@@ -1,0 +1,35 @@
+;
+; Copyright (c) 2017, 2020 ADLINK Technology Inc.
+;
+; This program and the accompanying materials are made available under the
+; terms of the Eclipse Public License 2.0 which is available at
+; http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+; which is available at https://www.apache.org/licenses/LICENSE-2.0.
+;
+; SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+;
+; Contributors:
+;   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+;
+
+(copy_files ../../zenoh-net/zn_storage.ml)
+
+(library
+  (name            zn_storage)
+  (modules         zn_storage)
+  (public_name     zn_storage)
+  (libraries       zenoh-net-ocaml dynload-sys)
+  (preprocess      (pps lwt_ppx)))
+
+(rule
+  (targets    storage-plugin.cmxs)
+  (deps       (package zn_storage))
+  (action     (run ocamlfind ocamlopt
+                  -shared
+                  -linkall
+                  -linkpkg
+                  -thread
+                  -dontlink apero-core
+                  -dontlink zenoh-net-ocaml
+                  -package zn_storage
+                  -o %{targets})))

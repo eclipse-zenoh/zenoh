@@ -1,0 +1,26 @@
+;
+; Copyright (c) 2017, 2020 ADLINK Technology Inc.
+;
+; This program and the accompanying materials are made available under the
+; terms of the Eclipse Public License 2.0 which is available at
+; http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+; which is available at https://www.apache.org/licenses/LICENSE-2.0.
+;
+; SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+;
+; Contributors:
+;   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+;
+
+(library
+ (name            zenoh_ocaml)
+  (modules        zenoh_ocaml zenoh_api)
+  (public_name    zenoh-ocaml)
+  (wrapped     false)
+  (libraries       zenoh-common zenoh-net-ocaml cstruct lwt lwt.unix logs logs.lwt ppx_deriving.show ppx_deriving.ord)
+  (preprocess
+    (pps ppx_deriving.show ppx_deriving.ord lwt_ppx ppx_cstruct)))
+
+(toplevel
+  (name zenoh_toplevel)
+  (libraries compiler-libs.toplevel zenoh_ocaml zenoh-common zenoh-net-ocaml cstruct lwt lwt.unix logs logs.lwt ppx_deriving.show ppx_deriving.ord))

@@ -1,0 +1,109 @@
+<!-- 
+  Copyright (c) 2017, 2020 ADLINK Technology Inc.
+ 
+  This program and the accompanying materials are made available under the
+  terms of the Eclipse Public License 2.0 which is available at
+  http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+  which is available at https://www.apache.org/licenses/LICENSE-2.0.
+ 
+  SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+ 
+  Contributors:
+    ADLINK zenoh team, <zenoh@adlink-labs.tech>
+-->
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>ZENOH ADMINISTRATION SPACE</title>
+        <meta charset="utf-8"/>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.easytabs/3.2.0/jquery.easytabs.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/7.0.4/jsoneditor.min.js"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/7.0.4/jsoneditor.min.css" rel="stylesheet" type="text/css" />
+        <link href="tabs.css" rel="stylesheet" type="text/css" />
+        <style>
+            * {font-family: sans-serif;}
+            #frame-gtool { width: 100%; height: 80vh; border:0px;}
+        </style>
+    </head>
+    <body>
+        <h1>Administration</h1>
+        <div id="tab-container" class="tab-container">
+            <ul class='etabs'>
+                <li class='tab'><a href="#tabs1-localrouter">Local router</a></li>
+                <li class='tab'><a href="#tabs1-allrouters">All routers</a></li>
+                <li class='tab'><a href="#tabs1-gtool">Graph tool</a></li>
+            </ul>
+            <div class='panel-container'>
+                <div id="tabs1-localrouter">
+                    <h2>Router</h2>
+                    <div id="localrouter"></div>
+                    <hr/>
+                    <h2>Plugins</h2>
+                    <div id="localplugins"></div>
+                </div>
+                <div id="tabs1-allrouters">
+                    <h2>Routers</h2>
+                    <div id="allrouters"></div>
+                    <hr/>
+                    <h2>Plugins</h2>
+                    <div id="allplugins"></div>
+                </div>
+                <div id="tabs1-gtool">
+                    <iframe id="frame-gtool" src=""></iframe>
+                </div>
+            </div>
+        </div>
+        <script>
+            function transform(values) {
+                return values.reduce(function(dict, val){
+                    dict[val.key] = val.value;
+                    return dict;
+                }, {});
+            }
+
+            const localrouter = new JSONEditor(
+                document.getElementById('localrouter'), 
+                {mode: 'view'});
+            const localplugins = new JSONEditor(
+                document.getElementById('localplugins'), 
+                {mode: 'view'});
+            const allrouters = new JSONEditor(
+                document.getElementById('allrouters'), 
+                {mode: 'view'});
+            const allplugins = new JSONEditor(
+                document.getElementById('allplugins'), 
+                {mode: 'view'});
+
+            const tabs = {
+                "": function () {
+                    $.getJSON("/@/router/local", function(json) {localrouter.updateText(JSON.stringify(transform(json)));});
+                    $.getJSON("/@/router/local/plugin/*", function(json) {localplugins.updateText(JSON.stringify(transform(json)));});
+                },
+                "tabs1-localrouter": function () {
+                    $.getJSON("/@/router/local", function(json) {localrouter.updateText(JSON.stringify(transform(json)));});
+                    $.getJSON("/@/router/local/plugin/*", function(json) {localplugins.updateText(JSON.stringify(transform(json)));});
+                },
+                "tabs1-allrouters": function () {
+                    $.getJSON("/@/router/*", function(json) {allrouters.updateText(JSON.stringify(transform(json)));});
+                    $.getJSON("/@/router/*/plugin/*", function(json) {allplugins.updateText(JSON.stringify(transform(json)));});
+                },
+                "tabs1-gtool": function () {
+                    if($('#frame-gtool').attr('src') == "") {
+                        $('#frame-gtool').attr('src', '/@/gtool.html');
+                    }else{
+                        document.getElementById('frame-gtool').contentWindow.postMessage("refresh", "*");
+                    }
+                }
+            }
+            $(document).ready( function() {
+                $('#tab-container').easytabs();
+                tabs[window.location.hash.substr(1)].call();
+                $('#tab-container').bind('easytabs:midTransition', function(_, _, panel) {
+                    tabs[panel[0].id].call();
+                })
+            });
+        </script>
+    </body>
+</html>
+        
