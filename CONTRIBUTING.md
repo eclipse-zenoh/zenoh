@@ -48,4 +48,4 @@ Contact the project developers via the project's "dev" list.
 
 Or via the Gitter channel.
 
-* https://gitter.im/eclipse/zenoh
+* https://gitter.im/atolab/zenoh
