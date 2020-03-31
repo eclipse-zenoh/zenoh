@@ -110,6 +110,9 @@ module Value = struct
     | PROPERTIES   [@id  0x03]
     | JSON         [@id  0x04]
     | SQL          [@id  0x05]
+    | INT          [@id  0x06]
+    | FLOAT        [@id  0x07]
+
   [@@uint8_t]]
 
   type sql_row = string list
@@ -121,6 +124,8 @@ module Value = struct
     | PropertiesValue of properties
     | JSonValue of string
     | SqlValue of (sql_row * sql_column_names option)
+    | IntValue of Int64.t
+    | FloatValue of Float.t
 
   let update ~delta _ = ignore delta; Apero.Result.fail `UnsupportedOperation
 
@@ -130,6 +135,8 @@ module Value = struct
     | PropertiesValue _ -> PROPERTIES
     | JSonValue _ -> JSON
     | SqlValue _ -> SQL
+    | IntValue _ -> INT
+    | FloatValue _ -> FLOAT
 
   let sql_val_sep = ',' (* Char.chr 31 *) (* US - unit separator *)
   let sql_val_sep_str = String.make 1 sql_val_sep
@@ -156,6 +163,8 @@ module Value = struct
     | PropertiesValue p -> Apero.Result.ok @@ RawValue (Some encoding_descr, Bytes.of_string @@ Properties.to_string p)
     | JSonValue s -> Apero.Result.ok @@ RawValue (Some encoding_descr, Bytes.of_string @@ s)
     | SqlValue v  -> Apero.Result.ok @@ RawValue (Some encoding_descr, Bytes.of_string @@ sql_to_string v)
+    | IntValue i -> Apero.Result.ok @@ RawValue (Some encoding_descr, Bytes.of_string @@ Int64.to_string i)
+    | FloatValue f -> Apero.Result.ok @@ RawValue (Some encoding_descr, Bytes.of_string @@ Float.to_string f)
 
   let to_string_encoding = function 
     | RawValue (_, r)  -> Apero.Result.ok @@ StringValue (Bytes.to_string r)  (* @TODO: base64 conversion and encoding description in string ? *)
@@ -163,6 +172,8 @@ module Value = struct
     | PropertiesValue p -> Apero.Result.ok @@ StringValue (Properties.to_string p)
     | JSonValue s -> Apero.Result.ok @@ StringValue s
     | SqlValue v -> Apero.Result.ok @@ StringValue (sql_to_string v)
+    | IntValue i -> Apero.Result.ok @@ StringValue (Int64.to_string i)
+    | FloatValue f -> Apero.Result.ok @@ StringValue (Float.to_string f)
 
   let properties_from_json json =
     let open Yojson.Basic in
@@ -186,6 +197,9 @@ module Value = struct
     | PropertiesValue _ as v -> Apero.Result.ok v
     | JSonValue s -> Apero.Result.ok @@ PropertiesValue (properties_from_json s)
     | SqlValue v -> Apero.Result.ok @@ PropertiesValue (properties_from_sql v)
+    | IntValue i -> Apero.Result.ok @@ PropertiesValue (Properties.add "int-value" (Int64.to_string i) Properties.empty)
+    | FloatValue f -> Apero.Result.ok @@ PropertiesValue (Properties.add "float-value" (Float.to_string f) Properties.empty)
+
 
   let json_from_sql (row, col) =
     let open Yojson.Basic in
@@ -206,6 +220,8 @@ module Value = struct
     | PropertiesValue p -> Apero.Result.ok @@ JSonValue (to_string @@ json_from_properties p)
     | JSonValue _ as v -> Apero.Result.ok @@ v
     | SqlValue v -> Apero.Result.ok @@ StringValue (json_from_sql v)
+    | IntValue i -> Apero.Result.ok @@ JSonValue (Int64.to_string i) 
+    | FloatValue f -> Apero.Result.ok @@ JSonValue (Float.to_string f)
 
   (* @TODO: use Error instead of Exception *)
   let sql_from_json json =
@@ -224,13 +240,41 @@ module Value = struct
     | PropertiesValue p -> Apero.Result.ok @@ SqlValue (sql_from_properties p)
     | JSonValue s -> Apero.Result.ok @@ SqlValue (sql_from_json s)
     | SqlValue _ as v -> Apero.Result.ok @@ v
+    | IntValue i -> Apero.Result.ok @@ SqlValue (sql_of_string @@ Int64.to_string i)
+    | FloatValue f -> Apero.Result.ok @@ SqlValue (sql_of_string @@ Float.to_string f)    
 
+  let to_int_encoding = function
+    | RawValue (_, bs) -> Apero.Result.ok @@ IntValue (Int64.of_string (Bytes.to_string bs))
+    | StringValue s -> Apero.Result.ok @@ IntValue (Int64.of_string s)
+    | PropertiesValue ps -> Apero.Result.ok @@ IntValue (Int64.of_string (Properties.find "int-value" ps))
+    | JSonValue j -> Apero.Result.ok @@ IntValue (Int64.of_string j)
+    | SqlValue s -> Apero.Result.ok @@ IntValue (Int64.of_string (sql_to_string s))
+    | IntValue i -> Apero.Result.ok @@ IntValue i
+    | FloatValue f -> Apero.Result.ok @@ IntValue (Int64.of_int @@ Float.to_int f)
+
+(* | IntValue i -> Apero.Result.ok @@ PropertiesValue (Properties.add "int-value" (Int64.to_string i) Properties.empty)
+    | FloatValue f -> Apero.Result.ok @@ PropertiesValue (Properties.add "float-value" (Float.to_string f) Properties.empty) *)
+
+  let to_float_encoding = function
+    | RawValue (_, bs) -> Apero.Result.ok @@ FloatValue (Float.of_string (Bytes.to_string bs))
+    | StringValue s -> Apero.Result.ok @@ FloatValue (Float.of_string s)
+    | PropertiesValue ps -> Apero.Result.ok @@ FloatValue (Float.of_string (Properties.find "float-value" ps))    
+    | JSonValue j -> Apero.Result.ok @@ FloatValue (Float.of_string j)
+    | SqlValue s -> Apero.Result.ok @@ FloatValue (Float.of_string (sql_to_string s))    
+    | IntValue i -> Apero.Result.ok @@ FloatValue (Int64.to_float i)
+    | FloatValue f -> Apero.Result.ok @@ FloatValue f    
+
+  
   let transcode v = function   
     | RAW -> to_raw_encoding v
     | STRING -> to_string_encoding v
     | PROPERTIES -> to_properties_encoding v
     | JSON -> to_json_encoding v
     | SQL -> to_sql_encoding v
+    | INT -> to_int_encoding v 
+    | FLOAT -> to_float_encoding v
+    
+    
 
   let of_string s e = transcode (StringValue s)  e
   let to_string  = function 
@@ -241,6 +285,8 @@ module Value = struct
     | PropertiesValue p -> Properties.to_string p
     | JSonValue j -> j 
     | SqlValue s -> sql_to_string s
+    | IntValue i -> Int64.to_string i
+    |FloatValue f -> Float.to_string f
 
 end
 
