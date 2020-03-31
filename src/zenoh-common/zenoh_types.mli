@@ -80,6 +80,7 @@ module Selector : sig
 end [@@deriving show]
 
 module Value : sig 
+  (* TODO: change order of constants to have primitive types first. *)
   [%%cenum
   type encoding =
     | RAW          [@id  0x00]
@@ -88,6 +89,8 @@ module Value : sig
     | PROPERTIES   [@id  0x03]
     | JSON         [@id  0x04]
     | SQL          [@id  0x05]
+    | INT          [@id  0x06]
+    | FLOAT        [@id  0x07]
   [@@uint8_t]]
 
   type sql_row = string list
@@ -99,6 +102,8 @@ module Value : sig
     | PropertiesValue of Apero.properties
     | JSonValue of string
     | SqlValue of (sql_row * sql_column_names option)
+    | IntValue of Int64.t
+    | FloatValue of float
 
 
   val of_string : string -> encoding -> (t, yerror) Apero.Result.t 
