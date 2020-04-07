@@ -33,9 +33,10 @@ jobs:
     
     - name: Setup opam dependencies
       run: |
-        opam install conf-libev
-        opam depext -yt
-        opam install -t . --deps-only
+        OPAMJOBS=1 opam config report
+        OPAMJOBS=1 opam install conf-libev
+        OPAMJOBS=1 opam depext -yt
+        OPAMJOBS=1 opam install -t . --deps-only
     
     - name: Build
       run: opam exec -- dune build @all
