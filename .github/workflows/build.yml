@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+
+    steps:
+    - uses: actions/checkout@v2
+  
+    - name: Install required libs (Ubuntu)
+      run: sudo apt-get install libev-dev libsqlite3-dev libmariadb-dev postgresql-client
+      if: matrix.os == 'ubuntu-latest'
+    - name: Install required libs (MacOS)
+      run: |
+        brew uninstall --ignore-dependencies libpq
+        brew install libev pkg-config sqlite mariadb postgresql
+      if: matrix.os == 'macOS-latest'
+
+    - name: Setup OCaml
+      uses: avsm/setup-ocaml@v1.0
+      with:
+        ocaml-version: 4.07.1 # optional, default is 4.08.1
+    
+    - name: Setup opam dependencies
+      run: |
+        opam install conf-libev
+        opam depext -yt
+        opam install -t . --deps-only
+    
+    - name: Build
+      run: opam exec -- dune build @all
+    
+    - name: Tests
+      run: opam exec -- dune runtest
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        # Artifact name
+        name: zenoh-${{ matrix.os }}
+        # Directory containing files to upload
+        path: _build/default/install
