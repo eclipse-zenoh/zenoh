@@ -40,6 +40,7 @@ depends: [
   "apero-net" {= "0.4.7"}
   "zenoh-proto" {= "0.4.1"}
   "zenoh-net-ocaml" {= "0.4.1"}
+  "alcotest" {with-test & = "1.0.1"}
 ]
 
 synopsis : "Zenoh -- the ZEro Network Over-Head protocol"
