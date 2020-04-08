@@ -37,6 +37,9 @@ depends: [
   "ocaml" {= "4.07.1"}
   "dune" {= "2.3.0" }
   "lwt" {= "5.1.1" }
+  "atdgen" {= "2.0.0" }
+  "yojson" {= "1.7.0" }
+  "cmdliner" {= "1.0.4" }
   "apero-core" {= "0.4.7"}
   "apero-net" {= "0.4.7"}
   "zenoh-proto" {= "0.4.1"}

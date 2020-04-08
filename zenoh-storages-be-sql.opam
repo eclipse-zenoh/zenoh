@@ -37,5 +37,10 @@ install: [
 depends: [
   "ocaml" {= "4.07.1"}
   "dune" {= "2.3.0" }
+  "caqti" {= "1.2.1" }
+  "caqti-driver-sqlite3" {= "1.2.1" }
+  "caqti-driver-mariadb" {= "1.2.1" }
+  "caqti-driver-postgresql" {= "1.2.1" }
+  "caqti-lwt" {= "1.2.0" }
   "zenoh-storages-be-lib" {= "0.4.1"}
 ]
