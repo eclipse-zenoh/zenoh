@@ -84,16 +84,19 @@ let fields_to_timedvalue serie_name time encoding timestamp value =
 
 let serie_to_timedvalues serie =
   if serie.columns = ["time"; "encoding"; "timestamp"; "value"] then (
-    List.fold_left (fun (result:TimedValue.t list) fields ->
-      match fields with
-      | [ `String time ; `String encoding ; `String timestamp ; `String value] ->
-        (match fields_to_timedvalue serie.name time encoding timestamp value with
-        | Some tv -> tv::result
-        | None -> result)
-      | _ -> Logs.err (fun m -> m "[Infx] A point from serie %s has incorect tags/fields types (value ignored): %s"
-                serie.name (String.concat "," (List.map Yojson.Safe.to_string fields)));
-             result
-    ) [] serie.values
+    match serie.values with
+    | Some values -> 
+      List.fold_left (fun (result:TimedValue.t list) fields ->
+        match fields with
+        | [ `String time ; `String encoding ; `String timestamp ; `String value] ->
+          (match fields_to_timedvalue serie.name time encoding timestamp value with
+          | Some tv -> tv::result
+          | None -> result)
+        | _ -> Logs.err (fun m -> m "[Infx] A point from serie %s has incorect tags/fields types (value ignored): %s"
+                  serie.name (String.concat "," (List.map Yojson.Safe.to_string fields)));
+              result
+      ) [] values
+    | None -> []
   ) else (
     Logs.err (fun m -> m "[Infx] Serie %s has invalid tags and fields for a zenoh value: %s (serie ignored)"
       serie.name (String.concat " , " serie.columns));
@@ -145,21 +148,23 @@ let write (db:db_info) measurement (tv:TimedValue.t) =
 
 
 let create_database (db:db_info) =
+  let new_db () =
+    Logs.debug (fun m -> m "[Infx] create new db %s" db.name);
+    match %lwt query ~post:true db ("CREATE DATABASE "^db.name) with
+    | {results=[{ statement_id=_; series=_; error=None }]} -> Lwt.return_unit
+    | {results=[{ statement_id=_; series=_; error=Some err }]} -> raise @@ YException (`StoreError (`Msg (
+        Printf.sprintf "Query 'CREATE DATABASE %s' failed: %s" db.name err)))
+    | res -> raise_unexpected_results db ("CREATE DATABASE "^db.name) res
+  in
   match%lwt query db "SHOW DATABASES" with
-  | {results=[{ statement_id=0; series=[{name="databases"; columns=["name"]; values=v}]; error=None }]} ->
+  | {results=[{ statement_id=0; series=[{name="databases"; columns=["name"]; values=Some(v)}]; error=None }]} ->
     let existing_db = List.flatten v in
     if List.exists (fun name -> name = `String db.name) existing_db then
       Lwt.return_unit
     else
-      begin
-        Logs.debug (fun m -> m "[Infx] create new db %s" db.name);
-        match %lwt query ~post:true db ("CREATE DATABASE "^db.name) with
-        | {results=[{ statement_id=_; series=_; error=None }]} -> Lwt.return_unit
-        | {results=[{ statement_id=_; series=_; error=Some err }]} -> raise @@ YException (`StoreError (`Msg (
-            Printf.sprintf "Query 'CREATE DATABASE %s' failed: %s" db.name err)))
-        | res -> raise_unexpected_results db ("CREATE DATABASE "^db.name) res
-      end
-
+      new_db ()
+  | {results=[{ statement_id=0; series=[{name="databases"; columns=["name"]; values=None}]; error=None }]} ->
+    new_db ()
   | res -> raise_unexpected_results db "SHOW DATABASES " res
 
 let drop_database db =

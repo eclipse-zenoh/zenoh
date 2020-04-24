@@ -34,7 +34,7 @@ type storage_info = {
 type serie = {
     name: string
   ; columns: string list
-  ; values: Yojson.Safe.t list list
+  ; values: Yojson.Safe.t list list option [@default None]
 }
 [@@deriving yojson { exn = true }]
 
