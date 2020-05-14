@@ -19,7 +19,6 @@ homepage:     "https://zenoh.io"
 bug-reports:  "https://github.com/atolab/zenoh/issues/"
 dev-repo:     "git+https://github.com/atolab/zenoh.git"
 tags:         ["zenoh"]
-synopsis:     "The zenoh common library"
 
 version: "0.4.1"
 license: ["EPL-2.0" "Apache-2.0"]
@@ -44,6 +43,6 @@ depends: [
   "zenoh-net-ocaml" {= "0.4.1"}
 ]
 
-synopsis : "zenoh common OCaml library"
+synopsis : "Zenoh common OCaml library"
 description: """
 An OCaml library used by both zenoh-net-ocaml API and zenoh-storages plugin."""
