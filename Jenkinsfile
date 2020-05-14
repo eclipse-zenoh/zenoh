@@ -24,7 +24,7 @@ pipeline {
         sh '''
         git log --graph --date=short --pretty=tformat:'%ad - %h - %cn -%d %s' -n 20 || true
         OPAMJOBS=1 opam config report
-        OPAMJOBS=1 opam install conf-libev
+        OPAMJOBS=1 opam install depext conf-libev
         OPAMJOBS=1 opam depext -yt
         OPAMJOBS=1 opam install -t . --deps-only
         '''
