@@ -15,23 +15,32 @@ pipeline {
                   extensions: [],
                   gitTool: 'Default',
                   submoduleCfg: [],
-                  userRemoteConfigs: [[url: 'https://github.com/atolab/eclipse-zenoh-c.git']]
+                  userRemoteConfigs: [[url: 'https://github.com/atolab/eclipse-zenoh.git']]
                 ])
       }
     }
-    stage('Simple build') {
+    stage('Setup opam dependencies') {
       steps {
         sh '''
         git log --graph --date=short --pretty=tformat:'%ad - %h - %cn -%d %s' -n 20 || true
-        make all
+        OPAMJOBS=1 opam config report
+        OPAMJOBS=1 opam install conf-libev
+        OPAMJOBS=1 opam depext -yt
+        OPAMJOBS=1 opam install -t . --deps-only
         '''
       }
     }
-    stage('Cross-platforms build') {
+    stage('Build') {
       steps {
         sh '''
-        docker images || true
-        make all-cross
+        opam exec -- dune build @all
+        '''
+      }
+    }
+    stage('Tests') {
+      steps {
+        sh '''
+        opam exec -- dune runtest
         '''
       }
     }
@@ -39,7 +48,7 @@ pipeline {
 
   post {
     success {
-        archiveArtifacts artifacts: 'build/crossbuilds/*/*zenohc*.*', fingerprint: true
+        archiveArtifacts artifacts: '_build/default/install/*/*', fingerprint: true
     }
   }
 }
