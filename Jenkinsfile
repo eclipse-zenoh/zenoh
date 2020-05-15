@@ -9,6 +9,7 @@ pipeline {
   stages {
     stage('Checkout Git TAG') {
       steps {
+        cleanWs()
         checkout([$class: 'GitSCM',
                   branches: [[name: "${params.TAG}"]],
                   doGenerateSubmoduleConfigurations: false,
@@ -55,7 +56,7 @@ pipeline {
     stage('Bocker build') {
       steps {
         sh '''
-        docker build -t eclipse/zenoh:${TAG}
+        docker build -t eclipse/zenoh:${TAG} .
         '''
       }
     }
