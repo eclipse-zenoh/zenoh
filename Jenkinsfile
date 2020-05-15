@@ -44,11 +44,26 @@ pipeline {
         '''
       }
     }
+    stage('Package') {
+      steps {
+        sh '''
+        cp -r _build/default/install eclipse-zenoh
+        tar czvf eclipse-zenoh-${TAG}-Ubuntu-20.04-x64.tgz eclipse-zenoh/*/*.*
+        '''
+      }
+    }
+    stage('Bocker build') {
+      steps {
+        sh '''
+        docker build -t eclipse/zenoh:${TAG}
+        '''
+      }
+    }
   }
 
   post {
     success {
-        archiveArtifacts artifacts: '_build/default/install/*/*', fingerprint: true
+        archiveArtifacts artifacts: 'eclipse-zenoh-${TAG}-Ubuntu-20.04-x64.tgz', fingerprint: true
     }
   }
 }
