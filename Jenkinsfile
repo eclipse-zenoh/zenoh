@@ -62,10 +62,11 @@ pipeline {
     }
     stage('Docker publish') {
       environment {
-        DOCKER_HUB_CREDS = credentials('jenkins-docker-hub-creds')
+        DOCKER_HUB_CREDS = credentials('jenkins-docker-hub-creds-2')
       }
       steps {
         sh '''
+        echo "Login into docker as ${DOCKER_HUB_CREDS_USR}"
         docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
         docker push eclipse/zenoh:${TAG} .
         docker logout
