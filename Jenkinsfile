@@ -53,10 +53,22 @@ pipeline {
         '''
       }
     }
-    stage('Bocker build') {
+    stage('Docker build') {
       steps {
         sh '''
         docker build -t eclipse/zenoh:${TAG} .
+        '''
+      }
+    }
+    stage('Docker publish') {
+      environment {
+        DOCKER_HUB_CREDS = credentials('jenkins-docker-hub-creds')
+      }
+      steps {
+        sh '''
+        docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+        docker push eclipse/zenoh:${TAG} .
+        docker logout
         '''
       }
     }
