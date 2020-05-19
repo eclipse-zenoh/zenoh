@@ -53,23 +53,33 @@ pipeline {
         '''
       }
     }
-    stage('Docker build') {
+    // stage('Docker build') {
+    //   steps {
+    //     sh '''
+    //     docker build -t eclipse/zenoh:${TAG} .
+    //     '''
+    //   }
+    // }
+    // stage('Docker publish') {
+    //   steps {
+    //     withCredentials([usernamePassword(credentialsId: 'jenkins-docker-hub-creds',
+    //         passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
+    //     {
+    //       sh '''
+    //       echo "Login into docker as ${DOCKER_HUB_CREDS_USR}"
+    //       docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+    //       docker push eclipse/zenoh:${TAG} .
+    //       docker logout
+    //       '''
+    //     }
+    //   }
+    // }
+    stage('Deploy to to download.eclipse.org') {
       steps {
-        sh '''
-        docker build -t eclipse/zenoh:${TAG} .
-        '''
-      }
-    }
-    stage('Docker publish') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'jenkins-docker-hub-creds',
-            passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
-        {
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          echo "Login into docker as ${DOCKER_HUB_CREDS_USR}"
-          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
-          docker push eclipse/zenoh:${TAG} .
-          docker logout
+          ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}
+          scp eclipse-zenoh-${TAG}-Ubuntu-20.04-x64.tgz  /home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}/
           '''
         }
       }
