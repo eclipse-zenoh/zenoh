@@ -79,7 +79,8 @@ pipeline {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
           ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}
-          scp eclipse-zenoh-${TAG}-Ubuntu-20.04-x64.tgz  /home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}/
+          ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}
+          scp eclipse-zenoh-${TAG}-Ubuntu-20.04-x64.tgz  genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}/
           '''
         }
       }
