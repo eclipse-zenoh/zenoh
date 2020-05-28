@@ -32,9 +32,9 @@ The ports used by zenoh are the following:
 Then, you can test it using the zenoh API in your favorite language:
 
  - [**Python** using zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
- - [**Java** using zenoh-java](https://github.com/eclipse-zenoh/zenoh-python)
- - [**Go** using zenoh-go](https://github.com/eclipse-zenoh/zenoh-python)
- - [**C** using zenoh-c](https://github.com/eclipse-zenoh/zenoh-python)
+ - [**Java** using zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
+ - [**Go** using zenoh-go](https://github.com/eclipse-zenoh/zenoh-go)
+ - [**C** using zenoh-c](https://github.com/eclipse-zenoh/zenoh-c)
 
 Or with the **REST** API:
 
