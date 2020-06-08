@@ -1,0 +1,40 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh-ffi"
+version = "0.5.0"
+authors = ["kydos <angelo@icorsaro.net>",
+           "Julien Enoch <julien@enoch.fr>",
+           "Olivier Hécart <olivier.hecart@adlinktech.com",
+		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[dependencies]
+zenoh = { version = "0.5.0", path = "../zenoh" }
+zenoh-protocol = { version = "0.5.0", path = "../zenoh-protocol" }
+async-trait = "0.1.31"
+spin = "0.5.2"
+rand = "0.7.3"
+cbindgen = "0.14.2"
+libc = "0.2.69"
+
+[dependencies.async-std]
+version = "~1.6.0"
+features = ["unstable"]
+
+[lib]
+crate-type = ["cdylib"]

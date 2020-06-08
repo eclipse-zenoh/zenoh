@@ -1,0 +1,85 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh"
+version = "0.5.0"
+authors = ["kydos <angelo@icorsaro.net>",
+           "Julien Enoch <julien@enoch.fr>",
+           "Olivier Hécart <olivier.hecart@adlinktech.com",
+		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.31"
+spin = "0.5.2"
+rand = "0.7.3"
+clap = "3.0.0-beta.1"
+log = "0.4"
+zenoh-protocol = { version = "0.5.0", path = "../zenoh-protocol" }
+zenoh-router = { version = "0.5.0", path = "../zenoh-router" }
+zenoh-util = { version = "0.5.0", path = "../zenoh-util" }
+
+[dependencies.async-std]
+version = "~1.6.0"
+features = ["unstable"]
+
+[dev-dependencies]
+env_logger = "0.7.1"
+
+[[example]]
+name = "zn_scout"
+path = "examples/zenoh-net/zn_scout.rs"
+
+[[example]]
+name = "zn_info"
+path = "examples/zenoh-net/zn_info.rs"
+
+[[example]]
+name = "zn_write"
+path = "examples/zenoh-net/zn_write.rs"
+
+[[example]]
+name = "zn_pub"
+path = "examples/zenoh-net/zn_pub.rs"
+
+[[example]] 
+name = "zn_sub"
+path = "examples/zenoh-net/zn_sub.rs"
+
+[[example]]
+name = "zn_pull"
+path = "examples/zenoh-net/zn_pull.rs"
+
+[[example]]
+name = "zn_eval"
+path = "examples/zenoh-net/zn_eval.rs"
+
+[[example]]
+name = "zn_storage"
+path = "examples/zenoh-net/zn_storage.rs"
+
+[[example]]
+name = "zn_query"
+path = "examples/zenoh-net/zn_query.rs"
+
+[[example]]
+name = "zn_pub_thr"
+path = "examples/zenoh-net/zn_pub_thr.rs"
+
+[[example]]
+name = "zn_sub_thr"
+path = "examples/zenoh-net/zn_sub_thr.rs"
+

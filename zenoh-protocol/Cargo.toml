@@ -1,0 +1,56 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh-protocol"
+version = "0.5.0"
+authors = ["kydos <angelo@icorsaro.net>",
+           "Julien Enoch <julien@enoch.fr>",
+           "Olivier Hécart <olivier.hecart@adlinktech.com",
+		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.31"
+env_logger = "0.7.1"
+log = "0.4.8"
+hex = "0.4.2"
+rand = "0.7.3"
+uuid = { version = "0.8.1", features = ["v4"] }
+zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
+lazy_static = "1.4.0"
+
+[dependencies.async-std]
+version = "~1.6.0"
+features = ["unstable"]
+
+[dev-dependencies]
+criterion = "0.3.2"
+
+[[bench]]
+name = "codec_bench"
+harness = false
+
+[[bench]]
+name = "rwbuf_bench"
+harness = false
+
+[[bench]]
+name = "rname_bench"
+harness = false
+
+[[bench]]
+name = "data_creation"
+harness = false
