@@ -1,0 +1,43 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh-router"
+version = "0.5.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.31"
+rand = "0.7.3"
+log = "0.4"
+env_logger = "0.7.1"
+zenoh-protocol =  { version = "0.5.0", path = "../zenoh-protocol" }
+zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
+
+[dependencies.async-std]
+version = "~1.6.0"
+features = ["unstable"]
+
+[dev-dependencies]
+criterion = "0.3.2"
+
+[[bench]]
+name = "tables_bench"
+harness = false
+
+[[bin]]
+name = "zenohd"
+test = false
+bench = false
