@@ -40,7 +40,7 @@ fn main() {
         let rname = path.clone();
         let query_handler = move |res_name: &str, predicate: &str, replies_sender: &RepliesSender, query_handle: QueryHandle| {
             println!(">> [Query handler] Handling '{}?{}'", res_name, predicate);
-            let result: Vec<(String, RBuf)> = [(rname.clone(), value.as_bytes().into())].to_vec();
+            let result: Vec<(String, RBuf, Option<RBuf>)> = [(rname.clone(), value.as_bytes().into(), None)].to_vec();
             (*replies_sender)(query_handle, result);
         };
 

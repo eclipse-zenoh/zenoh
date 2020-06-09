@@ -23,7 +23,7 @@ use log::{error, warn, info, trace};
 use zenoh_protocol:: {
     core::{ rname, PeerId, ResourceId, ResKey },
     io::RBuf,
-    proto::{ DataInfo, Primitives, QueryTarget, QueryConsolidation, Reply, whatami, queryable},
+    proto::{ Primitives, QueryTarget, QueryConsolidation, Reply, whatami, queryable},
     session::{SessionManager, SessionManagerConfig},
 };
 use zenoh_router::routing::broker::Broker;
@@ -180,7 +180,7 @@ impl Session {
     }
 
     pub async fn declare_subscriber<DataHandler>(&self, resource: &ResKey, info: &SubInfo, data_handler: DataHandler) -> ZResult<Subscriber>
-        where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ DataInfo) + Send + Sync + 'static
+        where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static
     {
         trace!("declare_subscriber({:?})", resource);
         let mut inner = self.inner.write();
@@ -316,17 +316,16 @@ impl Primitives for Session {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(&self, reskey: &ResKey, _reliable: bool, _info: &Option<RBuf>, payload: RBuf) {
-        trace!("recv Data {:?} {:?} {:?} {:?}", reskey, _reliable, _info, payload);
+    async fn data(&self, reskey: &ResKey, _reliable: bool, info: &Option<RBuf>, payload: RBuf) {
+        trace!("recv Data {:?} {:?} {:?} {:?}", reskey, _reliable, info, payload);
         let inner = self.inner.read();
         match inner.reskey_to_resname(reskey) {
             Ok(resname) => {
                 // Call matching subscribers
                 for sub in inner.subscribers.values() {
                     if rname::intersect(&sub.resname, &resname) {
-                        let info = DataInfo::make(None, None, None, None, None, None, None);   // @TODO
                         let handler = &mut *sub.dhandler.write();
-                        handler(&resname, payload.clone(), info);
+                        handler(&resname, payload.clone(), info.clone());
                     }
                 }
             },
@@ -355,15 +354,15 @@ impl Primitives for Session {
                 for queryable in queryables {
                     let handler = &mut *queryable.qhandler.write();
 
-                    fn replies_sender(query_handle: QueryHandle, replies: Vec<(String, RBuf)>) {
+                    fn replies_sender(query_handle: QueryHandle, replies: Vec<(String, RBuf, Option<RBuf>)>) {
                         async_std::task::spawn(
                             async move {
-                                for (reskey, payload) in replies {
+                                for (reskey, payload, info) in replies {
                                     query_handle.primitives.reply(query_handle.qid, &Reply::ReplyData {
                                         source_kind: query_handle.kind, 
                                         replier_id: query_handle.pid.clone(), 
                                         reskey: ResKey::RName(reskey.to_string()), 
-                                        info: None,   // @TODO
+                                        info,
                                         payload,
                                     }).await;
                                 }

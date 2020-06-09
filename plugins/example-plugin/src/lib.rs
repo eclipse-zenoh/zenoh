@@ -54,22 +54,24 @@ async fn run() {
     debug!("PID :      {:02x?}", info.get(&ZN_INFO_PID_KEY).unwrap());
     debug!("PEER PID : {:02x?}", info.get(&ZN_INFO_PEER_PID_KEY).unwrap());
 
-    let stored: Arc<RwLock<HashMap<String, RBuf>>> =
+    type Storage = HashMap<String, (RBuf, Option<RBuf>)>;
+
+    let stored: Arc<RwLock<Storage>> =
     Arc::new(RwLock::new(HashMap::new()));
     let stored_shared = stored.clone();
 
-    let data_handler = move |res_name: &str, payload: RBuf, _data_info: DataInfo| {
+    let data_handler = move |res_name: &str, payload: RBuf, data_info: Option<RBuf>| {
         info!("Received data ('{}': '{:02X?}')", res_name, payload);
-        stored.write().insert(res_name.into(), payload);
+        stored.write().insert(res_name.into(), (payload, data_info));
     };
 
     let query_handler = move |res_name: &str, predicate: &str, replies_sender: &RepliesSender, query_handle: QueryHandle| {
         info!("Handling query '{}?{}'", res_name, predicate);
-        let mut result: Vec<(String, RBuf)> = Vec::new();
+        let mut result: Vec<(String, RBuf, Option<RBuf>)> = Vec::new();
         let st = &stored_shared.read();
-        for (rname, data) in st.iter() {
+        for (rname, (data, data_info)) in st.iter() {
             if rname_intersect(res_name, rname) {
-                result.push((rname.to_string(), data.clone()));
+                result.push((rname.to_string(), data.clone(), data_info.clone()));
             }
         }
         debug!("Returning data {:?}", result);

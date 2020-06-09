@@ -39,7 +39,7 @@ fn main() {
             period: None
         };
 
-        let data_handler = move |res_name: &str, payload: RBuf, _data_info: DataInfo| {
+        let data_handler = move |res_name: &str, payload: RBuf, _data_info: Option<RBuf>| {
             println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
         };
 

@@ -35,7 +35,6 @@ pub use zenoh_protocol::proto::{
     QueryTarget,
     QueryConsolidation,
     Reply,
-    DataInfo
 };
 pub use zenoh_protocol::proto::Primitives;
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -52,11 +51,11 @@ pub struct QueryHandle {
     pub(crate) sent_final: Arc<AtomicBool>,
 }
 
-pub type DataHandler = dyn FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ DataInfo) + Send + Sync + 'static;
+pub type DataHandler = dyn FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static;
 
 pub type QueryHandler = dyn FnMut(/*res_name:*/ &str, /*predicate:*/ &str, /*replies_sender:*/ &RepliesSender, /*query_handle:*/ QueryHandle) + Send + Sync + 'static;
 
-pub type RepliesSender = dyn Fn(/*query_handle:*/ QueryHandle, /*replies:*/ Vec<(String, RBuf)>) + Send + Sync + 'static;
+pub type RepliesSender = dyn Fn(/*query_handle:*/ QueryHandle, /*replies:*/ Vec<(String, RBuf, Option<RBuf>)>) + Send + Sync + 'static;
 
 pub type RepliesHandler = dyn FnMut(&Reply) + Send + Sync + 'static;
 
