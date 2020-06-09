@@ -51,7 +51,7 @@ fn main() {
             period: None
         };
         let _ = session.declare_subscriber(&reskey, &sub_info,
-            move |_res_name: &str, _payload: Vec<u8>, _data_info: DataInfo| {
+            move |_res_name: &str, _payload: RBuf, _data_info: DataInfo| {
                 if count == 0 {
                     start = Instant::now();
                     count = count + 1;

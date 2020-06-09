@@ -36,18 +36,18 @@ fn main() {
         // Create a HashMap to store the keys/values receveid in data_handler closure.
         // As this map has to be used also in query_handler closure, we need to wrap it
         // in a Arc<RwLock<T>>. Each closure will own a copy of this Arc.
-        let stored: Arc<RwLock<HashMap<String, Vec<u8>>>> =
+        let stored: Arc<RwLock<HashMap<String, RBuf>>> =
             Arc::new(RwLock::new(HashMap::new()));
         let stored_shared = stored.clone();
 
-        let data_handler = move |res_name: &str, payload: Vec<u8>, _data_info: DataInfo| {
-            println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload));
+        let data_handler = move |res_name: &str, payload: RBuf, _data_info: DataInfo| {
+            println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
             stored.write().insert(res_name.into(), payload);
         };
 
         let query_handler = move |res_name: &str, predicate: &str, replies_sender: &RepliesSender, query_handle: QueryHandle| {
             println!(">> [Query handler   ] Handling '{}?{}'", res_name, predicate);
-            let mut result: Vec<(String, Vec<u8>)> = Vec::new();
+            let mut result: Vec<(String, RBuf)> = Vec::new();
             let ref st = stored_shared.read();
             for (rname, data) in st.iter() {
                 if rname_intersect(res_name, rname) {

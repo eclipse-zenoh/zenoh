@@ -180,7 +180,7 @@ impl Session {
     }
 
     pub async fn declare_subscriber<DataHandler>(&self, resource: &ResKey, info: &SubInfo, data_handler: DataHandler) -> ZResult<Subscriber>
-        where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ Vec<u8>, /*data_info:*/ DataInfo) + Send + Sync + 'static
+        where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ DataInfo) + Send + Sync + 'static
     {
         trace!("declare_subscriber({:?})", resource);
         let mut inner = self.inner.write();
@@ -245,12 +245,12 @@ impl Session {
         Ok(())
     }
 
-    pub async fn write(&self, resource: &ResKey, payload: Vec<u8>) -> ZResult<()> {
+    pub async fn write(&self, resource: &ResKey, payload: RBuf) -> ZResult<()> {
         trace!("write({:?}, [...])", resource);
         let inner = self.inner.read();
         let primitives = inner.primitives.as_ref().unwrap().clone();
         drop(inner);
-        primitives.data(resource, true, &None, payload.into()).await;
+        primitives.data(resource, true, &None, payload).await;
         Ok(())
     }
 
@@ -326,7 +326,7 @@ impl Primitives for Session {
                     if rname::intersect(&sub.resname, &resname) {
                         let info = DataInfo::make(None, None, None, None, None, None, None);   // @TODO
                         let handler = &mut *sub.dhandler.write();
-                        handler(&resname, payload.get_vec(), info);
+                        handler(&resname, payload.clone(), info);
                     }
                 }
             },
@@ -355,7 +355,7 @@ impl Primitives for Session {
                 for queryable in queryables {
                     let handler = &mut *queryable.qhandler.write();
 
-                    fn replies_sender(query_handle: QueryHandle, replies: Vec<(String, Vec<u8>)>) {
+                    fn replies_sender(query_handle: QueryHandle, replies: Vec<(String, RBuf)>) {
                         async_std::task::spawn(
                             async move {
                                 for (reskey, payload) in replies {
@@ -364,7 +364,7 @@ impl Primitives for Session {
                                         replier_id: query_handle.pid.clone(), 
                                         reskey: ResKey::RName(reskey.to_string()), 
                                         info: None,   // @TODO
-                                        payload: payload.into(),
+                                        payload,
                                     }).await;
                                 }
                                 query_handle.primitives.reply(query_handle.qid, &Reply::SourceFinal {

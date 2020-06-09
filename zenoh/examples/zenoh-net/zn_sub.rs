@@ -40,8 +40,8 @@ fn main() {
             period: None
         };
 
-        let data_handler = move |res_name: &str, payload: Vec<u8>, _data_info: DataInfo| {
-            println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload));
+        let data_handler = move |res_name: &str, payload: RBuf, _data_info: DataInfo| {
+            println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
         };
 
         let sub = session.declare_subscriber(&selector.into(), &sub_info, data_handler).await.unwrap();
