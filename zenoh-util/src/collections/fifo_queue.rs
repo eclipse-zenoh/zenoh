@@ -140,8 +140,7 @@ impl<'a, T> Iterator for Drain<'_, T> {
             self.drained = true;
             return Some(e)
         }
-
-        return None
+        None
     }
 
     #[inline]
