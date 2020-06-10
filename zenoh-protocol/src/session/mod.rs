@@ -53,7 +53,8 @@ impl Transport {
 
     pub async fn link_err(&self, link: &Link) -> ZResult<()> {
         let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.link_err(link).await)
+        transport.link_err(link).await;
+        Ok(())
     }
 }
 

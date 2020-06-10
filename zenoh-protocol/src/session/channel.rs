@@ -434,7 +434,7 @@ impl Timed for LeaseEvent {
             // Get and reset the current status of active links
             let alive: HashSet<Link> = HashSet::from_iter(zasynclock!(ch.rx).alive.drain());
             // Create the difference set
-            let difference: HashSet<Link> = HashSet::from_iter(links.difference(&alive).map(|l| l.clone()));
+            let difference: HashSet<Link> = HashSet::from_iter(links.difference(&alive).cloned());
 
             if links == difference {
                 // We have no links left, close the whole session
