@@ -29,7 +29,7 @@ fn main() {
         let locator = args.value_of("locator").unwrap_or("").to_string();
         let size    = args.value_of("PAYLOAD_SIZE").unwrap().parse::<usize>().unwrap();
 
-        let data = (0usize..size).map(|i| (i%10) as u8).collect::<Vec<u8>>();
+        let data: RBuf = (0usize..size).map(|i| (i%10) as u8).collect::<Vec<u8>>().into();
 
         println!("Openning session...");
         let session = open(&locator, None).await.unwrap();
