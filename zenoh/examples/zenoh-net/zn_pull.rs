@@ -43,7 +43,7 @@ fn main() {
             println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
         };
 
-        let sub = session.declare_subscriber(&selector.into(), &sub_info, data_handler).await.unwrap();
+        let sub = session.declare_direct_subscriber(&selector.into(), &sub_info, data_handler).await.unwrap();
 
         println!("Press <enter> to pull data...");
         let mut stdin = async_std::io::stdin();
@@ -53,7 +53,7 @@ fn main() {
             sub.pull().await.unwrap();
         }
 
-        session.undeclare_subscriber(sub).await.unwrap();
+        session.undeclare_direct_subscriber(sub).await.unwrap();
         session.close().await.unwrap();
     })
 }

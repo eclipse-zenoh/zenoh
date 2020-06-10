@@ -11,15 +11,16 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#![recursion_limit="256"]
+
 use log::{debug, info};
 use std::env;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
-use async_std::sync::Arc;
-use spin::RwLock;
+use futures::prelude::*;
+use futures::select;
 use zenoh::net::*;
-use zenoh::net::ResKey::*;
 use zenoh::net::queryable::STORAGE;
 
 #[no_mangle]
@@ -54,29 +55,7 @@ async fn run() {
     debug!("PID :      {:02x?}", info.get(&ZN_INFO_PID_KEY).unwrap());
     debug!("PEER PID : {:02x?}", info.get(&ZN_INFO_PEER_PID_KEY).unwrap());
 
-    type Storage = HashMap<String, (RBuf, Option<RBuf>)>;
-
-    let stored: Arc<RwLock<Storage>> =
-    Arc::new(RwLock::new(HashMap::new()));
-    let stored_shared = stored.clone();
-
-    let data_handler = move |res_name: &str, payload: RBuf, data_info: Option<RBuf>| {
-        info!("Received data ('{}': '{:02X?}')", res_name, payload);
-        stored.write().insert(res_name.into(), (payload, data_info));
-    };
-
-    let query_handler = move |res_name: &str, predicate: &str, replies_sender: &RepliesSender, query_handle: QueryHandle| {
-        info!("Handling query '{}?{}'", res_name, predicate);
-        let mut result: Vec<(String, RBuf, Option<RBuf>)> = Vec::new();
-        let st = &stored_shared.read();
-        for (rname, (data, data_info)) in st.iter() {
-            if rname_intersect(res_name, rname) {
-                result.push((rname.to_string(), data.clone(), data_info.clone()));
-            }
-        }
-        debug!("Returning data {:?}", result);
-        (*replies_sender)(query_handle, result);
-    };
+    let mut stored: HashMap<String, (RBuf, Option<RBuf>)> = HashMap::new();
 
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
@@ -84,13 +63,32 @@ async fn run() {
         period: None
     };
 
-    let uri = "/demo/example/**".to_string();
-    debug!("Declaring Subscriber on {}", uri);
-    let _sub = session.declare_subscriber(&RName(uri.clone()), &sub_info, data_handler).await.unwrap();
+    let selector = "/demo/example/**".to_string();
+    
+    debug!("Declaring Subscriber on {}", selector);
+    let mut sub = session.declare_subscriber(&selector.clone().into(), &sub_info).await.unwrap();
 
-    debug!("Declaring Queryable on {}", uri);
-    let _queryable = session.declare_queryable(&RName(uri), STORAGE, query_handler).await.unwrap();
+    debug!("Declaring Queryable on {}", selector);
+    let mut queryable = session.declare_queryable(&selector.into(), STORAGE).await.unwrap();
+    
+    loop {
+        select!(
+            sample = sub.next().fuse() => {
+                let (res_name, payload, data_info) = sample.unwrap();
+                info!("Received data ('{}': '{}')", res_name, payload);
+                stored.insert(res_name.into(), (payload, data_info));
+            },
 
-    async_std::future::pending::<()>().await;
+            query = queryable.next().fuse() => {
+                let (res_name, predicate, replies_sender) = query.unwrap();
+                info!("Handling query '{}?{}'", res_name, predicate);
+                for (rname, (data, data_info)) in stored.iter() {
+                    if rname_intersect(&res_name, rname) {
+                        replies_sender.send((rname.clone(), data.clone(), data_info.clone())).await;
+                    }
+                }
+            }
+        );
+    }
 }
 

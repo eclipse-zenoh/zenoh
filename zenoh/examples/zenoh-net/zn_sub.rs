@@ -12,7 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::App;
-use async_std::prelude::*;
+use futures::prelude::*;
+use futures::select;
 use async_std::task;
 use zenoh::net::*;
 
@@ -40,19 +41,24 @@ fn main() {
             period: None
         };
 
-        let data_handler = move |res_name: &str, payload: RBuf, data_info: Option<RBuf>| {
-            println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
-            if let Some(mut info) = data_info {
-                let _info = info.read_datainfo();
-            }
-        };
-
-        let sub = session.declare_subscriber(&selector.into(), &sub_info, data_handler).await.unwrap();
+        let mut sub = session.declare_subscriber(&selector.into(), &sub_info).await.unwrap();
 
         let mut stdin = async_std::io::stdin();
         let mut input = [0u8];
-        while input[0] != 'q' as u8 {
-            stdin.read_exact(&mut input).await.unwrap();
+        loop {
+            select!(
+                sample = sub.next().fuse() => {
+                    let (res_name, payload, data_info) = sample.unwrap();
+                    println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
+                    if let Some(mut info) = data_info {
+                        let _info = info.read_datainfo();
+                    }
+                },
+                
+                _ = stdin.read_exact(&mut input).fuse() => {
+                    if input[0] == 'q' as u8 {break}
+                }
+            );
         }
 
         session.undeclare_subscriber(sub).await.unwrap();

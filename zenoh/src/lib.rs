@@ -11,4 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#![feature(async_closure)]
+
 pub mod net;

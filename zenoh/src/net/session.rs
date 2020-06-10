@@ -11,12 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::Arc;
+use async_std::sync::{Arc, channel, Sender, Receiver};
 use async_std::task;
 use async_trait::async_trait;
+use futures::prelude::*;
 use rand::prelude::*;
 use std::fmt;
-use std::sync::atomic::{AtomicUsize, AtomicU64, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
 use std::collections::HashMap;
 use spin::RwLock;
 use log::{error, warn, info, trace};
@@ -30,7 +31,6 @@ use zenoh_router::routing::broker::Broker;
 use zenoh_util::zerror;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use super::*;
-
 
 // rename to avoid conflicts
 type TxSession = zenoh_protocol::session::Session;
@@ -179,16 +179,33 @@ impl Session {
         Ok(())
     }
 
-    pub async fn declare_subscriber<DataHandler>(&self, resource: &ResKey, info: &SubInfo, data_handler: DataHandler) -> ZResult<Subscriber>
-        where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static
+    pub async fn declare_subscriber(&self, resource: &ResKey, info: &SubInfo) -> ZResult<Subscriber>
     {
         trace!("declare_subscriber({:?})", resource);
         let mut inner = self.inner.write();
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = inner.localkey_to_resname(resource)?;
-        let dhandler = Arc::new(RwLock::new(data_handler));
-        let sub = Subscriber{ id, reskey: resource.clone(), resname, dhandler, session: self.inner.clone() };
+        let (sender, receiver) = channel(256);
+        let sub = Subscriber{ id, reskey: resource.clone(), resname, sender, receiver };
         inner.subscribers.insert(id, sub.clone());
+
+        let primitives = inner.primitives.as_ref().unwrap().clone();
+        drop(inner);
+        primitives.subscriber(resource, info).await;
+
+        Ok(sub)
+    }
+
+    pub async fn declare_direct_subscriber<DataHandler>(&self, resource: &ResKey, info: &SubInfo, data_handler: DataHandler) -> ZResult<DirectSubscriber>
+        where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static
+    {
+        trace!("declare_direct_subscriber({:?})", resource);
+        let mut inner = self.inner.write();
+        let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let resname = inner.localkey_to_resname(resource)?;
+        let dhandler = Arc::new(RwLock::new(data_handler));
+        let sub = DirectSubscriber{ id, reskey: resource.clone(), resname, dhandler };
+        inner.direct_subscribers.insert(id, sub.clone());
 
         let primitives = inner.primitives.as_ref().unwrap().clone();
         drop(inner);
@@ -205,7 +222,8 @@ impl Session {
 
         // Note: there might be several Subscribers on the same ResKey.
         // Before calling forget_subscriber(reskey), check if this was the last one.
-        if !inner.subscribers.values().any(|s| s.reskey == subscriber.reskey) {
+        if !inner.direct_subscribers.values().any(|s| s.reskey == subscriber.reskey)
+           && !inner.subscribers.values().any(|s| s.reskey == subscriber.reskey) {
             let primitives = inner.primitives.as_ref().unwrap().clone();
             drop(inner);
             primitives.forget_subscriber(&subscriber.reskey).await;
@@ -213,14 +231,31 @@ impl Session {
         Ok(())
     }
 
-    pub async fn declare_queryable<QueryHandler>(&self, resource: &ResKey, kind: ZInt, query_handler: QueryHandler) -> ZResult<Queryable>
-        where QueryHandler: FnMut(/*res_name:*/ &str, /*predicate:*/ &str, /*replies_sender:*/ &RepliesSender, /*query_handle:*/ QueryHandle) + Send + Sync + 'static
+
+    pub async fn undeclare_direct_subscriber(&self, subscriber: DirectSubscriber) -> ZResult<()>
+    {
+        trace!("undeclare_direct_subscriber({:?})", subscriber);
+        let mut inner = self.inner.write();
+        inner.direct_subscribers.remove(&subscriber.id);
+
+        // Note: there might be several Subscribers on the same ResKey.
+        // Before calling forget_subscriber(reskey), check if this was the last one.
+        if !inner.direct_subscribers.values().any(|s| s.reskey == subscriber.reskey)
+           && !inner.subscribers.values().any(|s| s.reskey == subscriber.reskey) {
+            let primitives = inner.primitives.as_ref().unwrap().clone();
+            drop(inner);
+            primitives.forget_subscriber(&subscriber.reskey).await;
+        }
+        Ok(())
+    }
+
+    pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable>
     {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut inner = self.inner.write();
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let qhandler = Arc::new(RwLock::new(query_handler));
-        let qable = Queryable{ id, reskey: resource.clone(), kind, qhandler };
+        let (req_sender, req_receiver) = channel(256);
+        let qable = Queryable{ id, reskey: resource.clone(), kind, req_sender, req_receiver };
         inner.queryables.insert(id, qable.clone());
 
         let primitives = inner.primitives.as_ref().unwrap().clone();
@@ -254,25 +289,24 @@ impl Session {
         Ok(())
     }
 
-    pub async fn query<RepliesHandler>(&self,
+    pub async fn query(&self,
         resource:        &ResKey,
         predicate:       &str,
-        replies_handler: RepliesHandler,
         target:          QueryTarget,
         consolidation:   QueryConsolidation
-    ) -> ZResult<()>
-        where RepliesHandler: FnMut(&Reply) + Send + Sync + 'static
+    ) -> ZResult<Receiver<Reply>>
     {
         trace!("query({:?}, {:?}, {:?}, {:?})", resource, predicate, target, consolidation);
         let mut inner = self.inner.write();
         let qid = inner.qid_counter.fetch_add(1, Ordering::SeqCst);
-        inner.queries.insert(qid, Arc::new(RwLock::new(replies_handler)));
+        let (rep_sender, rep_receiver) = channel(256);
+        inner.queries.insert(qid, rep_sender);
 
         let primitives = inner.primitives.as_ref().unwrap().clone();
         drop(inner);
         primitives.query(resource, predicate, qid, target, consolidation).await;
 
-        Ok(())
+        Ok(rep_receiver)
     }
 }
 
@@ -318,111 +352,126 @@ impl Primitives for Session {
 
     async fn data(&self, reskey: &ResKey, _reliable: bool, info: &Option<RBuf>, payload: RBuf) {
         trace!("recv Data {:?} {:?} {:?} {:?}", reskey, _reliable, info, payload);
-        let inner = self.inner.read();
-        match inner.reskey_to_resname(reskey) {
-            Ok(resname) => {
-                // Call matching subscribers
-                for sub in inner.subscribers.values() {
-                    if rname::intersect(&sub.resname, &resname) {
-                        let handler = &mut *sub.dhandler.write();
-                        handler(&resname, payload.clone(), info.clone());
+        let (resname, senders) = {
+            let inner = self.inner.read();
+            match inner.reskey_to_resname(reskey) {
+                Ok(resname) => {
+                    // Call matching direct_subscribers
+                    for sub in inner.direct_subscribers.values() {
+                        if rname::intersect(&sub.resname, &resname) {
+                            let handler = &mut *sub.dhandler.write();
+                            handler(&resname, payload.clone(), info.clone());
+                        }
                     }
+                    // Collect matching subscribers
+                    let subs = inner.subscribers.values().filter(|sub|rname::intersect(&sub.resname, &resname))
+                        .map(|sub|sub.sender.clone()).collect::<Vec<Sender<Sample>>>();
+                    (resname, subs)
+                },
+                Err(err) => {
+                    error!("Received Data for unkown reskey: {}", err);
+                    return
                 }
-            },
-            Err(err) => error!("Received Data for unkown reskey: {}", err)
+            }
+        };
+        for sender in senders {
+            sender.send((resname.clone(), payload.clone(), info.clone())).await;
         }
     }
 
     async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, _consolidation: QueryConsolidation) {
         trace!("recv Query {:?} {:?} {:?} {:?}", reskey, predicate, target, _consolidation);
-        let inner = self.inner.read();
-        match inner.reskey_to_resname(reskey) {
-            Ok(resname) => {
-                let queryables = inner.queryables.values().filter(|queryable| {
-                    match inner.reskey_to_resname(&queryable.reskey) {
-                        Ok(qablname) => {
-                            rname::intersect(&qablname, &resname) 
-                            && ((queryable.kind == queryable::ALL_KINDS || target.kind  == queryable::ALL_KINDS) 
-                                || (queryable.kind & target.kind != 0))
-                        },
-                        Err(err) => {error!("{}. Internal error (queryable reskey to resname failed).", err); false}
-                    }
-                });
-
-                let nb_qhandlers = Arc::new(AtomicUsize::new(queryables.size_hint().1.unwrap()));
-                let sent_final = Arc::new(AtomicBool::new(false));
-                for queryable in queryables {
-                    let handler = &mut *queryable.qhandler.write();
-
-                    fn replies_sender(query_handle: QueryHandle, replies: Vec<(String, RBuf, Option<RBuf>)>) {
-                        async_std::task::spawn(
-                            async move {
-                                for (reskey, payload, info) in replies {
-                                    query_handle.primitives.reply(query_handle.qid, &Reply::ReplyData {
-                                        source_kind: query_handle.kind, 
-                                        replier_id: query_handle.pid.clone(), 
-                                        reskey: ResKey::RName(reskey.to_string()), 
-                                        info,
-                                        payload,
-                                    }).await;
-                                }
-                                query_handle.primitives.reply(query_handle.qid, &Reply::SourceFinal {
-                                    source_kind: query_handle.kind, 
-                                    replier_id: query_handle.pid.clone(),
-                                }).await;
-
-                                query_handle.nb_qhandlers.fetch_sub(1, Ordering::Relaxed);
-                                if query_handle.nb_qhandlers.load(Ordering::Relaxed) == 0 && !query_handle.sent_final.swap(true, Ordering::Relaxed) {
-                                    query_handle.primitives.reply(query_handle.qid, &Reply::ReplyFinal).await;
-                                }
-                            }
-                        );
-                    }
-                    let qhandle = QueryHandle {
-                        pid: inner.pid.clone(), // @TODO build/use prebuilt specific pid
-                        kind: queryable.kind,
-                        primitives: inner.primitives.clone().unwrap(),
-                        qid,
-                        nb_qhandlers: nb_qhandlers.clone(),
-                        sent_final: sent_final.clone(),
-                    };
-                    handler(&resname, predicate, &replies_sender, qhandle);
-
+        let (primitives, resname, kinds_and_senders) = {
+            let inner = self.inner.read();
+            match inner.reskey_to_resname(reskey) {
+                Ok(resname) => {
+                    let kinds_and_senders = inner.queryables.values().filter(|queryable| {
+                        match inner.reskey_to_resname(&queryable.reskey) {
+                            Ok(qablname) => {
+                                rname::intersect(&qablname, &resname) 
+                                && ((queryable.kind == queryable::ALL_KINDS || target.kind  == queryable::ALL_KINDS) 
+                                    || (queryable.kind & target.kind != 0))
+                            },
+                            Err(err) => {error!("{}. Internal error (queryable reskey to resname failed).", err); false}
+                        }
+                    }).map(|qable|(qable.kind, qable.req_sender.clone())).collect::<Vec<(ZInt, Sender<Query>)>>();
+                    (inner.primitives.as_ref().unwrap().clone(), resname, kinds_and_senders)
                 }
-            },
-            Err(err) => error!("Received Query for unkown reskey: {}", err)
-        }
+                Err(err) => {
+                    error!("Received Query for unkown reskey: {}", err);
+                    return
+                }
+            }
+        };
+
+        let predicate = predicate.to_string();
+        let (rep_sender, mut rep_receiver) = channel(256);
+        let pid = self.inner.read().pid.clone(); // @TODO build/use prebuilt specific pid
+            
+        task::spawn( async move { // router is not re-entrant
+            for (kind, req_sender) in kinds_and_senders {
+                req_sender.send((resname.clone(), predicate.clone(), RepliesSender{ kind, sender: rep_sender.clone() })).await;
+            }
+            drop(rep_sender); // all senders need to be dropped for the channel to close
+
+            while let Some((kind, sample_opt)) = rep_receiver.next().await {
+                match sample_opt {
+                    Some((resname, payload, info)) => {
+                        primitives.reply(qid, &Reply::ReplyData {
+                            source_kind: kind, 
+                            replier_id: pid.clone(),
+                            reskey: ResKey::RName(resname), 
+                            info,
+                            payload,
+                        }).await;
+                    }
+                    None => {
+                        primitives.reply(qid, &Reply::SourceFinal {
+                            source_kind: kind, 
+                            replier_id: pid.clone(),
+                        }).await;
+                    }
+                }
+            }
+
+            primitives.reply(qid, &Reply::ReplyFinal).await;
+        });
     }
 
     async fn reply(&self, qid: ZInt, reply: &Reply) {
         trace!("recv Reply {:?} {:?}", qid, reply);
-        let inner = &mut self.inner.write();
-        let rhandler = &mut * match inner.queries.get(&qid) {
-            Some(arc) => arc.write(),
-            None => {
-                warn!("Received Reply for unkown Query: {}", qid);
-                return
-            }
+        let (rep_sender, reply) = {
+            let inner = &mut self.inner.write();
+            let rep_sender = match inner.queries.get(&qid) {
+                Some(rep_sender) => rep_sender.clone(),
+                None => {
+                    warn!("Received Reply for unkown Query: {}", qid);
+                    return
+                }
+            };
+            let reply = match reply {
+                Reply::ReplyData {source_kind, replier_id, reskey, info, payload} => {
+                    let resname = match inner.reskey_to_resname(&reskey) {
+                        Ok(name) => name,
+                        Err(e) => {
+                            error!("Received Reply for unkown reskey: {}", e);
+                            return
+                        }
+                    };
+                    Reply::ReplyData {
+                        source_kind: *source_kind, 
+                        replier_id: replier_id.clone(), 
+                        reskey: ResKey::RName(resname), 
+                        info: info.clone(), 
+                        payload: payload.clone()
+                    } // @TODO find something more efficient than cloning everything
+                }
+                Reply::SourceFinal {..} => {reply.clone()} 
+                Reply::ReplyFinal {..} => {inner.queries.remove(&qid); reply.clone()}
+            };
+            (rep_sender, reply)
         };
-        match reply {
-            Reply::ReplyData {source_kind, replier_id, reskey, info, payload} => {
-                let resname = match inner.reskey_to_resname(&reskey) {
-                    Ok(name) => name,
-                    Err(e) => {
-                        error!("Received Reply for unkown reskey: {}", e);
-                        return
-                    }
-                };
-                rhandler(&Reply::ReplyData {
-                    source_kind: *source_kind, 
-                    replier_id: replier_id.clone(), 
-                    reskey: ResKey::RName(resname), 
-                    info: info.clone(), 
-                    payload: payload.clone()} ); // @TODO find something more efficient than cloning everything
-            }
-            Reply::SourceFinal {..} => {rhandler(reply);} 
-            Reply::ReplyFinal {..} => {rhandler(reply);} // @TODO remove query
-        }
+        rep_sender.send(reply).await;
     }
 
     async fn pull(&self, _is_final: bool, _reskey: &ResKey, _pull_id: ZInt, _max_samples: &Option<ZInt>) {
@@ -434,36 +483,36 @@ impl Primitives for Session {
     }
 }
 
-
-
 pub(crate) struct InnerSession {
-    pid:              PeerId,
-    primitives:       Option<Arc<dyn Primitives + Send + Sync>>, // @TODO replace with MaybeUninit ??
-    rid_counter:      AtomicUsize,  // @TODO: manage rollover and uniqueness
-    qid_counter:      AtomicU64,
-    decl_id_counter:  AtomicUsize,
-    local_resources:  HashMap<ResourceId, String>,
-    remote_resources: HashMap<ResourceId, String>,
-    publishers:       HashMap<Id, Publisher>,
-    subscribers:      HashMap<Id, Subscriber>,
-    queryables:       HashMap<Id, Queryable>,
-    queries:          HashMap<ZInt, Arc<RwLock<RepliesHandler>>>,
+    pid:                PeerId,
+    primitives:         Option<Arc<dyn Primitives + Send + Sync>>, // @TODO replace with MaybeUninit ??
+    rid_counter:        AtomicUsize,  // @TODO: manage rollover and uniqueness
+    qid_counter:        AtomicU64,
+    decl_id_counter:    AtomicUsize,
+    local_resources:    HashMap<ResourceId, String>,
+    remote_resources:   HashMap<ResourceId, String>,
+    publishers:         HashMap<Id, Publisher>,
+    subscribers:        HashMap<Id, Subscriber>,
+    direct_subscribers: HashMap<Id, DirectSubscriber>,
+    queryables:         HashMap<Id, Queryable>,
+    queries:            HashMap<ZInt, Sender<Reply>>,
 }
 
 impl InnerSession {
     pub(crate) fn new(pid: PeerId) -> InnerSession {
         InnerSession  { 
             pid, 
-            primitives:       None,
-            rid_counter:      AtomicUsize::new(1),  // Note: start at 1 because 0 is reserved for NO_RESOURCE
-            qid_counter:      AtomicU64::new(0),
-            decl_id_counter:  AtomicUsize::new(0),
-            local_resources:  HashMap::new(),
-            remote_resources: HashMap::new(),
-            publishers:       HashMap::new(),
-            subscribers:      HashMap::new(),
-            queryables:       HashMap::new(),
-            queries:          HashMap::new(),
+            primitives:         None,
+            rid_counter:        AtomicUsize::new(1),  // Note: start at 1 because 0 is reserved for NO_RESOURCE
+            qid_counter:        AtomicU64::new(0),
+            decl_id_counter:    AtomicUsize::new(0),
+            local_resources:    HashMap::new(),
+            remote_resources:   HashMap::new(),
+            publishers:         HashMap::new(),
+            subscribers:        HashMap::new(),
+            direct_subscribers: HashMap::new(),
+            queryables:         HashMap::new(),
+            queries:            HashMap::new(),
         }
     }
 }

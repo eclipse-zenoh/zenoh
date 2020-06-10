@@ -12,7 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::App;
-use async_std::prelude::*;
+use futures::prelude::*;
+use futures::select;
 use async_std::task;
 use zenoh::net::*;
 use zenoh::net::queryable::EVAL;
@@ -35,22 +36,23 @@ fn main() {
         println!("Openning session...");
         let session = open(&locator, None).await.unwrap();
 
-        // We want to use path in query_handler closure.
-        // But as this closure must take the ownership, we clone path as rname.
-        let rname = path.clone();
-        let query_handler = move |res_name: &str, predicate: &str, replies_sender: &RepliesSender, query_handle: QueryHandle| {
-            println!(">> [Query handler] Handling '{}?{}'", res_name, predicate);
-            let result: Vec<(String, RBuf, Option<RBuf>)> = [(rname.clone(), value.as_bytes().into(), None)].to_vec();
-            (*replies_sender)(query_handle, result);
-        };
-
         println!("Declaring Queryable on {}", path);
-        let queryable = session.declare_queryable(&path.into(), EVAL, query_handler).await.unwrap();
+        let mut queryable = session.declare_queryable(&path.clone().into(), EVAL).await.unwrap();
 
         let mut stdin = async_std::io::stdin();
         let mut input = [0u8];
-        while input[0] != 'q' as u8 {
-            stdin.read_exact(&mut input).await.unwrap();
+        loop {
+            select!(
+                query = queryable.next().fuse() => {
+                    let (res_name, predicate, replies_sender) = query.unwrap();
+                    println!(">> [Query handler] Handling '{}?{}'", res_name, predicate);
+                    replies_sender.send((path.clone(), value.as_bytes().into(), None)).await;
+                },
+                
+                _ = stdin.read_exact(&mut input).fuse() => {
+                    if input[0] == 'q' as u8 {break}
+                }
+            );
         }
 
         session.undeclare_queryable(queryable).await.unwrap();
