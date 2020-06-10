@@ -21,18 +21,41 @@ pub use manager::*;
 use channel::*;
 use initial::*;
 
-use async_std::sync::Arc;
+use async_std::sync::{Arc, Weak};
 use async_trait::async_trait;
 
 use crate::link::Link;
 use crate::proto::{SessionMessage, WhatAmI, ZenohMessage};
 
-use zenoh_util::core::ZResult;
+use zenoh_util::{zerror, zweak};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*********************************************************/
 /*           Trait for implementing a transport          */
 /*********************************************************/
-pub type Transport = Arc<dyn TransportTrait + Send + Sync>;
+const STR_ERR: &str = "Transport not available";
+
+#[derive(Clone)]
+pub struct Transport(Weak<dyn TransportTrait + Send + Sync>);
+
+impl Transport {
+    pub fn new(transport: Arc<dyn TransportTrait + Send + Sync>) -> Transport {
+        let transport = Arc::downgrade(&transport);
+        Transport(transport)
+    }
+}
+
+impl Transport {
+    pub async fn receive_message(&self, link: &Link, msg: SessionMessage) -> ZResult<Action> {
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.receive_message(link, msg).await)
+    }
+
+    pub async fn link_err(&self, link: &Link) -> ZResult<()> {
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.link_err(link).await)
+    }
+}
 
 #[async_trait]
 pub trait TransportTrait {

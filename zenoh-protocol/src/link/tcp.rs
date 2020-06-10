@@ -13,7 +13,7 @@
 //
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
-use async_std::sync::{Arc, channel, Mutex, Sender, RwLock, Receiver, Weak};
+use async_std::sync::{Arc, Barrier, Mutex, Sender, RwLock, Receiver, Weak, channel};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -130,7 +130,7 @@ impl LinkTrait for Tcp {
 
         let res = (&self.socket).write_all(buffer).await;
         if let Err(e) = res {
-            log::debug!("Transmission error on TCP link {}: {}", self, e);
+            log::trace!("Transmission error on TCP link {}: {}", self, e);
             return zerror!(ZErrorKind::IOError {
                 descr: format!("{}", e)
             })
@@ -199,7 +199,7 @@ impl LinkTrait for Tcp {
 async fn read_task(link: Arc<Tcp>) {
     let read_loop = async {
         // The link object to be passed to the transport
-        let link_obj: Link = link.clone();
+        let link_obj: Link = Link::new(link.clone());
         // Acquire the lock on the transport
         let mut guard = zasynclock!(link.transport);
 
@@ -250,13 +250,15 @@ async fn read_task(link: Arc<Tcp>) {
 
         // Macro to handle a link error
         macro_rules! zlinkerror {
-            () => {
+            ($notify:expr) => {
                 // Close the underlying TCP socket
                 let _ = link.socket.shutdown(Shutdown::Both);
                 // Delete the link from the manager
                 let _ = link.manager.del_link(&link.src_addr, &link.dst_addr).await;
-                // Notify the transport
-                guard.link_err(&link_obj).await;
+                if $notify {
+                    // Notify the transport
+                    let _ = guard.link_err(&link_obj).await;
+                }
                 // Exit
                 return Ok(())
             };
@@ -282,7 +284,7 @@ async fn read_task(link: Arc<Tcp>) {
                         Err(e) => match e.get_kind() {
                             ZErrorKind::InvalidMessage { descr } => {
                                 log::warn!("Closing TCP link {}: {}", link, descr);
-                                zlinkerror!();
+                                zlinkerror!(true);
                             },
                             _ => break
                         }
@@ -290,22 +292,23 @@ async fn read_task(link: Arc<Tcp>) {
                 }
 
                 for msg in messages.drain(..) {
-                    let action = guard.receive_message(&link_obj, msg).await;
+                    let res = guard.receive_message(&link_obj, msg).await;
                     // Enforce the action as instructed by the upper logic
-                    match action {
-                        Action::Read => {},
-                        Action::ChangeTransport(transport) => {
-                            log::debug!("Change transport on TCP link: {}", link);
-                            *guard = transport
+                    match res {
+                        Ok(action) => match action {
+                            Action::Read => {},
+                            Action::ChangeTransport(transport) => {
+                                log::trace!("Change transport on TCP link: {}", link);
+                                *guard = transport
+                            },
+                            Action::Close => {
+                                log::trace!("Closing TCP link: {}", link);
+                                zlinkerror!(false);
+                            }
                         },
-                        Action::Close => {
-                            log::debug!("Closing TCP link: {}", link);
-                            // Close the underlying TCP socket
-                            let _ = link.socket.shutdown(Shutdown::Both);
-                            // Delete the link from the manager
-                            let _ = link.manager.del_link(&link.src_addr, &link.dst_addr).await;
-                            // Exit
-                            return Ok(())
+                        Err(e) => {
+                            log::trace!("Closing TCP link {}: {}", link, e);
+                            zlinkerror!(false);
                         }
                     }  
                 }
@@ -319,8 +322,8 @@ async fn read_task(link: Arc<Tcp>) {
                 Ok(mut n) => {
                     if n == 0 {  
                         // Reading 0 bytes means error
-                        log::warn!("Zero bytes reading on TCP link: {}", link);
-                        zlinkerror!();
+                        log::debug!("Zero bytes reading on TCP link: {}", link);
+                        zlinkerror!(true);
                     }
 
                     // If we had a w_pos different from 0, it means we add an incomplete length reading
@@ -445,8 +448,8 @@ async fn read_task(link: Arc<Tcp>) {
                     }
                 },
                 Err(e) => {
-                    log::warn!("Reading error on TCP link {}: {}", link, e);
-                    zlinkerror!();
+                    log::debug!("Reading error on TCP link {}: {}", link, e);
+                    zlinkerror!(true);
                 }
             }
         }
@@ -497,16 +500,8 @@ impl ManagerTrait for ManagerTcp {
     #[allow(clippy::infallible_destructuring_match)]
     async fn new_link(&self, dst: &Locator, transport: &Transport) -> ZResult<Link> {
         let dst = get_tcp_addr!(dst);
-        let link: Link = self.0.new_link(&self.0, dst, transport).await?;
-        Ok(link)
-    }
-
-    // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
-    #[allow(clippy::infallible_destructuring_match)]
-    async fn del_link(&self, src: &Locator, dst: &Locator) -> ZResult<Link> {
-        let src = get_tcp_addr!(src);
-        let dst = get_tcp_addr!(dst);
-        let link: Link = self.0.del_link(src, dst).await?;
+        let link = self.0.new_link(&self.0, dst, transport).await?;
+        let link = Link::new(link);
         Ok(link)
     }
 
@@ -515,8 +510,18 @@ impl ManagerTrait for ManagerTcp {
     async fn get_link(&self, src: &Locator, dst: &Locator) -> ZResult<Link> {
         let src = get_tcp_addr!(src);
         let dst = get_tcp_addr!(dst);
-        let link: Link = self.0.get_link(src, dst).await?;
+        let link = self.0.get_link(src, dst).await?;
+        let link = Link::new(link);
         Ok(link)
+    }
+
+    // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
+    #[allow(clippy::infallible_destructuring_match)]
+    async fn del_link(&self, src: &Locator, dst: &Locator) -> ZResult<()> {
+        let src = get_tcp_addr!(src);
+        let dst = get_tcp_addr!(dst);
+        let _ = self.0.del_link(src, dst).await?;
+        Ok(())
     }
 
     // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
@@ -542,18 +547,22 @@ impl ManagerTrait for ManagerTcp {
 struct ListenerTcpInner {
     socket: Arc<TcpListener>,
     sender: Sender<()>,
-    receiver: Receiver<()>
+    receiver: Receiver<()>,
+    barrier: Arc<Barrier>
 }
 
 impl ListenerTcpInner {
     fn new(socket: Arc<TcpListener>) -> ListenerTcpInner {
         // Create the channel necessary to break the accept loop
         let (sender, receiver) = channel::<()>(1);
+        // Create the barrier necessary to detect the termination of the accept loop
+        let barrier = Arc::new(Barrier::new(2));
         // Update the list of active listeners on the manager
         ListenerTcpInner {
             socket,
             sender,
-            receiver
+            receiver,
+            barrier
         }
     }
 }
@@ -600,14 +609,14 @@ impl ManagerTcpInner {
         Ok(link)
     }
 
-    async fn del_link(&self, src: &SocketAddr, dst: &SocketAddr) -> ZResult<Arc<Tcp>> {
+    async fn del_link(&self, src: &SocketAddr, dst: &SocketAddr) -> ZResult<()> {
         // Remove the link from the manager list
         match zasyncwrite!(self.link).remove(&(*src, *dst)) {
-            Some(link) => Ok(link),
+            Some(_) => Ok(()),
             None => {
                 let e = format!("Can not delete TCP link because it has not been found: {} => {}", src, dst);
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::Other {
+                zerror!(ZErrorKind::InvalidLink {
                     descr: e
                 })
             }
@@ -621,7 +630,7 @@ impl ManagerTcpInner {
             None => {
                 let e = format!("Can not get TCP link because it has not been found: {} => {}", src, dst);
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::Other {
+                zerror!(ZErrorKind::InvalidLink {
                     descr: e
                 })
             }
@@ -635,14 +644,14 @@ impl ManagerTcpInner {
             Err(e) => {
                 let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
                 log::warn!("{}", e);
-                return zerror!(ZErrorKind::Other {
+                return zerror!(ZErrorKind::InvalidLink {
                     descr: e
                 })
             }
         };
-
-        // Update the list of active listeners on the manager
+               
         let listener = Arc::new(ListenerTcpInner::new(socket.clone()));
+        // Update the list of active listeners on the manager
         zasyncwrite!(self.listener).insert(*addr, listener.clone());
 
         // Spawn the accept loop for the listener
@@ -661,13 +670,16 @@ impl ManagerTcpInner {
         // Stop the listener
         match zasyncwrite!(self.listener).remove(&addr) {
             Some(listener) => {
+                // Send the stop signal
                 listener.sender.send(()).await;
+                // Wait for the accept loop to be stopped
+                listener.barrier.wait().await;
                 Ok(())
             },
             None => {
                 let e = format!("Can not delete the TCP listener because it has not been found: {}", addr);
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::Other {
+                zerror!(ZErrorKind::InvalidLink {
                     descr: e
                 })
             }
@@ -718,4 +730,5 @@ async fn accept_task(a_self: &Arc<ManagerTcpInner>, listener: Arc<ListenerTcpInn
 
     let stop = listener.receiver.recv();
     let _ = accept_loop.race(stop).await;
+    listener.barrier.wait().await;
 }

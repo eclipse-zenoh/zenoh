@@ -41,7 +41,7 @@ impl<T> FifoQueue<T> {
                 if self.not_empty.has_waiting_list() {
                     self.not_empty.notify(q).await;
                 }                    
-                return;                                    
+                return;
             }
             self.not_full.wait(q).await;            
         }            
@@ -53,34 +53,12 @@ impl<T> FifoQueue<T> {
             if let Some(e) = q.pull() {
                 if self.not_full.has_waiting_list() {
                     self.not_full.notify(q).await;
-                }                   
+                }
                 return e;
-            }          
+            }
             self.not_empty.wait(q).await;
         }
     }
-
-    // pub async fn drain(&self) -> Vec<T> {
-    //     let mut q = zasynclock!(self.buffer);
-    //     let mut xs = Vec::with_capacity(q.len());        
-    //     while let Some(x) = q.pull() {
-    //         xs.push(x);
-    //     }         
-    //     if self.not_full.has_waiting_list() {
-    //         self.not_full.notify_all(q).await;
-    //       }                   
-    //     xs
-    // }
-
-    // pub async fn drain_into(&self, xs: &mut Vec<T>){
-    //     let mut q = zasynclock!(self.buffer);
-    //     while let Some(x) = q.pull() {
-    //         xs.push(x);
-    //     }                 
-    //     if self.not_full.has_waiting_list() {
-    //         self.not_full.notify_all(q).await;
-    //     }
-    // }
 
     pub async fn drain(&self) -> Drain<'_, T> {
         // Acquire the guard and wait until the queue is not empty

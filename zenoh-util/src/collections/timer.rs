@@ -124,6 +124,7 @@ async fn timer_task(
     let mut events = events.lock().await;
     
     loop { 
+        log::trace!("Timer loop...");
         // Fuuture for adding new events
         let new = new_channel.recv();
 
@@ -165,7 +166,7 @@ async fn timer_task(
                     },
                     Err(_) => {
                         // Channel error
-                        log::error!("{}", e);                       
+                        log::trace!("{}", e);                       
                         return Ok(())
                     }    
                 }                
@@ -177,7 +178,7 @@ async fn timer_task(
                 },
                 Err(_) => {
                     // Channel error
-                    log::error!("{}", e);
+                    log::trace!("{}", e);
                     return Ok(())
                 }
             } 
@@ -208,6 +209,7 @@ impl Timer {
         let c_e = timer.events.clone();
         task::spawn(async move {
             let _ = sl_receiver.recv().race(timer_task(c_e, ev_receiver)).await;
+            log::trace!("A - Timer task no longer running...");
         });
 
         // Return the timer object
@@ -228,6 +230,7 @@ impl Timer {
             let c_e = self.events.clone();
             task::spawn(async move {
                 let _ = sl_receiver.recv().race(timer_task(c_e, ev_receiver)).await;
+                log::trace!("B - Timer task no longer running...");
             });
         }
     }
@@ -237,6 +240,7 @@ impl Timer {
             // Stop the timer task
             sl_sender.send(()).await;
 
+            log::trace!("Stopping timer...");
             // Remove the channels handlers
             self.sl_sender = None;
             self.ev_sender = None;

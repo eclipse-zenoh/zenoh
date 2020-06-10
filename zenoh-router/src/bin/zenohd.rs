@@ -58,8 +58,9 @@ fn main() {
         };
         let opt_config = SessionManagerOptionalConfig {
             lease: None,
+            keep_alive: None,
             sn_resolution: None,
-            batchsize: batch_size,
+            batch_size: batch_size,
             timeout: None,
             retries: None,
             max_sessions: None,

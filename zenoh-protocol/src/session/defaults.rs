@@ -14,8 +14,11 @@
 use crate::core::ZInt;
 
 zconfigurable! {
-    // Default session lease in seconds: 5 minutes
-    pub(crate) static ref SESSION_LEASE: ZInt = 300;
+    // Default session lease in milliseconds: 10 seconds
+    pub(crate) static ref SESSION_LEASE: ZInt = 10_000;
+
+    // Default interval for keep alive messages in milliseconds: 1 second
+    pub(crate) static ref SESSION_KEEP_ALIVE: ZInt = 1_000;
 
     // The default sequence number resolution takes 4 bytes on the wire.
     // Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.

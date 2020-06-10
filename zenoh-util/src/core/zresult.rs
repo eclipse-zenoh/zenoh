@@ -22,7 +22,8 @@ pub enum ZErrorKind {
     InvalidLink { descr: String },
     InvalidLocator { descr: String },
     InvalidMessage { descr: String },
-    InvalidResolution { descr: String},
+    InvalidReference { descr: String},
+    InvalidResolution { descr: String},    
     InvalidSession { descr: String },
     IOError { descr: String },
     Other { descr: String },
@@ -43,6 +44,8 @@ impl fmt::Display for ZErrorKind {
                 write!(f, "Invalid link ({})", descr),
             ZErrorKind::InvalidMessage { descr } =>
                 write!(f, "Invalid message ({})", descr),
+            ZErrorKind::InvalidReference { descr } =>
+                write!(f, "Invalid Reference ({})", descr),
             ZErrorKind::InvalidResolution { descr} =>
                 write!(f, "Invalid Resolution ({})", descr),
             ZErrorKind::InvalidSession { descr } =>
