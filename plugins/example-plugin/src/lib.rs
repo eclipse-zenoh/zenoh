@@ -14,46 +14,41 @@
 #![recursion_limit="256"]
 
 use log::{debug, info};
-use std::env;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use futures::prelude::*;
 use futures::select;
+use clap::{Arg, ArgMatches};
 use zenoh::net::*;
 use zenoh::net::queryable::STORAGE;
 
+
 #[no_mangle]
-pub fn start<'a>() -> Pin<Box<dyn Future<Output=()> + 'a>>
+pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>>
+{
+    vec![
+        Arg::from_usage("--storage-selector \
+            'The selector under which the storage will be declared as subscriber and queryable'")
+        .default_value("/demo/example/**")
+    ]
+}
+
+#[no_mangle]
+pub fn start<'a>(args: &'a ArgMatches<'a>, locator: &'a str) -> Pin<Box<dyn Future<Output=()> + 'a>>
 {
     // NOTES: the Future cannot be returned as such to the caller of this plugin.
     // Otherwise Rust complains it cannot move it as its size is not known.
     // We need to wrap it in a pinned Box.
     // See https://stackoverflow.com/questions/61167939/return-an-async-function-from-a-function-in-rust
-    Box::pin(run())
+    Box::pin(run(args, locator))
 }
 
-async fn run() {
+async fn run(args: &ArgMatches<'_>, locator: &str) {
     env_logger::init();
-    debug!("Start_async zenoh-plugin-http");
+    debug!("Run example-plugin, openning session to {}", locator);
 
-    let mut args: Vec<String> = env::args().collect();
-    debug!("args: {:?}", args);
-
-    let mut options = args.drain(1..);
-    let locator = options.next().unwrap_or_else(|| "".to_string());
-    
-    let mut ps = Properties::new();
-    ps.insert(ZN_USER_KEY, b"user".to_vec());
-    ps.insert(ZN_PASSWD_KEY, b"password".to_vec());
-
-    debug!("Openning session...");
-    let session = open(&locator, Some(ps)).await.unwrap();
-
-    let info = session.info();
-    debug!("LOCATOR :  \"{}\"", String::from_utf8_lossy(info.get(&ZN_INFO_PEER_KEY).unwrap()));
-    debug!("PID :      {:02x?}", info.get(&ZN_INFO_PID_KEY).unwrap());
-    debug!("PEER PID : {:02x?}", info.get(&ZN_INFO_PEER_PID_KEY).unwrap());
+    let session = open(&locator, None).await.unwrap();
 
     let mut stored: HashMap<String, (RBuf, Option<RBuf>)> = HashMap::new();
 
@@ -63,13 +58,13 @@ async fn run() {
         period: None
     };
 
-    let selector = "/demo/example/**".to_string();
+    let selector: ResKey = args.value_of("storage-selector").unwrap().into();
     
     debug!("Declaring Subscriber on {}", selector);
-    let mut sub = session.declare_subscriber(&selector.clone().into(), &sub_info).await.unwrap();
+    let mut sub = session.declare_subscriber(&selector, &sub_info).await.unwrap();
 
     debug!("Declaring Queryable on {}", selector);
-    let mut queryable = session.declare_queryable(&selector.into(), STORAGE).await.unwrap();
+    let mut queryable = session.declare_queryable(&selector, STORAGE).await.unwrap();
     
     loop {
         select!(

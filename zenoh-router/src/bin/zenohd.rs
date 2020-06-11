@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use clap::{App, Arg};
 use async_std::future;
 use async_std::sync::Arc;
 use async_std::task;
@@ -25,31 +26,29 @@ use zenoh_router::routing::broker::Broker;
 fn main() {
     env_logger::init();
     
+    let app = App::new("The zenoh router")
+        .arg(Arg::from_usage("-l [LOCATOR], --locator \
+            'The locator this router will bind to.'")
+            .default_value("tcp/127.0.0.1:7447"))
+        .arg(Arg::from_usage("-p ... [LOCATOR] --peer \
+            'A peer locator this router will try to connect to. \
+            Repeat this option to connect to several peers.'"));
+
     task::block_on(async {
-        let mut args = std::env::args();
-        args.next(); // skip exe name
-    
+        debug!("Load plugins...");
+        let mut plugins_mgr = zenoh_util::plugins::PluginsMgr::new();
+        plugins_mgr.search_and_load_plugins("zenoh-", ".plugin").await;
+        let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
+
         let broker = Arc::new(Broker::new());
 
         let mut pid = vec![0, 0, 0, 0];
         rand::thread_rng().fill_bytes(&mut pid);
         debug!("Starting broker with PID: {:02x?}", pid);
 
-        let batch_size: Option<usize> = match args.next() { 
-            Some(size) => Some(size.parse().unwrap()),
-            None => None
-        };
-
-        let self_locator: Locator = match args.next() { 
-            Some(port) => {
-                let mut s = "tcp/127.0.0.1:".to_string();
-                s.push_str(&port);
-                s.parse().unwrap()
-            },
-            None => "tcp/127.0.0.1:7447".parse().unwrap()
-        };
+        let self_locator: Locator = args.value_of("locator").unwrap().parse().unwrap();
         debug!("self_locator: {}", self_locator);
-    
+
         let config = SessionManagerConfig {
             version: 0,
             whatami: whatami::BROKER,
@@ -60,7 +59,7 @@ fn main() {
             lease: None,
             keep_alive: None,
             sn_resolution: None,
-            batch_size,
+            batch_size: None,
             timeout: None,
             retries: None,
             max_sessions: None,
@@ -76,17 +75,18 @@ fn main() {
         }
 
         let attachment = None;
-        for locator in args {
-            debug!("Open session to {}", locator);
-            if let Err(_err) =  manager.open_session(&locator.parse().unwrap(), &attachment).await {
-                log::error!("Unable to connect to {}!", locator);
-                std::process::exit(-1);
+        if  args.occurrences_of("peer") > 0 {
+            debug!("peers: {:?}", args.values_of("peer"));
+            for locator in args.values_of("peer").unwrap() {
+                debug!("Open session to {}", locator);
+                if let Err(_err) =  manager.open_session(&locator.parse().unwrap(), &attachment).await {
+                    log::error!("Unable to connect to {}!", locator);
+                }
             }
         }
         
-        debug!("Load plugins...");
-        let mut plugins_mgr = zenoh_util::plugins::PluginsMgr::new();
-        plugins_mgr.search_and_load_plugins("zenoh-", ".plugin").await;
+        debug!("Start plugins...");
+        plugins_mgr.start_plugins(&args, &format!("{}", self_locator)).await;
 
         future::pending::<()>().await;
     });

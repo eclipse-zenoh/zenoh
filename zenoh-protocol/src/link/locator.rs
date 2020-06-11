@@ -51,6 +51,13 @@ impl FromStr for Locator {
     type Err = ZError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if !s.contains(SEPARATOR) {
+            let e = format!("Invalid locator: {} - the format should be '<protocol>/<address>'", s);
+            log::warn!("{}", e);
+            return zerror!(ZErrorKind::InvalidLocator {
+                descr: e
+            })
+        }
         let mut iter = s.split(SEPARATOR);
         let proto = iter.next().unwrap();
         let addr = iter.next().unwrap();

@@ -16,6 +16,7 @@ use log::{debug, warn};
 use libloading::{Library, Symbol};
 use std::future::Future;
 use std::pin::Pin;
+use clap::{Arg, ArgMatches};
 
 
 pub struct PluginsMgr {
@@ -96,18 +97,9 @@ impl PluginsMgr {
                                     let path = entry.path();
                                     let args: Vec<String> = vec![];  // TODO
                                     debug!("Load plugin {} from {:?} with args: {:?}", name, path, args);
-                                    match Library::new(path.as_os_str()) {
-                                        Ok(lib) => {
-                                            unsafe {
-                                                debug!("Call start() of plugin {}", name);
-                                                let start: Symbol<unsafe extern fn() -> Pin<Box<dyn Future<Output=()>>>> =
-                                                    lib.get(b"start\0").unwrap();
-                                                start().as_mut().await;
-                                            }
-                                            let plugin = Plugin { _name: name.to_string(), _path: path, _args: args, _lib:lib };
-                                            self.plugins.push(plugin);
-                                        }
-                                        Err(err) => warn!("Failed to load plugin from {}: {}", path.to_string_lossy(), err)
+                                    match Plugin::load(name, path) {
+                                            Ok(plugin) => self.plugins.push(plugin),
+                                            Err(err) => warn!("{}", err)
                                     }
                                 }
                             }
@@ -117,6 +109,21 @@ impl PluginsMgr {
             }
         }
     }
+
+    pub fn get_plugins_args<'a, 'b>(&self) -> Vec<Arg<'a, 'b>> {
+        let mut result: Vec<Arg<'a, 'b>> = vec![];
+        for plugin in &self.plugins {
+            result.append(&mut plugin.get_expected_args());
+        }
+        result
+    }
+
+    pub async fn start_plugins(&self, args: &ArgMatches<'_>, self_locator: &str) {
+        for plugin in &self.plugins {
+            plugin.start(args, self_locator).await
+        }
+    }
+
 }
 
 impl Default for PluginsMgr {
@@ -127,8 +134,52 @@ impl Default for PluginsMgr {
 }
 
 struct Plugin {
-    _name: String,
-    _path: PathBuf,
-    _args: Vec<String>,
-    _lib: Library
+    name: String,
+    lib: Library
+}
+
+const START_FN_NAME: &[u8; 6] = b"start\0";
+const GET_ARGS_FN_NAME: &[u8; 18] = b"get_expected_args\0";
+
+type StartFn<'lib> = Symbol<'lib, unsafe extern fn(&ArgMatches, &str) -> Pin<Box<dyn Future<Output=()>>>>;
+type GetArgsFn<'lib, 'a, 'b> = Symbol<'lib, unsafe extern fn() -> Vec<Arg<'a, 'b>>>;
+
+
+impl Plugin {
+
+    pub fn load(name: &str, path: PathBuf) -> Result<Plugin, String> {
+        debug!("Load plugin {} from {:?}", name, path);
+        match Library::new(path.as_os_str()) {
+            Ok(lib) => {
+                unsafe {
+                    // check if it has the expected operations
+                    // NOTE: we don't save the symbols here
+                    if lib.get::<GetArgsFn>(GET_ARGS_FN_NAME).is_err() {
+                        return Err(format!("Failed to load plugin from {}: it lacks a get_expected_args() operation", path.to_string_lossy()))
+                    };
+                    if lib.get::<StartFn>(START_FN_NAME).is_err() {
+                        return Err(format!("Failed to load plugin from {}: it lacks a start() operation", path.to_string_lossy()))
+                    };
+                }
+                Ok(Plugin { name: name.to_string(), lib })
+            }
+            Err(err) => Err(format!("Failed to load plugin from {}: {}", path.to_string_lossy(), err))
+        }
+    }
+
+    pub fn get_expected_args<'a, 'b>(&self) -> Vec<Arg<'a, 'b>> {
+        unsafe {
+            debug!("Call get_expected_args() of plugin {}", self.name);
+            let get_expected_args: GetArgsFn = self.lib.get(GET_ARGS_FN_NAME).unwrap();
+            get_expected_args()
+        }
+    }
+
+    pub async fn start(&self, args: &ArgMatches<'_>, self_locator: &str) {
+        unsafe {
+            debug!("Call start() of plugin {}", self.name);
+            let start: StartFn = self.lib.get(START_FN_NAME).unwrap();
+            start(args, self_locator).as_mut().await;
+        }
+    }
 }
