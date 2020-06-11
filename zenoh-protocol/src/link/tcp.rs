@@ -38,6 +38,10 @@ zconfigurable! {
     static ref TCP_READ_BUFFER_SIZE: usize = 2*DEFAULT_MTU;
     // Size of the vector used to deserialize the messages.
     static ref TCP_READ_MESSAGES_VEC_SIZE: usize = 32;
+    // Timeout in milliseconds before calling the shutdown on the socket. 
+    // More info on why this is required can be found at:
+    // https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable
+    static ref TCP_CLOSE_TIMEOUT: u64 = 100;
     // Amount of time in microseconds to throttle the accept loop upon an error. 
     // Default set to 100 ms.
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
@@ -118,6 +122,10 @@ impl LinkTrait for Tcp {
 
         // Stop the read loop
         self.stop().await?;
+
+        // @TODO: choose an apprioriate timeout value
+        task::sleep(Duration::from_millis(*TCP_CLOSE_TIMEOUT)).await;
+
         // Close the underlying TCP socket
         let _ = self.socket.shutdown(Shutdown::Both);
         // Delete the link from the manager

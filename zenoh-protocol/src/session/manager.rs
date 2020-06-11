@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use crate::core::{PeerId, ZInt};
 use crate::link::{Link, LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
-use crate::proto::{Attachment, WhatAmI, ZenohMessage};
+use crate::proto::{Attachment, WhatAmI, ZenohMessage, smsg};
 use crate::session::defaults::{
     SESSION_BATCH_SIZE, 
     SESSION_LEASE, 
@@ -517,6 +517,18 @@ impl Session {
         Ok(channel.has_callback())
     }
 
+    pub(super) async fn add_link(&self, link: Link) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
+        channel.add_link(link).await?;
+        Ok(())
+    }
+
+    pub(super) async fn _del_link(&self, link: &Link) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
+        channel.del_link(&link).await?;
+        Ok(())
+    }
+
     pub(super) async fn set_callback(&self, callback: Arc<dyn MsgHandler + Send + Sync>) -> ZResult<()> {
         let channel = zweak!(self.0, STR_ERR);
         channel.set_callback(callback).await;
@@ -544,18 +556,12 @@ impl Session {
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("{:?}. Close", self);
         let channel = zweak!(self.0, STR_ERR);
-        channel.close().await
-    }    
-
-    pub async fn add_link(&self, link: Link) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel.add_link(link).await?;
-        Ok(())
+        channel.close(smsg::close_reason::GENERIC).await
     }
 
-    pub async fn del_link(&self, link: Link) -> ZResult<()> {
+    pub async fn close_link(&self, link: &Link) -> ZResult<()> {
         let channel = zweak!(self.0, STR_ERR);
-        channel.del_link(&link).await?;
+        channel.close_link(link, smsg::close_reason::GENERIC).await?;
         Ok(())
     }
 

@@ -131,7 +131,7 @@ fn map_messages_on_links(
 ) {    
     // Drain all the messages from the queue and map them on the links
     for msg in drain {   
-        // log::trace!("Scheduling: {:?}", msg.inner);   
+        log::trace!("Scheduling: {:?}", msg.inner);   
         // Find the right index for the message
         let index = if let Some(link) = &msg.link {
             // Check if the target link exists, otherwise drop it            
@@ -165,7 +165,7 @@ async fn batch_fragment_transmit(
     
     // Process all the messages
     for msg in messages.drain(..) {
-        // log::trace!("Serializing: {:?}", msg);
+        log::trace!("Serializing: {:?}", msg);
 
         let mut has_failed = false;
         let mut current_sn = None;
@@ -238,7 +238,8 @@ async fn batch_fragment_transmit(
                 }
             };
 
-            // We have been succesfull in writing on the current batch, exit the loop
+            // We have been succesfull in writing on the current batch: breaks the loop
+            // and tries to write more message on the same batch
             if res {
                 break
             }
@@ -434,17 +435,17 @@ impl Timed for LeaseEvent {
             // Get and reset the current status of active links
             let alive: HashSet<Link> = HashSet::from_iter(zasynclock!(ch.rx).alive.drain());
             // Create the difference set
-            let difference: HashSet<Link> = HashSet::from_iter(links.difference(&alive).cloned());
+            let mut difference: HashSet<Link> = HashSet::from_iter(links.difference(&alive).cloned());
 
             if links == difference {
-                // We have no links left, close the whole session
+                // We have no links left or all the links have expired: close the whole session
                 log::warn!("Session with peer {} has expired", ch.get_peer());                
-                ch.delete().await;
+                let _ = ch.close(smsg::close_reason::EXPIRED).await;
             } else {
                 // Remove only the links with expired lease
-                for l in difference {           
+                for l in difference.drain() {
                     log::warn!("Link with peer {} has expired: {}", ch.get_peer(), l);
-                    let _ = ch.del_link(&l).await;                
+                    let _ = ch.close_link(&l, smsg::close_reason::EXPIRED).await;                
                 }
             }            
         }
@@ -469,7 +470,7 @@ impl SeqNumTx {
     }
 }
 
-// Store the mutable data that need to be used for transmission
+// Store the mutable data that need to be used for reception
 struct ChannelInnerTx {
     sn: SeqNumTx
     // Add reliability queue
@@ -603,10 +604,8 @@ pub(super) struct Channel {
     keep_alive: ZInt,
     // The SN resolution 
     sn_resolution: ZInt,
-    // Keep track whether the consume task can be started
-    can_start: AtomicBool,
-    // Keep track whether the consume task can be stopped
-    can_stop: AtomicBool,
+    // Keep track whether the consume task is active
+    active: Mutex<bool>,
     // The callback has been set or not
     has_callback: AtomicBool,
     // The message queue
@@ -670,8 +669,7 @@ impl Channel {
             sn_resolution,
             has_callback: AtomicBool::new(false),
             queue: CreditQueue::new(queue_tx, *QUEUE_CONCURRENCY),
-            can_start: AtomicBool::new(true),
-            can_stop: AtomicBool::new(false),
+            active: Mutex::new(false),
             links: RwLock::new(ChannelLinks::new(batch_size)),
             tx: Mutex::new(ChannelInnerTx::new(sn_resolution, initial_sn_tx)),
             rx: Mutex::new(ChannelInnerRx::new(sn_resolution, initial_sn_rx)),
@@ -690,6 +688,7 @@ impl Channel {
         let event = TimedEvent::periodic(interval, event);
         self.timer.add(event).await;
     }
+
 
     /*************************************/
     /*            ACCESSORS              */
@@ -720,10 +719,66 @@ impl Channel {
         guard.callback = Some(callback);
     }
 
+
+    /*************************************/
+    /*               TASK                */
+    /*************************************/
+    pub(super) async fn start(&self) -> ZResult<()> {
+        let mut guard = zasynclock!(self.active);   
+        // If not already active, start the transmission loop
+        if !*guard {    
+            // Get the Arc to the channel
+            let ch = zasyncread!(self.w_self).as_ref().unwrap().upgrade().unwrap();
+
+            // Spawn the transmission loop
+            task::spawn(async move {
+                let _ = consume_task(ch.clone()).await;
+                // Mark the task as non-active
+                let mut guard = zasynclock!(ch.active);
+                *guard = false;
+            });
+
+            // Mark that now the task can be stopped
+            *guard = true;
+
+            return Ok(())
+        }
+
+        zerror!(ZErrorKind::Other {
+            descr: format!("Can not start channel with peer {} because it is already active", self.get_peer())
+        })
+    }
+
+    pub(super) async fn stop(&self, priority: usize) -> ZResult<()> {  
+        let mut guard = zasynclock!(self.active);         
+        if *guard {
+            let msg = MessageTx {
+                inner: MessageInner::Stop,
+                link: None
+            };
+            self.queue.push(msg, priority).await;
+            self.barrier.wait().await;
+
+            // Mark that now the task can be started
+            *guard = false;
+
+            return Ok(())
+        }
+
+        zerror!(ZErrorKind::Other {
+            descr: format!("Can not stop channel with peer {} because it is already inactive", self.get_peer())
+        })
+    }
+
+
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
     async fn delete(&self) {
+        // Stop the consume task with the lowest priority to give enough
+        // time to send all the messages still present in the queue
+        let _ = self.stop(*QUEUE_PRIO_DATA).await;
+
         // Delete the session on the manager
         let _ = self.manager.del_session(&self.pid).await;            
 
@@ -731,14 +786,10 @@ impl Channel {
         if let Some(callback) = &zasynclock!(self.rx).callback {
             callback.close().await;
         }
-
-        // Stop the consume task
-        let _ = self.stop().await;
-
+        
         // Close all the links
         // NOTE: del_link() is meant to be used thorughout the lifetime
-        //       of the session and not for its termination. Do NOT use 
-        //       del_link() here since it can end up in a deadlock.
+        //       of the session and not for its termination.
         for l in self.get_links().await.drain(..) {
             let _ = l.close().await;
         }
@@ -747,46 +798,59 @@ impl Channel {
         zasyncwrite!(self.links).clear();
     }
 
-    pub(super) async fn close(&self) -> ZResult<()> {
-        // Mark the channel as inactive
-        if self.can_stop.swap(false, Ordering::SeqCst) { 
-            log::trace!("Closing session with peer: {}", self.get_peer());
+    pub(super) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {     
+        log::trace!("Closing link {} with peer: {}", link, self.get_peer());
 
-            // Atomically push the messages on the queue
-            let mut messages: Vec<MessageTx> = Vec::new();
+        // Close message to be sent on the target link
+        let peer_id = Some(self.manager.config.pid.clone());
+        let reason_id = reason;              
+        let link_only = true;  // This is should always be true when closing a link              
+        let attachment = None;  // No attachment here
+        let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            // Close message to be sent on all the links
-            let peer_id = Some(self.manager.config.pid.clone());
-            let reason_id = smsg::close_reason::GENERIC;              
-            let link_only = false;  // This is should always be false for user-triggered close              
-            let attachment = None;  // No attachment here
-            let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+        let close = MessageTx {
+            inner: MessageInner::Session(msg),
+            link: Some(link.clone())
+        };
 
-            for link in self.get_links().await.drain(..) {
-                let close = MessageTx {
-                    inner: MessageInner::Session(msg.clone()),
-                    link: Some(link)
-                };
-                messages.push(close);
-            }
+        // NOTE: del_link() stops the consume task with priority QUEUE_PRIO_CTRL.
+        //       The close message must be pushed with the same priority before
+        //       the link is deleted
+        self.queue.push(close, *QUEUE_PRIO_CTRL).await;
 
-            // Stop message to exit the consume task
-            // NOTE: do not use stop() here otherwise deadlocks may sporadically occur
-            let stop = MessageTx {
-                inner: MessageInner::Stop,
-                link: None
+        // Remove the link from the channel
+        self.del_link(&link).await?;
+
+        // Close the underlying link
+        link.close().await
+    }
+
+    pub(super) async fn close(&self, reason: u8) -> ZResult<()> {
+        log::trace!("Closing session with peer: {}", self.get_peer());
+
+        // Atomically push the messages on the queue
+        let mut messages: Vec<MessageTx> = Vec::new();
+
+        // Close message to be sent on all the links
+        let peer_id = Some(self.manager.config.pid.clone());
+        let reason_id = reason;              
+        let link_only = false;  // This is should always be false for user-triggered close              
+        let attachment = None;  // No attachment here
+        let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+
+        for link in self.get_links().await.drain(..) {
+            let close = MessageTx {
+                inner: MessageInner::Session(msg.clone()),
+                link: Some(link)
             };
-            messages.push(stop);
-
-            // Atomically push the close and stop messages to the queue
-            self.queue.push_batch(messages, *QUEUE_PRIO_DATA).await;
-
-            // Wait for the consume_task to stop
-            self.barrier.wait().await;
-
-            // Terminate and clean up the session
-            self.delete().await;
+            messages.push(close);
         }
+
+        // Atomically push the close and stop messages to the queue
+        self.queue.push_batch(messages, *QUEUE_PRIO_DATA).await;
+
+        // Terminate and clean up the session
+        self.delete().await;
         
         Ok(())
     }
@@ -794,7 +858,7 @@ impl Channel {
     /*************************************/
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
-    // Schedule the message to be sent asynchronsly
+    /// Schedule a Zenoh message on the transmission queue
     pub(super) async fn schedule(&self, message: ZenohMessage, link: Option<Link>) {
         let message = MessageTx {
             inner: MessageInner::Zenoh(message),
@@ -804,7 +868,7 @@ impl Channel {
         self.queue.push(message, *QUEUE_PRIO_DATA).await;
     }
 
-    // Schedule a batch of messages to be sent asynchronsly
+    /// Schedule a batch of Zenoh messages on the transmission queue
     pub(super) async fn schedule_batch(&self, mut messages: Vec<ZenohMessage>, link: Option<Link>) {
         let messages = messages.drain(..).map(|x| {
             MessageTx {
@@ -834,14 +898,14 @@ impl Channel {
         // Add the link along with the handle for defusing the KEEP_ALIVE messages
         zasyncwrite!(self.links).add(link.clone(), handle)?;
 
-        // Add the link to the alive links
+        // Add the link to the set of alive links
         zasynclock!(self.rx).alive.insert(link);
 
         // Add the periodic event to the timer
         ch.timer.add(event).await;
 
         // Stop the consume task to get the updated view on the links
-        let _ = self.stop().await;
+        let _ = self.stop(*QUEUE_PRIO_CTRL).await;
         // Start the consume task with the new view on the links
         let _ = self.start().await;
         
@@ -860,7 +924,7 @@ impl Channel {
         handle.defuse();
                 
         // Stop the consume task to get the updated view on the links
-        let _ = self.stop().await;
+        let _ = self.stop(*QUEUE_PRIO_CTRL).await;
         // Don't restart the consume task if there are no links left
         if !is_empty {
             // Start the consume task with the new view on the links
@@ -872,53 +936,6 @@ impl Channel {
 
     pub(super) async fn get_links(&self) -> Vec<Link> {
         zasyncread!(self.links).get()
-    }
-
-    /*************************************/
-    /*               TASK                */
-    /*************************************/
-    pub(super) async fn start(&self) -> ZResult<()> {        
-        // If not already active, start the transmission loop
-        if self.can_start.swap(false, Ordering::SeqCst) {    
-            // Get the Arc to the channel
-            let ch = zasyncread!(self.w_self).as_ref().unwrap().upgrade().unwrap();
-
-            // Spawn the transmission loop
-            task::spawn(async move {
-                let _ = consume_task(ch.clone()).await;
-                // Mark the task as non-active
-                ch.can_start.store(true, Ordering::SeqCst);
-            });
-
-            // Mark that now the task can be stopped
-            self.can_stop.store(true, Ordering::SeqCst);
-
-            return Ok(())
-        }
-
-        zerror!(ZErrorKind::Other {
-            descr: format!("Can not start channel with peer {} because it is already active", self.get_peer())
-        })
-    }
-
-    pub(super) async fn stop(&self) -> ZResult<()> {        
-        if self.can_stop.swap(false, Ordering::SeqCst) {
-            let msg = MessageTx {
-                inner: MessageInner::Stop,
-                link: None
-            };
-            self.queue.push(msg, *QUEUE_PRIO_CTRL).await;
-            self.barrier.wait().await;
-
-            // Mark that now the task can be stopped
-            self.can_start.store(true, Ordering::SeqCst);
-
-            return Ok(())
-        }
-
-        zerror!(ZErrorKind::Other {
-            descr: format!("Can not stop channel with peer {} because it is already inactive", self.get_peer())
-        })
     }
 
 
@@ -1026,7 +1043,7 @@ impl Channel {
 #[async_trait]
 impl TransportTrait for Channel {
     async fn receive_message(&self, link: &Link, message: SessionMessage) -> Action {
-        log::trace!("Received on link {}: {:?}", link, message);
+        log::trace!("Received from peer {} on link {}: {:?}", self.get_peer(), link, message);
         match message.body {
             SessionBody::Frame { ch, sn, payload } => {
                 match ch {
@@ -1069,12 +1086,7 @@ impl TransportTrait for Channel {
 
     async fn link_err(&self, link: &Link) {
         log::warn!("Unexpected error on link {} with peer: {}", link, self.get_peer());
-
         let _ = self.del_link(link).await;
-
-        // // @TODO: Remove this statement once the session lease is implemented
-        // if self.get_links().await.is_empty() {
-        //     self.delete().await;
-        // }
+        let _ = link.close().await;
     }
 }

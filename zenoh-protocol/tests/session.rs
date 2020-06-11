@@ -160,19 +160,19 @@ async fn session_lease(locator: Locator) {
     assert_eq!(links.len(), 1);
     
     /* [4] */
-    // Remove all the links to trigger session lease expiration
+    // Close all the links to trigger session lease expiration
     println!("Session Lease [4a1]");
     let mut links = c_ses1.get_links().await.unwrap();
     println!("Session Lease [4a2]: {:?}", links);
     assert_eq!(links.len(), 1);
     for l in links.drain(..) {
-        let res = c_ses1.del_link(l).await;
+        let res = c_ses1.close_link(&l).await;
         println!("Session Lease [4a3]: {:?}", res);
         assert!(res.is_ok());
     }
 
     // Wait for the session to expire
-    task::sleep(Duration::from_millis(2 * lease as u64)).await;
+    task::sleep(Duration::from_millis(3 * lease as u64)).await;
 
     /* [5] */
     // Verify that the session has been closed on the router
@@ -534,6 +534,8 @@ async fn session_open_close(locator: Locator) {
 
 #[test]
 fn session_tcp() {
+    env_logger::init();
+
     let locator: Locator = "tcp/127.0.0.1:8888".parse().unwrap();
     task::block_on(async {
         session_open_close(locator.clone()).await;

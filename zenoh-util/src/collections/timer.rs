@@ -124,7 +124,6 @@ async fn timer_task(
     let mut events = events.lock().await;
     
     loop { 
-        log::trace!("Timer loop...");
         // Fuuture for adding new events
         let new = new_channel.recv();
 

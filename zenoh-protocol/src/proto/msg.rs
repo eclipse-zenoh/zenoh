@@ -559,6 +559,7 @@ pub mod smsg {
         pub const INVALID       : u8 = 0x02;
         pub const MAX_SESSIONS  : u8 = 0x03;
         pub const MAX_LINKS     : u8 = 0x04;
+        pub const EXPIRED       : u8 = 0x05;
     }
 
     // Header mask

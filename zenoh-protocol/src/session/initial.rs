@@ -275,6 +275,7 @@ impl InitialSession {
             // Compute the minimum SN Resolution 
             let agreed_sn_resolution = self.manager.config.sn_resolution.min(sn_resolution);
             let initial_sn_tx = {
+                // @TODO: in case the session is already active, we should return the last SN
                 let mut rng = rand::thread_rng();
                 rng.gen_range(0, agreed_sn_resolution)
             };
