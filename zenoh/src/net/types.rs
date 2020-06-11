@@ -146,13 +146,13 @@ pin_project! {
         pub(crate) reskey: ResKey,
         pub(crate) kind: ZInt,
         #[pin]
-        pub(crate) req_sender: async_std::sync::Sender<Query>,
+        pub(crate) req_sender: Sender<Query>,
         #[pin]
-        pub(crate) req_receiver: async_std::sync::Receiver<Query>,
+        pub(crate) req_receiver: Receiver<Query>,
     }
 }
 
-impl async_std::stream::Stream for Queryable {
+impl Stream for Queryable {
     type Item = Query;
 
     #[inline(always)]
@@ -175,7 +175,7 @@ impl fmt::Debug for Queryable {
 
 pub struct RepliesSender{
     pub(crate) kind: ZInt,
-    pub(crate) sender: async_std::sync::Sender<(ZInt, Option<Sample>)>,
+    pub(crate) sender: Sender<(ZInt, Option<Sample>)>,
 }
 
 impl RepliesSender{
