@@ -181,7 +181,7 @@ pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<Face>, qid:
         Some(query) => {
             match reply {
                 Reply::ReplyData {..} | Reply::SourceFinal {..} => {
-                    query.src_face.primitives.clone().reply(query.src_qid, reply.clone()).await;
+                    query.src_face.primitives.clone().reply(query.src_qid, reply).await;
                 }
                 Reply::ReplyFinal {..} => {
                     unsafe {
