@@ -417,7 +417,7 @@ impl Primitives for Session {
             while let Some((kind, sample_opt)) = rep_receiver.next().await {
                 match sample_opt {
                     Some((resname, payload, info)) => {
-                        primitives.reply(qid, &Reply::ReplyData {
+                        primitives.reply(qid, Reply::ReplyData {
                             source_kind: kind, 
                             replier_id: pid.clone(),
                             reskey: ResKey::RName(resname), 
@@ -426,7 +426,7 @@ impl Primitives for Session {
                         }).await;
                     }
                     None => {
-                        primitives.reply(qid, &Reply::SourceFinal {
+                        primitives.reply(qid, Reply::SourceFinal {
                             source_kind: kind, 
                             replier_id: pid.clone(),
                         }).await;
@@ -434,11 +434,11 @@ impl Primitives for Session {
                 }
             }
 
-            primitives.reply(qid, &Reply::ReplyFinal).await;
+            primitives.reply(qid, Reply::ReplyFinal).await;
         });
     }
 
-    async fn reply(&self, qid: ZInt, reply: &Reply) {
+    async fn reply(&self, qid: ZInt, mut reply: Reply) {
         trace!("recv Reply {:?} {:?}", qid, reply);
         let (rep_sender, reply) = {
             let inner = &mut self.inner.write();
@@ -449,8 +449,8 @@ impl Primitives for Session {
                     return
                 }
             };
-            let reply = match reply {
-                Reply::ReplyData {source_kind, replier_id, reskey, info, payload} => {
+            let reply = match &mut reply {
+                Reply::ReplyData {ref mut reskey, ..} => {
                     let resname = match inner.reskey_to_resname(&reskey) {
                         Ok(name) => name,
                         Err(e) => {
@@ -458,16 +458,11 @@ impl Primitives for Session {
                             return
                         }
                     };
-                    Reply::ReplyData {
-                        source_kind: *source_kind, 
-                        replier_id: replier_id.clone(), 
-                        reskey: ResKey::RName(resname), 
-                        info: info.clone(), 
-                        payload: payload.clone()
-                    } // @TODO find something more efficient than cloning everything
+                    *reskey = ResKey::RName(resname);
+                    reply
                 }
-                Reply::SourceFinal {..} => {reply.clone()} 
-                Reply::ReplyFinal {..} => {inner.queries.remove(&qid); reply.clone()}
+                Reply::SourceFinal {..} => {reply} 
+                Reply::ReplyFinal {..} => {inner.queries.remove(&qid); reply}
             };
             (rep_sender, reply)
         };

@@ -39,7 +39,7 @@ pub trait Primitives {
 
     async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf);
     async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation);
-    async fn reply(&self, qid: ZInt, reply: &Reply);
+    async fn reply(&self, qid: ZInt, reply: Reply);
     async fn pull(&self, is_final: bool, reskey: &ResKey, pull_id: ZInt, max_samples: &Option<ZInt>);
 
     async fn close(&self);

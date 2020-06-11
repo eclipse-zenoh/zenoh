@@ -89,16 +89,16 @@ impl<T: MsgHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         self.handler.handle_message(ZenohMessage::make_query(reskey.clone(), predicate.to_string(), qid, target_opt, consolidation.clone(), None)).await;
     }
 
-    async fn reply(&self, qid: ZInt, reply: &Reply) {
+    async fn reply(&self, qid: ZInt, reply: Reply) {
         match reply {
             Reply::ReplyData { source_kind, replier_id, reskey, info, payload } => {
                 self.handler.handle_message(ZenohMessage::make_data(
                     channel::RELIABLE, reskey.clone(), info.clone(), payload.clone(), 
-                    Some(ReplyContext::make(qid, *source_kind, Some(replier_id.clone()))), None)).await;
+                    Some(ReplyContext::make(qid, source_kind, Some(replier_id.clone()))), None)).await;
             }
             Reply::SourceFinal { source_kind, replier_id } => {
                 self.handler.handle_message(ZenohMessage::make_unit(
-                    channel::RELIABLE, Some(ReplyContext::make(qid, *source_kind, Some(replier_id.clone()))), None)).await;
+                    channel::RELIABLE, Some(ReplyContext::make(qid, source_kind, Some(replier_id.clone()))), None)).await;
             }
             Reply::ReplyFinal {} => {
                 self.handler.handle_message(ZenohMessage::make_unit(
