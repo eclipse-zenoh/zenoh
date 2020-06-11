@@ -28,9 +28,16 @@ use zenoh_protocol:: {
     session::{SessionManager, SessionManagerConfig},
 };
 use zenoh_router::routing::broker::Broker;
-use zenoh_util::zerror;
+use zenoh_util::{zerror, zconfigurable};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use super::*;
+
+zconfigurable! {
+    pub static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
+    pub static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
+}
 
 // rename to avoid conflicts
 type TxSession = zenoh_protocol::session::Session;
@@ -185,7 +192,7 @@ impl Session {
         let mut inner = self.inner.write();
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = inner.localkey_to_resname(resource)?;
-        let (sender, receiver) = channel(256);
+        let (sender, receiver) = channel(*API_DATA_RECEPTION_CHANNEL_SIZE);
         let sub = Subscriber{ id, reskey: resource.clone(), resname, sender, receiver };
         inner.subscribers.insert(id, sub.clone());
 
@@ -254,7 +261,7 @@ impl Session {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut inner = self.inner.write();
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let (req_sender, req_receiver) = channel(256);
+        let (req_sender, req_receiver) = channel(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable = Queryable{ id, reskey: resource.clone(), kind, req_sender, req_receiver };
         inner.queryables.insert(id, qable.clone());
 
@@ -299,7 +306,7 @@ impl Session {
         trace!("query({:?}, {:?}, {:?}, {:?})", resource, predicate, target, consolidation);
         let mut inner = self.inner.write();
         let qid = inner.qid_counter.fetch_add(1, Ordering::SeqCst);
-        let (rep_sender, rep_receiver) = channel(256);
+        let (rep_sender, rep_receiver) = channel(*API_REPLY_RECEPTION_CHANNEL_SIZE);
         inner.queries.insert(qid, rep_sender);
 
         let primitives = inner.primitives.as_ref().unwrap().clone();
@@ -405,7 +412,7 @@ impl Primitives for Session {
         };
 
         let predicate = predicate.to_string();
-        let (rep_sender, mut rep_receiver) = channel(256);
+        let (rep_sender, mut rep_receiver) = channel(*API_REPLY_EMISSION_CHANNEL_SIZE);
         let pid = self.inner.read().pid.clone(); // @TODO build/use prebuilt specific pid
             
         for (kind, req_sender) in kinds_and_senders {
