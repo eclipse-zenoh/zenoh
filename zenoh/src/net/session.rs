@@ -28,9 +28,16 @@ use zenoh_protocol:: {
     session::{SessionManager, SessionManagerConfig},
 };
 use zenoh_router::routing::broker::Broker;
-use zenoh_util::zerror;
+use zenoh_util::{zerror, zconfigurable};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use super::*;
+
+zconfigurable! {
+    pub static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
+    pub static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
+}
 
 // rename to avoid conflicts
 type TxSession = zenoh_protocol::session::Session;
@@ -185,7 +192,7 @@ impl Session {
         let mut inner = self.inner.write();
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = inner.localkey_to_resname(resource)?;
-        let (sender, receiver) = channel(256);
+        let (sender, receiver) = channel(*API_DATA_RECEPTION_CHANNEL_SIZE);
         let sub = Subscriber{ id, reskey: resource.clone(), resname, sender, receiver };
         inner.subscribers.insert(id, sub.clone());
 
@@ -254,7 +261,7 @@ impl Session {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut inner = self.inner.write();
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let (req_sender, req_receiver) = channel(256);
+        let (req_sender, req_receiver) = channel(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable = Queryable{ id, reskey: resource.clone(), kind, req_sender, req_receiver };
         inner.queryables.insert(id, qable.clone());
 
@@ -299,7 +306,7 @@ impl Session {
         trace!("query({:?}, {:?}, {:?}, {:?})", resource, predicate, target, consolidation);
         let mut inner = self.inner.write();
         let qid = inner.qid_counter.fetch_add(1, Ordering::SeqCst);
-        let (rep_sender, rep_receiver) = channel(256);
+        let (rep_sender, rep_receiver) = channel(*API_REPLY_RECEPTION_CHANNEL_SIZE);
         inner.queries.insert(qid, rep_sender);
 
         let primitives = inner.primitives.as_ref().unwrap().clone();
@@ -405,7 +412,7 @@ impl Primitives for Session {
         };
 
         let predicate = predicate.to_string();
-        let (rep_sender, mut rep_receiver) = channel(256);
+        let (rep_sender, mut rep_receiver) = channel(*API_REPLY_EMISSION_CHANNEL_SIZE);
         let pid = self.inner.read().pid.clone(); // @TODO build/use prebuilt specific pid
             
         for (kind, req_sender) in kinds_and_senders {
@@ -417,7 +424,7 @@ impl Primitives for Session {
             while let Some((kind, sample_opt)) = rep_receiver.next().await {
                 match sample_opt {
                     Some((resname, payload, info)) => {
-                        primitives.reply(qid, &Reply::ReplyData {
+                        primitives.reply(qid, Reply::ReplyData {
                             source_kind: kind, 
                             replier_id: pid.clone(),
                             reskey: ResKey::RName(resname), 
@@ -426,7 +433,7 @@ impl Primitives for Session {
                         }).await;
                     }
                     None => {
-                        primitives.reply(qid, &Reply::SourceFinal {
+                        primitives.reply(qid, Reply::SourceFinal {
                             source_kind: kind, 
                             replier_id: pid.clone(),
                         }).await;
@@ -434,13 +441,13 @@ impl Primitives for Session {
                 }
             }
 
-            primitives.reply(qid, &Reply::ReplyFinal).await;
+            primitives.reply(qid, Reply::ReplyFinal).await;
         });
     }
 
-    async fn reply(&self, qid: ZInt, reply: &Reply) {
+    async fn reply(&self, qid: ZInt, mut reply: Reply) {
         trace!("recv Reply {:?} {:?}", qid, reply);
-        let (rep_sender, reply) = {
+        let rep_sender = {
             let inner = &mut self.inner.write();
             let rep_sender = match inner.queries.get(&qid) {
                 Some(rep_sender) => rep_sender.clone(),
@@ -449,8 +456,8 @@ impl Primitives for Session {
                     return
                 }
             };
-            let reply = match reply {
-                Reply::ReplyData {source_kind, replier_id, reskey, info, payload} => {
+            match &mut reply {
+                Reply::ReplyData {ref mut reskey, ..} => {
                     let resname = match inner.reskey_to_resname(&reskey) {
                         Ok(name) => name,
                         Err(e) => {
@@ -458,18 +465,12 @@ impl Primitives for Session {
                             return
                         }
                     };
-                    Reply::ReplyData {
-                        source_kind: *source_kind, 
-                        replier_id: replier_id.clone(), 
-                        reskey: ResKey::RName(resname), 
-                        info: info.clone(), 
-                        payload: payload.clone()
-                    } // @TODO find something more efficient than cloning everything
+                    *reskey = ResKey::RName(resname);
                 }
-                Reply::SourceFinal {..} => {reply.clone()} 
-                Reply::ReplyFinal {..} => {inner.queries.remove(&qid); reply.clone()}
+                Reply::SourceFinal {..} => {} 
+                Reply::ReplyFinal {..} => {inner.queries.remove(&qid);}
             };
-            (rep_sender, reply)
+            rep_sender
         };
         rep_sender.send(reply).await;
     }

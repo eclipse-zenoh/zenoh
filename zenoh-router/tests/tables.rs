@@ -272,7 +272,7 @@ impl Primitives for ClientPrimitives {
         *self.data.lock().unwrap() = Some(reskey.clone());
     }
     async fn query(&self, _reskey: &ResKey, _predicate: &str, _qid: ZInt, _target: QueryTarget, _consolidation: QueryConsolidation) {}
-    async fn reply(&self, _qid: ZInt, _reply: &Reply) {}
+    async fn reply(&self, _qid: ZInt, _reply: Reply) {}
     async fn pull(&self, _is_final: bool, _reskey: &ResKey, _pull_id: ZInt, _max_samples: &Option<ZInt>) {}
 
     async fn close(&self) {}

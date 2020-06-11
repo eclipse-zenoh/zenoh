@@ -131,7 +131,7 @@ impl Primitives for FaceHdl {
         route_query(&mut tables, &self.face, prefixid, suffix, predicate, qid, target, consolidation).await;
     }
 
-    async fn reply(&self, qid: ZInt, reply: &Reply) {
+    async fn reply(&self, qid: ZInt, reply: Reply) {
         let mut tables = self.tables.write().await;
         route_reply(&mut tables, &mut self.face.clone(), qid, reply).await;
     }

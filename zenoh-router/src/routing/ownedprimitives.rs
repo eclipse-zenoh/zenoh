@@ -61,7 +61,7 @@ impl OwnedPrimitives {
         self.primitives.query(&reskey, &predicate, qid, target, consolidation).await
     }
     pub async fn reply(self, qid: ZInt, reply: Reply) {
-        self.primitives.reply(qid, &reply).await
+        self.primitives.reply(qid, reply).await
     }
     pub async fn pull(self, is_final: bool, reskey: ResKey, pull_id: ZInt, max_samples: Option<ZInt>){
         self.primitives.pull(is_final, &reskey, pull_id, &max_samples).await
