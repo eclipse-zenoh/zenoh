@@ -440,7 +440,7 @@ impl Primitives for Session {
 
     async fn reply(&self, qid: ZInt, mut reply: Reply) {
         trace!("recv Reply {:?} {:?}", qid, reply);
-        let (rep_sender, reply) = {
+        let rep_sender = {
             let inner = &mut self.inner.write();
             let rep_sender = match inner.queries.get(&qid) {
                 Some(rep_sender) => rep_sender.clone(),
@@ -449,7 +449,7 @@ impl Primitives for Session {
                     return
                 }
             };
-            let reply = match &mut reply {
+            match &mut reply {
                 Reply::ReplyData {ref mut reskey, ..} => {
                     let resname = match inner.reskey_to_resname(&reskey) {
                         Ok(name) => name,
@@ -459,12 +459,11 @@ impl Primitives for Session {
                         }
                     };
                     *reskey = ResKey::RName(resname);
-                    reply
                 }
-                Reply::SourceFinal {..} => {reply} 
-                Reply::ReplyFinal {..} => {inner.queries.remove(&qid); reply}
+                Reply::SourceFinal {..} => {} 
+                Reply::ReplyFinal {..} => {inner.queries.remove(&qid);}
             };
-            (rep_sender, reply)
+            rep_sender
         };
         rep_sender.send(reply).await;
     }
