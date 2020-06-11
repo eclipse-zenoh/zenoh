@@ -723,7 +723,7 @@ impl Channel {
     /*************************************/
     /*               TASK                */
     /*************************************/
-    pub(super) async fn start(&self) -> ZResult<()> {
+    async fn start(&self) -> ZResult<()> {
         let mut guard = zasynclock!(self.active);   
         // If not already active, start the transmission loop
         if !*guard {    
@@ -749,7 +749,7 @@ impl Channel {
         })
     }
 
-    pub(super) async fn stop(&self, priority: usize) -> ZResult<()> {  
+    async fn stop(&self, priority: usize) -> ZResult<()> {  
         let mut guard = zasynclock!(self.active);         
         if *guard {
             let msg = MessageTx {
