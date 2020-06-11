@@ -408,12 +408,12 @@ impl Primitives for Session {
         let (rep_sender, mut rep_receiver) = channel(256);
         let pid = self.inner.read().pid.clone(); // @TODO build/use prebuilt specific pid
             
-        task::spawn( async move { // router is not re-entrant
-            for (kind, req_sender) in kinds_and_senders {
-                req_sender.send((resname.clone(), predicate.clone(), RepliesSender{ kind, sender: rep_sender.clone() })).await;
-            }
-            drop(rep_sender); // all senders need to be dropped for the channel to close
+        for (kind, req_sender) in kinds_and_senders {
+            req_sender.send((resname.clone(), predicate.clone(), RepliesSender{ kind, sender: rep_sender.clone() })).await;
+        }
+        drop(rep_sender); // all senders need to be dropped for the channel to close
 
+        task::spawn( async move { // router is not re-entrant
             while let Some((kind, sample_opt)) = rep_receiver.next().await {
                 match sample_opt {
                     Some((resname, payload, info)) => {
