@@ -13,79 +13,49 @@
 //
 use clap::{App, Arg};
 use async_std::future;
-use async_std::sync::Arc;
 use async_std::task;
-use rand::RngCore;
-use log::{debug, trace};
-use zenoh_protocol::core::PeerId;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::whatami;
-use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
-use zenoh_router::routing::broker::Broker;
+use zenoh_router::runtime::Runtime;
 
 fn main() {
-    env_logger::init();
-    
-    let app = App::new("The zenoh router")
-        .arg(Arg::from_usage("-l [LOCATOR], --locator \
+    task::block_on(async {
+        env_logger::init();
+
+        let app = App::new("The zenoh router")
+        .arg(Arg::from_usage("-l, --locator=[LOCATOR] \
             'The locator this router will bind to.'")
             .default_value("tcp/127.0.0.1:7447"))
-        .arg(Arg::from_usage("-p ... [LOCATOR] --peer \
+        .arg(Arg::from_usage("-p, --peer=[LOCATOR]... \
             'A peer locator this router will try to connect to. \
             Repeat this option to connect to several peers.'"));
 
-    task::block_on(async {
-        debug!("Load plugins...");
+        log::debug!("Load plugins...");
         let mut plugins_mgr = zenoh_util::plugins::PluginsMgr::new();
         plugins_mgr.search_and_load_plugins("zenoh-", ".plugin").await;
         let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
 
-        let broker = Arc::new(Broker::new());
+        let runtime = Runtime::new(0, whatami::BROKER);
 
-        let mut pid = vec![0, 0, 0, 0];
-        rand::thread_rng().fill_bytes(&mut pid);
-        debug!("Starting broker with PID: {:02x?}", pid);
 
         let self_locator: Locator = args.value_of("locator").unwrap().parse().unwrap();
-        debug!("self_locator: {}", self_locator);
+        log::trace!("self_locator: {}", self_locator);
 
-        let config = SessionManagerConfig {
-            version: 0,
-            whatami: whatami::BROKER,
-            id: PeerId{id: pid},
-            handler: broker.clone()
-        };
-        let opt_config = SessionManagerOptionalConfig {
-            lease: None,
-            keep_alive: None,
-            sn_resolution: None,
-            batch_size: None,
-            timeout: None,
-            retries: None,
-            max_sessions: None,
-            max_links: None 
-        };
-        trace!("SessionManager::new()");
-        let manager = SessionManager::new(config, Some(opt_config));
+        let orchestrator = &mut runtime.write().await.orchestrator;
 
-        trace!("SessionManager::add_locator({})", self_locator);
-        if let Err(_err) = manager.add_locator(&self_locator).await {
+        if let Err(_err) = orchestrator.add_acceptor(&self_locator).await {
             log::error!("Unable to open listening {}!", self_locator);
             std::process::exit(-1);
         }
 
-        let attachment = None;
         if  args.occurrences_of("peer") > 0 {
-            debug!("peers: {:?}", args.values_of("peer"));
+            log::debug!("Peers: {:?}", args.values_of("peer").unwrap().collect::<Vec<&str>>());
             for locator in args.values_of("peer").unwrap() {
-                debug!("Open session to {}", locator);
-                if let Err(_err) =  manager.open_session(&locator.parse().unwrap(), &attachment).await {
-                    log::error!("Unable to connect to {}!", locator);
-                }
+                orchestrator.add_peer(&locator.parse().unwrap()).await;
             }
         }
         
-        debug!("Start plugins...");
+        log::debug!("Start plugins...");
         plugins_mgr.start_plugins(&args, &format!("{}", self_locator)).await;
 
         future::pending::<()>().await;

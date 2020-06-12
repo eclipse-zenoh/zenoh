@@ -15,19 +15,17 @@ use async_std::sync::{Arc, channel, Sender, Receiver};
 use async_std::task;
 use async_trait::async_trait;
 use futures::prelude::*;
-use rand::prelude::*;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
 use std::collections::HashMap;
 use spin::RwLock;
 use log::{error, warn, info, trace};
 use zenoh_protocol:: {
-    core::{ rname, PeerId, ResourceId, ResKey },
+    core::{ rname, ResourceId, ResKey },
     io::RBuf,
     proto::{ Primitives, QueryTarget, QueryConsolidation, Reply, whatami, queryable},
-    session::{SessionManager, SessionManagerConfig},
 };
-use zenoh_router::routing::broker::Broker;
+use zenoh_router::runtime::Runtime;
 use zenoh_util::{zerror, zconfigurable};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use super::*;
@@ -39,64 +37,44 @@ zconfigurable! {
     pub static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
 }
 
-// rename to avoid conflicts
-type TxSession = zenoh_protocol::session::Session;
-
 #[derive(Clone)]
 pub struct Session {
-    session_manager: SessionManager,
-    tx_session: Option<Arc<TxSession>>,
-    broker: Arc<Broker>,
+    runtime: Runtime,
     inner: Arc<RwLock<InnerSession>>,
 }
 
 impl Session {
 
     pub(super) async fn new(locator: &str, _ps: Option<Properties>) -> Session {
-        let broker = Arc::new(Broker::new());
-        
-        let mut pid = vec![0, 0, 0, 0];
-        rand::thread_rng().fill_bytes(&mut pid);
-        let peerid = PeerId{id: pid};
 
-        let config = SessionManagerConfig {
-            version: 0,
-            whatami: whatami::CLIENT,
-            id: peerid.clone(),
-            handler: broker.clone()
-        };
-        let session_manager = SessionManager::new(config, None);
+        let runtime = Runtime::new(0, whatami::CLIENT);
 
         // @TODO: scout if locator = "". For now, replace by "tcp/127.0.0.1:7447"
         let locator = if locator.is_empty() { "tcp/127.0.0.1:7447" } else { &locator };
 
-        let mut tx_session: Option<Arc<TxSession>> = None;
-
-        // @TODO: manage a tcp.port property (and tcp.interface?)
-        // try to open TCP port 7447
-        if let Err(_err) = session_manager.add_locator(&"tcp/127.0.0.1:7447".parse().unwrap()).await {
-            // if failed, try to connect to peer on locator
-            info!("Unable to open listening TCP port on 127.0.0.1:7447. Try connection to {}", locator);
-            let attachment = None;
-            match session_manager.open_session(&locator.parse().unwrap(), &attachment).await {
-                Ok(s) => tx_session = Some(Arc::new(s)),
-                Err(err) => {
+        {
+            // @TODO: manage a tcp.port property (and tcp.interface?)
+            let orchestrator = &mut runtime.write().await.orchestrator;
+            // try to open TCP port 7447
+            if let Err(_err) = orchestrator.add_acceptor(&"tcp/127.0.0.1:7447".parse().unwrap()).await {
+                // if failed, try to connect to peer on locator
+                info!("Unable to open listening TCP port on 127.0.0.1:7447. Try connection to {}", locator);
+                if let Err(err) = orchestrator.open_session(&locator.parse().unwrap()).await {
                     error!("Unable to connect to {}! {:?}", locator, err);
                     std::process::exit(-1);
                 }
+            } else {
+                info!("Listening on TCP: 127.0.0.1:7447.");
             }
-        } else {
-            info!("Listening on TCP: 127.0.0.1:7447.");
         }
 
-        let inner = Arc::new(RwLock::new(
-            InnerSession::new(peerid)
-        ));
-        let inner2 = inner.clone();
-        let session = Session{ session_manager, tx_session, broker, inner };
+        let broker = runtime.read().await.broker.clone();
 
-        let prim = session.broker.new_primitives(Arc::new(session.clone())).await;
-        inner2.write().primitives = Some(prim);
+        let inner = Arc::new(RwLock::new(InnerSession::new()));
+
+        let session = Session{runtime, inner: inner.clone()};
+
+        inner.write().primitives = Some(broker.new_primitives(Arc::new(session.clone())).await);
 
         // Workaround for the declare_and_shoot problem
         task::sleep(std::time::Duration::from_millis(200)).await;
@@ -107,14 +85,9 @@ impl Session {
     pub async fn close(&self) -> ZResult<()> {
         // @TODO: implement
         trace!("close()");
-        let inner = self.inner.read();
-        if let Some(tx_session) = &self.tx_session {
-            return tx_session.close().await
-        }
-        // @TODO: session_manager.del_locator()
+        self.runtime.write().await.orchestrator.close().await?;
 
-        let primitives = inner.primitives.as_ref().unwrap().clone();
-        drop(inner);
+        let primitives = self.inner.write().primitives.as_ref().unwrap().clone();
         primitives.close().await;
 
         Ok(())
@@ -413,7 +386,7 @@ impl Primitives for Session {
 
         let predicate = predicate.to_string();
         let (rep_sender, mut rep_receiver) = channel(*API_REPLY_EMISSION_CHANNEL_SIZE);
-        let pid = self.inner.read().pid.clone(); // @TODO build/use prebuilt specific pid
+        let pid = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
             
         for (kind, req_sender) in kinds_and_senders {
             req_sender.send((resname.clone(), predicate.clone(), RepliesSender{ kind, sender: rep_sender.clone() })).await;
@@ -485,7 +458,6 @@ impl Primitives for Session {
 }
 
 pub(crate) struct InnerSession {
-    pid:                PeerId,
     primitives:         Option<Arc<dyn Primitives + Send + Sync>>, // @TODO replace with MaybeUninit ??
     rid_counter:        AtomicUsize,  // @TODO: manage rollover and uniqueness
     qid_counter:        AtomicU64,
@@ -500,9 +472,8 @@ pub(crate) struct InnerSession {
 }
 
 impl InnerSession {
-    pub(crate) fn new(pid: PeerId) -> InnerSession {
-        InnerSession  { 
-            pid, 
+    pub(crate) fn new() -> InnerSession {
+        InnerSession  {
             primitives:         None,
             rid_counter:        AtomicUsize::new(1),  // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter:        AtomicU64::new(0),
