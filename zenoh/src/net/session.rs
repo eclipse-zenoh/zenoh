@@ -85,7 +85,7 @@ impl Session {
     pub async fn close(&self) -> ZResult<()> {
         // @TODO: implement
         trace!("close()");
-        self.runtime.write().await.orchestrator.close().await?;
+        self.runtime.close().await?;
 
         let primitives = self.inner.write().primitives.as_ref().unwrap().clone();
         primitives.close().await;
