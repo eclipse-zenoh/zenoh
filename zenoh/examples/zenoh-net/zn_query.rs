@@ -15,42 +15,39 @@
 
 use clap::App;
 use futures::prelude::*;
-use async_std::task;
 use zenoh::net::*;
 
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
 
-fn main() {
-    task::block_on( async {
-        // initiate logging
-        env_logger::init();
+    let args = App::new("zenoh-net query example")
+        .arg("-l, --locator=[LOCATOR]   'Sets the locator used to initiate the zenoh session'")
+        .arg("-s, --selector=[SELECTOR] 'Sets the selection of resources to query'")
+        .get_matches();
 
-        let args = App::new("zenoh-net query example")
-            .arg("-l, --locator=[LOCATOR]   'Sets the locator used to initiate the zenoh session'")
-            .arg("-s, --selector=[SELECTOR] 'Sets the selection of resources to query'")
-            .get_matches();
+    let locator  = args.value_of("locator").unwrap_or("").to_string();
+    let selector = args.value_of("selector").unwrap_or("/demo/example/**").to_string();
 
-        let locator  = args.value_of("locator").unwrap_or("").to_string();
-        let selector = args.value_of("selector").unwrap_or("/demo/example/**").to_string();
+    println!("Openning session...");
+    let session = open(&locator, None).await.unwrap();
 
-        println!("Openning session...");
-        let session = open(&locator, None).await.unwrap();
-
-        println!("Sending Query '{}'...", selector);
-        session.query(
-            &selector.into(), "",
-            QueryTarget::default(),
-            QueryConsolidation::default()
-        ).await.unwrap().for_each(
-            async move |reply: Reply| {
-                match reply {
-                    Reply::ReplyData {reskey, payload, ..} => {println!(">> [Reply handler] received reply data {:?} : {}", 
-                                                                reskey, String::from_utf8_lossy(&payload.to_vec()))}
-                    Reply::SourceFinal {..} => {println!(">> [Reply handler] received source final.")}
-                    Reply::ReplyFinal => {println!(">> [Reply handler] received reply final.")}
-                }
+    println!("Sending Query '{}'...", selector);
+    session.query(
+        &selector.into(), "",
+        QueryTarget::default(),
+        QueryConsolidation::default()
+    ).await.unwrap().for_each(
+        async move |reply: Reply| {
+            match reply {
+                Reply::ReplyData {reskey, payload, ..} => {println!(">> [Reply handler] received reply data {:?} : {}", 
+                                                            reskey, String::from_utf8_lossy(&payload.to_vec()))}
+                Reply::SourceFinal {..} => {println!(">> [Reply handler] received source final.")}
+                Reply::ReplyFinal => {println!(">> [Reply handler] received reply final.")}
             }
-        ).await;
+        }
+    ).await;
 
-        session.close().await.unwrap();
-    })
+    session.close().await.unwrap();
 }

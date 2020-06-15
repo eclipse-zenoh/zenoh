@@ -13,7 +13,6 @@
 //
 use clap::App;
 use async_std::future;
-use async_std::task;
 use std::time::Instant;
 use zenoh::net::*;
 use zenoh::net::ResKey::*;
@@ -26,49 +25,47 @@ fn print_stats(start: Instant) {
     println!("{} msg/s", thpt);
 }
 
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
 
-fn main() {
-    task::block_on( async {
-        // initiate logging
-        env_logger::init();
+    let args = App::new("zenoh-net throughput sub example")
+        .arg("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'")
+        .get_matches();
 
-        let args = App::new("zenoh-net throughput sub example")
-            .arg("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'")
-            .get_matches();
+    let locator = args.value_of("locator").unwrap_or("").to_string();
+    
+    let session = open(&locator, None).await.unwrap();
 
-        let locator = args.value_of("locator").unwrap_or("").to_string();
-        
-        let session = open(&locator, None).await.unwrap();
+    let reskey = RId(session.declare_resource(&RName("/test/thr".to_string())).await.unwrap());
 
-        let reskey = RId(session.declare_resource(&RName("/test/thr".to_string())).await.unwrap());
+    let mut count = 0u128;
+    let mut start = Instant::now();
 
-        let mut count = 0u128;
-        let mut start = Instant::now();
-
-        let sub_info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None
-        };
-        session.declare_direct_subscriber(&reskey, &sub_info,
-            move |_res_name: &str, _payload: RBuf, _data_info: Option<RBuf>| {
-                if count == 0 {
-                    start = Instant::now();
-                    count = count + 1;
-                } else if count < N {
-                    count = count + 1;
-                } else {
-                    print_stats(start);
-                    count = 0;
-                }
+    let sub_info = SubInfo {
+        reliability: Reliability::Reliable,
+        mode: SubMode::Push,
+        period: None
+    };
+    session.declare_direct_subscriber(&reskey, &sub_info,
+        move |_res_name: &str, _payload: RBuf, _data_info: Option<RBuf>| {
+            if count == 0 {
+                start = Instant::now();
+                count = count + 1;
+            } else if count < N {
+                count = count + 1;
+            } else {
+                print_stats(start);
+                count = 0;
             }
-        ).await.unwrap();
+        }
+    ).await.unwrap();
 
-        // Stop forever
-        future::pending::<()>().await;
+    // Stop forever
+    future::pending::<()>().await;
 
-        // @TODO: Uncomment these once the writer starvation has been solved on the RwLock      
-        // session.undeclare_subscriber(sub).await.unwrap();
-        // session.close().await.unwrap();
-    });
+    // @TODO: Uncomment these once the writer starvation has been solved on the RwLock      
+    // session.undeclare_subscriber(sub).await.unwrap();
+    // session.close().await.unwrap();
 }
