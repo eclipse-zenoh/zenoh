@@ -16,7 +16,6 @@ use async_std::prelude::*;
 use async_std::sync::{Arc, Barrier, Mutex, Sender, RwLock, Receiver, Weak, channel};
 use async_std::task;
 use async_trait::async_trait;
-use libc;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
