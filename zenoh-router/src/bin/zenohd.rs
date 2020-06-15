@@ -11,82 +11,56 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use clap::{App, Arg};
 use async_std::future;
-use async_std::sync::Arc;
 use async_std::task;
-use rand::RngCore;
-use log::{debug, trace};
-use zenoh_protocol::core::PeerId;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::whatami;
-use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
-use zenoh_router::routing::broker::Broker;
+use zenoh_router::runtime::Runtime;
+use zenoh_router::plugins::PluginsMgr;
 
 fn main() {
-    env_logger::init();
-    
     task::block_on(async {
-        let mut args = std::env::args();
-        args.next(); // skip exe name
-    
-        let broker = Arc::new(Broker::new());
+        env_logger::init();
 
-        let mut pid = vec![0, 0, 0, 0];
-        rand::thread_rng().fill_bytes(&mut pid);
-        debug!("Starting broker with PID: {:02x?}", pid);
+        let app = App::new("The zenoh router")
+        .arg(Arg::from_usage("-l, --locator=[LOCATOR] \
+            'The locator this router will bind to.'")
+            .default_value("tcp/127.0.0.1:7447"))
+        .arg(Arg::from_usage("-p, --peer=[LOCATOR]... \
+            'A peer locator this router will try to connect to. \
+            Repeat this option to connect to several peers.'"));
 
-        let batch_size: Option<usize> = match args.next() { 
-            Some(size) => Some(size.parse().unwrap()),
-            None => None
-        };
+        log::debug!("Load plugins...");
+        let mut plugins_mgr = PluginsMgr::new();
+        plugins_mgr.search_and_load_plugins("zenoh-", ".plugin").await;
+        let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
 
-        let self_locator: Locator = match args.next() { 
-            Some(port) => {
-                let mut s = "tcp/127.0.0.1:".to_string();
-                s.push_str(&port);
-                s.parse().unwrap()
-            },
-            None => "tcp/127.0.0.1:7447".parse().unwrap()
-        };
-        debug!("self_locator: {}", self_locator);
-    
-        let config = SessionManagerConfig {
-            version: 0,
-            whatami: whatami::BROKER,
-            id: PeerId{id: pid},
-            handler: broker.clone()
-        };
-        let opt_config = SessionManagerOptionalConfig {
-            lease: None,
-            keep_alive: None,
-            sn_resolution: None,
-            batch_size,
-            timeout: None,
-            retries: None,
-            max_sessions: None,
-            max_links: None 
-        };
-        trace!("SessionManager::new()");
-        let manager = SessionManager::new(config, Some(opt_config));
+        let runtime = Runtime::new(0, whatami::BROKER);
 
-        trace!("SessionManager::add_locator({})", self_locator);
-        if let Err(_err) = manager.add_locator(&self_locator).await {
-            log::error!("Unable to open listening {}!", self_locator);
-            std::process::exit(-1);
-        }
 
-        let attachment = None;
-        for locator in args {
-            debug!("Open session to {}", locator);
-            if let Err(_err) =  manager.open_session(&locator.parse().unwrap(), &attachment).await {
-                log::error!("Unable to connect to {}!", locator);
+        let self_locator: Locator = args.value_of("locator").unwrap().parse().unwrap();
+        log::trace!("self_locator: {}", self_locator);
+
+        {
+            let orchestrator = &mut runtime.write().await.orchestrator;
+
+            if let Err(_err) = orchestrator.add_acceptor(&self_locator).await {
+                log::error!("Unable to open listening {}!", self_locator);
                 std::process::exit(-1);
             }
+
+            if  args.occurrences_of("peer") > 0 {
+                log::debug!("Peers: {:?}", args.values_of("peer").unwrap().collect::<Vec<&str>>());
+                for locator in args.values_of("peer").unwrap() {
+                    orchestrator.add_peer(&locator.parse().unwrap()).await;
+                }
+            }
+            // release runtime.write() lock for plugins to use Runtime
         }
         
-        debug!("Load plugins...");
-        let mut plugins_mgr = zenoh_util::plugins::PluginsMgr::new();
-        plugins_mgr.search_and_load_plugins("zenoh-", ".plugin").await;
+        log::debug!("Start plugins...");
+        plugins_mgr.start_plugins(&runtime, &args).await;
 
         future::pending::<()>().await;
     });

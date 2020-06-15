@@ -24,9 +24,14 @@ use zenoh_util::core::{ZError, ZErrorKind};
 /*************************************/
 /*          LOCATOR                  */
 /*************************************/
-const SEPARATOR: char = '/';
+const PROTO_SEPARATOR: char = '/';
+const PORT_SEPARATOR: char = ':';
 // Protocol literals
 const STR_TCP: &str = "tcp";
+// Defaults
+const DEFAULT_TRANSPORT: &str = STR_TCP;
+const DEFAULT_HOST: &str = "127.0.0.1";
+const DEFAULT_PORT: &str = "7447";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LocatorProtocol {
@@ -51,11 +56,23 @@ impl FromStr for Locator {
     type Err = ZError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut iter = s.split(SEPARATOR);
-        let proto = iter.next().unwrap();
-        let addr = iter.next().unwrap();
+        let split = s.split(PROTO_SEPARATOR).collect::<Vec<&str>>();
+        let (proto, addr) = match split.len() {
+            1 => {(DEFAULT_TRANSPORT, s)}
+            _ => {(split[0], split[1])}
+        };
         match proto {
             STR_TCP => {
+                let split = addr.split(PORT_SEPARATOR).collect::<Vec<&str>>();
+                let addr = match split.len() {
+                    1 => {
+                        match addr.parse::<u16>() {
+                            Ok(_) => {[DEFAULT_HOST, addr].join(&PORT_SEPARATOR.to_string())} // port only
+                            Err(_) => {[addr, DEFAULT_PORT].join(&PORT_SEPARATOR.to_string())} // host only
+                        }
+                    }
+                    _ => {addr.to_string()}
+                };
                 let addr: SocketAddr = match addr.parse() {
                     Ok(addr) => addr,
                     Err(e) => {
