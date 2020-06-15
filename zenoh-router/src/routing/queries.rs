@@ -54,6 +54,7 @@ pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<Face>,
                                 remote_rid: None,
                                 subs: None,
                                 qabl: true,
+                                last_values: HashMap::new(),
                             })
                         );
                     }
@@ -87,6 +88,7 @@ pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<Face>,
                                         remote_rid: None,
                                         subs: None,
                                         qabl: false,
+                                        last_values: HashMap::new(),
                                 }));
                                 Arc::get_mut_unchecked(someface).local_mappings.insert(rid, nonwild_prefix.clone());
 

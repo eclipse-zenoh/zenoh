@@ -190,7 +190,7 @@ impl Session {
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = inner.localkey_to_resname(resource)?;
         let dhandler = Arc::new(RwLock::new(data_handler));
-        let sub = DirectSubscriber{ id, reskey: resource.clone(), resname, dhandler };
+        let sub = DirectSubscriber{ id, reskey: resource.clone(), resname, session: self.clone(), dhandler };
         inner.direct_subscribers.insert(id, sub.clone());
 
         let primitives = inner.primitives.as_ref().unwrap().clone();
@@ -272,6 +272,15 @@ impl Session {
         let primitives = inner.primitives.as_ref().unwrap().clone();
         drop(inner);
         primitives.data(resource, true, &None, payload).await;
+        Ok(())
+    }
+
+    pub(crate) async fn pull(&self, reskey: &ResKey) -> ZResult<()> {
+        trace!("pull({:?})", reskey);
+        let inner = self.inner.read();
+        let primitives = inner.primitives.as_ref().unwrap().clone();
+        drop(inner);
+        primitives.pull(true, reskey, 0, &None).await;
         Ok(())
     }
 

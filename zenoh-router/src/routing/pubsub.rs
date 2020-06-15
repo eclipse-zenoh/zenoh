@@ -14,9 +14,9 @@
 use async_std::sync::Arc;
 use std::collections::HashMap;
 
-use zenoh_protocol::core::ResKey;
+use zenoh_protocol::core::{ZInt, ResKey};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{SubInfo, whatami};
+use zenoh_protocol::proto::{SubInfo, SubMode, Reliability, whatami};
 
 use crate::routing::face::Face;
 use crate::routing::broker::Tables;
@@ -27,6 +27,7 @@ pub type DataRoute = HashMap<usize, (Arc<Face>, u64, String)>;
 pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<Face>, prefixid: u64, suffix: &str, sub_info: &SubInfo) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
+            // Register subscription
             let mut res = Resource::make_resource(&mut prefix, suffix);
             Resource::match_resource(&tables.root_res, &mut res);
             {
@@ -34,7 +35,14 @@ pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<Face>, pre
                 log::debug!("Register subscription {} for face {}", res.name(), face.id);
                 match res.contexts.get_mut(&face.id) {
                     Some(mut ctx) => {
-                        Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
+                        match &ctx.subs {
+                            Some(info) => {
+                                if SubMode::Pull == info.mode {
+                                    Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
+                                }
+                            }
+                            None => {Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());}
+                        }
                     }
                     None => {
                         res.contexts.insert(face.id, 
@@ -44,12 +52,16 @@ pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<Face>, pre
                                 remote_rid: None,
                                 subs: Some(sub_info.clone()),
                                 qabl: false,
+                                last_values: HashMap::new(),
                             })
                         );
                     }
                 }
             }
 
+            // Propagate subscription
+            let mut propa_sub_info = sub_info.clone();
+            propa_sub_info.mode = SubMode::Push;
             for (id, someface) in &mut tables.faces {
                 if face.id != *id && (face.whatami != whatami::PEER || someface.whatami != whatami::PEER) {
                     let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(&res);
@@ -57,16 +69,16 @@ pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<Face>, pre
                         Some(mut nonwild_prefix) => {
                             if let Some(mut ctx) = Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.get_mut(id) {
                                 if let Some(rid) = ctx.local_rid {
-                                    someface.primitives.clone().subscriber((rid, wildsuffix).into(), sub_info.clone()).await;
+                                    someface.primitives.clone().subscriber((rid, wildsuffix).into(), propa_sub_info.clone()).await;
                                 } else if let Some(rid) = ctx.remote_rid {
-                                    someface.primitives.clone().subscriber((rid, wildsuffix).into(), sub_info.clone()).await;
+                                    someface.primitives.clone().subscriber((rid, wildsuffix).into(), propa_sub_info.clone()).await;
                                 } else {
                                     let rid = someface.get_next_local_id();
                                     Arc::get_mut_unchecked(&mut ctx).local_rid = Some(rid);
                                     Arc::get_mut_unchecked(someface).local_mappings.insert(rid, nonwild_prefix.clone());
 
                                     someface.primitives.clone().resource(rid, nonwild_prefix.name().into()).await;
-                                    someface.primitives.clone().subscriber((rid, wildsuffix).into(), sub_info.clone()).await;
+                                    someface.primitives.clone().subscriber((rid, wildsuffix).into(), propa_sub_info.clone()).await;
                                 }
                             } else {
                                 let rid = someface.get_next_local_id();
@@ -77,15 +89,16 @@ pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<Face>, pre
                                         remote_rid: None,
                                         subs: None,
                                         qabl: false,
+                                        last_values: HashMap::new(),
                                 }));
                                 Arc::get_mut_unchecked(someface).local_mappings.insert(rid, nonwild_prefix.clone());
 
                                 someface.primitives.clone().resource(rid, nonwild_prefix.name().into()).await;
-                                someface.primitives.clone().subscriber((rid, wildsuffix).into(), sub_info.clone()).await;
+                                someface.primitives.clone().subscriber((rid, wildsuffix).into(), propa_sub_info.clone()).await;
                             }
                         }
                         None => {
-                            someface.primitives.clone().subscriber(ResKey::RName(wildsuffix), sub_info.clone()).await;
+                            someface.primitives.clone().subscriber(ResKey::RName(wildsuffix), propa_sub_info.clone()).await;
                         }
                     }
                 }
@@ -116,36 +129,59 @@ pub async fn undeclare_subscription(tables: &mut Tables, face: &mut Arc<Face>, p
     }
 }
 
-pub async fn route_data_to_map(tables: &Tables, face: &Arc<Face>, rid: u64, suffix: &str) -> Option<DataRoute> {
+pub async fn route_data_to_map(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, _reliable:bool, info: &Option<RBuf>, payload: &RBuf) -> Option<DataRoute> {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => {
-            match Resource::get_resource(prefix, suffix) {
-                Some(res) => {Some(res.route.clone())}
-                None => {
-                    let mut faces = HashMap::new();
-                    for res in Resource::get_matches_from(&[&prefix.name(), suffix].concat(), &tables.root_res) {
-                        let res = res.upgrade().unwrap();
-                        for (sid, context) in &res.contexts {
-                            if context.subs.is_some() {
-                                faces.entry(*sid).or_insert_with( || {
-                                    let (rid, suffix) = Resource::get_best_key(prefix, suffix, *sid);
-                                    (context.face.clone(), rid, suffix)
-                                });
+            unsafe{
+                match Resource::get_resource(prefix, suffix) {
+                    Some(res) => {
+                        let resname = res.name();
+                        for mres in Resource::get_matches_from(&[&prefix.name(), suffix].concat(), &tables.root_res) {
+                            let mut mres = mres.upgrade().unwrap();
+                            let mres = Arc::get_mut_unchecked(&mut mres);
+                            for mut context in mres.contexts.values_mut() {
+                                if let Some(subinfo) = &context.subs {
+                                    if  SubMode::Pull == subinfo.mode {
+                                        Arc::get_mut_unchecked(&mut context).last_values.insert(resname.clone(), (info.clone(), payload.clone()));
+                                    }
+                                }
                             }
                         }
-                    };
-                    Some(faces)
+                        
+                        Some(res.route.clone())}
+                    None => {
+                        let mut faces = HashMap::new();
+                        let resname = [&prefix.name(), suffix].concat();
+                        for mres in Resource::get_matches_from(&resname, &tables.root_res) {
+                            let mut mres = mres.upgrade().unwrap();
+                            let mres = Arc::get_mut_unchecked(&mut mres);
+                            for (sid, mut context) in &mut mres.contexts {
+                                if let Some(subinfo) = &context.subs {
+                                    match subinfo.mode {
+                                        SubMode::Pull => {
+                                            Arc::get_mut_unchecked(&mut context).last_values.insert(resname.clone(), (info.clone(), payload.clone()));
+                                        }
+                                        SubMode::Push => {
+                                            faces.entry(*sid).or_insert_with( || {
+                                                let (rid, suffix) = Resource::get_best_key(prefix, suffix, *sid);
+                                                (context.face.clone(), rid, suffix)
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                        Some(faces)
+                    }
                 }
             }
         }
-        None => {
-            log::error!("Route data with unknown rid {}!", rid); None
-        }
+        None => {log::error!("Route data with unknown rid {}!", rid); None}
     }
 }
 
-pub async fn route_data(tables: &Tables, face: &Arc<Face>, rid: u64, suffix: &str, reliable:bool, info: &Option<RBuf>, payload: RBuf) {
-    if let Some(outfaces) = route_data_to_map(tables, face, rid, suffix).await {
+pub async fn route_data(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, reliable:bool, info: &Option<RBuf>, payload: RBuf) {
+    if let Some(outfaces) = route_data_to_map(tables, face, rid, suffix, reliable, info, &payload).await {
         for (_id, (outface, rid, suffix)) in outfaces {
             if ! Arc::ptr_eq(face, &outface) {
                 let primitives = {
@@ -161,4 +197,36 @@ pub async fn route_data(tables: &Tables, face: &Arc<Face>, rid: u64, suffix: &st
             }
         }
     }
+}
+
+pub async fn pull_data(tables: &mut Tables, face: &Arc<Face>, _is_final: bool, rid: u64, suffix: &str, _pull_id: ZInt, _max_samples: &Option<ZInt>) {
+    match tables.get_mapping(&face, &rid) {
+        Some(prefix) => {
+            match Resource::get_resource(prefix, suffix) {
+                Some(mut res) => {
+                    unsafe{
+                        let res = Arc::get_mut_unchecked(&mut res);
+                        match res.contexts.get_mut(&face.id) {
+                            Some(mut ctx) => {
+                                match &ctx.subs {
+                                    Some(subinfo) => {
+                                        for (name, (info, data)) in &ctx.last_values {
+                                            let reskey: ResKey = Resource::get_best_key(&tables.root_res, name, face.id).into();
+                                            face.primitives.clone().data(reskey, subinfo.reliability == Reliability::Reliable, info.clone(), data.clone()).await;
+                                        }
+                                        Arc::get_mut_unchecked(&mut ctx).last_values.clear();
+                                    }
+                                    None => {log::error!("Pull data for unknown subscription {} (no info)!", [&prefix.name(), suffix].concat());}
+                                }
+                            }
+                            None => {log::error!("Pull data for unknown subscription {} (no context)!", [&prefix.name(), suffix].concat());}
+                        }
+                    }
+                }
+                None => {log::error!("Pull data for unknown subscription {} (no resource)!", [&prefix.name(), suffix].concat());}
+            }
+        }
+        None => {log::error!("Pull data with unknown rid {}!", rid);}
+    };
+
 }

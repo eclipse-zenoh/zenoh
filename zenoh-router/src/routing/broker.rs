@@ -158,6 +158,7 @@ impl Tables {
                                             remote_rid: None,
                                             subs: None,
                                             qabl: false,
+                                            last_values: HashMap::new(),
                                     }));
                                     Arc::get_mut_unchecked(&mut newface).local_mappings.insert(local_id, nonwild_prefix.clone());
 
@@ -184,6 +185,7 @@ impl Tables {
                                             remote_rid: None,
                                             subs: None,
                                             qabl: false,
+                                            last_values: HashMap::new(),
                                     }));
                                     Arc::get_mut_unchecked(&mut newface).local_mappings.insert(local_id, nonwild_prefix.clone());
 
@@ -229,9 +231,11 @@ impl Tables {
         let mut dests = HashMap::new();
         for match_ in &res.matches {
             for (fid, context) in &match_.upgrade().unwrap().contexts {
-                if context.subs.is_some() {
-                    let (rid, suffix) = Resource::get_best_key(res, "", *fid);
-                    dests.insert(*fid, (context.face.clone(), rid, suffix));
+                if let Some(subinfo) = &context.subs {
+                    if  SubMode::Push == subinfo.mode {
+                        let (rid, suffix) = Resource::get_best_key(res, "", *fid);
+                        dests.insert(*fid, (context.face.clone(), rid, suffix));
+                    }
                 }
             }
         }

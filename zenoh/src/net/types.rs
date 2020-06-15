@@ -38,6 +38,7 @@ pub use zenoh_protocol::proto::{
 };
 pub use zenoh_protocol::proto::Primitives;
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use crate::net::Session;
 
 
 pub type Properties = HashMap<ZInt, Vec<u8>>;
@@ -114,14 +115,13 @@ pub struct DirectSubscriber {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) resname: String,
+    pub(crate) session: Session,
     pub(crate) dhandler: Arc<RwLock<DataHandler>>,
 }
 
 impl DirectSubscriber {
     pub async fn pull(&self) -> ZResult<()> {
-        // @TODO: implement
-        trace!("pull({:?})", self);
-        Ok(())
+        self.session.pull(&self.reskey).await
     }
 }
 

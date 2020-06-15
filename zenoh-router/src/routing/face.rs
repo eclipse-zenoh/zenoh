@@ -121,8 +121,8 @@ impl Primitives for FaceHdl {
 
     async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf) {
         let (prefixid, suffix) = reskey.into();
-        let tables = self.tables.read().await;
-        route_data(&tables, &self.face, prefixid, suffix, reliable, info, payload).await;
+        let mut tables = self.tables.write().await;
+        route_data(&mut tables, &self.face, prefixid, suffix, reliable, info, payload).await;
     }
 
     async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
@@ -136,7 +136,11 @@ impl Primitives for FaceHdl {
         route_reply(&mut tables, &mut self.face.clone(), qid, reply).await;
     }
 
-    async fn pull(&self, _is_final: bool, _reskey: &ResKey, _pull_id: ZInt, _max_samples: &Option<ZInt>) {}
+    async fn pull(&self, is_final: bool, reskey: &ResKey, pull_id: ZInt, max_samples: &Option<ZInt>) {
+        let (prefixid, suffix) = reskey.into();
+        let mut tables = self.tables.write().await;
+        pull_data(&mut tables, &self.face.clone(), is_final, prefixid, suffix, pull_id, max_samples).await;
+    }
 
     async fn close(&self) {
         Tables::close_face(&self.tables, &Arc::downgrade(&self.face)).await;
