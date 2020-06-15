@@ -21,6 +21,7 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.31"
 rand = "0.7.3"
+libloading = "0.6.2"
 log = "0.4"
 env_logger = "0.7.1"
 clap = "2"

@@ -20,6 +20,7 @@ use std::pin::Pin;
 use futures::prelude::*;
 use futures::select;
 use clap::{Arg, ArgMatches};
+use zenoh_router::runtime::Runtime;
 use zenoh::net::*;
 use zenoh::net::queryable::STORAGE;
 
@@ -35,20 +36,19 @@ pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>>
 }
 
 #[no_mangle]
-pub fn start<'a>(args: &'a ArgMatches<'a>, locator: &'a str) -> Pin<Box<dyn Future<Output=()> + 'a>>
+pub fn start<'a>(runtime: Runtime, args: &'a ArgMatches<'a>) -> Pin<Box<dyn Future<Output=()> + 'a>>
 {
     // NOTES: the Future cannot be returned as such to the caller of this plugin.
     // Otherwise Rust complains it cannot move it as its size is not known.
     // We need to wrap it in a pinned Box.
     // See https://stackoverflow.com/questions/61167939/return-an-async-function-from-a-function-in-rust
-    Box::pin(run(args, locator))
+    Box::pin(run(runtime, args))
 }
 
-async fn run(args: &ArgMatches<'_>, locator: &str) {
+async fn run(runtime: Runtime, args: &ArgMatches<'_>) {
     env_logger::init();
-    debug!("Run example-plugin, openning session to {}", locator);
 
-    let session = open(&locator, None).await.unwrap();
+    let session = Session::init(runtime).await;
 
     let mut stored: HashMap<String, (RBuf, Option<RBuf>)> = HashMap::new();
 
@@ -59,7 +59,8 @@ async fn run(args: &ArgMatches<'_>, locator: &str) {
     };
 
     let selector: ResKey = args.value_of("storage-selector").unwrap().into();
-    
+    debug!("Run example-plugin with storage-selector={}", selector);
+
     debug!("Declaring Subscriber on {}", selector);
     let mut sub = session.declare_subscriber(&selector, &sub_info).await.unwrap();
 

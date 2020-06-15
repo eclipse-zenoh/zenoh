@@ -17,6 +17,7 @@ use libloading::{Library, Symbol};
 use std::future::Future;
 use std::pin::Pin;
 use clap::{Arg, ArgMatches};
+use super::runtime::Runtime;
 
 
 pub struct PluginsMgr {
@@ -118,9 +119,9 @@ impl PluginsMgr {
         result
     }
 
-    pub async fn start_plugins(&self, args: &ArgMatches<'_>, self_locator: &str) {
+    pub async fn start_plugins(&self, runtime: &Runtime, args: &ArgMatches<'_>) {
         for plugin in &self.plugins {
-            plugin.start(args, self_locator).await
+            plugin.start(runtime.clone(), args).await
         }
     }
 
@@ -141,7 +142,7 @@ struct Plugin {
 const START_FN_NAME: &[u8; 6] = b"start\0";
 const GET_ARGS_FN_NAME: &[u8; 18] = b"get_expected_args\0";
 
-type StartFn<'lib> = Symbol<'lib, unsafe extern fn(&ArgMatches, &str) -> Pin<Box<dyn Future<Output=()>>>>;
+type StartFn<'lib> = Symbol<'lib, unsafe extern fn(Runtime, &ArgMatches) -> Pin<Box<dyn Future<Output=()>>>>;
 type GetArgsFn<'lib, 'a, 'b> = Symbol<'lib, unsafe extern fn() -> Vec<Arg<'a, 'b>>>;
 
 
@@ -175,11 +176,11 @@ impl Plugin {
         }
     }
 
-    pub async fn start(&self, args: &ArgMatches<'_>, self_locator: &str) {
+    pub async fn start(&self, runtime: Runtime, args: &ArgMatches<'_>) {
         unsafe {
             debug!("Call start() of plugin {}", self.name);
             let start: StartFn = self.lib.get(START_FN_NAME).unwrap();
-            start(args, self_locator).as_mut().await;
+            start(runtime, args).as_mut().await;
         }
     }
 }

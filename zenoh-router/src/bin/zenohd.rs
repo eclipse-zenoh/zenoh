@@ -17,6 +17,7 @@ use async_std::task;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::whatami;
 use zenoh_router::runtime::Runtime;
+use zenoh_router::plugins::PluginsMgr;
 
 fn main() {
     task::block_on(async {
@@ -31,7 +32,7 @@ fn main() {
             Repeat this option to connect to several peers.'"));
 
         log::debug!("Load plugins...");
-        let mut plugins_mgr = zenoh_util::plugins::PluginsMgr::new();
+        let mut plugins_mgr = PluginsMgr::new();
         plugins_mgr.search_and_load_plugins("zenoh-", ".plugin").await;
         let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
 
@@ -41,22 +42,25 @@ fn main() {
         let self_locator: Locator = args.value_of("locator").unwrap().parse().unwrap();
         log::trace!("self_locator: {}", self_locator);
 
-        let orchestrator = &mut runtime.write().await.orchestrator;
+        {
+            let orchestrator = &mut runtime.write().await.orchestrator;
 
-        if let Err(_err) = orchestrator.add_acceptor(&self_locator).await {
-            log::error!("Unable to open listening {}!", self_locator);
-            std::process::exit(-1);
-        }
-
-        if  args.occurrences_of("peer") > 0 {
-            log::debug!("Peers: {:?}", args.values_of("peer").unwrap().collect::<Vec<&str>>());
-            for locator in args.values_of("peer").unwrap() {
-                orchestrator.add_peer(&locator.parse().unwrap()).await;
+            if let Err(_err) = orchestrator.add_acceptor(&self_locator).await {
+                log::error!("Unable to open listening {}!", self_locator);
+                std::process::exit(-1);
             }
+
+            if  args.occurrences_of("peer") > 0 {
+                log::debug!("Peers: {:?}", args.values_of("peer").unwrap().collect::<Vec<&str>>());
+                for locator in args.values_of("peer").unwrap() {
+                    orchestrator.add_peer(&locator.parse().unwrap()).await;
+                }
+            }
+            // release runtime.write() lock for plugins to use Runtime
         }
         
         log::debug!("Start plugins...");
-        plugins_mgr.start_plugins(&args, &format!("{}", self_locator)).await;
+        plugins_mgr.start_plugins(&runtime, &args).await;
 
         future::pending::<()>().await;
     });

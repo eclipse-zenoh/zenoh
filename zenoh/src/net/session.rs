@@ -68,19 +68,25 @@ impl Session {
             }
         }
 
-        let broker = runtime.read().await.broker.clone();
-
-        let inner = Arc::new(RwLock::new(InnerSession::new()));
-
-        let session = Session{runtime, inner: inner.clone()};
-
-        inner.write().primitives = Some(broker.new_primitives(Arc::new(session.clone())).await);
+        let session = Self::init(runtime).await;
 
         // Workaround for the declare_and_shoot problem
         task::sleep(std::time::Duration::from_millis(200)).await;
 
         session
     }
+
+    // Initialize a Session with an existing Runtime.
+    // This operation is used by the plugins to share the same Runtime than the router.
+    #[doc(hidden)]
+    pub async fn init(runtime: Runtime) -> Session {
+        let broker = runtime.read().await.broker.clone();
+        let inner = Arc::new(RwLock::new(InnerSession::new()));
+        let session = Session{runtime, inner: inner.clone()};
+        inner.write().primitives = Some(broker.new_primitives(Arc::new(session.clone())).await);
+        session
+    }
+
 
     pub async fn close(&self) -> ZResult<()> {
         // @TODO: implement
