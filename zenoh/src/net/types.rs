@@ -17,7 +17,7 @@ use pin_project_lite::pin_project;
 use async_std::sync::{Arc, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
 use spin::RwLock;
-use log::{error, trace};
+use log::error;
 
 pub use zenoh_protocol::io::RBuf;
 pub use zenoh_protocol::core::{
@@ -73,6 +73,7 @@ pin_project! {
         pub(crate) id: Id,
         pub(crate) reskey: ResKey,
         pub(crate) resname: String,
+        pub(crate) session: Session,
         #[pin]
         pub(crate) sender: Sender<Sample>,
         #[pin]
@@ -82,9 +83,7 @@ pin_project! {
 
 impl Subscriber {
     pub async fn pull(&self) -> ZResult<()> {
-        // @TODO: implement
-        trace!("pull({:?})", self);
-        Ok(())
+        self.session.pull(&self.reskey).await
     }
 }
 

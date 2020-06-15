@@ -172,7 +172,7 @@ impl Session {
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = inner.localkey_to_resname(resource)?;
         let (sender, receiver) = channel(*API_DATA_RECEPTION_CHANNEL_SIZE);
-        let sub = Subscriber{ id, reskey: resource.clone(), resname, sender, receiver };
+        let sub = Subscriber{ id, reskey: resource.clone(), resname, session: self.clone(), sender, receiver };
         inner.subscribers.insert(id, sub.clone());
 
         let primitives = inner.primitives.as_ref().unwrap().clone();
