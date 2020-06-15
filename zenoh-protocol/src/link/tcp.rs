@@ -16,10 +16,15 @@ use async_std::prelude::*;
 use async_std::sync::{Arc, Barrier, Mutex, Sender, RwLock, Receiver, Weak, channel};
 use async_std::task;
 use async_trait::async_trait;
+use libc;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
+#[cfg(windows)]
+use std::os::windows::io::AsRawSocket;
 use std::time::Duration;
 
 use crate::io::{ArcSlice, RBuf};
@@ -38,10 +43,11 @@ zconfigurable! {
     static ref TCP_READ_BUFFER_SIZE: usize = 2*DEFAULT_MTU;
     // Size of the vector used to deserialize the messages.
     static ref TCP_READ_MESSAGES_VEC_SIZE: usize = 32;
-    // Timeout in milliseconds before calling the shutdown on the socket. 
-    // More info on why this is required can be found at:
+    // The LINGER option causes the shutdown() call to block until (1) all application data is delivered 
+    // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
+    // More info on the LINGER option and its dynamics can be found at:
     // https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable
-    static ref TCP_CLOSE_TIMEOUT: u64 = 100;
+    static ref TCP_LINGER_TIMEOUT: i32 = 10;
     // Amount of time in microseconds to throttle the accept loop upon an error. 
     // Default set to 100 ms.
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
@@ -67,7 +73,7 @@ macro_rules! get_tcp_addr {
 /*              LINK                 */
 /*************************************/
 pub struct Tcp {
-    // The underlying socket as returned from the std library
+    // The underlying socket as returned from the async-std library
     socket: TcpStream,
     // The source socket address of this link (address used on the local host)
     src_addr: SocketAddr,
@@ -95,7 +101,37 @@ impl Tcp {
         let dst_addr = socket.peer_addr().unwrap();
         // The channel for stopping the read task
         let (sender, receiver) = channel::<()>(1);
-        // Build the Tcp
+
+        // Retrieve the raw file descriptor/socket for setting TCP options
+        let raw_socket = {
+            #[cfg(unix)] { socket.as_raw_fd() }
+            #[cfg(windows)] { socket.as_raw_socket() }
+        };        
+
+        // Initialize the SO_LINGER option
+        let optval = libc::linger {
+            // This field is interpreted as a boolean. 
+            // If nonzero, shutdown() blocks until the data are transmitted or the timeout period has expired.
+            l_onoff: 1,
+            // This specifies the timeout period, in seconds.
+            l_linger: *TCP_LINGER_TIMEOUT
+        };
+
+        // Set the SO_LINGER option
+        unsafe {            
+            let ret = libc::setsockopt(
+                raw_socket,
+                libc::SOL_SOCKET,
+                libc::SO_LINGER,
+                &optval as *const libc::linger as *const libc::c_void,
+                std::mem::size_of_val(&optval) as libc::socklen_t,
+            );
+            if ret != 0 {
+                log::warn!("Unable to set LINGER option on TCP link: {} => {}", src_addr, dst_addr);
+            }
+        }
+
+        // Build the Tcp object
         Tcp {
             socket,
             src_addr,
@@ -123,11 +159,10 @@ impl LinkTrait for Tcp {
         // Stop the read loop
         self.stop().await?;
 
-        // @TODO: choose an apprioriate timeout value
-        task::sleep(Duration::from_millis(*TCP_CLOSE_TIMEOUT)).await;
-
         // Close the underlying TCP socket
-        let _ = self.socket.shutdown(Shutdown::Both);
+        let res = self.socket.shutdown(Shutdown::Both);
+        log::trace!("TCP link shudown {}: {:?}", self, res);
+
         // Delete the link from the manager
         let _ = self.manager.del_link(&self.src_addr, &self.dst_addr).await;
         Ok(())

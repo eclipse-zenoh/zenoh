@@ -305,11 +305,7 @@ async fn drain_queue(
                 // active = batch_fragment_transmit(link, &mut inner, &mut context[i]);
                 // Check if the batch is ready to send      
                 let res = batch_fragment_transmit(&mut inner, &mut messages[i], &mut batch).await;
-                if !res {
-                    // There was an error while transmitting. Exit.
-                    active = false;
-                    break
-                }
+                active = active && res;
             }
 
             // Try to drain messages from the queue
@@ -732,10 +728,11 @@ impl Channel {
 
             // Spawn the transmission loop
             task::spawn(async move {
-                let _ = consume_task(ch.clone()).await;
-                // Mark the task as non-active
-                let mut guard = zasynclock!(ch.active);
-                *guard = false;
+                let res = consume_task(ch.clone()).await;
+                if res.is_err() {
+                    let mut guard = zasynclock!(ch.active);
+                    *guard = false;
+                }
             });
 
             // Mark that now the task can be stopped
@@ -777,7 +774,8 @@ impl Channel {
     async fn delete(&self) {
         // Stop the consume task with the lowest priority to give enough
         // time to send all the messages still present in the queue
-        let _ = self.stop(*QUEUE_PRIO_DATA).await;
+        let res = self.stop(*QUEUE_PRIO_DATA).await;
+        log::trace!("Delete: {:?}", res);
 
         // Delete the session on the manager
         let _ = self.manager.del_session(&self.pid).await;            

@@ -42,8 +42,8 @@ async fn run() {
         counter: counter.clone()
     };
 
-    // Default testing interval: 50 ms
-    let interval = Duration::from_millis(50);
+    // Default testing interval: 125 ms
+    let interval = Duration::from_millis(125);
 
     /* [1] */
     // Fire a once timed event

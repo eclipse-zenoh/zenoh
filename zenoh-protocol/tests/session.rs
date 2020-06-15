@@ -398,7 +398,6 @@ async fn session_open_close(locator: Locator) {
     println!("Session Open Close [4c2]: {:?}", sessions);
     assert_eq!(sessions.len(), 0);
 
-
     /* [5] */
     // Open session -> This should be accepted because
     // the number of links should be back to 0
