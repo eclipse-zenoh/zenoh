@@ -4,7 +4,7 @@ pipeline {
     gitParameter(name: 'GIT_TAG',
                  type: 'PT_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
-                 defaultValue: 'master'),
+                 defaultValue: 'master')
     string(name: 'DOCKER_TAG',
            decription: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag')
   }
