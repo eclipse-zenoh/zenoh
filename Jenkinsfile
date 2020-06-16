@@ -6,7 +6,7 @@ pipeline {
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'master')
     string(name: 'DOCKER_TAG',
-           decription: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag')
+           description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag')
   }
 
   stages {
