@@ -209,16 +209,25 @@ impl Tables {
         match face.upgrade() {
             Some(mut face) => unsafe {
                 log::debug!("Close face {}", face.id);
+                finalize_pending_queries(&mut t, &mut face).await;
+
                 let face = Arc::get_mut_unchecked(&mut face);
-                for mut mapping in face.remote_mappings.values_mut() {
-                    Resource::clean(&mut mapping);
+                for mut res in face.remote_mappings.values_mut() {
+                    Arc::get_mut_unchecked(res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
                 }
                 face.remote_mappings.clear();
-                for mut mapping in face.local_mappings.values_mut() {
-                    Resource::clean(&mut mapping);
+                for mut res in face.local_mappings.values_mut() {
+                    Arc::get_mut_unchecked(res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
                 }
                 face.local_mappings.clear();
                 while let Some(mut res) = face.subs.pop() {
+                    Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
+                }
+                while let Some(mut res) = face.qabl.pop() {
+                    Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
                     Resource::clean(&mut res);
                 }
                 t.faces.remove(&face.id);

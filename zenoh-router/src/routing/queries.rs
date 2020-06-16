@@ -187,17 +187,27 @@ pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<Face>, qid:
                 }
                 Reply::ReplyFinal {..} => {
                     unsafe {
-                        let query = face.pending_queries.get(&qid).unwrap().clone();
                         log::debug!("Received final reply {}:{} from face {}", query.src_face.id, qid, face.id);
-                        Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
                         if Arc::strong_count(&query) == 1 {
                             log::debug!("Propagate final reply {}:{}", query.src_face.id, qid);
                             query.src_face.primitives.clone().reply(query.src_qid, Reply::ReplyFinal).await;
                         }
+                        Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
                     }
                 }
             }
         }
         None => {log::error!("Route reply for unknown query!")}
     }
+}
+
+pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<Face>) {
+    for query in face.pending_queries.values() {
+        log::debug!("Finalize reply {}:{} for closing face {}", query.src_face.id, query.src_qid, face.id);
+        if Arc::strong_count(&query) == 1 {
+            log::debug!("Propagate final reply {}:{}", query.src_face.id, query.src_qid);
+            query.src_face.primitives.clone().reply(query.src_qid, Reply::ReplyFinal).await;
+        }
+    }
+    unsafe{ Arc::get_mut_unchecked(face).pending_queries.clear(); }
 }
