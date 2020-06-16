@@ -12,7 +12,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "example-plugin"
+name = "zplugin-example"
 version = "0.5.0"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
@@ -21,7 +21,7 @@ authors = ["kydos <angelo@icorsaro.net>",
 edition = "2018"
 
 [lib]
-name = "example_plugin"
+name = "zplugin_example"
 crate-type = ["cdylib"]
 
 

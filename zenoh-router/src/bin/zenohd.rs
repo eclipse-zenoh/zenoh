@@ -11,13 +11,15 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::{App, Arg};
+use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use async_std::future;
 use async_std::task;
+use clap::{App, Arg};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::whatami;
-use zenoh_router::runtime::Runtime;
 use zenoh_router::plugins::PluginsMgr;
+use zenoh_router::runtime::Runtime;
+
 
 fn main() {
     task::block_on(async {
@@ -33,11 +35,10 @@ fn main() {
 
         log::debug!("Load plugins...");
         let mut plugins_mgr = PluginsMgr::new();
-        plugins_mgr.search_and_load_plugins("zenoh-", ".plugin").await;
+        plugins_mgr.search_and_load_plugins(&format!("{}zplugin_" ,DLL_PREFIX), DLL_SUFFIX).await;
         let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
 
         let runtime = Runtime::new(0, whatami::BROKER);
-
 
         let self_locator: Locator = args.value_of("locator").unwrap().parse().unwrap();
         log::trace!("self_locator: {}", self_locator);
