@@ -1,9 +1,12 @@
 pipeline {
   agent { label 'UbuntuVM' }
   parameters {
-    gitParameter name: 'TAG', 
+    gitParameter(name: 'GIT_TAG',
                  type: 'PT_TAG',
-                 defaultValue: 'master'
+                 description: 'The Git tag to checkout. If not specified "master" will be checkout.'
+                 defaultValue: 'master'),
+    string(name: 'DOCKER_TAG',
+           decription: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag')
   }
 
   stages {
@@ -11,7 +14,7 @@ pipeline {
       steps {
         cleanWs()
         checkout([$class: 'GitSCM',
-                  branches: [[name: "${params.TAG}"]],
+                  branches: [[name: "${params.GIT_TAG}"]],
                   doGenerateSubmoduleConfigurations: false,
                   extensions: [],
                   gitTool: 'Default',
@@ -49,38 +52,41 @@ pipeline {
       steps {
         sh '''
         cp -r _build/default/install eclipse-zenoh
-        tar czvf eclipse-zenoh-${TAG}-Ubuntu-20.04-x64.tgz eclipse-zenoh/*/*.*
+        tar czvf eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz eclipse-zenoh/*/*.*
         '''
       }
     }
-    // stage('Docker build') {
-    //   steps {
-    //     sh '''
-    //     docker build -t eclipse/zenoh:${TAG} .
-    //     '''
-    //   }
-    // }
-    // stage('Docker publish') {
-    //   steps {
-    //     withCredentials([usernamePassword(credentialsId: 'jenkins-docker-hub-creds',
-    //         passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
-    //     {
-    //       sh '''
-    //       echo "Login into docker as ${DOCKER_HUB_CREDS_USR}"
-    //       docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
-    //       docker push eclipse/zenoh:${TAG} .
-    //       docker logout
-    //       '''
-    //     }
-    //   }
-    // }
     stage('Deploy to to download.eclipse.org') {
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}
-          ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}
-          scp eclipse-zenoh-${TAG}-Ubuntu-20.04-x64.tgz  genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${TAG}/
+          ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
+          ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
+          scp eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz  genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}/
+          '''
+        }
+      }
+    }
+    stage('Docker build') {
+      steps {
+        sh '''
+        if -n "${DOCKER_TAG}"; then
+          export EXTRA_TAG="-t eclipse/zenoh:${DOCKER_TAG}"
+        fi
+        echo docker build -t eclipse/zenoh:${GIT_TAG} ${EXTRA_TAG} .
+        '''
+      }
+    }
+    stage('Docker publish') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'jenkins-docker-hub-creds',
+            passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
+        {
+          sh '''
+          echo "Login into docker as ${DOCKER_HUB_CREDS_USR}"
+          echo docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+          echo docker push eclipse/zenoh .
+          echo docker logout
           '''
         }
       }
@@ -89,7 +95,7 @@ pipeline {
 
   post {
     success {
-        archiveArtifacts artifacts: 'eclipse-zenoh-${TAG}-Ubuntu-20.04-x64.tgz', fingerprint: true
+        archiveArtifacts artifacts: 'eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz', fingerprint: true
     }
   }
 }
