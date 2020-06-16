@@ -14,9 +14,8 @@
 use std::fmt;
 use std::collections::HashMap;
 use pin_project_lite::pin_project;
-use async_std::sync::{Arc, Sender, Receiver, TrySendError};
+use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
-use spin::RwLock;
 use log::error;
 
 pub use zenoh_protocol::io::RBuf;

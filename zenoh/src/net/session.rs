@@ -18,7 +18,7 @@ use futures::prelude::*;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
 use std::collections::HashMap;
-use spin::RwLock;
+use async_std::sync::RwLock;
 use log::{error, warn, info, trace};
 use zenoh_protocol:: {
     core::{ rname, ResourceId, ResKey },
@@ -83,7 +83,8 @@ impl Session {
         let broker = runtime.read().await.broker.clone();
         let inner = Arc::new(RwLock::new(InnerSession::new()));
         let session = Session{runtime, inner: inner.clone()};
-        inner.write().primitives = Some(broker.new_primitives(Arc::new(session.clone())).await);
+        let primitives = Some(broker.new_primitives(Arc::new(session.clone())).await);
+        inner.write().await.primitives = primitives;
         session
     }
 
@@ -93,7 +94,7 @@ impl Session {
         trace!("close()");
         self.runtime.close().await?;
 
-        let primitives = self.inner.write().primitives.as_ref().unwrap().clone();
+        let primitives = self.inner.write().await.primitives.as_ref().unwrap().clone();
         primitives.close().await;
 
         Ok(())
@@ -111,7 +112,7 @@ impl Session {
 
     pub async fn declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
         trace!("declare_resource({:?})", resource);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         let rid = inner.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
         let rname = inner.localkey_to_resname(resource)?;
         inner.local_resources.insert(rid, rname);
@@ -125,7 +126,7 @@ impl Session {
 
     pub async fn undeclare_resource(&self, rid: ResourceId) -> ZResult<()> {
         trace!("undeclare_resource({:?})", rid);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         inner.local_resources.remove(&rid);
 
         let primitives = inner.primitives.as_ref().unwrap().clone();
@@ -137,7 +138,7 @@ impl Session {
 
     pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher> {
         trace!("declare_publisher({:?})", resource);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
 
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let publ = Publisher{ id, reskey: resource.clone() };
@@ -152,7 +153,7 @@ impl Session {
 
     pub async fn undeclare_publisher(&self, publisher: Publisher) -> ZResult<()> {
         trace!("undeclare_publisher({:?})", publisher);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         inner.publishers.remove(&publisher.id);
 
         // Note: there might be several Publishers on the same ResKey.
@@ -168,7 +169,7 @@ impl Session {
     pub async fn declare_subscriber(&self, resource: &ResKey, info: &SubInfo) -> ZResult<Subscriber>
     {
         trace!("declare_subscriber({:?})", resource);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = inner.localkey_to_resname(resource)?;
         let (sender, receiver) = channel(*API_DATA_RECEPTION_CHANNEL_SIZE);
@@ -186,7 +187,7 @@ impl Session {
         where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static
     {
         trace!("declare_direct_subscriber({:?})", resource);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = inner.localkey_to_resname(resource)?;
         let dhandler = Arc::new(RwLock::new(data_handler));
@@ -203,7 +204,7 @@ impl Session {
     pub async fn undeclare_subscriber(&self, subscriber: Subscriber) -> ZResult<()>
     {
         trace!("undeclare_subscriber({:?})", subscriber);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         inner.subscribers.remove(&subscriber.id);
 
         // Note: there might be several Subscribers on the same ResKey.
@@ -221,7 +222,7 @@ impl Session {
     pub async fn undeclare_direct_subscriber(&self, subscriber: DirectSubscriber) -> ZResult<()>
     {
         trace!("undeclare_direct_subscriber({:?})", subscriber);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         inner.direct_subscribers.remove(&subscriber.id);
 
         // Note: there might be several Subscribers on the same ResKey.
@@ -238,7 +239,7 @@ impl Session {
     pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable>
     {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         let id = inner.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (req_sender, req_receiver) = channel(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable = Queryable{ id, reskey: resource.clone(), kind, req_sender, req_receiver };
@@ -254,7 +255,7 @@ impl Session {
 
     pub async fn undeclare_queryable(&self, queryable: Queryable) -> ZResult<()> {
         trace!("undeclare_queryable({:?})", queryable);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         inner.queryables.remove(&queryable.id);
 
         // Note: there might be several Queryables on the same ResKey.
@@ -268,7 +269,7 @@ impl Session {
 
     pub async fn write(&self, resource: &ResKey, payload: RBuf) -> ZResult<()> {
         trace!("write({:?}, [...])", resource);
-        let inner = self.inner.read();
+        let inner = self.inner.read().await;
         let primitives = inner.primitives.as_ref().unwrap().clone();
         drop(inner);
         primitives.data(resource, true, &None, payload).await;
@@ -277,7 +278,7 @@ impl Session {
 
     pub(crate) async fn pull(&self, reskey: &ResKey) -> ZResult<()> {
         trace!("pull({:?})", reskey);
-        let inner = self.inner.read();
+        let inner = self.inner.read().await;
         let primitives = inner.primitives.as_ref().unwrap().clone();
         drop(inner);
         primitives.pull(true, reskey, 0, &None).await;
@@ -292,7 +293,7 @@ impl Session {
     ) -> ZResult<Receiver<Reply>>
     {
         trace!("query({:?}, {:?}, {:?}, {:?})", resource, predicate, target, consolidation);
-        let mut inner = self.inner.write();
+        let mut inner = self.inner.write().await;
         let qid = inner.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = channel(*API_REPLY_RECEPTION_CHANNEL_SIZE);
         inner.queries.insert(qid, rep_sender);
@@ -310,7 +311,7 @@ impl Primitives for Session {
 
     async fn resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
-        let inner = &mut self.inner.write();
+        let inner = &mut self.inner.write().await;
         match inner.reskey_to_resname(reskey) {
             Ok(name) => {inner.remote_resources.insert(rid, name);}
             Err(_) => error!("Received Resource for unkown reskey: {}", reskey)
@@ -348,13 +349,13 @@ impl Primitives for Session {
     async fn data(&self, reskey: &ResKey, _reliable: bool, info: &Option<RBuf>, payload: RBuf) {
         trace!("recv Data {:?} {:?} {:?} {:?}", reskey, _reliable, info, payload);
         let (resname, senders) = {
-            let inner = self.inner.read();
+            let inner = self.inner.read().await;
             match inner.reskey_to_resname(reskey) {
                 Ok(resname) => {
                     // Call matching direct_subscribers
                     for sub in inner.direct_subscribers.values() {
                         if rname::intersect(&sub.resname, &resname) {
-                            let handler = &mut *sub.dhandler.write();
+                            let handler = &mut *sub.dhandler.write().await;
                             handler(&resname, payload.clone(), info.clone());
                         }
                     }
@@ -377,7 +378,7 @@ impl Primitives for Session {
     async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, _consolidation: QueryConsolidation) {
         trace!("recv Query {:?} {:?} {:?} {:?}", reskey, predicate, target, _consolidation);
         let (primitives, resname, kinds_and_senders) = {
-            let inner = self.inner.read();
+            let inner = self.inner.read().await;
             match inner.reskey_to_resname(reskey) {
                 Ok(resname) => {
                     let kinds_and_senders = inner.queryables.values().filter(|queryable| {
@@ -436,7 +437,7 @@ impl Primitives for Session {
     async fn reply(&self, qid: ZInt, mut reply: Reply) {
         trace!("recv Reply {:?} {:?}", qid, reply);
         let rep_sender = {
-            let inner = &mut self.inner.write();
+            let inner = &mut self.inner.write().await;
             let rep_sender = match inner.queries.get(&qid) {
                 Some(rep_sender) => rep_sender.clone(),
                 None => {
