@@ -15,12 +15,12 @@ Check the website [zenoh.io](http://zenoh.io) for more detailed information.
 -------------------------------
 ## How to test it
 
-For convenience, the zenoh router is pre-build and made available in a Docker image: https://hub.docker.com/r/adlinktech/eclipse-zenoh
+For convenience, the zenoh router is pre-build and made available in a Docker image: https://hub.docker.com/r/eclipse/zenoh
 
 Thus, run it just doing:
 ```bash
-docker pull adlinktech/eclipse-zenoh:latest
-docker run --init -p 7447:7447/tcp -p 7447:7447/udp -p 8000:8000/tcp adlinktech/eclipse-zenoh:latest
+docker pull eclipse/zenoh:latest
+docker run --init -p 7447:7447/tcp -p 7447:7447/udp -p 8000:8000/tcp eclipse/zenoh:latest
 ```
 
 The ports used by zenoh are the following:
