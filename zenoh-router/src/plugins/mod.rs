@@ -16,6 +16,7 @@ use log::{debug, warn};
 use libloading::{Library, Symbol};
 use std::future::Future;
 use std::pin::Pin;
+use futures::future::join_all;
 use clap::{Arg, ArgMatches};
 use super::runtime::Runtime;
 
@@ -120,11 +121,8 @@ impl PluginsMgr {
     }
 
     pub async fn start_plugins(&self, runtime: &Runtime, args: &ArgMatches<'_>) {
-        for plugin in &self.plugins {
-            plugin.start(runtime.clone(), args).await
-        }
+        join_all(self.plugins.iter().map(|plugin| plugin.start(runtime.clone(), args))).await;
     }
-
 }
 
 impl Default for PluginsMgr {
