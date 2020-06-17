@@ -15,6 +15,24 @@ use async_std::net::{UdpSocket, ToSocketAddrs};
 
 /// # Safety
 /// This function is unsafe as it uses unsafe functions from the libc crate.
+/// 
+/// # Example: 
+/// ```
+/// async_std::task::block_on( async {
+///     let socket = unsafe {
+///         zenoh_util::net::bind_udp(
+///             "0.0.0.0:7447", 
+///             [(libc::SO_REUSEPORT, &1 as *const _ as *const libc::c_void)].to_vec()
+///         ).await.unwrap()
+///     };
+/// 
+///     let interface = std::net::Ipv4Addr::new(10, 10, 10, 10);
+///     let mcast_addr = std::net::Ipv4Addr::new(239, 255, 0, 1);
+/// 
+///     socket.join_multicast_v4(mcast_addr, interface);
+/// });
+/// 
+/// ```
 pub async unsafe fn bind_udp<A: ToSocketAddrs>(addrs: A, opts: Vec<(libc::c_int, *const libc::c_void)>) -> async_std::io::Result<UdpSocket> {
     let fd: async_std::os::unix::io::RawFd = 
         libc::socket(libc::AF_INET, libc::SOCK_DGRAM, libc::IPPROTO_UDP);
