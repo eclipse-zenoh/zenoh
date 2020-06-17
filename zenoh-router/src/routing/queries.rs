@@ -163,16 +163,17 @@ async fn route_query_to_map(tables: &mut Tables, face: &Arc<Face>, qid: ZInt, ri
 pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, predicate: &str, 
                                 qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
     if let Some(outfaces) = route_query_to_map(tables, face, qid, rid, suffix).await {
-        for (_id, (outface, rid, suffix, qid)) in outfaces {
-            let primitives = {
-                if face.whatami != whatami::PEER || outface.whatami != whatami::PEER {
-                    Some(outface.primitives.clone())
-                } else {
-                    None
+        let outfaces = outfaces.into_iter().filter(|(_, (outface, _, _, _))| face.whatami != whatami::PEER || outface.whatami != whatami::PEER)
+                                           .map(|(_, v)| v).collect::<Vec<(Arc<Face>, u64, String, u64)>>();
+        match outfaces.len() {
+            0 => {
+                log::debug!("Send final reply {}:{} (no matching queryables)", face.id, qid);
+                face.primitives.clone().reply(qid, Reply::ReplyFinal).await
+            },
+            _ => {
+                for (outface, rid, suffix, qid) in outfaces {
+                    outface.primitives.clone().query((rid, suffix).into(), predicate.to_string(), qid, target.clone(), consolidation.clone()).await
                 }
-            };
-            if let Some(primitives) = primitives {
-                primitives.query((rid, suffix).into(), predicate.to_string(), qid, target.clone(), consolidation.clone()).await
             }
         }
     }
