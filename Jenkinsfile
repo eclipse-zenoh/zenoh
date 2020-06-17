@@ -64,14 +64,13 @@ pipeline {
       }
     }
 
-    // Steps on any agent (where cresentials are available)
+    // Steps on any agent (where credentials are available)
     stage('Deploy to to download.eclipse.org') {
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           unstash 'zenohPackage'
           sh '''
-          ls -al .
-          ls -al _build/default/install/**
+          ls -al *.tgz _build/default/install/**
           ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
           ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
           scp eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz  genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}/
@@ -91,7 +90,7 @@ pipeline {
     }
     stage('Docker publish') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'jenkins-docker-hub-creds',
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
             passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
         {
           sh '''
