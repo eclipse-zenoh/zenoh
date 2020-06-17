@@ -19,7 +19,8 @@ members = [
   "zenoh-protocol",
   "zenoh-router",
   "zenoh-util",
-  "plugins/example-plugin"
+  "plugins/example-plugin",
+  "plugins/zenoh-http",
 ]
 
 exclude = [
