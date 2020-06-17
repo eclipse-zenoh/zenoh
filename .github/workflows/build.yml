@@ -18,7 +18,9 @@ jobs:
     - uses: actions/checkout@v2
   
     - name: Install required libs (Ubuntu)
-      run: sudo apt-get install libev-dev libsqlite3-dev libmariadb-dev postgresql-client
+      run: |
+        sudo apt-get update
+        sudo apt-get install libev-dev libsqlite3-dev libmariadb-dev postgresql-client
       if: matrix.os == 'ubuntu-latest'
     - name: Install required libs (MacOS)
       run: |

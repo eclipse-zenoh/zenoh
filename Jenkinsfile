@@ -84,7 +84,7 @@ pipeline {
             passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
         {
           sh '''
-          echo "${DOCKER_HUB_CREDS_PSW}" | docker login --username ${DOCKER_HUB_CREDS_USR}
+          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
           docker push eclipse/zenoh
           docker logout
           '''
