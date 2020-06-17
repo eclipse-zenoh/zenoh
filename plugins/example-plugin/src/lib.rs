@@ -29,8 +29,7 @@ use zenoh::net::queryable::STORAGE;
 pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>>
 {
     vec![
-        Arg::from_usage("--storage-selector \
-            'The selector under which the storage will be declared as subscriber and queryable'")
+        Arg::from_usage("--storage-selector 'The selection of resources to be stored'")
         .default_value("/demo/example/**")
     ]
 }
