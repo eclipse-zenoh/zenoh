@@ -19,7 +19,7 @@ pipeline {
                   extensions: [],
                   gitTool: 'Default',
                   submoduleCfg: [],
-                  userRemoteConfigs: [[url: 'https://github.com/eclipse/zenoh.git']]
+                  userRemoteConfigs: [[url: 'https://github.com/eclipse-zenoh/zenoh.git']]
                 ])
       }
     }
