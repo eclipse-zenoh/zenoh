@@ -60,7 +60,7 @@ pipeline {
         cp -r _build/default/install eclipse-zenoh
         tar czvf eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz eclipse-zenoh/*/*.*
         '''
-        stash includes: '_build/default/install/**, eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz', name: 'zenohPackage'
+        stash includes: '_build/default/install/**, eclipse-zenoh-*-Ubuntu-20.04-x64.tgz', name: 'zenohPackage'
       }
     }
 
@@ -70,6 +70,8 @@ pipeline {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           unstash 'zenohPackage'
           sh '''
+          ls -al .
+          ls -al _build/default/install/**
           ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
           ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
           scp eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz  genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}/
