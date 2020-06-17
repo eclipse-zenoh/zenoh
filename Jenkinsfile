@@ -1,5 +1,5 @@
 pipeline {
-  agent any
+  agent { label '! UbuntuVM && ! MacMini'}
   parameters {
     gitParameter(name: 'GIT_TAG',
                  type: 'PT_TAG',
