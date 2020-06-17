@@ -36,5 +36,5 @@ depends: [
   "ocaml" {= "4.07.1"}
   "dune" {= "2.3.0" }
 ]
-synopsis : "storage plugin"
+synopsis : "Storage plugin"
 description: """Plugin example"""

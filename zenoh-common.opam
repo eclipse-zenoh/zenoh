@@ -43,6 +43,6 @@ depends: [
   "zenoh-net-ocaml" {= "0.4.1"}
 ]
 
-synopsis : "zenoh common OCaml library"
+synopsis : "Zenoh common OCaml library"
 description: """
 An OCaml library used by both zenoh-net-ocaml API and zenoh-storages plugin."""

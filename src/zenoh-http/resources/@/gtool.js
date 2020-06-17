@@ -11,7 +11,7 @@
  * Contributors:
  *   ADLINK zenoh team, <zenoh@adlink-labs.tech>
  */
-$.ajaxSetup({timeout:1000});
+$.ajaxSetup({timeout:5000});
 window.addEventListener("message", function (event) {if(event.data == "refresh"){refresh();}}, false);
 
 var nodes = new vis.DataSet();
