@@ -84,7 +84,7 @@ pipeline {
         if [ -n "${DOCKER_TAG}" ]; then
           export EXTRA_TAG="-t eclipse/zenoh:${DOCKER_TAG}"
         fi
-        echo docker build -t eclipse/zenoh:${GIT_TAG} ${EXTRA_TAG} .
+        docker build -t eclipse/zenoh:${GIT_TAG} ${EXTRA_TAG} .
         '''
       }
     }
@@ -94,10 +94,9 @@ pipeline {
             passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
         {
           sh '''
-          echo "Login into docker as ${DOCKER_HUB_CREDS_USR}"
-          echo docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
-          echo docker push eclipse/zenoh .
-          echo docker logout
+          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+          docker push eclipse/zenoh .
+          docker logout
           '''
         }
       }
