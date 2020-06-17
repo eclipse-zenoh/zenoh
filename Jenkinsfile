@@ -1,5 +1,5 @@
 pipeline {
-  agent { label '! UbuntuVM && ! MacMini'}
+  agent { label 'UbuntuVM' }
   parameters {
     gitParameter(name: 'GIT_TAG',
                  type: 'PT_TAG',
@@ -10,9 +10,7 @@ pipeline {
   }
 
   stages {
-    // Steps on UbuntuVM agent (where OCaml is installed)
     stage('Checkout Git TAG') {
-      agent { label 'UbuntuVM' }
       steps {
         cleanWs()
         checkout([$class: 'GitSCM',
@@ -26,7 +24,6 @@ pipeline {
       }
     }
     stage('Setup opam dependencies') {
-      agent { label 'UbuntuVM' }
       steps {
         sh '''
         git log --graph --date=short --pretty=tformat:'%ad - %h - %cn -%d %s' -n 20 || true
@@ -38,7 +35,6 @@ pipeline {
       }
     }
     stage('Build') {
-      agent { label 'UbuntuVM' }
       steps {
         sh '''
         opam exec -- dune build @all
@@ -46,7 +42,6 @@ pipeline {
       }
     }
     stage('Tests') {
-      agent { label 'UbuntuVM' }
       steps {
         sh '''
         opam exec -- dune runtest
@@ -54,23 +49,18 @@ pipeline {
       }
     }
     stage('Package') {
-      agent { label 'UbuntuVM' }
       steps {
         sh '''
         cp -r _build/default/install eclipse-zenoh
         tar czvf eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz eclipse-zenoh/*/*.*
         '''
-        stash includes: '_build/default/install/**, eclipse-zenoh-*-Ubuntu-20.04-x64.tgz', name: 'zenohPackage'
       }
     }
 
-    // Steps on any agent (where credentials are available)
     stage('Deploy to to download.eclipse.org') {
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
-          unstash 'zenohPackage'
           sh '''
-          ls -al *.tgz _build/default/install/**
           ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
           ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
           scp eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz  genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}/
