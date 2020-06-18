@@ -1,4 +1,4 @@
-//
+ //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
 // This program and the accompanying materials are made available under the
@@ -15,8 +15,6 @@
 
 use log::{debug, info};
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use futures::prelude::*;
 use futures::select;
 use clap::{Arg, ArgMatches};
@@ -35,16 +33,12 @@ pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>>
 }
 
 #[no_mangle]
-pub fn start<'a>(runtime: Runtime, args: &'a ArgMatches<'a>) -> Pin<Box<dyn Future<Output=()> + 'a>>
+pub fn start(runtime: Runtime, args: ArgMatches<'static>)
 {
-    // NOTES: the Future cannot be returned as such to the caller of this plugin.
-    // Otherwise Rust complains it cannot move it as its size is not known.
-    // We need to wrap it in a pinned Box.
-    // See https://stackoverflow.com/questions/61167939/return-an-async-function-from-a-function-in-rust
-    Box::pin(run(runtime, args))
+    async_std::task::spawn(run(runtime, args));
 }
 
-async fn run(runtime: Runtime, args: &ArgMatches<'_>) {
+async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     env_logger::init();
 
     let session = Session::init(runtime).await;

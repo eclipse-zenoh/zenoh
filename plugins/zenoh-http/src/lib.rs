@@ -13,8 +13,6 @@
 //
 #![feature(async_closure)]
 
-use std::future::Future;
-use std::pin::Pin;
 use futures::prelude::*;
 use clap::{Arg, ArgMatches};
 use zenoh::net::*;
@@ -49,9 +47,9 @@ pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>>
 }
 
 #[no_mangle]
-pub fn start<'a>(runtime: Runtime, args: &'a ArgMatches<'a>) -> Pin<Box<dyn Future<Output=()> + 'a>>
+pub fn start(runtime: Runtime, args: ArgMatches<'static>)
 {
-    Box::pin(run(runtime, args))
+    async_std::task::spawn(run(runtime, args));
 }
 
 async fn to_json(results: async_std::sync::Receiver<Reply>) -> String{
@@ -64,45 +62,43 @@ async fn to_json(results: async_std::sync::Receiver<Reply>) -> String{
     format!("[\n{}\n]", values)
 }
 
-async fn run(runtime: Runtime, args: &ArgMatches<'_>) {
+async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     env_logger::init();
 
     let http_port = parse_http_port(args.value_of("http-port").unwrap());
 
-    async_std::task::spawn( async {
-        let session = Session::init(runtime).await;
+    let session = Session::init(runtime).await;
 
-        let mut app = Server::with_state(session);
+    let mut app = Server::with_state(session);
 
-        app.at("*").get(async move |req: Request<Session>| { 
-            let split = req.url().path().split('?').collect::<Vec<&str>>();
-            let path = split[0];
-            let predicate = match split.len() {
-                1 => "",
-                _ => split[1],
-            };
-            match req.state().query(
-                    &path.into(), &predicate,
-                    QueryTarget::default(),
-                    QueryConsolidation::default()).await {
-                Ok(stream) => {
-                    let mut res = Response::new(StatusCode::Ok);
-                    res.set_content_type(Mime::from_str("text/json").unwrap());
-                    res.set_body(to_json(stream).await);
-                    Ok(res)
-                }
-                Err(e) => {
-                    let mut res = Response::new(StatusCode::InternalServerError);
-                    res.set_content_type(Mime::from_str("text").unwrap());
-                    res.set_body(e.to_string());
-                    Ok(res)
-                }
+    app.at("*").get(async move |req: Request<Session>| { 
+        let split = req.url().path().split('?').collect::<Vec<&str>>();
+        let path = split[0];
+        let predicate = match split.len() {
+            1 => "",
+            _ => split[1],
+        };
+        match req.state().query(
+                &path.into(), &predicate,
+                QueryTarget::default(),
+                QueryConsolidation::default()).await {
+            Ok(stream) => {
+                let mut res = Response::new(StatusCode::Ok);
+                res.set_content_type(Mime::from_str("text/json").unwrap());
+                res.set_body(to_json(stream).await);
+                Ok(res)
             }
-        });
-
-        if let Err(e) = app.listen(http_port).await {
-            log::error!("Unable to start http server : {:?}", e);
+            Err(e) => {
+                let mut res = Response::new(StatusCode::InternalServerError);
+                res.set_content_type(Mime::from_str("text").unwrap());
+                res.set_body(e.to_string());
+                Ok(res)
+            }
         }
     });
+
+    if let Err(e) = app.listen(http_port).await {
+        log::error!("Unable to start http server : {:?}", e);
+    }
 }
 
