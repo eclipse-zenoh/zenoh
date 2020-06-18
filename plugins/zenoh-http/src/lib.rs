@@ -19,7 +19,9 @@ use futures::prelude::*;
 use clap::{Arg, ArgMatches};
 use zenoh::net::*;
 use zenoh_router::runtime::Runtime;
-use actix_web::{web, App, HttpServer, HttpResponse};
+use tide::{Request, Response, Server, StatusCode};
+use tide::http::Mime;
+use std::str::FromStr;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -65,46 +67,42 @@ async fn to_json(results: async_std::sync::Receiver<Reply>) -> String{
 async fn run(runtime: Runtime, args: &ArgMatches<'_>) {
     env_logger::init();
 
-    let session = Session::init(runtime).await;
-    
-    let app = move || {
-        App::new()
-        .data(session.clone())
-        .route("{tail:.*}", web::get().to( async move |session: web::Data<Session>, info: web::Path<String>| {
-            let split = info.split('?').collect::<Vec<&str>>();
-            let path = ["/", split[0]].concat();
+    let http_port = parse_http_port(args.value_of("http-port").unwrap());
+
+    async_std::task::spawn( async {
+        let session = Session::init(runtime).await;
+
+        let mut app = Server::with_state(session);
+
+        app.at("*").get(async move |req: Request<Session>| { 
+            let split = req.url().path().split('?').collect::<Vec<&str>>();
+            let path = split[0];
             let predicate = match split.len() {
                 1 => "",
                 _ => split[1],
             };
-            match session.query(
+            match req.state().query(
                     &path.into(), &predicate,
                     QueryTarget::default(),
                     QueryConsolidation::default()).await {
                 Ok(stream) => {
-                    HttpResponse::Ok()
-                        .content_type("text/json")
-                        .body(to_json(stream).await)
+                    let mut res = Response::new(StatusCode::Ok);
+                    res.set_content_type(Mime::from_str("text/json").unwrap());
+                    res.set_body(to_json(stream).await);
+                    Ok(res)
                 }
                 Err(e) => {
-                    HttpResponse::InternalServerError()
-                        .content_type("text")
-                        .body(e.to_string())
+                    let mut res = Response::new(StatusCode::InternalServerError);
+                    res.set_content_type(Mime::from_str("text").unwrap());
+                    res.set_body(e.to_string());
+                    Ok(res)
                 }
             }
-        }))
-    };
+        });
 
-    let http_server = async move || {
-        let sys = actix_rt::System::new("http-server");
-        HttpServer::new(app)
-            .bind(parse_http_port(args.value_of("http-port").unwrap()))?
-            .run()
-            .await?;
-        sys.run() 
-    };
-    if let Err(e) = http_server().await {
-        log::error!("Unable to start http server : {:?}", e);
-    }
+        if let Err(e) = app.listen(http_port).await {
+            log::error!("Unable to start http server : {:?}", e);
+        }
+    });
 }
 
