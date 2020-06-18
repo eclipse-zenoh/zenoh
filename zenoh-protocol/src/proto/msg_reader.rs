@@ -341,22 +341,22 @@ impl RBuf {
         let source_id = if header & zmsg::info_flag::SRCID > 0 {
             Some(self.read_peerid()?)
         } else { None };
-        let source_sn = if header & zmsg::info_flag::SRCID > 0 {
+        let source_sn = if header & zmsg::info_flag::SRCSN > 0 {
             Some(self.read_zint()?)
         } else { None };
-        let fist_broker_id = if header & zmsg::info_flag::SRCID > 0 {
+        let fist_broker_id = if header & zmsg::info_flag::BKRID > 0 {
             Some(self.read_peerid()?)
         } else { None };
-        let fist_broker_sn = if header & zmsg::info_flag::SRCID > 0 {
+        let fist_broker_sn = if header & zmsg::info_flag::BKRSN > 0 {
             Some(self.read_zint()?)
         } else { None };
-        let timestamp = if header & zmsg::info_flag::SRCID > 0 {
+        let timestamp = if header & zmsg::info_flag::TS > 0 {
             Some(self.read_timestamp()?)
         } else { None };
-        let kind = if header & zmsg::info_flag::SRCID > 0 {
+        let kind = if header & zmsg::info_flag::KIND > 0 {
             Some(self.read_zint()?)
         } else { None };
-        let encoding = if header & zmsg::info_flag::SRCID > 0 {
+        let encoding = if header & zmsg::info_flag::ENC > 0 {
             Some(self.read_zint()?)
         } else { None };
 
