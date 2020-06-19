@@ -16,6 +16,8 @@
 use futures::prelude::*;
 use clap::{Arg, ArgMatches};
 use zenoh::net::*;
+use zenoh_protocol::core::ZInt;
+use zenoh_protocol::proto::kind;
 use zenoh_router::runtime::Runtime;
 use tide::{Request, Response, Server, StatusCode};
 use tide::http::Mime;
@@ -37,6 +39,38 @@ fn parse_http_port(arg: &str) -> String {
     }
 }
 
+async fn to_json(results: async_std::sync::Receiver<Reply>) -> String{
+    let values = results.filter_map(async move |reply| match reply {
+        Reply::ReplyData {reskey, payload, ..} => 
+            Some(format!("{{ \"key\": \"{}\",\n  \"value\": \"{}\",\n  \"time\": \"{}\" }}",
+                        reskey, String::from_utf8_lossy(&payload.to_vec()), "None")), // TODO timestamp
+        _ => None,
+    }).collect::<Vec<String>>().await.join(",\n");
+    format!("[\n{}\n]", values)
+}
+
+fn enc_from_mime(mime: Option<Mime>) -> ZInt {
+    match mime {
+        Some(mime) => {
+            match zenoh_protocol::proto::encoding::from_str(mime.essence()) {
+                Ok(encoding) => encoding,
+                _ => match mime.basetype() {
+                    "text" => zenoh_protocol::proto::encoding::TEXT_PLAIN,
+                    &_ => zenoh_protocol::proto::encoding::APP_OCTET_STREAM,
+                }
+            }
+        }
+        None => zenoh_protocol::proto::encoding::APP_OCTET_STREAM
+    }
+}
+
+fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
+    let mut res = Response::new(status);
+    res.set_content_type(content_type);
+    res.set_body(body);
+    res
+}
+
 #[no_mangle]
 pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>>
 {
@@ -52,16 +86,6 @@ pub fn start(runtime: Runtime, args: ArgMatches<'static>)
     async_std::task::spawn(run(runtime, args));
 }
 
-async fn to_json(results: async_std::sync::Receiver<Reply>) -> String{
-    let values = results.filter_map(async move |reply| match reply {
-        Reply::ReplyData {reskey, payload, ..} => 
-            Some(format!("{{ \"key\": \"{}\",\n  \"value\": \"{}\",\n  \"time\": \"{}\" }}",
-                        reskey, String::from_utf8_lossy(&payload.to_vec()), "None")), // TODO timestamp
-        _ => None,
-    }).collect::<Vec<String>>().await.join(",\n");
-    format!("[\n{}\n]", values)
-}
-
 async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     env_logger::init();
 
@@ -71,29 +95,59 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
 
     let mut app = Server::with_state(session);
 
-    app.at("*").get(async move |req: Request<Session>| { 
-        let split = req.url().path().split('?').collect::<Vec<&str>>();
-        let path = split[0];
-        let predicate = match split.len() {
-            1 => "",
-            _ => split[1],
-        };
+    app.at("*").get(async move |req: Request<Session>| {
+        let path = req.url().path();
+        let predicate = req.url().query().or(Some("")).unwrap();
         match req.state().query(
                 &path.into(), &predicate,
                 QueryTarget::default(),
                 QueryConsolidation::default()).await {
-            Ok(stream) => {
-                let mut res = Response::new(StatusCode::Ok);
-                res.set_content_type(Mime::from_str("text/json").unwrap());
-                res.set_body(to_json(stream).await);
-                Ok(res)
-            }
-            Err(e) => {
-                let mut res = Response::new(StatusCode::InternalServerError);
-                res.set_content_type(Mime::from_str("text").unwrap());
-                res.set_body(e.to_string());
-                Ok(res)
-            }
+            Ok(stream) => 
+                Ok(response(StatusCode::Ok, Mime::from_str("application/json").unwrap(), &to_json(stream).await)),
+            Err(e) => 
+                Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
+        }
+    });
+
+    app.at("*").put(async move |mut req: Request<Session>| { 
+        match req.body_bytes().await {
+            Ok(bytes) => {
+                let path = req.url().path();
+                match req.state().write_wo(&path.into(), bytes.into(), 
+                        enc_from_mime(req.content_type()), kind::PUT).await {
+                    Ok(_) => Ok(Response::new(StatusCode::Ok)),
+                    Err(e) => 
+                        Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
+                }
+            },
+            Err(e) => 
+                Ok(response(StatusCode::NoContent, Mime::from_str("text/plain").unwrap(), &e.to_string())),
+        }
+    });
+
+    app.at("*").patch(async move |mut req: Request<Session>| { 
+        match req.body_bytes().await {
+            Ok(bytes) => {
+                let path = req.url().path();
+                match req.state().write_wo(&path.into(), bytes.into(), 
+                        enc_from_mime(req.content_type()), kind::UPDATE).await {
+                    Ok(_) => Ok(Response::new(StatusCode::Ok)),
+                    Err(e) => 
+                        Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
+                }
+            },
+            Err(e) => 
+                Ok(response(StatusCode::NoContent, Mime::from_str("text/plain").unwrap(), &e.to_string())),
+        }
+    });
+
+    app.at("*").delete(async move |req: Request<Session>| { 
+        let path = req.url().path();
+        match req.state().write_wo(&path.into(), RBuf::new(), 
+                enc_from_mime(req.content_type()), kind::REMOVE).await {
+            Ok(_) => Ok(Response::new(StatusCode::Ok)),
+            Err(e) => 
+                Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
         }
     });
 
