@@ -360,7 +360,7 @@ impl RBuf {
             Some(self.read_zint()?)
         } else { None };
 
-        Ok(DataInfo { header, source_id, source_sn, fist_broker_id, fist_broker_sn, timestamp, kind, encoding })
+        Ok(DataInfo { source_id, source_sn, fist_broker_id, fist_broker_sn, timestamp, kind, encoding })
     }
 
     pub fn read_properties(&mut self) -> ZResult<Vec<Property>> {

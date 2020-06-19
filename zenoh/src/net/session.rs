@@ -281,15 +281,15 @@ impl Session {
         let inner = self.inner.read().await;
         let primitives = inner.primitives.as_ref().unwrap().clone();
         drop(inner);
-        let info = zenoh_protocol::proto::DataInfo::make(
-            None, // source_id
-            None, // source_sn
-            None, // fist_broker_id
-            None, // fist_broker_sn
-            None, // timestamp
-            Some(kind), // kind
-            Some(encoding), // encoding
-        );
+        let info = zenoh_protocol::proto::DataInfo{
+            source_id: None,
+            source_sn: None,
+            fist_broker_id: None,
+            fist_broker_sn: None,
+            timestamp: None,
+            kind: Some(kind),
+            encoding: Some(encoding),
+        };
         let mut infobuf = zenoh_protocol::io::WBuf::new(64, false);
         infobuf.write_datainfo(&info);
         primitives.data(resource, true, &Some((&infobuf).into()), payload).await;

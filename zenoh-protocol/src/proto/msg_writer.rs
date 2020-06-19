@@ -215,7 +215,16 @@ impl WBuf {
     }
 
     pub fn write_datainfo(&mut self, info: &DataInfo) -> bool {
-        check!(self.write(info.header));
+        let mut header = 0u8;
+        if info.source_id.is_some() { header |= zmsg::info_flag::SRCID }
+        if info.source_sn.is_some() { header |= zmsg::info_flag::SRCSN }
+        if info.fist_broker_id.is_some() { header |= zmsg::info_flag::BKRID }
+        if info.fist_broker_sn.is_some() { header |= zmsg::info_flag::BKRSN }
+        if info.timestamp.is_some() { header |= zmsg::info_flag::TS }
+        if info.kind.is_some() { header |= zmsg::info_flag::KIND }
+        if info.encoding.is_some() { header |= zmsg::info_flag::ENC }
+
+        check!(self.write(header));
         if let Some(pid) = &info.source_id {
             check!(self.write_bytes_array(&pid.id));
         }
