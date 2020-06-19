@@ -29,24 +29,27 @@ pub mod encoding {
     use std::str::FromStr;
 
     lazy_static! {
-    static ref MIMES: [Mime; 17] = [
+    static ref MIMES: [Mime; 20] = [
         /*  0 */ Mime::from_str("application/octet-stream").unwrap(),
-        /*  1 */ Mime::from_str("application/custom").unwrap(),
+        /*  1 */ Mime::from_str("application/custom").unwrap(), // non iana standard
         /*  2 */ Mime::from_str("text/plain").unwrap(),
-        /*  3 */ Mime::from_str("application/properties").unwrap(),
+        /*  3 */ Mime::from_str("application/properties").unwrap(), // non iana standard
         /*  4 */ Mime::from_str("application/json").unwrap(), // if not readable from casual users
         /*  5 */ Mime::from_str("application/sql").unwrap(),
-        /*  6 */ Mime::from_str("application/integer").unwrap(),
-        /*  7 */ Mime::from_str("application/float").unwrap(),
+        /*  6 */ Mime::from_str("application/integer").unwrap(), // non iana standard
+        /*  7 */ Mime::from_str("application/float").unwrap(), // non iana standard
         /*  8 */ Mime::from_str("application/xml").unwrap(), // if not readable from casual users (RFC 3023, section 3)
-        /*  9 */ Mime::from_str("text/json").unwrap(), //  if readable from casual users
-        /* 10 */ Mime::from_str("text/htlm").unwrap(),
-        /* 11 */ Mime::from_str("text/xml").unwrap(), //  if readable from casual users (RFC 3023, section 3)
-        /* 12 */ Mime::from_str("text/css").unwrap(),
-        /* 13 */ Mime::from_str("text/javascript").unwrap(),
-        /* 14 */ Mime::from_str("image/jpeg").unwrap(),
-        /* 15 */ Mime::from_str("image/png").unwrap(),
-        /* 16 */ Mime::from_str("image/gif").unwrap(),
+        /*  9 */ Mime::from_str("application/xhtml+xml").unwrap(), 
+        /* 10 */ Mime::from_str("application/x-www-form-urlencoded").unwrap(), 
+        /* 11 */ Mime::from_str("text/json").unwrap(), // non iana standard - if readable from casual users
+        /* 12 */ Mime::from_str("text/htlm").unwrap(),
+        /* 13 */ Mime::from_str("text/xml").unwrap(), // if readable from casual users (RFC 3023, section 3)
+        /* 14 */ Mime::from_str("text/css").unwrap(),
+        /* 15 */ Mime::from_str("text/csv").unwrap(),
+        /* 16 */ Mime::from_str("text/javascript").unwrap(),
+        /* 17 */ Mime::from_str("image/jpeg").unwrap(),
+        /* 18 */ Mime::from_str("image/png").unwrap(),
+        /* 19 */ Mime::from_str("image/gif").unwrap(),
     ];
     }
 
@@ -63,6 +66,7 @@ pub mod encoding {
     }
 
     pub fn from_str(string: &str) -> ZResult<ZInt> {
+        let string = string.split(';').next().unwrap();
         match string {
             "application/octet-stream" => Ok(0),
             "application/custom" => Ok(1),
@@ -73,14 +77,17 @@ pub mod encoding {
             "application/integer" => Ok(6),
             "application/float" => Ok(7),
             "application/xml" => Ok(8),
-            "text/json" => Ok(9),
-            "text/htlm" => Ok(10),
-            "text/xml" => Ok(11),
-            "text/css" => Ok(12),
-            "text/javascript" => Ok(13),
-            "image/jpeg" => Ok(14),
-            "image/png" => Ok(15),
-            "image/gif" => Ok(16),
+            "application/xhtml+xml" => Ok(9),
+            "application/x-www-form-urlencoded" => Ok(10),
+            "text/json" => Ok(11),
+            "text/htlm" => Ok(12),
+            "text/xml" => Ok(13),
+            "text/css" => Ok(14),
+            "text/csv" => Ok(15),
+            "text/javascript" => Ok(16),
+            "image/jpeg" => Ok(17),
+            "image/png" => Ok(18),
+            "image/gif" => Ok(19),
             s => zerror!(ZErrorKind::Other { descr: format!("Unknown encoding '{}'",  s)}),
         }
     }
@@ -96,12 +103,17 @@ pub mod encoding {
     pub const APP_INTEGER: ZInt = 6;
     pub const APP_FLOAT: ZInt = 7;
     pub const APP_XML: ZInt = 8;
-    pub const TEXT_JSON: ZInt = 9;
-    pub const TEXT_HTML: ZInt = 10;
-    pub const TEXT_XML: ZInt = 11;
-    pub const TEXT_CSS: ZInt = 12;
-    pub const TEXT_JAVASCRIPT: ZInt = 13;
-    pub const IMG_JPG: ZInt = 14;
-    pub const IMG_PNG: ZInt = 15;
-    pub const IMG_GIF: ZInt = 16;
+    pub const APP_XHTML_XML: ZInt = 9;
+    pub const APP_X_WWW_FORM_URLENCODED: ZInt = 10;
+    pub const TEXT_JSON: ZInt = 11;
+    pub const TEXT_HTML: ZInt = 12;
+    pub const TEXT_XML: ZInt = 13;
+    pub const TEXT_CSS: ZInt = 14;
+    pub const TEXT_CSV: ZInt = 15;
+    pub const TEXT_JAVASCRIPT: ZInt = 16;
+    pub const IMG_JPG: ZInt = 17;
+    pub const IMG_PNG: ZInt = 18;
+    pub const IMG_GIF: ZInt = 19;
+
+    pub const DEFAULT: ZInt = APP_OCTET_STREAM;
 }
