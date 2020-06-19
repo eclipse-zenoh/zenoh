@@ -11,6 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+mod constants;
+pub use constants::*;
+
 mod msg;
 pub use msg::*;
 
