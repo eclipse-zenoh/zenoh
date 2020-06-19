@@ -60,7 +60,7 @@ pipeline {
         cp -r _build/default/install eclipse-zenoh
         tar czvf eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz eclipse-zenoh/*/*.*
         '''
-        stash includes: 'eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz', name: 'zenohMacOS'
+        stash includes: 'eclipse-zenoh-*-macosx-x86-64.tgz', name: 'zenohMacOS'
       }
     }
 
