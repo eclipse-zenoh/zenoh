@@ -153,7 +153,7 @@ pipeline {
 
   post {
     success {
-        archiveArtifacts artifacts: 'eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz  eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz', fingerprint: true
+        archiveArtifacts artifacts: 'eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz, eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz', fingerprint: true
     }
   }
 }
