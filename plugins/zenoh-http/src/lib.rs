@@ -46,7 +46,17 @@ async fn to_json(results: async_std::sync::Receiver<Reply>) -> String{
                         reskey, String::from_utf8_lossy(&payload.to_vec()), "None")), // TODO timestamp
         _ => None,
     }).collect::<Vec<String>>().await.join(",\n");
-    format!("[\n{}\n]", values)
+    format!("[\n{}\n]\n", values)
+}
+
+async fn to_html(results: async_std::sync::Receiver<Reply>) -> String{
+    let values = results.filter_map(async move |reply| match reply {
+        Reply::ReplyData {reskey, payload, ..} => 
+            Some(format!("<dt>{}</dt>\n<dd>{}</dd>\n",
+                        reskey, String::from_utf8_lossy(&payload.to_vec()))), 
+        _ => None,
+    }).collect::<Vec<String>>().await.join("\n");
+    format!("<dl>\n{}\n</dl>\n", values)
 }
 
 fn enc_from_mime(mime: Option<Mime>) -> ZInt {
@@ -103,8 +113,17 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
                 &path.into(), &predicate,
                 QueryTarget::default(),
                 QueryConsolidation::default()).await {
-            Ok(stream) => 
-                Ok(response(StatusCode::Ok, Mime::from_str("application/json").unwrap(), &to_json(stream).await)),
+            Ok(stream) => {
+                match req.header("accept") {
+                    Some(accept) => {
+                        match accept[0].to_string().split(';').next().unwrap().split(',').next().unwrap() {
+                            "text/html" => Ok(response(StatusCode::Ok, Mime::from_str("text/html").unwrap(), &to_html(stream).await)),
+                            _ => Ok(response(StatusCode::Ok, Mime::from_str("application/json").unwrap(), &to_json(stream).await)),
+                        }
+                    }
+                    None => Ok(response(StatusCode::Ok, Mime::from_str("application/json").unwrap(), &to_json(stream).await))
+                }
+            },
             Err(e) => 
                 Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
         }
