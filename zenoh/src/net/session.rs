@@ -493,6 +493,12 @@ impl Primitives for Session {
     }
 }
 
+impl fmt::Debug for Session {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Session{{...}}")
+    }
+}
+
 pub(crate) struct InnerSession {
     primitives:         Option<Arc<dyn Primitives + Send + Sync>>, // @TODO replace with MaybeUninit ??
     rid_counter:        AtomicUsize,  // @TODO: manage rollover and uniqueness

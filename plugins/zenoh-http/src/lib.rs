@@ -96,6 +96,7 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     let mut app = Server::with_state(session);
 
     app.at("*").get(async move |req: Request<Session>| {
+        log::trace!("Http {:?}", req);
         let path = req.url().path();
         let predicate = req.url().query().or(Some("")).unwrap();
         match req.state().query(
@@ -110,6 +111,7 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     });
 
     app.at("*").put(async move |mut req: Request<Session>| { 
+        log::trace!("Http {:?}", req);
         match req.body_bytes().await {
             Ok(bytes) => {
                 let path = req.url().path();
@@ -126,6 +128,7 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     });
 
     app.at("*").patch(async move |mut req: Request<Session>| { 
+        log::trace!("Http {:?}", req);
         match req.body_bytes().await {
             Ok(bytes) => {
                 let path = req.url().path();
@@ -142,6 +145,7 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     });
 
     app.at("*").delete(async move |req: Request<Session>| { 
+        log::trace!("Http {:?}", req);
         let path = req.url().path();
         match req.state().write_wo(&path.into(), RBuf::new(), 
                 enc_from_mime(req.content_type()), kind::REMOVE).await {
