@@ -13,12 +13,23 @@
 //
 pub mod kind {
     use crate::core::ZInt;
+    use zenoh_util::zerror;
+    use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 
     pub const PUT: ZInt = 0;
     pub const UPDATE: ZInt = 1;
     pub const REMOVE: ZInt = 2;
 
     pub const DEFAULT: ZInt = PUT;
+
+    pub fn to_str(i: ZInt) -> ZResult<String> {
+        match i {
+            0 => Ok("PUT".to_string()),
+            1 => Ok("UPDATE".to_string()),
+            2 => Ok("REMOVE".to_string()),
+            _ => zerror!(ZErrorKind::Other { descr: format!("Unknown kind id {}", i)}),
+        }
+    }
 }
 
 pub mod encoding {

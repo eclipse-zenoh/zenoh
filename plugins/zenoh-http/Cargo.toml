@@ -39,3 +39,6 @@ tide = "0.11.0"
 version = "~1.6.0"
 features = ["unstable"]
 
+[[example]]
+name = "zn_serve_sse"
+path = "examples/zenoh-net/zn_serve_sse.rs"
