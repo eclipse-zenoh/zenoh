@@ -31,7 +31,7 @@ const DEFAULT_WBUF_CAPACITY: usize = 64;
 
 // Macro to send a message on a link
 macro_rules! zlinksend {
-    ($msg:expr, $link:expr) => ({        
+    ($msg:expr, $link:expr) => ({       
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(DEFAULT_WBUF_CAPACITY, false);
         if $link.is_streamed() {
@@ -174,7 +174,7 @@ impl InitialSession {
         
             // Send the message on the link
             let _ = zlinksend!(message, link);
-            log::debug!("Rejecting Open on link {} because of unsupported Zenoh version", link);
+            log::warn!("Rejecting Open on link {} because of unsupported Zenoh version from peer: {}", link, pid);
 
             // Close the link
             return Action::Close
@@ -203,7 +203,7 @@ impl InitialSession {
 
                             // Send the message on the link
                             let _ = zlinksend!(message, link);
-                            log::debug!("Rejecting Open on link {} because of maximum links limit reached for peer: {}", link, pid);
+                            log::warn!("Rejecting Open on link {} because of maximum links limit reached for peer: {}", link, pid);
 
                             // Close the link
                             return Action::Close
@@ -223,7 +223,7 @@ impl InitialSession {
 
                         // Send the message on the link
                         let _ = zlinksend!(message, link);
-                        log::debug!("Rejecting Open on link {} because of invalid lease on already existing session with peer: {}", link, pid);
+                        log::warn!("Rejecting Open on link {} because of invalid lease on already existing session with peer: {}", link, pid);
 
                         // Close the link
                         return Action::Close
@@ -242,7 +242,8 @@ impl InitialSession {
 
                         // Send the message on the link
                         let _ = zlinksend!(message, link);
-                        log::debug!("Rejecting Open on link {} because of invalid sequence number resolution on already existing session with peer: {}", link, pid);
+                        log::warn!("Rejecting Open on link {} because of invalid sequence number resolution on already existing\
+                                    session with peer: {}", link, pid);
 
                         // Close the link
                         return Action::Close
@@ -263,7 +264,7 @@ impl InitialSession {
 
                         // Send the message on the link
                         let _ = zlinksend!(message, link);
-                        log::debug!("Rejecting Open on link {} because of maximum sessions limit reached for peer: {}", link, pid);
+                        log::warn!("Rejecting Open on link {} because of maximum sessions limit reached for peer: {}", link, pid);
 
                         // Close the link
                         return Action::Close
@@ -274,6 +275,7 @@ impl InitialSession {
             // Compute the minimum SN Resolution 
             let agreed_sn_resolution = self.manager.config.sn_resolution.min(sn_resolution);
             let initial_sn_tx = {
+                // @TODO: in case the session is already active, we should return the last SN
                 let mut rng = rand::thread_rng();
                 rng.gen_range(0, agreed_sn_resolution)
             };
@@ -301,14 +303,14 @@ impl InitialSession {
 
                 // Concurrency just occured: multiple Open Messages have simultanesouly arrived from different links.
                 // Restart from the beginning to check if the Open Messages have compatible parameters
-                log::trace!("Multiple Open messages have simultanesouly arrived from different links for peer: {}. Rechecking validity of Open message recevied on link: {}", pid, link);
+                log::trace!("Multiple Open messages have simultanesouly arrived from different links for peer: {}.\
+                             Rechecking validity of Open message recevied on link: {}", pid, link);
             }
         };
 
         // Add the link to the session
-        let res = session.add_link(link.clone()).await;
-        if res.is_err() {
-            log::debug!("Unable to add the link {} to the session with peer: {}", link, pid);
+        if let Err(e) = session.add_link(link.clone()).await {
+            log::warn!("Unable to add link {} to the session with peer {}: {}", link, pid, e);
             return Action::Close
         }
 
@@ -329,7 +331,9 @@ impl InitialSession {
         };
         let locators = {
             let mut locs = self.manager.get_locators().await;
+            // Get link source
             let src = link.get_src();
+            // Remove the source locator from the list of additional locators
             if let Some(index) = locs.iter().position(|x| x == &src) {
                 locs.remove(index);
                 if !locs.is_empty() {
@@ -345,9 +349,8 @@ impl InitialSession {
         let message = SessionMessage::make_accept(whatami, opid, apid, initial_sn, sn_resolution, lease, locators, attachment);
         
         // Send the message on the link
-        let res = zlinksend!(message, link);
-        if res.is_err() {
-            // Return if link error
+        if let Err(e) = zlinksend!(message, link) {
+            log::warn!("Unable to send Accept on link {} for peer {}: {}", link, pid, e);
             return Action::Close
         }
 
@@ -365,15 +368,17 @@ impl InitialSession {
                 ).await;
                 // Set the callback on the transport
                 if let Err(e) = session.set_callback(callback).await {
-                    log::warn!("{}", e);
+                    log::warn!("Unable to set callback for peer {}: {}", pid, e);
                     return Action::Close
                 }
             },
             Err(e) => {
-                log::warn!("{}", e);
+                log::warn!("Unable to get callback for peer {}: {}", pid, e);
                 return Action::Close
             }            
         }
+
+        log::debug!("New session opened from: {}", pid);
 
         // Return the target transport to use in the link
         match session.get_transport() {

@@ -158,6 +158,7 @@ impl Tables {
                                             remote_rid: None,
                                             subs: None,
                                             qabl: false,
+                                            last_values: HashMap::new(),
                                     }));
                                     Arc::get_mut_unchecked(&mut newface).local_mappings.insert(local_id, nonwild_prefix.clone());
 
@@ -184,6 +185,7 @@ impl Tables {
                                             remote_rid: None,
                                             subs: None,
                                             qabl: false,
+                                            last_values: HashMap::new(),
                                     }));
                                     Arc::get_mut_unchecked(&mut newface).local_mappings.insert(local_id, nonwild_prefix.clone());
 
@@ -207,16 +209,25 @@ impl Tables {
         match face.upgrade() {
             Some(mut face) => unsafe {
                 log::debug!("Close face {}", face.id);
+                finalize_pending_queries(&mut t, &mut face).await;
+
                 let face = Arc::get_mut_unchecked(&mut face);
-                for mut mapping in face.remote_mappings.values_mut() {
-                    Resource::clean(&mut mapping);
+                for mut res in face.remote_mappings.values_mut() {
+                    Arc::get_mut_unchecked(res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
                 }
                 face.remote_mappings.clear();
-                for mut mapping in face.local_mappings.values_mut() {
-                    Resource::clean(&mut mapping);
+                for mut res in face.local_mappings.values_mut() {
+                    Arc::get_mut_unchecked(res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
                 }
                 face.local_mappings.clear();
                 while let Some(mut res) = face.subs.pop() {
+                    Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
+                }
+                while let Some(mut res) = face.qabl.pop() {
+                    Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
                     Resource::clean(&mut res);
                 }
                 t.faces.remove(&face.id);
@@ -229,9 +240,11 @@ impl Tables {
         let mut dests = HashMap::new();
         for match_ in &res.matches {
             for (fid, context) in &match_.upgrade().unwrap().contexts {
-                if context.subs.is_some() {
-                    let (rid, suffix) = Resource::get_best_key(res, "", *fid);
-                    dests.insert(*fid, (context.face.clone(), rid, suffix));
+                if let Some(subinfo) = &context.subs {
+                    if  SubMode::Push == subinfo.mode {
+                        let (rid, suffix) = Resource::get_best_key(res, "", *fid);
+                        dests.insert(*fid, (context.face.clone(), rid, suffix));
+                    }
                 }
             }
         }

@@ -25,12 +25,14 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.31"
 env_logger = "0.7.1"
-log = "0.4.8"
 hex = "0.4.2"
+lazy_static = "1.4.0"
+libc = "0.2.71"
+log = "0.4.8"
 rand = "0.7.3"
+http-types = "2.2.0"
 uuid = { version = "0.8.1", features = ["v4"] }
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
-lazy_static = "1.4.0"
 
 [dependencies.async-std]
 version = "~1.6.0"

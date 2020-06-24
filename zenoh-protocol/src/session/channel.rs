@@ -11,10 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::prelude::*;
-use async_std::sync::{Arc, Barrier, Mutex, RecvError, RwLock, Weak, channel};
+use async_std::sync::{Arc, Barrier, Mutex, RwLock, Weak};
 use async_std::task;
 use async_trait::async_trait;
+use std::collections::{HashMap, HashSet};
+use std::iter::FromIterator;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -44,7 +45,7 @@ use crate::session::defaults::{
 };
 
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
-use zenoh_util::collections::{CreditBuffer, CreditQueue};
+use zenoh_util::collections::{CreditBuffer, CreditQueue, Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_util::collections::credit_queue::Drain as CreditQueueDrain;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 
@@ -82,8 +83,7 @@ struct SerializedBatch {
 }
 
 impl SerializedBatch {
-    fn new(link: Link, size: usize) -> SerializedBatch {
-        let size = size.min(link.get_mtu());
+    fn new(link: Link, size: usize) -> SerializedBatch {        
         // Create the buffer
         let mut buffer = WBuf::new(size, true);
         // Reserve two bytes if the link is streamed
@@ -98,7 +98,7 @@ impl SerializedBatch {
     }
 
     fn clear(&mut self) {
-        self.buffer.clear();        
+        self.buffer.clear();
         if self.link.is_streamed() {
             self.buffer.write_bytes(&TWO_BYTES);
         }
@@ -134,7 +134,7 @@ fn map_messages_on_links(
         log::trace!("Scheduling: {:?}", msg.inner);   
         // Find the right index for the message
         let index = if let Some(link) = &msg.link {
-            // Check if the target link exists, otherwise fallback on the main link            
+            // Check if the target link exists, otherwise drop it            
             if let Some(index) = batches.iter().position(|x| &x.link == link) {
                 index
             } else {
@@ -150,19 +150,20 @@ fn map_messages_on_links(
     }
 }
 
-enum CurrentFrame {
-    Reliable,
-    BestEffort,
-    None
-}
-
 async fn batch_fragment_transmit(
     inner: &mut ChannelInnerTx,
     messages: &mut Vec<MessageInner>,
     batch: &mut SerializedBatch
 ) -> bool {  
+    enum CurrentFrame {
+        Reliable,
+        BestEffort,
+        None
+    }
+    
     let mut current_frame = CurrentFrame::None;
     
+    // Process all the messages
     for msg in messages.drain(..) {
         log::trace!("Serializing: {:?}", msg);
 
@@ -170,6 +171,10 @@ async fn batch_fragment_transmit(
         let mut current_sn = None;
         let mut is_first = true;
 
+        // The loop works as follows:
+        // - first iteration tries to serialize the message on the current batch;
+        // - second iteration tries to serialize the message on a new batch if the first iteration failed
+        // - third iteration fragments the message if the second iteration failed
         loop {
             // Mark the write operation       
             batch.buffer.mark();
@@ -233,7 +238,8 @@ async fn batch_fragment_transmit(
                 }
             };
 
-            // We have been succesfull in writing on the current batch, exit the loop
+            // We have been succesfull in writing on the current batch: breaks the loop
+            // and tries to write more message on the same batch
             if res {
                 break
             }
@@ -266,21 +272,11 @@ async fn batch_fragment_transmit(
 // Task for draining the queue
 async fn drain_queue(
     ch: Arc<Channel>,
-    mut links: Vec<Link>,
-    batch_size: usize
+    mut batches: Vec<SerializedBatch>,    
+    mut messages: Vec<Vec<MessageInner>>
 ) {
     // @TODO: Implement reliability
     // @TODO: Implement fragmentation
-
-    // Allocate batches and messages buffers
-    let mut batches: Vec<SerializedBatch> = Vec::with_capacity(links.len());
-    let mut messages: Vec<Vec<MessageInner>> = Vec::with_capacity(links.len());
-
-    // Initialize the batches based on the current links parameters      
-    for link in links.drain(..) {
-        batches.push(SerializedBatch::new(link, batch_size));
-        messages.push(Vec::with_capacity(*QUEUE_SIZE_TOT));
-    }
 
     // Keep the lock on the inner transmission structure
     let mut inner = zasynclock!(ch.tx);
@@ -289,7 +285,7 @@ async fn drain_queue(
     let mut active = true; 
 
     while active {    
-        log::trace!("Waiting for messages in the transmission queue...");
+        // log::trace!("Waiting for messages in the transmission queue of channel: {}", ch.get_peer());
         // Get a Drain iterator for the queue
         // drain() waits for the queue to be non-empty
         let mut drain = ch.queue.drain().await;
@@ -309,11 +305,7 @@ async fn drain_queue(
                 // active = batch_fragment_transmit(link, &mut inner, &mut context[i]);
                 // Check if the batch is ready to send      
                 let res = batch_fragment_transmit(&mut inner, &mut messages[i], &mut batch).await;
-                if !res {
-                    // There was an error while transmitting. Exit.
-                    active = false;
-                    break
-                }
+                active = active && res;
             }
 
             // Try to drain messages from the queue
@@ -341,46 +333,11 @@ async fn drain_queue(
     }
 }
 
-// Task for periodically sending KEEP_ALIVE messages
-async fn keep_alive(
-    ch: Arc<Channel>,
-    links: Vec<Link>
-) -> Result<(), RecvError> {
-    // Although the sesion lease is expressed in seconds, use milliseconds granularity. 
-    // In order to consider eventual packet loss and transmission latency and jitter, set 
-    // the actual KEEP_ALIVE timeout to one third to the agreed session lease. This is 
-    // in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity check.  
-    let interval: u64 = 1_000 * ch.lease / 3;
-    let timeout = Duration::from_millis(interval);
-
-    // Create the KEEP_ALIVE message
-    let pid = None;
-    let attachment = None;
-    let message = MessageInner::Session(
-        SessionMessage::make_keep_alive(pid, attachment)
-    );
-    
-    // Periodically schedule the transmission of the KEEP_ALIVE messages
-    loop {
-        task::sleep(timeout).await;            
-
-        log::trace!("Schedule KEEP_ALIVE messages");
-        let messages: Vec<MessageTx> = links.iter().map(|l| 
-            MessageTx {
-                inner: message.clone(),
-                link: Some(l.clone())
-            }
-        ).collect();
-
-        // Push the KEEP_ALIVE messages on the queue
-        ch.queue.push_batch(messages, *QUEUE_PRIO_CTRL).await;
-    }
-}
-
 // Consume task
 async fn consume_task(ch: Arc<Channel>) -> ZResult<()> {
     // Acquire the lock on the links
     let guard = zasyncread!(ch.links);
+
     // Check if we have links to send on
     if guard.links.is_empty() {
         let e = "Unable to start the consume task, no links available".to_string();
@@ -390,42 +347,110 @@ async fn consume_task(ch: Arc<Channel>) -> ZResult<()> {
         })
     }
 
-    // Keep track of the batch size
-    let batch_size: usize = guard.batch_size;
-    // Make a copy of references to the links
-    let links: Vec<Link> = guard.links.clone();
+    // Allocate batches and messages buffers
+    let mut batches: Vec<SerializedBatch> = Vec::with_capacity(guard.links.len());
+    let mut messages: Vec<Vec<MessageInner>> = Vec::with_capacity(guard.links.len());
+
+    // Initialize the batches based on the current links parameters      
+    for link in guard.get().drain(..) {
+        let size = guard.batch_size.min(link.get_mtu());
+        batches.push(SerializedBatch::new(link, size));
+        messages.push(Vec::with_capacity(*QUEUE_SIZE_TOT));
+    }
 
     // Drop the mutex guard
     drop(guard);
 
-    // Create a channel to notify the other tasks when to exit
-    let (sender, receiver) = channel::<()>(1);
-    
-    // Spawn the task for periodically sending the KEEP_ALIVE messages
-    let c_li = links.clone();
-    let c_ch = ch.clone();
-    task::spawn(async move {
-        let stop = receiver.recv();
-        let keep = keep_alive(c_ch, c_li);
-        let _ = keep.race(stop).await;
-    });
-    
     // Drain the queue until a Stop signal is received
-    drain_queue(ch.clone(), links, batch_size).await;
-
-    // Stop all the other tasks
-    sender.send(()).await;
+    drain_queue(ch.clone(), batches, messages).await;
 
     // Barrier to synchronize with the stop()
     ch.barrier.wait().await;
+
+    log::trace!("Exiting consume task for channel: {}", ch.get_peer());
 
     Ok(())
 }
 
 /*************************************/
+/*          TIMED EVENTS            */
+/*************************************/
+struct KeepAliveEvent {
+    ch: Weak<Channel>,
+    link: Link
+}
+
+impl KeepAliveEvent {
+    fn new(ch: Weak<Channel>, link: Link) -> KeepAliveEvent {
+        KeepAliveEvent {
+            ch,
+            link
+        }
+    }
+}
+
+#[async_trait]
+impl Timed for KeepAliveEvent {
+    async fn run(&mut self) {
+        log::trace!("Schedule KEEP_ALIVE messages for link: {}", self.link);        
+        if let Some(ch) = self.ch.upgrade() {
+            // Create the KEEP_ALIVE message
+            let pid = None;
+            let attachment = None;
+            let message = MessageTx {
+                inner: MessageInner::Session(SessionMessage::make_keep_alive(pid, attachment)),
+                link: Some(self.link.clone())
+            };
+
+            // Push the KEEP_ALIVE messages on the queue
+            ch.queue.push(message, *QUEUE_PRIO_CTRL).await;
+        }
+    }
+}
+
+struct LeaseEvent {
+    ch: Weak<Channel>
+}
+
+impl LeaseEvent {
+    fn new(ch: Weak<Channel>) -> LeaseEvent {
+        LeaseEvent {
+            ch
+        }
+    }
+}
+
+#[async_trait]
+impl Timed for LeaseEvent {
+    async fn run(&mut self) {        
+        if let Some(ch) = self.ch.upgrade() {
+            log::trace!("Verify session lease for peer: {}", ch.get_peer());
+
+            // Create the set of current links
+            let links: HashSet<Link> = HashSet::from_iter(ch.get_links().await.drain(..));
+            // Get and reset the current status of active links
+            let alive: HashSet<Link> = HashSet::from_iter(zasynclock!(ch.rx).alive.drain());
+            // Create the difference set
+            let mut difference: HashSet<Link> = HashSet::from_iter(links.difference(&alive).cloned());
+
+            if links == difference {
+                // We have no links left or all the links have expired: close the whole session
+                log::warn!("Session with peer {} has expired", ch.get_peer());                
+                let _ = ch.close(smsg::close_reason::EXPIRED).await;
+            } else {
+                // Remove only the links with expired lease
+                for l in difference.drain() {
+                    log::warn!("Link with peer {} has expired: {}", ch.get_peer(), l);
+                    let _ = ch.close_link(&l, smsg::close_reason::EXPIRED).await;                
+                }
+            }            
+        }
+    }
+}
+
+/*************************************/
 /*      CHANNEL INNER TX STRUCT      */
 /*************************************/
-
 // Structs to manage the sequence numbers of channels
 struct SeqNumTx {
     reliable: SeqNumGenerator,
@@ -441,9 +466,11 @@ impl SeqNumTx {
     }
 }
 
-// Store the mutable data that need to be used for transmission
+// Store the mutable data that need to be used for reception
 struct ChannelInnerTx {
     sn: SeqNumTx
+    // Add reliability queue
+    // Add message to fragment
 }
 
 impl ChannelInnerTx {
@@ -454,32 +481,28 @@ impl ChannelInnerTx {
     }
 }
 
+
+/*************************************/
+/*              LINKS                */
+/*************************************/
 // Store the mutable data that need to be used for transmission
 #[derive(Clone)]
 struct ChannelLinks {
     batch_size: usize,
-    links: Vec<Link>
+    links: HashMap<Link, TimedHandle>
 }
 
 impl ChannelLinks {
     fn new(batch_size: usize) -> ChannelLinks {
         ChannelLinks {
             batch_size,
-            links: Vec::new()
+            links: HashMap::new()
         }
     }
 
-    /*************************************/
-    /*               LINK                */
-    /*************************************/
-    #[inline]
-    fn find_link_index(&self, link: &Link) -> Option<usize> {
-        self.links.iter().position(|x| x == link)
-    }
-
-    pub(super) async fn add_link(&mut self, link: Link) -> ZResult<()> {
+    pub(super) fn add(&mut self, link: Link, handle: TimedHandle) -> ZResult<()> {
         // Check if this link is not already present
-        if self.links.contains(&link) {
+        if self.links.contains_key(&link) {
             let e = format!("Can not add the link to the channel because it is already associated: {}", link);
             log::trace!("{}", e);
             return zerror!(ZErrorKind::InvalidLink {
@@ -488,29 +511,30 @@ impl ChannelLinks {
         }
 
         // Add the link to the channel
-        self.links.push(link);
+        self.links.insert(link, handle);
 
         Ok(())
     }
 
-    pub(super) async fn del_link(&mut self, link: &Link) -> ZResult<()> {
-        // Find the index of the link
-        let mut index = self.find_link_index(&link);
+    pub(super) fn get(&self) -> Vec<Link> {
+        self.links.iter().map(|(l, _)| l.clone()).collect()
+    }
 
-        // Return error if the link was not found
-        if index.is_none() {
+    pub(super) fn del(&mut self, link: &Link) -> ZResult<TimedHandle> {
+        // Remove the link from the channel
+        if let Some(handle) = self.links.remove(link) {
+            Ok(handle)
+        } else {
             let e = format!("Can not delete the link from the channel because it does not exist: {}", link);
             log::trace!("{}", e);
-            return zerror!(ZErrorKind::InvalidLink {
+            zerror!(ZErrorKind::InvalidLink {
                 descr: format!("{}", link)
             })
         }
+    }    
 
-        // Remove the link from the channel
-        let index = index.take().unwrap();
-        self.links.remove(index);
-
-        Ok(())
+    pub(super) fn clear(&mut self) {
+        self.links.clear()
     }
 }
 
@@ -543,20 +567,19 @@ impl SeqNumRx {
 
 // Store the mutable data that need to be used for transmission
 struct ChannelInnerRx {    
-    _lease: ZInt,
     sn: SeqNumRx,
+    alive: HashSet<Link>,
     callback: Option<Arc<dyn MsgHandler + Send + Sync>>
 }
 
 impl ChannelInnerRx {
     fn new(
-        lease: ZInt,
         sn_resolution: ZInt,
         initial_sn: ZInt
     ) -> ChannelInnerRx {
         ChannelInnerRx {
-            _lease: lease,
             sn: SeqNumRx::new(sn_resolution, initial_sn),
+            alive: HashSet::new(),
             callback: None
         }
     }
@@ -566,7 +589,6 @@ impl ChannelInnerRx {
 /*************************************/
 /*           CHANNEL STRUCT          */
 /*************************************/
-
 pub(super) struct Channel {
     // The manager this channel is associated to
     manager: Arc<SessionManagerInner>,
@@ -574,10 +596,12 @@ pub(super) struct Channel {
     pid: PeerId,
     // The session lease in seconds
     lease: ZInt,
+    // Keep alive interval
+    keep_alive: ZInt,
     // The SN resolution 
     sn_resolution: ZInt,
     // Keep track whether the consume task is active
-    active: AtomicBool,
+    active: Mutex<bool>,
     // The callback has been set or not
     has_callback: AtomicBool,
     // The message queue
@@ -588,6 +612,8 @@ pub(super) struct Channel {
     tx: Mutex<ChannelInnerTx>,
     // The mutable data struct for reception
     rx: Mutex<ChannelInnerRx>,
+    // The internal timer
+    timer: Timer,
     // Barrier for syncrhonizing the stop() with the consume_task
     barrier: Arc<Barrier>,
     // Weak reference to self
@@ -601,6 +627,7 @@ impl Channel {
         pid: PeerId, 
         _whatami: WhatAmI,
         lease: ZInt,
+        keep_alive: ZInt,
         sn_resolution: ZInt, 
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
@@ -630,25 +657,34 @@ impl Channel {
         // The buffer with index 0 has the highest priority.
         let queue_tx = vec![ctrl, retx, data];
 
-        Channel{
+        Channel {
             manager,
             pid,
             lease,
+            keep_alive,
             sn_resolution,
             has_callback: AtomicBool::new(false),
             queue: CreditQueue::new(queue_tx, *QUEUE_CONCURRENCY),
-            active: AtomicBool::new(false),
+            active: Mutex::new(false),
             links: RwLock::new(ChannelLinks::new(batch_size)),
             tx: Mutex::new(ChannelInnerTx::new(sn_resolution, initial_sn_tx)),
-            rx: Mutex::new(ChannelInnerRx::new(lease, sn_resolution, initial_sn_rx)),
+            rx: Mutex::new(ChannelInnerRx::new(sn_resolution, initial_sn_rx)),
+            timer: Timer::new(),
             barrier: Arc::new(Barrier::new(2)),
             w_self: RwLock::new(None)
-        }
+        }        
     }
 
-    pub(super) fn initialize(&self, w_self: Weak<Self>) {
-        *self.w_self.try_write().unwrap() = Some(w_self);
+    pub(super) async fn initialize(&self, w_self: Weak<Self>) {
+        // Initialize the weak reference to self
+        *zasyncwrite!(self.w_self) = Some(w_self.clone());
+        // Initialize the lease event
+        let event = LeaseEvent::new(w_self);
+        let interval = Duration::from_millis(self.lease);
+        let event = TimedEvent::periodic(interval, event);
+        self.timer.add(event).await;
     }
+
 
     /*************************************/
     /*            ACCESSORS              */
@@ -659,6 +695,10 @@ impl Channel {
 
     pub(super) fn get_lease(&self) -> ZInt {
         self.lease
+    }
+
+    pub(super) fn get_keep_alive(&self) -> ZInt {
+        self.keep_alive
     }
 
     pub(super) fn get_sn_resolution(&self) -> ZInt {
@@ -675,54 +715,140 @@ impl Channel {
         guard.callback = Some(callback);
     }
 
-    pub(super) async fn close(&self) -> ZResult<()> {
-        // Mark the channel as inactive
-        if self.active.swap(false, Ordering::SeqCst) {            
-            // Atomically push the messages on the queue
-            let mut messages: Vec<MessageTx> = Vec::new();
 
-            // Close message to be sent on all the links
-            let peer_id = Some(self.manager.config.pid.clone());
-            let reason_id = smsg::close_reason::GENERIC;              
-            let link_only = false;  // This is should always be false for user-triggered close              
-            let attachment = None;  // No attachment here
-            let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+    /*************************************/
+    /*               TASK                */
+    /*************************************/
+    async fn start(&self) -> ZResult<()> {
+        let mut guard = zasynclock!(self.active);   
+        // If not already active, start the transmission loop
+        if !*guard {    
+            // Get the Arc to the channel
+            let ch = zasyncread!(self.w_self).as_ref().unwrap().upgrade().unwrap();
 
-            for l in zasyncread!(self.links).links.iter() {
-                let close = MessageTx {
-                    inner: MessageInner::Session(msg.clone()),
-                    link: Some(l.clone())
-                };
-                messages.push(close);
-            }
+            // Spawn the transmission loop
+            task::spawn(async move {
+                let res = consume_task(ch.clone()).await;
+                if res.is_err() {
+                    let mut guard = zasynclock!(ch.active);
+                    *guard = false;
+                }
+            });
 
-            // Stop message to exit the consume task
-            let stop = MessageTx {
+            // Mark that now the task can be stopped
+            *guard = true;
+
+            return Ok(())
+        }
+
+        zerror!(ZErrorKind::Other {
+            descr: format!("Can not start channel with peer {} because it is already active", self.get_peer())
+        })
+    }
+
+    async fn stop(&self, priority: usize) -> ZResult<()> {  
+        let mut guard = zasynclock!(self.active);         
+        if *guard {
+            let msg = MessageTx {
                 inner: MessageInner::Stop,
                 link: None
             };
-            messages.push(stop);
-
-            // Atomically push the close and stop messages to the queue
-            self.queue.push_batch(messages, *QUEUE_PRIO_DATA).await;
-
-            // Wait for the consume_task to stop
+            self.queue.push(msg, priority).await;
             self.barrier.wait().await;
 
-            // Close all the links
-            for l in self.get_links().await.iter() {
-                let _ = self.del_link(l).await;
-                let _ = l.close().await;
-            }
+            // Mark that now the task can be started
+            *guard = false;
 
-            // Delete the session on the manager
-            let _ = self.manager.del_session(&self.pid).await;
-
-            // Notify the callback
-            if let Some(callback) = &zasynclock!(self.rx).callback {
-                callback.close().await;
-            }
+            return Ok(())
         }
+
+        zerror!(ZErrorKind::Other {
+            descr: format!("Can not stop channel with peer {} because it is already inactive", self.get_peer())
+        })
+    }
+
+
+    /*************************************/
+    /*           TERMINATION             */
+    /*************************************/
+    async fn delete(&self) {
+        // Stop the consume task with the lowest priority to give enough
+        // time to send all the messages still present in the queue
+        let res = self.stop(*QUEUE_PRIO_DATA).await;
+        log::trace!("Delete: {:?}", res);
+
+        // Delete the session on the manager
+        let _ = self.manager.del_session(&self.pid).await;            
+
+        // Notify the callback
+        if let Some(callback) = &zasynclock!(self.rx).callback {
+            callback.close().await;
+        }
+        
+        // Close all the links
+        // NOTE: del_link() is meant to be used thorughout the lifetime
+        //       of the session and not for its termination.
+        for l in self.get_links().await.drain(..) {
+            let _ = l.close().await;
+        }
+
+        // Remove all the reference to the links
+        zasyncwrite!(self.links).clear();
+    }
+
+    pub(super) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {     
+        log::trace!("Closing link {} with peer: {}", link, self.get_peer());
+
+        // Close message to be sent on the target link
+        let peer_id = Some(self.manager.config.pid.clone());
+        let reason_id = reason;              
+        let link_only = true;  // This is should always be true when closing a link              
+        let attachment = None;  // No attachment here
+        let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+
+        let close = MessageTx {
+            inner: MessageInner::Session(msg),
+            link: Some(link.clone())
+        };
+
+        // NOTE: del_link() stops the consume task with priority QUEUE_PRIO_CTRL.
+        //       The close message must be pushed with the same priority before
+        //       the link is deleted
+        self.queue.push(close, *QUEUE_PRIO_CTRL).await;
+
+        // Remove the link from the channel
+        self.del_link(&link).await?;
+
+        // Close the underlying link
+        link.close().await
+    }
+
+    pub(super) async fn close(&self, reason: u8) -> ZResult<()> {
+        log::trace!("Closing session with peer: {}", self.get_peer());
+
+        // Atomically push the messages on the queue
+        let mut messages: Vec<MessageTx> = Vec::new();
+
+        // Close message to be sent on all the links
+        let peer_id = Some(self.manager.config.pid.clone());
+        let reason_id = reason;              
+        let link_only = false;  // This is should always be false for user-triggered close              
+        let attachment = None;  // No attachment here
+        let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+
+        for link in self.get_links().await.drain(..) {
+            let close = MessageTx {
+                inner: MessageInner::Session(msg.clone()),
+                link: Some(link)
+            };
+            messages.push(close);
+        }
+
+        // Atomically push the close and stop messages to the queue
+        self.queue.push_batch(messages, *QUEUE_PRIO_DATA).await;
+
+        // Terminate and clean up the session
+        self.delete().await;
         
         Ok(())
     }
@@ -730,7 +856,7 @@ impl Channel {
     /*************************************/
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
-    // Schedule the message to be sent asynchronsly
+    /// Schedule a Zenoh message on the transmission queue
     pub(super) async fn schedule(&self, message: ZenohMessage, link: Option<Link>) {
         let message = MessageTx {
             inner: MessageInner::Zenoh(message),
@@ -740,7 +866,7 @@ impl Channel {
         self.queue.push(message, *QUEUE_PRIO_DATA).await;
     }
 
-    // Schedule a batch of messages to be sent asynchronsly
+    /// Schedule a batch of Zenoh messages on the transmission queue
     pub(super) async fn schedule_batch(&self, mut messages: Vec<ZenohMessage>, link: Option<Link>) {
         let messages = messages.drain(..).map(|x| {
             MessageTx {
@@ -756,73 +882,58 @@ impl Channel {
     /*               LINK                */
     /*************************************/
     pub(super) async fn add_link(&self, link: Link) -> ZResult<()> {
-        self.stop().await?;
-        zasyncwrite!(self.links).add_link(link).await?;
-        self.start().await?;
+        // Get the Arc to the channel
+        let ch = zasyncread!(self.w_self).as_ref().unwrap().upgrade().unwrap();
+        
+        // Initialize the event for periodically sending KEEP_ALIVE messages on the link
+        let event = KeepAliveEvent::new(Arc::downgrade(&ch), link.clone());
+        // Keep alive interval is expressed in millisesond
+        let interval = Duration::from_millis(self.keep_alive);
+        let event = TimedEvent::periodic(interval, event);
+        // Get the handle of the periodic event
+        let handle = event.get_handle();
+
+        // Add the link along with the handle for defusing the KEEP_ALIVE messages
+        zasyncwrite!(self.links).add(link.clone(), handle)?;
+
+        // Add the link to the set of alive links
+        zasynclock!(self.rx).alive.insert(link);
+
+        // Add the periodic event to the timer
+        ch.timer.add(event).await;
+
+        // Stop the consume task to get the updated view on the links
+        let _ = self.stop(*QUEUE_PRIO_CTRL).await;
+        // Start the consume task with the new view on the links
+        let _ = self.start().await;
+        
         Ok(())
     }
 
-    pub(super) async fn del_link(&self, link: &Link) -> ZResult<()> {
-        self.stop().await?;
+    pub(super) async fn del_link(&self, link: &Link) -> ZResult<()> { 
+        // Try to remove the link
         let mut guard = zasyncwrite!(self.links);
-        guard.del_link(link).await?;
-        if !guard.links.is_empty() {
-            self.start().await?;
+        let handle = guard.del(link)?;
+        let is_empty = guard.links.is_empty();
+        // Drop the guard before doing any other operation
+        drop(guard);
+        
+        // Defuse the periodic sending of KEEP_ALIVE messages on this link
+        handle.defuse();
+                
+        // Stop the consume task to get the updated view on the links
+        let _ = self.stop(*QUEUE_PRIO_CTRL).await;
+        // Don't restart the consume task if there are no links left
+        if !is_empty {
+            // Start the consume task with the new view on the links
+            let _ = self.start().await;
         }
+
         Ok(())    
     }
 
     pub(super) async fn get_links(&self) -> Vec<Link> {
-        let guard = zasyncread!(self.links);
-        guard.links.to_vec()
-    }
-
-    /*************************************/
-    /*               TASK                */
-    /*************************************/
-    pub(super) async fn start(&self) -> ZResult<()> {
-        // Get the Arc to the channel
-        let ch = if let Some(ch) = zasyncread!(self.w_self).as_ref() {
-            if let Some(ch) = ch.upgrade() {
-                ch
-            } else {
-                let e = format!("The channel does not longer exist: {}", self.pid);
-                log::error!("{}", e);
-                return zerror!(ZErrorKind::Other {
-                    descr: e
-                })
-            }
-        } else {
-            let e = format!("The channel is unitialized: {}", self.pid);
-            log::error!("{}", e);
-            return zerror!(ZErrorKind::Other {
-                descr: e
-            })
-        };
-
-        // If not already active, start the transmission loop
-        if !self.active.swap(true, Ordering::SeqCst) {
-            // Spawn the transmission loop
-            task::spawn(async move {
-                let _ = consume_task(ch.clone()).await;
-                ch.active.store(false, Ordering::SeqCst);
-            });
-        }
-
-        Ok(())
-    }
-
-    pub(super) async fn stop(&self) -> ZResult<()> {        
-        if self.active.swap(false, Ordering::SeqCst) {
-            let msg = MessageTx {
-                inner: MessageInner::Stop,
-                link: None
-            };
-            self.queue.push(msg, *QUEUE_PRIO_CTRL).await;
-            self.barrier.wait().await;
-        }
-
-        Ok(())
+        zasyncread!(self.links).get()
     }
 
 
@@ -860,7 +971,7 @@ impl Channel {
     }
 
     async fn process_best_effort_frame(&self, sn: ZInt, payload: FramePayload) -> Action {
-        let mut guard = zasynclock!(self.rx);        
+        let mut guard = zasynclock!(self.rx);
         if !(guard.sn.best_effort.precedes(sn) && guard.sn.best_effort.set(sn).is_ok()) {
             log::warn!("Best-effort frame with invalid SN dropped: {}", sn);
             return Action::Read
@@ -896,36 +1007,41 @@ impl Channel {
                 return Action::Read
             }
         }        
-        // Close all the session if this close message is not for the link only
+        
         if link_only {
-            // Delete the link
+            // Delete only the link but keep the session open
             let _ = self.del_link(link).await;
             // Close the link
             let _ = link.close().await;
-        } else {  
-            // Notify the callback
-            if let Some(callback) = &zasynclock!(self.rx).callback {
-                callback.close().await;
-            }
-
-            // Delete the session from the manager
-            let _ = self.manager.del_session(&self.pid).await; 
-
-            // Close all the remaining links
-            for l in self.get_links().await.iter() {
-                let _ = self.del_link(l).await;
-                let _ = l.close().await;
-            }                       
+        } else { 
+            // Close the whole session 
+            self.delete().await;
         }
         
         Action::Close
+    }
+
+    async fn process_keep_alive(&self, link: &Link, pid: Option<PeerId>) -> Action {
+        // Check if the PID is correct when provided
+        if let Some(pid) = pid {
+            if pid != self.pid {
+                log::warn!("Received an invalid KeepAlive on link {} from peer: {}. Ignoring.", link, pid);
+                return Action::Read
+            }
+        } 
+
+        let mut guard = zasynclock!(self.rx);
+        // Add the link to the list of alive links
+        guard.alive.insert(link.clone());
+
+        Action::Read
     }
 }
 
 #[async_trait]
 impl TransportTrait for Channel {
     async fn receive_message(&self, link: &Link, message: SessionMessage) -> Action {
-        log::trace!("Received on link {}: {:?}", link, message);
+        log::trace!("Received from peer {} on link {}: {:?}", self.get_peer(), link, message);
         match message.body {
             SessionBody::Frame { ch, sn, payload } => {
                 match ch {
@@ -942,9 +1058,8 @@ impl TransportTrait for Channel {
             SessionBody::Hello { .. } => {
                 unimplemented!("Handling of Hello Messages not yet implemented!");
             },
-            SessionBody::KeepAlive { .. } => {
-                // @TODO: Implement the timer at the receiving side
-                Action::Read
+            SessionBody::KeepAlive { pid } => {
+                self.process_keep_alive(link, pid).await
             },            
             SessionBody::Ping { .. } => {
                 unimplemented!("Handling of Ping Messages not yet implemented!");
@@ -968,18 +1083,8 @@ impl TransportTrait for Channel {
     }
 
     async fn link_err(&self, link: &Link) {
-        log::debug!("Unexpected error on link: {}", link);
-
+        log::warn!("Unexpected error on link {} with peer: {}", link, self.get_peer());
         let _ = self.del_link(link).await;
-
-        // @TODO: Remove this statement once the session lease is implemented
-        if self.get_links().await.is_empty() {
-            // Notify the callback
-            if let Some(callback) = &zasynclock!(self.rx).callback {
-                callback.close().await;
-            }
-            
-            let _ = self.manager.del_session(&self.pid).await;
-        }
+        let _ = link.close().await;
     }
 }

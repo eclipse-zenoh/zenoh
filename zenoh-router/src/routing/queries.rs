@@ -54,6 +54,7 @@ pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<Face>,
                                 remote_rid: None,
                                 subs: None,
                                 qabl: true,
+                                last_values: HashMap::new(),
                             })
                         );
                     }
@@ -87,6 +88,7 @@ pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<Face>,
                                         remote_rid: None,
                                         subs: None,
                                         qabl: false,
+                                        last_values: HashMap::new(),
                                 }));
                                 Arc::get_mut_unchecked(someface).local_mappings.insert(rid, nonwild_prefix.clone());
 
@@ -161,41 +163,53 @@ async fn route_query_to_map(tables: &mut Tables, face: &Arc<Face>, qid: ZInt, ri
 pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, predicate: &str, 
                                 qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
     if let Some(outfaces) = route_query_to_map(tables, face, qid, rid, suffix).await {
-        for (_id, (outface, rid, suffix, qid)) in outfaces {
-            let primitives = {
-                if face.whatami != whatami::PEER || outface.whatami != whatami::PEER {
-                    Some(outface.primitives.clone())
-                } else {
-                    None
+        let outfaces = outfaces.into_iter().filter(|(_, (outface, _, _, _))| face.whatami != whatami::PEER || outface.whatami != whatami::PEER)
+                                           .map(|(_, v)| v).collect::<Vec<(Arc<Face>, u64, String, u64)>>();
+        match outfaces.len() {
+            0 => {
+                log::debug!("Send final reply {}:{} (no matching queryables)", face.id, qid);
+                face.primitives.clone().reply(qid, Reply::ReplyFinal).await
+            },
+            _ => {
+                for (outface, rid, suffix, qid) in outfaces {
+                    outface.primitives.clone().query((rid, suffix).into(), predicate.to_string(), qid, target.clone(), consolidation.clone()).await;
                 }
-            };
-            if let Some(primitives) = primitives {
-                primitives.query((rid, suffix).into(), predicate.to_string(), qid, target.clone(), consolidation.clone()).await
             }
         }
     }
 }
 
-pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<Face>, qid: ZInt, reply: &Reply) {
+pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<Face>, qid: ZInt, reply: Reply) {
+    log::debug!("**** in route_reply...");
     match face.pending_queries.get(&qid) {
         Some(query) => {
             match reply {
                 Reply::ReplyData {..} | Reply::SourceFinal {..} => {
-                    query.src_face.primitives.clone().reply(query.src_qid, reply.clone()).await;
+                    query.src_face.primitives.clone().reply(query.src_qid, reply).await;
                 }
                 Reply::ReplyFinal {..} => {
                     unsafe {
-                        let query = face.pending_queries.get(&qid).unwrap().clone();
                         log::debug!("Received final reply {}:{} from face {}", query.src_face.id, qid, face.id);
-                        Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
                         if Arc::strong_count(&query) == 1 {
                             log::debug!("Propagate final reply {}:{}", query.src_face.id, qid);
                             query.src_face.primitives.clone().reply(query.src_qid, Reply::ReplyFinal).await;
                         }
+                        Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
                     }
                 }
             }
         }
         None => {log::error!("Route reply for unknown query!")}
     }
+}
+
+pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<Face>) {
+    for query in face.pending_queries.values() {
+        log::debug!("Finalize reply {}:{} for closing face {}", query.src_face.id, query.src_qid, face.id);
+        if Arc::strong_count(&query) == 1 {
+            log::debug!("Propagate final reply {}:{}", query.src_face.id, query.src_qid);
+            query.src_face.primitives.clone().reply(query.src_qid, Reply::ReplyFinal).await;
+        }
+    }
+    unsafe{ Arc::get_mut_unchecked(face).pending_queries.clear(); }
 }

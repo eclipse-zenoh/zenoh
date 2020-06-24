@@ -13,7 +13,7 @@
 //
 use async_std::sync::{Arc, Weak};
 use std::collections::HashMap;
-
+use zenoh_protocol::io::RBuf;
 use zenoh_protocol::core::rname::intersect;
 use zenoh_protocol::core::ResKey;
 use zenoh_protocol::proto::SubInfo;
@@ -28,6 +28,7 @@ pub(super) struct Context {
     pub(super) subs: Option<SubInfo>,
     #[allow(dead_code)]
     pub(super) qabl: bool,
+    pub(super) last_values: HashMap<String, (Option<RBuf>, RBuf)>,
 }
 
 pub struct Resource {
@@ -336,6 +337,7 @@ pub async fn declare_resource(tables: &mut Tables, face: &mut Arc<Face>, rid: u6
                             remote_rid: Some(rid),
                             subs: None,
                             qabl: false,
+                            last_values: HashMap::new(),
                         })
                     ).clone();
 

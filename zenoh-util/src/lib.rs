@@ -18,8 +18,8 @@ extern crate lazy_static;
 
 pub mod collections;
 pub mod core;
-pub mod plugins;
 pub mod sync;
+pub mod net;
 
 pub use crate::core::macros::*;
 

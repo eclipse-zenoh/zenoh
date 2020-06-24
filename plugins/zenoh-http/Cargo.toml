@@ -12,7 +12,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zplugin-example"
+name = "zplugin-http"
 version = "0.5.0"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
@@ -21,19 +21,24 @@ authors = ["kydos <angelo@icorsaro.net>",
 edition = "2018"
 
 [lib]
-name = "zplugin_example"
+name = "zplugin_http"
 crate-type = ["cdylib"]
 
 
 [dependencies]
 zenoh = { version = "0.5.0", path = "../../zenoh" }
 zenoh-router = { version = "0.5.0", path = "../../zenoh-router" }
+zenoh-protocol = { version = "0.5.0", path = "../../zenoh-protocol" }
 futures = "0.3.5"
 clap = "2"
 log = "0.4"
 env_logger = "0.7.1"
+tide = "0.11.0"
 
 [dependencies.async-std]
 version = "~1.6.0"
 features = ["unstable"]
 
+[[example]]
+name = "zn_serve_sse"
+path = "examples/zenoh-net/zn_serve_sse.rs"

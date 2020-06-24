@@ -163,8 +163,9 @@ async fn channel_base_inner() {
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
+        keep_alive: None,
         sn_resolution: Some(resolution),
-        batchsize: None,
+        batch_size: None,
         timeout: None,
         retries: None,
         max_sessions: None,
@@ -181,8 +182,9 @@ async fn channel_base_inner() {
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
+        keep_alive: None,
         sn_resolution: Some(resolution),
-        batchsize: None,
+        batch_size: None,
         timeout: None,
         retries: None,
         max_sessions: None,

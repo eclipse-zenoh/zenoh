@@ -17,6 +17,7 @@ extern crate zenoh_router;
 use async_std::task;
 use async_std::sync::Arc;
 use criterion::{Criterion, BenchmarkId};
+use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{Mux, SubInfo, Reliability, SubMode, whatami};
 use zenoh_protocol::session::DummyHandler;
 use zenoh_router::routing::broker::Tables;
@@ -47,19 +48,28 @@ fn tables_bench(c: &mut Criterion) {
         declare_subscription(&mut *tables.write().await, &mut face1.upgrade().unwrap(), i, "", &sub_info).await;
       }
 
-      let tables = tables.read().await;
       let face0 = face0.upgrade().unwrap();
+      let payload = RBuf::new();
       
       tables_bench.bench_function(BenchmarkId::new("direct_route", p), |b| b.iter(|| {
-        route_data_to_map(&tables, &face0, 2, "")
+        task::block_on(async {
+          let mut tables = tables.write().await;
+          route_data_to_map(&mut tables, &face0, 2, "", true, &None, &payload).await;
+        })
       }));
       
       tables_bench.bench_function(BenchmarkId::new("known_resource", p), |b| b.iter(|| {
-        route_data_to_map(&tables, &face0, 0, "/bench/tables/*")
+        task::block_on(async {
+          let mut tables = tables.write().await;
+          route_data_to_map(&mut tables, &face0, 0, "/bench/tables/*", true, &None, &payload).await;
+        })
       }));
       
       tables_bench.bench_function(BenchmarkId::new("matches_lookup", p), |b| b.iter(|| {
-        route_data_to_map(&tables, &face0, 0, "/bench/tables/A*")
+        task::block_on(async {
+          let mut tables = tables.write().await;
+          route_data_to_map(&mut tables, &face0, 0, "/bench/tables/A*", true, &None, &payload).await;
+        })
       }));
     }
     tables_bench.finish();

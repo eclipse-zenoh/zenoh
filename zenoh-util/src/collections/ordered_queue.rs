@@ -42,6 +42,7 @@ impl<T: Clone> OrderedElement<T> {
 
 pub struct OrderedQueue<T> {
     buff: Vec<Option<OrderedElement<T>>>,
+    // resolution: ZInt,
     pointer: usize,
     counter: usize,
     first: usize,

@@ -212,37 +212,13 @@ pub mod zmsg {
 
 #[derive(Debug, Clone)]
 pub struct DataInfo {
-    pub(super) header: u8,
-    pub(super) source_id: Option<PeerId>,
-    pub(super) source_sn: Option<ZInt>,
-    pub(super) fist_broker_id: Option<PeerId>,
-    pub(super) fist_broker_sn: Option<ZInt>,
-    pub(super) timestamp: Option<TimeStamp>,
-    pub(super) kind: Option<ZInt>,
-    pub(super) encoding: Option<ZInt>,
-}
-
-impl DataInfo {
-    pub fn make(
-        source_id: Option<PeerId>,
-        source_sn: Option<ZInt>,
-        fist_broker_id: Option<PeerId>,
-        fist_broker_sn: Option<ZInt>,
-        timestamp: Option<TimeStamp>,
-        kind: Option<ZInt>,
-        encoding: Option<ZInt>) -> DataInfo
-    {
-        let mut header = 0u8;
-        if source_id.is_some() { header |= zmsg::info_flag::SRCID }
-        if source_sn.is_some() { header |= zmsg::info_flag::SRCSN }
-        if fist_broker_id.is_some() { header |= zmsg::info_flag::BKRID }
-        if fist_broker_sn.is_some() { header |= zmsg::info_flag::BKRSN }
-        if timestamp.is_some() { header |= zmsg::info_flag::TS }
-        if kind.is_some() { header |= zmsg::info_flag::KIND }
-        if encoding.is_some() { header |= zmsg::info_flag::ENC }
-        
-        DataInfo { header, source_id, source_sn, fist_broker_id, fist_broker_sn, timestamp, kind, encoding }
-    }
+    pub source_id: Option<PeerId>,
+    pub source_sn: Option<ZInt>,
+    pub fist_broker_id: Option<PeerId>,
+    pub fist_broker_sn: Option<ZInt>,
+    pub timestamp: Option<TimeStamp>,
+    pub kind: Option<ZInt>,
+    pub encoding: Option<ZInt>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -559,6 +535,7 @@ pub mod smsg {
         pub const INVALID       : u8 = 0x02;
         pub const MAX_SESSIONS  : u8 = 0x03;
         pub const MAX_LINKS     : u8 = 0x04;
+        pub const EXPIRED       : u8 = 0x05;
     }
 
     // Header mask

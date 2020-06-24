@@ -20,30 +20,19 @@ use std::time::Duration;
 
 use crate::core::{PeerId, ZInt};
 use crate::link::{Link, LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
-use crate::proto::{Attachment, WhatAmI, ZenohMessage};
+use crate::proto::{Attachment, WhatAmI, ZenohMessage, smsg};
 use crate::session::defaults::{
-    SESSION_BATCH_SIZE, SESSION_LEASE, SESSION_OPEN_TIMEOUT,
-    SESSION_OPEN_RETRIES, SESSION_SEQ_NUM_RESOLUTION
+    SESSION_BATCH_SIZE, 
+    SESSION_LEASE, 
+    SESSION_KEEP_ALIVE,
+    SESSION_OPEN_TIMEOUT,
+    SESSION_OPEN_RETRIES, 
+    SESSION_SEQ_NUM_RESOLUTION
 };
 use crate::session::{Channel, InitialSession, MsgHandler, SessionHandler, Transport};
 
 use zenoh_util::{zasyncread, zasyncwrite, zerror};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-
-// Macro to access the session Weak pointer
-macro_rules! zchannel {
-    ($var:expr) => (
-        if let Some(inner) = $var.upgrade() { 
-            inner
-        } else {
-            let e = "Session has been closed".to_string();
-            log::trace!("{}", e);
-            return zerror!(ZErrorKind::InvalidSession{
-                descr: e
-            })
-        }
-    );
-}
 
 /// # Example:
 /// ```
@@ -88,11 +77,12 @@ macro_rules! zchannel {
 ///     id: PeerId{id: vec![3, 4]},
 ///     handler: Arc::new(MySH::new())
 /// };
-/// // Setting a value to None indicates to use the default value
+/// // Setting a value to None means to use the default value
 /// let opt_config = SessionManagerOptionalConfig {
 ///     lease: Some(1_000),     // Set the default lease to 1s
-///     sn_resolution: None,       // Use the default sequence number resolution
-///     batchsize: None,        // Use the default batch size
+///     keep_alive: Some(100),  // Set the default keep alive interval to 100ms
+///     sn_resolution: None,    // Use the default sequence number resolution
+///     batch_size: None,       // Use the default batch size
 ///     timeout: Some(10_0000), // Timeout of 10s when opening a session
 ///     retries: Some(3),       // Tries to open a session 3 times before failure
 ///     max_sessions: Some(5),  // Accept any number of sessions
@@ -113,8 +103,9 @@ pub struct SessionManagerConfig {
 
 pub struct SessionManagerOptionalConfig {
     pub lease: Option<ZInt>,
+    pub keep_alive: Option<ZInt>,
     pub sn_resolution: Option<ZInt>,
-    pub batchsize: Option<usize>,
+    pub batch_size: Option<usize>,
     pub timeout: Option<u64>,
     pub retries: Option<usize>,
     pub max_sessions: Option<usize>,
@@ -125,8 +116,9 @@ impl SessionManager {
     pub fn new(config: SessionManagerConfig, opt_config: Option<SessionManagerOptionalConfig>) -> SessionManager {
         // Set default optional values
         let mut lease = *SESSION_LEASE;
+        let mut keep_alive = *SESSION_KEEP_ALIVE;
         let mut sn_resolution = *SESSION_SEQ_NUM_RESOLUTION;
-        let mut batchsize = *SESSION_BATCH_SIZE;
+        let mut batch_size = *SESSION_BATCH_SIZE;
         let mut timeout = *SESSION_OPEN_TIMEOUT;
         let mut retries = *SESSION_OPEN_RETRIES;
         let mut max_sessions = None;
@@ -137,11 +129,14 @@ impl SessionManager {
             if let Some(v) = opt.lease {
                 lease = v;
             }
+            if let Some(v) = opt.keep_alive {
+                keep_alive = v;
+            }
             if let Some(v) = opt.sn_resolution {
                 sn_resolution = v;
             }
-            if let Some(v) = opt.batchsize {
-                batchsize = v;
+            if let Some(v) = opt.batch_size {
+                batch_size = v;
             }
             if let Some(v) = opt.timeout {
                 timeout = v;
@@ -158,8 +153,9 @@ impl SessionManager {
             whatami: config.whatami,
             pid: config.id.clone(),            
             lease,
+            keep_alive,
             sn_resolution,
-            batchsize,
+            batch_size,
             timeout,
             retries, 
             max_sessions,
@@ -236,7 +232,7 @@ impl SessionManager {
             }
         }
 
-        // Delete the link form the link manager
+        // Delete the link on the link manager
         let _ = manager.del_link(&link.get_src(), &link.get_dst()).await;
 
         let e = format!("Can not open a session to {}: maximum number of attemps reached ({})", locator, retries);
@@ -278,8 +274,9 @@ pub(crate) struct SessionManagerInnerConfig {
     pub(super) whatami: WhatAmI,
     pub(super) pid: PeerId,
     pub(super) lease: ZInt,
+    pub(super) keep_alive: ZInt,
     pub(super) sn_resolution: ZInt,
-    pub(super) batchsize: usize,
+    pub(super) batch_size: usize,
     pub(super) timeout: u64,
     pub(super) retries: usize,
     pub(super) max_sessions: Option<usize>,
@@ -377,7 +374,8 @@ impl SessionManagerInner {
     /*              SESSION              */
     /*************************************/
     pub(crate) async fn get_initial_transport(&self) -> Transport {
-        zasyncread!(self.initial).as_ref().unwrap().clone()
+        let initial = zasyncread!(self.initial).as_ref().unwrap().clone();
+        Transport::new(initial)
     }
 
     pub(super) async fn get_initial_session(&self) -> Arc<InitialSession> {
@@ -459,19 +457,29 @@ impl SessionManagerInner {
             })
         }
 
+        // Compute a suitable keep alive interval based on the lease
+        // NOTE: In order to consider eventual packet loss and transmission latency and jitter, 
+        //       set the actual keep_alive timeout to one fourth of the agreed session lease. 
+        //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity 
+        //       check which considers a link as failed when no messages are received in 3.5 times the
+        //       target interval.
+        let interval = lease / 4;
+        let keep_alive = self.config.keep_alive.min(interval);
+
         // Create the channel object
         let a_ch = Arc::new(Channel::new(  
             a_self.clone(),          
             peer.clone(),
             *whatami,            
             lease,
+            keep_alive,            
             sn_resolution,
             initial_sn_tx,
             initial_sn_rx,
-            self.config.batchsize   
+            self.config.batch_size   
         ));
         // Start the channel
-        a_ch.initialize(Arc::downgrade(&a_ch));
+        a_ch.initialize(Arc::downgrade(&a_ch)).await;
 
         // Create a weak reference to the session
         let session = Session::new(Arc::downgrade(&a_ch));
@@ -485,6 +493,7 @@ impl SessionManagerInner {
 /*************************************/
 /*              SESSION              */
 /*************************************/
+const STR_ERR: &str = "Session not available";
 
 /// [`Session`] is the session handler returned when opening a new session
 #[derive(Clone)]
@@ -499,30 +508,30 @@ impl Session {
     /*         SESSION ACCESSORS         */
     /*************************************/
     pub(super) fn get_transport(&self) -> ZResult<Transport> {
-        let channel = zchannel!(self.0);
-        Ok(channel)
+        let channel = zweak!(self.0, STR_ERR);
+        Ok(Transport::new(channel))
     }
 
     pub(super) fn has_callback(&self) -> ZResult<bool> {
-        let channel = zchannel!(self.0);
+        let channel = zweak!(self.0, STR_ERR);
         Ok(channel.has_callback())
     }
 
-    pub(super) async fn set_callback(&self, callback: Arc<dyn MsgHandler + Send + Sync>) -> ZResult<()> {
-        let channel = zchannel!(self.0);
-        channel.set_callback(callback).await;
-        Ok(())
-    }
-
     pub(super) async fn add_link(&self, link: Link) -> ZResult<()> {
-        let channel = zchannel!(self.0);
+        let channel = zweak!(self.0, STR_ERR);
         channel.add_link(link).await?;
         Ok(())
     }
 
-    pub(super) async fn _del_link(&self, link: Link) -> ZResult<()> {
-        let channel = zchannel!(self.0);
+    pub(super) async fn _del_link(&self, link: &Link) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
         channel.del_link(&link).await?;
+        Ok(())
+    }
+
+    pub(super) async fn set_callback(&self, callback: Arc<dyn MsgHandler + Send + Sync>) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
+        channel.set_callback(callback).await;
         Ok(())
     }
 
@@ -530,42 +539,48 @@ impl Session {
     /*          PUBLIC ACCESSORS         */
     /*************************************/
     pub fn get_peer(&self) -> ZResult<PeerId> {
-        let channel = zchannel!(self.0);
+        let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_peer())
     }
 
     pub fn get_lease(&self) -> ZResult<ZInt> {
-        let channel = zchannel!(self.0);
+        let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_lease())
     }
 
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
-        let channel = zchannel!(self.0);
+        let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_sn_resolution())
     }
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("{:?}. Close", self);
-        let channel = zchannel!(self.0);
-        channel.close().await
-    }    
+        let channel = zweak!(self.0, STR_ERR);
+        channel.close(smsg::close_reason::GENERIC).await
+    }
+
+    pub async fn close_link(&self, link: &Link) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
+        channel.close_link(link, smsg::close_reason::GENERIC).await?;
+        Ok(())
+    }
 
     pub async fn get_links(&self) -> ZResult<Vec<Link>> {
         log::trace!("{:?}. Get links", self);
-        let channel = zchannel!(self.0);
+        let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_links().await)
     }
 
     pub async fn schedule(&self, message: ZenohMessage, link: Option<Link>) -> ZResult<()> {  
         log::trace!("{:?}. Schedule: {:?}", self, message);      
-        let channel = zchannel!(self.0);
+        let channel = zweak!(self.0, STR_ERR);
         channel.schedule(message, link).await;
         Ok(())
     }
 
     pub async fn schedule_batch(&self, messages: Vec<ZenohMessage>, link: Option<Link>) -> ZResult<()> {
         log::trace!("{:?}. Schedule batch: {:?}", self, messages);
-        let channel = zchannel!(self.0);
+        let channel = zweak!(self.0, STR_ERR);
         channel.schedule_batch(messages, link).await;
         Ok(())
     }
@@ -592,9 +607,14 @@ impl PartialEq for Session {
 impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(channel) = self.0.upgrade() {
-            write!(f, "Session: {}", channel.get_peer())
+            f.debug_struct("Session")
+                .field("peer", &channel.get_peer())
+                .field("lease", &channel.get_lease())
+                .field("keep_alive", &channel.get_keep_alive())
+                .field("sn_resolution", &channel.get_sn_resolution())
+                .finish()
         } else {
             write!(f, "Session closed")
-        }
+        }       
     }
 }

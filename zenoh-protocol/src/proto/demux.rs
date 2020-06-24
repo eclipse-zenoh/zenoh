@@ -74,7 +74,7 @@ impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
                         match &rep.replier_id {
                             Some(replier_id) => {
                                 let reply = Reply::ReplyData {source_kind: rep.source_kind, replier_id: replier_id.clone(), reskey: key.clone(), info: info.clone(), payload: payload.clone()};
-                                self.primitives.reply(rep.qid, &reply).await}
+                                self.primitives.reply(rep.qid, reply).await}
                             None => return zerror!(ZErrorKind::Other {descr: "ReplyData with no replier_id".to_string()})
                         }
                     }
@@ -85,10 +85,10 @@ impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
                 if let Some(rep) = &msg.reply_context {
                     if rep.is_final {
                         let reply = Reply::ReplyFinal {};
-                        self.primitives.reply(rep.qid, &reply).await
+                        self.primitives.reply(rep.qid, reply).await
                     } else {
                         let reply = Reply::SourceFinal {source_kind: rep.source_kind, replier_id: rep.replier_id.clone().unwrap()};
-                        self.primitives.reply(rep.qid, &reply).await
+                        self.primitives.reply(rep.qid, reply).await
                     }
                 }
             },

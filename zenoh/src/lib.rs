@@ -11,4 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#![feature(async_closure)]
+
+#[macro_use]
+extern crate lazy_static;
+
 pub mod net;
