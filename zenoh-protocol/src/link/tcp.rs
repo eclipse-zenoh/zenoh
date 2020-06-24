@@ -209,7 +209,7 @@ impl LinkTrait for Tcp {
 
     async fn stop(&self) -> ZResult<()> {
         log::trace!("Stopping read loop on TCP link: {}", self);
-        self.ch_send.send(()).await;
+        let _ = self.ch_send.try_send(());
         Ok(())
     }
 

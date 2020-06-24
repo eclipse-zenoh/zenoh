@@ -820,7 +820,9 @@ impl Channel {
         self.del_link(&link).await?;
 
         // Close the underlying link
-        link.close().await
+        let _ = link.close().await;
+
+        Ok(())
     }
 
     pub(super) async fn close(&self, reason: u8) -> ZResult<()> {
