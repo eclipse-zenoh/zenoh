@@ -63,7 +63,7 @@ fn main() {
         log::debug!("Start plugins...");
         plugins_mgr.start_plugins(&runtime, &args).await;
 
-        AdminSpace::start(&runtime).await;
+        AdminSpace::start(&runtime, plugins_mgr).await;
 
         future::pending::<()>().await;
     });

@@ -19,8 +19,8 @@ use super::runtime::Runtime;
 
 
 pub struct PluginsMgr {
-    search_paths: Vec<PathBuf>,
-    plugins: Vec<Plugin>
+    pub search_paths: Vec<PathBuf>,
+    pub plugins: Vec<Plugin>
 }
 
 
@@ -131,8 +131,9 @@ impl Default for PluginsMgr {
     }
 }
 
-struct Plugin {
-    name: String,
+pub struct Plugin {
+    pub name: String,
+    pub path: PathBuf,
     lib: Library
 }
 
@@ -159,7 +160,7 @@ impl Plugin {
                         return Err(format!("Failed to load plugin from {}: it lacks a start() operation", path.to_string_lossy()))
                     };
                 }
-                Ok(Plugin { name: name.to_string(), lib })
+                Ok(Plugin { name: name.to_string(), path, lib })
             }
             Err(err) => Err(format!("Failed to load plugin from {}: {}", path.to_string_lossy(), err))
         }

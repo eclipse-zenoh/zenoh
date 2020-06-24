@@ -21,10 +21,12 @@ use zenoh_protocol:: {
     proto::queryable::EVAL
 };
 use super::Runtime;
-
+use crate::plugins::PluginsMgr;
+use serde_json::json;
 
 pub struct AdminSpace {
     runtime: Runtime,
+    plugins_mgr: PluginsMgr,
     primitives: Mutex<Option<Arc<dyn Primitives + Send + Sync>>>,
     pid_str: String,
     router_path: String
@@ -32,13 +34,14 @@ pub struct AdminSpace {
 
 impl AdminSpace {
 
-    pub async fn start(runtime: &Runtime) {
+    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr) {
         let rt = runtime.read().await;
         let pid_str = rt.pid.to_string();
         let router_path = format!("/@/router/{}", pid_str);
 
         let admin = Arc::new(AdminSpace { 
             runtime: runtime.clone(),
+            plugins_mgr,
             primitives: Mutex::new(None),
             pid_str,
             router_path });
@@ -49,6 +52,25 @@ impl AdminSpace {
         // declare queryable on router_path
         primitives.queryable(&admin.router_path.clone().into()).await;
     }
+
+    pub async fn create_reply_payload(&self) -> RBuf {
+        // plugins info
+        let plugins:  Vec<serde_json::Value> = self.plugins_mgr.plugins.iter().map(|plugin|
+            json!({
+                "name": plugin.name,
+                "path": plugin.path
+            })
+        ).collect();
+
+
+        let json = json!({
+            "pid": self.pid_str,
+            "plugins": plugins
+        });
+        log::debug!("JSON: {:?}", json);
+        RBuf::from(json.to_string().as_bytes())
+    }
+
 }
 
 
@@ -93,18 +115,13 @@ impl Primitives for AdminSpace {
 
     async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, _consolidation: QueryConsolidation) {
         trace!("recv Query {:?} {:?} {:?} {:?}", reskey, predicate, target, _consolidation);
-
-        let rt = self.runtime.read().await;
-        let json = serde_json::json!({
-            "pid": self.pid_str,
-        });
-        let payload = RBuf::from(json.to_string().as_bytes());
+        let payload = self.create_reply_payload().await;
 
         // The following are cloned to be moved in the task below
         // (could be removed if the lock used in router (face::tables) is re-entrant)
         let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
         let reskey = ResKey::RName(self.router_path.clone());
-        let replier_id = rt.pid.clone();
+        let replier_id = self.runtime.read().await.pid.clone();   // @TODO build/use prebuilt specific pid
 
         task::spawn( async move { // router is not re-entrant
             primitives.reply(qid, Reply::ReplyData {
