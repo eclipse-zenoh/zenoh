@@ -17,8 +17,8 @@ use zenoh_protocol::link::Locator;
 use zenoh_protocol::session::{Session, SessionManager};
 
 pub struct SessionOrchestrator {
-    manager: SessionManager,
-    sessions: Vec<Session>,
+    pub manager: SessionManager,
+    pub sessions: Vec<Session>,
 }
 
 impl SessionOrchestrator {

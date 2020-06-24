@@ -13,6 +13,7 @@
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
 use async_trait::async_trait;
+use futures::future;
 use log::trace;
 use zenoh_protocol:: {
     core::{ ResKey, ZInt },
@@ -54,18 +55,37 @@ impl AdminSpace {
     }
 
     pub async fn create_reply_payload(&self) -> RBuf {
+        let session_mgr = &self.runtime.read().await.orchestrator.manager;
+
         // plugins info
-        let plugins:  Vec<serde_json::Value> = self.plugins_mgr.plugins.iter().map(|plugin|
+        let plugins: Vec<serde_json::Value> = self.plugins_mgr.plugins.iter().map(|plugin|
             json!({
                 "name": plugin.name,
                 "path": plugin.path
             })
         ).collect();
 
+        // locators info
+        let locators: Vec<serde_json::Value> = session_mgr.get_locators().await.iter().map(|locator|
+            json!(locator.to_string())
+        ).collect();
+
+        // sessions info
+        let sessions = future::join_all(session_mgr.get_sessions().await.iter().map(async move |session|
+            json!({
+                "peer": session.get_peer().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
+                "links": session.get_links().await.map_or_else(
+                    |_| vec!(),
+                    |links| links.iter().map(|link| link.get_dst().to_string()).collect()
+                )
+            })
+        )).await;
 
         let json = json!({
             "pid": self.pid_str,
-            "plugins": plugins
+            "locators": locators,
+            "sessions": sessions,
+            "plugins": plugins,
         });
         log::debug!("JSON: {:?}", json);
         RBuf::from(json.to_string().as_bytes())

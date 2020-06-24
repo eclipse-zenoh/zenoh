@@ -126,17 +126,13 @@ impl Primitives for FaceHdl {
     }
 
     async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
-        log::debug!(">>>>> face::query....");
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        log::debug!(">>>>> call route_query....");
         route_query(&mut tables, &self.face, prefixid, suffix, predicate, qid, target, consolidation).await;
     }
 
     async fn reply(&self, qid: ZInt, reply: Reply) {
-        log::debug!("**** face::reply....");
         let mut tables = self.tables.write().await;
-        log::debug!("**** call route_reply....");
         route_reply(&mut tables, &mut self.face.clone(), qid, reply).await;
     }
 
