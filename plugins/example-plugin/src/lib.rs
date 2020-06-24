@@ -33,12 +33,12 @@ pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>>
 }
 
 #[no_mangle]
-pub fn start(runtime: Runtime, args: ArgMatches<'static>)
+pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>)
 {
     async_std::task::spawn(run(runtime, args));
 }
 
-async fn run(runtime: Runtime, args: ArgMatches<'_>) {
+async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     env_logger::init();
 
     let session = Session::init(runtime).await;
