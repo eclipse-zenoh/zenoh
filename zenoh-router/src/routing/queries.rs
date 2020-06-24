@@ -162,6 +162,7 @@ async fn route_query_to_map(tables: &mut Tables, face: &Arc<Face>, qid: ZInt, ri
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, predicate: &str, 
                                 qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
+    log::debug!(">>>>> in route_query...");
     if let Some(outfaces) = route_query_to_map(tables, face, qid, rid, suffix).await {
         let outfaces = outfaces.into_iter().filter(|(_, (outface, _, _, _))| face.whatami != whatami::PEER || outface.whatami != whatami::PEER)
                                            .map(|(_, v)| v).collect::<Vec<(Arc<Face>, u64, String, u64)>>();
@@ -172,18 +173,23 @@ pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<Face>, rid: u64,
             },
             _ => {
                 for (outface, rid, suffix, qid) in outfaces {
-                    outface.primitives.clone().query((rid, suffix).into(), predicate.to_string(), qid, target.clone(), consolidation.clone()).await
+                    log::debug!(">>>>> outface.primitives.query() ....");
+                    outface.primitives.clone().query((rid, suffix).into(), predicate.to_string(), qid, target.clone(), consolidation.clone()).await;
+                    log::debug!(">>>>> outface.primitives.query() done");
                 }
             }
         }
     }
+    log::debug!(">>>>> route_query done!");
 }
 
 pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<Face>, qid: ZInt, reply: Reply) {
+    log::debug!("**** in route_reply...");
     match face.pending_queries.get(&qid) {
         Some(query) => {
             match reply {
                 Reply::ReplyData {..} | Reply::SourceFinal {..} => {
+                    log::debug!("**** Propagate ReplyData or SourceFinal");
                     query.src_face.primitives.clone().reply(query.src_qid, reply).await;
                 }
                 Reply::ReplyFinal {..} => {

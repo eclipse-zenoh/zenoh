@@ -11,16 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod orchestrator;
-
 use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::RngCore;
 use zenoh_util::core::ZResult;
 use zenoh_protocol::core::PeerId;
 use zenoh_protocol::proto::WhatAmI;
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 use crate::routing::broker::Broker;
 use crate::runtime::orchestrator::SessionOrchestrator;
+
+pub mod orchestrator;
+
+mod adminspace;
+pub use adminspace::AdminSpace;
 
 pub struct RuntimeMut {
     pub pid: PeerId,
@@ -36,9 +38,8 @@ pub struct Runtime {
 impl Runtime {
 
     pub fn new(version: u8, whatami: WhatAmI) -> Runtime {
-        let mut pid = vec![0, 0, 0, 0];
-        rand::thread_rng().fill_bytes(&mut pid);
-        let pid = PeerId{id: pid};
+        let pid = PeerId{id: uuid::Uuid::new_v4().as_bytes().to_vec()};
+        log::debug!("Generated PID: {}", pid);
 
         let broker = Arc::new(Broker::new());
 

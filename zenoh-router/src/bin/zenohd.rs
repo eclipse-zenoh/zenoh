@@ -18,7 +18,7 @@ use clap::{App, Arg};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::whatami;
 use zenoh_router::plugins::PluginsMgr;
-use zenoh_router::runtime::Runtime;
+use zenoh_router::runtime::{ AdminSpace, Runtime };
 
 
 fn main() {
@@ -62,6 +62,8 @@ fn main() {
         
         log::debug!("Start plugins...");
         plugins_mgr.start_plugins(&runtime, &args).await;
+
+        AdminSpace::start(&runtime).await;
 
         future::pending::<()>().await;
     });

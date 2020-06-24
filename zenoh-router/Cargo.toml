@@ -21,10 +21,12 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.31"
 rand = "0.7.3"
+uuid = { version = "0.8", features = ["v4"] }
 libloading = "0.6.2"
 log = "0.4"
 env_logger = "0.7.1"
 clap = "2"
+serde_json = "1.0"
 zenoh-protocol =  { version = "0.5.0", path = "../zenoh-protocol" }
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
 
