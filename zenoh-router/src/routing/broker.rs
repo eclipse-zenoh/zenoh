@@ -20,7 +20,7 @@ use zenoh_protocol::core::{ResKey, ZInt};
 use zenoh_protocol::proto::{Primitives, SubInfo, SubMode, Reliability, Mux, DeMux, WhatAmI, whatami};
 use zenoh_protocol::session::{SessionHandler, MsgHandler};
 
-use crate::routing::face::{Face, FaceHdl};
+use crate::routing::face::{FaceState, Face};
 
 pub use crate::routing::resource::*;
 pub use crate::routing::pubsub::*;
@@ -76,9 +76,9 @@ impl Broker {
     }
     
     pub async fn new_primitives(&self, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<dyn Primitives + Send + Sync> {
-        Arc::new(FaceHdl {
+        Arc::new(Face {
             tables: self.tables.clone(), 
-            face: Tables::open_face(&self.tables, whatami::CLIENT, primitives).await.upgrade().unwrap(),
+            state: Tables::open_face(&self.tables, whatami::CLIENT, primitives).await.upgrade().unwrap(),
         })
     }
 }
@@ -92,9 +92,9 @@ impl Default for Broker {
 #[async_trait]
 impl SessionHandler for Broker {
     async fn new_session(&self, whatami: WhatAmI, session: Arc<dyn MsgHandler + Send + Sync>) -> Arc<dyn MsgHandler + Send + Sync> {
-        Arc::new(DeMux::new(FaceHdl {
+        Arc::new(DeMux::new(Face {
             tables: self.tables.clone(), 
-            face: Tables::open_face(&self.tables, whatami, Arc::new(Mux::new(session))).await.upgrade().unwrap(),
+            state: Tables::open_face(&self.tables, whatami, Arc::new(Mux::new(session))).await.upgrade().unwrap(),
         }))
     }
 }
@@ -102,7 +102,7 @@ impl SessionHandler for Broker {
 pub struct Tables {
     face_counter: usize,
     pub(crate) root_res: Arc<Resource>,
-    pub(crate) faces: HashMap<usize, Arc<Face>>,
+    pub(crate) faces: HashMap<usize, Arc<FaceState>>,
 }
 
 impl Tables {
@@ -125,20 +125,20 @@ impl Tables {
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub(crate) fn get_mapping<'a>(&'a self, face: &'a Face, rid: &ZInt) -> Option<&'a Arc<Resource>> {
+    pub(crate) fn get_mapping<'a>(&'a self, face: &'a FaceState, rid: &ZInt) -> Option<&'a Arc<Resource>> {
         match rid {
             0 => {Some(&self.root_res)}
             rid => {face.get_mapping(rid)}
         }
     }
 
-    pub async fn open_face(tables: &Arc<RwLock<Tables>>, whatami: WhatAmI, primitives: Arc<dyn Primitives + Send + Sync>) -> Weak<Face> {
+    pub async fn open_face(tables: &Arc<RwLock<Tables>>, whatami: WhatAmI, primitives: Arc<dyn Primitives + Send + Sync>) -> Weak<FaceState> {
         unsafe {
             let mut t = tables.write().await;
             let fid = t.face_counter;
             log::debug!("New face {}", fid);
             t.face_counter += 1;
-            let mut newface = t.faces.entry(fid).or_insert_with(|| Face::new(fid, whatami, primitives.clone())).clone();
+            let mut newface = t.faces.entry(fid).or_insert_with(|| FaceState::new(fid, whatami, primitives.clone())).clone();
             
             // @TODO temporarily propagate to everybody (clients)
             // if whatami != whatami::CLIENT {
@@ -204,7 +204,7 @@ impl Tables {
         }
     }
 
-    pub async fn close_face(tables: &Arc<RwLock<Tables>>, face: &Weak<Face>) {
+    pub async fn close_face(tables: &Arc<RwLock<Tables>>, face: &Weak<FaceState>) {
         let mut t = tables.write().await;
         match face.upgrade() {
             Some(mut face) => unsafe {

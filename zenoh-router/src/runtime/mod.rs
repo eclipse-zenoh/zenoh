@@ -24,7 +24,7 @@ pub mod orchestrator;
 mod adminspace;
 pub use adminspace::AdminSpace;
 
-pub struct RuntimeMut {
+pub struct RuntimeState {
     pub pid: PeerId,
     pub broker: Arc<Broker>,
     pub orchestrator: SessionOrchestrator,
@@ -32,7 +32,7 @@ pub struct RuntimeMut {
 
 #[derive(Clone)]
 pub struct Runtime {
-    muta: Arc<RwLock<RuntimeMut>>
+    state: Arc<RwLock<RuntimeState>>
 }
 
 impl Runtime {
@@ -64,21 +64,21 @@ impl Runtime {
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
         let orchestrator = SessionOrchestrator::new(session_manager);
 
-        let muta = Arc::new(RwLock::new(RuntimeMut {
+        let state = Arc::new(RwLock::new(RuntimeState {
             pid,
             broker,
             orchestrator,
         }));
 
-        Runtime{muta}
+        Runtime{state}
     }
 
-    pub async fn read(&self) -> RwLockReadGuard<'_, RuntimeMut> {
-        self.muta.read().await
+    pub async fn read(&self) -> RwLockReadGuard<'_, RuntimeState> {
+        self.state.read().await
     }
 
-    pub async fn write(&self) -> RwLockWriteGuard<'_, RuntimeMut> {
-        self.muta.write().await
+    pub async fn write(&self) -> RwLockWriteGuard<'_, RuntimeState> {
+        self.state.write().await
     }
 
     pub async fn close(&self) -> ZResult<()> {

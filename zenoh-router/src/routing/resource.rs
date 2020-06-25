@@ -18,11 +18,11 @@ use zenoh_protocol::core::rname::intersect;
 use zenoh_protocol::core::ResKey;
 use zenoh_protocol::proto::SubInfo;
 use crate::routing::broker::Tables;
-use crate::routing::face::Face;
+use crate::routing::face::FaceState;
 
 
 pub(super) struct Context {
-    pub(super) face: Arc<Face>,
+    pub(super) face: Arc<FaceState>,
     pub(super) local_rid: Option<u64>,
     pub(super) remote_rid: Option<u64>,
     pub(super) subs: Option<SubInfo>,
@@ -38,7 +38,7 @@ pub struct Resource {
     pub(super) childs: HashMap<String, Arc<Resource>>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) route: HashMap<usize, (Arc<Face>, u64, String)>
+    pub(super) route: HashMap<usize, (Arc<FaceState>, u64, String)>
 }
 
 impl Resource {
@@ -318,7 +318,7 @@ impl Resource {
     }
 }
 
-pub async fn declare_resource(tables: &mut Tables, face: &mut Arc<Face>, rid: u64, prefixid: u64, suffix: &str) {
+pub async fn declare_resource(tables: &mut Tables, face: &mut Arc<FaceState>, rid: u64, prefixid: u64, suffix: &str) {
     match face.remote_mappings.get(&rid) {
         Some(_res) => {
             // if _res.read().name() != rname {
@@ -359,7 +359,7 @@ pub async fn declare_resource(tables: &mut Tables, face: &mut Arc<Face>, rid: u6
     }
 }
 
-pub async fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<Face>, rid: u64) {
+pub async fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: u64) {
     unsafe {
         match Arc::get_mut_unchecked(face).remote_mappings.remove(&rid) {
             Some(mut res) => {Resource::clean(&mut res)}

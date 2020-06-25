@@ -18,18 +18,18 @@ use zenoh_protocol::core::{ZInt, ResKey};
 use zenoh_protocol::proto::{QueryTarget, QueryConsolidation, Reply, whatami};
 
 use crate::routing::broker::Tables;
-use crate::routing::face::Face;
+use crate::routing::face::FaceState;
 use crate::routing::resource::{Resource, Context};
 
 
 pub(crate) struct Query {
-    src_face: Arc<Face>,
+    src_face: Arc<FaceState>,
     src_qid: ZInt,
 }
 
-type QueryRoute = HashMap<usize, (Arc<Face>, u64, String, u64)>;
+type QueryRoute = HashMap<usize, (Arc<FaceState>, u64, String, u64)>;
 
-pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<Face>, prefixid: u64, suffix: &str) {
+pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: u64, suffix: &str) {
     let prefix = {
         match prefixid {
             0 => {Some(tables.root_res.clone())}
@@ -109,7 +109,7 @@ pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<Face>,
     }
 }
 
-pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<Face>, prefixid: u64, suffix: &str) {
+pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: u64, suffix: &str) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => {
             match Resource::get_resource(prefix, suffix) {
@@ -128,7 +128,7 @@ pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<Face>, pref
     }
 }
 
-async fn route_query_to_map(tables: &mut Tables, face: &Arc<Face>, qid: ZInt, rid: u64, suffix: &str/*, _predicate: &str, */
+async fn route_query_to_map(tables: &mut Tables, face: &Arc<FaceState>, qid: ZInt, rid: u64, suffix: &str/*, _predicate: &str, */
 /*_qid: ZInt, _target: &Option<QueryTarget>, _consolidation: &QueryConsolidation*/) -> Option<QueryRoute> {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => {
@@ -160,11 +160,11 @@ async fn route_query_to_map(tables: &mut Tables, face: &Arc<Face>, qid: ZInt, ri
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, predicate: &str, 
+pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<FaceState>, rid: u64, suffix: &str, predicate: &str, 
                                 qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
     if let Some(outfaces) = route_query_to_map(tables, face, qid, rid, suffix).await {
         let outfaces = outfaces.into_iter().filter(|(_, (outface, _, _, _))| face.whatami != whatami::PEER || outface.whatami != whatami::PEER)
-                                           .map(|(_, v)| v).collect::<Vec<(Arc<Face>, u64, String, u64)>>();
+                                           .map(|(_, v)| v).collect::<Vec<(Arc<FaceState>, u64, String, u64)>>();
         match outfaces.len() {
             0 => {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face.id, qid);
@@ -179,7 +179,7 @@ pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<Face>, rid: u64,
     }
 }
 
-pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<Face>, qid: ZInt, reply: Reply) {
+pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt, reply: Reply) {
     log::debug!("**** in route_reply...");
     match face.pending_queries.get(&qid) {
         Some(query) => {
@@ -203,7 +203,7 @@ pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<Face>, qid:
     }
 }
 
-pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<Face>) {
+pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
     for query in face.pending_queries.values() {
         log::debug!("Finalize reply {}:{} for closing face {}", query.src_face.id, query.src_qid, face.id);
         if Arc::strong_count(&query) == 1 {

@@ -18,13 +18,13 @@ use zenoh_protocol::core::{ZInt, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{SubInfo, SubMode, Reliability, whatami};
 
-use crate::routing::face::Face;
+use crate::routing::face::FaceState;
 use crate::routing::broker::Tables;
 use crate::routing::resource::{Resource, Context};
 
-pub type DataRoute = HashMap<usize, (Arc<Face>, u64, String)>;
+pub type DataRoute = HashMap<usize, (Arc<FaceState>, u64, String)>;
 
-pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<Face>, prefixid: u64, suffix: &str, sub_info: &SubInfo) {
+pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: u64, suffix: &str, sub_info: &SubInfo) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
             // Register subscription
@@ -110,7 +110,7 @@ pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<Face>, pre
     }
 }
 
-pub async fn undeclare_subscription(tables: &mut Tables, face: &mut Arc<Face>, prefixid: u64, suffix: &str) {
+pub async fn undeclare_subscription(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: u64, suffix: &str) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => {
             match Resource::get_resource(prefix, suffix) {
@@ -129,7 +129,7 @@ pub async fn undeclare_subscription(tables: &mut Tables, face: &mut Arc<Face>, p
     }
 }
 
-pub async fn route_data_to_map(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, _reliable:bool, info: &Option<RBuf>, payload: &RBuf) -> Option<DataRoute> {
+pub async fn route_data_to_map(tables: &mut Tables, face: &Arc<FaceState>, rid: u64, suffix: &str, _reliable:bool, info: &Option<RBuf>, payload: &RBuf) -> Option<DataRoute> {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => {
             unsafe{
@@ -180,7 +180,7 @@ pub async fn route_data_to_map(tables: &mut Tables, face: &Arc<Face>, rid: u64, 
     }
 }
 
-pub async fn route_data(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, reliable:bool, info: &Option<RBuf>, payload: RBuf) {
+pub async fn route_data(tables: &mut Tables, face: &Arc<FaceState>, rid: u64, suffix: &str, reliable:bool, info: &Option<RBuf>, payload: RBuf) {
     if let Some(outfaces) = route_data_to_map(tables, face, rid, suffix, reliable, info, &payload).await {
         for (_id, (outface, rid, suffix)) in outfaces {
             if ! Arc::ptr_eq(face, &outface) {
@@ -199,7 +199,7 @@ pub async fn route_data(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix:
     }
 }
 
-pub async fn pull_data(tables: &mut Tables, face: &Arc<Face>, _is_final: bool, rid: u64, suffix: &str, _pull_id: ZInt, _max_samples: &Option<ZInt>) {
+pub async fn pull_data(tables: &mut Tables, face: &Arc<FaceState>, _is_final: bool, rid: u64, suffix: &str, _pull_id: ZInt, _max_samples: &Option<ZInt>) {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => {
             match Resource::get_resource(prefix, suffix) {

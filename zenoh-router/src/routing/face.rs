@@ -23,7 +23,7 @@ use crate::routing::broker::*;
 use crate::routing::ownedprimitives::OwnedPrimitives;
 
 
-pub struct Face {
+pub struct FaceState {
     pub(super) id: usize,
     pub(super) whatami: WhatAmI,
     pub(super) primitives: OwnedPrimitives,
@@ -35,9 +35,9 @@ pub struct Face {
     pub(super) pending_queries: HashMap<u64, Arc<Query>>,
 }
 
-impl Face {
-    pub(super) fn new(id: usize, whatami: WhatAmI, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<Face> {
-        Arc::new(Face {
+impl FaceState {
+    pub(super) fn new(id: usize, whatami: WhatAmI, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<FaceState> {
+        Arc::new(FaceState {
             id,
             whatami,
             primitives: OwnedPrimitives::new(primitives),
@@ -73,34 +73,34 @@ impl Face {
     }
 }
 
-pub struct FaceHdl {
+pub struct Face {
     pub(super) tables: Arc<RwLock<Tables>>,
-    pub(super) face: Arc<Face>,
+    pub(super) state: Arc<FaceState>,
 }
 
 #[async_trait]
-impl Primitives for FaceHdl {
+impl Primitives for Face {
     async fn resource(&self, rid: u64, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        declare_resource(&mut tables, &mut self.face.clone(), rid, prefixid, suffix).await;
+        declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix).await;
     }
 
     async fn forget_resource(&self, rid: u64) {
         let mut tables = self.tables.write().await;
-        undeclare_resource(&mut tables, &mut self.face.clone(), rid).await;
+        undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
     }
     
     async fn subscriber(&self, reskey: &ResKey, sub_info: &SubInfo) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        declare_subscription(&mut tables, &mut self.face.clone(), prefixid, suffix, sub_info).await;
+        declare_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix, sub_info).await;
     }
 
     async fn forget_subscriber(&self, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        undeclare_subscription(&mut tables, &mut self.face.clone(), prefixid, suffix).await;
+        undeclare_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
     }
     
     async fn publisher(&self, _reskey: &ResKey) {}
@@ -110,39 +110,39 @@ impl Primitives for FaceHdl {
     async fn queryable(&self, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        declare_queryable(&mut tables, &mut self.face.clone(), prefixid, suffix).await;
+        declare_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
     }
 
     async fn forget_queryable(&self, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        undeclare_queryable(&mut tables, &mut self.face.clone(), prefixid, suffix).await;
+        undeclare_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
     }
 
     async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        route_data(&mut tables, &self.face, prefixid, suffix, reliable, info, payload).await;
+        route_data(&mut tables, &self.state, prefixid, suffix, reliable, info, payload).await;
     }
 
     async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        route_query(&mut tables, &self.face, prefixid, suffix, predicate, qid, target, consolidation).await;
+        route_query(&mut tables, &self.state, prefixid, suffix, predicate, qid, target, consolidation).await;
     }
 
     async fn reply(&self, qid: ZInt, reply: Reply) {
         let mut tables = self.tables.write().await;
-        route_reply(&mut tables, &mut self.face.clone(), qid, reply).await;
+        route_reply(&mut tables, &mut self.state.clone(), qid, reply).await;
     }
 
     async fn pull(&self, is_final: bool, reskey: &ResKey, pull_id: ZInt, max_samples: &Option<ZInt>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        pull_data(&mut tables, &self.face.clone(), is_final, prefixid, suffix, pull_id, max_samples).await;
+        pull_data(&mut tables, &self.state.clone(), is_final, prefixid, suffix, pull_id, max_samples).await;
     }
 
     async fn close(&self) {
-        Tables::close_face(&self.tables, &Arc::downgrade(&self.face)).await;
+        Tables::close_face(&self.tables, &Arc::downgrade(&self.state)).await;
     }
 }
