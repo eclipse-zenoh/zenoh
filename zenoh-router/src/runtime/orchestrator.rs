@@ -14,19 +14,17 @@
 use log::{warn, trace};
 use zenoh_util::core::ZResult;
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{Session, SessionManager};
+use zenoh_protocol::session::SessionManager;
 
 pub struct SessionOrchestrator {
     pub manager: SessionManager,
-    pub sessions: Vec<Session>,
 }
 
 impl SessionOrchestrator {
 
     pub fn new(manager: SessionManager) -> SessionOrchestrator {
         SessionOrchestrator {
-            manager,
-            sessions: vec![],
+            manager
         }
     }
 
@@ -43,7 +41,7 @@ impl SessionOrchestrator {
     pub async fn open_session(&mut self, locator: &Locator) -> ZResult<()> {
         trace!("SessionOrchestrator::open_session({})", locator);
         match self.manager.open_session(locator, &None).await {
-            Ok(session) => {self.sessions.push(session); Ok(())}
+            Ok(_) => {Ok(())}
             Err(err) => {Err(err)}
         }
     }
@@ -51,7 +49,7 @@ impl SessionOrchestrator {
     pub async fn add_peer(&mut self, locator: &Locator) {
         trace!("SessionOrchestrator::add_peer({})", locator);
         match self.manager.open_session(locator, &None).await {
-            Ok(session) => {self.sessions.push(session);}
+            Ok(_) => {}
             Err(_) => {
                 warn!("Unable to open session to ({})", locator);
                 // @TODO retry strategy
@@ -62,7 +60,7 @@ impl SessionOrchestrator {
 
     pub async fn close(&mut self) -> ZResult<()> {
         trace!("SessionOrchestrator::close())");
-        for session in &mut self.sessions {
+        for session in &mut self.manager.get_sessions().await {
             session.close().await?;
         }
         Ok(())
