@@ -868,7 +868,7 @@ impl SessionMessage {
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>
     ) -> SessionMessage {
-        let wflag = if whatami.is_some() { smsg::flag::W } else { 0 };
+        let wflag = if whatami.is_some() && whatami.unwrap() != whatami::BROKER { smsg::flag::W } else { 0 };
         let lflag = if locators.is_some() { smsg::flag::L } else { 0 };
         let header = smsg::id::HELLO | wflag | lflag;
 
