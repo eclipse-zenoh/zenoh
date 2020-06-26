@@ -19,18 +19,18 @@ use zenoh::net::*;
 use zenoh::net::queryable::EVAL;
 use zenoh_protocol::proto::{encoding, kind};
 
-const HTML: &'static str = 
-"<div id=\"result\"></div>\
-<script>\
-if(typeof(EventSource) !== \"undefined\") {\
-  var source = new EventSource(\"/demo/sse/event\");\
-  source.addEventListener(\"PUT\", function(e) {\
-    document.getElementById(\"result\").innerHTML += e.data + \"<br>\";\
-  }, false);\
-} else {\
-  document.getElementById(\"result\").innerHTML = \"Sorry, your browser does not support server-sent events...\";\
-}\
-</script>";
+const HTML: &'static str = r#"
+<div id="result"></div>
+<script>
+if(typeof(EventSource) !== "undefined") {
+  var source = new EventSource("/demo/sse/event");
+  source.addEventListener("PUT", function(e) {
+    document.getElementById("result").innerHTML += e.data + "<br>";
+  }, false);
+} else {
+  document.getElementById("result").innerHTML = "Sorry, your browser does not support server-sent events...";
+}
+</script>"#;
 
 #[async_std::main]
 async fn main() {
