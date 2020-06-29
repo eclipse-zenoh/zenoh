@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::fmt;
+use std::time::Duration;
 use std::collections::HashMap;
 use pin_project_lite::pin_project;
 use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
@@ -25,6 +26,7 @@ pub use zenoh_protocol::core::{
     ResKey,
     PeerId,
 };
+use zenoh_protocol::link::Locator;
 pub use zenoh_protocol::proto::{
     Reliability,
     SubMode,
@@ -34,11 +36,76 @@ pub use zenoh_protocol::proto::{
     QueryTarget,
     QueryConsolidation,
     Reply,
+    Primitives,
+    WhatAmI,
+    whatami,
 };
-pub use zenoh_protocol::proto::Primitives;
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use crate::net::Session;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Config {
+    pub whatami: WhatAmI,
+    pub peers: Vec<Locator>,
+    pub listeners: Vec<Locator>,
+    pub multicast_interface: String,
+    pub scouting_delay: Duration,
+}
+
+impl Config {
+
+    fn default(whatami: WhatAmI) -> Config {
+        Config { 
+            whatami,
+            peers: vec![],
+            listeners: vec![],
+            multicast_interface: "auto".to_string(),
+            scouting_delay: Duration::new(0, 250_000_000),
+        }
+    }
+
+    pub fn new(mode: &str) -> Result<Config, ()> {
+        match mode {
+            "peer" => Ok(Config::peer()),
+            "client" => Ok(Config::client()),
+            _ => Err(()),
+        }
+    }
+
+    pub fn peer() -> Config {
+        Config::default(whatami::PEER)
+    }
+
+    pub fn client() -> Config {
+        Config::default(whatami::CLIENT)
+    }
+
+    pub fn add_peer(mut self, locator: &str) -> Self {
+        self.peers.push(locator.parse().unwrap());
+        self
+    }
+
+    pub fn add_peers(mut self, locators: Vec<&str>) -> Self {
+        self.peers.extend(locators.iter().map(|l| l.parse().unwrap()));
+        self
+    }
+
+    pub fn add_listener(mut self, locator: &str) -> Self {
+        self.listeners.push(locator.parse().unwrap());
+        self
+    }
+
+    pub fn add_listeners(mut self, locators: Vec<&str>) -> Self {
+        self.listeners.extend(locators.iter().map(|l| l.parse().unwrap()));
+        self
+    }
+}
+
+impl fmt::Display for Config {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
 
 pub type Properties = HashMap<ZInt, Vec<u8>>;
 

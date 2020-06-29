@@ -38,15 +38,18 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net ssl server example")
-        .arg(Arg::from_usage("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'"))
-        .get_matches();
+      .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+          .possible_values(&["peer", "client"]).default_value("peer"))
+      .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
+      .get_matches();
 
-    let locator = args.value_of("locator").unwrap_or("").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+      .add_peers(args.values_of("peer").map(|p| p.collect()).or(Some(vec![])).unwrap());
     let path    = "/demo/sse";
     let value   = "Pub from sse server!";
 
     println!("Openning session...");
-    let session = open(&locator, None).await.unwrap();
+    let session = open(config, None).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
     let queryable = session.declare_queryable(&path.clone().into(), EVAL).await.unwrap();

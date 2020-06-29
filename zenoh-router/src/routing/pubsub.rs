@@ -185,7 +185,8 @@ pub async fn route_data(tables: &mut Tables, face: &Arc<FaceState>, rid: u64, su
         for (_id, (outface, rid, suffix)) in outfaces {
             if ! Arc::ptr_eq(face, &outface) {
                 let primitives = {
-                    if face.whatami != whatami::PEER || outface.whatami != whatami::PEER {
+                    if (face.whatami != whatami::PEER && face.whatami != whatami::BROKER)
+                       || (outface.whatami != whatami::PEER && outface.whatami != whatami::BROKER){
                         Some(outface.primitives.clone())
                     } else {
                         None

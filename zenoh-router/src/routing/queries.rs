@@ -139,7 +139,9 @@ async fn route_query_to_map(tables: &mut Tables, face: &Arc<FaceState>, qid: ZIn
                 unsafe {
                     let mut res = res.upgrade().unwrap();
                     for (sid, context) in &mut Arc::get_mut_unchecked(&mut res).contexts {
-                        if context.qabl && ! Arc::ptr_eq(&face, &context.face)
+                        if context.qabl && ! Arc::ptr_eq(&face, &context.face) && 
+                            ((face.whatami != whatami::PEER && face.whatami != whatami::BROKER)
+                            || (context.face.whatami != whatami::PEER && context.face.whatami != whatami::BROKER))
                         {
                             faces.entry(*sid).or_insert_with( || {
                                 let (rid, suffix) = Resource::get_best_key(prefix, suffix, *sid);
@@ -180,7 +182,6 @@ pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<FaceState>, rid:
 }
 
 pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt, reply: Reply) {
-    log::debug!("**** in route_reply...");
     match face.pending_queries.get(&qid) {
         Some(query) => {
             match reply {

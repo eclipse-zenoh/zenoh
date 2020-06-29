@@ -12,8 +12,10 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zenoh_util::core::ZResult;
+use zenoh_util::core::{ZResult, ZError, ZErrorKind};
+use zenoh_util::zerror;
 use zenoh_protocol::core::PeerId;
+use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::WhatAmI;
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 use crate::routing::broker::Broker;
@@ -37,7 +39,8 @@ pub struct Runtime {
 
 impl Runtime {
 
-    pub fn new(version: u8, whatami: WhatAmI) -> Runtime {
+    pub async fn new(version: u8, whatami: WhatAmI, listeners: Vec<Locator>, peers: Vec<Locator>, 
+                    iface: &str, delay: std::time::Duration) -> ZResult<Runtime> {
         let pid = PeerId{id: uuid::Uuid::new_v4().as_bytes().to_vec()};
         log::debug!("Generated PID: {}", pid);
 
@@ -62,15 +65,19 @@ impl Runtime {
         };
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
-        let orchestrator = SessionOrchestrator::new(session_manager);
-
-        let state = Arc::new(RwLock::new(RuntimeState {
-            pid,
-            broker,
-            orchestrator,
-        }));
-
-        Runtime{state}
+        let mut orchestrator = SessionOrchestrator::new(session_manager, whatami);
+        match orchestrator.init(listeners, peers, iface, delay).await {
+            Ok(()) => {
+                Ok(Runtime { 
+                    state: Arc::new(RwLock::new(RuntimeState {
+                        pid,
+                        broker,
+                        orchestrator,
+                    }))
+                })
+            },
+            Err(err) => zerror!(ZErrorKind::Other{ descr: "".to_string()}, err),
+        }
     }
 
     pub async fn read(&self) -> RwLockReadGuard<'_, RuntimeState> {

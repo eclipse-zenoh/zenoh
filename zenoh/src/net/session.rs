@@ -19,11 +19,11 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
 use std::collections::HashMap;
 use async_std::sync::RwLock;
-use log::{error, warn, info, trace};
+use log::{error, warn, trace};
 use zenoh_protocol:: {
     core::{ rname, ResourceId, ResKey },
     io::RBuf,
-    proto::{ Primitives, QueryTarget, QueryConsolidation, Reply, whatami, queryable},
+    proto::{ Primitives, QueryTarget, QueryConsolidation, Reply, queryable},
 };
 use zenoh_router::runtime::Runtime;
 use zenoh_util::{zerror, zconfigurable};
@@ -134,28 +134,12 @@ pub struct Session {
 
 impl Session {
 
-    pub(super) async fn new(locator: &str, _ps: Option<Properties>) -> Session {
+    pub(super) async fn new(config: Config, _ps: Option<Properties>) -> Session {
 
-        let runtime = Runtime::new(0, whatami::CLIENT);
-
-        // @TODO: scout if locator = "". For now, replace by "tcp/127.0.0.1:7447"
-        let locator = if locator.is_empty() { "tcp/127.0.0.1:7447" } else { &locator };
-
-        {
-            // @TODO: manage a tcp.port property (and tcp.interface?)
-            let orchestrator = &mut runtime.write().await.orchestrator;
-            // try to open TCP port 7447
-            if let Err(_err) = orchestrator.add_acceptor(&"tcp/127.0.0.1:7447".parse().unwrap()).await {
-                // if failed, try to connect to peer on locator
-                info!("Unable to open listening TCP port on 127.0.0.1:7447. Try connection to {}", locator);
-                if let Err(err) = orchestrator.open_session(&locator.parse().unwrap()).await {
-                    error!("Unable to connect to {}! {:?}", locator, err);
-                    std::process::exit(-1);
-                }
-            } else {
-                info!("Listening on TCP: 127.0.0.1:7447.");
-            }
-        }
+        let runtime = match Runtime::new(0, config.whatami, config.listeners, config.peers, &config.multicast_interface, config.scouting_delay).await {
+            Ok(runtime) => runtime,
+            _ => std::process::exit(-1),
+        };
 
         let session = Self::init(runtime).await;
 

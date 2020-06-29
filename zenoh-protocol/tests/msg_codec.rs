@@ -177,7 +177,7 @@ fn scout_tests() {
 
         for w in wami.iter() {
             for a in attachment.iter() {
-                let msg = SessionMessage::make_scout(w.clone(), a.clone());
+                let msg = SessionMessage::make_scout(w.clone(), false, false, a.clone());
                 test_write_read_session_message(msg);
             }
         }
@@ -194,7 +194,7 @@ fn hello_tests() {
         for w in wami.iter() {
             for l in locators.iter() {
                 for a in attachment.iter() {
-                    let msg = SessionMessage::make_hello(w.clone(), l.clone(), a.clone());
+                    let msg = SessionMessage::make_hello(None, w.clone(), l.clone(), a.clone());
                     test_write_read_session_message(msg);
                 }
             }

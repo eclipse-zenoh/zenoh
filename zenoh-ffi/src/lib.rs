@@ -16,6 +16,7 @@ use std::ffi::CStr;
 use std::slice;
 use async_std::task;
 use zenoh::net;
+use zenoh::net::Config;
 use zenoh_protocol::core::{ResKey, ResourceId}; // { rname, PeerId, ResourceId, , ZError, ZErrorKind };
 
 pub struct ZNSession(zenoh::net::Session, );
@@ -58,12 +59,11 @@ pub unsafe extern "C" fn zn_properties_free(rps: *mut ZProperties ) {
 /// 
 #[no_mangle]
 pub unsafe extern "C" fn zn_open(locator: *const c_char, _ps: *const ZProperties) -> *mut ZNSession {
-  let l = 
-  if locator.is_null() { "" } 
-  else {
-    CStr::from_ptr(locator).to_str().unwrap()
-  };
-  let s = task::block_on(net::open(l, None)).unwrap();
+  let s = task::block_on(async move {
+    let config = Config::client();
+    let config = if !locator.is_null() { config.add_peer(CStr::from_ptr(locator).to_str().unwrap()) } else { config };
+    net::open(config, None).await
+  }).unwrap();
   Box::into_raw(Box::new(ZNSession(s)))
 }
 

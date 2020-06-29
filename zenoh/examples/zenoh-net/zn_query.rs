@@ -13,7 +13,7 @@
 //
 #![feature(async_closure)]
 
-use clap::App;
+use clap::{App, Arg};
 use futures::prelude::*;
 use zenoh::net::*;
 
@@ -23,15 +23,19 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net query example")
-        .arg("-l, --locator=[LOCATOR]   'Sets the locator used to initiate the zenoh session'")
-        .arg("-s, --selector=[SELECTOR] 'Sets the selection of resources to query'")
+        .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
+        .arg(Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to query'")
+            .default_value("/demo/example/**"))
         .get_matches();
 
-    let locator  = args.value_of("locator").unwrap_or("").to_string();
-    let selector = args.value_of("selector").unwrap_or("/demo/example/**").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or(Some(vec![])).unwrap());
+    let selector = args.value_of("selector").unwrap().to_string();
 
     println!("Openning session...");
-    let session = open(&locator, None).await.unwrap();
+    let session = open(config, None).await.unwrap();
 
     println!("Sending Query '{}'...", selector);
     session.query(

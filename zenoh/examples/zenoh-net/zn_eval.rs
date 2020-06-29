@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::App;
+use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
 use zenoh::net::*;
@@ -23,17 +23,22 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net eval example")
-        .arg("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'")
-        .arg("-p, --path=[PATH]       'Sets the name of the resource to evaluate'")
-        .arg("-v, --value=[VALUE]     'Sets the value to reply to queries'")
+        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
+        .arg(Arg::from_usage("-p, --path=[PATH]        'The name of the resource to evaluate.'")
+            .default_value("/demo/example/zenoh-rs-eval"))
+        .arg(Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")
+            .default_value("Eval from Rust!"))
         .get_matches();
 
-    let locator = args.value_of("locator").unwrap_or("").to_string();
-    let path    = args.value_of("path").unwrap_or("/demo/example/zenoh-rs-eval").to_string();
-    let value   = args.value_of("value").unwrap_or("Eval from Rust!").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or(Some(vec![])).unwrap());
+    let path    = args.value_of("path").unwrap().to_string();
+    let value   = args.value_of("value").unwrap().to_string();
 
     println!("Openning session...");
-    let session = open(&locator, None).await.unwrap();
+    let session = open(config, None).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
     let mut queryable = session.declare_queryable(&path.clone().into(), EVAL).await.unwrap();
