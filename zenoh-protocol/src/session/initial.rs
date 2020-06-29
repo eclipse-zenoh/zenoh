@@ -315,7 +315,6 @@ impl InitialSession {
         }
 
         // Build Accept message
-        let whatami = self.manager.config.whatami;
         let opid = pid.clone();
         let apid = self.manager.config.pid.clone();
         let initial_sn = agreed_initial_sn;
@@ -346,7 +345,8 @@ impl InitialSession {
             }
         };
         let attachment = None;
-        let message = SessionMessage::make_accept(whatami, opid, apid, initial_sn, sn_resolution, lease, locators, attachment);
+        let message = SessionMessage::make_accept(self.manager.config.whatami, 
+            opid, apid, initial_sn, sn_resolution, lease, locators, attachment);
         
         // Send the message on the link
         if let Err(e) = zlinksend!(message, link) {
@@ -550,8 +550,7 @@ impl InitialSession {
             match session.has_callback() {
                 Ok(has_callback) => if !has_callback {
                     // Notify the session handler that there is a new session and get back a callback
-                    let callback = self.manager.config.handler.new_session(
-                        self.manager.config.whatami, Arc::new(session.clone())
+                    let callback = self.manager.config.handler.new_session(whatami, Arc::new(session.clone())
                     ).await;
                     // Set the callback on the transport
                     if let Err(e) = session.set_callback(callback).await {
