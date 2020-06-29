@@ -84,16 +84,7 @@ impl SessionOrchestrator {
         if listeners.is_empty() {
             listeners.push("tcp/0.0.0.0:0".parse().unwrap());
         }
-
-        for locator in &listeners {
-            match self.manager.add_locator(&locator).await {
-                Ok(locator) => log::info!("Listening on {}!", locator),
-                Err(err) => {
-                    log::error!("Unable to open listener {} : {:?}", locator, err);
-                    return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                },
-            }
-        }
+        self.bind_listeners(&listeners).await?;
 
         {
             let this = self.clone();
@@ -127,15 +118,8 @@ impl SessionOrchestrator {
     }
 
     pub async fn init_broker(&mut self, listeners: Vec<Locator>, peers: Vec<Locator>, iface: &str) -> ZResult<()> {
-        for locator in &listeners {
-            match self.manager.add_locator(&locator).await {
-                Ok(locator) => log::info!("Listening on {}!", locator),
-                Err(err) => {
-                    log::error!("Unable to open listener {} : {:?}", locator, err);
-                    return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                },
-            }
-        }
+
+        self.bind_listeners(&listeners).await?;
 
         {
             let this = self.clone();
@@ -161,6 +145,19 @@ impl SessionOrchestrator {
             },
             Err(err) => {zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)},
         }
+    }
+
+    async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
+        for locator in listeners {
+            match self.manager.add_locator(&locator).await {
+                Ok(locator) => log::info!("Listening on {}!", locator),
+                Err(err) => {
+                    log::error!("Unable to open listener {} : {:?}", locator, err);
+                    return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
+                },
+            }
+        }
+        Ok(())
     }
 
     fn get_interface(name: &str) -> ZResult<IpAddr> {
