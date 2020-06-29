@@ -41,17 +41,24 @@ impl RBuf {
                 },
 
                 SCOUT => {
+                    let pid_replies = smsg::has_flag(header, smsg::flag::I);
                     let what = if smsg::has_flag(header, smsg::flag::W) {
                         Some(self.read_zint()?)
                     } else { 
                         None 
                     }; 
+                    let forwarding = smsg::has_flag(header, smsg::flag::T);
 
-                    let body = SessionBody::Scout { what };
+                    let body = SessionBody::Scout { what, pid_replies, forwarding };
                     break (header, body)
                 },
 
                 HELLO => {
+                    let pid = if smsg::has_flag(header, smsg::flag::I) {
+                        Some(self.read_peerid()?)
+                    } else { 
+                        None
+                    };
                     let whatami = if smsg::has_flag(header, smsg::flag::W) {
                         Some(self.read_zint()?)
                     } else { 
@@ -63,7 +70,7 @@ impl RBuf {
                         None 
                     };
                     
-                    let body = SessionBody::Hello { whatami, locators };
+                    let body = SessionBody::Hello { pid, whatami, locators };
                     break (header, body)
                 },
 

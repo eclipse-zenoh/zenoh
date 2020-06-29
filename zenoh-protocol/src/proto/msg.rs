@@ -513,7 +513,7 @@ pub mod smsg {
     pub mod flag {
         pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
         pub const D: u8 = 1 << 5; // 0x80 LeasePeriod   if D==1 then the lease period is present
-        pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then the it is the last FRAME fragment
+        pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
         pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
         pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is present
         pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
@@ -523,7 +523,8 @@ pub mod smsg {
         pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
-        pub const W: u8 = 1 << 5; // 0x20 WhatAmI       if W==1 then WhatAmI is indicated
+        pub const T: u8 = 1 << 7; // 0x80 SN Resolution if T==1 then the scouter is asking for forwarded hello messages 
+        pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
 
         pub const X: u8 = 0;      // Unused flags are set to zero
     }
@@ -575,12 +576,16 @@ pub enum SessionBody {
     ///
     ///  7 6 5 4 3 2 1 0
 	/// +-+-+-+-+-+-+-+-+
-	/// |X|X|W|  SCOUT  |
+	/// |T|W|I|  SCOUT  |
 	/// +-+-+-+-+-------+
-	/// ~    whatmai    ~ if W==1 -- Otherwise implicitly scouting for Brokers
+	/// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Brokers
 	/// +---------------+  
     /// 
-    Scout { what: Option<WhatAmI> },
+    /// - if I==1 then the sender is asking for hello replies that contain a peer_id.
+    /// 
+    /// - if T==1 then the scouter is asking for forwarded hello messages.
+    /// 
+    Scout { what: Option<WhatAmI>, pid_replies: bool, forwarding: bool },
 
     /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght 
     ///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
@@ -602,14 +607,16 @@ pub enum SessionBody {
     /// 
 	///  7 6 5 4 3 2 1 0
 	/// +-+-+-+-+-+-+-+-+
-	/// |L|X|W|  HELLO  |
+	/// |L|W|I|  HELLO  |
 	/// +-+-+-+-+-------+
+    /// ~    peer-id    ~ if I==1
+	/// +---------------+
     /// ~    whatmai    ~ if W==1 -- Otherwise it is from a Broker
 	/// +---------------+
     /// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
     /// +---------------+
     /// 
-    Hello { whatami: Option<WhatAmI>, locators: Option<Vec<Locator>> },
+    Hello { pid: Option<PeerId>, whatami: Option<WhatAmI>, locators: Option<Vec<Locator>> },
 
     /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght 
     ///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
@@ -851,30 +858,36 @@ pub struct SessionMessage {
 impl SessionMessage {
     pub fn make_scout(
         what: Option<WhatAmI>,
+        pid_replies: bool,
+        forwarding: bool,
         attachment: Option<Attachment>
     ) -> SessionMessage {
+        let iflag = if pid_replies { smsg::flag::I } else { 0 };
         let wflag = if what.is_some() { smsg::flag::W } else { 0 };
-        let header = smsg::id::SCOUT | wflag;
+        let tflag = if forwarding { smsg::flag::T } else { 0 };
+        let header = smsg::id::SCOUT | iflag | wflag | tflag;
 
         SessionMessage {
             header,
-            body: SessionBody::Scout { what },
+            body: SessionBody::Scout { what, pid_replies, forwarding },
             attachment
         }
     }
 
     pub fn make_hello(
+        pid: Option<PeerId>,
         whatami: Option<WhatAmI>,
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>
     ) -> SessionMessage {
+        let iflag = if pid.is_some() { smsg::flag::I } else { 0 };
         let wflag = if whatami.is_some() && whatami.unwrap() != whatami::BROKER { smsg::flag::W } else { 0 };
         let lflag = if locators.is_some() { smsg::flag::L } else { 0 };
-        let header = smsg::id::HELLO | wflag | lflag;
+        let header = smsg::id::HELLO | iflag | wflag | lflag;
 
         SessionMessage {
             header,
-            body: SessionBody::Hello { whatami, locators },
+            body: SessionBody::Hello { pid, whatami, locators },
             attachment
         }
     }

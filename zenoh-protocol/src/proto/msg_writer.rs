@@ -46,13 +46,16 @@ impl WBuf {
 
         check!(self.write(msg.header));
         match msg.get_body() {
-            SessionBody::Scout { what } => {
+            SessionBody::Scout { what, .. } => {
                 if let Some(w) = *what {
                     check!(self.write_zint(w));
                 }
             },
 
-            SessionBody::Hello { whatami, locators } => {
+            SessionBody::Hello { pid, whatami, locators } => {
+                if let Some(pid) = pid {
+                    check!(self.write_bytes_array(&pid.id));
+                }
                 if let Some(w) = *whatami {
                     if w != whatami::BROKER {
                         check!(self.write_zint(w));
