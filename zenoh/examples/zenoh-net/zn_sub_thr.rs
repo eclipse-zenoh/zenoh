@@ -37,7 +37,7 @@ async fn main() {
         .get_matches();
 
     let config = Config::new(args.value_of("mode").unwrap()).unwrap()
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or(Some(vec![])).unwrap());
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
 
     println!("Openning session...");
     let session = open(config, None).await.unwrap();
@@ -56,9 +56,9 @@ async fn main() {
         move |_res_name: &str, _payload: RBuf, _data_info: Option<RBuf>| {
             if count == 0 {
                 start = Instant::now();
-                count = count + 1;
+                count += 1;
             } else if count < N {
-                count = count + 1;
+                count += 1;
             } else {
                 print_stats(start);
                 count = 0;

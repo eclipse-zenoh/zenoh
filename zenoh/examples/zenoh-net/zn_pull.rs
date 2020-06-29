@@ -30,7 +30,7 @@ async fn main() {
         .get_matches();
 
     let config = Config::new(args.value_of("mode").unwrap()).unwrap()
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or(Some(vec![])).unwrap());
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let selector = args.value_of("selector").unwrap().to_string();
 
     println!("Openning session...");

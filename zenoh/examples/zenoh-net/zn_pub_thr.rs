@@ -28,7 +28,7 @@ async fn main() {
         .get_matches();
 
     let config = Config::new(args.value_of("mode").unwrap()).unwrap()
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or(Some(vec![])).unwrap());
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let size    = args.value_of("PAYLOAD_SIZE").unwrap().parse::<usize>().unwrap();
 
     let data: RBuf = (0usize..size).map(|i| (i%10) as u8).collect::<Vec<u8>>().into();

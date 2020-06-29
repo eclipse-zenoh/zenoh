@@ -19,7 +19,7 @@ use zenoh::net::*;
 use zenoh::net::queryable::EVAL;
 use zenoh_protocol::proto::{encoding, kind};
 
-const HTML: &'static str = r#"
+const HTML: &str = r#"
 <div id="result"></div>
 <script>
 if(typeof(EventSource) !== "undefined") {
@@ -44,7 +44,7 @@ async fn main() {
       .get_matches();
 
     let config = Config::new(args.value_of("mode").unwrap()).unwrap()
-      .add_peers(args.values_of("peer").map(|p| p.collect()).or(Some(vec![])).unwrap());
+      .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let path    = "/demo/sse";
     let value   = "Pub from sse server!";
 
@@ -52,7 +52,7 @@ async fn main() {
     let session = open(config, None).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
-    let queryable = session.declare_queryable(&path.clone().into(), EVAL).await.unwrap();
+    let queryable = session.declare_queryable(&path.into(), EVAL).await.unwrap();
 
     async_std::task::spawn(
         queryable.for_each(async move |(_res_name, _predicate, replies_sender)|{
