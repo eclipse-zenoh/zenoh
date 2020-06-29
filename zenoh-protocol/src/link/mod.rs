@@ -189,7 +189,7 @@ pub trait ManagerTrait {
 
     async fn del_link(&self, src: &Locator, dst: &Locator) -> ZResult<()>;
 
-    async fn new_listener(&self, locator: &Locator) -> ZResult<()>;
+    async fn new_listener(&self, locator: &Locator) -> ZResult<Locator>;
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
 

@@ -568,7 +568,7 @@ impl ManagerTrait for ManagerTcp {
 
     // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
     #[allow(clippy::infallible_destructuring_match)]
-    async fn new_listener(&self, locator: &Locator) -> ZResult<()> {
+    async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
         let addr = get_tcp_addr!(locator);
         self.0.new_listener(&self.0, addr).await
     }
@@ -679,7 +679,7 @@ impl ManagerTcpInner {
         }
     }
 
-    async fn new_listener(&self, a_self: &Arc<Self>, addr: &SocketAddr) -> ZResult<()> {
+    async fn new_listener(&self, a_self: &Arc<Self>, addr: &SocketAddr) -> ZResult<Locator> {
         // Bind the TCP socket
         let socket = match TcpListener::bind(addr).await {
             Ok(socket) => Arc::new(socket),
@@ -691,21 +691,23 @@ impl ManagerTcpInner {
                 })
             }
         };
+
+        let local_addr = socket.local_addr().unwrap();
                
         let listener = Arc::new(ListenerTcpInner::new(socket.clone()));
         // Update the list of active listeners on the manager
-        zasyncwrite!(self.listener).insert(*addr, listener.clone());
+        zasyncwrite!(self.listener).insert(local_addr, listener.clone());
 
         // Spawn the accept loop for the listener
         let c_self = a_self.clone();
-        let c_addr = *addr;
+        let c_addr = local_addr;
         task::spawn(async move {
             // Wait for the accept loop to terminate
             accept_task(&c_self, listener).await; 
             // Delete the listener from the manager
             zasyncwrite!(c_self.listener).remove(&c_addr);
         });
-        Ok(())
+        Ok(["tcp/".to_string(), local_addr.to_string()].concat().parse().unwrap())
     }
 
     async fn del_listener(&self, _a_self: &Arc<Self>, addr: &SocketAddr) -> ZResult<()> {

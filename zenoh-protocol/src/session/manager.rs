@@ -260,7 +260,7 @@ impl SessionManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_locator(&self, locator: &Locator) -> ZResult<()> {
+    pub async fn add_locator(&self, locator: &Locator) -> ZResult<Locator> {
         let manager = self.0.get_or_new_link_manager(&self.0, &locator.get_proto()).await;
         manager.new_listener(locator).await
     }
