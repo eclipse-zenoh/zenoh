@@ -79,7 +79,7 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn init_peer(&mut self, mut listeners: Vec<Locator>, _peers: Vec<Locator>, iface: &str, delay: Duration) -> ZResult<()> {
+    pub async fn init_peer(&mut self, mut listeners: Vec<Locator>, peers: Vec<Locator>, iface: &str, delay: Duration) -> ZResult<()> {
 
         if listeners.is_empty() {
             listeners.push("tcp/0.0.0.0:0".parse().unwrap());
@@ -93,6 +93,11 @@ impl SessionOrchestrator {
                     return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                 },
             }
+        }
+
+        {
+            let this = self.clone();
+            async_std::task::spawn(async move { this.connector(peers).await });
         }
 
         let res = match SessionOrchestrator::bind_mcast_port().await {
@@ -121,7 +126,7 @@ impl SessionOrchestrator {
         res
     }
 
-    pub async fn init_broker(&mut self, listeners: Vec<Locator>, _peers: Vec<Locator>, iface: &str) -> ZResult<()> {
+    pub async fn init_broker(&mut self, listeners: Vec<Locator>, peers: Vec<Locator>, iface: &str) -> ZResult<()> {
         for locator in &listeners {
             match self.manager.add_locator(&locator).await {
                 Ok(locator) => log::info!("Listening on {}!", locator),
@@ -130,6 +135,11 @@ impl SessionOrchestrator {
                     return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                 },
             }
+        }
+
+        {
+            let this = self.clone();
+            async_std::task::spawn(async move { this.connector(peers).await });
         }
 
         match SessionOrchestrator::bind_mcast_port().await {
@@ -246,6 +256,24 @@ impl SessionOrchestrator {
             }    
         };
         async_std::prelude::FutureExt::race(send, recv).await
+    }
+
+    // @TODO try to reconnect on disconnection
+    async fn connector(&self, peers: Vec<Locator>) {
+        futures::future::join_all(
+            peers.into_iter().map(|peer| { async move {
+                loop {
+                    log::trace!("Trying to connect to configured peer {}", peer);
+                    if self.manager.open_session(&peer, &None).await.is_ok() {
+                        log::debug!("Successfully connected to configured peer {}", peer);
+                        break;
+                    } else {
+                        log::warn!("Unable to connect to configured peer {}", peer);
+                    }
+                    async_std::task::sleep(Duration::new(5, 0)).await;
+                }
+            }})
+        ).await;
     }
 
     async fn scout(&self, ucast_socket: &UdpSocket, what: WhatAmI) {
