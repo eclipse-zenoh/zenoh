@@ -24,7 +24,7 @@ async fn main() {
             .possible_values(&["peer", "client"]).default_value("peer"))
         .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
         .arg(Arg::from_usage("-p, --path=[PATH]        'The name of the resource to publish.'")
-            .default_value("/demo/example/zenoh-rs-eval"))
+            .default_value("/demo/example/zenoh-rs-pub"))
         .arg(Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to publish.'")
             .default_value("Pub from Rust!"))
         .get_matches();
