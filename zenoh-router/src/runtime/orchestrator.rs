@@ -359,7 +359,7 @@ impl SessionOrchestrator {
             let mut rbuf = RBuf::from(&buf[..n]);
             log::trace!("Received UDP datagram {}", rbuf);
             if let Ok(msg) = rbuf.read_session_message() {
-                log::debug!("Received {:?}", msg);
+                log::trace!("Received {:?}", msg);
                 if let SessionBody::Scout{what, pid_replies, ..} = msg.get_body() {
                     let what = what.or(Some(whatami::BROKER)).unwrap();
                     if what & self.whatami != 0 {
@@ -367,7 +367,7 @@ impl SessionOrchestrator {
                         let pid  = if *pid_replies { Some(self.manager.pid()) } else { None };
                         let hello = SessionMessage::make_hello( pid, Some(self.whatami), 
                             Some(self.get_local_locators().await.clone()), None);
-                        log::debug!("Send {:?} to {}", hello, peer);
+                        log::trace!("Send {:?} to {}", hello, peer);
                         wbuf.write_session_message(&hello);
                         if let Err(err) = ucast_socket.send_to(&RBuf::from(&wbuf).to_vec(), peer).await {
                             log::error!("Unable to send {:?} to {} : {:?}", hello, peer, err);
