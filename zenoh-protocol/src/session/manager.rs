@@ -172,6 +172,10 @@ impl SessionManager {
         SessionManager(manager_inner)
     }
 
+    pub fn pid(&self) -> PeerId {
+        self.0.config.pid.clone()
+    }
+
     /*************************************/
     /*              SESSION              */
     /*************************************/
@@ -240,6 +244,13 @@ impl SessionManager {
         zerror!(ZErrorKind::Other {
             descr: e
         })
+    }
+
+    pub async fn get_session(&self, peer: &PeerId) -> Option<Session> {
+        match self.0.get_session(peer).await {
+            Ok(session) => Some(session),
+            Err(_) => None,
+        }
     }
 
     pub async fn get_sessions(&self) -> Vec<Session> {
