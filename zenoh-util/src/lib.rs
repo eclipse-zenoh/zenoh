@@ -20,6 +20,7 @@ pub mod collections;
 pub mod core;
 pub mod sync;
 pub mod net;
+pub mod hlc;
 
 pub use crate::core::macros::*;
 
