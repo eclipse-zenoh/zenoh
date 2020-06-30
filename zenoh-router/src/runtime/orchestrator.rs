@@ -20,6 +20,7 @@ use zenoh_protocol::io::{WBuf, RBuf};
 use zenoh_protocol::proto::{WhatAmI, whatami, SessionMessage, SessionBody};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::session::SessionManager;
+use crate::runtime::Config;
 
 const MCAST_ADDR: &str = "239.255.0.1";
 const MCAST_PORT: &str = "7447";
@@ -39,11 +40,11 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn init(&mut self, listeners: Vec<Locator>, peers: Vec<Locator>, iface: &str, delay: Duration) -> ZResult<()> {
+    pub async fn init(&mut self, config: Config) -> ZResult<()> {
         match self.whatami {
-            whatami::CLIENT => self.init_client(peers, iface).await,
-            whatami::PEER => self.init_peer(listeners, peers, iface, delay).await,
-            whatami::BROKER => self.init_broker(listeners, peers, iface).await,
+            whatami::CLIENT => self.init_client(config.peers, &config.multicast_interface).await,
+            whatami::PEER => self.init_peer(config.listeners, config.peers, &config.multicast_interface, config.scouting_delay).await,
+            whatami::BROKER => self.init_broker(config.listeners, config.peers, &config.multicast_interface).await,
             _ => {
                 log::error!("Unknown mode");
                 zerror!(ZErrorKind::Other{ descr: "Unknown mode".to_string()})

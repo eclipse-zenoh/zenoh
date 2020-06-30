@@ -17,7 +17,7 @@ use async_std::task;
 use clap::{App, Arg};
 use zenoh_protocol::proto::whatami;
 use zenoh_router::plugins::PluginsMgr;
-use zenoh_router::runtime::{ AdminSpace, Runtime };
+use zenoh_router::runtime::{ AdminSpace, Runtime, Config };
 
 
 fn main() {
@@ -42,7 +42,15 @@ fn main() {
         let peers = args.values_of("peer").map(|v| v.map(|l| l.parse().unwrap()).collect())
             .or_else(|| Some(vec![])).unwrap();
 
-        let runtime = match Runtime::new(0, whatami::BROKER, listeners, peers, "auto", std::time::Duration::new(0, 200_000_000)).await {
+        let config = Config {
+            whatami: whatami::BROKER,
+            peers,
+            listeners,
+            multicast_interface: "auto".to_string(),
+            scouting_delay: std::time::Duration::new(0, 200_000_000),
+        };
+
+        let runtime = match Runtime::new(0, config).await {
             Ok(runtime) => runtime,
             _ => std::process::exit(-1),
         };

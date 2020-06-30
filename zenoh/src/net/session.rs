@@ -136,7 +136,7 @@ impl Session {
 
     pub(super) async fn new(config: Config, _ps: Option<Properties>) -> Session {
 
-        let runtime = match Runtime::new(0, config.whatami, config.listeners, config.peers, &config.multicast_interface, config.scouting_delay).await {
+        let runtime = match Runtime::new(0, config).await {
             Ok(runtime) => runtime,
             _ => std::process::exit(-1),
         };
