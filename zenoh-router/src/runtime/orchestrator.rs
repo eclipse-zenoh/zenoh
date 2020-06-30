@@ -177,7 +177,7 @@ impl SessionOrchestrator {
             match zenoh_util::net::bind_udp(SocketAddr::new(addr, 0), vec![]).await {
                 Ok(socket) => {Ok(socket)},
                 Err(err) => {
-                    log::error!("Unable to bind udp port {}", MCAST_PORT);
+                    log::error!("Unable to bind udp port 0");
                     zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                 }
             }
