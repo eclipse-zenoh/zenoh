@@ -22,6 +22,15 @@ use zenoh_protocol::link::Locator;
 use zenoh_protocol::session::SessionManager;
 use crate::runtime::Config;
 
+const RCV_BUF_SIZE: usize = 65536;
+const SEND_BUF_INITIAL_SIZE: usize = 8;
+const CLIENT_SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
+const CLIENT_SCOUT_MAX_PERIOD: u64 = 4000; //ms
+const CLIENT_SCOUT_PERIOD_INCREASE_FACTOR: u64 = 2;
+const PEER_SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
+const PEER_SCOUT_MAX_PERIOD: u64 = 8000; //ms
+const PEER_SCOUT_PERIOD_INCREASE_FACTOR: u64 = 2;
+const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
 const MCAST_ADDR: &str = "239.255.0.1";
 const MCAST_PORT: &str = "7447";
 
@@ -76,7 +85,7 @@ impl SessionOrchestrator {
     pub async fn init_peer(&mut self, mut listeners: Vec<Locator>, peers: Vec<Locator>, iface: &str, delay: Duration) -> ZResult<()> {
 
         if listeners.is_empty() {
-            listeners.push("tcp/0.0.0.0:0".parse().unwrap());
+            listeners.push(DEFAULT_LISTENER.parse().unwrap());
         }
         self.bind_listeners(&listeners).await?;
 
@@ -187,7 +196,8 @@ impl SessionOrchestrator {
 
     async fn connect_first(&self, socket: &UdpSocket, what: WhatAmI) -> ZResult<()> {
         let send = async {
-            let mut wbuf = WBuf::new(8, false);
+            let mut delay = CLIENT_SCOUT_INITIAL_PERIOD;
+            let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
             wbuf.write_session_message(&SessionMessage::make_scout(Some(what), true, false, None));
             loop{
                 log::trace!("Send scout to {}:{}", MCAST_ADDR, MCAST_PORT);
@@ -195,11 +205,14 @@ impl SessionOrchestrator {
                     log::error!("Unable to send scout to {}:{} : {}", MCAST_ADDR, MCAST_PORT, err);
                     return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                 }
-                async_std::task::sleep(std::time::Duration::new(5, 0)).await;
+                async_std::task::sleep(Duration::from_millis(delay)).await;
+                if delay * CLIENT_SCOUT_PERIOD_INCREASE_FACTOR <= CLIENT_SCOUT_MAX_PERIOD {
+                    delay *= CLIENT_SCOUT_PERIOD_INCREASE_FACTOR;
+                }
             }
         };
         let recv = async {
-            let mut buf = vec![0; 65536];
+            let mut buf = vec![0; RCV_BUF_SIZE];
             loop {
                 let (n, _peer) = socket.recv_from(&mut buf).await.unwrap();
                 let mut rbuf = RBuf::from(&buf[..n]);
@@ -249,18 +262,22 @@ impl SessionOrchestrator {
 
     async fn scout(&self, ucast_socket: &UdpSocket, what: WhatAmI) {
         let send = async {
-            let mut wbuf = WBuf::new(8, false);
+            let mut delay = PEER_SCOUT_INITIAL_PERIOD;
+            let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
             wbuf.write_session_message(&SessionMessage::make_scout(Some(what), true, false, None));
             loop{
                 log::trace!("Send scout to {}:{}", MCAST_ADDR, MCAST_PORT);
                 if let Err(err) = ucast_socket.send_to(&RBuf::from(&wbuf).to_vec(), [MCAST_ADDR, MCAST_PORT].join(":")).await {
                     log::error!("Unable to send scout to {}:{} : {}", MCAST_ADDR, MCAST_PORT, err);
                 }
-                async_std::task::sleep(std::time::Duration::new(5, 0)).await;
+                async_std::task::sleep(Duration::from_millis(delay)).await;
+                if delay * PEER_SCOUT_PERIOD_INCREASE_FACTOR <= PEER_SCOUT_MAX_PERIOD {
+                    delay *= PEER_SCOUT_PERIOD_INCREASE_FACTOR;
+                }
             }
         };
         let recv = async {
-            let mut buf = vec![0; 65536];
+            let mut buf = vec![0; RCV_BUF_SIZE];
             loop {
                 let (n, _peer) = ucast_socket.recv_from(&mut buf).await.unwrap();
                 let mut rbuf = RBuf::from(&buf[..n]);
@@ -323,7 +340,7 @@ impl SessionOrchestrator {
     }
 
     async fn responder(&self, mcast_socket: &UdpSocket, ucast_socket: &UdpSocket) {
-        let mut buf = vec![0; 65536];
+        let mut buf = vec![0; RCV_BUF_SIZE];
         log::debug!("Waiting for UDP datagram...");
         loop {
             let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
@@ -334,7 +351,7 @@ impl SessionOrchestrator {
                 if let SessionBody::Scout{what, pid_replies, ..} = msg.get_body() {
                     let what = what.or(Some(whatami::BROKER)).unwrap();
                     if what & self.whatami != 0 {
-                        let mut wbuf = WBuf::new(8, false);
+                        let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
                         let pid  = if *pid_replies { Some(self.manager.pid()) } else { None };
                         let hello = SessionMessage::make_hello( pid, Some(self.whatami), 
                             Some(self.get_local_locators().await.clone()), None);
