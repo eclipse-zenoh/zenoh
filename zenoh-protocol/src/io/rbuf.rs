@@ -202,6 +202,27 @@ impl RBuf {
         self.get_bytes_no_check((0,0), &mut vec[..]);
         vec
     }
+
+    // Read 'len' bytes from 'self' and add those to 'dest'
+    // This is 0-copy, only ArcSlices from 'self' are added to 'dest', without cloning the original buffer.
+    pub fn read_into_rbuf(&mut self, dest: &mut RBuf, len: usize) -> ZResult<()> {
+        if self.readable() >= len {
+            let mut to_copy: usize = len;
+            while to_copy > 0 {
+                let remain_in_slice = self.current_slice().len() - self.pos.1;
+                let l = std::cmp::min(to_copy, remain_in_slice);
+                dest.add_slice(self.current_slice().new_sub_slice(self.pos.1, self.pos.1+l));
+                self.pos.0 += 1;
+                self.pos.1 = 0;
+                to_copy -= l;
+            }
+            Ok(())
+        } else {
+            zerror!(ZErrorKind::BufferUnderflow { missing: 1 }) 
+        }
+    }
+
+
 }
 
 impl fmt::Display for RBuf {
@@ -387,6 +408,17 @@ mod tests {
         for i in 0 .. buf3.len()-1 {
             assert_eq!(i as u8, buf3.read().unwrap());
         }
+
+        // test read_into_rbuf
+        buf1.reset_pos();
+        let _ = buf1.read();
+        let mut dest = RBuf::new();
+        assert!(buf1.read_into_rbuf(&mut dest, 24).is_ok());
+        let dest_slices = dest.as_ioslices();
+        assert_eq!(3, dest_slices.len());
+        assert_eq!(Some(&[1u8, 2, 3, 4, 5, 6, 7, 8, 9][..]), dest_slices[0].get(..));
+        assert_eq!(Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]), dest_slices[1].get(..));
+        assert_eq!(Some(&[20u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
 
     }
 }
