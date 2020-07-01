@@ -172,15 +172,15 @@ impl WBuf {
     }
 
     pub fn write_zenoh_message(&mut self, msg: &ZenohMessage) -> bool {
-        if let Some(attachment) = msg.get_attachment() {
+        if let Some(attachment) = &msg.attachment {
             check!(self.write_deco_attachment(attachment, false));
         }
-        if let Some(reply_context) = msg.get_reply_context() {
+        if let Some(reply_context) = &msg.reply_context {
             check!(self.write_deco_reply(reply_context));
         }
 
         check!(self.write(msg.header));
-        match msg.get_body() {
+        match &msg.body {
             ZenohBody::Declare { declarations } => {
                 check!(self.write_declarations(&declarations));
             },

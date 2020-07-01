@@ -327,11 +327,11 @@ pub enum ZenohBody {
 
 #[derive(Clone, PartialEq)]
 pub struct ZenohMessage {
-    pub(crate) header: u8,
-    pub(crate) body: ZenohBody,
-    pub(crate) channel: Channel,
-    pub(crate) reply_context: Option<ReplyContext>,
-    pub(crate) attachment: Option<Attachment>
+    pub header: u8,
+    pub body: ZenohBody,
+    pub channel: Channel,
+    pub reply_context: Option<ReplyContext>,
+    pub attachment: Option<Attachment>
 }
 
 impl std::fmt::Debug for ZenohMessage {
@@ -454,32 +454,6 @@ impl ZenohMessage {
     #[inline]
     pub fn is_reply(&self) -> bool {
         self.reply_context.is_some()
-    }
-
-    // -- Accessor
-    #[inline]
-    pub fn get_body(&self) -> &ZenohBody {
-        &self.body
-    }
-
-    #[inline]
-    pub fn get_attachment(&self) -> &Option<Attachment> {
-        &self.attachment
-    }
-
-    #[inline]
-    pub fn get_attachment_mut(&mut self) -> &mut Option<Attachment> {
-        &mut self.attachment
-    }
-
-    #[inline]
-    pub fn get_reply_context(&self) -> &Option<ReplyContext> {
-        &self.reply_context
-    }
-
-    #[inline]
-    pub fn get_reply_context_mut(&mut self) -> &mut Option<ReplyContext> {
-        &mut self.reply_context
     }
 }
 
