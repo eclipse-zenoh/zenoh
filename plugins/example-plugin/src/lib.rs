@@ -63,17 +63,21 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     loop {
         select!(
             sample = sub.next().fuse() => {
-                let (res_name, payload, data_info) = sample.unwrap();
-                info!("Received data ('{}': '{}')", res_name, payload);
-                stored.insert(res_name.into(), (payload, data_info));
+                let sample = sample.unwrap();
+                info!("Received data ('{}': '{}')", sample.res_name, sample.payload);
+                stored.insert(sample.res_name.into(), (sample.payload, sample.data_info));
             },
 
             query = queryable.next().fuse() => {
-                let (res_name, predicate, replies_sender) = query.unwrap();
-                info!("Handling query '{}?{}'", res_name, predicate);
+                let query = query.unwrap();
+                info!("Handling query '{}?{}'", query.res_name, query.predicate);
                 for (rname, (data, data_info)) in stored.iter() {
-                    if rname_intersect(&res_name, rname) {
-                        replies_sender.send((rname.clone(), data.clone(), data_info.clone())).await;
+                    if rname_intersect(&query.res_name, rname) {
+                        query.replies_sender.send(Sample{
+                            res_name: rname.clone(), 
+                            payload: data.clone(), 
+                            data_info: data_info.clone(),
+                        }).await;
                     }
                 }
             }

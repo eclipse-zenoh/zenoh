@@ -52,9 +52,10 @@ async fn main() {
     loop {
         select!(
             sample = sub.next().fuse() => {
-                let (res_name, payload, data_info) = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
-                if let Some(mut info) = data_info {
+                let sample = sample.unwrap();
+                println!(">> [Subscription listener] Received ('{}': '{}')", 
+                    sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
+                if let Some(mut info) = sample.data_info {
                     let _info = info.read_datainfo();
                 }
             },

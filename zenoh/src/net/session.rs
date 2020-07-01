@@ -464,7 +464,11 @@ impl Primitives for Session {
             }
         };
         for sender in senders {
-            sender.send((resname.clone(), payload.clone(), info.clone())).await;
+            sender.send( Sample {
+                res_name: resname.clone(),
+                payload: payload.clone(),
+                data_info: info.clone(),
+            }).await;
         }
     }
 
@@ -498,20 +502,24 @@ impl Primitives for Session {
         let pid = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
             
         for (kind, req_sender) in kinds_and_senders {
-            req_sender.send((resname.clone(), predicate.clone(), RepliesSender{ kind, sender: rep_sender.clone() })).await;
+            req_sender.send( Query {
+                res_name: resname.clone(),
+                predicate: predicate.clone(),
+                replies_sender: RepliesSender{ kind, sender: rep_sender.clone() }
+            }).await;
         }
         drop(rep_sender); // all senders need to be dropped for the channel to close
 
         task::spawn( async move { // router is not re-entrant
-            while let Some((kind, (resname, payload, info))) = rep_receiver.next().await {
-                primitives.reply_data(qid, kind, pid.clone(), ResKey::RName(resname), info, payload).await;
+            while let Some((kind, sample)) = rep_receiver.next().await {
+                primitives.reply_data(qid, kind, pid.clone(), ResKey::RName(sample.res_name), sample.data_info, sample.payload).await;
             }
             primitives.reply_final(qid).await;
         });
     }
 
-    async fn reply_data(&self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
-        trace!("recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}", qid, source_kind, replier_id, reskey, info, payload);
+    async fn reply_data(&self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, data_info: Option<RBuf>, payload: RBuf) {
+        trace!("recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}", qid, source_kind, replier_id, reskey, data_info, payload);
         let (rep_sender, reply) = {
             let state = &mut self.state.write().await;
             let rep_sender = match state.queries.get(&qid) {
@@ -521,14 +529,14 @@ impl Primitives for Session {
                     return
                 }
             };
-            let resname = match state.reskey_to_resname(&reskey) {
+            let res_name = match state.reskey_to_resname(&reskey) {
                 Ok(name) => name,
                 Err(e) => {
                     error!("Received Reply for unkown reskey: {}", e);
                     return
                 }
             };
-            (rep_sender, ((resname, payload, info), source_kind, replier_id))
+            (rep_sender, Reply { data: Sample{res_name, payload, data_info}, source_kind, replier_id })
         };
         rep_sender.send(reply).await;
     }

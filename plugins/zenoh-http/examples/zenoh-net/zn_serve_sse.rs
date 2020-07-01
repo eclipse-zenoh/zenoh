@@ -55,8 +55,12 @@ async fn main() {
     let queryable = session.declare_queryable(&path.into(), EVAL).await.unwrap();
 
     async_std::task::spawn(
-        queryable.for_each(async move |(_res_name, _predicate, replies_sender)|{
-            replies_sender.send((path.to_string(), HTML.as_bytes().into(), None)).await;
+        queryable.for_each(async move |request|{
+            request.replies_sender.send(Sample {
+                res_name: path.to_string(),
+                payload: HTML.as_bytes().into(),
+                data_info: None,
+            }).await;
         })
     );
 

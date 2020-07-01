@@ -43,13 +43,25 @@ pub type Config = zenoh_router::runtime::Config;
 
 pub type Properties = HashMap<ZInt, Vec<u8>>;
 
-pub type Sample = (/*res_name:*/ String, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>);
+pub struct Sample {
+    pub res_name: String,
+    pub payload: RBuf,
+    pub data_info: Option<RBuf>,
+}
 
 pub type DataHandler = dyn FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static;
 
-pub type Query = (/*res_name:*/ String, /*predicate:*/ String, /*replies_sender*/ RepliesSender);
+pub struct Query {
+    pub res_name: String,
+    pub predicate: String,
+    pub replies_sender: RepliesSender,
+}
 
-pub type Reply = (Sample, /*source_kind:*/ ZInt, /*replier_id:*/ PeerId);
+pub struct Reply {
+    pub data: Sample,
+    pub source_kind: ZInt, 
+    pub replier_id: PeerId,
+}
 
 pub(crate) type Id = usize;
 
