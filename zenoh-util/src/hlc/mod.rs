@@ -107,6 +107,7 @@ mod tests {
     use crate::hlc::*;
     use std::time::{Duration};
     use async_std::task;
+    use async_std::sync::Arc;
     use futures::join;
 
     #[test]
@@ -116,41 +117,66 @@ mod tests {
             let id1: Vec<u8> = vec![0x01];
             let id2: Vec<u8> = vec![0x02];
             let id3: Vec<u8> = vec![0x03];
-            let hlc0 = HLC::with_system_time(id0.clone());
-            let hlc1 = HLC::with_system_time(id1.clone());
-            let hlc2 = HLC::with_system_time(id2.clone());
-            let hlc3 = HLC::with_system_time(id3.clone());
+            let hlc0 = Arc::new(HLC::with_system_time(id0.clone()));
+            let hlc1 = Arc::new(HLC::with_system_time(id1.clone()));
+            let hlc2 = Arc::new(HLC::with_system_time(id2.clone()));
+            let hlc3 = Arc::new(HLC::with_system_time(id3.clone()));
 
-            // Make 4 tasks to generate 10000 timestamps each with distinct HLCs
+            // Make 4 tasks to generate 10000 timestamps each with distinct HLCs,
+            // and also to update each other HLCs
             const NB_TIME: usize = 10000;
-            let t0 = task::spawn(async move {
-                let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
-                for _ in 0..NB_TIME {
-                    times.push(hlc0.new_timestamp().await)
-                }
-                times
-            });
-            let t1 = task::spawn(async move  {
-                let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
-                for _ in 0..NB_TIME {
-                    times.push(hlc1.new_timestamp().await)
-                }
-                times
-            });
-            let t2 = task::spawn(async move  {
-                let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
-                for _ in 0..NB_TIME {
-                    times.push(hlc2.new_timestamp().await)
-                }
-                times
-            });
-            let t3 = task::spawn(async move  {
-                let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
-                for _ in 0..NB_TIME {
-                    times.push(hlc3.new_timestamp().await)
-                }
-                times
-            });
+            let t0 = {
+                let hlc0 = hlc0.clone();
+                let hlc1 = hlc1.clone();
+                task::spawn(async move {
+                    let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
+                    for _ in 0..NB_TIME {
+                        let ts = hlc0.new_timestamp().await;
+                        assert!(hlc1.update_with_timestamp(&ts).await.is_ok());
+                        times.push(ts)
+                    }
+                    times
+                })
+            };
+            let t1 = {
+                let hlc1 = hlc1.clone();
+                let hlc2 = hlc2.clone();
+                task::spawn(async move  {
+                    let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
+                    for _ in 0..NB_TIME {
+                        let ts = hlc1.new_timestamp().await;
+                        assert!(hlc2.update_with_timestamp(&ts).await.is_ok());
+                        times.push(ts)
+                    }
+                    times
+                })
+            };
+            let t2 = {
+                let hlc2 = hlc3.clone();
+                let hlc3 = hlc3.clone();
+                task::spawn(async move  {
+                    let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
+                    for _ in 0..NB_TIME {
+                        let ts = hlc2.new_timestamp().await;
+                        assert!(hlc3.update_with_timestamp(&ts).await.is_ok());
+                        times.push(ts)
+                    }
+                    times
+                })
+            };
+            let t3 = {
+                let hlc3 = hlc3.clone();
+                let hlc0 = hlc0.clone();
+                task::spawn(async move  {
+                    let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
+                    for _ in 0..NB_TIME {
+                        let ts = hlc3.new_timestamp().await;
+                        assert!(hlc0.update_with_timestamp(&ts).await.is_ok());
+                        times.push(ts)
+                    }
+                    times
+                })
+            };
             let vecs = join!(t0, t1, t2, t3);
 
             // test that each timeseries is sorted (i.e. monotonic time)
