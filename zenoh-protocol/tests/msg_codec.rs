@@ -157,7 +157,7 @@ fn test_write_read_zenoh_message(msg: ZenohMessage) {
     println!("Read message from: {:?}", buf);
     let mut result = RBuf::from(&buf).read_zenoh_message().unwrap();
     println!("Message read: {:?}", result);
-    if let Some(attachment) = result.get_attachment_mut() {
+    if let Some(attachment) = &mut result.attachment {
         let properties = attachment.buffer.read_properties();
         println!("Properties read: {:?}", properties);
     }
