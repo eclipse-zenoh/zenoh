@@ -13,7 +13,7 @@
 //
 use async_trait::async_trait;
 
-use crate::proto::{ZenohMessage, ZenohBody, Declaration, Primitives, Reply, zmsg};
+use crate::proto::{ZenohMessage, ZenohBody, Declaration, Primitives, zmsg};
 use crate::session::MsgHandler;
 use zenoh_util::zerror;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
@@ -32,33 +32,34 @@ impl<P: Primitives + Send + Sync> DeMux<P> {
 impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
 
     async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
-        match msg.get_body() {
+        let reliability = msg.is_reliable();
+        match msg.body {
             ZenohBody::Declare{ declarations, .. } => {
                 for declaration in declarations {
                     match declaration {
                         Declaration::Resource { rid, key } => {
-                            self.primitives.resource(*rid, key).await;
+                            self.primitives.resource(rid, &key).await;
                         }
                         Declaration::Publisher { key } => {
-                            self.primitives.publisher(key).await;
+                            self.primitives.publisher(&key).await;
                         }
                         Declaration::Subscriber { key, info } => {
-                            self.primitives.subscriber(key, info).await;
+                            self.primitives.subscriber(&key, &info).await;
                         }
                         Declaration::Queryable { key } => {
-                            self.primitives.queryable(key).await;
+                            self.primitives.queryable(&key).await;
                         }
                         Declaration::ForgetResource { rid } => {
-                            self.primitives.forget_resource(*rid).await;
+                            self.primitives.forget_resource(rid).await;
                         }
                         Declaration::ForgetPublisher { key } => {
-                            self.primitives.forget_publisher(key).await;
+                            self.primitives.forget_publisher(&key).await;
                         }
                         Declaration::ForgetSubscriber { key } => {
-                            self.primitives.forget_subscriber(key).await;
+                            self.primitives.forget_subscriber(&key).await;
                         }
                         Declaration::ForgetQueryable { key } => {
-                            self.primitives.forget_queryable(key).await;
+                            self.primitives.forget_queryable(&key).await;
                         }
                     }
 
@@ -66,15 +67,15 @@ impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
             },
             
             ZenohBody::Data { key, info, payload, .. } => {
-                match &msg.reply_context {
+                match msg.reply_context {
                     None => {
-                        self.primitives.data(key, msg.is_reliable(), info, payload.clone()).await;
+                        self.primitives.data(&key, reliability, &info, payload).await;
                     }
                     Some(rep) => {
-                        match &rep.replier_id {
+                        match rep.replier_id {
                             Some(replier_id) => {
-                                let reply = Reply::ReplyData {source_kind: rep.source_kind, replier_id: replier_id.clone(), reskey: key.clone(), info: info.clone(), payload: payload.clone()};
-                                self.primitives.reply(rep.qid, reply).await}
+                                self.primitives.reply_data(rep.qid, rep.source_kind, replier_id, key, info, payload).await
+                            }
                             None => return zerror!(ZErrorKind::Other {descr: "ReplyData with no replier_id".to_string()})
                         }
                     }
@@ -82,23 +83,19 @@ impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
             },
 
             ZenohBody::Unit { .. } => {
-                if let Some(rep) = &msg.reply_context {
+                if let Some(rep) = msg.reply_context {
                     if rep.is_final {
-                        let reply = Reply::ReplyFinal {};
-                        self.primitives.reply(rep.qid, reply).await
-                    } else {
-                        let reply = Reply::SourceFinal {source_kind: rep.source_kind, replier_id: rep.replier_id.clone().unwrap()};
-                        self.primitives.reply(rep.qid, reply).await
+                        self.primitives.reply_final(rep.qid).await
                     }
                 }
             },
 
             ZenohBody::Query{ key, predicate, qid, target, consolidation, .. } => {
-                self.primitives.query(key, predicate, *qid, target.clone().unwrap_or_default(), consolidation.clone()).await;
+                self.primitives.query(&key, &predicate, qid, target.unwrap_or_default(), consolidation).await;
             },
 
             ZenohBody::Pull{ key, pull_id, max_samples, .. } => {
-                self.primitives.pull(zmsg::has_flag(msg.header, zmsg::flag::F), key, *pull_id, max_samples).await;
+                self.primitives.pull(zmsg::has_flag(msg.header, zmsg::flag::F), &key, pull_id, &max_samples).await;
             }
         }
 

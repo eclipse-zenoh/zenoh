@@ -30,7 +30,7 @@ const PORT_SEPARATOR: char = ':';
 const STR_TCP: &str = "tcp";
 // Defaults
 const DEFAULT_TRANSPORT: &str = STR_TCP;
-const DEFAULT_HOST: &str = "127.0.0.1";
+const DEFAULT_HOST: &str = "0.0.0.0";
 const DEFAULT_PORT: &str = "7447";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

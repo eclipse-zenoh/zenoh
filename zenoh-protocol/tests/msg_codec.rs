@@ -157,7 +157,7 @@ fn test_write_read_zenoh_message(msg: ZenohMessage) {
     println!("Read message from: {:?}", buf);
     let mut result = RBuf::from(&buf).read_zenoh_message().unwrap();
     println!("Message read: {:?}", result);
-    if let Some(attachment) = result.get_attachment_mut() {
+    if let Some(attachment) = &mut result.attachment {
         let properties = attachment.buffer.read_properties();
         println!("Properties read: {:?}", properties);
     }
@@ -177,7 +177,7 @@ fn scout_tests() {
 
         for w in wami.iter() {
             for a in attachment.iter() {
-                let msg = SessionMessage::make_scout(w.clone(), a.clone());
+                let msg = SessionMessage::make_scout(w.clone(), false, false, a.clone());
                 test_write_read_session_message(msg);
             }
         }
@@ -194,7 +194,7 @@ fn hello_tests() {
         for w in wami.iter() {
             for l in locators.iter() {
                 for a in attachment.iter() {
-                    let msg = SessionMessage::make_hello(w.clone(), l.clone(), a.clone());
+                    let msg = SessionMessage::make_hello(None, w.clone(), l.clone(), a.clone());
                     test_write_read_session_message(msg);
                 }
             }

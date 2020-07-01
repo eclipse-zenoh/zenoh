@@ -19,18 +19,18 @@ use zenoh::net::*;
 use zenoh::net::queryable::EVAL;
 use zenoh_protocol::proto::{encoding, kind};
 
-const HTML: &'static str = 
-"<div id=\"result\"></div>\
-<script>\
-if(typeof(EventSource) !== \"undefined\") {\
-  var source = new EventSource(\"/demo/sse/event\");\
-  source.addEventListener(\"PUT\", function(e) {\
-    document.getElementById(\"result\").innerHTML += e.data + \"<br>\";\
-  }, false);\
-} else {\
-  document.getElementById(\"result\").innerHTML = \"Sorry, your browser does not support server-sent events...\";\
-}\
-</script>";
+const HTML: &str = r#"
+<div id="result"></div>
+<script>
+if(typeof(EventSource) !== "undefined") {
+  var source = new EventSource("/demo/sse/event");
+  source.addEventListener("PUT", function(e) {
+    document.getElementById("result").innerHTML += e.data + "<br>";
+  }, false);
+} else {
+  document.getElementById("result").innerHTML = "Sorry, your browser does not support server-sent events...";
+}
+</script>"#;
 
 #[async_std::main]
 async fn main() {
@@ -38,22 +38,29 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net ssl server example")
-        .arg(Arg::from_usage("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'"))
-        .get_matches();
+      .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+          .possible_values(&["peer", "client"]).default_value("peer"))
+      .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
+      .get_matches();
 
-    let locator = args.value_of("locator").unwrap_or("").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+      .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let path    = "/demo/sse";
     let value   = "Pub from sse server!";
 
     println!("Openning session...");
-    let session = open(&locator, None).await.unwrap();
+    let session = open(config, None).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
-    let queryable = session.declare_queryable(&path.clone().into(), EVAL).await.unwrap();
+    let queryable = session.declare_queryable(&path.into(), EVAL).await.unwrap();
 
     async_std::task::spawn(
-        queryable.for_each(async move |(_res_name, _predicate, replies_sender)|{
-            replies_sender.send((path.to_string(), HTML.as_bytes().into(), None)).await;
+        queryable.for_each(async move |request|{
+            request.replies_sender.send(Sample {
+                res_name: path.to_string(),
+                payload: HTML.as_bytes().into(),
+                data_info: None,
+            }).await;
         })
     );
 

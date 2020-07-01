@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::App;
+use clap::{App, Arg};
 use async_std::future;
 use std::time::Instant;
 use zenoh::net::*;
@@ -31,12 +31,16 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net throughput sub example")
-        .arg("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'")
+        .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
         .get_matches();
 
-    let locator = args.value_of("locator").unwrap_or("").to_string();
-    
-    let session = open(&locator, None).await.unwrap();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
+
+    println!("Openning session...");
+    let session = open(config, None).await.unwrap();
 
     let reskey = RId(session.declare_resource(&RName("/test/thr".to_string())).await.unwrap());
 
@@ -52,9 +56,9 @@ async fn main() {
         move |_res_name: &str, _payload: RBuf, _data_info: Option<RBuf>| {
             if count == 0 {
                 start = Instant::now();
-                count = count + 1;
+                count += 1;
             } else if count < N {
-                count = count + 1;
+                count += 1;
             } else {
                 print_stats(start);
                 count = 0;

@@ -13,7 +13,7 @@
 //
 #![recursion_limit="256"]
 
-use clap::App;
+use clap::{App, Arg};
 use std::collections::HashMap;
 use futures::prelude::*;
 use futures::select;
@@ -26,17 +26,21 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net storage example")
-        .arg("-l, --locator=[LOCATOR]   'Sets the locator used to initiate the zenoh session'")
-        .arg("-s, --selector=[SELECTOR] 'Sets the selection of resources to store'")
+        .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
+        .arg(Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to store'")
+            .default_value("/demo/example/**"))
         .get_matches();
 
-    let locator  = args.value_of("locator").unwrap_or("").to_string();
-    let selector = args.value_of("selector").unwrap_or("/demo/example/**").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
+    let selector = args.value_of("selector").unwrap().to_string();
 
     let mut stored: HashMap<String, (RBuf, Option<RBuf>)> = HashMap::new();
 
     println!("Openning session...");
-    let session = open(&locator, None).await.unwrap();
+    let session = open(config, None).await.unwrap();
 
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
@@ -56,17 +60,22 @@ async fn main() {
     loop {
         select!(
             sample = sub.next().fuse() => {
-                let (res_name, payload, data_info) = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
-                stored.insert(res_name.into(), (payload, data_info));
+                let sample = sample.unwrap();
+                println!(">> [Subscription listener] Received ('{}': '{}')", 
+                    sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
+                stored.insert(sample.res_name.into(), (sample.payload, sample.data_info));
             },
 
             query = queryable.next().fuse() => {
-                let (res_name, predicate, replies_sender) = query.unwrap();
-                println!(">> [Query handler        ] Handling '{}?{}'", res_name, predicate);
-                for (rname, (data, data_info)) in stored.iter() {
-                    if rname_intersect(&res_name, rname) {
-                        replies_sender.send((rname.clone(), data.clone(), data_info.clone())).await;
+                let query = query.unwrap();
+                println!(">> [Query handler        ] Handling '{}?{}'", query.res_name, query.predicate);
+                for (stored_name, (data, data_info)) in stored.iter() {
+                    if rname_intersect(&query.res_name, stored_name) {
+                        query.replies_sender.send(Sample{
+                            res_name: stored_name.clone(),
+                            payload: data.clone(),
+                            data_info: data_info.clone(),
+                        }).await;
                     }
                 }
             },

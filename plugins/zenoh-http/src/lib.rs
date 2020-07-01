@@ -46,7 +46,7 @@ fn parse_http_port(arg: &str) -> String {
 }
 
 fn get_kind_str(sample: &Sample) -> String {
-    let info = sample.2.clone();
+    let info = sample.data_info.clone();
     let kind = match info {
         Some(mut buf) => match buf.read_datainfo() {
             Ok(info) => info.kind.or(Some(kind::DEFAULT)).unwrap(),
@@ -61,32 +61,26 @@ fn get_kind_str(sample: &Sample) -> String {
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let (reskey, payload, _data_info) = sample;
     format!("{{ \"key\": \"{}\", \"value\": \"{}\", \"time\": \"{}\" }}",
-        reskey, String::from_utf8_lossy(&payload.to_vec()), "None") // TODO timestamp
+        sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()), "None") // TODO timestamp
 }
 
 async fn to_json(results: async_std::sync::Receiver<Reply>) -> String {
-    let values = results.filter_map(async move |reply| match reply {
-        Reply::ReplyData {reskey, payload, info, ..} => 
-            Some(sample_to_json((reskey.to_string(), payload, info))),
-        _ => None,
-    }).collect::<Vec<String>>().await.join(",\n");
+    let values = results.filter_map(async move |reply| 
+        Some(sample_to_json(reply.data))
+    ).collect::<Vec<String>>().await.join(",\n");
     format!("[\n{}\n]\n", values)
 }
 
 fn sample_to_html(sample: Sample) -> String {
-    let (reskey, payload, _data_info) = sample;
     format!("<dt>{}</dt>\n<dd>{}</dd>\n",
-        reskey, String::from_utf8_lossy(&payload.to_vec()))
+    sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()))
 }
 
 async fn to_html(results: async_std::sync::Receiver<Reply>) -> String{
-    let values = results.filter_map(async move |reply| match reply {
-        Reply::ReplyData {reskey, payload, info, ..} => 
-            Some(sample_to_html((reskey.to_string(), payload, info))),
-        _ => None,
-    }).collect::<Vec<String>>().await.join("\n");
+    let values = results.filter_map(async move |reply| 
+        Some(sample_to_html(reply.data))
+    ).collect::<Vec<String>>().await.join("\n");
     format!("<dl>\n{}\n</dl>\n", values)
 }
 

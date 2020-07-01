@@ -13,10 +13,10 @@
 //
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use crate::core::{ZInt, ResKey};
+use crate::core::{ZInt, ResKey, PeerId};
 use crate::io::RBuf;
 use crate::proto::{channel, ZenohMessage, SubInfo, Declaration, Primitives,  
-    QueryTarget, QueryConsolidation, ReplyContext, Reply};
+    QueryTarget, QueryConsolidation, ReplyContext};
 use crate::session::MsgHandler;
 
 pub struct Mux<T: MsgHandler + Send + Sync + ?Sized> {
@@ -89,22 +89,15 @@ impl<T: MsgHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         self.handler.handle_message(ZenohMessage::make_query(reskey.clone(), predicate.to_string(), qid, target_opt, consolidation.clone(), None)).await;
     }
 
-    async fn reply(&self, qid: ZInt, reply: Reply) {
-        match reply {
-            Reply::ReplyData { source_kind, replier_id, reskey, info, payload } => {
-                self.handler.handle_message(ZenohMessage::make_data(
-                    channel::RELIABLE, reskey.clone(), info.clone(), payload.clone(), 
-                    Some(ReplyContext::make(qid, source_kind, Some(replier_id.clone()))), None)).await;
-            }
-            Reply::SourceFinal { source_kind, replier_id } => {
-                self.handler.handle_message(ZenohMessage::make_unit(
-                    channel::RELIABLE, Some(ReplyContext::make(qid, source_kind, Some(replier_id.clone()))), None)).await;
-            }
-            Reply::ReplyFinal {} => {
-                self.handler.handle_message(ZenohMessage::make_unit(
-                    channel::RELIABLE, Some(ReplyContext::make(qid, 0, None)), None)).await;
-            }
-        }
+    async fn reply_data(&self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
+        self.handler.handle_message(ZenohMessage::make_data(
+            channel::RELIABLE, reskey, info, payload, 
+            Some(ReplyContext::make(qid, source_kind, Some(replier_id))), None)).await;
+    }
+
+    async fn reply_final(&self, qid: ZInt) {
+        self.handler.handle_message(ZenohMessage::make_unit(
+            channel::RELIABLE, Some(ReplyContext::make(qid, 0, None)), None)).await;
     }
 
     async fn pull(&self, is_final: bool, reskey: &ResKey, pull_id: ZInt, max_samples: &Option<ZInt>) {

@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::App;
+use clap::{App, Arg};
 use zenoh::net::*;
 
 #[async_std::main]
@@ -20,17 +20,22 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net write example")
-        .arg("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'")
-        .arg("-p, --path=[PATH]       'Sets the name of the resource to write'")
-        .arg("-v, --value=[VALUE]     'Sets the value of the resource to write'")
+        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
+        .arg(Arg::from_usage("-p, --path=[PATH]        'The name of the resource to write.'")
+            .default_value("/demo/example/zenoh-rs-write"))
+        .arg(Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to write.'")
+            .default_value("Write from Rust!"))
         .get_matches();
 
-    let locator = args.value_of("locator").unwrap_or("").to_string();
-    let path    = args.value_of("path").unwrap_or("/demo/example/zenoh-rs-write").to_string();
-    let value   = args.value_of("value").unwrap_or("Write from Rust!").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
+    let path    = args.value_of("path").unwrap();
+    let value   = args.value_of("value").unwrap();
 
     println!("Openning session...");
-    let session = open(&locator, None).await.unwrap();
+    let session = open(config, None).await.unwrap();
 
     println!("Writing Data ('{}': '{}')...\n", path, value);
     session.write(&path.into(), value.as_bytes().into()).await.unwrap();

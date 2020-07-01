@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::App;
+use clap::{App, Arg};
 use zenoh::net::*;
 use zenoh::net::ResKey::*;
 
@@ -21,17 +21,20 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net throughput pub example")
-        .arg("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'")
-        .arg("<PAYLOAD_SIZE>          'Sets the size of the payload to publish'")
+        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
+        .arg(Arg::from_usage("<PAYLOAD_SIZE>          'Sets the size of the payload to publish'"))
         .get_matches();
 
-    let locator = args.value_of("locator").unwrap_or("").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let size    = args.value_of("PAYLOAD_SIZE").unwrap().parse::<usize>().unwrap();
 
     let data: RBuf = (0usize..size).map(|i| (i%10) as u8).collect::<Vec<u8>>().into();
 
     println!("Openning session...");
-    let session = open(&locator, None).await.unwrap();
+    let session = open(config, None).await.unwrap();
 
     let reskey = RId(session.declare_resource(&RName("/test/thr".to_string())).await.unwrap());
     let _publ = session.declare_publisher(&reskey).await.unwrap();

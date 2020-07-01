@@ -38,9 +38,15 @@ pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
     vec![]
 }
 
-pub async fn open(locator: &str, ps: Option<Properties>) -> ZResult<Session> {
-    // @TODO: implement
-    debug!("open(\"{}\", {:?})", locator, ps);
-    Ok(Session::new(locator, ps).await)
+/// # Example:
+/// ```
+/// use zenoh::net::*;
+///
+/// let session = open(Config::peer(), None);
+/// 
+/// ```
+pub async fn open(config: Config, ps: Option<Properties>) -> ZResult<Session> {
+    debug!("open(\"{}\", {:?})", config, ps);
+    Ok(Session::new(config, ps).await)
 }
 

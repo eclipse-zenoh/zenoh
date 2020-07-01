@@ -15,10 +15,9 @@ use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use async_std::future;
 use async_std::task;
 use clap::{App, Arg};
-use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::whatami;
 use zenoh_router::plugins::PluginsMgr;
-use zenoh_router::runtime::{ AdminSpace, Runtime };
+use zenoh_router::runtime::{ AdminSpace, Runtime, Config };
 
 
 fn main() {
@@ -26,10 +25,11 @@ fn main() {
         env_logger::init();
 
         let app = App::new("The zenoh router")
-        .arg(Arg::from_usage("-l, --locator=[LOCATOR] \
-            'The locator this router will bind to.'")
-            .default_value("tcp/127.0.0.1:7447"))
-        .arg(Arg::from_usage("-p, --peer=[LOCATOR]... \
+        .arg(Arg::from_usage("-l, --listener=[LOCATOR]... \
+            'A locator on which this router will listen for incoming sessions. \
+            Repeat this option to open several listeners.'")
+            .default_value("tcp/0.0.0.0:7447"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]... \
             'A peer locator this router will try to connect to. \
             Repeat this option to connect to several peers.'"));
 
@@ -37,28 +37,23 @@ fn main() {
         let mut plugins_mgr = PluginsMgr::new();
         plugins_mgr.search_and_load_plugins(&format!("{}zplugin_" ,DLL_PREFIX), DLL_SUFFIX).await;
         let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
+        let listeners = args.values_of("listener").map(|v| v.map(|l| l.parse().unwrap()).collect())
+            .or_else(|| Some(vec![])).unwrap();
+        let peers = args.values_of("peer").map(|v| v.map(|l| l.parse().unwrap()).collect())
+            .or_else(|| Some(vec![])).unwrap();
 
-        let runtime = Runtime::new(0, whatami::BROKER);
+        let config = Config {
+            whatami: whatami::BROKER,
+            peers,
+            listeners,
+            multicast_interface: "auto".to_string(),
+            scouting_delay: std::time::Duration::new(0, 200_000_000),
+        };
 
-        let self_locator: Locator = args.value_of("locator").unwrap().parse().unwrap();
-        log::trace!("self_locator: {}", self_locator);
-
-        {
-            let orchestrator = &mut runtime.write().await.orchestrator;
-
-            if let Err(_err) = orchestrator.add_acceptor(&self_locator).await {
-                log::error!("Unable to open listening {}!", self_locator);
-                std::process::exit(-1);
-            }
-
-            if  args.occurrences_of("peer") > 0 {
-                log::debug!("Peers: {:?}", args.values_of("peer").unwrap().collect::<Vec<&str>>());
-                for locator in args.values_of("peer").unwrap() {
-                    orchestrator.add_peer(&locator.parse().unwrap()).await;
-                }
-            }
-            // release runtime.write() lock for plugins to use Runtime
-        }
+        let runtime = match Runtime::new(0, config).await {
+            Ok(runtime) => runtime,
+            _ => std::process::exit(-1),
+        };
         
         log::debug!("Start plugins...");
         plugins_mgr.start_plugins(&runtime, &args).await;

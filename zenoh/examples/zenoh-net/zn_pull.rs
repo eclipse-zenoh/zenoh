@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::App;
+use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
 use zenoh::net::*;
@@ -22,15 +22,19 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net pull example")
-        .arg("-l, --locator=[LOCATOR]   'Sets the locator used to initiate the zenoh session'")
-        .arg("-s, --selector=[SELECTOR] 'Sets the selection of resources to pull'")
+        .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
+        .arg(Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to pull'")
+            .default_value("/demo/example/**"))
         .get_matches();
 
-    let locator  = args.value_of("locator").unwrap_or("").to_string();
-    let selector = args.value_of("selector").unwrap_or("/demo/example/**").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
+    let selector = args.value_of("selector").unwrap().to_string();
 
     println!("Openning session...");
-    let session = open(&locator, None).await.unwrap();
+    let session = open(config, None).await.unwrap();
 
     println!("Declaring Subscriber on {}", selector);
     let sub_info = SubInfo {
@@ -48,9 +52,10 @@ async fn main() {
     loop {
         select!(
             sample = sub.next().fuse() => {
-                let (res_name, payload, data_info) = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')", res_name, String::from_utf8_lossy(&payload.to_vec()));
-                if let Some(mut info) = data_info {
+                let sample = sample.unwrap();
+                println!(">> [Subscription listener] Received ('{}': '{}')", 
+                    sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
+                if let Some(mut info) = sample.data_info {
                     let _info = info.read_datainfo();
                 }
             },

@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::App;
+use clap::{App, Arg};
 use zenoh::net::*;
 
 #[async_std::main]
@@ -20,17 +20,20 @@ async fn main() {
     env_logger::init();
 
     let args = App::new("zenoh-net info example")
-        .arg("-l, --locator=[LOCATOR] 'Sets the locator used to initiate the zenoh session'")
+        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
         .get_matches();
 
-    let locator = args.value_of("locator").unwrap_or("").to_string();
+    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     
     let mut ps = Properties::new();
-    ps.insert(ZN_USER_KEY, "user".as_bytes().to_vec());
-    ps.insert(ZN_PASSWD_KEY, "password".as_bytes().to_vec());
+    ps.insert(ZN_USER_KEY, b"user".to_vec());
+    ps.insert(ZN_PASSWD_KEY, b"password".to_vec());
 
     println!("Openning session...");
-    let session = open(&locator, Some(ps)).await.unwrap();
+    let session = open(config, Some(ps)).await.unwrap();
 
     let info = session.info();
     println!("LOCATOR :  \"{}\"", String::from_utf8_lossy(info.get(&ZN_INFO_PEER_KEY).unwrap()));

@@ -14,22 +14,23 @@
 use async_std::sync::Arc;
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey};
-use zenoh_protocol::proto::{QueryTarget, QueryConsolidation, Reply, whatami};
+use zenoh_protocol::core::{ZInt, ResKey, PeerId};
+use zenoh_protocol::io::{RBuf};
+use zenoh_protocol::proto::{QueryTarget, QueryConsolidation, whatami};
 
 use crate::routing::broker::Tables;
-use crate::routing::face::Face;
+use crate::routing::face::FaceState;
 use crate::routing::resource::{Resource, Context};
 
 
 pub(crate) struct Query {
-    src_face: Arc<Face>,
+    src_face: Arc<FaceState>,
     src_qid: ZInt,
 }
 
-type QueryRoute = HashMap<usize, (Arc<Face>, u64, String, u64)>;
+type QueryRoute = HashMap<usize, (Arc<FaceState>, u64, String, u64)>;
 
-pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<Face>, prefixid: u64, suffix: &str) {
+pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: u64, suffix: &str) {
     let prefix = {
         match prefixid {
             0 => {Some(tables.root_res.clone())}
@@ -109,7 +110,7 @@ pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<Face>,
     }
 }
 
-pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<Face>, prefixid: u64, suffix: &str) {
+pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: u64, suffix: &str) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => {
             match Resource::get_resource(prefix, suffix) {
@@ -128,7 +129,7 @@ pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<Face>, pref
     }
 }
 
-async fn route_query_to_map(tables: &mut Tables, face: &Arc<Face>, qid: ZInt, rid: u64, suffix: &str/*, _predicate: &str, */
+async fn route_query_to_map(tables: &mut Tables, face: &Arc<FaceState>, qid: ZInt, rid: u64, suffix: &str/*, _predicate: &str, */
 /*_qid: ZInt, _target: &Option<QueryTarget>, _consolidation: &QueryConsolidation*/) -> Option<QueryRoute> {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => {
@@ -139,7 +140,9 @@ async fn route_query_to_map(tables: &mut Tables, face: &Arc<Face>, qid: ZInt, ri
                 unsafe {
                     let mut res = res.upgrade().unwrap();
                     for (sid, context) in &mut Arc::get_mut_unchecked(&mut res).contexts {
-                        if context.qabl && ! Arc::ptr_eq(&face, &context.face)
+                        if context.qabl && ! Arc::ptr_eq(&face, &context.face) && 
+                            ((face.whatami != whatami::PEER && face.whatami != whatami::BROKER)
+                            || (context.face.whatami != whatami::PEER && context.face.whatami != whatami::BROKER))
                         {
                             faces.entry(*sid).or_insert_with( || {
                                 let (rid, suffix) = Resource::get_best_key(prefix, suffix, *sid);
@@ -160,15 +163,15 @@ async fn route_query_to_map(tables: &mut Tables, face: &Arc<Face>, qid: ZInt, ri
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<Face>, rid: u64, suffix: &str, predicate: &str, 
+pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<FaceState>, rid: u64, suffix: &str, predicate: &str, 
                                 qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
     if let Some(outfaces) = route_query_to_map(tables, face, qid, rid, suffix).await {
         let outfaces = outfaces.into_iter().filter(|(_, (outface, _, _, _))| face.whatami != whatami::PEER || outface.whatami != whatami::PEER)
-                                           .map(|(_, v)| v).collect::<Vec<(Arc<Face>, u64, String, u64)>>();
+                                           .map(|(_, v)| v).collect::<Vec<(Arc<FaceState>, u64, String, u64)>>();
         match outfaces.len() {
             0 => {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face.id, qid);
-                face.primitives.clone().reply(qid, Reply::ReplyFinal).await
+                face.primitives.clone().reply_final(qid).await
             },
             _ => {
                 for (outface, rid, suffix, qid) in outfaces {
@@ -179,36 +182,38 @@ pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<Face>, rid: u64,
     }
 }
 
-pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<Face>, qid: ZInt, reply: Reply) {
-    log::debug!("**** in route_reply...");
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn route_reply_data(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
     match face.pending_queries.get(&qid) {
         Some(query) => {
-            match reply {
-                Reply::ReplyData {..} | Reply::SourceFinal {..} => {
-                    query.src_face.primitives.clone().reply(query.src_qid, reply).await;
+            query.src_face.primitives.clone().reply_data(query.src_qid, source_kind, replier_id, reskey, info, payload).await;
+        }
+        None => {log::error!("Route reply for unknown query!")}
+    }
+}
+
+pub(crate) async fn route_reply_final(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt) {
+    match face.pending_queries.get(&qid) {
+        Some(query) => {
+            unsafe {
+                log::debug!("Received final reply {}:{} from face {}", query.src_face.id, qid, face.id);
+                if Arc::strong_count(&query) == 1 {
+                    log::debug!("Propagate final reply {}:{}", query.src_face.id, qid);
+                    query.src_face.primitives.clone().reply_final(query.src_qid).await;
                 }
-                Reply::ReplyFinal {..} => {
-                    unsafe {
-                        log::debug!("Received final reply {}:{} from face {}", query.src_face.id, qid, face.id);
-                        if Arc::strong_count(&query) == 1 {
-                            log::debug!("Propagate final reply {}:{}", query.src_face.id, qid);
-                            query.src_face.primitives.clone().reply(query.src_qid, Reply::ReplyFinal).await;
-                        }
-                        Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
-                    }
-                }
+                Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
             }
         }
         None => {log::error!("Route reply for unknown query!")}
     }
 }
 
-pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<Face>) {
+pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
     for query in face.pending_queries.values() {
         log::debug!("Finalize reply {}:{} for closing face {}", query.src_face.id, query.src_qid, face.id);
         if Arc::strong_count(&query) == 1 {
             log::debug!("Propagate final reply {}:{}", query.src_face.id, query.src_qid);
-            query.src_face.primitives.clone().reply(query.src_qid, Reply::ReplyFinal).await;
+            query.src_face.primitives.clone().reply_final(query.src_qid).await;
         }
     }
     unsafe{ Arc::get_mut_unchecked(face).pending_queries.clear(); }

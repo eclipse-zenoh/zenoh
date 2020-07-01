@@ -172,6 +172,10 @@ impl SessionManager {
         SessionManager(manager_inner)
     }
 
+    pub fn pid(&self) -> PeerId {
+        self.0.config.pid.clone()
+    }
+
     /*************************************/
     /*              SESSION              */
     /*************************************/
@@ -242,6 +246,13 @@ impl SessionManager {
         })
     }
 
+    pub async fn get_session(&self, peer: &PeerId) -> Option<Session> {
+        match self.0.get_session(peer).await {
+            Ok(session) => Some(session),
+            Err(_) => None,
+        }
+    }
+
     pub async fn get_sessions(&self) -> Vec<Session> {
         self.0.get_sessions().await
     }
@@ -249,7 +260,7 @@ impl SessionManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_locator(&self, locator: &Locator) -> ZResult<()> {
+    pub async fn add_locator(&self, locator: &Locator) -> ZResult<Locator> {
         let manager = self.0.get_or_new_link_manager(&self.0, &locator.get_proto()).await;
         manager.new_listener(locator).await
     }
