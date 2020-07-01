@@ -16,9 +16,9 @@ use async_trait::async_trait;
 use futures::future;
 use log::trace;
 use zenoh_protocol:: {
-    core::{ ResKey, ZInt },
+    core::{ ResKey, ZInt, PeerId },
     io::RBuf,
-    proto::{ Primitives, QueryTarget, QueryConsolidation, Reply, SubInfo },
+    proto::{ Primitives, QueryTarget, QueryConsolidation, SubInfo },
     proto::queryable::EVAL
 };
 use super::Runtime;
@@ -144,24 +144,17 @@ impl Primitives for AdminSpace {
         let replier_id = self.runtime.read().await.pid.clone();   // @TODO build/use prebuilt specific pid
 
         task::spawn( async move { // router is not re-entrant
-            primitives.reply(qid, Reply::ReplyData {
-                source_kind: EVAL, 
-                replier_id: replier_id.clone(),
-                reskey, 
-                info: None,
-                payload,
-            }).await;
-
-            primitives.reply(qid, Reply::SourceFinal {
-                source_kind: EVAL, 
-                replier_id,
-            }).await;
-            primitives.reply(qid, Reply::ReplyFinal).await;
+            primitives.reply_data(qid, EVAL, replier_id.clone(), reskey, None, payload).await;
+            primitives.reply_final(qid).await;
         });
     }
 
-    async fn reply(&self, qid: ZInt, reply: Reply) {
-        trace!("recv Reply {:?} {:?}", qid, reply);
+    async fn reply_data(&self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
+        trace!("recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}", qid, source_kind, replier_id, reskey, info, payload);
+    }
+
+    async fn reply_final(&self, qid: ZInt) {
+        trace!("recv ReplyFinal {:?}", qid);
     }
 
     async fn pull(&self, _is_final: bool, _reskey: &ResKey, _pull_id: ZInt, _max_samples: &Option<ZInt>) {

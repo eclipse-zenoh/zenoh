@@ -42,15 +42,8 @@ async fn main() {
         &selector.into(), "",
         QueryTarget::default(),
         QueryConsolidation::default()
-    ).await.unwrap().for_each(
-        async move |reply: Reply| {
-            match reply {
-                Reply::ReplyData {reskey, payload, ..} => {println!(">> [Reply handler] received reply data {:?} : {}", 
-                                                            reskey, String::from_utf8_lossy(&payload.to_vec()))}
-                Reply::SourceFinal {..} => {println!(">> [Reply handler] received source final.")}
-                Reply::ReplyFinal => {println!(">> [Reply handler] received reply final.")}
-            }
-        }
+    ).await.unwrap().for_each( async move |((reskey, payload, _info), _source_kind, _replier_id)| 
+        println!(">> [Reply handler] received reply data {:?} : {}",  reskey, String::from_utf8_lossy(&payload.to_vec()))
     ).await;
 
     session.close().await.unwrap();

@@ -23,7 +23,7 @@ use log::{error, warn, trace};
 use zenoh_protocol:: {
     core::{ rname, ResourceId, ResKey },
     io::RBuf,
-    proto::{ Primitives, QueryTarget, QueryConsolidation, Reply, queryable},
+    proto::{ Primitives, QueryTarget, QueryConsolidation, queryable},
 };
 use zenoh_router::runtime::Runtime;
 use zenoh_util::{zerror, zconfigurable};
@@ -503,33 +503,16 @@ impl Primitives for Session {
         drop(rep_sender); // all senders need to be dropped for the channel to close
 
         task::spawn( async move { // router is not re-entrant
-            while let Some((kind, sample_opt)) = rep_receiver.next().await {
-                match sample_opt {
-                    Some((resname, payload, info)) => {
-                        primitives.reply(qid, Reply::ReplyData {
-                            source_kind: kind, 
-                            replier_id: pid.clone(),
-                            reskey: ResKey::RName(resname), 
-                            info,
-                            payload,
-                        }).await;
-                    }
-                    None => {
-                        primitives.reply(qid, Reply::SourceFinal {
-                            source_kind: kind, 
-                            replier_id: pid.clone(),
-                        }).await;
-                    }
-                }
+            while let Some((kind, (resname, payload, info))) = rep_receiver.next().await {
+                primitives.reply_data(qid, kind, pid.clone(), ResKey::RName(resname), info, payload).await;
             }
-
-            primitives.reply(qid, Reply::ReplyFinal).await;
+            primitives.reply_final(qid).await;
         });
     }
 
-    async fn reply(&self, qid: ZInt, mut reply: Reply) {
-        trace!("recv Reply {:?} {:?}", qid, reply);
-        let rep_sender = {
+    async fn reply_data(&self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
+        trace!("recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}", qid, source_kind, replier_id, reskey, info, payload);
+        let (rep_sender, reply) = {
             let state = &mut self.state.write().await;
             let rep_sender = match state.queries.get(&qid) {
                 Some(rep_sender) => rep_sender.clone(),
@@ -538,23 +521,22 @@ impl Primitives for Session {
                     return
                 }
             };
-            match &mut reply {
-                Reply::ReplyData {ref mut reskey, ..} => {
-                    let resname = match state.reskey_to_resname(&reskey) {
-                        Ok(name) => name,
-                        Err(e) => {
-                            error!("Received Reply for unkown reskey: {}", e);
-                            return
-                        }
-                    };
-                    *reskey = ResKey::RName(resname);
+            let resname = match state.reskey_to_resname(&reskey) {
+                Ok(name) => name,
+                Err(e) => {
+                    error!("Received Reply for unkown reskey: {}", e);
+                    return
                 }
-                Reply::SourceFinal {..} => {} 
-                Reply::ReplyFinal {..} => {state.queries.remove(&qid);}
             };
-            rep_sender
+            (rep_sender, ((resname, payload, info), source_kind, replier_id))
         };
         rep_sender.send(reply).await;
+    }
+
+
+    async fn reply_final(&self, qid: ZInt) {
+        trace!("recv ReplyFinal {:?}", qid);
+        self.state.write().await.queries.remove(&qid);
     }
 
     async fn pull(&self, _is_final: bool, _reskey: &ResKey, _pull_id: ZInt, _max_samples: &Option<ZInt>) {

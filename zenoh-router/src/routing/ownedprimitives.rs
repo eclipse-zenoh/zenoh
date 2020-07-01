@@ -13,9 +13,9 @@
 //
 use async_std::sync::Arc;
 
-use zenoh_protocol::core::{ZInt, ResKey};
+use zenoh_protocol::core::{ZInt, ResKey, PeerId};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{SubInfo, QueryTarget, QueryConsolidation, Primitives, Reply};
+use zenoh_protocol::proto::{SubInfo, QueryTarget, QueryConsolidation, Primitives};
 
 
 #[derive(Clone)]
@@ -60,8 +60,11 @@ impl OwnedPrimitives {
     pub async fn query(self, reskey: ResKey, predicate: String, qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
         self.primitives.query(&reskey, &predicate, qid, target, consolidation).await
     }
-    pub async fn reply(self, qid: ZInt, reply: Reply) {
-        self.primitives.reply(qid, reply).await
+    pub async fn reply_data(self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
+        self.primitives.reply_data(qid, source_kind, replier_id, reskey, info, payload).await
+    }
+    pub async fn reply_final(self, qid: ZInt) {
+        self.primitives.reply_final(qid).await
     }
     pub async fn pull(self, is_final: bool, reskey: ResKey, pull_id: ZInt, max_samples: Option<ZInt>){
         self.primitives.pull(is_final, &reskey, pull_id, &max_samples).await

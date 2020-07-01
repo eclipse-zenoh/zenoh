@@ -14,8 +14,9 @@
 use async_std::sync::Arc;
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey};
-use zenoh_protocol::proto::{QueryTarget, QueryConsolidation, Reply, whatami};
+use zenoh_protocol::core::{ZInt, ResKey, PeerId};
+use zenoh_protocol::io::{RBuf};
+use zenoh_protocol::proto::{QueryTarget, QueryConsolidation, whatami};
 
 use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
@@ -170,7 +171,7 @@ pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<FaceState>, rid:
         match outfaces.len() {
             0 => {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face.id, qid);
-                face.primitives.clone().reply(qid, Reply::ReplyFinal).await
+                face.primitives.clone().reply_final(qid).await
             },
             _ => {
                 for (outface, rid, suffix, qid) in outfaces {
@@ -181,23 +182,26 @@ pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<FaceState>, rid:
     }
 }
 
-pub(crate) async fn route_reply(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt, reply: Reply) {
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn route_reply_data(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
     match face.pending_queries.get(&qid) {
         Some(query) => {
-            match reply {
-                Reply::ReplyData {..} | Reply::SourceFinal {..} => {
-                    query.src_face.primitives.clone().reply(query.src_qid, reply).await;
+            query.src_face.primitives.clone().reply_data(query.src_qid, source_kind, replier_id, reskey, info, payload).await;
+        }
+        None => {log::error!("Route reply for unknown query!")}
+    }
+}
+
+pub(crate) async fn route_reply_final(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt) {
+    match face.pending_queries.get(&qid) {
+        Some(query) => {
+            unsafe {
+                log::debug!("Received final reply {}:{} from face {}", query.src_face.id, qid, face.id);
+                if Arc::strong_count(&query) == 1 {
+                    log::debug!("Propagate final reply {}:{}", query.src_face.id, qid);
+                    query.src_face.primitives.clone().reply_final(query.src_qid).await;
                 }
-                Reply::ReplyFinal {..} => {
-                    unsafe {
-                        log::debug!("Received final reply {}:{} from face {}", query.src_face.id, qid, face.id);
-                        if Arc::strong_count(&query) == 1 {
-                            log::debug!("Propagate final reply {}:{}", query.src_face.id, qid);
-                            query.src_face.primitives.clone().reply(query.src_qid, Reply::ReplyFinal).await;
-                        }
-                        Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
-                    }
-                }
+                Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
             }
         }
         None => {log::error!("Route reply for unknown query!")}
@@ -209,7 +213,7 @@ pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Ar
         log::debug!("Finalize reply {}:{} for closing face {}", query.src_face.id, query.src_qid, face.id);
         if Arc::strong_count(&query) == 1 {
             log::debug!("Propagate final reply {}:{}", query.src_face.id, query.src_qid);
-            query.src_face.primitives.clone().reply(query.src_qid, Reply::ReplyFinal).await;
+            query.src_face.primitives.clone().reply_final(query.src_qid).await;
         }
     }
     unsafe{ Arc::get_mut_unchecked(face).pending_queries.clear(); }

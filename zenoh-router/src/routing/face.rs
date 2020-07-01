@@ -15,9 +15,9 @@ use async_trait::async_trait;
 use async_std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey};
+use zenoh_protocol::core::{ZInt, ResKey, PeerId};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{Primitives, SubInfo, QueryTarget, QueryConsolidation, Reply, WhatAmI};
+use zenoh_protocol::proto::{Primitives, SubInfo, QueryTarget, QueryConsolidation, WhatAmI};
 
 use crate::routing::broker::*;
 use crate::routing::ownedprimitives::OwnedPrimitives;
@@ -131,9 +131,14 @@ impl Primitives for Face {
         route_query(&mut tables, &self.state, prefixid, suffix, predicate, qid, target, consolidation).await;
     }
 
-    async fn reply(&self, qid: ZInt, reply: Reply) {
+    async fn reply_data(&self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
         let mut tables = self.tables.write().await;
-        route_reply(&mut tables, &mut self.state.clone(), qid, reply).await;
+        route_reply_data(&mut tables, &mut self.state.clone(), qid, source_kind, replier_id, reskey, info, payload).await;
+    }
+
+    async fn reply_final(&self, qid: ZInt) {
+        let mut tables = self.tables.write().await;
+        route_reply_final(&mut tables, &mut self.state.clone(), qid).await;
     }
 
     async fn pull(&self, is_final: bool, reskey: &ResKey, pull_id: ZInt, max_samples: &Option<ZInt>) {

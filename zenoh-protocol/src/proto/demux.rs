@@ -13,7 +13,7 @@
 //
 use async_trait::async_trait;
 
-use crate::proto::{ZenohMessage, ZenohBody, Declaration, Primitives, Reply, zmsg};
+use crate::proto::{ZenohMessage, ZenohBody, Declaration, Primitives, zmsg};
 use crate::session::MsgHandler;
 use zenoh_util::zerror;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
@@ -74,8 +74,8 @@ impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
                     Some(rep) => {
                         match rep.replier_id {
                             Some(replier_id) => {
-                                let reply = Reply::ReplyData {source_kind: rep.source_kind, replier_id, reskey: key, info, payload};
-                                self.primitives.reply(rep.qid, reply).await}
+                                self.primitives.reply_data(rep.qid, rep.source_kind, replier_id, key, info, payload).await
+                            }
                             None => return zerror!(ZErrorKind::Other {descr: "ReplyData with no replier_id".to_string()})
                         }
                     }
@@ -85,11 +85,7 @@ impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
             ZenohBody::Unit { .. } => {
                 if let Some(rep) = msg.reply_context {
                     if rep.is_final {
-                        let reply = Reply::ReplyFinal {};
-                        self.primitives.reply(rep.qid, reply).await
-                    } else {
-                        let reply = Reply::SourceFinal {source_kind: rep.source_kind, replier_id: rep.replier_id.unwrap()};
-                        self.primitives.reply(rep.qid, reply).await
+                        self.primitives.reply_final(rep.qid).await
                     }
                 }
             },

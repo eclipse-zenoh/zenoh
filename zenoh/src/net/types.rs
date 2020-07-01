@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use pin_project_lite::pin_project;
 use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
-use log::error;
 
 pub use zenoh_protocol::io::RBuf;
 pub use zenoh_protocol::core::{
@@ -33,7 +32,6 @@ pub use zenoh_protocol::proto::{
     Target,
     QueryTarget,
     QueryConsolidation,
-    Reply,
     Primitives,
     WhatAmI,
     whatami,
@@ -45,7 +43,13 @@ pub type Config = zenoh_router::runtime::Config;
 
 pub type Properties = HashMap<ZInt, Vec<u8>>;
 
+pub type Sample = (/*res_name:*/ String, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>);
+
 pub type DataHandler = dyn FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static;
+
+pub type Query = (/*res_name:*/ String, /*predicate:*/ String, /*replies_sender*/ RepliesSender);
+
+pub type Reply = (Sample, /*source_kind:*/ ZInt, /*replier_id:*/ PeerId);
 
 pub(crate) type Id = usize;
 
@@ -66,8 +70,6 @@ impl fmt::Debug for Publisher {
         write!(f, "Publisher{{ id:{} }}", self.id)
     }
 }
-
-pub type Sample = (/*res_name:*/ String, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>);
 
 pin_project! {
     #[derive(Clone)]
@@ -138,8 +140,6 @@ impl fmt::Debug for DirectSubscriber {
     }
 }
 
-pub type Query = (/*res_name:*/ String, /*predicate:*/ String, /*replies_sender*/ RepliesSender);
-
 pin_project! {
     #[derive(Clone)]
     pub struct Queryable {
@@ -176,19 +176,19 @@ impl fmt::Debug for Queryable {
 
 pub struct RepliesSender{
     pub(crate) kind: ZInt,
-    pub(crate) sender: Sender<(ZInt, Option<Sample>)>,
+    pub(crate) sender: Sender<(ZInt, Sample)>,
 }
 
 impl RepliesSender{
     pub async fn send(&'_ self, msg: Sample) {
-        self.sender.send((self.kind, Some(msg))).await
+        self.sender.send((self.kind, msg)).await
     }
 
     pub fn try_send(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
-        match self.sender.try_send((self.kind, Some(msg))) {
+        match self.sender.try_send((self.kind, msg)) {
             Ok(()) => {Ok(())}
-            Err(TrySendError::Full(sample)) => {Err(TrySendError::Full(sample.1.unwrap()))}
-            Err(TrySendError::Disconnected(sample)) => {Err(TrySendError::Disconnected(sample.1.unwrap()))}
+            Err(TrySendError::Full(sample)) => {Err(TrySendError::Full(sample.1))}
+            Err(TrySendError::Disconnected(sample)) => {Err(TrySendError::Disconnected(sample.1))}
         }
     }
 
@@ -208,18 +208,3 @@ impl RepliesSender{
         self.sender.len()
     }
 }
-
-impl Drop for RepliesSender {
-    fn drop(&mut self) {
-        match self.sender.try_send((self.kind, None)) {
-            Ok(()) => {}
-            Err(TrySendError::Full(_)) => {
-                error!("Cannot send SourceFinal message : channel is full ! ") // @TODO
-            }
-            Err(TrySendError::Disconnected(_)) => {
-                error!("Cannot send SourceFinal message : channel is disconnected ! ") // Should never happen
-            }
-        }
-    }
-}
-

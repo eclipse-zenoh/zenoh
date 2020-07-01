@@ -67,11 +67,9 @@ fn sample_to_json(sample: Sample) -> String {
 }
 
 async fn to_json(results: async_std::sync::Receiver<Reply>) -> String {
-    let values = results.filter_map(async move |reply| match reply {
-        Reply::ReplyData {reskey, payload, info, ..} => 
-            Some(sample_to_json((reskey.to_string(), payload, info))),
-        _ => None,
-    }).collect::<Vec<String>>().await.join(",\n");
+    let values = results.filter_map(async move |((reskey, payload, info), _source_kind, _replier_id)| 
+        Some(sample_to_json((reskey.to_string(), payload, info)))
+    ).collect::<Vec<String>>().await.join(",\n");
     format!("[\n{}\n]\n", values)
 }
 
@@ -82,11 +80,9 @@ fn sample_to_html(sample: Sample) -> String {
 }
 
 async fn to_html(results: async_std::sync::Receiver<Reply>) -> String{
-    let values = results.filter_map(async move |reply| match reply {
-        Reply::ReplyData {reskey, payload, info, ..} => 
-            Some(sample_to_html((reskey.to_string(), payload, info))),
-        _ => None,
-    }).collect::<Vec<String>>().await.join("\n");
+    let values = results.filter_map(async move |((reskey, payload, info), _source_kind, _replier_id)| 
+        Some(sample_to_html((reskey.to_string(), payload, info)))
+    ).collect::<Vec<String>>().await.join("\n");
     format!("<dl>\n{}\n</dl>\n", values)
 }
 
