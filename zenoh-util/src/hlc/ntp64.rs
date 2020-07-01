@@ -27,10 +27,11 @@ const FRAC_MASK: u64 = 0xFFFF_FFFFu64;
 const NANO_PER_SEC: u64 = 1_000_000_000;
 
 
-// A timestap using the NTP 64-bits format (https://tools.ietf.org/html/rfc5905#section-6)
-// With the assumption that it's relative to UNIX_EPOCH (1970-01-01 00:00:00 UTC)
-// Note: this imply the maximum timestamp will be reached on 7 Feb 2106.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+// A timestamp using the NTP 64-bits format (https://tools.ietf.org/html/rfc5905#section-6)
+// Note that this timestamp in actually similar to a std::time::Duration, as it doesn't
+// define an EPOCH. Only the as_system_time() and Display::fmt() operation assume that
+// a UNIX_EPOCH (1st Jan 1970) to display the timpestamp in RFC-3339 format.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct NTP64( pub(crate) u64);
 
 impl NTP64 {
@@ -141,39 +142,4 @@ impl From<Duration> for NTP64 {
         let nanos: u64 = duration.subsec_nanos().into();
         NTP64((secs << 32) + ((nanos * FRAC_PER_SEC) / NANO_PER_SEC) +1)
     }
-}
-
-impl From<SystemTime> for NTP64 {
-    fn from(systime: SystemTime) -> NTP64 {
-        Self::from(systime.duration_since(UNIX_EPOCH).unwrap())
-    }
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    use crate::hlc::*;
-    use std::time::SystemTime;
-
-    #[test]
-    fn test_ntp64() {
-        let now = SystemTime::now();
-        println!("now: {:?}", now);
-        
-        let ts = NTP64::from(now);
-        println!("now NTP64: {:?}", ts);
-        println!("now NTP64: {}", ts);
-
-
-        println!("ts: {:?} -> {}", SystemTime::now(), NTP64::from(SystemTime::now()));
-        println!("ts: {:?} -> {}", SystemTime::now(), NTP64::from(SystemTime::now()));
-        println!("ts: {:?} -> {}", SystemTime::now(), NTP64::from(SystemTime::now()));
-        println!("ts: {:?} -> {}", SystemTime::now(), NTP64::from(SystemTime::now()));
-        println!("ts: {:?} -> {}", SystemTime::now(), NTP64::from(SystemTime::now()));
-        println!("ts: {:?} -> {}", SystemTime::now(), NTP64::from(SystemTime::now()));
-
-    }
-
-
 }

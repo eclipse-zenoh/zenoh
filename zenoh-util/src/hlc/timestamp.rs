@@ -53,7 +53,7 @@ impl fmt::Debug for Timestamp {
 #[cfg(test)]
 mod tests {
     use crate::hlc::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::UNIX_EPOCH;
 
     #[test]
     fn test_timestamp() {
@@ -64,12 +64,12 @@ mod tests {
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 
             0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x11];
     
-        let ts1_epoch = Timestamp::new(NTP64::from(UNIX_EPOCH), id1.clone());
+        let ts1_epoch = Timestamp::new(Default::default(), id1.clone());
         assert_eq!(ts1_epoch.get_time().as_system_time(), UNIX_EPOCH);
         assert_eq!(ts1_epoch.get_id(), &id1[..]);
 
 
-        let ts2_epoch = Timestamp::new(NTP64::from(UNIX_EPOCH), id2.clone());
+        let ts2_epoch = Timestamp::new(Default::default(), id2.clone());
         assert_eq!(ts2_epoch.get_time().as_system_time(), UNIX_EPOCH);
         assert_eq!(ts2_epoch.get_id(), &id2[..]);
 
@@ -77,7 +77,7 @@ mod tests {
         assert_ne!(ts1_epoch, ts2_epoch);
         assert!(ts1_epoch < ts2_epoch);
 
-        let now = SystemTime::now();
+        let now = system_time_clock();
         let ts1_now = Timestamp::new(NTP64::from(now), id1);
         let ts2_now = Timestamp::new(NTP64::from(now), id2);
         assert_ne!(ts1_now, ts2_now);

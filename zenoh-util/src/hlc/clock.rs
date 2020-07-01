@@ -11,16 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#![feature(is_sorted)]
+use super::ntp64::NTP64;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-#[macro_use]
-extern crate lazy_static;
+// A function giving the current time
+pub type Clock = dyn Fn() -> NTP64 + Send + Sync + 'static;
 
-pub mod collections;
-pub mod core;
-pub mod sync;
-pub mod net;
-pub mod hlc;
-
-pub use crate::core::macros::*;
-
+// A clock relying on std::time::SystemTime::now(), and returning
+// a NTP64 relative to std::time::UNIX_EPOCH (1st Jan 1970).
+pub fn system_time_clock() -> NTP64 {
+    NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
+}
