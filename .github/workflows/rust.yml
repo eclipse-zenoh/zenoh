@@ -22,7 +22,11 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@v2
@@ -44,6 +48,6 @@ jobs:
     - name: Build
       run: cargo build --verbose --all-targets
     - name: Clippy
-      run: cargo clippy
+      run: cargo clippy --all --examples
     - name: Run tests
       run: cargo test --verbose
