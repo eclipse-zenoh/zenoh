@@ -139,7 +139,10 @@ pub unsafe extern "C" fn zn_write(session: *mut ZNSession, r_name: *const c_char
 #[no_mangle]
 pub unsafe extern "C" fn zn_write_wrid(session: *mut ZNSession, r_id: c_ulong, payload: *const c_char, len: c_uint) -> c_int {
   let s = Box::from_raw(session);  
-  let r = ResKey::RId(r_id);  
+  let r = {
+    #[cfg(unix)] { ResKey::RId(r_id) }
+    #[cfg(windows)] { ResKey::RId(r_id.into()) }
+  }; 
   let r = match task::block_on(s.0.write(&r, slice::from_raw_parts(payload as *const u8, len as usize).into())) {
     Ok(()) => 0,
     _ => 1
