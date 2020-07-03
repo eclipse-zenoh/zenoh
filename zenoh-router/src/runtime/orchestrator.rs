@@ -174,11 +174,11 @@ impl SessionOrchestrator {
             log::error!("Unable to set SO_REUSEADDR option : {}", err);
             return zerror!(ZErrorKind::IOError{ descr: "Unable to set SO_REUSEADDR option".to_string()}, err)
         }
-        if let Err(err) = socket.bind(&[MCAST_ADDR, MCAST_PORT].join(":").parse::<SocketAddr>().unwrap().into()) {
-            log::error!("Unable to bind udp port {}:{} : {}", MCAST_ADDR, MCAST_PORT, err);
-            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:{}", MCAST_ADDR, MCAST_PORT)}, err)
+        if let Err(err) = socket.bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), MCAST_PORT.parse().unwrap()).into()) {
+            log::error!("Unable to bind udp port 0.0.0.0:{} : {}", MCAST_PORT, err);
+            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port 0.0.0.0:{}", MCAST_PORT)}, err)
         }
-        if let Err(err) = socket.join_multicast_v4(&MCAST_ADDR.parse::<Ipv4Addr>().unwrap(), &std::net::Ipv4Addr::new(0, 0, 0, 0)) {
+        if let Err(err) = socket.join_multicast_v4(&MCAST_ADDR.parse::<Ipv4Addr>().unwrap(), &Ipv4Addr::new(0, 0, 0, 0)) {
             log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
             return zerror!(ZErrorKind::IOError{ descr: format!("Unable to join multicast group {}", MCAST_ADDR)}, err)
         }
@@ -327,7 +327,7 @@ impl SessionOrchestrator {
         for locator in self.manager.get_locators().await {
             match locator {
                 Locator::Tcp(addr) => {
-                    if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
+                    if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
                         for iface in pnet::datalink::interfaces() {
                             if !iface.is_loopback() {
                                 for ip in iface.ips {
