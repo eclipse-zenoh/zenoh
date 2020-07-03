@@ -11,10 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::os::unix::io::FromRawFd;
 use async_std::net::UdpSocket;
 use std::time::Duration;
-use std::os::unix::io::IntoRawFd;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use socket2::{Socket, Domain, Type};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
@@ -184,7 +182,7 @@ impl SessionOrchestrator {
             log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
             return zerror!(ZErrorKind::IOError{ descr: format!("Unable to join multicast group {}", MCAST_ADDR)}, err)
         }
-        unsafe {Ok(FromRawFd::from_raw_fd(socket.into_raw_fd()))}
+        Ok(socket.into_udp_socket().into())
     }
 
     async fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
@@ -199,7 +197,7 @@ impl SessionOrchestrator {
             log::error!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
             return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:0", addr.to_string())}, err)
         }
-        unsafe {Ok(FromRawFd::from_raw_fd(socket.into_raw_fd()))}
+        Ok(socket.into_udp_socket().into())
     }
 
     async fn connect_first(&self, socket: &UdpSocket, what: WhatAmI) -> ZResult<()> {
