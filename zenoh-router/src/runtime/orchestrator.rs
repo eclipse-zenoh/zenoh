@@ -73,7 +73,7 @@ impl SessionOrchestrator {
                 for locator in &peers {
                     match self.manager.open_session(&locator, &None).await {
                         Ok(_) => {return Ok (())},
-                        Err(err) => log::warn!("Unable to connect to {}! {:?}", locator, err)
+                        Err(err) => log::warn!("Unable to connect to {}! {}", locator, err)
                     }
                 }
                 log::error!("Unable to connect to any of {:?}! ", peers);
@@ -126,7 +126,7 @@ impl SessionOrchestrator {
             match self.manager.add_locator(&locator).await {
                 Ok(locator) => log::info!("Listening on {}!", locator),
                 Err(err) => {
-                    log::error!("Unable to open listener {} : {:?}", locator, err);
+                    log::error!("Unable to open listener {} : {}", locator, err);
                     return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                 },
             }
@@ -169,13 +169,13 @@ impl SessionOrchestrator {
                     match socket.join_multicast_v4(MCAST_ADDR.parse().unwrap(), std::net::Ipv4Addr::new(0, 0, 0, 0)) {
                         Ok(()) => {Ok(socket)},
                         Err(err) => {
-                            log::error!("Unable to join multicast group {}", MCAST_ADDR);
+                            log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
                             zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                         }
                     }
                 },
                 Err(err) => {
-                    log::error!("Unable to bind udp port {}", MCAST_PORT);
+                    log::error!("Unable to bind udp port {} : {}", MCAST_PORT, err);
                     zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                 }
             }
@@ -187,7 +187,7 @@ impl SessionOrchestrator {
             match zenoh_util::net::bind_udp(SocketAddr::new(addr, 0), vec![]).await {
                 Ok(socket) => {Ok(socket)},
                 Err(err) => {
-                    log::error!("Unable to bind udp port 0");
+                    log::error!("Unable to bind udp port 0 : {}", err);
                     zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                 }
             }
@@ -358,7 +358,7 @@ impl SessionOrchestrator {
                         log::trace!("Send {:?} to {}", hello, peer);
                         wbuf.write_session_message(&hello);
                         if let Err(err) = ucast_socket.send_to(&RBuf::from(&wbuf).to_vec(), peer).await {
-                            log::error!("Unable to send {:?} to {} : {:?}", hello, peer, err);
+                            log::error!("Unable to send {:?} to {} : {}", hello, peer, err);
                         }
                     }
                 }
