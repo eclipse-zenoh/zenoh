@@ -92,6 +92,10 @@ impl Runtime {
     pub async fn close(&self) -> ZResult<()> {
         self.write().await.orchestrator.close().await
     }
+
+    pub async fn get_pid_str(&self) -> String {
+        self.read().await.pid.to_string()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

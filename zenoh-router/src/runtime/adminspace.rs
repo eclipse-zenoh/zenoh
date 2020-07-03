@@ -36,8 +36,7 @@ pub struct AdminSpace {
 impl AdminSpace {
 
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr) {
-        let rt = runtime.read().await;
-        let pid_str = rt.pid.to_string();
+        let pid_str = runtime.get_pid_str().await;
         let router_path = format!("/@/router/{}", pid_str);
 
         let admin = Arc::new(AdminSpace { 
@@ -47,7 +46,8 @@ impl AdminSpace {
             pid_str,
             router_path });
 
-        let primitives = rt.broker.new_primitives(admin.clone()).await;
+        let primitives = runtime.read().await
+            .broker.new_primitives(admin.clone()).await;
         admin.primitives.lock().await.replace(primitives.clone());
 
         // declare queryable on router_path
