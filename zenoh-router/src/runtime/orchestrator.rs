@@ -11,9 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::os::unix::io::FromRawFd;
 use async_std::net::UdpSocket;
 use std::time::Duration;
+use std::os::unix::io::IntoRawFd;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use socket2::{Socket, Domain, Type};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
 use zenoh_protocol::io::{WBuf, RBuf};
@@ -162,36 +165,41 @@ impl SessionOrchestrator {
     }
 
     async fn bind_mcast_port() -> ZResult<UdpSocket> {
-        unsafe {
-            let options = [(libc::SO_REUSEADDR, &1 as *const _ as *const libc::c_void)].to_vec();
-            match zenoh_util::net::bind_udp([MCAST_ADDR, MCAST_PORT].join(":"), options).await {
-                Ok(socket) => {
-                    match socket.join_multicast_v4(MCAST_ADDR.parse().unwrap(), std::net::Ipv4Addr::new(0, 0, 0, 0)) {
-                        Ok(()) => {Ok(socket)},
-                        Err(err) => {
-                            log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
-                            zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                        }
-                    }
-                },
-                Err(err) => {
-                    log::error!("Unable to bind udp port {} : {}", MCAST_PORT, err);
-                    zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                }
-            }
+        let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
+            Ok(socket) => {socket},
+            Err(err) => {
+                log::error!("Unable to create datagram socket : {}", err);
+                return zerror!(ZErrorKind::IOError{ descr: "Unable to create datagram socket".to_string()}, err)
+            },
+        };
+        if let Err(err) = socket.set_reuse_address(true) {
+            log::error!("Unable to set SO_REUSEADDR option : {}", err);
+            return zerror!(ZErrorKind::IOError{ descr: "Unable to set SO_REUSEADDR option".to_string()}, err)
         }
+        if let Err(err) = socket.bind(&[MCAST_ADDR, MCAST_PORT].join(":").parse::<SocketAddr>().unwrap().into()) {
+            log::error!("Unable to bind udp port {}:{} : {}", MCAST_ADDR, MCAST_PORT, err);
+            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:{}", MCAST_ADDR, MCAST_PORT)}, err)
+        }
+        if let Err(err) = socket.join_multicast_v4(&MCAST_ADDR.parse::<Ipv4Addr>().unwrap(), &std::net::Ipv4Addr::new(0, 0, 0, 0)) {
+            log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
+            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to join multicast group {}", MCAST_ADDR)}, err)
+        }
+        unsafe {Ok(FromRawFd::from_raw_fd(socket.into_raw_fd()))}
     }
 
     async fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
-        unsafe {
-            match zenoh_util::net::bind_udp(SocketAddr::new(addr, 0), vec![]).await {
-                Ok(socket) => {Ok(socket)},
-                Err(err) => {
-                    log::error!("Unable to bind udp port 0 : {}", err);
-                    zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                }
-            }
+        let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
+            Ok(socket) => {socket},
+            Err(err) => {
+                log::error!("Unable to create datagram socket : {}", err);
+                return zerror!(ZErrorKind::IOError{ descr: "Unable to create datagram socket".to_string()}, err)
+            },
+        };
+        if let Err(err) = socket.bind(&SocketAddr::new(addr, 0).into()) {
+            log::error!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
+            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:0", addr.to_string())}, err)
         }
+        unsafe {Ok(FromRawFd::from_raw_fd(socket.into_raw_fd()))}
     }
 
     async fn connect_first(&self, socket: &UdpSocket, what: WhatAmI) -> ZResult<()> {

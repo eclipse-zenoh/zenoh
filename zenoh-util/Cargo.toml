@@ -29,10 +29,6 @@ rand = "0.7.3"
 hex = "0.4.2"
 humantime = "2.0"
 clap = "2"
-libc = "0.2.71"
-
-[target.'cfg(unix)'.dependencies]
-os_socketaddr = "0.1.0"
 
 [dependencies.async-std]
 version = "~1.6.0"
