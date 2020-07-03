@@ -13,26 +13,21 @@
 //
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Barrier, Mutex, Sender, RwLock, Receiver, Weak, channel};
+use async_std::sync::{channel, Arc, Barrier, Mutex, Receiver, RwLock, Sender, Weak};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
-#[cfg(windows)]
-use std::os::windows::io::AsRawSocket;
 use std::time::Duration;
 
+use super::{Link, LinkTrait, Locator, ManagerTrait};
 use crate::io::{ArcSlice, RBuf};
 use crate::proto::SessionMessage;
-use crate::session::{SessionManagerInner, Action, Transport};
-use super::{Link, LinkTrait, Locator, ManagerTrait};
+use crate::session::{Action, SessionManagerInner, Transport};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-
 
 // Default MTU (TCP PDU) in bytes.
 const DEFAULT_MTU: usize = 65_536;
@@ -42,30 +37,31 @@ zconfigurable! {
     static ref TCP_READ_BUFFER_SIZE: usize = 2*DEFAULT_MTU;
     // Size of the vector used to deserialize the messages.
     static ref TCP_READ_MESSAGES_VEC_SIZE: usize = 32;
-    // The LINGER option causes the shutdown() call to block until (1) all application data is delivered 
+    // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:
     // https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable
     static ref TCP_LINGER_TIMEOUT: i32 = 10;
-    // Amount of time in microseconds to throttle the accept loop upon an error. 
+    // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-
 #[macro_export]
 macro_rules! get_tcp_addr {
-    ($locator:expr) => (match $locator {
-        Locator::Tcp(addr) => addr,
-        // @TODO: uncomment the following when more links are added
-        // _ => {
-        //    let e = format!("Not a TCP locator: {}", $locator);
-        //    log::debug!("{}", e);    
-        //    return zerror!(ZErrorKind::InvalidLocator {
-        //        descr: e
-        //    })
-        // }
-    });
+    ($locator:expr) => {
+        match $locator {
+            Locator::Tcp(addr) => addr,
+            // @TODO: uncomment the following when more links are added
+            // _ => {
+            //    let e = format!("Not a TCP locator: {}", $locator);
+            //    log::debug!("{}", e);
+            //    return zerror!(ZErrorKind::InvalidLocator {
+            //        descr: e
+            //    })
+            // }
+        }
+    };
 }
 
 /*************************************/
@@ -89,7 +85,7 @@ pub struct Tcp {
     // Channel for stopping the read task
     signal: Mutex<Option<Sender<()>>>,
     // Weak reference to self
-    w_self: RwLock<Option<Weak<Self>>>
+    w_self: RwLock<Option<Weak<Self>>>,
 }
 
 impl Tcp {
@@ -98,32 +94,74 @@ impl Tcp {
         let src_addr = socket.local_addr().unwrap();
         let dst_addr = socket.peer_addr().unwrap();
 
-        // Retrieve the raw file descriptor/socket for setting TCP options
-        let raw_socket = {
-            #[cfg(unix)] { socket.as_raw_fd() }
-            #[cfg(windows)] { socket.as_raw_socket() }
-        };        
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            // Retrieve the raw file descriptor/socket for setting TCP options
+            let raw_socket = socket.as_raw_fd();
 
-        // Initialize the SO_LINGER option
-        let optval = libc::linger {
-            // This field is interpreted as a boolean. 
-            // If nonzero, shutdown() blocks until the data are transmitted or the timeout period has expired.
-            l_onoff: 1,
-            // This specifies the timeout period, in seconds.
-            l_linger: *TCP_LINGER_TIMEOUT
-        };
+            // Initialize the SO_LINGER option
+            let optval = libc::linger {
+                // This field is interpreted as a boolean.
+                // If nonzero, shutdown() blocks until the data are transmitted or the timeout period has expired.
+                l_onoff: 1,
+                // This specifies the timeout period, in seconds.
+                l_linger: *TCP_LINGER_TIMEOUT,
+            };
 
-        // Set the SO_LINGER option
-        unsafe {            
-            let ret = libc::setsockopt(
-                raw_socket,
-                libc::SOL_SOCKET,
-                libc::SO_LINGER,
-                &optval as *const libc::linger as *const libc::c_void,
-                std::mem::size_of_val(&optval) as libc::socklen_t,
-            );
-            if ret != 0 {
-                log::warn!("Unable to set LINGER option on TCP link: {} => {}", src_addr, dst_addr);
+            // Set the SO_LINGER option
+            unsafe {
+                let ret = libc::setsockopt(
+                    raw_socket,
+                    libc::SOL_SOCKET,
+                    libc::SO_LINGER,
+                    &optval as *const libc::linger as *const libc::c_void,
+                    std::mem::size_of_val(&optval) as libc::socklen_t,
+                );
+                if ret != 0 {
+                    log::warn!(
+                        "Unable to set LINGER option on TCP link: {} => {}",
+                        src_addr,
+                        dst_addr
+                    );
+                }
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawSocket;
+            use winapi::um::winsock2;
+            use winapi::um::ws2tcpip;
+
+            // Retrieve the raw file descriptor/socket for setting TCP options
+            let raw_socket = socket.as_raw_socket();
+
+            // Initialize the SO_LINGER option
+            let optval = winsock2::linger {
+                // This field is interpreted as a boolean.
+                // If nonzero, shutdown() blocks until the data are transmitted or the timeout period has expired.
+                l_onoff: 1,
+                // This specifies the timeout period, in seconds.
+                l_linger: *TCP_LINGER_TIMEOUT as u16,
+            };
+
+            // Set the SO_LINGER option
+            unsafe {
+                let ret = winsock2::setsockopt(
+                    raw_socket.try_into().unwrap(),
+                    winsock2::SOL_SOCKET,
+                    winsock2::SO_LINGER,
+                    &optval as *const winsock2::linger as *const i8,
+                    std::mem::size_of_val(&optval) as ws2tcpip::socklen_t,
+                );
+                if ret != 0 {
+                    log::warn!(
+                        "Unable to set LINGER option on TCP link: {} => {}",
+                        src_addr,
+                        dst_addr
+                    );
+                }
             }
         }
 
@@ -137,7 +175,7 @@ impl Tcp {
             transport: Mutex::new(transport),
             manager,
             signal: Mutex::new(None),
-            w_self: RwLock::new(None)
+            w_self: RwLock::new(None),
         }
     }
 
@@ -162,7 +200,6 @@ impl LinkTrait for Tcp {
         let _ = self.manager.del_link(&self.src_addr, &self.dst_addr).await;
         Ok(())
     }
-    
     async fn send(&self, buffer: &[u8]) -> ZResult<()> {
         log::trace!("Sending {} bytes on TCP link: {}", buffer.len(), self);
 
@@ -171,8 +208,8 @@ impl LinkTrait for Tcp {
             log::trace!("Transmission error on TCP link {}: {}", self, e);
             return zerror!(ZErrorKind::IOError {
                 descr: format!("{}", e)
-            })
-        }            
+            });
+        }
 
         Ok(())
     }
@@ -187,16 +224,12 @@ impl LinkTrait for Tcp {
                 } else {
                     let e = format!("TCP link does not longer exist: {}", self);
                     log::error!("{}", e);
-                    return zerror!(ZErrorKind::Other {
-                        descr: e
-                    })
+                    return zerror!(ZErrorKind::Other { descr: e });
                 }
             } else {
                 let e = format!("TCP link is unitialized: {}", self);
                 log::error!("{}", e);
-                return zerror!(ZErrorKind::Other {
-                    descr: e
-                })
+                return zerror!(ZErrorKind::Other { descr: e });
             };
 
             // The channel for stopping the read task
@@ -258,7 +291,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
         // The vector for storing the deserialized messages
         let mut messages: Vec<SessionMessage> = Vec::with_capacity(*TCP_READ_MESSAGES_VEC_SIZE);
 
-        // An example of the received buffer and the correspoding indexes is: 
+        // An example of the received buffer and the correspoding indexes is:
         //
         //  0 1 2 3 4 5 6 7  ..  n 0 1 2 3 4 5 6 7      k 0 1 2 3 4 5 6 7      x
         // +-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+
@@ -267,17 +300,17 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
         //
         // - Decoding Iteration 0:
         //      r_l_pos = 0; r_s_pos = 2; r_e_pos = n;
-        // 
+        //
         // - Decoding Iteration 1:
         //      r_l_pos = n; r_s_pos = n+2; r_e_pos = n+k;
         //
         // - Decoding Iteration 2:
         //      r_l_pos = n+k; r_s_pos = n+k+2; r_e_pos = n+k+x;
-        //  
+        //
         // In this example, Iteration 2 will fail since the batch is incomplete and
         // fewer bytes than the ones indicated in the length are read. The incomplete
-        // batch is hence stored in a RBuf in order to read more bytes from the socket 
-        // and deserialize a complete batch. In case it is not possible to read at once 
+        // batch is hence stored in a RBuf in order to read more bytes from the socket
+        // and deserialize a complete batch. In case it is not possible to read at once
         // the 2 bytes indicating the message batch length (i.e., only the first byte is
         // available), the first byte is copied at the beginning of the buffer and more
         // bytes are read in the next iteration.
@@ -289,7 +322,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
         // The end read position of the messages bytes in the buffer
         let mut r_e_pos: usize;
         // The write position in the buffer
-        let mut w_pos: usize = 0;        
+        let mut w_pos: usize = 0;
 
         // Keep track of the number of bytes still to read for incomplete message batches
         let mut left_to_read: usize = 0;
@@ -306,7 +339,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                     let _ = guard.link_err(&link_obj).await;
                 }
                 // Exit
-                return Ok(())
+                return Ok(());
             };
         }
 
@@ -331,10 +364,10 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                             ZErrorKind::InvalidMessage { descr } => {
                                 log::warn!("Closing TCP link {}: {}", link, descr);
                                 zlinkerror!(true);
-                            },
-                            _ => break
-                        }
-                    }                 
+                            }
+                            _ => break,
+                        },
+                    }
                 }
 
                 for msg in messages.drain(..) {
@@ -342,11 +375,11 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                     // Enforce the action as instructed by the upper logic
                     match res {
                         Ok(action) => match action {
-                            Action::Read => {},
+                            Action::Read => {}
                             Action::ChangeTransport(transport) => {
                                 log::trace!("Change transport on TCP link: {}", link);
                                 *guard = transport
-                            },
+                            }
                             Action::Close => {
                                 log::trace!("Closing TCP link: {}", link);
                                 zlinkerror!(false);
@@ -356,17 +389,16 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                             log::trace!("Closing TCP link {}: {}", link, e);
                             zlinkerror!(false);
                         }
-                    }  
+                    }
                 }
             };
         }
-        
         log::trace!("Ready to read from TCP link: {}", link);
-        loop {            
+        loop {
             // Async read from the TCP socket
             match (&link.socket).read(&mut buffer[w_pos..]).await {
                 Ok(mut n) => {
-                    if n == 0 {  
+                    if n == 0 {
                         // Reading 0 bytes means error
                         log::debug!("Zero bytes reading on TCP link: {}", link);
                         zlinkerror!(true);
@@ -384,7 +416,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                     }
 
                     // Reset the read length index
-                    r_l_pos = 0;                    
+                    r_l_pos = 0;
 
                     // Check if we had an incomplete message batch
                     if left_to_read > 0 {
@@ -395,43 +427,40 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                             // Copy the relevant buffer slice in the RBuf
                             zaddslice!(0, n);
                             // Keep reading from the socket
-                            continue
+                            continue;
                         }
-                        
                         // We are ready to decode a complete message batch
                         // Copy the relevant buffer slice in the RBuf
                         zaddslice!(0, left_to_read);
                         // Read the batch
                         zdeserialize!();
-                        
                         // Update the read length index
                         r_l_pos = left_to_read;
                         // Reset the remaining bytes to read
-                        left_to_read = 0;  
+                        left_to_read = 0;
 
                         // Check if we have completely read the batch
-                        if buffer[r_l_pos..n].is_empty() {  
+                        if buffer[r_l_pos..n].is_empty() {
                             // Reset the RBuf
-                            rbuf.clear();                         
+                            rbuf.clear();
                             // Keep reading from the socket
-                            continue
-                        }                                                       
+                            continue;
+                        }
                     }
 
                     // Loop over all the buffer which may contain multiple message batches
                     loop {
                         // Compute the total number of bytes we have read
                         let read = buffer[r_l_pos..n].len();
-                        // Check if we have read the 2 bytes necessary to decode the message length                
-                        if read < 2 {    
+                        // Check if we have read the 2 bytes necessary to decode the message length
+                        if read < 2 {
                             // Copy the bytes at the beginning of the buffer
-                            buffer.copy_within(r_l_pos..n, 0); 
-                            // Update the write index                  
+                            buffer.copy_within(r_l_pos..n, 0);
+                            // Update the write index
                             w_pos = read;
                             // Keep reading from the socket
-                            break
+                            break;
                         }
-                        
                         // We have read at least two bytes in the buffer, update the read start index
                         r_s_pos = r_l_pos + 2;
                         // Read the lenght as litlle endian from the buffer (array of 2 bytes)
@@ -440,33 +469,32 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                         let to_read = u16::from_le_bytes(length) as usize;
 
                         // Check if we have really something to read
-                        if to_read == 0 {                            
+                        if to_read == 0 {
                             // Keep reading from the socket
-                            break
+                            break;
                         }
-                        
                         // Compute the number of useful bytes we have actually read
                         let read = buffer[r_s_pos..n].len();
 
                         if read == 0 {
-                            // The buffer might be empty in case of having read only the two bytes 
+                            // The buffer might be empty in case of having read only the two bytes
                             // of the length and no additional bytes are left in the reading buffer
                             left_to_read = to_read;
                             // Keep reading from the socket
-                            break 
+                            break;
                         } else if read < to_read {
                             // We haven't read enough bytes for a complete batch, so
                             // we need to store the bytes read so far and keep reading
 
-                            // Update the number of bytes we still have to read to 
+                            // Update the number of bytes we still have to read to
                             // obtain a complete message batch for decoding
                             left_to_read = to_read - read;
 
-                            // Copy the buffer in the RBuf if not empty                            
+                            // Copy the buffer in the RBuf if not empty
                             zaddslice!(r_s_pos, n);
 
                             // Keep reading from the socket
-                            break                            
+                            break;
                         }
 
                         // We have at least one complete message batch we can deserialize
@@ -486,13 +514,13 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                         // Check if we are done with the current reading buffer
                         if buffer[r_e_pos..n].is_empty() {
                             // Keep reading from the socket
-                            break
+                            break;
                         }
 
                         // Update the read length index to read the next message batch
                         r_l_pos = r_e_pos;
                     }
-                },
+                }
                 Err(e) => {
                     log::debug!("Reading error on TCP link {}: {}", link, e);
                     zlinkerror!(true);
@@ -501,7 +529,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
         }
     };
 
-    // Execute the read loop 
+    // Execute the read loop
     let _ = read_loop.race(stop.recv()).await;
 }
 
@@ -526,7 +554,7 @@ impl fmt::Debug for Tcp {
             .field("dst", &self.dst_addr)
             .finish()
     }
-} 
+}
 
 /*************************************/
 /*          LISTENER                 */
@@ -534,7 +562,7 @@ impl fmt::Debug for Tcp {
 pub struct ManagerTcp(Arc<ManagerTcpInner>);
 
 impl ManagerTcp {
-    pub(crate) fn new(manager: Arc<SessionManagerInner>) -> Self {  
+    pub(crate) fn new(manager: Arc<SessionManagerInner>) -> Self {
         Self(Arc::new(ManagerTcpInner::new(manager)))
     }
 }
@@ -582,18 +610,16 @@ impl ManagerTrait for ManagerTcp {
         let addr = get_tcp_addr!(locator);
         self.0.del_listener(&self.0, addr).await
     }
-  
     async fn get_listeners(&self) -> Vec<Locator> {
         self.0.get_listeners().await
     }
 }
 
-
 struct ListenerTcpInner {
     socket: Arc<TcpListener>,
     sender: Sender<()>,
     receiver: Receiver<()>,
-    barrier: Arc<Barrier>
+    barrier: Arc<Barrier>,
 }
 
 impl ListenerTcpInner {
@@ -607,7 +633,7 @@ impl ListenerTcpInner {
             socket,
             sender,
             receiver,
-            barrier
+            barrier,
         }
     }
 }
@@ -615,11 +641,11 @@ impl ListenerTcpInner {
 struct ManagerTcpInner {
     inner: Arc<SessionManagerInner>,
     listener: RwLock<HashMap<SocketAddr, Arc<ListenerTcpInner>>>,
-    link: RwLock<HashMap<(SocketAddr, SocketAddr), Arc<Tcp>>>
+    link: RwLock<HashMap<(SocketAddr, SocketAddr), Arc<Tcp>>>,
 }
 
 impl ManagerTcpInner {
-    pub fn new(inner: Arc<SessionManagerInner>) -> Self {  
+    pub fn new(inner: Arc<SessionManagerInner>) -> Self {
         Self {
             inner,
             listener: RwLock::new(HashMap::new()),
@@ -627,19 +653,21 @@ impl ManagerTcpInner {
         }
     }
 
-    async fn new_link(&self, a_self: &Arc<Self>, dst: &SocketAddr, transport: &Transport) -> ZResult<Arc<Tcp>> {
+    async fn new_link(
+        &self,
+        a_self: &Arc<Self>,
+        dst: &SocketAddr,
+        transport: &Transport,
+    ) -> ZResult<Arc<Tcp>> {
         // Create the TCP connection
         let stream = match TcpStream::connect(dst).await {
             Ok(stream) => stream,
             Err(e) => {
                 let e = format!("Can not create a new TCP link bound to {}: {}", dst, e);
                 log::warn!("{}", e);
-                return zerror!(ZErrorKind::Other {
-                    descr: e
-                })
+                return zerror!(ZErrorKind::Other { descr: e });
             }
         };
-        
         // Create a new link object
         let link = Arc::new(Tcp::new(stream, transport.clone(), a_self.clone()));
         link.initizalize(Arc::downgrade(&link));
@@ -647,7 +675,6 @@ impl ManagerTcpInner {
         // Store the ink object
         let key = (link.src_addr, link.dst_addr);
         self.link.write().await.insert(key, link.clone());
-        
         // Spawn the receive loop for the new link
         let _ = link.start().await;
 
@@ -659,11 +686,12 @@ impl ManagerTcpInner {
         match zasyncwrite!(self.link).remove(&(*src, *dst)) {
             Some(_) => Ok(()),
             None => {
-                let e = format!("Can not delete TCP link because it has not been found: {} => {}", src, dst);
+                let e = format!(
+                    "Can not delete TCP link because it has not been found: {} => {}",
+                    src, dst
+                );
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: e
-                })
+                zerror!(ZErrorKind::InvalidLink { descr: e })
             }
         }
     }
@@ -673,11 +701,12 @@ impl ManagerTcpInner {
         match zasyncwrite!(self.link).get(&(*src, *dst)) {
             Some(link) => Ok(link.clone()),
             None => {
-                let e = format!("Can not get TCP link because it has not been found: {} => {}", src, dst);
+                let e = format!(
+                    "Can not get TCP link because it has not been found: {} => {}",
+                    src, dst
+                );
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: e
-                })
+                zerror!(ZErrorKind::InvalidLink { descr: e })
             }
         }
     }
@@ -689,14 +718,11 @@ impl ManagerTcpInner {
             Err(e) => {
                 let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
                 log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink {
-                    descr: e
-                })
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
         };
 
         let local_addr = socket.local_addr().unwrap();
-               
         let listener = Arc::new(ListenerTcpInner::new(socket.clone()));
         // Update the list of active listeners on the manager
         zasyncwrite!(self.listener).insert(local_addr, listener.clone());
@@ -706,11 +732,14 @@ impl ManagerTcpInner {
         let c_addr = local_addr;
         task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(&c_self, listener).await; 
+            accept_task(&c_self, listener).await;
             // Delete the listener from the manager
             zasyncwrite!(c_self.listener).remove(&c_addr);
         });
-        Ok(["tcp/".to_string(), local_addr.to_string()].concat().parse().unwrap())
+        Ok(["tcp/".to_string(), local_addr.to_string()]
+            .concat()
+            .parse()
+            .unwrap())
     }
 
     async fn del_listener(&self, _a_self: &Arc<Self>, addr: &SocketAddr) -> ZResult<()> {
@@ -722,46 +751,59 @@ impl ManagerTcpInner {
                 // Wait for the accept loop to be stopped
                 listener.barrier.wait().await;
                 Ok(())
-            },
+            }
             None => {
-                let e = format!("Can not delete the TCP listener because it has not been found: {}", addr);
+                let e = format!(
+                    "Can not delete the TCP listener because it has not been found: {}",
+                    addr
+                );
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: e
-                })
+                zerror!(ZErrorKind::InvalidLink { descr: e })
             }
         }
     }
-  
     async fn get_listeners(&self) -> Vec<Locator> {
-        zasyncread!(self.listener).keys().map(|x| Locator::Tcp(*x)).collect()
+        zasyncread!(self.listener)
+            .keys()
+            .map(|x| Locator::Tcp(*x))
+            .collect()
     }
 }
 
 async fn accept_task(a_self: &Arc<ManagerTcpInner>, listener: Arc<ListenerTcpInner>) {
     // The accept future
     let accept_loop = async {
-        log::trace!("Ready to accept TCP connections on: {:?}", listener.socket.local_addr());
+        log::trace!(
+            "Ready to accept TCP connections on: {:?}",
+            listener.socket.local_addr()
+        );
         loop {
             // Wait for incoming connections
             let stream = match listener.socket.accept().await {
                 Ok((stream, _)) => stream,
                 Err(e) => {
-                    log::warn!("{}. Hint: you might want to increase the system open file limit", e);
+                    log::warn!(
+                        "{}. Hint: you might want to increase the system open file limit",
+                        e
+                    );
                     // Throttle the accept loop upon an error
                     // NOTE: This might be due to various factors. However, the most common case is that
                     //       the process has reached the maximum number of open files in the system. On
-                    //       Linux systems this limit can be changed by using the "ulimit" command line 
-                    //       tool. In case of systemd-based systems, this can be changed by using the 
+                    //       Linux systems this limit can be changed by using the "ulimit" command line
+                    //       tool. In case of systemd-based systems, this can be changed by using the
                     //       "sysctl" command line tool.
                     task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
-                    continue
+                    continue;
                 }
             };
 
-            log::debug!("Accepted TCP connection on {:?}: {:?}", stream.local_addr(), stream.peer_addr());
+            log::debug!(
+                "Accepted TCP connection on {:?}: {:?}",
+                stream.local_addr(),
+                stream.peer_addr()
+            );
 
-            // Retrieve the initial temporary session 
+            // Retrieve the initial temporary session
             let initial = a_self.inner.get_initial_transport().await;
             // Create the new link object
             let link = Arc::new(Tcp::new(stream, initial, a_self.clone()));
