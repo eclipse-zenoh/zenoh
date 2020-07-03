@@ -174,9 +174,13 @@ impl SessionOrchestrator {
             log::error!("Unable to set SO_REUSEADDR option : {}", err);
             return zerror!(ZErrorKind::IOError{ descr: "Unable to set SO_REUSEADDR option".to_string()}, err)
         }
-        if let Err(err) = socket.bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), MCAST_PORT.parse().unwrap()).into()) {
-            log::error!("Unable to bind udp port 0.0.0.0:{} : {}", MCAST_PORT, err);
-            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port 0.0.0.0:{}", MCAST_PORT)}, err)
+        let addr = {
+            #[cfg(unix)] { MCAST_ADDR.parse().unwrap() }
+            #[cfg(windows)] { IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) }
+        };  
+        if let Err(err) = socket.bind(&SocketAddr::new(addr, MCAST_PORT.parse().unwrap()).into()) {
+            log::error!("Unable to bind udp port {}:{} : {}", addr, MCAST_PORT, err);
+            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:{}", addr, MCAST_PORT)}, err)
         }
         if let Err(err) = socket.join_multicast_v4(&MCAST_ADDR.parse::<Ipv4Addr>().unwrap(), &Ipv4Addr::new(0, 0, 0, 0)) {
             log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
