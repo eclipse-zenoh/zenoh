@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::path::{Path, PathBuf};
-use log::{debug, warn};
+use log::{debug, trace, warn};
 use libloading::{Library, Symbol};
 use clap::{Arg, ArgMatches};
 use super::runtime::Runtime;
@@ -84,8 +84,9 @@ impl PluginsMgr {
     }
 
     pub async fn search_and_load_plugins(&mut self, prefix: &str, extension: &str) {
+        log::debug!("Search for plugins to load in {:?}", self.search_paths);
         for dir in &self.search_paths {
-            debug!("Search plugins in dir {:?} ", dir);
+            trace!("Search plugins in dir {:?} ", dir);
             match dir.read_dir() {
                 Ok(read_dir) =>
                     for entry in read_dir {
@@ -94,8 +95,6 @@ impl PluginsMgr {
                                 if filename.starts_with(prefix) && filename.ends_with(extension) {
                                     let name = &filename[(prefix.len())..(filename.len()-extension.len())];
                                     let path = entry.path();
-                                    let args: Vec<String> = vec![];  // TODO
-                                    debug!("Load plugin {} from {:?} with args: {:?}", name, path, args);
                                     match Plugin::load(name, path) {
                                             Ok(plugin) => self.plugins.push(plugin),
                                             Err(err) => warn!("{}", err)
@@ -107,6 +106,24 @@ impl PluginsMgr {
                 Err(err) => debug!("Failed to read in directory {:?} ({}). Can't use it to search plugins.", dir, err)
             }
         }
+    }
+
+    pub fn load_plugins(&mut self, paths: Vec<String>) {
+        log::debug!("Plugins to load: {:?}", paths);
+        paths.iter().for_each(|path| {
+            let file = PathBuf::from(path);
+            if !file.exists() {
+                panic!(format!("Plugin file '{}' doesn't exist", path));
+            }
+            if !file.is_file() {
+                panic!(format!("Path to plugin '{}' doesn't point to a file", path));
+            }
+            let name = file.file_name().unwrap();
+            match Plugin::load(name.to_str().unwrap(), file.clone()) {
+                Ok(plugin) => self.plugins.push(plugin),
+                Err(err) => panic!(err)
+            }
+        });
     }
 
     pub fn get_plugins_args<'a, 'b>(&self) -> Vec<Arg<'a, 'b>> {
@@ -168,7 +185,7 @@ impl Plugin {
 
     pub fn get_expected_args<'a, 'b>(&self) -> Vec<Arg<'a, 'b>> {
         unsafe {
-            debug!("Call get_expected_args() of plugin {}", self.name);
+            trace!("Call get_expected_args() of plugin {}", self.name);
             let get_expected_args: GetArgsFn = self.lib.get(GET_ARGS_FN_NAME).unwrap();
             get_expected_args()
         }
@@ -176,7 +193,7 @@ impl Plugin {
 
     pub fn start(&self, runtime: Runtime, args: &ArgMatches<'_>) {
         unsafe {
-            debug!("Call start() of plugin {}", self.name);
+            debug!("Start plugin {}", self.name);
             let start: StartFn = self.lib.get(START_FN_NAME).unwrap();
             start(runtime, args)
         }
