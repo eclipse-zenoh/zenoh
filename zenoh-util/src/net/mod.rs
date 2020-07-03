@@ -26,7 +26,7 @@ use async_std::net::{UdpSocket, ToSocketAddrs};
 ///         ).await.unwrap()
 ///     };
 /// 
-///     let interface = std::net::Ipv4Addr::new(10, 10, 10, 10);
+///     let interface = std::net::Ipv4Addr::new(0, 0, 0, 0);
 ///     let mcast_addr = std::net::Ipv4Addr::new(239, 255, 0, 1);
 /// 
 ///     socket.join_multicast_v4(mcast_addr, interface);
@@ -51,9 +51,18 @@ pub async unsafe fn bind_udp<A: ToSocketAddrs>(addrs: A, opts: Vec<(libc::c_int,
 
     let addrs = addrs.to_socket_addrs().await?;
     for addr in addrs {
-        let socketaddr: os_socketaddr::OsSocketAddr = addr.into();
+        let (addr_ptr, addr_len) = match addr {
+            std::net::SocketAddr::V4(addr) => {
+                let mut socketaddr = std::mem::MaybeUninit::<libc::sockaddr_in6>::uninit();
+                *(&mut socketaddr as *mut _ as *mut _) = addr;
+                socketaddr.assume_init();
+                (&socketaddr as *const _ as *const _, std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t)
+            },
+            std::net::SocketAddr::V6(addr) =>
+                (&addr as *const _ as *const _, std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t)
+        };
     
-        let res = libc::bind(fd, socketaddr.as_ptr(), socketaddr.len());
+        let res = libc::bind(fd, addr_ptr, addr_len);
         if res != -1 {
             return Ok(async_std::os::unix::io::FromRawFd::from_raw_fd(fd))
         }
