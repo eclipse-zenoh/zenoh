@@ -51,18 +51,9 @@ pub async unsafe fn bind_udp<A: ToSocketAddrs>(addrs: A, opts: Vec<(libc::c_int,
 
     let addrs = addrs.to_socket_addrs().await?;
     for addr in addrs {
-        let (addr_ptr, addr_len) = match addr {
-            std::net::SocketAddr::V4(addr) => {
-                let mut socketaddr = std::mem::MaybeUninit::<libc::sockaddr_in6>::uninit();
-                *(&mut socketaddr as *mut _ as *mut _) = addr;
-                socketaddr.assume_init();
-                (&socketaddr as *const _ as *const _, std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t)
-            },
-            std::net::SocketAddr::V6(addr) =>
-                (&addr as *const _ as *const _, std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t)
-        };
+        let socketaddr: os_socketaddr::OsSocketAddr = addr.into();
     
-        let res = libc::bind(fd, addr_ptr, addr_len);
+        let res = libc::bind(fd, socketaddr.as_ptr(), socketaddr.len());
         if res != -1 {
             return Ok(async_std::os::unix::io::FromRawFd::from_raw_fd(fd))
         }
