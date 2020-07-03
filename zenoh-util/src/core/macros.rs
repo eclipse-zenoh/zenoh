@@ -54,6 +54,15 @@ macro_rules! zasyncwrite {
     );
 }
 
+// This macro returns &T from RwLock<Option<T>>
+// This macro assumes that Option is always Some(T)
+#[macro_export]
+macro_rules! zasyncopt {
+    ($var:expr) => (
+        zasyncread!($var).as_ref().unwrap()
+    );
+}
+
 // This macro performs an async send on Channel<T>
 // For performance reasons, it first performs a try_send() and,
 // if it fails, it falls back on send().await

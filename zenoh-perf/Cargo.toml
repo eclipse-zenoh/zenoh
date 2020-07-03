@@ -23,19 +23,21 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.31"
+async-trait = "0.1.36"
+clap = "2.33.1"
 env_logger = "0.7.1"
 log = "0.4.8"
 rand = "0.7.3"
 slab = "0.4.2"
 time = "0.2.16"
 uuid = { version = "0.8.1", features = ["v4"] }
+zenoh =  { version = "0.5.0", path = "../zenoh" }
 zenoh-protocol =  { version = "0.5.0", path = "../zenoh-protocol" }
 zenoh-router =  { version = "0.5.0", path = "../zenoh-router" }
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
 
 [dependencies.async-std]
-version = "~1.6.0"
+version = "~1.6.2"
 features = ["unstable"]
 
 [profile.release]
@@ -43,6 +45,11 @@ debug=false
 lto = true
 codegen-units = 1
 opt-level = 3
+
+[[bin]]
+name = "api_thr_sub_peer"
+test = false
+bench = false
 
 [[bin]]
 name = "session_thr_sink_tcp"

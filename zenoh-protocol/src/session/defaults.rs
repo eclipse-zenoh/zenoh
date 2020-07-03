@@ -13,6 +13,14 @@
 //
 use crate::core::ZInt;
 
+// Total number of queues
+pub(crate) const QUEUE_NUM: usize = 3;
+
+// Queue priorities
+pub(crate) const QUEUE_PRIO_CTRL: usize = 0;
+pub(crate) const QUEUE_PRIO_RETX: usize = 1;
+pub(crate) const QUEUE_PRIO_DATA: usize = 2;
+
 zconfigurable! {
     // Default session lease in milliseconds: 10 seconds
     pub(crate) static ref SESSION_LEASE: ZInt = 10_000;
@@ -34,21 +42,10 @@ zconfigurable! {
     // Default retries when opening a session
     pub(crate) static ref SESSION_OPEN_RETRIES: usize = 3;
 
-    // Parameters of the conduit transmission queue
-    pub(crate) static ref QUEUE_PRIO_CTRL: usize = 0;
-    pub(crate) static ref QUEUE_SIZE_CTRL: usize = 16;
-    pub(crate) static ref QUEUE_CRED_CTRL: isize = 1;
+    // Parameters of the link transmission queue
+    pub(crate) static ref QUEUE_SIZE_CTRL: usize = 1;
+    pub(crate) static ref QUEUE_SIZE_RETX: usize = 1;
+    pub(crate) static ref QUEUE_SIZE_DATA: usize = 8;
 
-    pub(crate) static ref QUEUE_PRIO_RETX: usize = 1;
-    pub(crate) static ref QUEUE_SIZE_RETX: usize = 64;
-    pub(crate) static ref QUEUE_CRED_RETX: isize = 1;
-
-    pub(crate) static ref QUEUE_PRIO_DATA: usize = 2;
-    pub(crate) static ref QUEUE_SIZE_DATA: usize = 1_024;
-    pub(crate) static ref QUEUE_CRED_DATA: isize = 100;
-
-    pub(crate) static ref QUEUE_SIZE_TOT: usize = *QUEUE_SIZE_CTRL + *QUEUE_SIZE_RETX + *QUEUE_SIZE_DATA;
     pub(crate) static ref QUEUE_CONCURRENCY: usize = 16;
-
-    pub(crate) static ref WRITE_MSG_SLICE_SIZE: usize = 128;
 }

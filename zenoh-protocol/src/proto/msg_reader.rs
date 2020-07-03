@@ -35,6 +35,39 @@ impl RBuf {
 
             // Read the body
             match smsg::mid(header) {
+                // Frame as first for optimization reasons
+                FRAME => {
+                    let ch = smsg::has_flag(header, smsg::flag::R);
+                    let sn = self.read_zint()?;
+
+                    let payload = if smsg::has_flag(header, smsg::flag::F) {
+                        // A fragmented frame is not supposed to be followed by
+                        // any other frame in the same batch. Read all the bytes.
+                        let mut buffer = RBuf::new();
+                        self.drain_into_rbuf(&mut buffer);
+                        let is_final = smsg::has_flag(header, smsg::flag::E);
+
+                        FramePayload::Fragment { buffer, is_final }
+                    } else {
+                        // @TODO: modify the get_pos/set_pos to mark/revert 
+                        let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
+                        loop {
+                            let pos = self.get_pos();
+                            if let Ok(msg) = self.read_zenoh_message() {
+                                messages.push(msg);
+                            } else {
+                                self.set_pos(pos)?;
+                                break
+                            }
+                        }
+                        
+                        FramePayload::Messages { messages }
+                    };
+
+                    let body = SessionBody::Frame { ch, sn, payload };
+                    break (header, body)
+                },
+                
                 ATTACHMENT => {
                     attachment = Some(self.read_deco_attachment(header)?);
                     continue
@@ -191,36 +224,7 @@ impl RBuf {
                     };
 
                     break (header, body)
-                },
-
-                FRAME => {
-                    let ch = smsg::has_flag(header, smsg::flag::R);
-                    let sn = self.read_zint()?;
-
-                    let payload = if smsg::has_flag(header, smsg::flag::F) {
-                        let buffer = RBuf::from(self.read_bytes_array()?);
-                        let is_final = smsg::has_flag(header, smsg::flag::E);
-
-                        FramePayload::Fragment { buffer, is_final }
-                    } else {
-                        // @TODO: modify the get_pos/set_pos to mark/revert 
-                        let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
-                        loop {
-                            let pos = self.get_pos();
-                            if let Ok(msg) = self.read_zenoh_message() {
-                                messages.push(msg);
-                            } else {
-                                self.set_pos(pos)?;
-                                break
-                            }
-                        }
-                        
-                        FramePayload::Messages { messages }
-                    };
-
-                    let body = SessionBody::Frame { ch, sn, payload };
-                    break (header, body)
-                },
+                },                
 
                 unknown => return zerror!(ZErrorKind::InvalidMessage {
                     descr: format!("Session message with unknown ID: {}", unknown)
@@ -245,6 +249,21 @@ impl RBuf {
 
             // Read the body
             match zmsg::mid(header) {
+                // Message data as first for optimization reasons
+                DATA => {
+                    let channel = zmsg::has_flag(header, zmsg::flag::R);
+                    let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
+                    let info = if zmsg::has_flag(header, zmsg::flag::I) {
+                        Some(RBuf::from(self.read_bytes_array()?))
+                    } else { 
+                        None 
+                    };
+                    let payload = self.read_rbuf()?;
+
+                    let body = ZenohBody::Data { key, info, payload };
+                    break (header, body, channel)
+                },
+
                 // Decorators
                 REPLY_CONTEXT => {
                     reply_context = Some(self.read_deco_reply(header)?);
@@ -262,20 +281,6 @@ impl RBuf {
 
                     let body = ZenohBody::Declare { declarations };
                     let channel = zmsg::default_channel::DECLARE;
-                    break (header, body, channel)
-                },
-
-                DATA => {
-                    let channel = zmsg::has_flag(header, zmsg::flag::R);
-                    let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
-                    let info = if zmsg::has_flag(header, zmsg::flag::I) {
-                        Some(RBuf::from(self.read_bytes_array()?))
-                    } else { 
-                        None 
-                    };
-                    let payload = RBuf::from(self.read_bytes_array()?);
-
-                    let body = ZenohBody::Data { key, info, payload };
                     break (header, body, channel)
                 },
 
@@ -328,7 +333,7 @@ impl RBuf {
 
     fn read_deco_attachment(&mut self, header: u8) -> ZResult<Attachment> {
         let encoding = smsg::flags(header);
-        let buffer = RBuf::from(self.read_bytes_array()?);
+        let buffer = self.read_rbuf()?;
         Ok(Attachment { encoding, buffer })
     }
 

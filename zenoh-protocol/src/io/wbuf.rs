@@ -264,11 +264,12 @@ impl WBuf {
         }
     }
 
-
+    #[inline]
     pub fn mark(&mut self) {
         self.mark = (self.slices.clone(), self.buf.len());
     }
 
+    #[inline]
     pub fn revert(&mut self) {
        // restaure slices and truncate buf to saved len
        self.slices = self.mark.0.clone();

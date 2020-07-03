@@ -46,6 +46,20 @@ impl WBuf {
 
         check!(self.write(msg.header));
         match msg.get_body() {
+            SessionBody::Frame { sn, payload, .. } => {
+                check!(self.write_zint(*sn));
+                match payload {
+                    FramePayload::Fragment { buffer, .. } => {
+                        check!(self.write_rbuf_slices(&buffer));
+                    }, 
+                    FramePayload::Messages { messages } => {
+                        for m in messages {
+                            check!(self.write_zenoh_message(m));
+                        }
+                    }
+                }
+            },
+
             SessionBody::Scout { what, .. } => {
                 if let Some(w) = *what {
                     check!(self.write_zint(w));
@@ -151,20 +165,6 @@ impl WBuf {
             SessionBody::Ping { hash }
             | SessionBody::Pong { hash } => {
                 check!(self.write_zint(*hash));
-            },
-
-            SessionBody::Frame { sn, payload, .. } => {
-                check!(self.write_zint(*sn));
-                match payload {
-                    FramePayload::Fragment { buffer, .. } => {
-                        check!(self.write_rbuf(&buffer));
-                    }, 
-                    FramePayload::Messages { messages } => {
-                        for m in messages {
-                            check!(self.write_zenoh_message(m));
-                        }
-                    }
-                }
             }
         }
 

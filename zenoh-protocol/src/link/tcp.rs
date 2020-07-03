@@ -87,8 +87,7 @@ pub struct Tcp {
     // The reference to the associated link manager
     manager: Arc<ManagerTcpInner>,
     // Channel for stopping the read task
-    ch_send: Sender<()>,
-    ch_recv: Receiver<()>,
+    signal: Mutex<Option<Sender<()>>>,
     // Weak reference to self
     w_self: RwLock<Option<Weak<Self>>>
 }
@@ -98,8 +97,6 @@ impl Tcp {
         // Retrieve the source and destination socket addresses
         let src_addr = socket.local_addr().unwrap();
         let dst_addr = socket.peer_addr().unwrap();
-        // The channel for stopping the read task
-        let (sender, receiver) = channel::<()>(1);
 
         // Retrieve the raw file descriptor/socket for setting TCP options
         let raw_socket = {
@@ -139,8 +136,7 @@ impl Tcp {
             dst_locator: Locator::Tcp(dst_addr),
             transport: Mutex::new(transport),
             manager,
-            ch_send: sender,
-            ch_recv: receiver,
+            signal: Mutex::new(None),
             w_self: RwLock::new(None)
         }
     }
@@ -183,33 +179,45 @@ impl LinkTrait for Tcp {
 
     async fn start(&self) -> ZResult<()> {
         log::trace!("Starting read loop on TCP link: {}", self);
-        let link = if let Some(link) = zasyncread!(self.w_self).as_ref() {
-            if let Some(link) = link.upgrade() {
-                link
+        let mut guard = zasynclock!(self.signal);
+        if guard.is_none() {
+            let link = if let Some(link) = zasyncread!(self.w_self).as_ref() {
+                if let Some(link) = link.upgrade() {
+                    link
+                } else {
+                    let e = format!("TCP link does not longer exist: {}", self);
+                    log::error!("{}", e);
+                    return zerror!(ZErrorKind::Other {
+                        descr: e
+                    })
+                }
             } else {
-                let e = format!("TCP link does not longer exist: {}", self);
+                let e = format!("TCP link is unitialized: {}", self);
                 log::error!("{}", e);
                 return zerror!(ZErrorKind::Other {
                     descr: e
                 })
-            }
-        } else {
-            let e = format!("TCP link is unitialized: {}", self);
-            log::error!("{}", e);
-            return zerror!(ZErrorKind::Other {
-                descr: e
-            })
-        };
+            };
 
-        // Spawn the read task
-        task::spawn(read_task(link));
+            // The channel for stopping the read task
+            let (sender, receiver) = channel::<()>(1);
+            // Store the sender
+            *guard = Some(sender);
+
+            // Spawn the read task
+            task::spawn(read_task(link, receiver));
+        }
 
         Ok(())
     }
 
     async fn stop(&self) -> ZResult<()> {
         log::trace!("Stopping read loop on TCP link: {}", self);
-        let _ = self.ch_send.try_send(());
+        let mut guard = zasynclock!(self.signal);
+        if let Some(signal) = guard.take() {
+            let _ = signal.send(()).await;
+        }
+
         Ok(())
     }
 
@@ -225,10 +233,6 @@ impl LinkTrait for Tcp {
         DEFAULT_MTU
     }
 
-    fn is_ordered(&self) -> bool {
-        true
-    }
-
     fn is_reliable(&self) -> bool {
         true
     }
@@ -238,7 +242,7 @@ impl LinkTrait for Tcp {
     }
 }
 
-async fn read_task(link: Arc<Tcp>) {
+async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
     let read_loop = async {
         // The link object to be passed to the transport
         let link_obj: Link = Link::new(link.clone());
@@ -498,8 +502,7 @@ async fn read_task(link: Arc<Tcp>) {
     };
 
     // Execute the read loop 
-    let stop = link.ch_recv.recv();
-    let _ = read_loop.race(stop).await;
+    let _ = read_loop.race(stop.recv()).await;
 }
 
 impl Drop for Tcp {

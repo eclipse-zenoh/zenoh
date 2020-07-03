@@ -43,7 +43,6 @@ pub struct Link {
     mtu: usize,
     src: Locator,
     dst: Locator,
-    is_ordered: bool,
     is_reliable: bool,
     is_streamed: bool,
     inner: Weak<dyn LinkTrait + Send + Sync>
@@ -55,7 +54,6 @@ impl Link {
             mtu: link.get_mtu(),
             src: link.get_src(),
             dst: link.get_dst(),
-            is_ordered: link.is_ordered(),
             is_reliable: link.is_reliable(),
             is_streamed: link.is_streamed(),
             inner: Arc::downgrade(&link)
@@ -81,11 +79,6 @@ impl Link {
     #[inline]
     pub fn get_dst(&self) -> Locator {
         self.dst.clone()
-    }
-
-    #[inline]
-    pub fn is_ordered(&self) -> bool {
-        self.is_ordered
     }
 
     #[inline]
@@ -120,7 +113,7 @@ impl Link {
 impl Eq for Link {}
 
 impl PartialEq for Link {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(&self, other: &Self) -> bool {        
         self.inner.ptr_eq(&other.inner)
     }
 }
@@ -145,7 +138,6 @@ impl fmt::Debug for Link {
             .field("src", &self.get_src())
             .field("dst", &self.get_dst())
             .field("mtu", &self.get_mtu())
-            .field("is_ordered", &self.is_ordered())
             .field("is_reliable", &self.is_reliable())
             .field("is_streamed", &self.is_streamed())
             .field("active", &status)
@@ -162,8 +154,6 @@ pub trait LinkTrait {
     fn get_src(&self) -> Locator;
 
     fn get_dst(&self) -> Locator;
-
-    fn is_ordered(&self) -> bool;
 
     fn is_reliable(&self) -> bool;
 

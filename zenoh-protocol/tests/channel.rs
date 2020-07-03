@@ -73,8 +73,8 @@ impl SCRouter {
     pub fn new(resolution: ZInt) -> Self {
         Self {
             count: AtomicUsize::new(0),
-            last_reliable: Mutex::new(SeqNum::make(resolution-1, resolution).unwrap()),
-            last_unreliable: Mutex::new(SeqNum::make(resolution-1, resolution).unwrap())
+            last_reliable: Mutex::new(SeqNum::new(resolution-1, resolution)),
+            last_unreliable: Mutex::new(SeqNum::new(resolution-1, resolution))
         }
     }
 }
@@ -250,50 +250,6 @@ async fn channel_base_inner() {
     router_handler.reset_count().await;
 
     /* [3] */
-    // Send reliable messages by using schedule_batch()
-    let reliable = true;
-    let key = ResKey::RName("/test".to_string());
-    let info = None;
-    let payload = RBuf::from(vec![0u8; 1]);
-    let reply_context = None;
-    let attachment = None;
-    let message = ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
-
-    // Create the batch and schedule it
-    let v = vec![message.clone(); messages_count as usize];
-    session.schedule_batch(v, None).await.unwrap();
-
-    // Wait for the messages to arrive to the other side
-    task::sleep(Duration::from_millis(timeout)).await;
-    let count = router_handler.get_count().await;    
-    assert_eq!(messages_count, count);
-
-    // Reset the counters
-    router_handler.reset_count().await;
-
-    /* [4] */
-    // Send unreliable messages by using schedule()
-    let reliable = false; 
-    let key = ResKey::RName("/test".to_string());
-    let info = None;
-    let payload = RBuf::from(vec![0u8; 1]);
-    let reply_context = None;
-    let attachment = None;
-    let message = ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
-
-    // Create the batch and schedule it
-    let v = vec![message.clone(); messages_count as usize];
-    session.schedule_batch(v, None).await.unwrap();
-
-    // Wait for the messages to arrive to the other side
-    task::sleep(Duration::from_millis(timeout)).await;
-    let count = router_handler.get_count().await;
-    assert_eq!(messages_count, count);
-
-    // Reset the counters
-    router_handler.reset_count().await;
-
-    /* [5] */
     // Send reliable messages by using handle_message()
     let reliable = true;
     let key = ResKey::RName("/test".to_string());
@@ -316,7 +272,7 @@ async fn channel_base_inner() {
     // Reset the counters
     router_handler.reset_count().await;
 
-    /* [6] */
+    /* [4] */
     // Send unreliable messages by using handle_message()
     let reliable = false; 
     let key = ResKey::RName("/test".to_string());

@@ -18,7 +18,6 @@ mod manager;
 
 pub use manager::*;
 
-use channel::*;
 use initial::*;
 
 use async_std::sync::{Arc, Weak};

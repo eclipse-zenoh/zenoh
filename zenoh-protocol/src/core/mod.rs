@@ -19,6 +19,7 @@ use uuid::Uuid;
 pub mod rname;
 
 pub type ZInt = u64;
+pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
 pub const ZINT_MAX_BYTES : usize = 10;
 
@@ -34,9 +35,9 @@ pub const NO_RESOURCE_ID: ResourceId = 0;
 ///
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum ResKey {
-  RName(String),
-  RId(ResourceId),
-  RIdWithSuffix(ResourceId, String),
+    RName(String),
+    RId(ResourceId),
+    RIdWithSuffix(ResourceId, String),
 }
 use ResKey::*;
 
