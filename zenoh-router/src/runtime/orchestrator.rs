@@ -32,7 +32,7 @@ const PEER_SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
 const PEER_SCOUT_MAX_PERIOD: u64 = 8000; //ms
 const PEER_SCOUT_PERIOD_INCREASE_FACTOR: u64 = 2;
 const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
-const MCAST_ADDR: &str = "239.255.0.1";
+const MCAST_ADDR: &str = "224.0.0.224";
 const MCAST_PORT: &str = "7447";
 
 #[derive(Clone)]
