@@ -83,7 +83,6 @@ impl Timed for LinkLeaseEvent {
         // Close the link or eventually the whole session
         if let Some(ch) = self.ch.upgrade() {                        
             let links = ch.get_links().await;
-            log::debug!("LINK LEASE");
             if links.len() == 1 && links[0] == self.link {
                 log::warn!("Link {} has expired with peer: {}. No links left. Closing the session.", self.link, ch.get_peer());
                 // The last link has expired, close the whole session
@@ -117,7 +116,6 @@ impl Timed for SessionLeaseEvent {
     async fn run(&mut self) {
         if let Some(ch) = self.ch.upgrade() {            
             let links = ch.get_links().await;
-            log::debug!("SESSION LEASE");
             if links.is_empty() {
                 log::warn!("Session has expired with peer: {}", ch.get_peer());
                 // The last link has expired, close the whole session

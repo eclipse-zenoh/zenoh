@@ -249,33 +249,46 @@ impl TransportTrait for Channel {
                 }
             },
             SessionBody::AckNack { .. } => {
-                unimplemented!("Handling of AckNack Messages not yet implemented!");
+                log::debug!("Handling of AckNack Messages not yet implemented!");
+                self.delete().await;
+                Action::Close
             },
             SessionBody::Close { pid, reason, link_only } => {
                 self.process_close(link, pid, reason, link_only).await
             },
             SessionBody::Hello { .. } => {
-                unimplemented!("Handling of Hello Messages not yet implemented!");
+                log::debug!("Handling of Hello Messages not yet implemented!");
+                self.delete().await;
+                Action::Close
             },
             SessionBody::KeepAlive { pid } => {
                 self.process_keep_alive(link, pid).await
             },            
             SessionBody::Ping { .. } => {
-                unimplemented!("Handling of Ping Messages not yet implemented!");
+                log::debug!("Handling of Ping Messages not yet implemented!");
+                self.delete().await;
+                Action::Close
             },
             SessionBody::Pong { .. } => {
-                unimplemented!("Handling of Pong Messages not yet implemented!");
+                log::debug!("Handling of Pong Messages not yet implemented!");
+                self.delete().await;
+                Action::Close
             },
             SessionBody::Scout { .. } => {
-                unimplemented!("Handling of Scout Messages not yet implemented!");
+                log::debug!("Handling of Scout Messages not yet implemented!");
+                self.delete().await;
+                Action::Close
             },
             SessionBody::Sync { .. } => {
-                unimplemented!("Handling of Sync Messages not yet implemented!");
+                log::debug!("Handling of Sync Messages not yet implemented!");
+                self.delete().await;
+                Action::Close
             },            
             SessionBody::Open { .. } |
             SessionBody::Accept { .. } => {
                 log::debug!("Unexpected Open/Accept message received in an already established session\
                              Closing the link: {}", link);
+                self.delete().await;
                 Action::Close
             }
         }        

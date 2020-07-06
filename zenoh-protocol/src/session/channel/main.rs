@@ -179,6 +179,7 @@ impl Channel {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) {
+        log::debug!("Closing the session with peer: {}", self.get_keep_alive());
         // Delete the session on the manager
         let _ = self.manager.del_session(&self.pid).await;            
 
