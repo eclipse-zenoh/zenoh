@@ -93,76 +93,8 @@ impl Tcp {
         // Retrieve the source and destination socket addresses
         let src_addr = socket.local_addr().unwrap();
         let dst_addr = socket.peer_addr().unwrap();
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::io::AsRawFd;
-            // Retrieve the raw file descriptor/socket for setting TCP options
-            let raw_socket = socket.as_raw_fd();
-
-            // Initialize the SO_LINGER option
-            let optval = libc::linger {
-                // This field is interpreted as a boolean.
-                // If nonzero, shutdown() blocks until the data are transmitted or the timeout period has expired.
-                l_onoff: 1,
-                // This specifies the timeout period, in seconds.
-                l_linger: *TCP_LINGER_TIMEOUT,
-            };
-
-            // Set the SO_LINGER option
-            unsafe {
-                let ret = libc::setsockopt(
-                    raw_socket,
-                    libc::SOL_SOCKET,
-                    libc::SO_LINGER,
-                    &optval as *const libc::linger as *const libc::c_void,
-                    std::mem::size_of_val(&optval) as libc::socklen_t,
-                );
-                if ret != 0 {
-                    log::warn!(
-                        "Unable to set LINGER option on TCP link: {} => {}",
-                        src_addr,
-                        dst_addr
-                    );
-                }
-            }
-        }
-
-        #[cfg(windows)]
-        {
-            use std::os::windows::io::AsRawSocket;
-            use winapi::um::winsock2;
-            use winapi::um::ws2tcpip;
-
-            // Retrieve the raw file descriptor/socket for setting TCP options
-            let raw_socket = socket.as_raw_socket();
-
-            // Initialize the SO_LINGER option
-            let optval = winsock2::linger {
-                // This field is interpreted as a boolean.
-                // If nonzero, shutdown() blocks until the data are transmitted or the timeout period has expired.
-                l_onoff: 1,
-                // This specifies the timeout period, in seconds.
-                l_linger: *TCP_LINGER_TIMEOUT as u16,
-            };
-
-            // Set the SO_LINGER option
-            unsafe {
-                let ret = winsock2::setsockopt(
-                    raw_socket.try_into().unwrap(),
-                    winsock2::SOL_SOCKET,
-                    winsock2::SO_LINGER,
-                    &optval as *const winsock2::linger as *const i8,
-                    std::mem::size_of_val(&optval) as ws2tcpip::socklen_t,
-                );
-                if ret != 0 {
-                    log::warn!(
-                        "Unable to set LINGER option on TCP link: {} => {}",
-                        src_addr,
-                        dst_addr
-                    );
-                }
-            }
+        if zenoh_util::net::set_linger(&socket, Some(Duration::from_secs((*TCP_LINGER_TIMEOUT).try_into().unwrap()))).is_err() {
+            log::warn!("Unable to set LINGER option on TCP link: {} => {}", src_addr, dst_addr);
         }
 
         // Build the Tcp object
@@ -200,7 +132,6 @@ impl LinkTrait for Tcp {
         let _ = self.manager.del_link(&self.src_addr, &self.dst_addr).await;
         Ok(())
     }
-
     async fn send(&self, buffer: &[u8]) -> ZResult<()> {
         log::trace!("Sending {} bytes on TCP link: {}", buffer.len(), self);
 
@@ -394,7 +325,6 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                 }
             };
         }
-        
         log::trace!("Ready to read from TCP link: {}", link);
         loop {
             // Async read from the TCP socket

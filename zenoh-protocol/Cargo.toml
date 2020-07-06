@@ -33,12 +33,6 @@ http-types = "2.2.1"
 uuid = { version = "0.8.1", features = ["v4"] }
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
 
-[target.'cfg(windows)'.dependencies]
-winapi = "0.3.9"
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2.71"
-
 [dependencies.async-std]
 version = "~1.6.0"
 features = ["unstable"]

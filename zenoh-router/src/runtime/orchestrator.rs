@@ -137,28 +137,21 @@ impl SessionOrchestrator {
 
     fn get_interface(name: &str) -> ZResult<IpAddr> {
         if name == "auto" {
-            for iface in pnet::datalink::interfaces() {
-                if !iface.is_loopback() && iface.is_multicast() {
-                    for ip in iface.ips {
-                        if ip.is_ipv4() { return Ok(ip.ip()) }
-                    }
-                }
+            match zenoh_util::net::get_default_multicast_interface() {
+                Some(addr) => Ok(addr),
+                None => {
+                    log::warn!("Unable to find active, non-loopback multicast interface. Will use 0.0.0.0");
+                    Ok(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)))
+                },
             }
-            log::warn!("Unable to find non-loopback multicast interface. Will use 0.0.0.0");
-            Ok(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)))
         } else {
-            for iface in pnet::datalink::interfaces() {
-                if iface.name == name {
-                    for ip in &iface.ips {
-                        if ip.is_ipv4() { return Ok(ip.ip()) }
-                    }
-                }
-                for ip in &iface.ips {
-                    if ip.ip().to_string() == name { return Ok(ip.ip()) }
-                }
+            match zenoh_util::net::get_interface(name) {
+                Some(addr) => Ok(addr),
+                None => {
+                    log::error!("Unable to find interface : {}", name);
+                    zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface : {}", name) })
+                },
             }
-            log::error!("Unable to find interface : {}", name);
-            zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface : {}", name)})
         }
     }
 
@@ -175,7 +168,7 @@ impl SessionOrchestrator {
             return zerror!(ZErrorKind::IOError{ descr: "Unable to set SO_REUSEADDR option".to_string()}, err)
         }
         let addr = {
-            #[cfg(unix)] { MCAST_ADDR.parse().unwrap() }
+            #[cfg(unix)] { MCAST_ADDR.parse().unwrap() } // See UNIX Network Programmping p.212
             #[cfg(windows)] { IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) }
         };  
         if let Err(err) = socket.bind(&SocketAddr::new(addr, MCAST_PORT.parse().unwrap()).into()) {
@@ -332,13 +325,9 @@ impl SessionOrchestrator {
             match locator {
                 Locator::Tcp(addr) => {
                     if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
-                        for iface in pnet::datalink::interfaces() {
-                            if !iface.is_loopback() {
-                                for ip in iface.ips {
-                                    if ip.ip().is_ipv4() {
-                                        result.push(format!("tcp/{}:{}", ip.ip().to_string(), addr.port()).parse().unwrap());
-                                    }
-                                }
+                        for ipaddr in zenoh_util::net::get_local_addresses() {
+                            if ! ipaddr.is_loopback() && ipaddr.is_ipv4() {
+                                result.push(format!("tcp/{}:{}", ipaddr.to_string(), addr.port()).parse().unwrap());
                             }
                         }
                     } else {

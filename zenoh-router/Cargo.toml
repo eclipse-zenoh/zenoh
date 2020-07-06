@@ -28,7 +28,6 @@ log = "0.4"
 env_logger = "0.7.1"
 clap = "2"
 serde_json = { version = "1.0", features = ["preserve_order"] }
-pnet = "0.26.0"
 socket2 = "0.3.12"
 zenoh-protocol =  { version = "0.5.0", path = "../zenoh-protocol" }
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
