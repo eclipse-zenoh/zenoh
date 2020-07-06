@@ -21,6 +21,7 @@ pub mod core;
 pub mod sync;
 pub mod hlc;
 pub mod net;
+pub mod ffi;
 
 pub use crate::core::macros::*;
 

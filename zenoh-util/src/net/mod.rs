@@ -14,8 +14,12 @@
 use std::time::Duration;
 use std::net::IpAddr;
 use async_std::net::TcpStream;
-use crate::zerror;
+use crate::{zerror, zconfigurable};
 use crate::core::{ZResult, ZError, ZErrorKind};
+
+zconfigurable! {
+    static ref WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE: u32 = 8192;
+}
 
 pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
     #[cfg(unix)] {
@@ -50,6 +54,7 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
     }
 
     #[cfg(windows)] {
+        use std::convert::TryInto;
         use std::os::windows::io::AsRawSocket;
         use winapi::um::winsock2;
         use winapi::um::ws2tcpip;
@@ -83,39 +88,132 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
 }
 
 pub fn get_interface(name: &str) -> Option<IpAddr> {
-    for iface in pnet::datalink::interfaces() {
-        if iface.name == name {
-            for ip in &iface.ips {
-                if ip.is_ipv4() { return Some(ip.ip()) }
-            }
-        }
-        for ip in &iface.ips {
-            if ip.ip().to_string() == name { return Some(ip.ip()) }
-        }
-    }
-    None
-}
-
-/// Get the network interface to bind the UDP sending port to when not specified by user
-pub fn get_default_multicast_interface() -> Option<IpAddr> {
     #[cfg(unix)] {
-        // In unix family, return first active, non-loopback, multicast enabled interface
         for iface in pnet::datalink::interfaces() {
-            if iface.is_up() && !iface.is_loopback() && iface.is_multicast() {
-                for ipaddr in iface.ips {
-                    if ipaddr.is_ipv4() { return Some(ipaddr.ip()) }
+            if iface.name == name {
+                for ifaddr in &iface.ips {
+                    if ifaddr.is_ipv4() {
+                        return Some(ifaddr.ip());
+                    }
+                }
+            }
+            for ifaddr in &iface.ips {
+                if ifaddr.ip().to_string() == name {
+                    return Some(ifaddr.ip());
                 }
             }
         }
         None
     }
-    #[cfg(windows)] {
+
+    #[cfg(windows)] { unsafe {
+        use std::convert::TryInto;
+        use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+        use crate::ffi;
+
+        let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
+        let mut buffer: Vec<u8> = Vec::with_capacity(*WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE as usize);
+        let ret = winapi::um::iphlpapi::GetAdaptersAddresses(
+            winapi::shared::ws2def::AF_INET.try_into().unwrap(),
+            0,
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
+            &mut size,
+        );
+
+        if ret != 0 { return None; }
+
+        let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
+        while let Some(iface) = next_iface {
+            if name == ffi::pstr_to_string(iface.AdapterName)
+                || name == ffi::pwstr_to_string(iface.FriendlyName)
+                || name == ffi::pwstr_to_string(iface.Description)
+            {
+                let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
+                while let Some(ucast_addr) = next_ucast_addr {
+                    if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
+                        if ifaddr.is_ipv4() {
+                            return Some(ifaddr.ip());
+                        }
+                    }
+                    next_ucast_addr = ucast_addr.Next.as_ref();
+                }
+            }
+
+            let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
+            while let Some(ucast_addr) = next_ucast_addr {
+                if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
+                    if ifaddr.ip().to_string() == name {
+                        return Some(ifaddr.ip());
+                    }
+                }
+                next_ucast_addr = ucast_addr.Next.as_ref();
+            }
+            next_iface = iface.Next.as_ref();
+        }
+        None
+    }}
+}
+
+/// Get the network interface to bind the UDP sending port to when not specified by user
+pub fn get_default_multicast_interface() -> Option<IpAddr> {
+    #[cfg(unix)]
+    {
+        // In unix family, return first active, non-loopback, multicast enabled interface
+        for iface in pnet::datalink::interfaces() {
+            if iface.is_up() && !iface.is_loopback() && iface.is_multicast() {
+                for ipaddr in iface.ips {
+                    if ipaddr.is_ipv4() {
+                        return Some(ipaddr.ip());
+                    }
+                }
+            }
+        }
+        None
+    }
+    #[cfg(windows)]
+    {
         // On windows, bind to 0.0.0.0, the system will select the default interface
         Some(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
     }
 }
 
-pub fn get_local_addresses() -> Vec<IpAddr> {
-    pnet::datalink::interfaces().into_iter().map(|iface| iface.ips)
-        .flatten().map(|ipnet| ipnet.ip()).collect()
+pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
+    #[cfg(unix)]
+    {
+        Ok(pnet::datalink::interfaces().into_iter().map(|iface| iface.ips)
+            .flatten().map(|ipnet| ipnet.ip()).collect())
+    }
+
+    #[cfg(windows)] { unsafe {
+        use std::convert::TryInto;
+        use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+        use crate::ffi;
+
+        let mut result = vec![];
+        let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
+        let mut buffer: Vec<u8> = Vec::with_capacity(*WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE as usize);
+        let ret = winapi::um::iphlpapi::GetAdaptersAddresses(
+            winapi::shared::ws2def::AF_INET.try_into().unwrap(),
+            0,
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
+            &mut size,
+        );
+
+        if ret != 0 { return zerror!(ZErrorKind::IOError { descr: "".to_string() }); }
+
+        let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
+        while let Some(iface) = next_iface {
+            let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
+            while let Some(ucast_addr) = next_ucast_addr {
+                if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
+                    result.push(ifaddr.ip());
+                }
+                next_ucast_addr = ucast_addr.Next.as_ref();
+            }
+            next_iface = iface.Next.as_ref();
+        }
+        Ok(result)
+    }}
 }

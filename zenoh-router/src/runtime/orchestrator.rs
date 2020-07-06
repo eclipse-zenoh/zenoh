@@ -325,10 +325,15 @@ impl SessionOrchestrator {
             match locator {
                 Locator::Tcp(addr) => {
                     if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
-                        for ipaddr in zenoh_util::net::get_local_addresses() {
-                            if ! ipaddr.is_loopback() && ipaddr.is_ipv4() {
-                                result.push(format!("tcp/{}:{}", ipaddr.to_string(), addr.port()).parse().unwrap());
-                            }
+                        match zenoh_util::net::get_local_addresses() {
+                            Ok(ipaddrs) => {
+                                for ipaddr in ipaddrs {
+                                    if ! ipaddr.is_loopback() && ipaddr.is_ipv4() {
+                                        result.push(format!("tcp/{}:{}", ipaddr.to_string(), addr.port()).parse().unwrap());
+                                    }
+                                }
+                            },
+                            Err(_) => log::error!("Unable to get local addresses"),
                         }
                     } else {
                         result.push(locator)
