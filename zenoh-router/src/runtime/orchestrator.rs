@@ -341,6 +341,8 @@ impl SessionOrchestrator {
                                 }
                             }
                         }
+                    } else {
+                        result.push(locator)
                     }
                 },
                 loc => result.push(loc),
