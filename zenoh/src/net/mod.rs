@@ -24,6 +24,9 @@ pub use consts::*;
 mod session;
 pub use session::*;
 
+pub use zenoh_protocol::proto::encoding;
+pub use zenoh_protocol::proto::kind;
+
 pub mod queryable { pub use zenoh_protocol::core::queryable::*; }
 
 pub const LOCATOR_AUTO: &str = "auto";

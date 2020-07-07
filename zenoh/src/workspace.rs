@@ -71,7 +71,12 @@ impl Workspace {
 
     pub async fn put(&self, path: &Path, value: &dyn Value) -> ZResult<()> {
         debug!("write to {:?}", self.path_to_reskey(path));
-        self.session.write(&self.path_to_reskey(path), value.into()).await
+        self.session.write_wo(
+            &self.path_to_reskey(path),
+            value.into(),
+            value.encoding(),
+            kind::PUT
+        ).await
     }
 
 

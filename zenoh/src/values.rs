@@ -11,11 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::net::RBuf;
+use crate::net::{encoding, RBuf, ZInt};
 use log::warn;
 
 pub trait Value {
     fn as_rbuf(&self) -> RBuf;
+
+    fn encoding(&self) -> ZInt;
 }
 
 impl From<&dyn Value> for RBuf {
@@ -30,6 +32,9 @@ pub struct RawValue(RBuf);
 impl Value for RawValue {
     fn as_rbuf(&self) -> RBuf {
         self.0.clone()
+    }
+    fn encoding(&self) -> ZInt {
+        encoding::RAW
     }
 }
 
@@ -59,6 +64,9 @@ impl Value for StringValue {
     fn as_rbuf(&self) -> RBuf {
         self.0.as_bytes().into()
     }
+    fn encoding(&self) -> ZInt {
+        encoding::STRING
+    }
 }
 
 impl From<&RBuf> for StringValue {
@@ -86,6 +94,9 @@ impl Value for IntValue {
     fn as_rbuf(&self) -> RBuf {
         self.0.to_string().as_bytes().into()
     }
+    fn encoding(&self) -> ZInt {
+        encoding::APP_INTEGER
+    }
 }
 
 impl From<&RBuf> for IntValue {
@@ -110,6 +121,9 @@ pub struct FloatValue(f64);
 impl Value for FloatValue {
     fn as_rbuf(&self) -> RBuf {
         self.0.to_string().as_bytes().into()
+    }
+    fn encoding(&self) -> ZInt {
+        encoding::APP_FLOAT
     }
 }
 
