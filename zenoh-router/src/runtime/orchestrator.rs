@@ -145,12 +145,25 @@ impl SessionOrchestrator {
                 },
             }
         } else {
-            match zenoh_util::net::get_interface(name) {
-                Some(addr) => Ok(addr),
-                None => {
-                    log::error!("Unable to find interface : {}", name);
-                    zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface : {}", name) })
-                },
+            match name.parse::<IpAddr>() {
+                Ok(addr) => Ok(addr),
+                Err(_) => {
+                    match zenoh_util::net::get_interface(name) {
+                        Ok(opt_addr) => {
+                                match opt_addr {
+                                Some(addr) => Ok(addr),
+                                None => {
+                                    log::error!("Unable to find interface {}", name);
+                                    zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface {}", name) })
+                                }
+                            }
+                        },
+                        Err(err) => {
+                            log::error!("Unable to find interface {} : {}", name, err);
+                            zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface {} : {}", name, err) })
+                        },
+                    }
+                }
             }
         }
     }
@@ -333,7 +346,7 @@ impl SessionOrchestrator {
                                     }
                                 }
                             },
-                            Err(_) => log::error!("Unable to get local addresses"),
+                            Err(err) => log::error!("Unable to get local addresses : {}", err),
                         }
                     } else {
                         result.push(locator)

@@ -48,7 +48,7 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
             );
             match ret {
                 0 => Ok(()),
-                _ => zerror!(ZErrorKind::IOError { descr: "".to_string() }),
+                err_code => zerror!(ZErrorKind::IOError { descr: format!("setsockopt returned {}", err_code) }),
             }
         }
     }
@@ -81,29 +81,29 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
             );
             match ret {
                 0 => Ok(()),
-                _ => zerror!(ZErrorKind::IOError { descr: "".to_string() }),
+                err_code => zerror!(ZErrorKind::IOError { descr: format!("setsockopt returned {}", err_code) }),
             }
         }
     }
 }
 
-pub fn get_interface(name: &str) -> Option<IpAddr> {
+pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
     #[cfg(unix)] {
         for iface in pnet::datalink::interfaces() {
             if iface.name == name {
                 for ifaddr in &iface.ips {
                     if ifaddr.is_ipv4() {
-                        return Some(ifaddr.ip());
+                        return Ok(Some(ifaddr.ip()));
                     }
                 }
             }
             for ifaddr in &iface.ips {
                 if ifaddr.ip().to_string() == name {
-                    return Some(ifaddr.ip());
+                    return Ok(Some(ifaddr.ip()));
                 }
             }
         }
-        None
+        Ok(None)
     }
 
     #[cfg(windows)] { unsafe {
@@ -121,7 +121,7 @@ pub fn get_interface(name: &str) -> Option<IpAddr> {
             &mut size,
         );
 
-        if ret != 0 { return None; }
+        if ret != 0 { return zerror!(ZErrorKind::IOError { descr: format!("GetAdaptersAddresses returned {}", ret)}); }
 
         let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
         while let Some(iface) = next_iface {
@@ -133,7 +133,7 @@ pub fn get_interface(name: &str) -> Option<IpAddr> {
                 while let Some(ucast_addr) = next_ucast_addr {
                     if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
                         if ifaddr.is_ipv4() {
-                            return Some(ifaddr.ip());
+                            return return Ok(Some(ifaddr.ip()));;
                         }
                     }
                     next_ucast_addr = ucast_addr.Next.as_ref();
@@ -144,14 +144,14 @@ pub fn get_interface(name: &str) -> Option<IpAddr> {
             while let Some(ucast_addr) = next_ucast_addr {
                 if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
                     if ifaddr.ip().to_string() == name {
-                        return Some(ifaddr.ip());
+                        return return Ok(Some(ifaddr.ip()));;
                     }
                 }
                 next_ucast_addr = ucast_addr.Next.as_ref();
             }
             next_iface = iface.Next.as_ref();
         }
-        None
+        Ok(None)
     }}
 }
 
@@ -201,7 +201,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
             &mut size,
         );
 
-        if ret != 0 { return zerror!(ZErrorKind::IOError { descr: "".to_string() }); }
+        if ret != 0 { return zerror!(ZErrorKind::IOError { descr: format!("GetAdaptersAddresses returned {}", ret)}); }
 
         let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
         while let Some(iface) = next_iface {
