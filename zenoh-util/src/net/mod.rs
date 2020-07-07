@@ -133,7 +133,7 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
                 while let Some(ucast_addr) = next_ucast_addr {
                     if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
                         if ifaddr.is_ipv4() {
-                            return return Ok(Some(ifaddr.ip()));;
+                            return Ok(Some(ifaddr.ip()));
                         }
                     }
                     next_ucast_addr = ucast_addr.Next.as_ref();
@@ -144,7 +144,7 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
             while let Some(ucast_addr) = next_ucast_addr {
                 if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
                     if ifaddr.ip().to_string() == name {
-                        return return Ok(Some(ifaddr.ip()));;
+                        return Ok(Some(ifaddr.ip()));
                     }
                 }
                 next_ucast_addr = ucast_addr.Next.as_ref();
