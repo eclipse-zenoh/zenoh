@@ -25,6 +25,9 @@ pub enum ZErrorKind {
     InvalidReference { descr: String},
     InvalidResolution { descr: String},    
     InvalidSession { descr: String },
+    InvalidPath { path: String },
+    InvalidPathExpr { path: String },
+    InvalidSelector { selector: String },
     IOError { descr: String },
     Other { descr: String },
     UnkownResourceId { rid: String }
@@ -50,6 +53,12 @@ impl fmt::Display for ZErrorKind {
                 write!(f, "Invalid Resolution ({})", descr),
             ZErrorKind::InvalidSession { descr } =>
                 write!(f, "Invalid Session ({})", descr),
+            ZErrorKind::InvalidPath { path } =>
+                write!(f, "Invalid Path ({})", path),
+            ZErrorKind::InvalidPathExpr { path } =>
+                write!(f, "Invalid PathExpr ({})", path),
+            ZErrorKind::InvalidSelector { selector } =>
+                write!(f, "Invalid Selector ({})", selector),
             ZErrorKind::IOError { descr } =>
                 write!(f, "IO error ({})", descr),
             ZErrorKind::Other { descr } =>

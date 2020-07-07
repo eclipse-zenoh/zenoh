@@ -27,7 +27,7 @@ async-trait = "0.1.36"
 futures = "0.3.5"
 pin-project-lite = "0.1.7"
 rand = "0.7.3"
-clap = "2.33.1"
+regex = "1"
 log = "0.4"
 lazy_static = "1.4.0"
 zenoh-protocol = { version = "0.5.0", path = "../zenoh-protocol" }
@@ -39,7 +39,16 @@ version = "~1.6.0"
 features = ["unstable", "attributes"]
 
 [dev-dependencies]
+clap = "2.33"
 env_logger = "0.7.1"
+
+[[example]]
+name = "z_put"
+path = "examples/zenoh/z_put.rs"
+
+[[example]]
+name = "z_put_float"
+path = "examples/zenoh/z_put_float.rs"
 
 [[example]]
 name = "zn_scout"
