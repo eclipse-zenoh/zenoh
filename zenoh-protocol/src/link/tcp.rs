@@ -93,8 +93,8 @@ impl Tcp {
         // Retrieve the source and destination socket addresses
         let src_addr = socket.local_addr().unwrap();
         let dst_addr = socket.peer_addr().unwrap();
-        if zenoh_util::net::set_linger(&socket, Some(Duration::from_secs((*TCP_LINGER_TIMEOUT).try_into().unwrap()))).is_err() {
-            log::warn!("Unable to set LINGER option on TCP link: {} => {}", src_addr, dst_addr);
+        if let Err(err) = zenoh_util::net::set_linger(&socket, Some(Duration::from_secs((*TCP_LINGER_TIMEOUT).try_into().unwrap()))) {
+            log::warn!("Unable to set LINGER option on TCP link {} => {} : {}", src_addr, dst_addr, err);
         }
 
         // Build the Tcp object
