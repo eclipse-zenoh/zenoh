@@ -183,14 +183,20 @@ impl SessionOrchestrator {
         let addr = {
             #[cfg(unix)] { MCAST_ADDR.parse().unwrap() } // See UNIX Network Programmping p.212
             #[cfg(windows)] { IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) }
-        };  
-        if let Err(err) = socket.bind(&SocketAddr::new(addr, MCAST_PORT.parse().unwrap()).into()) {
-            log::error!("Unable to bind udp port {}:{} : {}", addr, MCAST_PORT, err);
-            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:{}", addr, MCAST_PORT)}, err)
+        };
+        match socket.bind(&SocketAddr::new(addr, MCAST_PORT.parse().unwrap()).into()) {
+            Ok(()) => log::debug!("UDP port bound to {}:{}", addr, MCAST_PORT),
+            Err(err) => {
+                log::error!("Unable to bind udp port {}:{} : {}", addr, MCAST_PORT, err);
+                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:{}", addr, MCAST_PORT)}, err)
+            },
         }
-        if let Err(err) = socket.join_multicast_v4(&MCAST_ADDR.parse::<Ipv4Addr>().unwrap(), &Ipv4Addr::new(0, 0, 0, 0)) {
-            log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
-            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to join multicast group {}", MCAST_ADDR)}, err)
+        match socket.join_multicast_v4(&MCAST_ADDR.parse::<Ipv4Addr>().unwrap(), &Ipv4Addr::new(0, 0, 0, 0)) {
+            Ok(()) => log::debug!("Joined multicast group {}", MCAST_ADDR),
+            Err(err) => {
+                log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
+                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to join multicast group {}", MCAST_ADDR)}, err)
+            },
         }
         Ok(socket.into_udp_socket().into())
     }
@@ -203,9 +209,18 @@ impl SessionOrchestrator {
                 return zerror!(ZErrorKind::IOError{ descr: "Unable to create datagram socket".to_string()}, err)
             },
         };
-        if let Err(err) = socket.bind(&SocketAddr::new(addr, 0).into()) {
-            log::error!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
-            return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:0", addr.to_string())}, err)
+        match socket.bind(&SocketAddr::new(addr, 0).into()) {
+            Ok(()) => {
+                #[allow(clippy::or_fun_call)]
+                let local_addr = socket.local_addr()
+                    .or::<std::io::Error>(Ok(SocketAddr::new(addr, 0).into())).unwrap().as_std()
+                    .or(Some(SocketAddr::new(addr, 0))).unwrap();
+                log::debug!("UDP port bound to {}", local_addr);
+            },
+            Err(err) => {
+                log::error!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
+                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:0", addr.to_string())}, err)
+            }
         }
         Ok(socket.into_udp_socket().into())
     }
