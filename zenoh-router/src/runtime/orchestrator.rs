@@ -378,6 +378,13 @@ impl SessionOrchestrator {
         log::debug!("Waiting for UDP datagram...");
         loop {
             let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
+            if let Ok(local_addr) = ucast_socket.local_addr() {
+                if local_addr == peer { 
+                    log::trace!("Ignore UDP datagram from own socket");
+                    continue; 
+                }
+            }
+
             let mut rbuf = RBuf::from(&buf[..n]);
             log::trace!("Received UDP datagram {}", rbuf);
             if let Ok(msg) = rbuf.read_session_message() {
