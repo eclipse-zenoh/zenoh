@@ -42,10 +42,11 @@ async fn run() {
         counter: counter.clone()
     };
 
-    // Default testing interval: 125 ms
-    let interval = Duration::from_millis(125);
+    // Default testing interval: 1 s
+    let interval = Duration::from_secs(1);
 
     /* [1] */
+    println!("Timer [1]: Once event and run");
     // Fire a once timed event
     let now = Instant::now(); 
     let event = TimedEvent::once(now + (2 * interval), myev.clone());
@@ -61,6 +62,7 @@ async fn run() {
     assert_eq!(value, 1);
 
     /* [2] */
+    println!("Timer [2]: Once event and defuse");
     // Fire a once timed event and defuse it before it is executed
     let now = Instant::now(); 
     let event = TimedEvent::once(now + (2 * interval), myev.clone());
@@ -79,6 +81,7 @@ async fn run() {
     assert_eq!(value, 0);
 
     /* [3] */
+    println!("Timer [3]: Periodic event run and defuse");
     // Number of events to occur
     let amount: usize = 5;
 
@@ -110,6 +113,7 @@ async fn run() {
     assert_eq!(value, 0);
 
     /* [4] */
+    println!("Timer [4]: Periodic event and stop/start timer");
     // Fire a periodic event
     let event = TimedEvent::periodic(2 * interval, myev);
 
