@@ -83,7 +83,7 @@ async fn run() {
     /* [3] */
     println!("Timer [3]: Periodic event run and defuse");
     // Number of events to occur
-    let amount: usize = 5;
+    let amount: usize = 3;
 
     // Half the waiting interval for granularity reasons
     let to_elapse = (2 * amount as u32) * interval;
