@@ -132,6 +132,7 @@ impl LinkTrait for Tcp {
         let _ = self.manager.del_link(&self.src_addr, &self.dst_addr).await;
         Ok(())
     }
+    
     async fn send(&self, buffer: &[u8]) -> ZResult<()> {
         log::trace!("Sending {} bytes on TCP link: {}", buffer.len(), self);
 

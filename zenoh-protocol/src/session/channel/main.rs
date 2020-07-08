@@ -184,7 +184,9 @@ impl Channel {
         let _ = self.manager.del_session(&self.pid).await;            
 
         // Notify the callback
-        zasyncopt!(self.callback).close().await;
+        if let Some(callback) = zasyncread!(self.callback).as_ref() {
+            callback.close().await;
+        }
         
         // Close all the links
         let mut guard = zasyncwrite!(self.links);
