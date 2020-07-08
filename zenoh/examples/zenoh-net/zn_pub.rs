@@ -29,7 +29,8 @@ async fn main() {
             .default_value("Pub from Rust!"))
         .get_matches();
 
-    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+    let config = Config::new()
+        .mode(args.value_of("mode").map(|m| Config::into_mode(m)).unwrap().unwrap())
         .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let path    = args.value_of("path").unwrap();
     let value   = args.value_of("value").unwrap();

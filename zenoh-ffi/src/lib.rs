@@ -15,6 +15,8 @@ use libc::{c_char, c_ulong, c_uint, c_int};
 use std::ffi::CStr;
 use std::slice;
 use async_std::task;
+use clap::{App, Arg};
+
 use zenoh::net;
 use zenoh::net::Config;
 use zenoh_protocol::core::{ResKey, ResourceId}; // { rname, PeerId, ResourceId, , ZError, ZErrorKind };
@@ -57,15 +59,15 @@ pub unsafe extern "C" fn zn_properties_free(rps: *mut ZProperties ) {
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 /// 
-#[no_mangle]
-pub unsafe extern "C" fn zn_open(locator: *const c_char, _ps: *const ZProperties) -> *mut ZNSession {
-  let s = task::block_on(async move {
-    let config = Config::client();
-    let config = if !locator.is_null() { config.add_peer(CStr::from_ptr(locator).to_str().unwrap()) } else { config };
-    net::open(config, None).await
-  }).unwrap();
-  Box::into_raw(Box::new(ZNSession(s)))
-}
+// #[no_mangle]
+// pub unsafe extern "C" fn zn_open(argc: c_int, argv: *const *const c_char, _ps: *const ZProperties) -> *mut ZNSession {
+  // let s = task::block_on(async move {
+  //   let config = Config::client();
+  //   let config = if !locator.is_null() { config.add_peer(CStr::from_ptr(locator).to_str().unwrap()) } else { config };
+  //   net::open(config, None).await
+  // }).unwrap();
+  // Box::into_raw(Box::new(ZNSession(s)))
+// }
 
 /// Add a property
 /// 

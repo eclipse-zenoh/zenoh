@@ -118,13 +118,14 @@ impl Config {
             scouting_delay: Duration::new(0, 250_000_000),
         }
     }
+    
+    pub fn new() -> Config {
+        Config::default(whatami::PEER)        
+    }
 
-    pub fn new(mode: &str) -> Result<Config, ()> {
-        match mode {
-            "peer" => Ok(Config::peer()),
-            "client" => Ok(Config::client()),
-            _ => Err(()),
-        }
+    pub fn mode(mut self, w: whatami::Type) -> Self {
+        self.whatami = w;
+        self
     }
 
     pub fn peer() -> Config {
@@ -164,6 +165,16 @@ impl Config {
         self.scouting_delay = delay;
         self
     }
+
+    pub fn into_mode(m: &str) -> Result<whatami::Type, ()> {
+        match m {
+            "peer" => Ok(whatami::PEER),
+            "client" => Ok(whatami::CLIENT),
+            "router" => Ok(whatami::ROUTER),
+            "broker" => Ok(whatami::BROKER),
+            _ => Err(())
+        }
+    }
 }
 
 impl fmt::Display for Config {
@@ -171,3 +182,4 @@ impl fmt::Display for Config {
         fmt::Debug::fmt(self, f)
     }
 }
+

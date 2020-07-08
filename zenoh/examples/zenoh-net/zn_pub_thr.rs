@@ -27,7 +27,8 @@ async fn main() {
         .arg(Arg::from_usage("<PAYLOAD_SIZE>          'Sets the size of the payload to publish'"))
         .get_matches();
 
-    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+    let config = Config::new()
+        .mode(args.value_of("mode").map(|m| Config::into_mode(m)).unwrap().unwrap())
         .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let size    = args.value_of("PAYLOAD_SIZE").unwrap().parse::<usize>().unwrap();
 
