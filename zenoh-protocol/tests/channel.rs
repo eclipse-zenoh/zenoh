@@ -147,7 +147,7 @@ async fn channel_base_inner() {
     let router_id = PeerId{id: vec![1u8]};
 
     // Reliable messages to send
-    let messages_count: usize = 10_000;
+    let messages_count: usize = 1_000;
 
     // The timeout before counting the received messages
     // Set it to 1000 ms for testing purposes

@@ -231,8 +231,8 @@ async fn session_open_close(locator: Locator) {
     let client02_id = PeerId { id: vec![2u8] };
 
     // The timeout when opening a session
-    // Set it to 1000 ms for testing purposes
-    let timeout: u64 = 1_000;
+    // Set it to 2000 ms for testing purposes
+    let timeout: u64 = 2_000;
     let retries = 1;
 
     // Create the transport session manager for the first client

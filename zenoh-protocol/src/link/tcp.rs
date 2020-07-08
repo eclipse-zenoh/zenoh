@@ -132,6 +132,7 @@ impl LinkTrait for Tcp {
         let _ = self.manager.del_link(&self.src_addr, &self.dst_addr).await;
         Ok(())
     }
+
     async fn send(&self, buffer: &[u8]) -> ZResult<()> {
         log::trace!("Sending {} bytes on TCP link: {}", buffer.len(), self);
 
@@ -542,6 +543,7 @@ impl ManagerTrait for ManagerTcp {
         let addr = get_tcp_addr!(locator);
         self.0.del_listener(&self.0, addr).await
     }
+    
     async fn get_listeners(&self) -> Vec<Locator> {
         self.0.get_listeners().await
     }
