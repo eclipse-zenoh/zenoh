@@ -15,15 +15,25 @@ use libc::{c_char, c_ulong, c_uint, c_int};
 use std::ffi::CStr;
 use std::slice;
 use async_std::task;
-use clap::{App, Arg};
-
 use zenoh::net;
 use zenoh::net::Config;
 use zenoh_protocol::core::{ResKey, ResourceId}; // { rname, PeerId, ResourceId, , ZError, ZErrorKind };
+use zenoh_protocol::proto::whatami;
+
+#[no_mangle]
+pub static BROKER_MODE : c_int = whatami::BROKER as c_int;
+#[no_mangle]
+pub static ROUTER_MODE : c_int = whatami::ROUTER as c_int;
+#[no_mangle]
+pub static PEER_MODE : c_int = whatami::PEER as c_int;
+#[no_mangle]
+pub static CLIENT_MODE : c_int = whatami::CLIENT as c_int;
+
 
 pub struct ZNSession(zenoh::net::Session, );
 
 pub struct ZProperties(zenoh::net::Properties);
+
 
 #[no_mangle]
 pub extern "C" fn zn_properties_make() -> *mut ZProperties {
@@ -59,15 +69,16 @@ pub unsafe extern "C" fn zn_properties_free(rps: *mut ZProperties ) {
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 /// 
-// #[no_mangle]
-// pub unsafe extern "C" fn zn_open(argc: c_int, argv: *const *const c_char, _ps: *const ZProperties) -> *mut ZNSession {
-  // let s = task::block_on(async move {
-  //   let config = Config::client();
-  //   let config = if !locator.is_null() { config.add_peer(CStr::from_ptr(locator).to_str().unwrap()) } else { config };
-  //   net::open(config, None).await
-  // }).unwrap();
-  // Box::into_raw(Box::new(ZNSession(s)))
-// }
+#[no_mangle]
+pub unsafe extern "C" fn zn_open(mode: c_int, locator: *const c_char, _ps: *const ZProperties) -> *mut ZNSession {  
+
+  let s = task::block_on(async move {
+    let c = Config::new().mode(mode as u64);    
+    let config = if !locator.is_null() { c.add_peer(CStr::from_ptr(locator).to_str().unwrap()) } else { c };        
+    net::open(config, None).await
+  }).unwrap();
+  Box::into_raw(Box::new(ZNSession(s)))
+}
 
 /// Add a property
 /// 

@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
   len = atoi(argv[1]);
   
 
-  ZNSession *s = zn_open("", 0);
+  ZNSession *s = zn_open(PEER_MODE, 0, 0);
   if (s == 0) {
     printf("Error creating session!\n");
     exit(-1);
