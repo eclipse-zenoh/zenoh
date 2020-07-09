@@ -14,9 +14,10 @@
 use crate::net::*;
 use crate::*;
 use log::debug;
-use async_std::prelude::*;
-use std::pin::Pin;
+use async_std::sync::Receiver;
+use async_std::stream::Stream;
 use std::convert::TryInto;
+use pin_project_lite::pin_project;
 
 pub struct Workspace {
     session: Session,
@@ -66,31 +67,18 @@ impl Workspace {
         ).await
     }
 
-
-    pub async fn get(&self, selector: &Selector) -> ZResult<Pin<Box<dyn Stream<Item=Data>>>> {
+    pub async fn get(&self, selector: &Selector) -> ZResult<DataStream> {
         debug!("get on {}", selector);
         let pathexpr = self.pathexpr_to_reskey(&selector.path_expr);
 
-        match self.session.query(
+        self.session.query(
             &pathexpr,
             &selector.predicate,
             QueryTarget::default(),
             QueryConsolidation::default()
-            ).await
-        {
-            Ok(stream) => {
-                Ok(Box::pin(stream.map(Self::reply_to_data)))
-            },
-            Err(err) => Err(err)
-        }
+        ).await
+        .map(|receiver| DataStream { receiver })
     }
-
-
-    fn reply_to_data(reply: Reply) -> Data {
-        let path: Path = reply.data.res_name.try_into().unwrap();
-        Data { path, value: Box::new(RawValue::from(reply.data.payload)) }
-    }
-
 
 }
 
@@ -101,6 +89,29 @@ impl Workspace {
 pub struct Data {
     pub path: Path,
     pub value: Box<dyn Value>
-    // pub value: impl Value
+}
+
+
+pin_project! {
+    pub struct DataStream {
+        #[pin]
+        receiver: Receiver<Reply>
+    }
+}
+
+impl Stream for DataStream {
+    type Item = Data;
+
+    #[inline(always)]
+    fn poll_next(self: async_std::pin::Pin<&mut Self>, cx: &mut async_std::task::Context) -> async_std::task::Poll<Option<Self::Item>> {
+        self.project().receiver.poll_next(cx).map(reply_to_data)
+    }
+}
+
+fn reply_to_data(reply: Option<Reply>) -> Option<Data> {
+    reply.map(|r| Data {
+        path: r.data.res_name.try_into().unwrap(),
+        value: Box::new(RawValue::from(r.data.payload))
+    })
 }
 
