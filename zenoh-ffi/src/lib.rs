@@ -17,8 +17,7 @@ use std::slice;
 use async_std::task;
 use zenoh::net;
 use zenoh::net::Config;
-use zenoh_protocol::core::{ResKey, ResourceId}; // { rname, PeerId, ResourceId, , ZError, ZErrorKind };
-use zenoh_protocol::proto::whatami;
+use zenoh_protocol::core::*;
 
 #[no_mangle]
 pub static BROKER_MODE : c_int = whatami::BROKER as c_int;
@@ -165,3 +164,20 @@ pub unsafe extern "C" fn zn_write_wrid(session: *mut ZNSession, r_id: c_ulong, p
 
 }
 
+/// Declares a zenoh subscriber
+/// 
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// 
+#[no_mangle]
+pub unsafe extern "C" fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char, callback: extern fn()) -> c_int {   
+  if session.is_null() || r_name.is_null()  {
+    return -1
+  }
+  let si: SubInfo = Default::default();
+  let s = Box::from_raw(session);  
+  let name = CStr::from_ptr(r_name).to_str().unwrap();
+  // @WORK in progress.
+  // let r = task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()))).unwrap() as c_ulong;
+  return -1
+}

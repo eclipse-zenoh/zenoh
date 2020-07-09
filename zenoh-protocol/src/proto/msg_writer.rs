@@ -12,10 +12,10 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::io::WBuf;
-use crate::core::{ZInt, Property, ResKey, TimeStamp, NO_RESOURCE_ID};
+use crate::core::*;
 use crate::link::Locator;
 use super::msg::*;
-use super::decl::{Declaration, SubMode, Reliability, Period};
+use super::decl::*;
 
 macro_rules! check {
     ($op:expr) => (if !$op { return false })
@@ -346,13 +346,12 @@ impl WBuf {
         }
     }
 
-    fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool {
-        use super::decl::{SubMode::*, id::*};
-        let period_mask: u8 = if period.is_some() { PERIOD } else { 0x00 };
+    fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool {        
+        let period_mask: u8 = if period.is_some() { id::PERIOD } else { 0x00 };
         check!(
             match mode {
-                Push => self.write(MODE_PUSH | period_mask),
-                Pull => self.write(MODE_PULL | period_mask),
+                SubMode::Push => self.write(id::MODE_PUSH | period_mask),
+                SubMode::Pull => self.write(id::MODE_PULL | period_mask),
             });
         if let Some(p) = period {
             self.write_zint(p.origin) &&

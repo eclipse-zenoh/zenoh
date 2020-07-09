@@ -12,11 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::io::RBuf;
-use crate::core::{PeerId, Property, ResKey, TimeStamp, NO_RESOURCE_ID};
+use crate::core::*;
 use crate::link::Locator;
 
 use super::msg::*;
-use super::decl::{Declaration, SubInfo, SubMode, Reliability, Period};
+use super::decl::*;
 
 use zenoh_util::zerror;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
@@ -458,11 +458,11 @@ impl RBuf {
     }
 
     fn read_submode(&mut self) -> ZResult<(SubMode, Option<Period>)> {
-        use super::decl::{SubMode::*, id::*};
+        use super::decl::id::*;
         let mode_flag = self.read()?;
         let mode = match mode_flag & !PERIOD {
-            MODE_PUSH => Push,
-            MODE_PULL => Pull,
+            id::MODE_PUSH => SubMode::Push,
+            id::MODE_PULL => SubMode::Pull,
             id => panic!("UNEXPECTED ID FOR SubMode: {}", id)   //@TODO: return error
         };
         let period = if mode_flag & PERIOD > 0{

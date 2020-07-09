@@ -29,9 +29,9 @@ use super::defaults::{
     SESSION_SEQ_NUM_RESOLUTION
 };
 
-use crate::core::{PeerId, ZInt};
+use crate::core::{PeerId, ZInt, WhatAmI};
 use crate::link::{Link, LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
-use crate::proto::{Attachment, WhatAmI, ZenohMessage, smsg};
+use crate::proto::{Attachment, ZenohMessage, smsg};
 
 use zenoh_util::{zasyncread, zasyncwrite, zerror};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};

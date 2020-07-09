@@ -16,10 +16,9 @@ use async_trait::async_trait;
 use futures::future;
 use log::trace;
 use zenoh_protocol:: {
-    core::{ ResKey, ZInt, PeerId },
+    core::{ ResKey, ZInt, PeerId, QueryConsolidation, SubInfo, QueryTarget, queryable::EVAL},
     io::RBuf,
-    proto::{ Primitives, QueryTarget, QueryConsolidation, SubInfo },
-    proto::queryable::EVAL
+    proto::Primitives,    
 };
 use super::Runtime;
 use crate::plugins::PluginsMgr;

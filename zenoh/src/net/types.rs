@@ -23,18 +23,19 @@ pub use zenoh_protocol::core::{
     ResourceId,
     ResKey,
     PeerId,
-};
-pub use zenoh_protocol::proto::{
+    QueryConsolidation,
+    QueryTarget,
+    Target,
     Reliability,
     SubMode,
     Period,
-    SubInfo,
-    Target,
-    QueryTarget,
-    QueryConsolidation,
-    Primitives,
-    WhatAmI,
-    whatami,
+    SubInfo
+
+};
+pub use zenoh_protocol::{
+    core::{WhatAmI, whatami},
+    proto::Primitives,    
+    
 };
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use crate::net::Session;
@@ -123,7 +124,6 @@ impl fmt::Debug for Subscriber {
         write!(f, "Subscriber{{ id:{}, resname:{} }}", self.id, self.resname)
     }
 }
-
 
 #[derive(Clone)]
 pub struct DirectSubscriber {

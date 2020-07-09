@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::{ZInt, ResKey};
+use crate::core::*;
 
 pub mod id {
     // Declarations
@@ -32,31 +32,6 @@ pub mod id {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Reliability { BestEffort, Reliable }
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SubMode { Push, Pull }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Period { 
-    pub origin: ZInt,
-    pub period: ZInt,
-    pub duration: ZInt
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SubInfo {
-    pub reliability: Reliability,
-    pub mode: SubMode,
-    pub period: Option<Period>,
-}
-
-pub mod queryable{
-    pub const ALL_KINDS      : crate::core::ZInt = 0x01;
-    pub const STORAGE        : crate::core::ZInt = 0x02;
-    pub const EVAL           : crate::core::ZInt = 0x04;
-}
 
 
 #[derive(Debug, Clone, PartialEq)]

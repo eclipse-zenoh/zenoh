@@ -15,8 +15,7 @@ use async_std::sync::{Arc, Weak};
 use std::collections::HashMap;
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::core::rname::intersect;
-use zenoh_protocol::core::ResKey;
-use zenoh_protocol::proto::SubInfo;
+use zenoh_protocol::core::{ResKey, SubInfo};
 use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
 

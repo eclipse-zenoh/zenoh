@@ -23,8 +23,25 @@ pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
 pub const ZINT_MAX_BYTES : usize = 10;
 
+// WhatAmI values
+pub type WhatAmI = whatami::Type;
+pub mod whatami {
+    use super::ZInt;
+
+    pub type Type = ZInt;
+
+    pub const BROKER        : Type = 1;      // 0x01
+    pub const ROUTER        : Type = 1 << 1; // 0x02
+    pub const PEER          : Type = 1 << 2; // 0x04
+    pub const CLIENT        : Type = 1 << 3; // 0x08
+    // b4-b13: Reserved
+}
+
+
 pub type ResourceId = ZInt;
+
 pub const NO_RESOURCE_ID: ResourceId = 0;
+
 
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -165,4 +182,81 @@ impl fmt::Display for TimeStamp {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt::Debug::fmt(self, f)
   }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Reliability { BestEffort, Reliable }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SubMode { Push, Pull }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Period { 
+    pub origin: ZInt,
+    pub period: ZInt,
+    pub duration: ZInt
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubInfo {
+    pub reliability: Reliability,
+    pub mode: SubMode,
+    pub period: Option<Period>,
+}
+
+impl Default for SubInfo {
+  fn default() -> SubInfo {
+    SubInfo {
+      reliability: Reliability::Reliable,
+      mode : SubMode::Push,
+      period: None
+    }  
+  }
+}
+
+pub mod queryable{
+    pub const ALL_KINDS      : crate::core::ZInt = 0x01;
+    pub const STORAGE        : crate::core::ZInt = 0x02;
+    pub const EVAL           : crate::core::ZInt = 0x04;
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum QueryConsolidation {
+    None,
+    LastBroker,
+    Incremental
+    // @TODO: add more if necessary
+}
+
+impl Default for QueryConsolidation {
+    fn default() -> Self { QueryConsolidation::Incremental }
+}
+
+// @TODO: The query target is incomplete
+#[derive(Debug, Clone, PartialEq)]
+pub enum Target {
+    BestMatching,
+    Complete {n: ZInt},
+    All,
+    None,
+}
+
+impl Default for Target {
+    fn default() -> Self { Target::BestMatching }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryTarget {
+    pub kind : ZInt,
+    pub target : Target,
+}
+
+impl Default for QueryTarget {
+    fn default() -> Self { 
+        QueryTarget {            
+            kind : queryable::ALL_KINDS, 
+            target : Target::default(), 
+        }
+     }
 }

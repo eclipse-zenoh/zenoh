@@ -13,9 +13,9 @@
 //
 use async_std::sync::Arc;
 
-use zenoh_protocol::core::{ZInt, ResKey, PeerId};
+use zenoh_protocol::core::{ZInt, ResKey, PeerId, SubInfo, QueryTarget, QueryConsolidation, };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{SubInfo, QueryTarget, QueryConsolidation, Primitives};
+use zenoh_protocol::proto::Primitives;
 
 
 #[derive(Clone)]

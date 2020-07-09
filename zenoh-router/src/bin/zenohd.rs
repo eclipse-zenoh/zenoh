@@ -15,7 +15,7 @@ use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use async_std::future;
 use async_std::task;
 use clap::{App, Arg};
-use zenoh_protocol::proto::whatami;
+use zenoh_protocol::core::whatami;
 use zenoh_router::plugins::PluginsMgr;
 use zenoh_router::runtime::{ AdminSpace, Runtime, Config };
 

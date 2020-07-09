@@ -17,9 +17,9 @@ use std::time::Duration;
 
 use super::{ChannelLink, ChannelRxBestEffort, ChannelRxReliable, SessionLeaseEvent};
 
-use crate::core::{PeerId, ZInt};
+use crate::core::{PeerId, ZInt, WhatAmI};
 use crate::link::Link;
-use crate::proto::{SeqNumGenerator, SessionMessage, WhatAmI, ZenohMessage};
+use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
 use crate::session::{MsgHandler, SessionManagerInner};
 use crate::session::defaults::QUEUE_PRIO_DATA;
 

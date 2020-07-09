@@ -14,9 +14,8 @@
 use async_std::sync::Arc;
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey, PeerId};
+use zenoh_protocol::core::{ZInt, ResKey, PeerId, QueryTarget, QueryConsolidation, whatami};
 use zenoh_protocol::io::{RBuf};
-use zenoh_protocol::proto::{QueryTarget, QueryConsolidation, whatami};
 
 use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;

@@ -14,9 +14,8 @@
 use async_std::sync::Arc;
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey};
+use zenoh_protocol::core::{ZInt, ResKey, SubInfo, SubMode, Reliability, whatami};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{SubInfo, SubMode, Reliability, whatami};
 
 use crate::routing::face::FaceState;
 use crate::routing::broker::Tables;

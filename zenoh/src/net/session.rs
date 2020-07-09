@@ -21,9 +21,9 @@ use std::collections::HashMap;
 use async_std::sync::RwLock;
 use log::{error, warn, trace};
 use zenoh_protocol:: {
-    core::{ rname, ResourceId, ResKey },
+    core::{ rname, ResourceId, ResKey, QueryTarget, QueryConsolidation, queryable },
     io::RBuf,
-    proto::{ Primitives, QueryTarget, QueryConsolidation, queryable},
+    proto::Primitives,
 };
 use zenoh_router::runtime::Runtime;
 use zenoh_util::{zerror, zconfigurable};
@@ -290,8 +290,7 @@ impl Session {
         }
         Ok(())
     }
-
-
+    
     pub async fn undeclare_direct_subscriber(&self, subscriber: DirectSubscriber) -> ZResult<()>
     {
         trace!("undeclare_direct_subscriber({:?})", subscriber);

@@ -15,8 +15,8 @@ use async_std::sync::Arc;
 use async_trait::async_trait;
 use crate::core::{ZInt, ResKey, PeerId};
 use crate::io::RBuf;
-use crate::proto::{channel, ZenohMessage, SubInfo, Declaration, Primitives,  
-    QueryTarget, QueryConsolidation, ReplyContext};
+use crate::core::{QueryTarget, QueryConsolidation, SubInfo};
+use crate::proto::{channel, ZenohMessage, Declaration, Primitives,  ReplyContext};
 use crate::session::MsgHandler;
 
 pub struct Mux<T: MsgHandler + Send + Sync + ?Sized> {
