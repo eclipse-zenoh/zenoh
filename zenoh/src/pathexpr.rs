@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::fmt;
-use std::convert::From;
+use std::convert::TryFrom;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
 use crate::net::ResKey;
@@ -61,34 +61,34 @@ impl fmt::Display for PathExpr {
     }
 }
 
-impl From<String> for PathExpr {
-    fn from(p: String) -> PathExpr {
-        PathExpr::new(p).unwrap()
-    }
-}
+// impl From<String> for PathExpr {
+//     fn from(p: String) -> PathExpr {
+//         PathExpr::new(p).unwrap()
+//     }
+// }
 
-impl From<&str> for PathExpr {
-    fn from(p: &str) -> PathExpr {
-        Self::from(p.to_string())
-    }
-}
+// impl From<&str> for PathExpr {
+//     fn from(p: &str) -> PathExpr {
+//         Self::from(p.to_string())
+//     }
+// }
 
 // Doesn't compile because of https://github.com/rust-lang/rust/issues/50133
-//
-// impl TryFrom<String> for PathExpr {
-//     type Error = ZError;
-//     fn try_from(p: String) -> Result<Self, Self::Error> {
-//         PathExpr::new(p)
-//     }
-// }
-//
-// impl TryFrom<&str> for PathExpr {
-//     type Error = ZError;
-//     fn try_from(p: &str) -> ZResult<PathExpr> {
-//         Self::try_from(p.to_string())
-//     }
-// }
-//
+
+impl TryFrom<String> for PathExpr {
+    type Error = ZError;
+    fn try_from(p: String) -> Result<Self, Self::Error> {
+        PathExpr::new(p)
+    }
+}
+
+impl TryFrom<&str> for PathExpr {
+    type Error = ZError;
+    fn try_from(p: &str) -> ZResult<PathExpr> {
+        Self::try_from(p.to_string())
+    }
+}
+
 
 impl From<PathExpr> for ResKey {
     fn from(path: PathExpr) -> Self {

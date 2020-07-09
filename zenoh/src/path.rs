@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::fmt;
-use std::convert::From;
+use std::convert::TryFrom;
 use regex::Regex;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
@@ -73,34 +73,34 @@ impl fmt::Display for Path {
     }
 }
 
-impl From<String> for Path {
-    fn from(p: String) -> Path {
-        Path::new(p).unwrap()
-    }
-}
+// impl From<String> for Path {
+//     fn from(p: String) -> Path {
+//         Path::new(p).unwrap()
+//     }
+// }
 
-impl From<&str> for Path {
-    fn from(p: &str) -> Path {
-        Self::from(p.to_string())
-    }
-}
+// impl From<&str> for Path {
+//     fn from(p: &str) -> Path {
+//         Self::from(p.to_string())
+//     }
+// }
 
 // Doesn't compile because of https://github.com/rust-lang/rust/issues/50133
-//
-// impl TryFrom<String> for Path {
-//     type Error = ZError;
-//     fn try_from(p: String) -> Result<Self, Self::Error> {
-//         Path::new(p)
-//     }
-// }
-//
-// impl TryFrom<&str> for Path {
-//     type Error = ZError;
-//     fn try_from(p: &str) -> ZResult<Path> {
-//         Self::try_from(p.to_string())
-//     }
-// }
-//
+
+impl TryFrom<String> for Path {
+    type Error = ZError;
+    fn try_from(p: String) -> Result<Self, Self::Error> {
+        Path::new(p)
+    }
+}
+
+impl TryFrom<&str> for Path {
+    type Error = ZError;
+    fn try_from(p: &str) -> ZResult<Path> {
+        Self::try_from(p.to_string())
+    }
+}
+
 
 impl From<Path> for ResKey {
     fn from(path: Path) -> Self {
@@ -117,25 +117,28 @@ impl From<&Path> for ResKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
 
     #[test]
     fn test_path() {
 
-        assert_eq!(Path::from("a/b"), 
+        assert_eq!(Path::try_from("a/b").unwrap(), 
             Path { p: "a/b".into() });
 
-        assert_eq!(Path::from("/a/b"), 
+        assert_eq!(Path::try_from("/a/b").unwrap(), 
             Path { p: "/a/b".into() });
 
-        assert_eq!(Path::from("////a///b///"), 
+        assert_eq!(Path::try_from("////a///b///").unwrap(), 
             Path { p: "/a/b".into() });
 
-        assert!(Path::from("a/b").is_relative());
-        assert!(!Path::from("/a/b").is_relative());
+        assert!(Path::try_from("a/b").unwrap().is_relative());
+        assert!(!Path::try_from("/a/b").unwrap().is_relative());
 
-        assert_eq!(Path::from("c/d").with_prefix(&"/a/b".into()),
+        assert_eq!(Path::try_from("c/d").unwrap()
+            .with_prefix(&"/a/b".try_into().unwrap()),
             Path { p: "/a/b/c/d".into() });
-        assert_eq!(Path::from("/c/d").with_prefix(&"/a/b".into()),
+        assert_eq!(Path::try_from("/c/d").unwrap()
+            .with_prefix(&"/a/b".try_into().unwrap()),
             Path { p: "/a/b/c/d".into() });
 
 

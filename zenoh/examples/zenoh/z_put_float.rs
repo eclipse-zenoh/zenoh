@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
+use std::convert::TryInto;
 use zenoh::*;
 use zenoh::net::Config;
 
@@ -44,7 +45,7 @@ async fn main() {
     let workspace = zenoh.workspace(None).await.unwrap();
 
     println!("Put Float ('{}': '{}')...\n", path, value);
-    workspace.put(&path.into(), &FloatValue::from(value)).await.unwrap();
+    workspace.put(&path.try_into().unwrap(), &FloatValue::from(value)).await.unwrap();
 
     zenoh.close().await.unwrap();
 }

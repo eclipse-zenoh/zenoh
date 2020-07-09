@@ -14,10 +14,10 @@
 #![feature(async_closure)]
 
 use clap::{App, Arg};
+use std::convert::TryInto;
 use futures::prelude::*;
 use zenoh::*;
 use zenoh::net::Config;
-use std::pin::Pin;
 
 
 #[async_std::main]
@@ -44,10 +44,9 @@ async fn main() {
     let workspace = zenoh.workspace(None).await.unwrap();
 
     println!("Get Data from {}'...\n", selector);
-    let s: Pin<Box<dyn Stream<Item=Data>>> = 
-    workspace.get(&selector.into())
-        .await.unwrap();
-        s.for_each( async move |data| 
+    workspace.get(&selector.try_into().unwrap())
+        .await.unwrap()
+        .for_each( async move |data| 
             println!(">> [Reply handler] received reply data {} : {:?}",
                 data.path, data.value.as_rbuf())
         ).await;

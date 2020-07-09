@@ -16,6 +16,7 @@ use crate::*;
 use log::debug;
 use async_std::prelude::*;
 use std::pin::Pin;
+use std::convert::TryInto;
 
 pub struct Workspace {
     session: Session,
@@ -26,7 +27,7 @@ pub struct Workspace {
 impl Workspace {
 
     pub(crate) async fn new(session: Session, prefix: Option<Path>) -> ZResult<Workspace> {
-        Ok(Workspace { session, prefix: prefix.unwrap_or_else(|| "/".into()) })
+        Ok(Workspace { session, prefix: prefix.unwrap_or_else(|| "/".try_into().unwrap()) })
     }
 
     fn path_to_reskey(&self, path: &Path) -> ResKey {
@@ -86,7 +87,7 @@ impl Workspace {
 
 
     fn reply_to_data(reply: Reply) -> Data {
-        let path: Path = reply.data.res_name.into();
+        let path: Path = reply.data.res_name.try_into().unwrap();
         Data { path, value: Box::new(RawValue::from(reply.data.payload)) }
     }
 

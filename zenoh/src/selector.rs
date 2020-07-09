@@ -118,12 +118,13 @@ impl From<&str> for Selector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
 
     #[test]
     fn test_selector() {
         assert_eq!(Selector::new("/path/**").unwrap(),
             Selector { 
-                path_expr: "/path/**".into(),
+                path_expr: "/path/**".try_into().unwrap(),
                 predicate: "".into(),
                 projection: None,
                 properties: None,
@@ -132,7 +133,7 @@ mod tests {
 
         assert_eq!(Selector::new("/path/**?proj").unwrap(),
             Selector { 
-                path_expr: "/path/**".into(),
+                path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj".into(),
                 projection: Some("proj".into()),
                 properties: None,
@@ -141,7 +142,7 @@ mod tests {
 
         assert_eq!(Selector::new("/path/**?(prop)").unwrap(),
             Selector { 
-                path_expr: "/path/**".into(),
+                path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?(prop)".into(),
                 projection: None,
                 properties: Some("prop".into()),
@@ -150,7 +151,7 @@ mod tests {
 
         assert_eq!(Selector::new("/path/**#frag").unwrap(),
             Selector { 
-                path_expr: "/path/**".into(),
+                path_expr: "/path/**".try_into().unwrap(),
                 predicate: "#frag".into(),
                 projection: None,
                 properties: None,
@@ -159,7 +160,7 @@ mod tests {
 
         assert_eq!(Selector::new("/path/**?proj(prop)").unwrap(),
             Selector { 
-                path_expr: "/path/**".into(),
+                path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj(prop)".into(),
                 projection: Some("proj".into()),
                 properties: Some("prop".into()),
@@ -168,7 +169,7 @@ mod tests {
 
         assert_eq!(Selector::new("/path/**?proj#frag").unwrap(),
             Selector { 
-                path_expr: "/path/**".into(),
+                path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj#frag".into(),
                 projection: Some("proj".into()),
                 properties: None,
@@ -177,7 +178,7 @@ mod tests {
 
         assert_eq!(Selector::new("/path/**?(prop)#frag").unwrap(),
             Selector { 
-                path_expr: "/path/**".into(),
+                path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?(prop)#frag".into(),
                 projection: None,
                 properties: Some("prop".into()),
@@ -186,7 +187,7 @@ mod tests {
 
         assert_eq!(Selector::new("/path/**?proj(prop)#frag").unwrap(),
             Selector { 
-                path_expr: "/path/**".into(),
+                path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj(prop)#frag".into(),
                 projection: Some("proj".into()),
                 properties: Some("prop".into()),
