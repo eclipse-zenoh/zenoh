@@ -39,9 +39,9 @@ impl Selector {
 
         let path_expr = PathExpr::new(path.to_string())?;
 
-        const REGEX_PROJECTION: &'static str = r"[^\[\]\(\)#]+";
-        const REGEX_PROPERTIES: &'static str = ".*";
-        const REGEX_FRAGMENT: &'static str = ".*";
+        const REGEX_PROJECTION: &str = r"[^\[\]\(\)#]+";
+        const REGEX_PROPERTIES: &str = ".*";
+        const REGEX_FRAGMENT:   &str = ".*";
 
         lazy_static! {
             static ref RE: Regex = Regex::new(&format!(

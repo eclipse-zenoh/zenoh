@@ -24,9 +24,9 @@ async fn main() {
         .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
             .possible_values(&["peer", "client"]).default_value("peer"))
         .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
-        .arg(Arg::from_usage("-p, --path=[PATH]        'The name of the resource to publish.'")
+        .arg(Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
             .default_value("/demo/example/zenoh-rs-put"))
-        .arg(Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to publish.'")
+        .arg(Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to put.'")
             .default_value("Put from Rust!"))
         .get_matches();
 
@@ -39,7 +39,7 @@ async fn main() {
     let zenoh = Zenoh::new(config, None).await.unwrap();
     
     println!("New workspace...");
-    let workspace = zenoh.workspace(Some("/demo/example".into())).await.unwrap();
+    let workspace = zenoh.workspace(None).await.unwrap();
 
     println!("Put Data ('{}': '{}')...\n", path, value);
     workspace.put(&path.into(), &StringValue::from(value)).await.unwrap();

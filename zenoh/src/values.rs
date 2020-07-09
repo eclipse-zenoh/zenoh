@@ -38,6 +38,12 @@ impl Value for RawValue {
     }
 }
 
+impl From<RBuf> for RawValue {
+    fn from(rbuf: RBuf) -> Self {
+        RawValue(rbuf)
+    }
+}
+
 impl From<&RBuf> for RawValue {
     fn from(rbuf: &RBuf) -> Self {
         RawValue(rbuf.clone())

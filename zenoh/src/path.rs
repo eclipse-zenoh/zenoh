@@ -50,10 +50,6 @@ impl Path {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        self.p.clone()
-    }
-
     pub fn as_str(&self) -> &str {
         self.p.as_str()
     }

@@ -32,6 +32,11 @@ impl RBuf {
         RBuf{ slices, pos:(0,0) } 
     }
 
+    pub fn empty() -> RBuf {
+        let slices = Vec::with_capacity(0);
+        RBuf{ slices, pos:(0,0) } 
+    }
+
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0

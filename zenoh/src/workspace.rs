@@ -13,9 +13,9 @@
 //
 use crate::net::*;
 use crate::*;
-use std::borrow::Cow;
-use log::{debug, warn};
-
+use log::debug;
+use async_std::prelude::*;
+use std::pin::Pin;
 
 pub struct Workspace {
     session: Session,
@@ -26,31 +26,7 @@ pub struct Workspace {
 impl Workspace {
 
     pub(crate) async fn new(session: Session, prefix: Option<Path>) -> ZResult<Workspace> {
-        Ok(Workspace { session, prefix: prefix.unwrap_or("/".into()) })
-    }
-
-    fn to_absolute_path<'a>(&self, p: &'a Path) -> Cow<'a, Path> {
-        if p.is_relative() {
-            Cow::Owned(p.with_prefix(&self.prefix))
-        } else {
-            Cow::Borrowed(p)
-        }
-    }
-
-    fn to_absolute_pathexpr<'a>(&self, p: &'a PathExpr) -> Cow<'a, PathExpr> {
-        if p.is_relative() {
-            Cow::Owned(p.with_prefix(&self.prefix))
-        } else {
-            Cow::Borrowed(p)
-        }
-    }
-
-    fn to_absolute_selector<'a>(&self, s: &'a Selector) -> Cow<'a, Selector> {
-        if s.is_relative() {
-            Cow::Owned(s.with_prefix(&self.prefix))
-        } else {
-            Cow::Borrowed(s)
-        }
+        Ok(Workspace { session, prefix: prefix.unwrap_or_else(|| "/".into()) })
     }
 
     fn path_to_reskey(&self, path: &Path) -> ResKey {
@@ -70,7 +46,7 @@ impl Workspace {
     }
 
     pub async fn put(&self, path: &Path, value: &dyn Value) -> ZResult<()> {
-        debug!("write to {:?}", self.path_to_reskey(path));
+        debug!("put on {:?}", path);
         self.session.write_wo(
             &self.path_to_reskey(path),
             value.into(),
@@ -79,6 +55,51 @@ impl Workspace {
         ).await
     }
 
+    pub async fn delete(&self, path: &Path) -> ZResult<()> {
+        debug!("delete on {:?}", path);
+        self.session.write_wo(
+            &self.path_to_reskey(path),
+            RBuf::empty(),
+            encoding::RAW,
+            kind::DELETE
+        ).await
+    }
+
+
+    pub async fn get(&self, selector: &Selector) -> ZResult<Pin<Box<dyn Stream<Item=Data>>>> {
+        debug!("get on {}", selector);
+        let pathexpr = self.pathexpr_to_reskey(&selector.path_expr);
+
+        match self.session.query(
+            &pathexpr,
+            &selector.predicate,
+            QueryTarget::default(),
+            QueryConsolidation::default()
+            ).await
+        {
+            Ok(stream) => {
+                Ok(Box::pin(stream.map(Self::reply_to_data)))
+            },
+            Err(err) => Err(err)
+        }
+    }
+
+
+    fn reply_to_data(reply: Reply) -> Data {
+        let path: Path = reply.data.res_name.into();
+        Data { path, value: Box::new(RawValue::from(reply.data.payload)) }
+    }
 
 
 }
+
+
+
+
+
+pub struct Data {
+    pub path: Path,
+    pub value: Box<dyn Value>
+    // pub value: impl Value
+}
+

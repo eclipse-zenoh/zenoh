@@ -18,7 +18,7 @@ pub mod kind {
 
     pub const PUT: ZInt = 0;
     pub const UPDATE: ZInt = 1;
-    pub const REMOVE: ZInt = 2;
+    pub const DELETE: ZInt = 2;
 
     pub const DEFAULT: ZInt = PUT;
 
@@ -26,7 +26,7 @@ pub mod kind {
         match i {
             0 => Ok("PUT".to_string()),
             1 => Ok("UPDATE".to_string()),
-            2 => Ok("REMOVE".to_string()),
+            2 => Ok("DELETE".to_string()),
             _ => zerror!(ZErrorKind::Other { descr: format!("Unknown kind id {}", i)}),
         }
     }

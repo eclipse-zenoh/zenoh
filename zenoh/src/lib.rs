@@ -17,13 +17,12 @@
 extern crate lazy_static;
 
 use log::debug;
-use async_std::task;
 
 pub mod net;
 use net::{Properties, Session, ZResult};
 
 mod workspace;
-pub use workspace::Workspace;
+pub use workspace::{Data, Workspace};
 
 mod path;
 pub use path::Path;
