@@ -69,15 +69,31 @@ impl Workspace {
 
     pub async fn get(&self, selector: &Selector) -> ZResult<DataStream> {
         debug!("get on {}", selector);
-        let pathexpr = self.pathexpr_to_reskey(&selector.path_expr);
+        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
 
         self.session.query(
-            &pathexpr,
+            &reskey,
             &selector.predicate,
             QueryTarget::default(),
             QueryConsolidation::default()
         ).await
         .map(|receiver| DataStream { receiver })
+    }
+
+    pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream> {
+        debug!("subscribe on {}", selector);
+        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
+        let sub_info = SubInfo {
+            reliability: Reliability::Reliable,
+            mode: SubMode::Push,
+            period: None
+        };
+    
+        self.session.declare_subscriber(
+            &reskey,
+            &sub_info
+        ).await
+        .map(|subscriber| ChangeStream { subscriber })
     }
 
 }
@@ -91,6 +107,12 @@ pub struct Data {
     pub value: Box<dyn Value>
 }
 
+fn reply_to_data(reply: Option<Reply>) -> Option<Data> {
+    reply.map(|r| Data {
+        path: r.data.res_name.try_into().unwrap(),
+        value: Box::new(RawValue::from(r.data.payload))
+    })
+}
 
 pin_project! {
     pub struct DataStream {
@@ -108,10 +130,40 @@ impl Stream for DataStream {
     }
 }
 
-fn reply_to_data(reply: Option<Reply>) -> Option<Data> {
-    reply.map(|r| Data {
-        path: r.data.res_name.try_into().unwrap(),
-        value: Box::new(RawValue::from(r.data.payload))
+pub enum ChangeKind {
+    PUT = kind::PUT as isize,
+    PATCH = kind::UPDATE as isize,
+    DELETE = kind::DELETE as isize
+}
+
+pub struct Change {
+    pub path: Path,
+    pub value: Option<Box<dyn Value>>,
+    //pub timestamp
+    pub kind: ChangeKind
+}
+
+fn sample_to_change(sample: Option<Sample>) -> Option<Change> {
+    sample.map(|s| Change {
+        path: s.res_name.try_into().unwrap(),
+        value: Some(Box::new(RawValue::from(s.payload))),
+        // timestamp:            // TODO
+        kind: ChangeKind::PUT    // TODO
     })
 }
 
+pin_project! {
+    pub struct ChangeStream {
+        #[pin]
+        subscriber: Subscriber
+    }
+}
+
+impl Stream for ChangeStream {
+    type Item = Change;
+
+    #[inline(always)]
+    fn poll_next(self: async_std::pin::Pin<&mut Self>, cx: &mut async_std::task::Context) -> async_std::task::Poll<Option<Self::Item>> {
+        self.project().subscriber.poll_next(cx).map(sample_to_change)
+    }
+}

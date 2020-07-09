@@ -55,6 +55,10 @@ name = "z_get"
 path = "examples/zenoh/z_get.rs"
 
 [[example]]
+name = "z_sub"
+path = "examples/zenoh/z_sub.rs"
+
+[[example]]
 name = "zn_scout"
 path = "examples/zenoh-net/zn_scout.rs"
 
