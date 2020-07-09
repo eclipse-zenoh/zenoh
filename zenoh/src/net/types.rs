@@ -33,9 +33,8 @@ pub use zenoh_protocol::core::{
 
 };
 pub use zenoh_protocol::{
-    core::{WhatAmI, whatami},
-    proto::Primitives,    
-    
+    proto::Primitives,
+    core::{WhatAmI, whatami}
 };
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use crate::net::Session;

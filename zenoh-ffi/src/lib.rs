@@ -14,10 +14,10 @@
 use libc::{c_char, c_ulong, c_uint, c_int};
 use std::ffi::CStr;
 use std::slice;
+use futures::prelude::*;
 use async_std::task;
-use zenoh::net;
+use zenoh::net::*;
 use zenoh::net::Config;
-use zenoh_protocol::core::*;
 
 #[no_mangle]
 pub static BROKER_MODE : c_int = whatami::BROKER as c_int;
@@ -29,10 +29,9 @@ pub static PEER_MODE : c_int = whatami::PEER as c_int;
 pub static CLIENT_MODE : c_int = whatami::CLIENT as c_int;
 
 
-pub struct ZNSession(zenoh::net::Session, );
+pub struct ZNSession(zenoh::net::Session);
 
 pub struct ZProperties(zenoh::net::Properties);
-
 
 #[no_mangle]
 pub extern "C" fn zn_properties_make() -> *mut ZProperties {
@@ -74,7 +73,7 @@ pub unsafe extern "C" fn zn_open(mode: c_int, locator: *const c_char, _ps: *cons
   let s = task::block_on(async move {
     let c = Config::new().mode(mode as u64);    
     let config = if !locator.is_null() { c.add_peer(CStr::from_ptr(locator).to_str().unwrap()) } else { c };        
-    net::open(config, None).await
+    open(config, None).await
   }).unwrap();
   Box::into_raw(Box::new(ZNSession(s)))
 }
@@ -133,7 +132,6 @@ pub unsafe extern "C" fn zn_write(session: *mut ZNSession, r_name: *const c_char
   let s = Box::from_raw(session);
   let name = CStr::from_ptr(r_name).to_str().unwrap();
   let r = ResKey::RName(name.to_string());
-  // let bs = ArcSlice::new(Arc::new(Vec::from(slice::from_raw_parts(payload as *const u8, len as usize))), 0, len as usize);    
   let r = match task::block_on(s.0.write(&r, slice::from_raw_parts(payload as *const u8, len as usize).into())) {
     Ok(()) => 0,
     _ => 1
@@ -170,14 +168,33 @@ pub unsafe extern "C" fn zn_write_wrid(session: *mut ZNSession, r_id: c_ulong, p
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 /// 
 #[no_mangle]
-pub unsafe extern "C" fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char, callback: extern fn()) -> c_int {   
+pub unsafe extern "C" fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char, callback: extern fn(*const c_char, c_uint, *const c_char, c_uint)) -> c_int {   
   if session.is_null() || r_name.is_null()  {
     return -1
   }
   let si: SubInfo = Default::default();
   let s = Box::from_raw(session);  
   let name = CStr::from_ptr(r_name).to_str().unwrap();
-  // @WORK in progress.
-  // let r = task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()))).unwrap() as c_ulong;
-  return -1
+  
+  let mut sub = task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()), &si)).unwrap();
+  
+  // Note: This is done to ensure that even if the call-back into C
+  // does any blocking call we do not incour the risk of blocking
+  // any of the task resolving futures.
+  task::spawn_blocking(move || (task::block_on(async move {    
+    loop {      
+      let sample = sub.next().await.unwrap();            
+      // This is a bit brutal but avoids an allocation and
+      // a copy that would be otherwise required to add the 
+      // C string terminator. See the test_sub.c to find out how to deal
+      // with non null terminated strings.
+      let data = sample.payload.to_vec();
+      callback(
+        sample.res_name.as_ptr() as *const c_char, 
+        sample.res_name.len() as c_uint,
+        data.as_ptr() as *const c_char, 
+        data.len() as c_uint);          
+    }
+  })));
+  0
 }

@@ -1,5 +1,5 @@
-#ifndef ZENOH_NET_
-#define ZENOH_NET_
+#ifndef ZENOH_NET_FFI_
+#define ZENOH_NET_FFI_
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -48,6 +48,17 @@ unsigned long zn_declare_resource(ZNSession *session, const char *r_name);
 unsigned long zn_declare_resource_ws(ZNSession *session, unsigned long rid, const char *suffix);
 
 /**
+ * Declares a zenoh subscriber
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ *
+ */
+int zn_declare_subscriber(ZNSession *session,
+                          const char *r_name,
+                          void (*callback)(const char*, unsigned int, const char*, unsigned int));
+
+/**
  * Add a property
  *
  * # Safety
@@ -94,4 +105,4 @@ int zn_write(ZNSession *session, const char *r_name, const char *payload, unsign
  */
 int zn_write_wrid(ZNSession *session, unsigned long r_id, const char *payload, unsigned int len);
 
-#endif /* ZENOH_NET_ */
+#endif /* ZENOH_NET_FFI_ */

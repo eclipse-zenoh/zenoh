@@ -13,6 +13,7 @@
 #
 debug:
 	clang -I ../include -L ../../target/debug/ -lzenoh_ffi session_test.c -o session_test
+	clang -I ../include -L ../../target/debug/ -lzenoh_ffi test_sub.c -o test_sub
 
 release:
 	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi session_test.c -o session_test
