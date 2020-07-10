@@ -40,8 +40,7 @@ use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 /// ```
 /// use async_std::sync::Arc;
 /// use async_trait::async_trait;
-/// use zenoh_protocol::core::PeerId;
-/// use zenoh_protocol::proto::{WhatAmI, whatami};
+/// use zenoh_protocol::core::{PeerId, WhatAmI, whatami};
 /// use zenoh_protocol::session::{DummyHandler, MsgHandler, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 ///
 /// // Create my session handler to be notified when a new session is initiated with me

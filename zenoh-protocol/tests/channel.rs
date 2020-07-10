@@ -16,8 +16,7 @@ use async_std::task;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-
-use zenoh_protocol::core::*;
+use zenoh_protocol::core::{AtomicZInt, PeerId, ResKey, WhatAmI, ZInt, whatami};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{ZenohMessage, SeqNum};

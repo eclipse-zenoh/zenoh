@@ -213,7 +213,7 @@ impl Default for SubInfo {
   }
 }
 
-pub mod queryable{
+pub mod queryable {
     pub const ALL_KINDS      : crate::core::ZInt = 0x01;
     pub const STORAGE        : crate::core::ZInt = 0x02;
     pub const EVAL           : crate::core::ZInt = 0x04;
