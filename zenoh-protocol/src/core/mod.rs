@@ -37,7 +37,6 @@ pub mod whatami {
     // b4-b13: Reserved
 }
 
-
 pub type ResourceId = ZInt;
 
 pub const NO_RESOURCE_ID: ResourceId = 0;

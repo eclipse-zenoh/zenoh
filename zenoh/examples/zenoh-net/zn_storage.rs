@@ -20,11 +20,10 @@ use futures::select;
 use zenoh::net::*;
 use zenoh::net::queryable::STORAGE;
 
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
+//
+// Argument parsing -- look at the main for the zenoh-related code
+//
+fn parse_args() -> (Config, String) {
     let args = App::new("zenoh-net storage example")
         .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
             .possible_values(&["peer", "client"]).default_value("peer"))
@@ -33,10 +32,19 @@ async fn main() {
             .default_value("/demo/example/**"))
         .get_matches();
 
-    let config = Config::new()
-        .mode(args.value_of("mode").map(|m| Config::into_mode(m)).unwrap().unwrap())
+    let config = Config::default()
+        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
         .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let selector = args.value_of("selector").unwrap().to_string();
+
+    (config, selector.to_string())
+}
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+    
+    let (config, selector) = parse_args();
 
     let mut stored: HashMap<String, (RBuf, Option<RBuf>)> = HashMap::new();
 

@@ -116,11 +116,7 @@ impl Config {
             multicast_interface: "auto".to_string(),
             scouting_delay: Duration::new(0, 250_000_000),
         }
-    }
-    
-    pub fn new() -> Config {
-        Config::default(whatami::PEER)        
-    }
+    }        
 
     pub fn mode(mut self, w: whatami::Type) -> Self {
         self.whatami = w;
@@ -165,7 +161,7 @@ impl Config {
         self
     }
 
-    pub fn into_mode(m: &str) -> Result<whatami::Type, ()> {
+    pub fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
         match m {
             "peer" => Ok(whatami::PEER),
             "client" => Ok(whatami::CLIENT),
@@ -176,6 +172,11 @@ impl Config {
     }
 }
 
+impl Default for Config {
+    fn default() -> Config {
+        Config::default(whatami::PEER)
+    }
+}
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)

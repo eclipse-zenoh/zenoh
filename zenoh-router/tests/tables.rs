@@ -16,9 +16,9 @@ use async_std::task;
 use async_trait::async_trait;
 use std::convert::TryInto;
 use zenoh_protocol::core::rname::intersect;
-use zenoh_protocol::core::{ResKey, ZInt, PeerId};
+use zenoh_protocol::core::*;
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{Primitives, Mux, Reliability, SubMode, SubInfo, QueryConsolidation, QueryTarget, whatami};
+use zenoh_protocol::proto::{Primitives, Mux};
 use zenoh_protocol::session::DummyHandler;
 use zenoh_router::routing::broker::*;
 

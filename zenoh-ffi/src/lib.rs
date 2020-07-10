@@ -71,8 +71,13 @@ pub unsafe extern "C" fn zn_properties_free(rps: *mut ZProperties ) {
 pub unsafe extern "C" fn zn_open(mode: c_int, locator: *const c_char, _ps: *const ZProperties) -> *mut ZNSession {  
 
   let s = task::block_on(async move {
-    let c = Config::new().mode(mode as u64);    
-    let config = if !locator.is_null() { c.add_peer(CStr::from_ptr(locator).to_str().unwrap()) } else { c };        
+    let c : Config = Default::default();    
+    let config = if !locator.is_null() { 
+      c
+        .mode(mode as u64)
+        .add_peer(CStr::from_ptr(locator).to_str().unwrap()) 
+      } else { c.mode(mode as u64) };
+
     open(config, None).await
   }).unwrap();
   Box::into_raw(Box::new(ZNSession(s)))

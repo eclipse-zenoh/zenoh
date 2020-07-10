@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use zenoh_protocol::core::{PeerId, ZInt};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{WhatAmI, whatami};
+use zenoh_protocol::core::{WhatAmI, whatami};
 use zenoh_protocol::session::{
     DummyHandler,
     MsgHandler,
