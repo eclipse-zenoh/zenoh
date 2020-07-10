@@ -29,9 +29,8 @@ pub use crate::routing::queries::*;
 /// # Example: 
 /// ```
 ///   use async_std::sync::Arc;
-///   use zenoh_protocol::core::PeerId;
+///   use zenoh_protocol::core::{PeerId, whatami::PEER};
 ///   use zenoh_protocol::io::RBuf;
-///   use zenoh_protocol::proto::whatami::PEER;
 ///   use zenoh_protocol::session::{SessionManager, SessionManagerConfig};
 ///   use zenoh_router::routing::broker::Broker;
 /// 
