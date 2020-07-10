@@ -12,6 +12,8 @@ typedef struct ZNSession ZNSession;
 
 typedef struct ZProperties ZProperties;
 
+typedef struct ZSubscriber ZSubscriber;
+
 extern const int BROKER_MODE;
 
 extern const int CLIENT_MODE;
@@ -54,9 +56,9 @@ unsigned long zn_declare_resource_ws(ZNSession *session, unsigned long rid, cons
  * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
  *
  */
-int zn_declare_subscriber(ZNSession *session,
-                          const char *r_name,
-                          void (*callback)(const char*, unsigned int, const char*, unsigned int));
+ZSubscriber *zn_declare_subscriber(ZNSession *session,
+                                   const char *r_name,
+                                   void (*callback)(const char*, unsigned int, const char*, unsigned int));
 
 /**
  * Add a property
@@ -86,6 +88,8 @@ ZProperties *zn_properties_add(ZProperties *rps, unsigned long id, const char *v
 void zn_properties_free(ZProperties *rps);
 
 ZProperties *zn_properties_make(void);
+
+void zn_undeclare_subscriber(ZSubscriber *sub);
 
 /**
  * Writes a named resource.

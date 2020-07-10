@@ -23,7 +23,8 @@ void sub_callback(const char* key, unsigned int klen, const char* data, unsigned
 
 int main(int argc, char** argv) {
     char *key_expr = "/demo/example/**";
-    // char *key_expr = "/test/*";
+    ZSubscriber *sub = 0;
+
     if (argc > 1) {        
         key_expr = argv[1];        
     }
@@ -38,8 +39,10 @@ int main(int argc, char** argv) {
 
     sleep(1);
 
-    zn_declare_subscriber(s, key_expr, sub_callback);
+    sub = zn_declare_subscriber(s, key_expr, sub_callback);
 
-    char ch;
-    read(0, &ch, 1);
+    sleep(5);
+
+    zn_undeclare_subscriber(sub);
+    
 }

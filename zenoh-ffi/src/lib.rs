@@ -15,6 +15,8 @@ use libc::{c_char, c_ulong, c_uint, c_int};
 use std::ffi::CStr;
 use std::slice;
 use futures::prelude::*;
+use futures::select;
+use async_std::sync::{Arc, channel, Sender};
 use async_std::task;
 use zenoh::net::*;
 use zenoh::net::Config;
@@ -32,6 +34,9 @@ pub static CLIENT_MODE : c_int = whatami::CLIENT as c_int;
 pub struct ZNSession(zenoh::net::Session);
 
 pub struct ZProperties(zenoh::net::Properties);
+
+pub struct ZSubscriber(Option<Arc<Sender<bool>>>);
+
 
 #[no_mangle]
 pub extern "C" fn zn_properties_make() -> *mut ZProperties {
@@ -173,33 +178,59 @@ pub unsafe extern "C" fn zn_write_wrid(session: *mut ZNSession, r_id: c_ulong, p
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 /// 
 #[no_mangle]
-pub unsafe extern "C" fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char, callback: extern fn(*const c_char, c_uint, *const c_char, c_uint)) -> c_int {   
-  if session.is_null() || r_name.is_null()  {
-    return -1
+pub unsafe extern "C" 
+fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char, 
+                        callback: extern fn(*const c_char, c_uint, *const c_char, c_uint)) -> *mut ZSubscriber { 
+    
+  if session.is_null() || r_name.is_null()  { 
+    return Box::into_raw(Box::new(ZSubscriber(None))) 
   }
+
   let si: SubInfo = Default::default();
   let s = Box::from_raw(session);  
   let name = CStr::from_ptr(r_name).to_str().unwrap();
   
-  let mut sub = task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()), &si)).unwrap();
+  let (tx, rx) = channel::<bool>(1);  
+  let r = ZSubscriber(Some(Arc::new(tx)));
   
-  // Note: This is done to ensure that even if the call-back into C
-  // does any blocking call we do not incour the risk of blocking
-  // any of the task resolving futures.
-  task::spawn_blocking(move || (task::block_on(async move {    
-    loop {      
-      let sample = sub.next().await.unwrap();            
-      // This is a bit brutal but avoids an allocation and
-      // a copy that would be otherwise required to add the 
-      // C string terminator. See the test_sub.c to find out how to deal
-      // with non null terminated strings.
-      let data = sample.payload.to_vec();
-      callback(
-        sample.res_name.as_ptr() as *const c_char, 
-        sample.res_name.len() as c_uint,
-        data.as_ptr() as *const c_char, 
-        data.len() as c_uint);          
-    }
-  })));
-  0
+  let mut sub : Subscriber = task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()), &si)).unwrap();
+  // match task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()), &si)) {
+    // Ok(mut sub) => {
+      // Note: This is done to ensure that even if the call-back into C
+      // does any blocking call we do not incour the risk of blocking
+      // any of the task resolving futures.
+      task::spawn_blocking(move || (task::block_on(async move {    
+        loop {      
+          select!(
+            s = sub.next().fuse() => {            
+              // This is a bit brutal but avoids an allocation and
+              // a copy that would be otherwise required to add the 
+              // C string terminator. See the test_sub.c to find out how to deal
+              // with non null terminated strings.
+              let sample = s.unwrap();
+              let data = sample.payload.to_vec();
+              callback(
+                sample.res_name.as_ptr() as *const c_char, 
+                sample.res_name.len() as c_uint,
+                data.as_ptr() as *const c_char, 
+                data.len() as c_uint);
+              },
+            _ = rx.recv().fuse() => {
+                print!("Notification thread undeclaring sub!\n");
+                let _ = s.0.undeclare_subscriber(sub).await;
+                return ()
+            }                        
+          )
+      } } )));
+      Box::into_raw(Box::new(r))         
+  }
+
+
+#[no_mangle]
+pub unsafe extern "C" fn zn_undeclare_subscriber(sub: *mut ZSubscriber) {
+  match *Box::from_raw(sub) {
+    ZSubscriber(Some(tx)) => task::block_on(tx.send(true)),
+    ZSubscriber(None) => ()
+  }  
 }
+
