@@ -11,11 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::net::*;
 use crate::*;
-use log::debug;
+use crate::net::*;
+use crate::net::queryable::EVAL;
+use log::{debug, warn};
 use async_std::sync::Receiver;
 use async_std::stream::Stream;
+use async_std::pin::Pin;
+use async_std::task::{Context, Poll};
 use std::convert::TryInto;
 use pin_project_lite::pin_project;
 
@@ -89,15 +92,19 @@ impl Workspace {
             period: None
         };
     
-        self.session.declare_subscriber(
-            &reskey,
-            &sub_info
-        ).await
-        .map(|subscriber| ChangeStream { subscriber })
+        self.session.declare_subscriber(&reskey, &sub_info).await
+            .map(|subscriber| ChangeStream { subscriber })
+    }
+
+    pub async fn register_eval(&self, selector: &Selector) -> ZResult<GetStream> {
+        debug!("eval on {}", selector);
+        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
+
+        self.session.declare_queryable(&reskey, EVAL).await
+            .map(|queryable| GetStream { queryable })
     }
 
 }
-
 
 
 
@@ -114,6 +121,10 @@ fn reply_to_data(reply: Option<Reply>) -> Option<Data> {
     })
 }
 
+fn data_to_sample(data: Data) -> Sample {
+    Sample { res_name: data.path.to_string(), payload: data.value.as_rbuf(), data_info: None }
+}
+
 pin_project! {
     pub struct DataStream {
         #[pin]
@@ -125,7 +136,7 @@ impl Stream for DataStream {
     type Item = Data;
 
     #[inline(always)]
-    fn poll_next(self: async_std::pin::Pin<&mut Self>, cx: &mut async_std::task::Context) -> async_std::task::Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         self.project().receiver.poll_next(cx).map(reply_to_data)
     }
 }
@@ -163,7 +174,53 @@ impl Stream for ChangeStream {
     type Item = Change;
 
     #[inline(always)]
-    fn poll_next(self: async_std::pin::Pin<&mut Self>, cx: &mut async_std::task::Context) -> async_std::task::Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         self.project().subscriber.poll_next(cx).map(sample_to_change)
+    }
+}
+
+pub struct GetRequest {
+    pub selector: Selector,
+    pub data_sender: DataSender
+}
+
+fn query_to_get(query: Query) -> ZResult<GetRequest> {
+    Selector::new(query.res_name.as_str(), query.predicate.as_str())
+        .map(|selector| GetRequest { selector, data_sender: DataSender { replies_sender: query.replies_sender } })
+}
+
+pin_project! {
+    pub struct GetStream {
+        #[pin]
+        queryable: Queryable
+    }
+}
+
+impl Stream for GetStream {
+    type Item = GetRequest;
+
+    #[inline(always)]
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        match self.project().queryable.poll_next(cx) {
+            Poll::Ready(Some(query)) => match query_to_get(query) {
+                Ok(get) => Poll::Ready(Some(get)),
+                Err(err) => {
+                    warn!("Error in receveid get(): {}. Ignore it.", err);
+                    Poll::Pending
+                }
+            },
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending
+        }
+    }
+}
+
+pub struct DataSender {
+    replies_sender: RepliesSender
+}
+
+impl DataSender {
+    pub async fn send(&self, data: Data) {
+        self.replies_sender.send(data_to_sample(data)).await
     }
 }

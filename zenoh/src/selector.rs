@@ -21,16 +21,16 @@ use regex::Regex;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Selector {
-    pub(crate) path_expr: PathExpr,
-    pub(crate) predicate: String,
-    pub(crate) projection: Option<String>,
-    pub(crate) properties: Option<String>,
-    pub(crate) fragment: Option<String>
+    pub path_expr: PathExpr,
+    pub predicate: String,
+    pub projection: Option<String>,
+    pub properties: Option<String>,
+    pub fragment: Option<String>
 }
 
 impl Selector {
 
-    fn new(res_name: &str, predicate: &str) -> ZResult<Selector> {
+    pub(crate) fn new(res_name: &str, predicate: &str) -> ZResult<Selector> {
 
         let path_expr: PathExpr = PathExpr::try_from(res_name)?;
 
