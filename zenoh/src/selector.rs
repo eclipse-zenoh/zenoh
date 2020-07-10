@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::fmt;
+use std::convert::TryFrom;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
 use crate::{Path, PathExpr};
@@ -29,15 +30,9 @@ pub struct Selector {
 
 impl Selector {
 
-    fn new(selector: &str) -> ZResult<Selector> {
-        let (path, predicate) = 
-            if let Some(i) = selector.find(|c| c == '?' || c == '#') {
-                selector.split_at(i)
-            } else {
-                (selector, "")
-            };
+    fn new(res_name: &str, predicate: &str) -> ZResult<Selector> {
 
-        let path_expr = PathExpr::new(path.to_string())?;
+        let path_expr: PathExpr = PathExpr::try_from(res_name)?;
 
         const REGEX_PROJECTION: &str = r"[^\[\]\(\)#]+";
         const REGEX_PROPERTIES: &str = ".*";
@@ -59,7 +54,7 @@ impl Selector {
                 fragment: caps.name("frag").map(|s| s.as_str().to_string())
             })
         } else {
-            zerror!(ZErrorKind::InvalidSelector{ selector: selector.to_string() })
+            zerror!(ZErrorKind::InvalidSelector{ selector: format!("{}{}", res_name, predicate) })
         }
     }
 
@@ -84,34 +79,26 @@ impl fmt::Display for Selector {
     }
 }
 
-impl From<String> for Selector {
-    fn from(p: String) -> Selector {
-        Self::from(p.as_str())
+impl TryFrom<&str> for Selector {
+    type Error = ZError;
+    fn try_from(s: &str) -> ZResult<Selector> {
+        let (path_expr, predicate) = 
+            if let Some(i) = s.find(|c| c == '?' || c == '#') {
+                s.split_at(i)
+            } else {
+                (s, "")
+            };
+        Self::new(path_expr, predicate)
     }
 }
 
-impl From<&str> for Selector {
-    fn from(p: &str) -> Selector {
-        Selector::new(p).unwrap()
+impl TryFrom<String> for Selector {
+    type Error = ZError;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
     }
 }
 
-// Doesn't compile because of https://github.com/rust-lang/rust/issues/50133
-//
-// impl TryFrom<String> for Selector {
-//     type Error = ZError;
-//     fn try_from(p: String) -> Result<Self, Self::Error> {
-//         Selector::new(p)
-//     }
-// }
-//
-// impl TryFrom<&str> for Selector {
-//     type Error = ZError;
-//     fn try_from(p: &str) -> ZResult<Selector> {
-//         Self::try_from(p.to_string())
-//     }
-// }
-//
 
 
 
@@ -122,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_selector() {
-        assert_eq!(Selector::new("/path/**").unwrap(),
+        assert_eq!(Selector::try_from("/path/**").unwrap(),
             Selector { 
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "".into(),
@@ -131,7 +118,7 @@ mod tests {
                 fragment: None
             });
 
-        assert_eq!(Selector::new("/path/**?proj").unwrap(),
+        assert_eq!(Selector::try_from("/path/**?proj").unwrap(),
             Selector { 
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj".into(),
@@ -140,7 +127,7 @@ mod tests {
                 fragment: None
             });
 
-        assert_eq!(Selector::new("/path/**?(prop)").unwrap(),
+        assert_eq!(Selector::try_from("/path/**?(prop)").unwrap(),
             Selector { 
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?(prop)".into(),
@@ -149,7 +136,7 @@ mod tests {
                 fragment: None
             });
 
-        assert_eq!(Selector::new("/path/**#frag").unwrap(),
+        assert_eq!(Selector::try_from("/path/**#frag").unwrap(),
             Selector { 
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "#frag".into(),
@@ -158,7 +145,7 @@ mod tests {
                 fragment: Some("frag".into()),
             });
 
-        assert_eq!(Selector::new("/path/**?proj(prop)").unwrap(),
+        assert_eq!(Selector::try_from("/path/**?proj(prop)").unwrap(),
             Selector { 
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj(prop)".into(),
@@ -167,7 +154,7 @@ mod tests {
                 fragment: None
             });
 
-        assert_eq!(Selector::new("/path/**?proj#frag").unwrap(),
+        assert_eq!(Selector::try_from("/path/**?proj#frag").unwrap(),
             Selector { 
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj#frag".into(),
@@ -176,7 +163,7 @@ mod tests {
                 fragment: Some("frag".into()),
             });
 
-        assert_eq!(Selector::new("/path/**?(prop)#frag").unwrap(),
+        assert_eq!(Selector::try_from("/path/**?(prop)#frag").unwrap(),
             Selector { 
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?(prop)#frag".into(),
@@ -185,7 +172,7 @@ mod tests {
                 fragment: Some("frag".into()),
             });
 
-        assert_eq!(Selector::new("/path/**?proj(prop)#frag").unwrap(),
+        assert_eq!(Selector::try_from("/path/**?proj(prop)#frag").unwrap(),
             Selector { 
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj(prop)#frag".into(),
