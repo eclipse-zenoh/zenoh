@@ -37,7 +37,7 @@ fn parse_args() -> (Config, String) {
         .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let selector = args.value_of("selector").unwrap().to_string();
 
-    (config, selector.to_string())
+    (config, selector)
 }
 #[async_std::main]
 async fn main() {
