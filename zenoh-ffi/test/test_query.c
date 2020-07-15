@@ -17,7 +17,7 @@
 #include <unistd.h>
 #include <string.h>
 
-void sub_callback(const zn_sample *sample) {    
+void query_callback(const zn_source_info *info, const zn_sample *sample) {    
     printf(">> Received:\n\t (%.*s, %.*s)\n", 
         sample->key.len, sample->key.val, 
         sample->value.len, sample->value.val);    
@@ -25,12 +25,16 @@ void sub_callback(const zn_sample *sample) {
 
 int main(int argc, char** argv) {
     char *key_expr = "/demo/example/**";
+    char *predicate = "";
     ZNSubscriber *sub = 0;
 
     if (argc > 1) {        
         key_expr = argv[1];        
     }
-    printf("Subscription expression to %s\n", key_expr);
+    if (argc > 2) {        
+        predicate = argv[2];        
+    }
+    printf("Query expression to %s:%s\n", key_expr, predicate);
 
     ZNSession *s = zn_open(PEER_MODE, 0, 0);
 
@@ -38,11 +42,7 @@ int main(int argc, char** argv) {
         printf("Error creating session!\n");
         exit(-1);
     } 
-    
-    sub = zn_declare_subscriber(s, key_expr, sub_callback);
 
-    sleep(5);
-
-    zn_undeclare_subscriber(sub);
-    
+    zn_query(s, key_expr, predicate, zn_query_target_default(), zn_query_consolidation_default(), query_callback);
+    sleep(1);        
 }

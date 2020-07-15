@@ -223,7 +223,7 @@ pub mod queryable {
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryConsolidation {
     None,
-    LastBroker,
+    LastHop, 
     Incremental
     // @TODO: add more if necessary
 }

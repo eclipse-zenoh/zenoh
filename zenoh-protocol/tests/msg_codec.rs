@@ -128,7 +128,7 @@ fn gen_target() -> Target {
 fn gen_consolidation() -> QueryConsolidation {
     match thread_rng().gen_range::<u8, u8, u8>(0, 3) {
         0 => QueryConsolidation::None,
-        1 => QueryConsolidation::LastBroker,
+        1 => QueryConsolidation::LastHop,
         _ => QueryConsolidation::Incremental
     }
 }

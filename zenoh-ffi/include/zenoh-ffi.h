@@ -8,11 +8,35 @@
 #include "zenoh-types.h"
 
 
+typedef struct ZNQueryConsolidation ZNQueryConsolidation;
+
+typedef struct ZNQueryTarget ZNQueryTarget;
+
 typedef struct ZNSession ZNSession;
+
+typedef struct ZNSubscriber ZNSubscriber;
 
 typedef struct ZProperties ZProperties;
 
-typedef struct ZSubscriber ZSubscriber;
+typedef struct zn_string {
+  const char *val;
+  unsigned int len;
+} zn_string;
+
+typedef struct zn_bytes {
+  const unsigned char *val;
+  unsigned int len;
+} zn_bytes;
+
+typedef struct zn_sample {
+  zn_string key;
+  zn_bytes value;
+} zn_sample;
+
+typedef struct zn_source_info {
+  unsigned int kind;
+  zn_bytes id;
+} zn_source_info;
 
 extern const int BROKER_MODE;
 
@@ -56,9 +80,9 @@ unsigned long zn_declare_resource_ws(ZNSession *session, unsigned long rid, cons
  * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
  *
  */
-ZSubscriber *zn_declare_subscriber(ZNSession *session,
-                                   const char *r_name,
-                                   void (*callback)(const char*, unsigned int, const char*, unsigned int));
+ZNSubscriber *zn_declare_subscriber(ZNSession *session,
+                                    const char *r_name,
+                                    void (*callback)(const zn_sample*));
 
 /**
  * Add a property
@@ -89,7 +113,36 @@ void zn_properties_free(ZProperties *rps);
 
 ZProperties *zn_properties_make(void);
 
-void zn_undeclare_subscriber(ZSubscriber *sub);
+/**
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ *
+ */
+void zn_query(ZNSession *session,
+              const char *key_expr,
+              const char *predicate,
+              ZNQueryTarget *target,
+              ZNQueryConsolidation *consolidation,
+              void (*callback)(const zn_source_info*, const zn_sample*));
+
+ZNQueryConsolidation *zn_query_consolidation_default(void);
+
+ZNQueryConsolidation *zn_query_consolidation_incremental(void);
+
+ZNQueryConsolidation *zn_query_consolidation_last_hop(void);
+
+ZNQueryConsolidation *zn_query_consolidation_none(void);
+
+ZNQueryTarget *zn_query_target_default(void);
+
+/**
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ *
+ */
+void zn_undeclare_subscriber(ZNSubscriber *sub);
 
 /**
  * Writes a named resource.

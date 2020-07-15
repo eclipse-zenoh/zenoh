@@ -404,7 +404,7 @@ impl WBuf {
     fn write_consolidation(&mut self, consolidation: &QueryConsolidation) -> bool {
         match consolidation {
             QueryConsolidation::None        => self.write_zint(0),
-            QueryConsolidation::LastBroker  => self.write_zint(1),
+            QueryConsolidation::LastHop  => self.write_zint(1),
             QueryConsolidation::Incremental => self.write_zint(2),
         }
     }

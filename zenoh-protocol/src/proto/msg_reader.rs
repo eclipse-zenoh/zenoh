@@ -514,7 +514,7 @@ impl RBuf {
     fn read_consolidation(&mut self) -> ZResult<QueryConsolidation> {
         match self.read_zint()? {
             0 => Ok(QueryConsolidation::None),
-            1 => Ok(QueryConsolidation::LastBroker),
+            1 => Ok(QueryConsolidation::LastHop),
             2 => Ok(QueryConsolidation::Incremental),
             id => panic!("UNEXPECTED ID FOR QueryConsolidation: {}", id)   //@TODO: return error
         }
