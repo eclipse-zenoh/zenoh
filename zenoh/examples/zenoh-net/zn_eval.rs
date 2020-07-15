@@ -37,7 +37,7 @@ fn parse_args() -> (Config, String, String) {
     let path    = args.value_of("path").unwrap().to_string();
     let value   = args.value_of("value").unwrap().to_string();
 
-    (config, path.to_string(), value.to_string())
+    (config, path, value)
 }
 #[async_std::main]
 async fn main() {

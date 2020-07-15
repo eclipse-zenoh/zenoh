@@ -35,7 +35,7 @@ fn parse_args() -> (Config, String)  {
         
     let selector = args.value_of("selector").unwrap().to_string();
 
-    (config, selector.to_string())
+    (config, selector)
 }
 
 #[async_std::main]
