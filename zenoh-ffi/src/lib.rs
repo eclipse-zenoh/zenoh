@@ -20,6 +20,7 @@ use async_std::sync::{Arc, channel, Sender};
 use async_std::task;
 use zenoh::net::*;
 use zenoh::net::Config;
+use smol;
 
 #[no_mangle]
 pub static BROKER_MODE : c_int = whatami::BROKER as c_int;
@@ -163,7 +164,7 @@ pub unsafe extern "C" fn zn_write_wrid(session: *mut ZNSession, r_id: c_ulong, p
     #[cfg(unix)] { ResKey::RId(r_id) }
     #[cfg(windows)] { ResKey::RId(r_id.into()) }
   }; 
-  let r = match task::block_on(s.0.write(&r, slice::from_raw_parts(payload as *const u8, len as usize).into())) {
+  let r = match smol::block_on(s.0.write(&r, slice::from_raw_parts(payload as *const u8, len as usize).into())) {
     Ok(()) => 0,
     _ => 1
   };
@@ -194,8 +195,6 @@ fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char,
   let r = ZSubscriber(Some(Arc::new(tx)));
   
   let mut sub : Subscriber = task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()), &si)).unwrap();
-  // match task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()), &si)) {
-    // Ok(mut sub) => {
       // Note: This is done to ensure that even if the call-back into C
       // does any blocking call we do not incour the risk of blocking
       // any of the task resolving futures.
@@ -229,7 +228,7 @@ fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char,
 #[no_mangle]
 pub unsafe extern "C" fn zn_undeclare_subscriber(sub: *mut ZSubscriber) {
   match *Box::from_raw(sub) {
-    ZSubscriber(Some(tx)) => task::block_on(tx.send(true)),
+    ZSubscriber(Some(tx)) => smol::block_on(tx.send(true)),
     ZSubscriber(None) => ()
   }  
 }
