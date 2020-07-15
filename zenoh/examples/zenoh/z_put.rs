@@ -16,11 +16,10 @@ use std::convert::TryInto;
 use zenoh::*;
 use zenoh::net::Config;
 
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
+//
+// Argument parsing -- look at the main for the zenoh-related code
+//
+fn parse_args() -> (Config, String, String)  {
     let args = App::new("zenoh put example")
         .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
             .possible_values(&["peer", "client"]).default_value("peer"))
@@ -31,10 +30,21 @@ async fn main() {
             .default_value("Put from Rust!"))
         .get_matches();
 
-    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+    let config = Config::default()
+        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
         .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
-    let path    = args.value_of("path").unwrap();
-    let value   = args.value_of("value").unwrap();
+    let path    = args.value_of("path").unwrap().to_string();
+    let value   = args.value_of("value").unwrap().to_string();
+
+    (config, path, value)
+}
+
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let (config, path, value) = parse_args();
 
     println!("New zenoh...");
     let zenoh = Zenoh::new(config, None).await.unwrap();

@@ -16,27 +16,37 @@ use std::convert::TryInto;
 use zenoh::*;
 use zenoh::net::Config;
 
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
+//
+// Argument parsing -- look at the main for the zenoh-related code
+//
+fn parse_args() -> (Config, String, f64)  {
     let default_value = std::f64::consts::PI.to_string();
 
-    let args = App::new("zenoh put example")
+    let args = App::new("zenoh put float example")
         .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
             .possible_values(&["peer", "client"]).default_value("peer"))
         .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
         .arg(Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
             .default_value("/demo/example/zenoh-rs-put"))
-        .arg(Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to put.'")
+        .arg(Arg::from_usage("-v, --value=[VALUE]      'The float value of the resource to put.'")
             .default_value(&default_value))
         .get_matches();
 
-    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+    let config = Config::default()
+        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
         .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
-    let path    = args.value_of("path").unwrap();
-    let value: f64   = args.value_of("value").unwrap().parse().unwrap();
+    let path = args.value_of("path").unwrap().to_string();
+    let value: f64 = args.value_of("value").unwrap().parse().unwrap();
+
+    (config, path, value)
+}
+
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let (config, path, value) = parse_args();
 
     println!("New zenoh...");
     let zenoh = Zenoh::new(config, None).await.unwrap();
