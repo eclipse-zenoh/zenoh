@@ -53,12 +53,12 @@ async fn main() {
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();
 
-    let selector = Selector::try_from("/test/thr").unwrap();
+    let path_expr = PathExpr::try_from("/test/thr").unwrap();
 
     let mut count = 0u64;
     let mut start = Instant::now();
 
-    let mut sub = workspace.subscribe(&selector).await.unwrap();
+    let mut sub = workspace.subscribe(&path_expr).await.unwrap();
     while let Some(_change) = sub.next().await {
         if count == 0 {
             start = Instant::now();

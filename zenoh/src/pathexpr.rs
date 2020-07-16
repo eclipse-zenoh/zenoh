@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::fmt;
-use std::convert::TryFrom;
+use std::convert::{From, TryFrom};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
 use crate::net::ResKey;
@@ -75,6 +75,19 @@ impl TryFrom<&str> for PathExpr {
     }
 }
 
+impl From<&Path> for PathExpr {
+    fn from(path: &Path) -> Self {
+        // No need to check validity as PathExpr is valid
+        PathExpr{p: path.p.clone()}
+    }
+}
+
+impl From<Path> for PathExpr {
+    fn from(path: Path) -> Self {
+        // No need to check validity as PathExpr is valid
+        PathExpr{p: path.p}
+    }
+}
 
 impl From<PathExpr> for ResKey {
     fn from(path: PathExpr) -> Self {

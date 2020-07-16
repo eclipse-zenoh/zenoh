@@ -83,9 +83,9 @@ impl Workspace {
         .map(|receiver| DataStream { receiver })
     }
 
-    pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream> {
-        debug!("subscribe on {}", selector);
-        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
+    pub async fn subscribe(&self, path_expr: &PathExpr) -> ZResult<ChangeStream> {
+        debug!("subscribe on {}", path_expr);
+        let reskey = self.pathexpr_to_reskey(&path_expr);
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
@@ -96,9 +96,9 @@ impl Workspace {
             .map(|subscriber| ChangeStream { subscriber })
     }
 
-    pub async fn register_eval(&self, selector: &Selector) -> ZResult<GetStream> {
-        debug!("eval on {}", selector);
-        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
+    pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetStream> {
+        debug!("eval on {}", path_expr);
+        let reskey = self.pathexpr_to_reskey(&path_expr);
 
         self.session.declare_queryable(&reskey, EVAL).await
             .map(|queryable| GetStream { queryable })
