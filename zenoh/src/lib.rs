@@ -19,11 +19,13 @@ extern crate lazy_static;
 use log::debug;
 
 pub mod net;
-use net::{Properties, Session, ZResult};
+use net::{Session, ZResult};
 
 mod workspace;
 pub use workspace::{Data, Workspace};
 
+mod properties;
+pub use properties::Properties;
 mod path;
 pub use path::Path;
 mod pathexpr;
@@ -42,7 +44,8 @@ pub struct Zenoh {
 impl Zenoh {
 
     pub async fn new(config: Config, props: Option<Properties>) -> ZResult<Zenoh> {
-        Ok(Zenoh { session: net::open(config, props).await? })
+        let zn_props = props.map(|p| p.0.iter().filter_map(Self::to_zn_prop).collect());
+        Ok(Zenoh { session: net::open(config, zn_props).await? })
     }
 
     pub async fn workspace(&self, prefix: Option<Path>) -> ZResult<Workspace> {
@@ -52,6 +55,11 @@ impl Zenoh {
 
     pub async fn close(&self) -> ZResult<()> {
         self.session.close().await
+    }
+
+    fn to_zn_prop(_prop: (&String, &String)) -> Option<(net::ZInt, Vec<u8>)> {
+        // No existing zenoh-net properties to be mapped yet
+        None
     }
 
 }

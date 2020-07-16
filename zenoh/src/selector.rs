@@ -15,7 +15,7 @@ use std::fmt;
 use std::convert::TryFrom;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
-use crate::{Path, PathExpr};
+use crate::{Path, PathExpr, Properties};
 use regex::Regex;
 
 
@@ -24,7 +24,7 @@ pub struct Selector {
     pub path_expr: PathExpr,
     pub predicate: String,
     pub projection: Option<String>,
-    pub properties: Option<String>,
+    pub properties: Properties,
     pub fragment: Option<String>
 }
 
@@ -50,16 +50,12 @@ impl Selector {
                 path_expr,
                 predicate: predicate.to_string(),
                 projection: caps.name("proj").map(|s| s.as_str().to_string()),
-                properties: caps.name("prop").map(|s| s.as_str().to_string()),
+                properties: caps.name("prop").map(|s| s.as_str().into()).unwrap_or_default(),
                 fragment: caps.name("frag").map(|s| s.as_str().to_string())
             })
         } else {
             zerror!(ZErrorKind::InvalidSelector{ selector: format!("{}{}", res_name, predicate) })
         }
-    }
-
-    pub fn is_relative(&self) -> bool {
-        self.path_expr.is_relative()
     }
 
     pub fn with_prefix(&self, prefix: &Path) -> Selector {
@@ -70,6 +66,10 @@ impl Selector {
             properties: self.properties.clone(),
             fragment: self.fragment.clone()
         }
+    }
+
+    pub fn is_relative(&self) -> bool {
+        self.path_expr.is_relative()
     }
 }
 
@@ -101,7 +101,6 @@ impl TryFrom<String> for Selector {
 
 
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,7 +113,7 @@ mod tests {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "".into(),
                 projection: None,
-                properties: None,
+                properties: Properties::default(),
                 fragment: None
             });
 
@@ -123,7 +122,7 @@ mod tests {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj".into(),
                 projection: Some("proj".into()),
-                properties: None,
+                properties: Properties::default(),
                 fragment: None
             });
 
@@ -132,7 +131,7 @@ mod tests {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?(prop)".into(),
                 projection: None,
-                properties: Some("prop".into()),
+                properties: Properties::from(&[("prop", "")][..]),
                 fragment: None
             });
 
@@ -141,7 +140,7 @@ mod tests {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "#frag".into(),
                 projection: None,
-                properties: None,
+                properties: Properties::default(),
                 fragment: Some("frag".into()),
             });
 
@@ -150,7 +149,7 @@ mod tests {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj(prop)".into(),
                 projection: Some("proj".into()),
-                properties: Some("prop".into()),
+                properties: Properties::from(&[("prop", "")][..]),
                 fragment: None
             });
 
@@ -159,7 +158,7 @@ mod tests {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj#frag".into(),
                 projection: Some("proj".into()),
-                properties: None,
+                properties: Properties::default(),
                 fragment: Some("frag".into()),
             });
 
@@ -168,7 +167,7 @@ mod tests {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?(prop)#frag".into(),
                 projection: None,
-                properties: Some("prop".into()),
+                properties: Properties::from(&[("prop", "")][..]),
                 fragment: Some("frag".into()),
             });
 
@@ -177,7 +176,7 @@ mod tests {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj(prop)#frag".into(),
                 projection: Some("proj".into()),
-                properties: Some("prop".into()),
+                properties: Properties::from(&[("prop", "")][..]),
                 fragment: Some("frag".into()),
             });
 
