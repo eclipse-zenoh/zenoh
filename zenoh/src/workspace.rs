@@ -96,6 +96,31 @@ impl Workspace {
             .map(|subscriber| ChangeStream { subscriber })
     }
 
+    pub async fn subscribe_with_callback<SubscribeCallback>(
+        &self,
+        path_expr: &PathExpr,
+        mut callback: SubscribeCallback) -> ZResult<()>
+    where SubscribeCallback: FnMut(Change) + Send + Sync + 'static
+    {
+        debug!("subscribe_with_callback on {}", path_expr);
+        let reskey = self.pathexpr_to_reskey(&path_expr);
+        let sub_info = SubInfo {
+            reliability: Reliability::Reliable,
+            mode: SubMode::Push,
+            period: None
+        };
+    
+        let _ = self.session.declare_direct_subscriber(&reskey, &sub_info,
+            move |res_name: &str, payload: RBuf, data_info: Option<RBuf>| {
+                match Change::new(res_name, payload, data_info) {
+                    Ok(change) => callback(change),
+                    Err(err) => warn!("Received an invalid Sample (drop it): {}", err)
+                }
+            }
+        ).await;
+        Ok(())
+    }
+
     pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream> {
         debug!("eval on {}", path_expr);
         let reskey = self.pathexpr_to_reskey(&path_expr);
@@ -154,14 +179,20 @@ pub struct Change {
     pub kind: ChangeKind
 }
 
-fn sample_to_change(sample: Option<Sample>) -> Option<Change> {
-    sample.map(|s| Change {
-        path: s.res_name.try_into().unwrap(),
-        value: Some(Box::new(RawValue::from(s.payload))),
-        // timestamp:            // TODO
-        kind: ChangeKind::PUT    // TODO
-    })
+impl Change {
+    fn new(res_name: &str, payload: RBuf, _data_info: Option<RBuf>) -> ZResult<Change> {
+        let path = res_name.try_into()?;
+        let value: Option<Box<dyn Value>> = Some(Box::new(RawValue::from(payload)));
+        // let timestamp = ...TODO
+        let kind = ChangeKind::PUT;   // TODO
+        Ok(Change{path, value, kind})
+    }
 }
+
+
+// fn sample_to_change(sample: Option<Sample>) -> Option<Change> {
+//     sample.map(|s| Change::new(&s.res_name, s.payload, s.data_info))
+// }
 
 pin_project! {
     pub struct ChangeStream {
@@ -175,7 +206,18 @@ impl Stream for ChangeStream {
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.project().subscriber.poll_next(cx).map(sample_to_change)
+        match self.project().subscriber.poll_next(cx) {
+            Poll::Ready(Some(sample)) => 
+                match Change::new(&sample.res_name, sample.payload, sample.data_info) {
+                    Ok(change) => Poll::Ready(Some(change)),
+                    Err(err) => {
+                        warn!("Received an invalid Sample (drop it): {}", err);
+                        Poll::Pending
+                    }
+                },
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending
+        }
     }
 }
 

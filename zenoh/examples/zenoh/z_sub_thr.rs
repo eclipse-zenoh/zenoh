@@ -58,18 +58,22 @@ async fn main() {
     let mut count = 0u64;
     let mut start = Instant::now();
 
-    let mut sub = workspace.subscribe(&path_expr).await.unwrap();
-    while let Some(_change) = sub.next().await {
-        if count == 0 {
-            start = Instant::now();
-            count += 1;
-        } else if count < N {
-            count += 1;
-        } else {
-            print_stats(start);
-            count = 0;
+    workspace.subscribe_with_callback(&path_expr,
+        move |_change| {
+            if count == 0 {
+                start = Instant::now();
+                count += 1;
+            } else if count < N {
+                count += 1;
+            } else {
+                print_stats(start);
+                count = 0;
+            }
         }
-    }
+    ).await.unwrap();
+
+    // Stop forever
+    future::pending::<()>().await;
 
     zenoh.close().await.unwrap();
 }
