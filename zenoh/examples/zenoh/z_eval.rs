@@ -63,7 +63,7 @@ async fn main() {
     println!("Register eval for {}'...\n", path);
     let mut get_stream = workspace.register_eval(&path.into()).await.unwrap();
     while let Some(get_request) = get_stream.next().await {
-        println!(">> [Eval listener] received get on {}", get_request.selector);
+        println!(">> [Eval listener] received get with selector: {}", get_request.selector);
 
         // The returned Value is a StringValue with a 'name' part which is set in 3 possible ways,
         // depending the properties specified in the selector. For example, with the
@@ -73,9 +73,8 @@ async fn main() {
         // - "/zenoh/example/eval?(name=/zenoh/example/name)" : the Eval function does a GET 
         //      on "/zenoh/example/name" an uses the 1st result for the name
         let mut name = get_request.selector.properties.get("name").cloned().unwrap_or("Rust!".to_string());
-        println!("  >> name = {}", name);
         if name.starts_with('/') {
-            println!("  >> get name from  {}", name);
+            println!("   >> Get name to use from path: {}", name);
             if let Ok(selector) = Selector::try_from(name.as_str()) {
                 if let Some(data) = workspace.get(&selector).await.unwrap().next().await {
                     name = String::from_utf8_lossy(&data.value.as_rbuf().to_vec()).to_string();
@@ -85,12 +84,13 @@ async fn main() {
             } else {
                 println!("Failed to get value from '{}' : this is not a valid Selector", name);
             }
-
         }
-
-        let value = Box::new(StringValue::from(format!("Eval from {}", name)));
-
-        get_request.data_sender.send(Data { path: path.clone(), value }).await;
+        let s = format!("Eval from {}", name);
+        println!(r#"   >> Returning string: "{}""#, s);
+        get_request.data_sender.send( Data {
+            path: path.clone(),
+            value: Box::new(StringValue::from(s)) 
+        }).await;
     }
 
     zenoh.close().await.unwrap();
