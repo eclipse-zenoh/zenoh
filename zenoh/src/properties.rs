@@ -49,7 +49,7 @@ impl fmt::Display for Properties {
             } else {
                 write!(f, "{}{}{}", k, KV_SEP, v)?
             }
-            while let Some((k,v)) = it.next() {
+            for (k,v) in it {
                 if v.is_empty() {
                     write!(f, "{}{}", PROP_SEP, k)?
                 } else {

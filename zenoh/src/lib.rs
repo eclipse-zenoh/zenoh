@@ -44,7 +44,7 @@ pub struct Zenoh {
 impl Zenoh {
 
     pub async fn new(config: Config, props: Option<Properties>) -> ZResult<Zenoh> {
-        let zn_props = props.map(|p| p.0.iter().filter_map(Self::to_zn_prop).collect());
+        let zn_props = props.map(|p| p.0.iter().filter_map(prop_to_zn_prop).collect());
         Ok(Zenoh { session: net::open(config, zn_props).await? })
     }
 
@@ -57,9 +57,10 @@ impl Zenoh {
         self.session.close().await
     }
 
-    fn to_zn_prop(_prop: (&String, &String)) -> Option<(net::ZInt, Vec<u8>)> {
-        // No existing zenoh-net properties to be mapped yet
-        None
-    }
 
+}
+
+fn prop_to_zn_prop(_prop: (&String, &String)) -> Option<(net::ZInt, Vec<u8>)> {
+    // No existing zenoh-net properties to be mapped yet
+    None
 }

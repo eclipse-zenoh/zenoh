@@ -87,7 +87,7 @@ async fn main() {
         }
         let s = format!("Eval from {}", name);
         println!(r#"   >> Returning string: "{}""#, s);
-        get_request.data_sender.send( Data {
+        get_request.reply( Data {
             path: path.clone(),
             value: Box::new(StringValue::from(s)) 
         }).await;

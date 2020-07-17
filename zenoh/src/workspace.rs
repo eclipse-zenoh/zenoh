@@ -96,12 +96,12 @@ impl Workspace {
             .map(|subscriber| ChangeStream { subscriber })
     }
 
-    pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetStream> {
+    pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream> {
         debug!("eval on {}", path_expr);
         let reskey = self.pathexpr_to_reskey(&path_expr);
 
         self.session.declare_queryable(&reskey, EVAL).await
-            .map(|queryable| GetStream { queryable })
+            .map(|queryable| GetRequestStream { queryable })
     }
 
 }
@@ -181,22 +181,28 @@ impl Stream for ChangeStream {
 
 pub struct GetRequest {
     pub selector: Selector,
-    pub data_sender: DataSender
+    replies_sender: RepliesSender
+}
+
+impl GetRequest {
+    pub async fn reply(&self, data: Data) {
+        self.replies_sender.send(data_to_sample(data)).await
+    }
 }
 
 fn query_to_get(query: Query) -> ZResult<GetRequest> {
     Selector::new(query.res_name.as_str(), query.predicate.as_str())
-        .map(|selector| GetRequest { selector, data_sender: DataSender { replies_sender: query.replies_sender } })
+        .map(|selector| GetRequest { selector, replies_sender: query.replies_sender })
 }
 
 pin_project! {
-    pub struct GetStream {
+    pub struct GetRequestStream {
         #[pin]
         queryable: Queryable
     }
 }
 
-impl Stream for GetStream {
+impl Stream for GetRequestStream {
     type Item = GetRequest;
 
     #[inline(always)]
@@ -215,12 +221,3 @@ impl Stream for GetStream {
     }
 }
 
-pub struct DataSender {
-    replies_sender: RepliesSender
-}
-
-impl DataSender {
-    pub async fn send(&self, data: Data) {
-        self.replies_sender.send(data_to_sample(data)).await
-    }
-}
