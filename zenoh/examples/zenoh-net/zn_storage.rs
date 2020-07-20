@@ -77,7 +77,7 @@ async fn main() {
 
             query = queryable.next().fuse() => {
                 let query = query.unwrap();
-                println!(">> [Query handler        ] Handling '{}?{}'", query.res_name, query.predicate);
+                println!(">> [Query handler        ] Handling '{}{}'", query.res_name, query.predicate);
                 for (stored_name, (data, data_info)) in stored.iter() {
                     if rname_intersect(&query.res_name, stored_name) {
                         query.replies_sender.send(Sample{

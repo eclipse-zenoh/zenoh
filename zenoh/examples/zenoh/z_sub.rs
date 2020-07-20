@@ -56,8 +56,8 @@ async fn main() {
     workspace.subscribe(&path_expr.try_into().unwrap())
         .await.unwrap()
         .for_each( async move |change| 
-            println!(">> [Subscription listener] received change {} : {:?}",
-                change.path, change.value.unwrap().as_rbuf())
+            println!(">> [Subscription listener] received change {} : {}",
+                change.path, change.value.unwrap())
         ).await;
 
     zenoh.close().await.unwrap();

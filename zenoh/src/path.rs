@@ -73,20 +73,6 @@ impl fmt::Display for Path {
     }
 }
 
-// impl From<String> for Path {
-//     fn from(p: String) -> Path {
-//         Path::new(p).unwrap()
-//     }
-// }
-
-// impl From<&str> for Path {
-//     fn from(p: &str) -> Path {
-//         Self::from(p.to_string())
-//     }
-// }
-
-// Doesn't compile because of https://github.com/rust-lang/rust/issues/50133
-
 impl TryFrom<String> for Path {
     type Error = ZError;
     fn try_from(p: String) -> Result<Self, Self::Error> {

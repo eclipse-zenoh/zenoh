@@ -50,7 +50,7 @@ impl Workspace {
         }
     }
 
-    pub async fn put(&self, path: &Path, value: &dyn Value) -> ZResult<()> {
+    pub async fn put(&self, path: &Path, value: &Value) -> ZResult<()> {
         debug!("put on {:?}", path);
         self.session.write_wo(
             &self.path_to_reskey(path),
@@ -136,18 +136,38 @@ impl Workspace {
 
 pub struct Data {
     pub path: Path,
-    pub value: Box<dyn Value>
+    pub value: Value
 }
 
-fn reply_to_data(reply: Option<Reply>) -> Option<Data> {
-    reply.map(|r| Data {
-        path: r.data.res_name.try_into().unwrap(),
-        value: Box::new(RawValue::from(r.data.payload))
-    })
+fn reply_to_data(reply: Reply) -> ZResult<Data> {
+    let path: Path = reply.data.res_name.try_into().unwrap();
+    let encoding = reply.data.data_info.map_or(encoding::RAW, |mut rbuf| {
+        match rbuf.read_datainfo() {
+            Ok(info) => info.encoding.unwrap_or(encoding::RAW),
+            Err(e) => {
+                warn!("Received DataInfo that failed to be decoded: {}. Assume it's RAW encoding", e);
+                encoding::RAW
+            }
+        }
+    });
+    let value = Value::decode(encoding, reply.data.payload)?;
+
+    Ok(Data{ path, value })
 }
 
 fn data_to_sample(data: Data) -> Sample {
-    Sample { res_name: data.path.to_string(), payload: data.value.as_rbuf(), data_info: None }
+    let info = DataInfo {
+        source_id: None,
+        source_sn: None,
+        fist_broker_id: None,
+        fist_broker_sn: None,
+        timestamp: None,
+        kind: None,
+        encoding: Some(data.value.encoding()),
+    };
+    let mut infobuf = WBuf::new(64, false);
+    infobuf.write_datainfo(&info);
+    Sample { res_name: data.path.to_string(), payload: data.value.into(), data_info: Some(infobuf.into()) }
 }
 
 pin_project! {
@@ -162,37 +182,77 @@ impl Stream for DataStream {
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.project().receiver.poll_next(cx).map(reply_to_data)
+        match self.project().receiver.poll_next(cx) {
+            Poll::Ready(Some(reply)) => 
+                match reply_to_data(reply) {
+                    Ok(data) => Poll::Ready(Some(data)),
+                    Err(err) => {
+                        warn!("Received an invalid Reply (drop it): {}", err);
+                        Poll::Pending
+                    }
+                },
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending
+        }
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ChangeKind {
     PUT = kind::PUT as isize,
     PATCH = kind::UPDATE as isize,
     DELETE = kind::DELETE as isize
 }
 
+impl From<ZInt> for ChangeKind {
+    fn from(kind: ZInt) -> Self {
+        match kind {
+            kind::PUT => ChangeKind::PUT,
+            kind::UPDATE => ChangeKind::PATCH,
+            kind::DELETE => ChangeKind::DELETE,
+            _ => {
+                warn!("Received DataInfo with kind={} which doesn't correspond to a ChangeKind. \
+                       Assume a PUT with RAW encoding", kind);
+                ChangeKind::PUT
+            }
+        }
+    }
+}
+
 pub struct Change {
     pub path: Path,
-    pub value: Option<Box<dyn Value>>,
+    pub value: Option<Value>,
     //pub timestamp
     pub kind: ChangeKind
 }
 
 impl Change {
-    fn new(res_name: &str, payload: RBuf, _data_info: Option<RBuf>) -> ZResult<Change> {
+    fn new(res_name: &str, payload: RBuf, data_info: Option<RBuf>) -> ZResult<Change> {
         let path = res_name.try_into()?;
-        let value: Option<Box<dyn Value>> = Some(Box::new(RawValue::from(payload)));
         // let timestamp = ...TODO
-        let kind = ChangeKind::PUT;   // TODO
+        let (kind, encoding) = data_info.map_or((ChangeKind::PUT, encoding::RAW), |mut rbuf| {
+                match rbuf.read_datainfo() {
+                    Ok(info) => (
+                        info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+                        info.encoding.unwrap_or(encoding::RAW)
+                    ),
+                    Err(e) => {
+                        warn!("Received DataInfo that failed to be decoded: {}. Assume it's for a PUT", e);
+                        (ChangeKind::PUT, encoding::RAW)
+                    }
+                }
+            }
+        );
+        let value = if kind == ChangeKind::DELETE {
+            None
+        } else {
+            Some(Value::decode(encoding, payload)?)
+        };
         Ok(Change{path, value, kind})
     }
 }
 
-
-// fn sample_to_change(sample: Option<Sample>) -> Option<Change> {
-//     sample.map(|s| Change::new(&s.res_name, s.payload, s.data_info))
-// }
 
 pin_project! {
     pub struct ChangeStream {

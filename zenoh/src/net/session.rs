@@ -364,7 +364,7 @@ impl Session {
         };
         let mut infobuf = zenoh_protocol::io::WBuf::new(64, false);
         infobuf.write_datainfo(&info);
-        primitives.data(resource, true, &Some((&infobuf).into()), payload).await;
+        primitives.data(resource, true, &Some(infobuf.into()), payload).await;
         Ok(())
     }
 

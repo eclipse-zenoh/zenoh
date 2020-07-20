@@ -30,7 +30,8 @@ pub enum ZErrorKind {
     InvalidSelector { selector: String },
     IOError { descr: String },
     Other { descr: String },
-    UnkownResourceId { rid: String }
+    UnkownResourceId { rid: String },
+    ValueDecodingFailed { descr: String }
 }
 
 impl fmt::Display for ZErrorKind {
@@ -65,6 +66,8 @@ impl fmt::Display for ZErrorKind {
                 write!(f, "zenoh error: ({})", descr),
             ZErrorKind::UnkownResourceId { rid } =>
                 write!(f, "Unkown ResourceId ({})", rid),
+            ZErrorKind::ValueDecodingFailed { descr } =>
+                write!(f, "Failed to decode Value ({})", descr),
         }
     }
 }

@@ -51,7 +51,7 @@ async fn main() {
     let workspace = zenoh.workspace(None).await.unwrap();
 
     let path: Path = Path::try_from("/test/thr").unwrap();
-    let value = RawValue::from(data);
+    let value = Value::Raw(data);
     loop {
         workspace.put(&path, &value).await.unwrap();
     }

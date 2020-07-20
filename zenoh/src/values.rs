@@ -11,141 +11,120 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::net::{encoding, RBuf, ZInt};
-use log::warn;
+use std::fmt;
+use crate::net::{RBuf, WBuf, ZInt};
+use zenoh_util::core::{ZResult, ZError, ZErrorKind};
+use zenoh_util::{zerror, zerror2};
+use crate::Properties;
 
-pub trait Value {
-    fn as_rbuf(&self) -> RBuf;
 
-    fn encoding(&self) -> ZInt;
+#[derive(Debug)]
+pub enum Value {
+    Raw(RBuf),
+    Custom { encoding_descr: String, data: RBuf },
+    StringUTF8(String),
+    Properties(Properties),
+    Json(String),
+    Integer(i64),
+    Float(f64)
 }
 
-impl From<&dyn Value> for RBuf {
-    fn from(value: &dyn Value) -> Self {
-        value.as_rbuf()
+impl Value {
+    pub(crate) fn encoding(&self) -> ZInt {
+        use crate::net::encoding::*;
+        use Value::*;
+        match self {
+            Raw(_)        => RAW,
+            Custom{encoding_descr:_, data:_}  => APP_CUSTOM,
+            StringUTF8(_) => STRING,
+            Properties(_) => APP_PROPERTIES,
+            Json(_) => APP_JSON,
+            Integer(_)    => APP_INTEGER,
+            Float(_)      => APP_FLOAT
+        }
     }
-}
 
-// ------- RawValue 
-pub struct RawValue(RBuf);
-
-impl Value for RawValue {
-    fn as_rbuf(&self) -> RBuf {
-        self.0.clone()
-    }
-    fn encoding(&self) -> ZInt {
-        encoding::RAW
-    }
-}
-
-impl From<RBuf> for RawValue {
-    fn from(rbuf: RBuf) -> Self {
-        RawValue(rbuf)
-    }
-}
-
-impl From<&RBuf> for RawValue {
-    fn from(rbuf: &RBuf) -> Self {
-        RawValue(rbuf.clone())
-    }
-}
-
-impl From<Vec<u8>> for RawValue {
-    fn from(buf: Vec<u8>) -> Self {
-        RawValue(buf.into())
-    }
-}
-
-impl From<&[u8]> for RawValue {
-    fn from(buf: &[u8]) -> Self {
-        RawValue(buf.into())
-    }
-}
-
-
-// ------- StringValue 
-pub struct StringValue(String);
-
-impl Value for StringValue {
-    fn as_rbuf(&self) -> RBuf {
-        self.0.as_bytes().into()
-    }
-    fn encoding(&self) -> ZInt {
-        encoding::STRING
-    }
-}
-
-impl From<&RBuf> for StringValue {
-    fn from(rbuf: &RBuf) -> Self {
-        StringValue(String::from_utf8_lossy(&rbuf.to_vec()).into())
-    }
-}
-
-impl From<String> for StringValue {
-    fn from(s: String) -> Self {
-        StringValue(s)
-    }
-}
-
-impl From<&str> for StringValue {
-    fn from(s: &str) -> Self {
-        StringValue(s.into())
+    pub(crate) fn decode(encoding: ZInt, mut payload: RBuf) -> ZResult<Value> {
+        use crate::net::encoding::*;
+        use Value::*;
+        match encoding {
+            RAW => Ok(Raw(payload)),
+            APP_CUSTOM => {
+                if let Ok(encoding_descr) = payload.read_string() {
+                    let mut data = RBuf::empty();
+                    payload.drain_into_rbuf(&mut data);
+                    Ok(Custom{encoding_descr, data})
+                } else {
+                    zerror!(ZErrorKind::ValueDecodingFailed{ descr: 
+                        "Failed to read 'encoding_decscr' from a payload with Custom encoding".to_string() })
+                }
+            }
+            STRING => String::from_utf8(payload.read_vec())
+                .map(StringUTF8)
+                .map_err(|e| zerror2!(ZErrorKind::ValueDecodingFailed{ descr: "Failed to decode StringUTF8 Value".to_string() }, e)),
+            APP_PROPERTIES => String::from_utf8(payload.read_vec())
+                .map(|s| Properties(crate::Properties::from(s)))
+                .map_err(|e| zerror2!(ZErrorKind::ValueDecodingFailed{ descr: "Failed to decode UTF-8 string for a Properties Value".to_string() }, e)),
+            APP_JSON | TEXT_JSON => String::from_utf8(payload.read_vec())
+                .map(Json)
+                .map_err(|e| zerror2!(ZErrorKind::ValueDecodingFailed{ descr: "Failed to decode UTF-8 string for a JSON Value".to_string() }, e)),
+            APP_INTEGER => String::from_utf8(payload.read_vec())
+                .map_err(|e| zerror2!(ZErrorKind::ValueDecodingFailed{ descr: "Failed to decode an Integer Value".to_string() }, e))
+                .and_then(|s| s.parse::<i64>()
+                    .map_err(|e| zerror2!(ZErrorKind::ValueDecodingFailed{ descr: "Failed to decode an Integer Value".to_string() }, e)))
+                .map(Integer),
+            APP_FLOAT => String::from_utf8(payload.read_vec())
+                .map_err(|e| zerror2!(ZErrorKind::ValueDecodingFailed{ descr: "Failed to decode an Float Value".to_string() }, e))
+                .and_then(|s| s.parse::<f64>()
+                    .map_err(|e| zerror2!(ZErrorKind::ValueDecodingFailed{ descr: "Failed to decode an Float Value".to_string() }, e)))
+                .map(Float),
+            _ => {
+                zerror!(ZErrorKind::ValueDecodingFailed{ descr: 
+                    format!("Unkown encoding flag '{}'", encoding) })
+            }
+        }
     }
 }
 
-// ------- IntValue
-pub struct IntValue(i64);
-
-impl Value for IntValue {
-    fn as_rbuf(&self) -> RBuf {
-        self.0.to_string().as_bytes().into()
-    }
-    fn encoding(&self) -> ZInt {
-        encoding::APP_INTEGER
-    }
-}
-
-impl From<&RBuf> for IntValue {
-    fn from(rbuf: &RBuf) -> Self {
-        IntValue(
-            String::from_utf8_lossy(&rbuf.to_vec())
-            .parse().unwrap_or_else(|err| {
-                warn!("Error decoding IntValue '{}': {}", String::from_utf8_lossy(&rbuf.to_vec()), err);
-                i64::default()
-            }))
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Value::*;
+        match self {
+            Raw(buf)        => write!(f, "{}", buf),
+            Custom{encoding_descr, data}  => write!(f, "{} {}", encoding_descr, data),
+            StringUTF8(s) => write!(f, "{}", s),
+            Properties(p) => write!(f, "{}", p),
+            Json(s)       => write!(f, "{}", s),
+            Integer(i)    => write!(f, "{}", i),
+            Float(fl)     => write!(f, "{}", fl)
+        }
     }
 }
 
-impl From<i64> for IntValue {
-    fn from(i: i64) -> Self {
-        IntValue(i)
-    }
-}
-// ------- FloatValue
-pub struct FloatValue(f64);
-
-impl Value for FloatValue {
-    fn as_rbuf(&self) -> RBuf {
-        self.0.to_string().as_bytes().into()
-    }
-    fn encoding(&self) -> ZInt {
-        encoding::APP_FLOAT
+impl From<Value> for RBuf {
+    fn from(v: Value) -> Self {
+        Self::from(&v)
     }
 }
 
-impl From<&RBuf> for FloatValue {
-    fn from(rbuf: &RBuf) -> Self {
-        FloatValue(
-            String::from_utf8_lossy(&rbuf.to_vec())
-            .parse().unwrap_or_else(|err| {
-                warn!("Error decoding FloatValue '{}': {}", String::from_utf8_lossy(&rbuf.to_vec()), err);
-                f64::default()
-            }))
-    }
-}
-
-impl From<f64> for FloatValue {
-    fn from(f: f64) -> Self {
-        FloatValue(f)
+impl From<&Value> for RBuf {
+    fn from(v: &Value) -> Self {
+        use Value::*;
+        match v {
+            Raw(buf) => buf.clone(),
+            Custom{encoding_descr, data} => {
+                let mut buf = WBuf::new(64, false);
+                buf.write_string(&encoding_descr);
+                for slice in data.get_slices() {
+                    buf.write_slice(slice.clone());
+                }
+                buf.into()
+            },
+            StringUTF8(s) => RBuf::from(s.as_bytes()),
+            Properties(props) => RBuf::from(props.to_string().as_bytes()),
+            Json(s) => RBuf::from(s.as_bytes()),
+            Integer(i) =>  RBuf::from(i.to_string().as_bytes()),
+            Float(f) =>  RBuf::from(f.to_string().as_bytes()),
+        }
     }
 }

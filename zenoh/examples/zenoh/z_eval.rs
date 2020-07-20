@@ -77,7 +77,7 @@ async fn main() {
             println!("   >> Get name to use from path: {}", name);
             if let Ok(selector) = Selector::try_from(name.as_str()) {
                 if let Some(data) = workspace.get(&selector).await.unwrap().next().await {
-                    name = String::from_utf8_lossy(&data.value.as_rbuf().to_vec()).to_string();
+                    name = data.value.to_string();
                 } else {
                     println!("Failed to get value from '{}' : not found", name);
                 }
@@ -89,7 +89,7 @@ async fn main() {
         println!(r#"   >> Returning string: "{}""#, s);
         get_request.reply( Data {
             path: path.clone(),
-            value: Box::new(StringValue::from(s)) 
+            value: Value::StringUTF8(s) 
         }).await;
     }
 

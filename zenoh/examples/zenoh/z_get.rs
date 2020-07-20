@@ -57,8 +57,8 @@ async fn main() {
     workspace.get(&selector.try_into().unwrap())
         .await.unwrap()
         .for_each( async move |data| 
-            println!(">> [Reply handler] received reply data {} : {:?}",
-                data.path, data.value.as_rbuf())
+            println!(">> [Reply handler] received reply data {} : {}",
+                data.path, data.value)
         ).await;
 
     zenoh.close().await.unwrap();

@@ -81,6 +81,12 @@ impl From<&str> for Properties {
     }
 }
 
+impl From<String> for Properties {
+    fn from(s: String) -> Self {
+        Self::from(s.as_str())
+    }
+}
+
 impl From<&[(&str, &str)]> for Properties {
     fn from(kvs: &[(&str, &str)]) -> Properties {
         let p: HashMap<String, String> = 

@@ -301,6 +301,12 @@ impl From<&super::WBuf> for RBuf {
     }
 }
 
+impl From<super::WBuf> for RBuf {
+    fn from(wbuf: super::WBuf) -> RBuf {
+        Self::from(&wbuf)
+    }
+}
+
 impl PartialEq for RBuf {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {

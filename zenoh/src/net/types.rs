@@ -17,7 +17,7 @@ use pin_project_lite::pin_project;
 use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
 
-pub use zenoh_protocol::io::RBuf;
+pub use zenoh_protocol::io::{RBuf, WBuf};
 pub use zenoh_protocol::core::{
     ZInt,
     ResourceId,
@@ -33,7 +33,7 @@ pub use zenoh_protocol::core::{
 
 };
 pub use zenoh_protocol::{
-    proto::Primitives,
+    proto::{DataInfo, Primitives},
     core::{WhatAmI, whatami}
 };
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
