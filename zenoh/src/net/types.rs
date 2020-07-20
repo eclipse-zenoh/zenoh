@@ -16,28 +16,25 @@ use std::collections::HashMap;
 use pin_project_lite::pin_project;
 use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
+use crate::net::Session;
 
-pub use zenoh_protocol::io::RBuf;
+pub use zenoh_protocol::io::{RBuf, WBuf};
 pub use zenoh_protocol::core::{
     ZInt,
     ResourceId,
     ResKey,
     PeerId,
-};
-pub use zenoh_protocol::proto::{
+    QueryConsolidation,
+    QueryTarget,
+    Target,
     Reliability,
     SubMode,
     Period,
     SubInfo,
-    Target,
-    QueryTarget,
-    QueryConsolidation,
-    Primitives,
-    WhatAmI,
-    whatami,
+    whatami
 };
+pub use zenoh_protocol::proto::DataInfo;
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use crate::net::Session;
 
 pub type Config = zenoh_router::runtime::Config;
 
@@ -123,7 +120,6 @@ impl fmt::Debug for Subscriber {
         write!(f, "Subscriber{{ id:{}, resname:{} }}", self.id, self.resname)
     }
 }
-
 
 #[derive(Clone)]
 pub struct DirectSubscriber {

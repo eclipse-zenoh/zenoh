@@ -16,8 +16,6 @@
 use futures::prelude::*;
 use clap::{Arg, ArgMatches};
 use zenoh::net::*;
-use zenoh_protocol::core::ZInt;
-use zenoh_protocol::proto::kind;
 use zenoh_router::runtime::Runtime;
 use tide::{Request, Response, Server, StatusCode};
 use tide::http::Mime;
@@ -49,12 +47,12 @@ fn get_kind_str(sample: &Sample) -> String {
     let info = sample.data_info.clone();
     let kind = match info {
         Some(mut buf) => match buf.read_datainfo() {
-            Ok(info) => info.kind.or(Some(kind::DEFAULT)).unwrap(),
-            _ => kind::DEFAULT,
+            Ok(info) => info.kind.or(Some(data_kind::DEFAULT)).unwrap(),
+            _ => data_kind::DEFAULT,
         }
-        None => kind::DEFAULT,
+        None => data_kind::DEFAULT,
     };
-    match kind::to_str(kind) {
+    match data_kind::to_str(kind) {
         Ok(string) => string,
         _ => "PUT".to_string(),
     }
@@ -126,11 +124,12 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     let http_port = parse_http_port(args.value_of("http-port").unwrap());
 
+    let pid = runtime.get_pid_str().await;
     let session = Session::init(runtime).await;
 
-    let mut app = Server::with_state(session);
+    let mut app = Server::with_state((session, pid));
 
-    app.at("*").get(async move |req: Request<Session>| {
+    app.at("*").get(async move |req: Request<(Session, String)>| {
         log::trace!("Http {:?}", req);
 
         let first_accept = match req.header("accept") {
@@ -140,13 +139,13 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         match &first_accept[..] {
 
             "text/event-stream" => {
-                Ok(tide::sse::upgrade(req, async move |req: Request<Session>, sender| {
-                    let path = req.url().path().to_string();
-                    let session = req.state().clone();
+                Ok(tide::sse::upgrade(req, async move |req: Request<(Session, String)>, sender| {
+                    let resource = path_to_resource(req.url().path(), &req.state().1);
+                    let session = req.state().0.clone();
                     async_std::task::spawn(async move {
-                        log::debug!("Subscribe to {} for SSE stream (task {})", path, async_std::task::current().id());
+                        log::debug!("Subscribe to {} for SSE stream (task {})", resource, async_std::task::current().id());
                         let sender = &sender;
-                        let mut sub = session.declare_subscriber(&path.into(), &SSE_SUB_INFO).await.unwrap();
+                        let mut sub = session.declare_subscriber(&resource, &SSE_SUB_INFO).await.unwrap();
                         loop {
                             let sample = sub.next().await.unwrap();
                             let send = async { sender.send(&get_kind_str(&sample), sample_to_json(sample), None).await; true };
@@ -165,10 +164,10 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             },
 
             "text/html" => {
-                let path = req.url().path();
+                let resource = path_to_resource(req.url().path(), &req.state().1);
                 let predicate = req.url().query().or(Some("")).unwrap();
-                match req.state().query(
-                        &path.into(), &predicate,
+                match req.state().0.query(
+                        &resource, &predicate,
                         QueryTarget::default(),
                         QueryConsolidation::default()).await {
                     Ok(stream) => 
@@ -179,10 +178,10 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             },
 
             _ => {
-                let path = req.url().path();
+                let resource = path_to_resource(req.url().path(), &req.state().1);
                 let predicate = req.url().query().or(Some("")).unwrap();
-                match req.state().query(
-                        &path.into(), &predicate,
+                match req.state().0.query(
+                        &resource, &predicate,
                         QueryTarget::default(),
                         QueryConsolidation::default()).await {
                     Ok(stream) => 
@@ -194,13 +193,13 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         }
     });
 
-    app.at("*").put(async move |mut req: Request<Session>| { 
+    app.at("*").put(async move |mut req: Request<(Session, String)>| { 
         log::trace!("Http {:?}", req);
         match req.body_bytes().await {
             Ok(bytes) => {
                 let path = req.url().path();
-                match req.state().write_wo(&path.into(), bytes.into(), 
-                        enc_from_mime(req.content_type()), kind::PUT).await {
+                match req.state().0.write_wo(&path.into(), bytes.into(), 
+                        enc_from_mime(req.content_type()), data_kind::PUT).await {
                     Ok(_) => Ok(Response::new(StatusCode::Ok)),
                     Err(e) => 
                         Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
@@ -211,13 +210,13 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         }
     });
 
-    app.at("*").patch(async move |mut req: Request<Session>| { 
+    app.at("*").patch(async move |mut req: Request<(Session, String)>| { 
         log::trace!("Http {:?}", req);
         match req.body_bytes().await {
             Ok(bytes) => {
                 let path = req.url().path();
-                match req.state().write_wo(&path.into(), bytes.into(), 
-                        enc_from_mime(req.content_type()), kind::UPDATE).await {
+                match req.state().0.write_wo(&path.into(), bytes.into(), 
+                        enc_from_mime(req.content_type()), data_kind::PATCH).await {
                     Ok(_) => Ok(Response::new(StatusCode::Ok)),
                     Err(e) => 
                         Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
@@ -228,11 +227,11 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         }
     });
 
-    app.at("*").delete(async move |req: Request<Session>| { 
+    app.at("*").delete(async move |req: Request<(Session, String)>| { 
         log::trace!("Http {:?}", req);
         let path = req.url().path();
-        match req.state().write_wo(&path.into(), RBuf::new(), 
-                enc_from_mime(req.content_type()), kind::REMOVE).await {
+        match req.state().0.write_wo(&path.into(), RBuf::new(), 
+                enc_from_mime(req.content_type()), data_kind::DELETE).await {
             Ok(_) => Ok(Response::new(StatusCode::Ok)),
             Err(e) => 
                 Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
@@ -244,3 +243,10 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     }
 }
 
+fn path_to_resource(path: &str, pid: &str) -> ResKey {
+    if path.starts_with("/@/router/local/") {
+        ResKey::from(format!("/@/router/{}/{}", pid, &path[16..]))
+    } else {
+        ResKey::from(path)
+    }
+}

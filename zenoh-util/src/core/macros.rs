@@ -54,6 +54,15 @@ macro_rules! zasyncwrite {
     );
 }
 
+// This macro returns &T from RwLock<Option<T>>
+// This macro assumes that Option is always Some(T)
+#[macro_export]
+macro_rules! zasyncopt {
+    ($var:expr) => (
+        zasyncread!($var).as_ref().unwrap()
+    );
+}
+
 // This macro performs an async send on Channel<T>
 // For performance reasons, it first performs a try_send() and,
 // if it fails, it falls back on send().await
@@ -122,6 +131,7 @@ macro_rules! zconfigurable {
     () => ()
 }
 
+// TODO: re-design ZError and macros
 // This macro is a shorthand for the creation of a ZError
 #[macro_export]
 macro_rules! zerror {
@@ -129,6 +139,15 @@ macro_rules! zerror {
     ($kind:expr, $source:expr) => (Err(ZError::new($kind, file!(), line!(), Some(Box::new($source)))));
     ($kind:ident, $descr:expr, $source:expr) => (
         Err(ZError::new(ZErrorKind::$kind{descr:$descr}, file!(), line!(), Some(Box::new($source))));
+    )
+}
+
+#[macro_export]
+macro_rules! zerror2 {
+    ($kind:expr) => (ZError::new($kind, file!(), line!(), None));
+    ($kind:expr, $source:expr) => (ZError::new($kind, file!(), line!(), Some(Box::new($source))));
+    ($kind:ident, $descr:expr, $source:expr) => (
+        ZError::new(ZErrorKind::$kind{descr:$descr}, file!(), line!(), Some(Box::new($source)));
     )
 }
 

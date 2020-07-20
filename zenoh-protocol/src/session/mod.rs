@@ -18,14 +18,14 @@ mod manager;
 
 pub use manager::*;
 
-use channel::*;
 use initial::*;
 
 use async_std::sync::{Arc, Weak};
 use async_trait::async_trait;
 
 use crate::link::Link;
-use crate::proto::{SessionMessage, WhatAmI, ZenohMessage};
+use crate::core::WhatAmI;
+use crate::proto::{SessionMessage, ZenohMessage};
 
 use zenoh_util::{zerror, zweak};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};

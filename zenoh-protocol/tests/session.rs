@@ -16,9 +16,8 @@ use async_std::task;
 use async_trait::async_trait;
 use std::time::Duration;
 
-use zenoh_protocol::core::{PeerId, ZInt};
+use zenoh_protocol::core::{PeerId, WhatAmI, ZInt, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{WhatAmI, whatami};
 use zenoh_protocol::session::{
     DummyHandler,
     MsgHandler,
@@ -231,8 +230,8 @@ async fn session_open_close(locator: Locator) {
     let client02_id = PeerId { id: vec![2u8] };
 
     // The timeout when opening a session
-    // Set it to 1000 ms for testing purposes
-    let timeout: u64 = 1_000;
+    // Set it to 2000 ms for testing purposes
+    let timeout: u64 = 2_000;
     let retries = 1;
 
     // Create the transport session manager for the first client

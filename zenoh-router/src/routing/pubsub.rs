@@ -14,9 +14,8 @@
 use async_std::sync::Arc;
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey};
+use zenoh_protocol::core::{ZInt, ResKey, SubInfo, SubMode, Reliability, whatami};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{SubInfo, SubMode, Reliability, whatami};
 
 use crate::routing::face::FaceState;
 use crate::routing::broker::Tables;
@@ -63,7 +62,10 @@ pub async fn declare_subscription(tables: &mut Tables, face: &mut Arc<FaceState>
             let mut propa_sub_info = sub_info.clone();
             propa_sub_info.mode = SubMode::Push;
             for (id, someface) in &mut tables.faces {
-                if face.id != *id && (face.whatami != whatami::PEER || someface.whatami != whatami::PEER) {
+                if face.id != *id
+                    && (face.whatami != whatami::PEER || someface.whatami != whatami::PEER)
+                    && (face.whatami != whatami::BROKER || someface.whatami != whatami::BROKER)
+                {
                     let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(&res);
                     match nonwild_prefix {
                         Some(mut nonwild_prefix) => {

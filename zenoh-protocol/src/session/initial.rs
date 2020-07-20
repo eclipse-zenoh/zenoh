@@ -16,10 +16,10 @@ use async_trait::async_trait;
 use rand::Rng;
 use std::collections::HashMap;
 
-use crate::core::{PeerId, ZInt};
+use crate::core::{PeerId, ZInt, WhatAmI};
 use crate::io::WBuf;
 use crate::link::{Link, Locator};
-use crate::proto::{Attachment, SessionMessage, SessionBody, WhatAmI, smsg};
+use crate::proto::{Attachment, SessionMessage, SessionBody, smsg};
 use crate::session::defaults::SESSION_SEQ_NUM_RESOLUTION;
 use crate::session::{Action, Session, SessionManagerInner, TransportTrait};
 

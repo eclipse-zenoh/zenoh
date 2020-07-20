@@ -14,10 +14,12 @@
 use async_std::net::UdpSocket;
 use std::time::Duration;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use socket2::{Socket, Domain, Type};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
 use zenoh_protocol::io::{WBuf, RBuf};
-use zenoh_protocol::proto::{WhatAmI, whatami, SessionMessage, SessionBody};
+use zenoh_protocol::core::{WhatAmI, whatami};
+use zenoh_protocol::proto::{SessionMessage, SessionBody};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::session::SessionManager;
 use crate::runtime::Config;
@@ -31,7 +33,7 @@ const PEER_SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
 const PEER_SCOUT_MAX_PERIOD: u64 = 8000; //ms
 const PEER_SCOUT_PERIOD_INCREASE_FACTOR: u64 = 2;
 const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
-const MCAST_ADDR: &str = "239.255.0.1";
+const MCAST_ADDR: &str = "224.0.0.224";
 const MCAST_PORT: &str = "7447";
 
 #[derive(Clone)]
@@ -73,7 +75,7 @@ impl SessionOrchestrator {
                 for locator in &peers {
                     match self.manager.open_session(&locator, &None).await {
                         Ok(_) => {return Ok (())},
-                        Err(err) => log::warn!("Unable to connect to {}! {:?}", locator, err)
+                        Err(err) => log::warn!("Unable to connect to {}! {}", locator, err)
                     }
                 }
                 log::error!("Unable to connect to any of {:?}! ", peers);
@@ -126,7 +128,7 @@ impl SessionOrchestrator {
             match self.manager.add_locator(&locator).await {
                 Ok(locator) => log::info!("Listening on {}!", locator),
                 Err(err) => {
-                    log::error!("Unable to open listener {} : {:?}", locator, err);
+                    log::error!("Unable to open listener {} : {}", locator, err);
                     return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
                 },
             }
@@ -136,62 +138,92 @@ impl SessionOrchestrator {
 
     fn get_interface(name: &str) -> ZResult<IpAddr> {
         if name == "auto" {
-            for iface in pnet::datalink::interfaces() {
-                if !iface.is_loopback() && iface.is_multicast() {
-                    for ip in iface.ips {
-                        if ip.is_ipv4() { return Ok(ip.ip()) }
-                    }
-                }
+            match zenoh_util::net::get_default_multicast_interface() {
+                Some(addr) => Ok(addr),
+                None => {
+                    log::warn!("Unable to find active, non-loopback multicast interface. Will use 0.0.0.0");
+                    Ok(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)))
+                },
             }
-            log::warn!("Unable to find non-loopback multicast interface. Will use 0.0.0.0");
-            Ok(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)))
         } else {
-            for iface in pnet::datalink::interfaces() {
-                if iface.name == name {
-                    for ip in &iface.ips {
-                        if ip.is_ipv4() { return Ok(ip.ip()) }
+            match name.parse::<IpAddr>() {
+                Ok(addr) => Ok(addr),
+                Err(_) => {
+                    match zenoh_util::net::get_interface(name) {
+                        Ok(opt_addr) => {
+                                match opt_addr {
+                                Some(addr) => Ok(addr),
+                                None => {
+                                    log::error!("Unable to find interface {}", name);
+                                    zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface {}", name) })
+                                }
+                            }
+                        },
+                        Err(err) => {
+                            log::error!("Unable to find interface {} : {}", name, err);
+                            zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface {} : {}", name, err) })
+                        },
                     }
                 }
-                for ip in &iface.ips {
-                    if ip.ip().to_string() == name { return Ok(ip.ip()) }
-                }
             }
-            log::error!("Unable to find interface : {}", name);
-            zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface : {}", name)})
         }
     }
 
     async fn bind_mcast_port() -> ZResult<UdpSocket> {
-        unsafe {
-            let options = [(libc::SO_REUSEADDR, &1 as *const _ as *const libc::c_void)].to_vec();
-            match zenoh_util::net::bind_udp([MCAST_ADDR, MCAST_PORT].join(":"), options).await {
-                Ok(socket) => {
-                    match socket.join_multicast_v4(MCAST_ADDR.parse().unwrap(), std::net::Ipv4Addr::new(0, 0, 0, 0)) {
-                        Ok(()) => {Ok(socket)},
-                        Err(err) => {
-                            log::error!("Unable to join multicast group {}", MCAST_ADDR);
-                            zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                        }
-                    }
-                },
-                Err(err) => {
-                    log::error!("Unable to bind udp port {}", MCAST_PORT);
-                    zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                }
-            }
+        let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
+            Ok(socket) => {socket},
+            Err(err) => {
+                log::error!("Unable to create datagram socket : {}", err);
+                return zerror!(ZErrorKind::IOError{ descr: "Unable to create datagram socket".to_string()}, err)
+            },
+        };
+        if let Err(err) = socket.set_reuse_address(true) {
+            log::error!("Unable to set SO_REUSEADDR option : {}", err);
+            return zerror!(ZErrorKind::IOError{ descr: "Unable to set SO_REUSEADDR option".to_string()}, err)
         }
+        let addr = {
+            #[cfg(unix)] { MCAST_ADDR.parse().unwrap() } // See UNIX Network Programmping p.212
+            #[cfg(windows)] { IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) }
+        };
+        match socket.bind(&SocketAddr::new(addr, MCAST_PORT.parse().unwrap()).into()) {
+            Ok(()) => log::debug!("UDP port bound to {}:{}", addr, MCAST_PORT),
+            Err(err) => {
+                log::error!("Unable to bind udp port {}:{} : {}", addr, MCAST_PORT, err);
+                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:{}", addr, MCAST_PORT)}, err)
+            },
+        }
+        match socket.join_multicast_v4(&MCAST_ADDR.parse::<Ipv4Addr>().unwrap(), &Ipv4Addr::new(0, 0, 0, 0)) {
+            Ok(()) => log::debug!("Joined multicast group {}", MCAST_ADDR),
+            Err(err) => {
+                log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
+                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to join multicast group {}", MCAST_ADDR)}, err)
+            },
+        }
+        Ok(socket.into_udp_socket().into())
     }
 
     async fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
-        unsafe {
-            match zenoh_util::net::bind_udp(SocketAddr::new(addr, 0), vec![]).await {
-                Ok(socket) => {Ok(socket)},
-                Err(err) => {
-                    log::error!("Unable to bind udp port 0");
-                    zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                }
+        let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
+            Ok(socket) => {socket},
+            Err(err) => {
+                log::error!("Unable to create datagram socket : {}", err);
+                return zerror!(ZErrorKind::IOError{ descr: "Unable to create datagram socket".to_string()}, err)
+            },
+        };
+        match socket.bind(&SocketAddr::new(addr, 0).into()) {
+            Ok(()) => {
+                #[allow(clippy::or_fun_call)]
+                let local_addr = socket.local_addr()
+                    .or::<std::io::Error>(Ok(SocketAddr::new(addr, 0).into())).unwrap().as_std()
+                    .or(Some(SocketAddr::new(addr, 0))).unwrap();
+                log::debug!("UDP port bound to {}", local_addr);
+            },
+            Err(err) => {
+                log::error!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
+                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:0", addr.to_string())}, err)
             }
         }
+        Ok(socket.into_udp_socket().into())
     }
 
     async fn connect_first(&self, socket: &UdpSocket, what: WhatAmI) -> ZResult<()> {
@@ -321,16 +353,19 @@ impl SessionOrchestrator {
         for locator in self.manager.get_locators().await {
             match locator {
                 Locator::Tcp(addr) => {
-                    if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
-                        for iface in pnet::datalink::interfaces() {
-                            if !iface.is_loopback() {
-                                for ip in iface.ips {
-                                    if ip.ip().is_ipv4() {
-                                        result.push(format!("tcp/{}:{}", ip.ip().to_string(), addr.port()).parse().unwrap());
+                    if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
+                        match zenoh_util::net::get_local_addresses() {
+                            Ok(ipaddrs) => {
+                                for ipaddr in ipaddrs {
+                                    if ! ipaddr.is_loopback() && ipaddr.is_ipv4() {
+                                        result.push(format!("tcp/{}:{}", ipaddr.to_string(), addr.port()).parse().unwrap());
                                     }
                                 }
-                            }
+                            },
+                            Err(err) => log::error!("Unable to get local addresses : {}", err),
                         }
+                    } else {
+                        result.push(locator)
                     }
                 },
                 loc => result.push(loc),
@@ -344,6 +379,13 @@ impl SessionOrchestrator {
         log::debug!("Waiting for UDP datagram...");
         loop {
             let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
+            if let Ok(local_addr) = ucast_socket.local_addr() {
+                if local_addr == peer { 
+                    log::trace!("Ignore UDP datagram from own socket");
+                    continue; 
+                }
+            }
+
             let mut rbuf = RBuf::from(&buf[..n]);
             log::trace!("Received UDP datagram {}", rbuf);
             if let Ok(msg) = rbuf.read_session_message() {
@@ -358,7 +400,7 @@ impl SessionOrchestrator {
                         log::trace!("Send {:?} to {}", hello, peer);
                         wbuf.write_session_message(&hello);
                         if let Err(err) = ucast_socket.send_to(&RBuf::from(&wbuf).to_vec(), peer).await {
-                            log::error!("Unable to send {:?} to {} : {:?}", hello, peer, err);
+                            log::error!("Unable to send {:?} to {} : {}", hello, peer, err);
                         }
                     }
                 }

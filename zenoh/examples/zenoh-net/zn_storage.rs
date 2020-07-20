@@ -19,12 +19,12 @@ use futures::prelude::*;
 use futures::select;
 use zenoh::net::*;
 use zenoh::net::queryable::STORAGE;
+use zenoh::net::utils::resource_name;
 
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
+//
+// Argument parsing -- look at the main for the zenoh-related code
+//
+fn parse_args() -> (Config, String) {
     let args = App::new("zenoh-net storage example")
         .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
             .possible_values(&["peer", "client"]).default_value("peer"))
@@ -33,9 +33,19 @@ async fn main() {
             .default_value("/demo/example/**"))
         .get_matches();
 
-    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
+    let config = Config::default()
+        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
         .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
     let selector = args.value_of("selector").unwrap().to_string();
+
+    (config, selector)
+}
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+    
+    let (config, selector) = parse_args();
 
     let mut stored: HashMap<String, (RBuf, Option<RBuf>)> = HashMap::new();
 
@@ -68,9 +78,9 @@ async fn main() {
 
             query = queryable.next().fuse() => {
                 let query = query.unwrap();
-                println!(">> [Query handler        ] Handling '{}?{}'", query.res_name, query.predicate);
+                println!(">> [Query handler        ] Handling '{}{}'", query.res_name, query.predicate);
                 for (stored_name, (data, data_info)) in stored.iter() {
-                    if rname_intersect(&query.res_name, stored_name) {
+                    if resource_name::intersect(&query.res_name, stored_name) {
                         query.replies_sender.send(Sample{
                             res_name: stored_name.clone(),
                             payload: data.clone(),

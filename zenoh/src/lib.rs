@@ -16,4 +16,51 @@
 #[macro_use]
 extern crate lazy_static;
 
+use log::debug;
+
 pub mod net;
+use net::{Session, ZResult};
+
+mod workspace;
+pub use workspace::{Data, Workspace};
+
+mod properties;
+pub use properties::Properties;
+mod path;
+pub use path::Path;
+mod pathexpr;
+pub use pathexpr::PathExpr;
+mod selector;
+pub use selector::Selector;
+mod values;
+pub use values::*;
+
+type Config = net::Config;
+
+pub struct Zenoh {
+    session: Session
+}
+
+impl Zenoh {
+
+    pub async fn new(config: Config, props: Option<Properties>) -> ZResult<Zenoh> {
+        let zn_props = props.map(|p| p.0.iter().filter_map(prop_to_zn_prop).collect());
+        Ok(Zenoh { session: net::open(config, zn_props).await? })
+    }
+
+    pub async fn workspace(&self, prefix: Option<Path>) -> ZResult<Workspace> {
+        debug!("New workspace with prefix: {:?}", prefix);
+        Workspace::new(self.session.clone(), prefix).await
+    }
+
+    pub async fn close(&self) -> ZResult<()> {
+        self.session.close().await
+    }
+
+
+}
+
+fn prop_to_zn_prop(_prop: (&String, &String)) -> Option<(net::ZInt, Vec<u8>)> {
+    // No existing zenoh-net properties to be mapped yet
+    None
+}

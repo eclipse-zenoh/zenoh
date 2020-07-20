@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::{ZInt, PeerId, ResKey, TimeStamp};
+use crate::core::*;
 use crate::io::RBuf;
 use crate::link::Locator;
 use super::decl::Declaration;
@@ -25,19 +25,6 @@ pub mod channel {
     pub const RELIABLE      : Type = true;
 }
 
-// WhatAmI values
-pub type WhatAmI = whatami::Type;
-pub mod whatami {
-    use super::ZInt;
-
-    pub type Type = ZInt;
-
-    pub const BROKER        : Type = 1;      // 0x01
-    pub const ROUTER        : Type = 1 << 1; // 0x02
-    pub const PEER          : Type = 1 << 2; // 0x04
-    pub const CLIENT        : Type = 1 << 3; // 0x08
-    // b4-b13: Reserved
-}
 
 // -- Attachment decorator
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght 
@@ -221,45 +208,6 @@ pub struct DataInfo {
     pub encoding: Option<ZInt>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum QueryConsolidation {
-    None,
-    LastBroker,
-    Incremental
-    // @TODO: add more if necessary
-}
-
-impl Default for QueryConsolidation {
-    fn default() -> Self { QueryConsolidation::Incremental }
-}
-
-// @TODO: The query target is incomplete
-#[derive(Debug, Clone, PartialEq)]
-pub enum Target {
-    BestMatching,
-    Complete {n: ZInt},
-    All,
-    None,
-}
-
-impl Default for Target {
-    fn default() -> Self { Target::BestMatching }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct QueryTarget {
-    pub kind : ZInt,
-    pub target : Target,
-}
-
-impl Default for QueryTarget {
-    fn default() -> Self { 
-        QueryTarget {
-            kind : super::decl::queryable::ALL_KINDS, 
-            target : Target::default(), 
-        }
-     }
-}
 
 // Zenoh messages at zenoh level
 #[derive(Debug, Clone, PartialEq)]

@@ -23,13 +23,14 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.31"
+async-trait = "0.1.36"
 futures = "0.3.5"
 pin-project-lite = "0.1.7"
 rand = "0.7.3"
-clap = "2.33.1"
+regex = "1"
 log = "0.4"
 lazy_static = "1.4.0"
+serde_json = "1.0"
 zenoh-protocol = { version = "0.5.0", path = "../zenoh-protocol" }
 zenoh-router = { version = "0.5.0", path = "../zenoh-router" }
 zenoh-util = { version = "0.5.0", path = "../zenoh-util" }
@@ -39,7 +40,36 @@ version = "~1.6.0"
 features = ["unstable", "attributes"]
 
 [dev-dependencies]
+clap = "2.33"
 env_logger = "0.7.1"
+
+[[example]]
+name = "z_put"
+path = "examples/zenoh/z_put.rs"
+
+[[example]]
+name = "z_put_float"
+path = "examples/zenoh/z_put_float.rs"
+
+[[example]]
+name = "z_get"
+path = "examples/zenoh/z_get.rs"
+
+[[example]]
+name = "z_sub"
+path = "examples/zenoh/z_sub.rs"
+
+[[example]]
+name = "z_eval"
+path = "examples/zenoh/z_eval.rs"
+
+[[example]]
+name = "z_put_thr"
+path = "examples/zenoh/z_put_thr.rs"
+
+[[example]]
+name = "z_sub_thr"
+path = "examples/zenoh/z_sub_thr.rs"
 
 [[example]]
 name = "zn_scout"

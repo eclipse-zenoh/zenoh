@@ -12,10 +12,10 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::io::WBuf;
-use crate::core::{ZInt, Property, ResKey, TimeStamp, NO_RESOURCE_ID};
+use crate::core::*;
 use crate::link::Locator;
 use super::msg::*;
-use super::decl::{Declaration, SubMode, Reliability, Period};
+use super::decl::*;
 
 macro_rules! check {
     ($op:expr) => (if !$op { return false })
@@ -46,6 +46,20 @@ impl WBuf {
 
         check!(self.write(msg.header));
         match msg.get_body() {
+            SessionBody::Frame { sn, payload, .. } => {
+                check!(self.write_zint(*sn));
+                match payload {
+                    FramePayload::Fragment { buffer, .. } => {
+                        check!(self.write_rbuf_slices(&buffer));
+                    }, 
+                    FramePayload::Messages { messages } => {
+                        for m in messages {
+                            check!(self.write_zenoh_message(m));
+                        }
+                    }
+                }
+            },
+
             SessionBody::Scout { what, .. } => {
                 if let Some(w) = *what {
                     check!(self.write_zint(w));
@@ -151,20 +165,6 @@ impl WBuf {
             SessionBody::Ping { hash }
             | SessionBody::Pong { hash } => {
                 check!(self.write_zint(*hash));
-            },
-
-            SessionBody::Frame { sn, payload, .. } => {
-                check!(self.write_zint(*sn));
-                match payload {
-                    FramePayload::Fragment { buffer, .. } => {
-                        check!(self.write_rbuf(&buffer));
-                    }, 
-                    FramePayload::Messages { messages } => {
-                        for m in messages {
-                            check!(self.write_zenoh_message(m));
-                        }
-                    }
-                }
             }
         }
 
@@ -346,13 +346,12 @@ impl WBuf {
         }
     }
 
-    fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool {
-        use super::decl::{SubMode::*, id::*};
-        let period_mask: u8 = if period.is_some() { PERIOD } else { 0x00 };
+    fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool {        
+        let period_mask: u8 = if period.is_some() { id::PERIOD } else { 0x00 };
         check!(
             match mode {
-                Push => self.write(MODE_PUSH | period_mask),
-                Pull => self.write(MODE_PULL | period_mask),
+                SubMode::Push => self.write(id::MODE_PUSH | period_mask),
+                SubMode::Pull => self.write(id::MODE_PULL | period_mask),
             });
         if let Some(p) = period {
             self.write_zint(p.origin) &&
@@ -405,7 +404,7 @@ impl WBuf {
     fn write_consolidation(&mut self, consolidation: &QueryConsolidation) -> bool {
         match consolidation {
             QueryConsolidation::None        => self.write_zint(0),
-            QueryConsolidation::LastBroker  => self.write_zint(1),
+            QueryConsolidation::LastHop  => self.write_zint(1),
             QueryConsolidation::Incremental => self.write_zint(2),
         }
     }

@@ -24,8 +24,7 @@ use std::time::{Duration, Instant};
 use crate::zconfigurable;
 
 zconfigurable! {
-    // Default session lease in seconds: 5 minutes
-    static ref TIMER_EVENTS_CHANNEL_SIZE: usize = 8;
+    static ref TIMER_EVENTS_CHANNEL_SIZE: usize = 1;
 }
 
 #[async_trait]
@@ -115,7 +114,7 @@ impl PartialEq for TimedEvent {
 
 async fn timer_task(
     events: Arc<Mutex<BinaryHeap<TimedEvent>>>,
-    new_channel: Receiver<(bool, TimedEvent)>
+    new_event: Receiver<(bool, TimedEvent)>
 ) -> Result<(), RecvError> {
     // Error message
     let e = "Timer has been dropped. Unable to run timed events.";
@@ -125,7 +124,7 @@ async fn timer_task(
     
     loop { 
         // Fuuture for adding new events
-        let new = new_channel.recv();
+        let new = new_event.recv();
 
         match events.peek() {
             Some(next) => {
@@ -185,6 +184,7 @@ async fn timer_task(
     }
 }
 
+#[derive(Clone)]
 pub struct Timer {
     events: Arc<Mutex<BinaryHeap<TimedEvent>>>,
     sl_sender: Option<Sender<()>>,

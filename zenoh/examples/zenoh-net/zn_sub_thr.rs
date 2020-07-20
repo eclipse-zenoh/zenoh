@@ -24,21 +24,28 @@ fn print_stats(start: Instant) {
     let thpt = (N as f64) / elapsed;
     println!("{} msg/s", thpt);
 }
-
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
+//
+// Argument parsing -- look at the main for the zenoh-related code
+//
+fn parse_args() -> Config  {
     let args = App::new("zenoh-net throughput sub example")
         .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
             .possible_values(&["peer", "client"]).default_value("peer"))
         .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
         .get_matches();
 
-    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
+    Config::default()
+        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap())
+}
 
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let config = parse_args();
+    
     println!("Openning session...");
     let session = open(config, None).await.unwrap();
 

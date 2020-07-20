@@ -26,11 +26,16 @@ edition = "2018"
 [dependencies]
 zenoh = { version = "0.5.0", path = "../zenoh" }
 zenoh-protocol = { version = "0.5.0", path = "../zenoh-protocol" }
-async-trait = "0.1.31"
+futures = "0.3.5"
+async-trait = "0.1.36"
 spin = "0.5.2"
 rand = "0.7.3"
-cbindgen = "0.14.2"
-libc = "0.2.69"
+cbindgen = "0.14.3"
+libc = "0.2.72"
+clap = "2.33.1"
+
+[dependencies.smol]
+version = "0.1.18"
 
 [dependencies.async-std]
 version = "~1.6.0"

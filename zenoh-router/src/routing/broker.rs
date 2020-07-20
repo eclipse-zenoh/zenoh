@@ -16,8 +16,8 @@ use async_std::sync::RwLock;
 use async_std::sync::{Arc, Weak};
 use std::collections::{HashMap};
 
-use zenoh_protocol::core::{ResKey, ZInt};
-use zenoh_protocol::proto::{Primitives, SubInfo, SubMode, Reliability, Mux, DeMux, WhatAmI, whatami};
+use zenoh_protocol::core::{ResKey, ZInt, SubInfo, SubMode, Reliability, WhatAmI, whatami};
+use zenoh_protocol::proto::{Primitives, Mux, DeMux};
 use zenoh_protocol::session::{SessionHandler, MsgHandler};
 
 use crate::routing::face::{FaceState, Face};
@@ -29,9 +29,8 @@ pub use crate::routing::queries::*;
 /// # Example: 
 /// ```
 ///   use async_std::sync::Arc;
-///   use zenoh_protocol::core::PeerId;
+///   use zenoh_protocol::core::{PeerId, whatami::PEER};
 ///   use zenoh_protocol::io::RBuf;
-///   use zenoh_protocol::proto::whatami::PEER;
 ///   use zenoh_protocol::session::{SessionManager, SessionManagerConfig};
 ///   use zenoh_router::routing::broker::Broker;
 /// 
@@ -39,7 +38,7 @@ pub use crate::routing::queries::*;
 ///     // implement Primitives trait
 ///     use zenoh_protocol::proto::Mux;
 ///     use zenoh_protocol::session::DummyHandler;
-///     let dummyPrimitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+///     let dummy_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
 ///   
 ///     // Instanciate broker
 ///     let broker = Arc::new(Broker::new());
@@ -54,7 +53,7 @@ pub use crate::routing::queries::*;
 ///     let manager = SessionManager::new(config, None);
 /// 
 ///     // Declare new primitives
-///     let primitives = broker.new_primitives(dummyPrimitives).await;
+///     let primitives = broker.new_primitives(dummy_primitives).await;
 ///     
 ///     // Use primitives
 ///     primitives.data(&"/demo".to_string().into(), true, &None, RBuf::from(vec![1, 2])).await;

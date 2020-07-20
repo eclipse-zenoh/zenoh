@@ -21,20 +21,21 @@ use std::collections::HashMap;
 use async_std::sync::RwLock;
 use log::{error, warn, trace};
 use zenoh_protocol:: {
-    core::{ rname, ResourceId, ResKey },
+    core::{ rname, ResourceId, ResKey, QueryTarget, QueryConsolidation, queryable },
     io::RBuf,
-    proto::{ Primitives, QueryTarget, QueryConsolidation, queryable},
+    proto::Primitives,
 };
 use zenoh_router::runtime::Runtime;
 use zenoh_util::{zerror, zconfigurable};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use super::*;
+use super::properties::*;
 
 zconfigurable! {
-    pub static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
-    pub static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
+    static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
+    static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
 }
 
 pub(crate) struct SessionState {
@@ -290,8 +291,7 @@ impl Session {
         }
         Ok(())
     }
-
-
+    
     pub async fn undeclare_direct_subscriber(&self, subscriber: DirectSubscriber) -> ZResult<()>
     {
         trace!("undeclare_direct_subscriber({:?})", subscriber);
@@ -365,7 +365,7 @@ impl Session {
         };
         let mut infobuf = zenoh_protocol::io::WBuf::new(64, false);
         infobuf.write_datainfo(&info);
-        primitives.data(resource, true, &Some((&infobuf).into()), payload).await;
+        primitives.data(resource, true, &Some(infobuf.into()), payload).await;
         Ok(())
     }
 

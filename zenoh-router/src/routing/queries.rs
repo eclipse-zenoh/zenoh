@@ -14,9 +14,8 @@
 use async_std::sync::Arc;
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey, PeerId};
+use zenoh_protocol::core::{ZInt, ResKey, PeerId, QueryTarget, QueryConsolidation, whatami};
 use zenoh_protocol::io::{RBuf};
-use zenoh_protocol::proto::{QueryTarget, QueryConsolidation, whatami};
 
 use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
@@ -63,7 +62,10 @@ pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<FaceSt
             }
 
             for (id, someface) in &mut tables.faces {
-                if face.id != *id && (face.whatami != whatami::PEER || someface.whatami != whatami::PEER) {
+                if face.id != *id
+                    && (face.whatami != whatami::PEER || someface.whatami != whatami::PEER)
+                    && (face.whatami != whatami::BROKER || someface.whatami != whatami::BROKER)
+                {
                     let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(&res);
                     match nonwild_prefix {
                         Some(mut nonwild_prefix) => {

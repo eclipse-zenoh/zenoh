@@ -16,9 +16,8 @@ use std::time::Duration;
 use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
-use zenoh_protocol::core::PeerId;
+use zenoh_protocol::core::{PeerId, WhatAmI, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{WhatAmI, whatami};
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 use crate::routing::broker::Broker;
 use crate::runtime::orchestrator::SessionOrchestrator;
@@ -92,6 +91,10 @@ impl Runtime {
     pub async fn close(&self) -> ZResult<()> {
         self.write().await.orchestrator.close().await
     }
+
+    pub async fn get_pid_str(&self) -> String {
+        self.read().await.pid.to_string()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,14 +116,11 @@ impl Config {
             multicast_interface: "auto".to_string(),
             scouting_delay: Duration::new(0, 250_000_000),
         }
-    }
+    }        
 
-    pub fn new(mode: &str) -> Result<Config, ()> {
-        match mode {
-            "peer" => Ok(Config::peer()),
-            "client" => Ok(Config::client()),
-            _ => Err(()),
-        }
+    pub fn mode(mut self, w: whatami::Type) -> Self {
+        self.whatami = w;
+        self
     }
 
     pub fn peer() -> Config {
@@ -160,10 +160,26 @@ impl Config {
         self.scouting_delay = delay;
         self
     }
+
+    pub fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
+        match m {
+            "peer" => Ok(whatami::PEER),
+            "client" => Ok(whatami::CLIENT),
+            "router" => Ok(whatami::ROUTER),
+            "broker" => Ok(whatami::BROKER),
+            _ => Err(())
+        }
+    }
 }
 
+impl Default for Config {
+    fn default() -> Config {
+        Config::default(whatami::PEER)
+    }
+}
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
+

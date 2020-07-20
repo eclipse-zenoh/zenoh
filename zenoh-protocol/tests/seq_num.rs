@@ -12,55 +12,103 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use zenoh_protocol::core::ZInt;
-use zenoh_protocol::proto::{
-  SeqNum,
-  SeqNumGenerator
-};
-
+use zenoh_protocol::proto::{SeqNum, SeqNumGenerator};
 
 #[test]
-fn sn_pre_test() {
-  let sn0a = SeqNum::make(0, 14).unwrap();
-  let sn1a: ZInt = 1;
-  assert!(sn0a.precedes(sn1a));
+fn sn_set() {
+    let mut sn0a = SeqNum::new(0, 14);
+    assert_eq!(sn0a.get(), 0);
+    assert_eq!(sn0a.resolution(), 14);
 
-  let sn0a = SeqNum::make(0, 14).unwrap();
-  let sn1a: ZInt = 0;
-  assert!(!sn0a.precedes(sn1a));
+    let res = sn0a.set(13);
+    assert!(res.is_ok());
+    assert_eq!(sn0a.get(), 13);
 
-  let sn0a = SeqNum::make(0, 14).unwrap();
-  let sn1a: ZInt = 6;
-  assert!(sn0a.precedes(sn1a));
+    let res = sn0a.set(14);
+    assert!(res.is_err());
+    assert_eq!(sn0a.get(), 13);
 
-  let sn0a = SeqNum::make(0, 14).unwrap();
-  let sn1a: ZInt = 7;
-  assert!(sn0a.precedes(sn1a));
+    sn0a.increment();
+    assert_eq!(sn0a.get(), 0);
 
-  let sn0a = SeqNum::make(13, 14).unwrap();
-  let sn1a: ZInt = 6;
-  assert!(!sn0a.precedes(sn1a));
-
-  let sn0a = SeqNum::make(13, 14).unwrap();
-  let sn1a: ZInt = 1;
-  assert!(sn0a.precedes(sn1a));
-
-  let sn0a = SeqNum::make(13, 14).unwrap();
-  let sn1a: ZInt = 5;
-  assert!(sn0a.precedes(sn1a));
+    sn0a.increment();
+    assert_eq!(sn0a.get(), 1);
 }
 
 #[test]
-fn sn_gen_test() {
-  let mut sn0 = SeqNumGenerator::make(13, 14).unwrap();
-  let mut sn1 = SeqNumGenerator::make(5, 14).unwrap();
+fn sn_gap() {
+    let mut sn0a = SeqNum::new(0, 14);
+    let sn1a: ZInt = 0;
+    let res = sn0a.gap(sn1a);
+    assert_eq!(res.unwrap(), 0);
 
-  let sn = sn0.get();
-  assert_eq!(sn, 13);
-  let sn = sn1.get();
-  assert_eq!(sn, 5);
+    let sn1a: ZInt = 1;
+    let res = sn0a.gap(sn1a);
+    assert_eq!(res.unwrap(), 1);
 
-  let sn = sn0.get();
-  assert_eq!(sn, 0);
-  let sn = sn1.get();
-  assert_eq!(sn, 6);
+    let sn1a: ZInt = 13;
+    let res = sn0a.gap(sn1a);
+    assert_eq!(res.unwrap(), 13);
+
+    let sn1a: ZInt = 14;
+    let res = sn0a.gap(sn1a);
+    assert!(res.is_err());
+
+    let res = sn0a.set(13);
+    assert!(res.is_ok());
+
+    let sn1a: ZInt = 13;
+    let res = sn0a.gap(sn1a);
+    assert_eq!(res.unwrap(), 0);
+
+    let sn1a: ZInt = 0;
+    let res = sn0a.gap(sn1a);
+    assert_eq!(res.unwrap(), 1);
+}
+
+#[test]
+fn sn_precedence() {
+    let mut sn0a = SeqNum::new(0, 14);
+    let sn1a: ZInt = 1;
+    let res = sn0a.precedes(sn1a);
+    assert!(res.unwrap());
+
+    let sn1a: ZInt = 0;
+    let res = sn0a.precedes(sn1a);
+    assert!(!res.unwrap());
+
+    let sn1a: ZInt = 6;
+    let res = sn0a.precedes(sn1a);
+    assert!(res.unwrap());
+
+    let sn1a: ZInt = 7;
+    let res = sn0a.precedes(sn1a);
+    assert!(res.unwrap());
+
+    let res = sn0a.set(13);
+    assert!(res.is_ok());
+
+    let sn1a: ZInt = 6;
+    let res = sn0a.precedes(sn1a);
+    assert!(!res.unwrap());
+
+    let sn1a: ZInt = 1;
+    let res = sn0a.precedes(sn1a);
+    assert!(res.unwrap());
+
+    let sn1a: ZInt = 5;
+    let res = sn0a.precedes(sn1a);
+    assert!(res.unwrap());
+}
+
+#[test]
+fn sn_generation() {
+    let mut sn0 = SeqNumGenerator::new(13, 14);
+    let mut sn1 = SeqNumGenerator::new(5, 14);
+
+    assert_eq!(sn0.get(), 13);
+    assert_eq!(sn1.get(), 5);
+
+    assert_eq!(sn0.get(), 0);
+    assert_eq!(sn1.get(), 6);
 }

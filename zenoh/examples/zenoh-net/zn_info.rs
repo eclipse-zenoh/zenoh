@@ -13,21 +13,30 @@
 //
 use clap::{App, Arg};
 use zenoh::net::*;
+use zenoh::net::properties::*;
+
+//
+// Argument parsing -- look at the main for the zenoh-related code
+//
+fn parse_args() -> Config {
+    let args = App::new("zenoh-net info example")
+        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+            .possible_values(&["peer", "client"]).default_value("peer"))
+        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
+        .get_matches();
+    
+    Config::default()    
+        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
+        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap())        
+}
 
 #[async_std::main]
 async fn main() {
     // initiate logging
     env_logger::init();
 
-    let args = App::new("zenoh-net info example")
-        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-            .possible_values(&["peer", "client"]).default_value("peer"))
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
-        .get_matches();
+    let config : Config = parse_args();
 
-    let config = Config::new(args.value_of("mode").unwrap()).unwrap()
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
-    
     let mut ps = Properties::new();
     ps.insert(ZN_USER_KEY, b"user".to_vec());
     ps.insert(ZN_PASSWD_KEY, b"password".to_vec());

@@ -11,17 +11,89 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use libc::{c_char, c_ulong, c_uint, c_int};
+#![recursion_limit="256"]
+#![feature(async_closure)]
+use libc::{c_char, c_uchar, c_ulong, c_uint, c_int};
 use std::ffi::CStr;
 use std::slice;
+use futures::prelude::*;
+use futures::select;
+use async_std::sync::{Arc, channel, Sender};
 use async_std::task;
-use zenoh::net;
+use zenoh::net::*;
 use zenoh::net::Config;
-use zenoh_protocol::core::{ResKey, ResourceId}; // { rname, PeerId, ResourceId, , ZError, ZErrorKind };
+use smol;
 
-pub struct ZNSession(zenoh::net::Session, );
+#[no_mangle]
+pub static BROKER_MODE : c_int = whatami::BROKER as c_int;
+#[no_mangle]
+pub static ROUTER_MODE : c_int = whatami::ROUTER as c_int;
+#[no_mangle]
+pub static PEER_MODE : c_int = whatami::PEER as c_int;
+#[no_mangle]
+pub static CLIENT_MODE : c_int = whatami::CLIENT as c_int;
+
+
+pub struct ZNSession(zenoh::net::Session);
 
 pub struct ZProperties(zenoh::net::Properties);
+
+pub struct ZNSubscriber(Option<Arc<Sender<bool>>>);
+
+pub struct ZNQueryTarget(zenoh::net::QueryTarget);
+
+pub struct ZNQueryConsolidation(zenoh::net::QueryConsolidation);
+
+
+
+#[repr(C)]
+pub struct zn_string {  
+  val: *const c_char,
+  len: c_uint
+}
+
+#[repr(C)]
+pub struct zn_bytes {  
+  val: *const c_uchar,
+  len: c_uint
+}
+
+#[repr(C)]
+pub struct zn_sample {
+  key: zn_string,
+  value: zn_bytes
+}
+
+#[repr(C)]
+pub struct zn_source_info {
+  kind: c_uint,
+  id: zn_bytes, 
+}
+
+#[no_mangle]
+pub extern "C" fn zn_query_target_default() -> *mut ZNQueryTarget {
+  Box::into_raw(Box::new(ZNQueryTarget(QueryTarget::default())))
+}
+
+#[no_mangle]
+pub extern "C" fn zn_query_consolidation_default() -> *mut ZNQueryConsolidation {
+  Box::into_raw(Box::new(ZNQueryConsolidation(QueryConsolidation::default())))
+}
+
+#[no_mangle]
+pub extern "C" fn zn_query_consolidation_none() -> *mut ZNQueryConsolidation {
+  Box::into_raw(Box::new(ZNQueryConsolidation(QueryConsolidation::None)))
+}
+
+#[no_mangle]
+pub extern "C" fn zn_query_consolidation_incremental() -> *mut ZNQueryConsolidation {
+  Box::into_raw(Box::new(ZNQueryConsolidation(QueryConsolidation::Incremental)))
+}
+
+#[no_mangle]
+pub extern "C" fn zn_query_consolidation_last_hop() -> *mut ZNQueryConsolidation {
+  Box::into_raw(Box::new(ZNQueryConsolidation(QueryConsolidation::LastHop)))
+}
 
 #[no_mangle]
 pub extern "C" fn zn_properties_make() -> *mut ZProperties {
@@ -58,11 +130,17 @@ pub unsafe extern "C" fn zn_properties_free(rps: *mut ZProperties ) {
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 /// 
 #[no_mangle]
-pub unsafe extern "C" fn zn_open(locator: *const c_char, _ps: *const ZProperties) -> *mut ZNSession {
+pub unsafe extern "C" fn zn_open(mode: c_int, locator: *const c_char, _ps: *const ZProperties) -> *mut ZNSession {  
+
   let s = task::block_on(async move {
-    let config = Config::client();
-    let config = if !locator.is_null() { config.add_peer(CStr::from_ptr(locator).to_str().unwrap()) } else { config };
-    net::open(config, None).await
+    let c : Config = Default::default();    
+    let config = if !locator.is_null() { 
+      c
+        .mode(mode as u64)
+        .add_peer(CStr::from_ptr(locator).to_str().unwrap()) 
+      } else { c.mode(mode as u64) };
+
+    open(config, None).await
   }).unwrap();
   Box::into_raw(Box::new(ZNSession(s)))
 }
@@ -121,7 +199,6 @@ pub unsafe extern "C" fn zn_write(session: *mut ZNSession, r_name: *const c_char
   let s = Box::from_raw(session);
   let name = CStr::from_ptr(r_name).to_str().unwrap();
   let r = ResKey::RName(name.to_string());
-  // let bs = ArcSlice::new(Arc::new(Vec::from(slice::from_raw_parts(payload as *const u8, len as usize))), 0, len as usize);    
   let r = match task::block_on(s.0.write(&r, slice::from_raw_parts(payload as *const u8, len as usize).into())) {
     Ok(()) => 0,
     _ => 1
@@ -139,8 +216,11 @@ pub unsafe extern "C" fn zn_write(session: *mut ZNSession, r_name: *const c_char
 #[no_mangle]
 pub unsafe extern "C" fn zn_write_wrid(session: *mut ZNSession, r_id: c_ulong, payload: *const c_char, len: c_uint) -> c_int {
   let s = Box::from_raw(session);  
-  let r = ResKey::RId(r_id);  
-  let r = match task::block_on(s.0.write(&r, slice::from_raw_parts(payload as *const u8, len as usize).into())) {
+  let r = {
+    #[cfg(unix)] { ResKey::RId(r_id) }
+    #[cfg(windows)] { ResKey::RId(r_id.into()) }
+  }; 
+  let r = match smol::block_on(s.0.write(&r, slice::from_raw_parts(payload as *const u8, len as usize).into())) {
     Ok(()) => 0,
     _ => 1
   };
@@ -149,3 +229,110 @@ pub unsafe extern "C" fn zn_write_wrid(session: *mut ZNSession, r_id: c_ulong, p
 
 }
 
+/// Declares a zenoh subscriber
+/// 
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// 
+#[no_mangle]
+pub unsafe extern "C" 
+fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char, 
+                        callback: extern fn(*const zn_sample)) -> *mut ZNSubscriber { 
+    
+  if session.is_null() || r_name.is_null()  { 
+    return Box::into_raw(Box::new(ZNSubscriber(None))) 
+  }
+
+  let si: SubInfo = Default::default();
+  let s = Box::from_raw(session);  
+  let name = CStr::from_ptr(r_name).to_str().unwrap();
+  
+  let (tx, rx) = channel::<bool>(1);  
+  let r = ZNSubscriber(Some(Arc::new(tx)));
+  
+  let mut sub : Subscriber = task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()), &si)).unwrap();
+      // Note: This is done to ensure that even if the call-back into C
+      // does any blocking call we do not incour the risk of blocking
+      // any of the task resolving futures.
+      task::spawn_blocking(move || (task::block_on(async move {    
+        let key = zn_string { val: std::ptr::null(), len: 0};
+        let value = zn_bytes { val: std::ptr::null(), len: 0};
+        let mut sample = zn_sample {key: key,  value: value};
+
+        loop {      
+          select!(
+            s = sub.next().fuse() => {            
+              // This is a bit brutal but avoids an allocation and
+              // a copy that would be otherwise required to add the 
+              // C string terminator. See the test_sub.c to find out how to deal
+              // with non null terminated strings.
+              let us = s.unwrap();
+              let data = us.payload.to_vec();
+              sample.key.val = us.res_name.as_ptr() as *const c_char;
+              sample.key.len = us.res_name.len() as c_uint;
+              sample.value.val = data.as_ptr() as *const c_uchar;
+              sample.value.len = data.len() as c_uint;
+              callback(&sample)
+            },
+            _ = rx.recv().fuse() => {
+                print!("Notification thread undeclaring sub!\n");
+                let _ = s.0.undeclare_subscriber(sub).await;
+                return ()
+            }                        
+          )
+      } } )));
+      Box::into_raw(Box::new(r))         
+  }
+
+
+// Un-declares a zenoh subscriber
+/// 
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// 
+#[no_mangle]
+pub unsafe extern "C" fn zn_undeclare_subscriber(sub: *mut ZNSubscriber) {
+  match *Box::from_raw(sub) {
+    ZNSubscriber(Some(tx)) => smol::block_on(tx.send(true)),
+    ZNSubscriber(None) => ()
+  }  
+}
+
+// Issues a zenoh query
+/// 
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// 
+#[no_mangle]
+pub unsafe extern "C" fn zn_query(session: *mut ZNSession, key_expr: *const c_char, predicate: *const c_char, 
+                                  target: *mut ZNQueryTarget, consolidation: *mut ZNQueryConsolidation, 
+                                  callback: extern fn(*const zn_source_info, *const zn_sample)) {
+  
+  let s = Box::from_raw(session);
+  let ke = CStr::from_ptr(key_expr).to_str().unwrap();
+  let p = CStr::from_ptr(predicate).to_str().unwrap();
+  let qt = Box::from_raw(target);
+  let qc = Box::from_raw(consolidation);
+  
+  task::spawn_blocking(move || task::block_on(async move {    
+    let mut q = s.0.query(&ke.into(), p, qt.0, qc.0).await.unwrap();
+    let key = zn_string { val: std::ptr::null(), len: 0};
+    let value = zn_bytes { val: std::ptr::null(), len: 0};
+    let mut sample = zn_sample {key,  value};  
+    let id = zn_bytes { val: std::ptr::null(), len: 0};
+    let mut source_info = zn_source_info {kind: 0,  id};
+    
+    while let Some(reply) = q.next().await {      
+      source_info.kind = reply.source_kind as c_uint;
+      source_info.id.val = reply.replier_id.id.as_ptr() as *const c_uchar;
+      source_info.id.len = reply.replier_id.id.len() as c_uint;
+      sample.key.val = reply.data.res_name.as_ptr() as *const c_char;
+      sample.key.len = reply.data.res_name.len() as c_uint;
+      let data = reply.data.payload.to_vec();
+      sample.value.val = data.as_ptr() as *const c_uchar;
+      sample.value.len = data.len() as c_uint;
+     
+      callback(&source_info, &sample)
+    }    
+  }));
+}

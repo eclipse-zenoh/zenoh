@@ -11,52 +11,226 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::net::{UdpSocket, ToSocketAddrs};
+use std::time::Duration;
+use std::net::IpAddr;
+use async_std::net::TcpStream;
+use crate::{zerror, zconfigurable};
+use crate::core::{ZResult, ZError, ZErrorKind};
 
-/// # Safety
-/// This function is unsafe as it uses unsafe functions from the libc crate.
-/// 
-/// # Example: 
-/// ```
-/// async_std::task::block_on( async {
-///     let socket = unsafe {
-///         zenoh_util::net::bind_udp(
-///             "0.0.0.0:7447", 
-///             [(libc::SO_REUSEPORT, &1 as *const _ as *const libc::c_void)].to_vec()
-///         ).await.unwrap()
-///     };
-/// 
-///     let interface = std::net::Ipv4Addr::new(10, 10, 10, 10);
-///     let mcast_addr = std::net::Ipv4Addr::new(239, 255, 0, 1);
-/// 
-///     socket.join_multicast_v4(mcast_addr, interface);
-/// });
-/// 
-/// ```
-pub async unsafe fn bind_udp<A: ToSocketAddrs>(addrs: A, opts: Vec<(libc::c_int, *const libc::c_void)>) -> async_std::io::Result<UdpSocket> {
-    let fd: async_std::os::unix::io::RawFd = 
-        libc::socket(libc::AF_INET, libc::SOCK_DGRAM, libc::IPPROTO_UDP);
-    if fd == -1 {return Err(async_std::io::Error::last_os_error());}
+zconfigurable! {
+    static ref WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE: u32 = 8192;
+    static ref WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES: u32 = 3;
+}
 
-    for (opt, optval) in opts {
-        let res = libc::setsockopt(
-            fd,
-            libc::SOL_SOCKET,
-            opt,
-            &optval as *const _ as *const libc::c_void,
-            std::mem::size_of_val(&optval) as libc::socklen_t,
-        );
-        if res == -1 {return Err(async_std::io::Error::last_os_error());}
-    }
+pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
+    #[cfg(unix)] {
+        use std::os::unix::io::AsRawFd;
 
-    let addrs = addrs.to_socket_addrs().await?;
-    for addr in addrs {
-        let socketaddr: os_socketaddr::OsSocketAddr = addr.into();
-    
-        let res = libc::bind(fd, socketaddr.as_ptr(), socketaddr.len());
-        if res != -1 {
-            return Ok(async_std::os::unix::io::FromRawFd::from_raw_fd(fd))
+        let raw_socket = socket.as_raw_fd();
+        let linger = match dur {
+            Some(d) => libc::linger {
+                l_onoff: 1,
+                l_linger: d.as_secs() as libc::c_int,
+            },
+            None => libc::linger {
+                l_onoff: 0,
+                l_linger: 0,
+            },
+        };
+
+        // Set the SO_LINGER option
+        unsafe {
+            let ret = libc::setsockopt(
+                raw_socket,
+                libc::SOL_SOCKET,
+                libc::SO_LINGER,
+                &linger as *const libc::linger as *const libc::c_void,
+                std::mem::size_of_val(&linger) as libc::socklen_t,
+            );
+            match ret {
+                0 => Ok(()),
+                err_code => zerror!(ZErrorKind::IOError { descr: format!("setsockopt returned {}", err_code) }),
+            }
         }
     }
-    Err(async_std::io::Error::last_os_error())
+
+    #[cfg(windows)] {
+        use std::convert::TryInto;
+        use std::os::windows::io::AsRawSocket;
+        use winapi::um::winsock2;
+        use winapi::um::ws2tcpip;
+
+        let raw_socket = socket.as_raw_socket();
+        let linger = match dur {
+            Some(d) => winsock2::linger {
+                l_onoff: 1,
+                l_linger: d.as_secs() as u16,
+            },
+            None => winsock2::linger {
+                l_onoff: 0,
+                l_linger: 0,
+            },
+        };
+
+        unsafe {
+            let ret = winsock2::setsockopt(
+                raw_socket.try_into().unwrap(),
+                winsock2::SOL_SOCKET,
+                winsock2::SO_LINGER,
+                &linger as *const winsock2::linger as *const i8,
+                std::mem::size_of_val(&linger) as ws2tcpip::socklen_t,
+            );
+            match ret {
+                0 => Ok(()),
+                err_code => zerror!(ZErrorKind::IOError { descr: format!("setsockopt returned {}", err_code) }),
+            }
+        }
+    }
+}
+
+pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
+    #[cfg(unix)] {
+        for iface in pnet::datalink::interfaces() {
+            if iface.name == name {
+                for ifaddr in &iface.ips {
+                    if ifaddr.is_ipv4() {
+                        return Ok(Some(ifaddr.ip()));
+                    }
+                }
+            }
+            for ifaddr in &iface.ips {
+                if ifaddr.ip().to_string() == name {
+                    return Ok(Some(ifaddr.ip()));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    #[cfg(windows)] { unsafe {
+        use std::convert::TryInto;
+        use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+        use crate::ffi;
+
+        let mut ret;
+        let mut retries = 0;
+        let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
+        let mut buffer: Vec<u8>;
+        loop {
+            buffer = Vec::with_capacity(size as usize);
+            ret = winapi::um::iphlpapi::GetAdaptersAddresses(
+                winapi::shared::ws2def::AF_INET.try_into().unwrap(),
+                0,
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
+                &mut size,
+            );
+            if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {break;}
+            if retries >= *WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES {break;}
+            retries += 1;
+        }
+
+        if ret != 0 { return zerror!(ZErrorKind::IOError { descr: format!("GetAdaptersAddresses returned {}", ret)}); }
+
+        let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
+        while let Some(iface) = next_iface {
+            if name == ffi::pstr_to_string(iface.AdapterName)
+                || name == ffi::pwstr_to_string(iface.FriendlyName)
+                || name == ffi::pwstr_to_string(iface.Description)
+            {
+                let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
+                while let Some(ucast_addr) = next_ucast_addr {
+                    if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
+                        if ifaddr.is_ipv4() {
+                            return Ok(Some(ifaddr.ip()));
+                        }
+                    }
+                    next_ucast_addr = ucast_addr.Next.as_ref();
+                }
+            }
+
+            let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
+            while let Some(ucast_addr) = next_ucast_addr {
+                if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
+                    if ifaddr.ip().to_string() == name {
+                        return Ok(Some(ifaddr.ip()));
+                    }
+                }
+                next_ucast_addr = ucast_addr.Next.as_ref();
+            }
+            next_iface = iface.Next.as_ref();
+        }
+        Ok(None)
+    }}
+}
+
+/// Get the network interface to bind the UDP sending port to when not specified by user
+pub fn get_default_multicast_interface() -> Option<IpAddr> {
+    #[cfg(unix)]
+    {
+        // In unix family, return first active, non-loopback, multicast enabled interface
+        for iface in pnet::datalink::interfaces() {
+            if iface.is_up() && !iface.is_loopback() && iface.is_multicast() {
+                for ipaddr in iface.ips {
+                    if ipaddr.is_ipv4() {
+                        return Some(ipaddr.ip());
+                    }
+                }
+            }
+        }
+        None
+    }
+    #[cfg(windows)]
+    {
+        // On windows, bind to 0.0.0.0, the system will select the default interface
+        Some(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
+    }
+}
+
+pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
+    #[cfg(unix)]
+    {
+        Ok(pnet::datalink::interfaces().into_iter().map(|iface| iface.ips)
+            .flatten().map(|ipnet| ipnet.ip()).collect())
+    }
+
+    #[cfg(windows)] { unsafe {
+        use std::convert::TryInto;
+        use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+        use crate::ffi;
+
+        let mut result = vec![];
+        let mut ret;
+        let mut retries = 0;
+        let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
+        let mut buffer: Vec<u8>;
+        loop {
+            buffer = Vec::with_capacity(size as usize);
+            ret = winapi::um::iphlpapi::GetAdaptersAddresses(
+                winapi::shared::ws2def::AF_INET.try_into().unwrap(),
+                0,
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
+                &mut size,
+            );
+            if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {break;}
+            if retries >= *WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES {break;}
+            retries += 1;
+        }
+
+        if ret != 0 { return zerror!(ZErrorKind::IOError { descr: format!("GetAdaptersAddresses returned {}", ret)}); }
+
+        let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
+        while let Some(iface) = next_iface {
+            let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
+            while let Some(ucast_addr) = next_ucast_addr {
+                if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
+                    result.push(ifaddr.ip());
+                }
+                next_ucast_addr = ucast_addr.Next.as_ref();
+            }
+            next_iface = iface.Next.as_ref();
+        }
+        Ok(result)
+    }}
 }

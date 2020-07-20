@@ -12,9 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_trait::async_trait;
-use crate::core::{ZInt, PeerId, ResKey};
+use crate::core::{ZInt, PeerId, ResKey, SubInfo, QueryConsolidation, QueryTarget};
 use crate::io::RBuf;
-use crate::proto::{SubInfo, QueryTarget, QueryConsolidation};
 
 #[async_trait]
 pub trait Primitives {

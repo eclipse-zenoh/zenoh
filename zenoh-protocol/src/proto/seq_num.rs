@@ -46,14 +46,27 @@ impl SeqNum {
     ///                  - 16_386 (i.e., 2^14)
     ///                  - 2_097_152 (i.e., 2^21)
     /// 
-    pub fn make(value: ZInt, resolution: ZInt) -> ZResult<SeqNum> {
+    /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
+    /// `value` is greater or equal than `resolution`.
+    /// 
+    pub fn new(value: ZInt, resolution: ZInt) -> SeqNum {
         let mut sn = SeqNum { 
             value: 0, 
             semi_int: resolution >> 1, 
             resolution 
         };
-        sn.set(value)?;
-        Ok(sn)
+        sn.set(value).unwrap();
+        sn
+    }
+
+    #[inline]
+    pub fn resolution(&self) -> ZInt {
+        self.resolution
+    }
+
+    #[inline]
+    pub fn semi_int(&self) -> ZInt {
+        self.semi_int
     }
 
     #[inline]
@@ -63,17 +76,20 @@ impl SeqNum {
 
     #[inline]
     pub fn set(&mut self, value: ZInt) -> ZResult<()> {
-        if value < self.resolution {
-            self.value = value;
-            Ok(())
-        }
-        else {
-            zerror!(ZErrorKind::InvalidResolution {
+        if value >= self.resolution {
+            return zerror!(ZErrorKind::InvalidResolution {
                 descr: "The sequence number value must be smaller than the resolution".to_string()
             })
         }
+
+        self.value = value;
+        Ok(())
     }
 
+    #[inline]
+    pub fn increment(&mut self) {        
+        self.value = (self.value + 1) % self.resolution;
+    }
     
     /// Checks to see if two sequence number are in a precedence relationship, 
     /// while taking into account roll backs. 
@@ -94,12 +110,51 @@ impl SeqNum {
     /// # Arguments
     /// 
     /// * `value` -  The sequence number which should be checked for precedence relation. 
-    pub fn precedes(&self, value: ZInt) -> bool {
-        if value > self.value {
+    pub fn precedes(&self, value: ZInt) -> ZResult<bool> {
+        if value >= self.resolution {
+            return zerror!(ZErrorKind::InvalidResolution {
+                descr: "The sequence number value must be smaller than the resolution".to_string()
+            })
+        }
+        
+        let res = if value > self.value {
             value - self.value <= self.semi_int
         } else {
             self.value - value > self.semi_int 
-        } 
+        };
+
+        Ok(res)
+    }
+
+    /// Computes the modulo gap between two sequence numbers. 
+    /// 
+    /// Two case are considered:
+    /// 
+    /// ## Case 1: sna < snb
+    /// 
+    /// In this case the gap is computed as *snb* - *sna*.
+    /// 
+    /// ## Case 2: sna > snb
+    /// 
+    /// In this case the gap is computed as *resolution* - (*sna* - *snb*). 
+    /// 
+    /// # Arguments
+    /// 
+    /// * `value` -  The sequence number which should be checked for gap computation. 
+    pub fn gap(&self, value: ZInt) -> ZResult<ZInt> {
+        if value >= self.resolution {
+            return zerror!(ZErrorKind::InvalidResolution {
+                descr: "The sequence number value must be smaller than the resolution".to_string()
+            })
+        }
+
+        let gap = if value >= self.value {
+            value - self.value
+        } else {
+            self.resolution - (self.value - value)
+        };
+
+        Ok(gap)
     }
 }
 
@@ -116,22 +171,28 @@ impl SeqNumGenerator {
     /// Create a new sequence number generator with a given resolution.
     /// 
     /// # Arguments
-    /// * `sn0` - The initial sequence number. It is a good practice to initialize the
+    /// * `initial_sn` - The initial sequence number. It is a good practice to initialize the
     ///           sequence number generator with a random number
     ///
-    /// * `resolution` - The resolution, in bits, to be used for the sequence number generator. 
+    /// * `sn_resolution` - The resolution, in bits, to be used for the sequence number generator. 
     ///                  As a consequence of wire zenoh's representation of sequence numbers
     ///                  this should be a multiple of 7.
     /// 
-    pub fn make(sn0: ZInt, resolution: ZInt) -> ZResult<SeqNumGenerator> {
-        let sn = SeqNum::make(sn0, resolution)?;
-        Ok(SeqNumGenerator(sn))
+    /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
+    /// `value` is greater or equal than `resolution`.
+    /// 
+    pub fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SeqNumGenerator {
+        SeqNumGenerator(SeqNum::new(initial_sn, sn_resolution))
     }
 
     /// Generates the next sequence number
     pub fn get(&mut self) -> ZInt {
         let now = self.0.get();
-        self.0.set((now + 1) % self.0.resolution).unwrap();
+        self.0.increment();
         now
+    }
+
+    pub fn set(&mut self, sn: ZInt) {
+        self.0.set(sn).unwrap();
     }
 }

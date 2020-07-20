@@ -32,6 +32,11 @@ impl RBuf {
         RBuf{ slices, pos:(0,0) } 
     }
 
+    pub fn empty() -> RBuf {
+        let slices = Vec::with_capacity(0);
+        RBuf{ slices, pos:(0,0) } 
+    }
+
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -45,6 +50,11 @@ impl RBuf {
     #[inline]
     pub fn get_slices(&self) -> &[ArcSlice] {
         &self.slices[..]
+    }
+
+    #[inline]
+    pub fn drain_slices(self) -> Vec<ArcSlice> {
+        self.slices
     }
 
     pub fn as_ioslices(&self) -> Vec<IoSlice> {
@@ -202,6 +212,34 @@ impl RBuf {
         self.get_bytes_no_check((0,0), &mut vec[..]);
         vec
     }
+
+    // Read 'len' bytes from 'self' and add those to 'dest'
+    // This is 0-copy, only ArcSlices from 'self' are added to 'dest', without cloning the original buffer.
+    fn read_into_rbuf_no_check(&mut self, dest: &mut RBuf, len: usize) {
+        let mut to_copy = len;
+        while to_copy > 0 {
+            let remain_in_slice = self.current_slice().len() - self.pos.1;
+            let l = to_copy.min(remain_in_slice); 
+            dest.add_slice(self.current_slice().new_sub_slice(self.pos.1, self.pos.1+l));
+            self.skip_bytes_no_check(l);
+            to_copy -= l;
+        }
+    }
+
+    // Read 'len' bytes from 'self' and add those to 'dest'
+    pub fn read_into_rbuf(&mut self, dest: &mut RBuf, len: usize) -> ZResult<()> {
+        if self.readable() >= len {
+            self.read_into_rbuf_no_check(dest, len);
+            Ok(())
+        } else {
+            zerror!(ZErrorKind::BufferUnderflow { missing: 1 }) 
+        }
+    }
+
+    // Read all the bytes from 'self' and add those to 'dest'
+    pub fn drain_into_rbuf(&mut self, dest: &mut RBuf) {
+        self.read_into_rbuf_no_check(dest, self.readable());
+    }
 }
 
 impl fmt::Display for RBuf {
@@ -260,6 +298,12 @@ impl<'a> From<Vec<IoSlice<'a>>> for RBuf {
 impl From<&super::WBuf> for RBuf {
     fn from(wbuf: &super::WBuf) -> RBuf {
         RBuf::from(wbuf.as_arcslices())
+    }
+}
+
+impl From<super::WBuf> for RBuf {
+    fn from(wbuf: super::WBuf) -> RBuf {
+        Self::from(&wbuf)
     }
 }
 
@@ -387,6 +431,17 @@ mod tests {
         for i in 0 .. buf3.len()-1 {
             assert_eq!(i as u8, buf3.read().unwrap());
         }
+
+        // test read_into_rbuf
+        buf1.reset_pos();
+        let _ = buf1.read();
+        let mut dest = RBuf::new();
+        assert!(buf1.read_into_rbuf(&mut dest, 24).is_ok());
+        let dest_slices = dest.as_ioslices();
+        assert_eq!(3, dest_slices.len());
+        assert_eq!(Some(&[1u8, 2, 3, 4, 5, 6, 7, 8, 9][..]), dest_slices[0].get(..));
+        assert_eq!(Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]), dest_slices[1].get(..));
+        assert_eq!(Some(&[20u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
 
     }
 }

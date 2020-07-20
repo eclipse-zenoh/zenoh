@@ -19,8 +19,9 @@ extern crate lazy_static;
 pub mod collections;
 pub mod core;
 pub mod sync;
-pub mod net;
 pub mod hlc;
+pub mod net;
+pub mod ffi;
 
 pub use crate::core::macros::*;
 

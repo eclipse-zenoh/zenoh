@@ -15,10 +15,9 @@ use async_trait::async_trait;
 use async_std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey, PeerId};
+use zenoh_protocol::core::{ZInt, ResKey, PeerId, SubInfo, QueryTarget, QueryConsolidation, WhatAmI};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{Primitives, SubInfo, QueryTarget, QueryConsolidation, WhatAmI};
-
+use zenoh_protocol::proto::Primitives;
 use crate::routing::broker::*;
 use crate::routing::ownedprimitives::OwnedPrimitives;
 
