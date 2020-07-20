@@ -16,8 +16,6 @@
 use futures::prelude::*;
 use clap::{Arg, ArgMatches};
 use zenoh::net::*;
-use zenoh_protocol::core::ZInt;
-use zenoh_protocol::proto::kind;
 use zenoh_router::runtime::Runtime;
 use tide::{Request, Response, Server, StatusCode};
 use tide::http::Mime;
@@ -49,12 +47,12 @@ fn get_kind_str(sample: &Sample) -> String {
     let info = sample.data_info.clone();
     let kind = match info {
         Some(mut buf) => match buf.read_datainfo() {
-            Ok(info) => info.kind.or(Some(kind::DEFAULT)).unwrap(),
-            _ => kind::DEFAULT,
+            Ok(info) => info.kind.or(Some(data_kind::DEFAULT)).unwrap(),
+            _ => data_kind::DEFAULT,
         }
-        None => kind::DEFAULT,
+        None => data_kind::DEFAULT,
     };
-    match kind::to_str(kind) {
+    match data_kind::to_str(kind) {
         Ok(string) => string,
         _ => "PUT".to_string(),
     }
@@ -201,7 +199,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             Ok(bytes) => {
                 let path = req.url().path();
                 match req.state().0.write_wo(&path.into(), bytes.into(), 
-                        enc_from_mime(req.content_type()), kind::PUT).await {
+                        enc_from_mime(req.content_type()), data_kind::PUT).await {
                     Ok(_) => Ok(Response::new(StatusCode::Ok)),
                     Err(e) => 
                         Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
@@ -218,7 +216,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             Ok(bytes) => {
                 let path = req.url().path();
                 match req.state().0.write_wo(&path.into(), bytes.into(), 
-                        enc_from_mime(req.content_type()), kind::UPDATE).await {
+                        enc_from_mime(req.content_type()), data_kind::PATCH).await {
                     Ok(_) => Ok(Response::new(StatusCode::Ok)),
                     Err(e) => 
                         Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
@@ -233,7 +231,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         log::trace!("Http {:?}", req);
         let path = req.url().path();
         match req.state().0.write_wo(&path.into(), RBuf::new(), 
-                enc_from_mime(req.content_type()), kind::DELETE).await {
+                enc_from_mime(req.content_type()), data_kind::DELETE).await {
             Ok(_) => Ok(Response::new(StatusCode::Ok)),
             Err(e) => 
                 Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),

@@ -56,7 +56,7 @@ impl Workspace {
             &self.path_to_reskey(path),
             value.into(),
             value.encoding(),
-            kind::PUT
+            data_kind::PUT
         ).await
     }
 
@@ -66,7 +66,7 @@ impl Workspace {
             &self.path_to_reskey(path),
             RBuf::empty(),
             encoding::RAW,
-            kind::DELETE
+            data_kind::DELETE
         ).await
     }
 
@@ -200,17 +200,17 @@ impl Stream for DataStream {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChangeKind {
-    PUT = kind::PUT as isize,
-    PATCH = kind::UPDATE as isize,
-    DELETE = kind::DELETE as isize
+    PUT = data_kind::PUT as isize,
+    PATCH = data_kind::PATCH as isize,
+    DELETE = data_kind::DELETE as isize
 }
 
 impl From<ZInt> for ChangeKind {
     fn from(kind: ZInt) -> Self {
         match kind {
-            kind::PUT => ChangeKind::PUT,
-            kind::UPDATE => ChangeKind::PATCH,
-            kind::DELETE => ChangeKind::DELETE,
+            data_kind::PUT => ChangeKind::PUT,
+            data_kind::PATCH => ChangeKind::PATCH,
+            data_kind::DELETE => ChangeKind::DELETE,
             _ => {
                 warn!("Received DataInfo with kind={} which doesn't correspond to a ChangeKind. \
                        Assume a PUT with RAW encoding", kind);

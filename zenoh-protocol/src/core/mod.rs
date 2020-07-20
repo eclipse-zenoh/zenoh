@@ -42,13 +42,13 @@ pub type ResourceId = ZInt;
 pub const NO_RESOURCE_ID: ResourceId = 0;
 
 
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// ~      id       — if ResName{name} : id=0
-/// +-+-+-+-+-+-+-+-+
-/// ~  name/suffix  ~ if flag C!=1 in Message's header
-/// +---------------+
-///
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// ~      id       — if ResName{name} : id=0
+// +-+-+-+-+-+-+-+-+
+// ~  name/suffix  ~ if flag C!=1 in Message's header
+// +---------------+
+//
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum ResKey {
     RName(String),
