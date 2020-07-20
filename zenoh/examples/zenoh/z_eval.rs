@@ -52,7 +52,7 @@ async fn main() {
     // But we could also register an eval for a PathExpr. In this case,
     // the eval implementation should choose the Path(s) for reply(ies) that
     // are coherent with the Selector received in GetRequest.
-    let ref path = Path::try_from(path).unwrap();
+    let path = &Path::try_from(path).unwrap();
 
     println!("New zenoh...");
     let zenoh = Zenoh::new(config, None).await.unwrap();
@@ -72,7 +72,7 @@ async fn main() {
         // - "/zenoh/example/eval?(name=Bob)" : "Bob" is used for the name
         // - "/zenoh/example/eval?(name=/zenoh/example/name)" : the Eval function does a GET 
         //      on "/zenoh/example/name" an uses the 1st result for the name
-        let mut name = get_request.selector.properties.get("name").cloned().unwrap_or("Rust!".to_string());
+        let mut name = get_request.selector.properties.get("name").cloned().unwrap_or_else(|| "Rust!".to_string());
         if name.starts_with('/') {
             println!("   >> Get name to use from path: {}", name);
             if let Ok(selector) = Selector::try_from(name.as_str()) {
