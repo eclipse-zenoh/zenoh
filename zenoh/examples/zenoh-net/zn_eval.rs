@@ -58,7 +58,7 @@ async fn main() {
         select!(
             query = queryable.next().fuse() => {
                 let query = query.unwrap();
-                println!(">> [Query handler] Handling '{}?{}'", query.res_name, query.predicate);
+                println!(">> [Query handler] Handling '{}{}'", query.res_name, query.predicate);
                 query.replies_sender.send(Sample{
                     res_name: path.clone(),
                     payload: value.as_bytes().into(),

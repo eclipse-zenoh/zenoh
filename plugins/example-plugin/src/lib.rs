@@ -71,7 +71,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
             query = queryable.next().fuse() => {
                 let query = query.unwrap();
-                info!("Handling query '{}?{}'", query.res_name, query.predicate);
+                info!("Handling query '{}{}'", query.res_name, query.predicate);
                 for (rname, (data, data_info)) in stored.iter() {
                     if resource_name::intersect(&query.res_name, rname) {
                         query.replies_sender.send(Sample{

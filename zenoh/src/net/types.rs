@@ -18,7 +18,7 @@ use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
 use crate::net::Session;
 
-pub use zenoh_protocol::io::RBuf;
+pub use zenoh_protocol::io::{RBuf, WBuf};
 pub use zenoh_protocol::core::{
     ZInt,
     ResourceId,
@@ -33,6 +33,7 @@ pub use zenoh_protocol::core::{
     SubInfo,
     whatami
 };
+pub use zenoh_protocol::proto::DataInfo;
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 pub type Config = zenoh_router::runtime::Config;

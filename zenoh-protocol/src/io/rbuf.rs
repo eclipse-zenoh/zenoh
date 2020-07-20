@@ -32,6 +32,11 @@ impl RBuf {
         RBuf{ slices, pos:(0,0) } 
     }
 
+    pub fn empty() -> RBuf {
+        let slices = Vec::with_capacity(0);
+        RBuf{ slices, pos:(0,0) } 
+    }
+
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -293,6 +298,12 @@ impl<'a> From<Vec<IoSlice<'a>>> for RBuf {
 impl From<&super::WBuf> for RBuf {
     fn from(wbuf: &super::WBuf) -> RBuf {
         RBuf::from(wbuf.as_arcslices())
+    }
+}
+
+impl From<super::WBuf> for RBuf {
+    fn from(wbuf: super::WBuf) -> RBuf {
+        Self::from(&wbuf)
     }
 }
 

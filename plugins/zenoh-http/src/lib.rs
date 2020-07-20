@@ -216,7 +216,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             Ok(bytes) => {
                 let path = req.url().path();
                 match req.state().0.write_wo(&path.into(), bytes.into(), 
-                        enc_from_mime(req.content_type()), data_kind::UPDATE).await {
+                        enc_from_mime(req.content_type()), data_kind::PATCH).await {
                     Ok(_) => Ok(Response::new(StatusCode::Ok)),
                     Err(e) => 
                         Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
@@ -231,7 +231,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         log::trace!("Http {:?}", req);
         let path = req.url().path();
         match req.state().0.write_wo(&path.into(), RBuf::new(), 
-                enc_from_mime(req.content_type()), data_kind::REMOVE).await {
+                enc_from_mime(req.content_type()), data_kind::DELETE).await {
             Ok(_) => Ok(Response::new(StatusCode::Ok)),
             Err(e) => 
                 Ok(response(StatusCode::InternalServerError, Mime::from_str("text/plain").unwrap(), &e.to_string())),
