@@ -26,8 +26,6 @@ pub use session::*;
 
 pub mod queryable { pub use zenoh_protocol::core::queryable::*; }
 
-pub const LOCATOR_AUTO: &str = "auto";
-
 pub fn rname_intersect(s1: &str, s2: &str) -> bool {
     core::rname::intersect(s1, s2)
 }
@@ -38,6 +36,8 @@ pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
     vec![]
 }
 
+/// Open a zenoh-net session.
+/// 
 /// # Example:
 /// ```
 /// use zenoh::net::*;

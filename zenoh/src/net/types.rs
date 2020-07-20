@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use pin_project_lite::pin_project;
 use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
+use crate::net::Session;
 
 pub use zenoh_protocol::io::RBuf;
 pub use zenoh_protocol::core::{
@@ -29,15 +30,10 @@ pub use zenoh_protocol::core::{
     Reliability,
     SubMode,
     Period,
-    SubInfo
-
-};
-pub use zenoh_protocol::{
-    proto::Primitives,
-    core::{WhatAmI, whatami}
+    SubInfo,
+    whatami
 };
 pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use crate::net::Session;
 
 pub type Config = zenoh_router::runtime::Config;
 

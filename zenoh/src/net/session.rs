@@ -31,10 +31,10 @@ use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use super::*;
 
 zconfigurable! {
-    pub static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    pub static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
-    pub static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
+    static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
+    static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
 }
 
 pub(crate) struct SessionState {
