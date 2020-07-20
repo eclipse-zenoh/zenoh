@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod kind {
+pub mod data_kind {
     use crate::core::ZInt;
     use zenoh_util::zerror;
     use zenoh_util::core::{ZResult, ZError, ZErrorKind};

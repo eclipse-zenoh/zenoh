@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use zenoh_protocol::core;
 use log::debug;
 
 mod types;
@@ -24,11 +23,10 @@ pub use consts::*;
 mod session;
 pub use session::*;
 
-pub mod queryable { pub use zenoh_protocol::core::queryable::*; }
+pub use zenoh_protocol::proto::{encoding, data_kind};
 
-pub fn rname_intersect(s1: &str, s2: &str) -> bool {
-    core::rname::intersect(s1, s2)
-}
+pub mod queryable { pub use zenoh_protocol::core::queryable::*; }
+pub mod utils { pub mod resource_name { pub use zenoh_protocol::core::rname::intersect; } }
 
 pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
     // @TODO: implement

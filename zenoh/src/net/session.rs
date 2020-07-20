@@ -29,6 +29,7 @@ use zenoh_router::runtime::Runtime;
 use zenoh_util::{zerror, zconfigurable};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use super::*;
+use super::properties::*;
 
 zconfigurable! {
     static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;

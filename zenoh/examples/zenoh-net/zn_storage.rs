@@ -19,6 +19,7 @@ use futures::prelude::*;
 use futures::select;
 use zenoh::net::*;
 use zenoh::net::queryable::STORAGE;
+use zenoh::net::utils::resource_name;
 
 //
 // Argument parsing -- look at the main for the zenoh-related code
@@ -79,7 +80,7 @@ async fn main() {
                 let query = query.unwrap();
                 println!(">> [Query handler        ] Handling '{}?{}'", query.res_name, query.predicate);
                 for (stored_name, (data, data_info)) in stored.iter() {
-                    if rname_intersect(&query.res_name, stored_name) {
+                    if resource_name::intersect(&query.res_name, stored_name) {
                         query.replies_sender.send(Sample{
                             res_name: stored_name.clone(),
                             payload: data.clone(),

@@ -13,6 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::net::*;
+use zenoh::net::properties::*;
 
 //
 // Argument parsing -- look at the main for the zenoh-related code
