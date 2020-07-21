@@ -18,6 +18,60 @@ extern crate lazy_static;
 
 use log::debug;
 
+/// The network level zenoh API.
+/// 
+/// # Examples
+/// 
+/// Publish
+/// ```
+/// use zenoh::net::*;
+/// 
+/// #[async_std::main]
+/// async fn main() {
+///     let session = open(Config::default(), None).await.unwrap();
+///     session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
+///     session.close().await.unwrap();
+/// }
+/// ```
+/// 
+/// Subscribe
+/// ```no_run
+/// #![feature(async_closure)]
+/// use zenoh::net::*;
+/// use futures::prelude::*;
+/// 
+/// #[async_std::main]
+/// async fn main() {
+///     let session = open(Config::default(), None).await.unwrap();
+///     let sub_info = SubInfo {
+///         reliability: Reliability::Reliable,
+///         mode: SubMode::Push,
+///         period: None
+///     };
+///     let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+///     subscriber.for_each(async move |sample| { println!("Received : {:?}", sample); }).await;
+/// }
+/// ```
+/// 
+/// Query
+/// ```
+/// #![feature(async_closure)]
+/// use zenoh::net::*;
+/// use futures::prelude::*;
+/// 
+/// #[async_std::main]
+/// async fn main() {
+///     let session = open(Config::default(), None).await.unwrap();
+///     session.query(
+///         &"/resource/name".into(),
+///         "predicate",
+///         QueryTarget::default(),
+///         QueryConsolidation::default()
+///     ).await.unwrap().for_each( async move |reply| 
+///         println!(">> Received {:?}", reply.data)
+///     ).await;
+/// }
+/// ```
 pub mod net;
 use net::{Session, ZResult};
 
