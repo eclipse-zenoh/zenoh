@@ -41,8 +41,10 @@ use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 /// use async_std::sync::Arc;
 /// use async_trait::async_trait;
 /// use zenoh_protocol::core::{PeerId, WhatAmI, whatami};
-/// use zenoh_protocol::session::{DummyHandler, MsgHandler, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
+/// use zenoh_protocol::session::{DummyHandler, MsgHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 ///
+/// use zenoh_util::core::ZResult;
+/// 
 /// // Create my session handler to be notified when a new session is initiated with me
 /// struct MySH;
 ///
@@ -55,10 +57,9 @@ use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 /// #[async_trait]
 /// impl SessionHandler for MySH {
 ///     async fn new_session(&self,
-///         _wami: WhatAmI,
-///         _session: Arc<dyn MsgHandler + Send + Sync>
-///     ) -> Arc<dyn MsgHandler + Send + Sync> {
-///         Arc::new(DummyHandler::new())
+///         _session: Session
+///     ) -> ZResult<Arc<dyn MsgHandler + Send + Sync>> {
+///         Ok(Arc::new(DummyHandler::new()))
 ///     }
 /// }
 ///
