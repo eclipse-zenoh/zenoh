@@ -36,7 +36,7 @@ use crate::proto::{Attachment, ZenohMessage, smsg};
 use zenoh_util::{zasyncread, zasyncwrite, zerror};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 
-/// # Example:
+/// # Examples
 /// ```
 /// use async_std::sync::Arc;
 /// use async_trait::async_trait;

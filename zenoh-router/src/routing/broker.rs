@@ -26,7 +26,7 @@ pub use crate::routing::resource::*;
 pub use crate::routing::pubsub::*;
 pub use crate::routing::queries::*;
 
-/// # Example: 
+/// # Examples 
 /// ```
 ///   use async_std::sync::Arc;
 ///   use zenoh_protocol::core::{PeerId, whatami::PEER};
