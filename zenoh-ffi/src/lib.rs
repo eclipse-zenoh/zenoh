@@ -22,7 +22,6 @@ use async_std::sync::{Arc, channel, Sender};
 use async_std::task;
 use zenoh::net::*;
 use zenoh::net::Config;
-use smol;
 
 #[no_mangle]
 pub static BROKER_MODE : c_int = whatami::BROKER as c_int;
@@ -257,7 +256,7 @@ fn zn_declare_subscriber(session: *mut ZNSession, r_name: *const c_char,
       task::spawn_blocking(move || (task::block_on(async move {    
         let key = zn_string { val: std::ptr::null(), len: 0};
         let value = zn_bytes { val: std::ptr::null(), len: 0};
-        let mut sample = zn_sample {key: key,  value: value};
+        let mut sample = zn_sample {key,  value};
 
         loop {      
           select!(

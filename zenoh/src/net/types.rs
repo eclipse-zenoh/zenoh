@@ -40,6 +40,7 @@ pub type Config = zenoh_router::runtime::Config;
 
 pub type Properties = HashMap<ZInt, Vec<u8>>;
 
+#[derive(Debug)]
 pub struct Sample {
     pub res_name: String,
     pub payload: RBuf,
@@ -95,6 +96,27 @@ pin_project! {
 }
 
 impl Subscriber {
+    /// Pull available data for a pull-mode [Subscriber](Subscriber).
+    ///
+    /// # Examples
+    /// ```
+    /// #![feature(async_closure)]
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use futures::prelude::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Pull,
+    /// #     period: None
+    /// # };
+    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// let stream = subscriber.clone();
+    /// async_std::task::spawn(stream.for_each(async move |sample| { println!("Received : {:?}", sample); }));
+    /// subscriber.pull();
+    /// # })
+    /// ```
     pub async fn pull(&self) -> ZResult<()> {
         self.session.pull(&self.reskey).await
     }
@@ -131,6 +153,25 @@ pub struct DirectSubscriber {
 }
 
 impl DirectSubscriber {
+    /// Pull available data for a pull-mode [DirectSubscriber](DirectSubscriber).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Pull,
+    /// #     period: None
+    /// # };
+    /// let subscriber = session.declare_direct_subscriber(&"/resource/name".into(), &sub_info, 
+    ///     |res_name, payload, _info| { println!("Received : {} {}", res_name, payload); }
+    /// ).await.unwrap();
+    /// subscriber.pull();
+    /// # })
+    /// ```
     pub async fn pull(&self) -> ZResult<()> {
         self.session.pull(&self.reskey).await
     }

@@ -161,9 +161,7 @@ impl SeqNum {
 
 /// Sequence Number Generator
 /// 
-/// The [`SeqNumGenerator`][SeqNumGenerator] encapsulates the generation of sequence numbers
-/// along with a [`precede`][SeqNumGenerator::precede] predicate that checks whether two
-/// sequence numbers are in the precede relationship.
+/// The [`SeqNumGenerator`][SeqNumGenerator] encapsulates the generation of sequence numbers.
 #[derive(Clone, Copy, Debug)]
 pub struct SeqNumGenerator(SeqNum);
 
