@@ -657,14 +657,15 @@ impl Session {
     /// use futures::prelude::*;
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.query(
+    /// let mut replies = session.query(
     ///     &"/resource/name".into(),
     ///     "predicate",
     ///     QueryTarget::default(),
     ///     QueryConsolidation::default()
-    /// ).await.unwrap().for_each( async move |reply| 
-    ///     println!(">> Received {:?}", reply.data)
-    /// ).await;
+    /// ).await.unwrap();
+    /// while let Some(reply) = replies.next().await {
+    ///     println!(">> Received {:?}", reply.data);
+    /// }
     /// # })
     /// ```
     pub async fn query(&self,

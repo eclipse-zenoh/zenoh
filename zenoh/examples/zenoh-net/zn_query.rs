@@ -49,14 +49,15 @@ async fn main() {
     let session = open(config, None).await.unwrap();
 
     println!("Sending Query '{}'...", selector);
-    session.query(
+    let mut replies = session.query(
         &selector.into(), "",
         QueryTarget::default(),
         QueryConsolidation::default()
-    ).await.unwrap().for_each( async move |reply| 
+    ).await.unwrap();
+    while let Some(reply) = replies.next().await {
         println!(">> [Reply handler] received reply data {:?} : {}",
             reply.data.res_name, String::from_utf8_lossy(&reply.data.payload.to_vec()))
-    ).await;
+    }
 
     session.close().await.unwrap();
 }

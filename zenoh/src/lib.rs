@@ -54,21 +54,21 @@ use log::debug;
 /// 
 /// Query
 /// ```
-/// #![feature(async_closure)]
 /// use zenoh::net::*;
 /// use futures::prelude::*;
 /// 
 /// #[async_std::main]
 /// async fn main() {
 ///     let session = open(Config::default(), None).await.unwrap();
-///     session.query(
+///     let mut replies = session.query(
 ///         &"/resource/name".into(),
 ///         "predicate",
 ///         QueryTarget::default(),
 ///         QueryConsolidation::default()
-///     ).await.unwrap().for_each( async move |reply| 
-///         println!(">> Received {:?}", reply.data)
-///     ).await;
+///     ).await.unwrap();
+///     while let Some(reply) = replies.next().await {
+///         println!(">> Received {:?}", reply.data);
+///     }
 /// }
 /// ```
 pub mod net;

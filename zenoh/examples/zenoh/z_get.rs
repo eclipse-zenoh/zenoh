@@ -54,12 +54,11 @@ async fn main() {
     let workspace = zenoh.workspace(None).await.unwrap();
 
     println!("Get Data from {}'...\n", selector);
-    workspace.get(&selector.try_into().unwrap())
-        .await.unwrap()
-        .for_each( async move |data| 
-            println!(">> [Reply handler] received reply data {} : {}",
-                data.path, data.value)
-        ).await;
+    let mut data_stream = workspace.get(&selector.try_into().unwrap()).await.unwrap();
+    while let Some(data)  = data_stream.next().await {
+        println!(">> [Reply handler] received reply data {} : {}",
+            data.path, data.value)
+    }
 
     zenoh.close().await.unwrap();
 }

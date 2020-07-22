@@ -53,12 +53,11 @@ async fn main() {
     let workspace = zenoh.workspace(None).await.unwrap();
 
     println!("Subscribe to {}'...\n", path_expr);
-    workspace.subscribe(&path_expr.try_into().unwrap())
-        .await.unwrap()
-        .for_each( async move |change| 
-            println!(">> [Subscription listener] received change {} : {}",
-                change.path, change.value.unwrap())
-        ).await;
+    let mut change_stream = workspace.subscribe(&path_expr.try_into().unwrap()).await.unwrap();
+    while let Some(change) = change_stream.next().await {
+        println!(">> [Subscription listener] received change {} : {}",
+            change.path, change.value.unwrap())
+    }
 
     zenoh.close().await.unwrap();
 }
