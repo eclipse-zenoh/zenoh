@@ -127,6 +127,7 @@ impl fmt::Debug for SessionState {
     }
 }
 
+/// A zenoh-net session.
 #[derive(Clone)]
 pub struct Session {
     runtime: Runtime,

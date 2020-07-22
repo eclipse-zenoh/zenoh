@@ -197,18 +197,6 @@ pub mod zmsg {
     pub fn has_flag(byte: u8, flag: u8) -> bool { byte & flag != 0 }
 }
 
-/// Some informations about the associated data.
-/// 
-/// # Examples
-/// ```
-/// # use zenoh_protocol::io::RBuf;
-/// # use zenoh_protocol::proto::DataInfo;
-/// # struct FakeSample { data_info: Option<RBuf> }
-/// # let sample = FakeSample { data_info: None };
-/// if let Some(mut info) = sample.data_info {
-///     let info: DataInfo = info.read_datainfo().unwrap();
-/// }
-/// ```
 #[derive(Debug, Clone)]
 pub struct DataInfo {
     pub source_id: Option<PeerId>,
