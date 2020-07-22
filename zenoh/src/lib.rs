@@ -36,7 +36,6 @@ use log::debug;
 /// 
 /// Subscribe
 /// ```no_run
-/// #![feature(async_closure)]
 /// use zenoh::net::*;
 /// use futures::prelude::*;
 /// 
@@ -49,7 +48,7 @@ use log::debug;
 ///         period: None
 ///     };
 ///     let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-///     subscriber.for_each(async move |sample| { println!("Received : {:?}", sample); }).await;
+///     while let Some(sample) = subscriber.next().await { println!("Received : {:?}", sample); };
 /// }
 /// ```
 /// 

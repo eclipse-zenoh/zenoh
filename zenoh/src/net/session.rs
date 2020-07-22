@@ -341,7 +341,6 @@ impl Session {
     /// 
     /// # Examples
     /// ```no_run
-    /// #![feature(async_closure)]
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
@@ -352,8 +351,10 @@ impl Session {
     ///     mode: SubMode::Push,
     ///     period: None
     /// };
-    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// subscriber.for_each(async move |sample| { println!("Received : {:?}", sample); }).await;
+    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// while let Some(sample) = subscriber.next().await {
+    ///     println!("Received : {:?}", sample);
+    /// }
     /// # })
     /// ```
     pub async fn declare_subscriber(&self, resource: &ResKey, info: &SubInfo) -> ZResult<Subscriber>
@@ -503,21 +504,20 @@ impl Session {
     /// 
     /// # Examples
     /// ```no_run
-    /// #![feature(async_closure)]
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     /// use zenoh::net::queryable::EVAL;
     /// use futures::prelude::*;
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
-    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
-    /// queryable.for_each(async move |query| { 
+    /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// while let Some(query) = queryable.next().await { 
     ///     query.replies_sender.send(Sample{
     ///         res_name: "/resource/name".to_string(),
     ///         payload: "value".as_bytes().into(),
     ///         data_info: None,
     ///     }).await;
-    /// }).await;
+    /// }
     /// # })
     /// ```
     pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable>

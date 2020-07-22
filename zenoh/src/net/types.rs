@@ -112,8 +112,9 @@ impl Subscriber {
     /// #     period: None
     /// # };
     /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// let stream = subscriber.clone();
-    /// async_std::task::spawn(stream.for_each(async move |sample| { println!("Received : {:?}", sample); }));
+    /// async_std::task::spawn(subscriber.clone().for_each(
+    ///     async move |sample| { println!("Received : {:?}", sample); }
+    /// ));
     /// subscriber.pull();
     /// # })
     /// ```
