@@ -355,27 +355,32 @@ impl InitialSession {
         }
 
         // Assign a callback if the session is new
-        match session.has_callback() {
-            Ok(has_callback) => if !has_callback {
-                // Notify the session handler that there is a new session and get back a callback
-                // NOTE: the read loop of the link the open message was sent on remains blocked
-                //       until the new_session() returns. The read_loop in the various links
-                //       waits for any eventual transport to associate to. This transport is
-                //       returned only by the process_open() -- this function.
-                let callback = self.manager.config.handler.new_session(
-                    whatami, 
-                    Arc::new(session.clone())
-                ).await;
-                // Set the callback on the transport
-                if let Err(e) = session.set_callback(callback).await {
-                    log::warn!("Unable to set callback for peer {}: {}", pid, e);
-                    return Action::Close
-                }
-            },
+        let has_callback = match session.has_callback() {
+            Ok(has_callback) => has_callback,
             Err(e) => {
                 log::warn!("Unable to get callback for peer {}: {}", pid, e);
                 return Action::Close
-            }            
+            }
+        };
+
+        if !has_callback {
+            // Notify the session handler that there is a new session and get back a callback
+            // NOTE: the read loop of the link the open message was sent on remains blocked
+            //       until the new_session() returns. The read_loop in the various links
+            //       waits for any eventual transport to associate to. This transport is
+            //       returned only by the process_open() -- this function.
+            let callback = match self.manager.config.handler.new_session(session.clone()).await {
+                Ok(callback) => callback,
+                Err(e) => {
+                    log::warn!("Unable to get message handler for peer {}: {}", pid, e);
+                    return Action::Close 
+                }
+            };             
+            // Set the callback on the transport
+            if let Err(e) = session.set_callback(callback).await {
+                log::warn!("Unable to set callback for peer {}: {}", pid, e);
+                return Action::Close
+            }
         }
 
         log::debug!("New session opened from: {}", pid);
@@ -547,20 +552,27 @@ impl InitialSession {
             }
 
             // Set the callback on the session if needed
-            match session.has_callback() {
-                Ok(has_callback) => if !has_callback {
-                    // Notify the session handler that there is a new session and get back a callback
-                    let callback = self.manager.config.handler.new_session(whatami, Arc::new(session.clone())
-                    ).await;
-                    // Set the callback on the transport
-                    if let Err(e) = session.set_callback(callback).await {
-                        log::warn!("{}", e);
-                        // Notify
-                        pending.notify.send(Err(e)).await;
-                        return Action::Close
-                    }
-                },
+            let has_callback = match session.has_callback() {
+                Ok(has_callback) => has_callback,
                 Err(e) => {
+                    // Notify
+                    pending.notify.send(Err(e)).await;
+                    return Action::Close
+                }
+            };
+
+            if !has_callback {
+                // Notify the session handler that there is a new session and get back a callback
+                let callback = match self.manager.config.handler.new_session(session.clone()).await {
+                    Ok(callback) => callback,
+                    Err(e) => {
+                        log::warn!("Unable to get message handler for peer {}: {}", apid, e);
+                        return Action::Close 
+                    }
+                }; 
+                // Set the callback on the transport
+                if let Err(e) = session.set_callback(callback).await {
+                    log::warn!("{}", e);
                     // Notify
                     pending.notify.send(Err(e)).await;
                     return Action::Close

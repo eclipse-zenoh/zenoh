@@ -16,11 +16,11 @@ use async_std::task;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh_protocol::core::{AtomicZInt, PeerId, ResKey, WhatAmI, ZInt, whatami};
+use zenoh_protocol::core::{AtomicZInt, PeerId, ResKey, ZInt, whatami};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{ZenohMessage, SeqNum};
-use zenoh_protocol::session::{MsgHandler, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
+use zenoh_protocol::session::{MsgHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 use zenoh_util::zasynclock;
 use zenoh_util::core::ZResult;
 
@@ -54,10 +54,10 @@ impl SHRouter {
 
 #[async_trait]
 impl SessionHandler for SHRouter {
-    async fn new_session(&self, _whatami: WhatAmI, _session: Arc<dyn MsgHandler + Send + Sync>) -> Arc<dyn MsgHandler + Send + Sync> {
+    async fn new_session(&self, _session: Session) -> ZResult<Arc<dyn MsgHandler + Send + Sync>> {
         let arc = Arc::new(SCRouter::new(self.resolution));
         self.session.lock().await.push(arc.clone());
-        arc
+        Ok(arc)
     }
 }
 
@@ -105,8 +105,8 @@ impl SHClient {
 
 #[async_trait]
 impl SessionHandler for SHClient {
-    async fn new_session(&self, _whatami: WhatAmI, _session: Arc<dyn MsgHandler + Send + Sync>) -> Arc<dyn MsgHandler + Send + Sync> {
-        Arc::new(SCClient::new())
+    async fn new_session(&self, _session: Session) -> ZResult<Arc<dyn MsgHandler + Send + Sync>> {
+        Ok(Arc::new(SCClient::new()))
     }
 }
 

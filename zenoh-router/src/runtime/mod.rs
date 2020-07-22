@@ -97,6 +97,15 @@ impl Runtime {
     }
 }
 
+/// Struct to pass to [open](../../zenoh/net/fn.open.html) to configure the zenoh-net [Session](../../zenoh/net/struct.Session.html).
+/// 
+/// # Examples
+/// ```
+/// # use zenoh_router::runtime::Config;
+/// let config = Config::peer()
+///     .add_listener("tcp/0.0.0.0:7447")
+///     .add_peer("tcp/10.10.10.10:7447");
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub whatami: WhatAmI,

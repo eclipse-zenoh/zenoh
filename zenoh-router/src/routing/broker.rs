@@ -18,7 +18,9 @@ use std::collections::{HashMap};
 
 use zenoh_protocol::core::{ResKey, ZInt, SubInfo, SubMode, Reliability, WhatAmI, whatami};
 use zenoh_protocol::proto::{Primitives, Mux, DeMux};
-use zenoh_protocol::session::{SessionHandler, MsgHandler};
+use zenoh_protocol::session::{Session, SessionHandler, MsgHandler};
+
+use zenoh_util::core::ZResult;
 
 use crate::routing::face::{FaceState, Face};
 
@@ -26,7 +28,7 @@ pub use crate::routing::resource::*;
 pub use crate::routing::pubsub::*;
 pub use crate::routing::queries::*;
 
-/// # Example: 
+/// # Examples 
 /// ```
 ///   use async_std::sync::Arc;
 ///   use zenoh_protocol::core::{PeerId, whatami::PEER};
@@ -90,11 +92,13 @@ impl Default for Broker {
 
 #[async_trait]
 impl SessionHandler for Broker {
-    async fn new_session(&self, whatami: WhatAmI, session: Arc<dyn MsgHandler + Send + Sync>) -> Arc<dyn MsgHandler + Send + Sync> {
-        Arc::new(DeMux::new(Face {
+    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn MsgHandler + Send + Sync>> {
+        let whatami = session.get_whatami()?;
+        let handler = Arc::new(DeMux::new(Face {
             tables: self.tables.clone(), 
-            state: Tables::open_face(&self.tables, whatami, Arc::new(Mux::new(session))).await.upgrade().unwrap(),
-        }))
+            state: Tables::open_face(&self.tables, whatami, Arc::new(Mux::new(Arc::new(session)))).await.upgrade().unwrap(),
+        }));
+        Ok(handler)
     }
 }
 

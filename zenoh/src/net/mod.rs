@@ -36,12 +36,13 @@ pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
 
 /// Open a zenoh-net session.
 /// 
-/// # Example:
+/// # Examples
 /// ```
+/// # async_std::task::block_on(async {
 /// use zenoh::net::*;
 ///
-/// let session = open(Config::peer(), None);
-/// 
+/// let session = open(Config::peer(), None).await.unwrap();
+/// # })
 /// ```
 pub async fn open(config: Config, ps: Option<Properties>) -> ZResult<Session> {
     debug!("open(\"{}\", {:?})", config, ps);

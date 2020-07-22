@@ -34,7 +34,7 @@ zconfigurable! {
     pub(crate) static ref SESSION_SEQ_NUM_RESOLUTION: ZInt = 268_435_456;
 
     // The default batch size in bytes for the transport
-    pub(crate) static ref SESSION_BATCH_SIZE: usize = 8_192;
+    pub(crate) static ref SESSION_BATCH_SIZE: usize = 16_384;
 
     // Default timeout when opening a session in milliseconds
     pub(crate) static ref SESSION_OPEN_TIMEOUT: u64 = 10_000;
@@ -45,7 +45,6 @@ zconfigurable! {
     // Parameters of the link transmission queue
     pub(crate) static ref QUEUE_SIZE_CTRL: usize = 1;
     pub(crate) static ref QUEUE_SIZE_RETX: usize = 1;
-    pub(crate) static ref QUEUE_SIZE_DATA: usize = 8;
-
+    pub(crate) static ref QUEUE_SIZE_DATA: usize = 16;
     pub(crate) static ref QUEUE_CONCURRENCY: usize = 16;
 }

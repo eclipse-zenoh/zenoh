@@ -368,8 +368,8 @@ mod tests {
     #[test]
     fn reliability_queue_mask() {
         // Test the deterministic insertion of elements and mask
-        let size = 64;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 64);
+        let size = 8;
+        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 8);
 
         let mut sn: ZInt = 0;  
         while sn < size as ZInt {
@@ -379,7 +379,7 @@ mod tests {
         }
 
         // Verify that the mask is correct
-        let mask = 0b0010101010101010101010101010101010101010101010101010101010101010;
+        let mask: ZInt = 0b00101010;
         assert_eq!(queue.get_mask(), mask);
 
         // Insert the missing elements

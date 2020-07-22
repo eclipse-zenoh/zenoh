@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// This is a Condition Variable similar to that provided by POSIX. 
 /// As for POSIX condition variables, this assumes that a mutex is 
 /// properly used to coordinate behaviour. In other terms there should
-/// not be race condition on [notify].
+/// not be race condition on [notify](Condition::notify).
 /// 
 pub struct Condition {
     wait_rx: Receiver<bool>,

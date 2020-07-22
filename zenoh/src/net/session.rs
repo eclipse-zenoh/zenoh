@@ -150,8 +150,8 @@ impl Session {
         session
     }
 
-    // Initialize a Session with an existing Runtime.
-    // This operation is used by the plugins to share the same Runtime than the router.
+    /// Initialize a Session with an existing Runtime.
+    /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
     pub async fn init(runtime: Runtime) -> Session {
         let broker = runtime.read().await.broker.clone();
@@ -162,7 +162,17 @@ impl Session {
         session
     }
 
-
+    /// Close the zenoh-net session.
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// session.close();
+    /// # })
+    /// ```
     pub async fn close(&self) -> ZResult<()> {
         // @TODO: implement
         trace!("close()");
@@ -174,6 +184,17 @@ impl Session {
         Ok(())
     }
 
+    /// Get informations about the zenoh-net session.
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let info = session.info();
+    /// # })
+    /// ```
     pub fn info(&self) -> Properties {
         // @TODO: implement
         trace!("info()");
@@ -184,6 +205,24 @@ impl Session {
         info
     }
 
+    /// Associate a numerical Id with the given resource key. 
+    /// 
+    /// This numerical Id will be used on the network to save bandwidth and 
+    /// ease the retrieval of the concerned resource in the routing tables.
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The resource key to map to a numerical Id
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let rid = session.declare_resource(&"/resource/name".into()).await.unwrap();
+    /// # })
+    /// ```
     pub async fn declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
         trace!("declare_resource({:?})", resource);
         let mut state = self.state.write().await;
@@ -198,6 +237,23 @@ impl Session {
         Ok(rid)
     }
 
+    /// Undeclare the *numerical Id/resource key* association previously declared 
+    /// with [declare_resource](Session::declare_resource).
+    /// 
+    /// # Arguments
+    ///
+    /// * `rid` - The numerical Id to unmap
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let rid = session.declare_resource(&"/resource/name".into()).await.unwrap();
+    /// session.undeclare_resource(rid).await;
+    /// # })
+    /// ```
     pub async fn undeclare_resource(&self, rid: ResourceId) -> ZResult<()> {
         trace!("undeclare_resource({:?})", rid);
         let mut state = self.state.write().await;
@@ -210,6 +266,24 @@ impl Session {
         Ok(())
     }
 
+    /// Declare a [Publisher](Publisher) for the given resource key.
+    /// 
+    /// Resources written with the given key will only be sent on the network 
+    /// if matching subscribers exist in the system.
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The resource key to publish
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
+    /// # })
+    /// ```
     pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher> {
         trace!("declare_publisher({:?})", resource);
         let mut state = self.state.write().await;
@@ -225,6 +299,22 @@ impl Session {
         Ok(publ)
     }
 
+    /// Undeclare a [Publisher](Publisher) previously declared with [declare_publisher](Session::declare_publisher).
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The [Publisher](Publisher) to undeclare
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
+    /// session.undeclare_publisher(publisher).await;
+    /// # })
+    /// ```
     pub async fn undeclare_publisher(&self, publisher: Publisher) -> ZResult<()> {
         trace!("undeclare_publisher({:?})", publisher);
         let mut state = self.state.write().await;
@@ -240,6 +330,33 @@ impl Session {
         Ok(())
     }
 
+    /// Declare a [Subscriber](Subscriber) for the given resource key.
+    /// 
+    /// The returned [Subscriber](Subscriber) implements the Stream trait.
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The resource key to subscribe
+    /// * `info` - The [SubInfo](SubInfo) to configure the subscription
+    /// 
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use futures::prelude::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let sub_info = SubInfo {
+    ///     reliability: Reliability::Reliable,
+    ///     mode: SubMode::Push,
+    ///     period: None
+    /// };
+    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// while let Some(sample) = subscriber.next().await {
+    ///     println!("Received : {:?}", sample);
+    /// }
+    /// # })
+    /// ```
     pub async fn declare_subscriber(&self, resource: &ResKey, info: &SubInfo) -> ZResult<Subscriber>
     {
         trace!("declare_subscriber({:?})", resource);
@@ -257,6 +374,30 @@ impl Session {
         Ok(sub)
     }
 
+    /// Declare a [DirectSubscriber](DirectSubscriber) for the given resource key.
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The resource key to subscribe
+    /// * `info` - The [SubInfo](SubInfo) to configure the subscription
+    /// * `data_handler` - The callback that will be called on each data reception
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let sub_info = SubInfo {
+    ///     reliability: Reliability::Reliable,
+    ///     mode: SubMode::Push,
+    ///     period: None
+    /// };
+    /// let subscriber = session.declare_direct_subscriber(&"/resource/name".into(), &sub_info, 
+    ///     |res_name, payload, _info| { println!("Received : {} {}", res_name, payload); }
+    /// ).await.unwrap();
+    /// # })
+    /// ```
     pub async fn declare_direct_subscriber<DataHandler>(&self, resource: &ResKey, info: &SubInfo, data_handler: DataHandler) -> ZResult<DirectSubscriber>
         where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static
     {
@@ -275,6 +416,27 @@ impl Session {
         Ok(sub)
     }
 
+    /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
+    /// 
+    /// # Arguments
+    ///
+    /// * `subscriber` - The [Subscriber](Subscriber) to undeclare
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Push,
+    /// #     period: None
+    /// # };
+    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// session.undeclare_subscriber(subscriber).await;
+    /// # })
+    /// ```
     pub async fn undeclare_subscriber(&self, subscriber: Subscriber) -> ZResult<()>
     {
         trace!("undeclare_subscriber({:?})", subscriber);
@@ -292,6 +454,28 @@ impl Session {
         Ok(())
     }
     
+    /// Undeclare a [DirectSubscriber](DirectSubscriber) previously declared with [declare_direct_subscriber](Session::declare_direct_subscriber).
+    /// 
+    /// # Arguments
+    ///
+    /// * `subscriber` - The direct [DirectSubscriber](DirectSubscriber) to undeclare
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Push,
+    /// #     period: None
+    /// # };
+    /// # fn data_handler(res_name: &str, payload: RBuf, _info: Option<RBuf>) { println!("Received : {} {}", res_name, payload); };
+    /// let subscriber = session.declare_direct_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
+    /// session.undeclare_direct_subscriber(subscriber).await;
+    /// # })
+    /// ```
     pub async fn undeclare_direct_subscriber(&self, subscriber: DirectSubscriber) -> ZResult<()>
     {
         trace!("undeclare_direct_subscriber({:?})", subscriber);
@@ -309,6 +493,33 @@ impl Session {
         Ok(())
     }
 
+    /// Declare a [Queryable](Queryable) for the given resource key.
+    /// 
+    /// The returned [Queryable](Queryable) implements the Stream trait.
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The resource key the [Queryable](Queryable) will reply to
+    /// * `kind` - The kind of [Queryable](Queryable)
+    /// 
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use zenoh::net::queryable::EVAL;
+    /// use futures::prelude::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// while let Some(query) = queryable.next().await { 
+    ///     query.replies_sender.send(Sample{
+    ///         res_name: "/resource/name".to_string(),
+    ///         payload: "value".as_bytes().into(),
+    ///         data_info: None,
+    ///     }).await;
+    /// }
+    /// # })
+    /// ```
     pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable>
     {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
@@ -323,9 +534,25 @@ impl Session {
         primitives.queryable(resource).await;
 
         Ok(qable)
-
     }
 
+    /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
+    /// 
+    /// # Arguments
+    ///
+    /// * `queryable` - The [Queryable](Queryable) to undeclare
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use zenoh::net::queryable::EVAL;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// session.undeclare_queryable(queryable).await;
+    /// # })
+    /// ```
     pub async fn undeclare_queryable(&self, queryable: Queryable) -> ZResult<()> {
         trace!("undeclare_queryable({:?})", queryable);
         let mut state = self.state.write().await;
@@ -340,6 +567,22 @@ impl Session {
         Ok(())
     }
 
+    /// Write data.
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The resource key to write
+    /// * `payload` - The value to write
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
+    /// # })
+    /// ```
     pub async fn write(&self, resource: &ResKey, payload: RBuf) -> ZResult<()> {
         trace!("write({:?}, [...])", resource);
         let state = self.state.read().await;
@@ -349,6 +592,24 @@ impl Session {
         Ok(())
     }
 
+    /// Write data with options.
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The resource key to write
+    /// * `payload` - The value to write
+    /// * `encoding` - The encoding of the value
+    /// * `kind` - The kind of value
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// session.write_wo(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT).await.unwrap();
+    /// # })
+    /// ```
     pub async fn write_wo(&self, resource: &ResKey, payload: RBuf, encoding: ZInt, kind: ZInt) -> ZResult<()> {
         trace!("write_wo({:?}, [...])", resource);
         let state = self.state.read().await;
@@ -378,6 +639,34 @@ impl Session {
         Ok(())
     }
 
+
+    /// Query data from the matching queryables in the system.
+    /// 
+    /// # Arguments
+    ///
+    /// * `resource` - The resource key to query
+    /// * `predicate` - An indication to matching queryables about the queried data
+    /// * `target` - The kind of queryables that should be target of this query
+    /// * `consolidation` - The kind of consolidation that should be applied on replies
+    /// 
+    /// # Examples
+    /// ```
+    /// #![feature(async_closure)]
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use futures::prelude::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// session.query(
+    ///     &"/resource/name".into(),
+    ///     "predicate",
+    ///     QueryTarget::default(),
+    ///     QueryConsolidation::default()
+    /// ).await.unwrap().for_each( async move |reply| 
+    ///     println!(">> Received {:?}", reply.data)
+    /// ).await;
+    /// # })
+    /// ```
     pub async fn query(&self,
         resource:        &ResKey,
         predicate:       &str,

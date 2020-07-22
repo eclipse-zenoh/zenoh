@@ -16,16 +16,19 @@ use async_std::task;
 use async_trait::async_trait;
 use std::time::Duration;
 
-use zenoh_protocol::core::{PeerId, WhatAmI, ZInt, whatami};
+use zenoh_protocol::core::{PeerId, ZInt, whatami};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::session::{
     DummyHandler,
     MsgHandler,
+    Session,
     SessionHandler,
     SessionManager,
     SessionManagerConfig,
     SessionManagerOptionalConfig
 };
+
+use zenoh_util::core::ZResult;
 
 
 // Session Handler for the router
@@ -39,8 +42,8 @@ impl SHRouter {
 
 #[async_trait]
 impl SessionHandler for SHRouter {
-    async fn new_session(&self, _whatami: WhatAmI, _session: Arc<dyn MsgHandler + Send + Sync>) -> Arc<dyn MsgHandler + Send + Sync> {
-        Arc::new(DummyHandler::new())
+    async fn new_session(&self, _session: Session) -> ZResult<Arc<dyn MsgHandler + Send + Sync>> {
+        Ok(Arc::new(DummyHandler::new()))
     }
 }
 
@@ -56,8 +59,8 @@ impl SHClient {
 
 #[async_trait]
 impl SessionHandler for SHClient {
-    async fn new_session(&self, _whatami: WhatAmI, _session: Arc<dyn MsgHandler + Send + Sync>) -> Arc<dyn MsgHandler + Send + Sync> {
-        Arc::new(DummyHandler::new())
+    async fn new_session(&self, _session: Session) -> ZResult<Arc<dyn MsgHandler + Send + Sync>> {
+        Ok(Arc::new(DummyHandler::new()))
     }
 }
 
