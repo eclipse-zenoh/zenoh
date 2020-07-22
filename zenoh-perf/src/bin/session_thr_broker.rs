@@ -21,11 +21,11 @@ use slab::Slab;
 use zenoh_protocol::core::PeerId;
 use zenoh_protocol::proto::{ZenohMessage, WhatAmI, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{MsgHandler, SessionHandler, SessionManager, SessionManagerConfig};
+use zenoh_protocol::session::{SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig};
 use zenoh_util::core::ZResult;
 
 
-type Table = Arc<Mutex<Slab<Arc<dyn MsgHandler + Send + Sync>>>>;
+type Table = Arc<Mutex<Slab<Arc<dyn SessionEventHandler + Send + Sync>>>>;
 
 // Session Handler for the peer
 struct MySH {
@@ -42,8 +42,8 @@ impl MySH {
 impl SessionHandler for MySH {
     async fn new_session(&self, 
         _whatami: WhatAmI, 
-        session: Arc<dyn MsgHandler + Send + Sync>
-    ) -> Arc<dyn MsgHandler + Send + Sync> {
+        session: Arc<dyn SessionEventHandler + Send + Sync>
+    ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         let index = self.table.lock().await.insert(session);
         Arc::new(MyMH::new(self.table.clone(), index))
     }
@@ -62,7 +62,7 @@ impl MyMH {
 }
 
 #[async_trait]
-impl MsgHandler for MyMH {
+impl SessionEventHandler for MyMH {
     async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
         for (i, e) in self.table.lock().await.iter() {
             if i != self.index {

@@ -17,13 +17,13 @@ use crate::core::{ZInt, ResKey, PeerId};
 use crate::io::RBuf;
 use crate::core::{QueryTarget, QueryConsolidation, SubInfo};
 use crate::proto::{channel, ZenohMessage, Declaration, Primitives,  ReplyContext};
-use crate::session::MsgHandler;
+use crate::session::SessionEventHandler;
 
-pub struct Mux<T: MsgHandler + Send + Sync + ?Sized> {
+pub struct Mux<T: SessionEventHandler + Send + Sync + ?Sized> {
     handler: Arc<T>,
 }
 
-impl<T: MsgHandler + Send + Sync + ?Sized> Mux<T> {
+impl<T: SessionEventHandler + Send + Sync + ?Sized> Mux<T> {
     pub fn new(handler: Arc<T>) -> Mux<T> {
         Mux {handler}
     }
@@ -31,7 +31,7 @@ impl<T: MsgHandler + Send + Sync + ?Sized> Mux<T> {
 
 #[allow(unused_must_use)] // TODO
 #[async_trait]
-impl<T: MsgHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
+impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
     async fn resource(&self, rid: u64, reskey: &ResKey) {
         let mut decls = Vec::new();
         decls.push(Declaration::Resource{rid, key: reskey.clone()});

@@ -355,15 +355,17 @@ impl InitialSession {
         }
 
         // Assign a callback if the session is new
-        let has_callback = match session.has_callback() {
-            Ok(has_callback) => has_callback,
+        let callback = match session.get_callback().await {
+            Ok(callback) => callback,
             Err(e) => {
                 log::warn!("Unable to get callback for peer {}: {}", pid, e);
                 return Action::Close
             }
         };
 
-        if !has_callback {
+        if let Some(callback) = callback {
+            callback.new_link(link.clone()).await;
+        } else {
             // Notify the session handler that there is a new session and get back a callback
             // NOTE: the read loop of the link the open message was sent on remains blocked
             //       until the new_session() returns. The read_loop in the various links
@@ -372,7 +374,7 @@ impl InitialSession {
             let callback = match self.manager.config.handler.new_session(session.clone()).await {
                 Ok(callback) => callback,
                 Err(e) => {
-                    log::warn!("Unable to get message handler for peer {}: {}", pid, e);
+                    log::warn!("Unable to get session event handler for peer {}: {}", pid, e);
                     return Action::Close 
                 }
             };             
@@ -552,8 +554,8 @@ impl InitialSession {
             }
 
             // Set the callback on the session if needed
-            let has_callback = match session.has_callback() {
-                Ok(has_callback) => has_callback,
+            let callback = match session.get_callback().await {
+                Ok(callback) => callback,
                 Err(e) => {
                     // Notify
                     pending.notify.send(Err(e)).await;
@@ -561,12 +563,14 @@ impl InitialSession {
                 }
             };
 
-            if !has_callback {
+            if let Some(callback) = callback {
+                callback.new_link(link.clone()).await;
+            } else {
                 // Notify the session handler that there is a new session and get back a callback
                 let callback = match self.manager.config.handler.new_session(session.clone()).await {
                     Ok(callback) => callback,
                     Err(e) => {
-                        log::warn!("Unable to get message handler for peer {}: {}", apid, e);
+                        log::warn!("Unable to get session event handler for peer {}: {}", apid, e);
                         return Action::Close 
                     }
                 }; 

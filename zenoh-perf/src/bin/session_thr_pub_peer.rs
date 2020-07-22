@@ -20,7 +20,7 @@ use zenoh_protocol::core::{PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{ZenohMessage, WhatAmI, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{DummyHandler, MsgHandler, SessionHandler, SessionManager, SessionManagerConfig};
+use zenoh_protocol::session::{DummyHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig};
 
 
 struct MySH {}
@@ -35,8 +35,8 @@ impl MySH {
 impl SessionHandler for MySH {
     async fn new_session(&self, 
         _whatami: WhatAmI, 
-        _session: Arc<dyn MsgHandler + Send + Sync>
-    ) -> Arc<dyn MsgHandler + Send + Sync> {
+        _session: Arc<dyn SessionEventHandler + Send + Sync>
+    ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         Arc::new(DummyHandler::new())
     }
 }

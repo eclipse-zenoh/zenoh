@@ -21,7 +21,7 @@ use zenoh_protocol::core::{PeerId, ResKey, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{Primitives, SubInfo, Reliability, SubMode, QueryConsolidation, QueryTarget, Reply, Mux, DeMux, WhatAmI, whatami};
-use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionHandler, MsgHandler};
+use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionHandler, SessionEventHandler};
 
 const N: usize = 100_000;
 
@@ -95,7 +95,7 @@ impl Primitives for ThrouputPrimitives {
 }
 
 struct LightSessionHandler {
-    pub handler: Mutex<Option<Arc<dyn MsgHandler + Send + Sync>>>,
+    pub handler: Mutex<Option<Arc<dyn SessionEventHandler + Send + Sync>>>,
 }
 
 impl LightSessionHandler {
@@ -106,7 +106,7 @@ impl LightSessionHandler {
 
 #[async_trait]
 impl SessionHandler for LightSessionHandler {
-    async fn new_session(&self, _whatami: WhatAmI, session: Arc<dyn MsgHandler + Send + Sync>) -> Arc<dyn MsgHandler + Send + Sync> {
+    async fn new_session(&self, _whatami: WhatAmI, session: Arc<dyn SessionEventHandler + Send + Sync>) -> Arc<dyn SessionEventHandler + Send + Sync> {
         *self.handler.lock().await = Some(session);
         Arc::new(DeMux::new(ThrouputPrimitives::new()))
     }

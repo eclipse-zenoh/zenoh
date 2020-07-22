@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::{Arc, Mutex, RwLock, Weak};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use super::{ChannelLink, ChannelRxBestEffort, ChannelRxReliable, SessionLeaseEvent};
@@ -20,7 +19,7 @@ use super::{ChannelLink, ChannelRxBestEffort, ChannelRxReliable, SessionLeaseEve
 use crate::core::{PeerId, ZInt, WhatAmI};
 use crate::link::Link;
 use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
-use crate::session::{MsgHandler, SessionManagerInner};
+use crate::session::{SessionEventHandler, SessionManagerInner};
 use crate::session::defaults::QUEUE_PRIO_DATA;
 
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror, zasyncopt};
@@ -58,8 +57,6 @@ pub(crate) struct Channel {
     pub(super) sn_resolution: ZInt,
     // The batch size 
     pub(super) batch_size: usize,
-    // The callback has been set or not
-    pub(super) has_callback: AtomicBool,
     // The sn generator for the TX reliable channel
     pub(super) tx_sn_reliable: Arc<Mutex<SeqNumGenerator>>,
     // The sn generator for the TX best_effort channel
@@ -75,7 +72,7 @@ pub(crate) struct Channel {
     // The lease event
     pub(super) lease_event_handle: Mutex<Option<TimedHandle>>,
     // The callback
-    pub(super) callback: RwLock<Option<Arc<dyn MsgHandler + Send + Sync>>>,
+    pub(super) callback: RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>,
     // Weak reference to self
     pub(super) w_self: RwLock<Option<Weak<Self>>>
 }
@@ -101,7 +98,6 @@ impl Channel {
             keep_alive,
             sn_resolution,
             batch_size,
-            has_callback: AtomicBool::new(false),
             tx_sn_reliable: Arc::new(Mutex::new(SeqNumGenerator::new(initial_sn_tx, sn_resolution))),
             tx_sn_best_effort: Arc::new(Mutex::new(SeqNumGenerator::new(initial_sn_tx, sn_resolution))),            
             rx_reliable: Mutex::new(ChannelRxReliable::new(initial_sn_rx, sn_resolution)),
@@ -125,7 +121,7 @@ impl Channel {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_peer(&self) -> PeerId {
+    pub(crate) fn get_pid(&self) -> PeerId {
         self.pid.clone()
     }
 
@@ -145,14 +141,13 @@ impl Channel {
         self.sn_resolution
     }
 
-    pub(crate) fn has_callback(&self) -> bool {
-        self.has_callback.load(Ordering::Relaxed)
+    pub(crate) async fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler + Send + Sync>> {
+        zasyncread!(self.callback).clone()
     }
 
-    pub(crate) async fn set_callback(&self, callback: Arc<dyn MsgHandler + Send + Sync>) {        
+    pub(crate) async fn set_callback(&self, callback: Arc<dyn SessionEventHandler + Send + Sync>) {        
         let mut guard = zasyncwrite!(self.callback);
         *guard = Some(callback.clone());
-        self.has_callback.store(true, Ordering::Relaxed);
     }
 
     /*************************************/
@@ -180,13 +175,18 @@ impl Channel {
     /*************************************/
     pub(super) async fn delete(&self) {
         log::debug!("Closing the session with peer: {}", self.get_keep_alive());
+        // Stop the timer
+        let mut timer = self.timer.clone();
+        timer.stop().await;
+
         // Delete the session on the manager
         let _ = self.manager.del_session(&self.pid).await;            
 
         // Notify the callback
-        if let Some(callback) = zasyncread!(self.callback).as_ref() {
+        let mut guard = zasyncwrite!(self.callback);
+        if let Some(callback) = guard.take() {
             callback.close().await;
-        }
+        }        
         
         // Close all the links
         let mut guard = zasyncwrite!(self.links);
@@ -196,7 +196,7 @@ impl Channel {
     }
 
     pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {     
-        log::trace!("Closing link {} with peer: {}", link, self.get_peer());
+        log::trace!("Closing link {} with peer: {}", link, self.get_pid());
 
         let guard = zasyncread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
@@ -221,7 +221,7 @@ impl Channel {
     }
 
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing session with peer: {}", self.get_peer());
+        log::trace!("Closing session with peer: {}", self.get_pid());
 
         // Close message to be sent on all the links
         let peer_id = Some(self.manager.config.pid.clone());
@@ -252,12 +252,12 @@ impl Channel {
                 l.schedule_zenoh_message(message, QUEUE_PRIO_DATA).await;
             } else {
                 log::trace!("Zenoh message has been dropped because link {} does not exist\
-                            in session with peer: {}", link, self.get_peer());
+                            in session with peer: {}", link, self.get_pid());
             }
         } else {
             let guard = zasyncread!(self.links);
             if guard.is_empty() {                
-                log::trace!("Zenoh message has been dropped because no links are available in session with peer: {}", self.get_peer());
+                log::trace!("Zenoh message has been dropped because no links are available in session with peer: {}", self.get_pid());
             } else {
                 guard[0].schedule_zenoh_message(message, QUEUE_PRIO_DATA).await;
             }
@@ -271,7 +271,7 @@ impl Channel {
         let mut guard = zasyncwrite!(self.links);
         if zlinkget!(guard, &link).is_some() {
             return zerror!(ZErrorKind::InvalidLink { 
-                descr: format!("Can not add Link {} with peer: {}", link, self.get_peer())
+                descr: format!("Can not add Link {} with peer: {}", link, self.get_pid())
             });
         }
 
@@ -301,7 +301,7 @@ impl Channel {
             link.close().await           
         } else {
             zerror!(ZErrorKind::InvalidLink { 
-                descr: format!("Can not delete Link {} with peer: {}", link, self.get_peer())
+                descr: format!("Can not delete Link {} with peer: {}", link, self.get_pid())
             })
         }
     }

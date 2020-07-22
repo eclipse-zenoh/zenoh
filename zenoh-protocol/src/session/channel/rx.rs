@@ -100,16 +100,16 @@ impl Channel {
                         if res.is_ok() && is_final {
                             match guard.defrag_buffer.defragment() {
                                 Ok(msg) => {
-                                    log::trace!("Session: {}. Message: {:?}", self.get_peer(), msg);
+                                    log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
                                     let _ = zasyncopt!(self.callback).handle_message(msg).await;
                                 },
-                                Err(e) => log::trace!("Session: {}. Defragmentation error: {:?}", self.get_peer(), e)
+                                Err(e) => log::trace!("Session: {}. Defragmentation error: {:?}", self.get_pid(), e)
                             }
                         }
                     },
                     FramePayload::Messages { mut messages } => {
                         for msg in messages.drain(..) {
-                            log::trace!("Session: {}. Message: {:?}", self.get_peer(), msg);
+                            log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
                             let _ = zasyncopt!(self.callback).handle_message(msg).await;
                         }                        
                     }
@@ -127,7 +127,7 @@ impl Channel {
             },
             Err(e) => {
                 log::warn!("Invalid SN in reliable frame: {}. \
-                            Closing the session with peer: {}", e, self.get_peer());
+                            Closing the session with peer: {}", e, self.get_pid());
                 // Drop the guard before closing the session
                 drop(guard);
                 // Delete the whole session
@@ -155,16 +155,16 @@ impl Channel {
                         if res.is_ok() && is_final {
                             match guard.defrag_buffer.defragment() {
                                 Ok(msg) => {
-                                    log::trace!("Session: {}. Message: {:?}", self.get_peer(), msg);
+                                    log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
                                     let _ = zasyncopt!(self.callback).handle_message(msg).await;
                                 },
-                                Err(e) => log::trace!("Session: {}. Defragmentation error: {:?}", self.get_peer(), e)
+                                Err(e) => log::trace!("Session: {}. Defragmentation error: {:?}", self.get_pid(), e)
                             }
                         }
                     },
                     FramePayload::Messages { mut messages } => {
                         for msg in messages.drain(..) {
-                            log::trace!("Session: {}. Message: {:?}", self.get_peer(), msg);
+                            log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
                             let _ = zasyncopt!(self.callback).handle_message(msg).await;
                         }                        
                     }
@@ -182,7 +182,7 @@ impl Channel {
             },
             Err(e) => {
                 log::warn!("Invalid SN in best effort frame: {}. \
-                            Closing the session with peer: {}", e, self.get_peer());
+                            Closing the session with peer: {}", e, self.get_pid());
                 // Drop the guard before closing the session
                 drop(guard);
                 // Delete the whole session
@@ -229,7 +229,7 @@ impl Channel {
 #[async_trait]
 impl TransportTrait for Channel {
     async fn receive_message(&self, link: &Link, message: SessionMessage) -> Action {
-        log::trace!("Received from peer {} on link {}: {:?}", self.get_peer(), link, message);
+        log::trace!("Received from peer {} on link {}: {:?}", self.get_pid(), link, message);
 
         // Mark the link as alive for link and session lease
         let guard = zasyncread!(self.links);
@@ -295,7 +295,7 @@ impl TransportTrait for Channel {
     }
 
     async fn link_err(&self, link: &Link) {
-        log::warn!("Unexpected error on link {} with peer: {}", link, self.get_peer());
+        log::warn!("Unexpected error on link {} with peer: {}", link, self.get_pid());
         let _ = self.del_link(link).await;
         let _ = link.close().await;
     }

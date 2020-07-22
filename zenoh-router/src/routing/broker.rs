@@ -18,7 +18,7 @@ use std::collections::{HashMap};
 
 use zenoh_protocol::core::{ResKey, ZInt, SubInfo, SubMode, Reliability, WhatAmI, whatami};
 use zenoh_protocol::proto::{Primitives, Mux, DeMux};
-use zenoh_protocol::session::{Session, SessionHandler, MsgHandler};
+use zenoh_protocol::session::{Session, SessionHandler, SessionEventHandler};
 
 use zenoh_util::core::ZResult;
 
@@ -92,7 +92,7 @@ impl Default for Broker {
 
 #[async_trait]
 impl SessionHandler for Broker {
-    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn MsgHandler + Send + Sync>> {
+    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         let whatami = session.get_whatami()?;
         let handler = Arc::new(DeMux::new(Face {
             tables: self.tables.clone(), 
