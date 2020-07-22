@@ -52,7 +52,7 @@ impl Workspace {
 
     pub async fn put(&self, path: &Path, value: &Value) -> ZResult<()> {
         debug!("put on {:?}", path);
-        self.session.write_wo(
+        self.session.write_ext(
             &self.path_to_reskey(path),
             value.into(),
             value.encoding(),
@@ -62,7 +62,7 @@ impl Workspace {
 
     pub async fn delete(&self, path: &Path) -> ZResult<()> {
         debug!("delete on {:?}", path);
-        self.session.write_wo(
+        self.session.write_ext(
             &self.path_to_reskey(path),
             RBuf::empty(),
             encoding::RAW,
@@ -110,7 +110,7 @@ impl Workspace {
             period: None
         };
     
-        let _ = self.session.declare_direct_subscriber(&reskey, &sub_info,
+        let _ = self.session.declare_callback_subscriber(&reskey, &sub_info,
             move |res_name: &str, payload: RBuf, data_info: Option<RBuf>| {
                 match Change::new(res_name, payload, data_info) {
                     Ok(change) => callback(change),

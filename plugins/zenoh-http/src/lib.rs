@@ -198,7 +198,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         match req.body_bytes().await {
             Ok(bytes) => {
                 let path = req.url().path();
-                match req.state().0.write_wo(&path.into(), bytes.into(), 
+                match req.state().0.write_ext(&path.into(), bytes.into(), 
                         enc_from_mime(req.content_type()), data_kind::PUT).await {
                     Ok(_) => Ok(Response::new(StatusCode::Ok)),
                     Err(e) => 
@@ -215,7 +215,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         match req.body_bytes().await {
             Ok(bytes) => {
                 let path = req.url().path();
-                match req.state().0.write_wo(&path.into(), bytes.into(), 
+                match req.state().0.write_ext(&path.into(), bytes.into(), 
                         enc_from_mime(req.content_type()), data_kind::PATCH).await {
                     Ok(_) => Ok(Response::new(StatusCode::Ok)),
                     Err(e) => 
@@ -230,7 +230,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     app.at("*").delete(async move |req: Request<(Session, String)>| { 
         log::trace!("Http {:?}", req);
         let path = req.url().path();
-        match req.state().0.write_wo(&path.into(), RBuf::new(), 
+        match req.state().0.write_ext(&path.into(), RBuf::new(), 
                 enc_from_mime(req.content_type()), data_kind::DELETE).await {
             Ok(_) => Ok(Response::new(StatusCode::Ok)),
             Err(e) => 

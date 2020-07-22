@@ -145,7 +145,7 @@ impl fmt::Debug for Subscriber {
 }
 
 #[derive(Clone)]
-pub struct DirectSubscriber {
+pub struct CallbackSubscriber {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) resname: String,
@@ -153,8 +153,8 @@ pub struct DirectSubscriber {
     pub(crate) dhandler: Arc<RwLock<DataHandler>>,
 }
 
-impl DirectSubscriber {
-    /// Pull available data for a pull-mode [DirectSubscriber](DirectSubscriber).
+impl CallbackSubscriber {
+    /// Pull available data for a pull-mode [CallbackSubscriber](CallbackSubscriber).
     ///
     /// # Examples
     /// ```
@@ -167,7 +167,7 @@ impl DirectSubscriber {
     /// #     mode: SubMode::Pull,
     /// #     period: None
     /// # };
-    /// let subscriber = session.declare_direct_subscriber(&"/resource/name".into(), &sub_info, 
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, 
     ///     |res_name, payload, _info| { println!("Received : {} {}", res_name, payload); }
     /// ).await.unwrap();
     /// subscriber.pull();
@@ -178,15 +178,15 @@ impl DirectSubscriber {
     }
 }
 
-impl PartialEq for DirectSubscriber {
-    fn eq(&self, other: &DirectSubscriber) -> bool {
+impl PartialEq for CallbackSubscriber {
+    fn eq(&self, other: &CallbackSubscriber) -> bool {
         self.id == other.id
     }
 }
 
-impl fmt::Debug for DirectSubscriber {
+impl fmt::Debug for CallbackSubscriber {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "DirectSubscriber{{ id:{}, resname:{} }}", self.id, self.resname)
+        write!(f, "CallbackSubscriber{{ id:{}, resname:{} }}", self.id, self.resname)
     }
 }
 
