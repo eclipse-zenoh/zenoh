@@ -53,6 +53,6 @@ async fn main() {
     let path: Path = Path::try_from("/test/thr").unwrap();
     let value = Value::Raw(data);
     loop {
-        workspace.put(&path, &value).await.unwrap();
+        workspace.put(&path, value.clone()).await.unwrap();
     }
 }

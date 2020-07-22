@@ -56,7 +56,7 @@ async fn main() {
     println!("Get Data from {}'...\n", selector);
     let mut data_stream = workspace.get(&selector.try_into().unwrap()).await.unwrap();
     while let Some(data)  = data_stream.next().await {
-        println!(">> [Reply handler] received reply data {} : {}",
+        println!(">> [Reply handler] received reply data {} : {:?}",
             data.path, data.value)
     }
 

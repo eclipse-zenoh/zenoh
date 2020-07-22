@@ -55,7 +55,7 @@ async fn main() {
     println!("Subscribe to {}'...\n", path_expr);
     let mut change_stream = workspace.subscribe(&path_expr.try_into().unwrap()).await.unwrap();
     while let Some(change) = change_stream.next().await {
-        println!(">> [Subscription listener] received change {} : {}",
+        println!(">> [Subscription listener] received change {} : {:?}",
             change.path, change.value.unwrap())
     }
 

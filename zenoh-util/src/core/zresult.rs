@@ -31,7 +31,8 @@ pub enum ZErrorKind {
     IOError { descr: String },
     Other { descr: String },
     UnkownResourceId { rid: String },
-    ValueDecodingFailed { descr: String }
+    ValueDecodingFailed { descr: String },
+    TranscodingFailed { origin_encoding: String, target_encoding: String }
 }
 
 impl fmt::Display for ZErrorKind {
@@ -68,6 +69,8 @@ impl fmt::Display for ZErrorKind {
                 write!(f, "Unkown ResourceId ({})", rid),
             ZErrorKind::ValueDecodingFailed { descr } =>
                 write!(f, "Failed to decode Value ({})", descr),
+            ZErrorKind::TranscodingFailed { origin_encoding, target_encoding } =>
+                write!(f, "Failed to transcode Value from {} to {}", origin_encoding, target_encoding),
         }
     }
 }

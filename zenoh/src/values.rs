@@ -11,41 +11,49 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
 use crate::net::{RBuf, WBuf, ZInt};
+use crate::net::encoding::*;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::{zerror, zerror2};
 use crate::Properties;
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Value {
-    Raw(RBuf),
-    Custom { encoding_descr: String, data: RBuf },
-    StringUTF8(String),
-    Properties(Properties),
-    Json(String),
-    Integer(i64),
-    Float(f64)
+    Encoded(ZInt, RBuf),
+    Raw(RBuf),                                      // alias for Encoded(RAW, encoding_descr+data)
+    Custom { encoding_descr: String, data: RBuf },  // alias for Encoded(APP_CUSTOM, encoding_descr+data)
+    StringUTF8(String),                             // alias for Encoded(STRING, String)
+    Properties(Properties),                         // alias for Encoded(APP_PROPERTIES, props.to_string())
+    Json(String),                                   // alias for Encoded(APP_JSON, String)
+    Integer(i64),                                   // alias for Encoded(APP_INTEGER, i64.to_string())
+    Float(f64)                                      // alias for Encoded(APP_FLOAT, f64.to_string())
 }
 
 impl Value {
-    pub(crate) fn encoding(&self) -> ZInt {
-        use crate::net::encoding::*;
+
+    pub(crate) fn encode(self) -> (ZInt, RBuf) {
         use Value::*;
         match self {
-            Raw(_)        => RAW,
-            Custom{encoding_descr:_, data:_}  => APP_CUSTOM,
-            StringUTF8(_) => STRING,
-            Properties(_) => APP_PROPERTIES,
-            Json(_) => APP_JSON,
-            Integer(_)    => APP_INTEGER,
-            Float(_)      => APP_FLOAT
+            Encoded(encoding, buf) => (encoding, buf),
+            Raw(buf)               => (RAW, buf),
+            Custom{encoding_descr, data} => {
+                let mut buf = WBuf::new(64, false);
+                buf.write_string(&encoding_descr);
+                for slice in data.get_slices() {
+                    buf.write_slice(slice.clone());
+                }
+                (APP_CUSTOM, buf.into())
+            },
+            StringUTF8(s)     => (STRING, RBuf::from(s.as_bytes())),
+            Properties(props) => (APP_PROPERTIES, RBuf::from(props.to_string().as_bytes())),
+            Json(s)           => (APP_JSON, RBuf::from(s.as_bytes())),
+            Integer(i)        => (APP_INTEGER, RBuf::from(i.to_string().as_bytes())),
+            Float(f)          => (APP_FLOAT, RBuf::from(f.to_string().as_bytes()))
         }
     }
 
     pub(crate) fn decode(encoding: ZInt, mut payload: RBuf) -> ZResult<Value> {
-        use crate::net::encoding::*;
         use Value::*;
         match encoding {
             RAW => Ok(Raw(payload)),
@@ -78,53 +86,7 @@ impl Value {
                 .and_then(|s| s.parse::<f64>()
                     .map_err(|e| zerror2!(ZErrorKind::ValueDecodingFailed{ descr: "Failed to decode an Float Value".to_string() }, e)))
                 .map(Float),
-            _ => {
-                zerror!(ZErrorKind::ValueDecodingFailed{ descr: 
-                    format!("Unkown encoding flag '{}'", encoding) })
-            }
-        }
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Value::*;
-        match self {
-            Raw(buf)        => write!(f, "{}", buf),
-            Custom{encoding_descr, data}  => write!(f, "{} {}", encoding_descr, data),
-            StringUTF8(s) => write!(f, "{}", s),
-            Properties(p) => write!(f, "{}", p),
-            Json(s)       => write!(f, "{}", s),
-            Integer(i)    => write!(f, "{}", i),
-            Float(fl)     => write!(f, "{}", fl)
-        }
-    }
-}
-
-impl From<Value> for RBuf {
-    fn from(v: Value) -> Self {
-        Self::from(&v)
-    }
-}
-
-impl From<&Value> for RBuf {
-    fn from(v: &Value) -> Self {
-        use Value::*;
-        match v {
-            Raw(buf) => buf.clone(),
-            Custom{encoding_descr, data} => {
-                let mut buf = WBuf::new(64, false);
-                buf.write_string(&encoding_descr);
-                for slice in data.get_slices() {
-                    buf.write_slice(slice.clone());
-                }
-                buf.into()
-            },
-            StringUTF8(s) => RBuf::from(s.as_bytes()),
-            Properties(props) => RBuf::from(props.to_string().as_bytes()),
-            Json(s) => RBuf::from(s.as_bytes()),
-            Integer(i) =>  RBuf::from(i.to_string().as_bytes()),
-            Float(f) =>  RBuf::from(f.to_string().as_bytes()),
+            _ => Ok(Encoded(encoding, payload)),
         }
     }
 }

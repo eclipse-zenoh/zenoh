@@ -76,10 +76,10 @@ async fn main() {
         if name.starts_with('/') {
             println!("   >> Get name to use from path: {}", name);
             if let Ok(selector) = Selector::try_from(name.as_str()) {
-                if let Some(data) = workspace.get(&selector).await.unwrap().next().await {
-                    name = data.value.to_string();
-                } else {
-                    println!("Failed to get value from '{}' : not found", name);
+                match workspace.get(&selector).await.unwrap().next().await {
+                    Some(Data{ path:_, value: Value::StringUTF8(s) }) => name = s,
+                    Some(_) => println!("Failed to get name from '{}' : not a UTF-8 String", name),
+                    None    => println!("Failed to get name from '{}' : not found", name)
                 }
             } else {
                 println!("Failed to get value from '{}' : this is not a valid Selector", name);
