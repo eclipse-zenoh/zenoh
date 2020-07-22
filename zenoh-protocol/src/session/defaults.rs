@@ -46,6 +46,5 @@ zconfigurable! {
     pub(crate) static ref QUEUE_SIZE_CTRL: usize = 1;
     pub(crate) static ref QUEUE_SIZE_RETX: usize = 1;
     pub(crate) static ref QUEUE_SIZE_DATA: usize = 16;
-
     pub(crate) static ref QUEUE_CONCURRENCY: usize = 16;
 }
