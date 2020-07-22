@@ -421,11 +421,7 @@ impl SessionManagerInner {
 
     pub(super) async fn del_session(&self, peer: &PeerId) -> ZResult<()> {
         match zasyncwrite!(self.sessions).remove(peer) {
-            Some(session) => {                
-                println!(">>> SESSION ARC COUNT: {}", Arc::strong_count(&session));
-                drop(session);
-                Ok(())
-            },
+            Some(_) => Ok(()),
             None => {
                 let e = format!("Can not delete the session of peer: {}", peer);
                 log::trace!("{}", e);
