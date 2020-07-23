@@ -22,7 +22,7 @@ use std::time::Duration;
 use zenoh_protocol::core::PeerId;
 use zenoh_protocol::proto::{ZenohMessage, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{MsgHandler, SessionHandler, SessionManager, SessionManagerConfig};
+use zenoh_protocol::session::{SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig};
 use zenoh_util::core::ZResult;
 
 // Session Handler for the peer
@@ -41,8 +41,8 @@ impl MySH {
 impl SessionHandler for MySH {
     async fn new_session(&self, 
         _whatami: whatami::Type, 
-        _session: Arc<dyn MsgHandler + Send + Sync>
-    ) -> Arc<dyn MsgHandler + Send + Sync> {
+        _session: Arc<dyn SessionEventHandler + Send + Sync>
+    ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         if !self.active.swap(true, Ordering::Acquire) {
             let count = self.counter.clone();
             task::spawn(async move {
@@ -69,7 +69,7 @@ impl MyMH {
 }
 
 #[async_trait]
-impl MsgHandler for MyMH {
+impl SessionEventHandler for MyMH {
     async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         self.counter.fetch_add(1, Ordering::Relaxed);
         Ok(())

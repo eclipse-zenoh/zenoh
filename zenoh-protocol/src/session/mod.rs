@@ -73,14 +73,19 @@ pub enum Action {
 /* Session Callback to be implemented by the Upper Layer */
 /*********************************************************/
 #[async_trait]
-pub trait MsgHandler {
+pub trait SessionEventHandler {
     async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
+
+    async fn new_link(&self, link: Link);
+
+    async fn del_link(&self, link: Link);
+
     async fn close(&self);
 }
 
 #[async_trait]
 pub trait SessionHandler {
-    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn MsgHandler + Send + Sync>>;
+    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>>;
 }
 
 // Define an empty SessionCallback for the listener session
@@ -94,9 +99,14 @@ impl DummyHandler {
 }
 
 #[async_trait]
-impl MsgHandler for DummyHandler {
+impl SessionEventHandler for DummyHandler {
     async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
+
+    async fn new_link(&self, _link: Link) {}
+
+    async fn del_link(&self, _link: Link) {}
+    
     async fn close(&self) {}
 }

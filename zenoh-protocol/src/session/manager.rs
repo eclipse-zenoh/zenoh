@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
-use super::{InitialSession, MsgHandler, SessionHandler, Transport};
+use super::{InitialSession, SessionEventHandler, SessionHandler, Transport};
 use super::channel::Channel;
 use super::defaults::{
     SESSION_BATCH_SIZE, 
@@ -41,7 +41,7 @@ use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 /// use async_std::sync::Arc;
 /// use async_trait::async_trait;
 /// use zenoh_protocol::core::{PeerId, WhatAmI, whatami};
-/// use zenoh_protocol::session::{DummyHandler, MsgHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
+/// use zenoh_protocol::session::{DummyHandler, SessionEventHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 ///
 /// use zenoh_util::core::ZResult;
 /// 
@@ -58,7 +58,7 @@ use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 /// impl SessionHandler for MySH {
 ///     async fn new_session(&self,
 ///         _session: Session
-///     ) -> ZResult<Arc<dyn MsgHandler + Send + Sync>> {
+///     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
 ///         Ok(Arc::new(DummyHandler::new()))
 ///     }
 /// }
@@ -525,11 +525,6 @@ impl Session {
         Ok(Transport::new(channel))
     }
 
-    pub(super) fn has_callback(&self) -> ZResult<bool> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.has_callback())
-    }
-
     pub(super) async fn add_link(&self, link: Link) -> ZResult<()> {
         let channel = zweak!(self.0, STR_ERR);
         channel.add_link(link).await?;
@@ -542,7 +537,13 @@ impl Session {
         Ok(())
     }
 
-    pub(super) async fn set_callback(&self, callback: Arc<dyn MsgHandler + Send + Sync>) -> ZResult<()> {
+    pub(super) async fn get_callback(&self) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
+        let channel = zweak!(self.0, STR_ERR);
+        let callback = channel.get_callback().await;
+        Ok(callback)
+    }
+
+    pub(super) async fn set_callback(&self, callback: Arc<dyn SessionEventHandler + Send + Sync>) -> ZResult<()> {
         let channel = zweak!(self.0, STR_ERR);
         channel.set_callback(callback).await;
         Ok(())
@@ -551,9 +552,9 @@ impl Session {
     /*************************************/
     /*          PUBLIC ACCESSORS         */
     /*************************************/
-    pub fn get_peer(&self) -> ZResult<PeerId> {
+    pub fn get_pid(&self) -> ZResult<PeerId> {
         let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_peer())
+        Ok(channel.get_pid())
     }
 
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
@@ -598,11 +599,15 @@ impl Session {
 }
 
 #[async_trait]
-impl MsgHandler for Session {
+impl SessionEventHandler for Session {
     #[inline]
     async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
         self.schedule(message, None).await
     }
+
+    async fn new_link(&self, _link: Link) {}
+
+    async fn del_link(&self, _link: Link) {}
 
     async fn close(&self) {}
 }
@@ -619,7 +624,7 @@ impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(channel) = self.0.upgrade() {
             f.debug_struct("Session")
-                .field("peer", &channel.get_peer())
+                .field("peer", &channel.get_pid())
                 .field("lease", &channel.get_lease())
                 .field("keep_alive", &channel.get_keep_alive())
                 .field("sn_resolution", &channel.get_sn_resolution())

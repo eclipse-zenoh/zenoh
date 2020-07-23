@@ -13,8 +13,9 @@
 //
 use async_trait::async_trait;
 
+use crate::link::Link;
 use crate::proto::{ZenohMessage, ZenohBody, Declare, Data, Query, Pull, Declaration, Primitives, zmsg};
-use crate::session::MsgHandler;
+use crate::session::SessionEventHandler;
 use zenoh_util::zerror;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 
@@ -29,7 +30,7 @@ impl<P: Primitives + Send + Sync> DeMux<P> {
 }
 
 #[async_trait]
-impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
+impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
 
     async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         let reliability = msg.is_reliable();
@@ -101,6 +102,10 @@ impl<P: Primitives + Send + Sync> MsgHandler for DeMux<P> {
 
         Ok(())
     }
+
+    async fn new_link(&self, _link: Link) {}
+
+    async fn del_link(&self, _link: Link) {}
 
     async fn close(&self) {
         self.primitives.close().await;

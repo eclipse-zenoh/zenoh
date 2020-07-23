@@ -205,7 +205,7 @@ impl Session {
         for session in runtime.orchestrator.manager.get_sessions().await {
             if let Ok(what) = session.get_whatami() {
                 if what & whatami::PEER != 0 {
-                    if let Ok(peer) = session.get_peer() {
+                    if let Ok(peer) = session.get_pid() {
                         info.push((ZN_INFO_PEER_PID_KEY, peer.id));
                     }
                 }
@@ -217,7 +217,7 @@ impl Session {
         for session in runtime.orchestrator.manager.get_sessions().await {
             if let Ok(what) = session.get_whatami() {
                 if what & whatami::BROKER != 0 {
-                    if let Ok(peer) = session.get_peer() {
+                    if let Ok(peer) = session.get_pid() {
                         info.push((ZN_INFO_ROUTER_PID_KEY, peer.id));
                     }
                 }
