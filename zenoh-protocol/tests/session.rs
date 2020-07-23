@@ -304,6 +304,7 @@ async fn session_lease(locator: Locator) {
     println!("Session Open Close [6a1]");
     let res = router_manager.del_locator(&locator).await;
     println!("Session Open Close [6a2]: {:?}", res);
+    assert!(res.is_ok());
 }
 
 
@@ -706,9 +707,10 @@ async fn session_open_close(locator: Locator) {
 
     /* [10] */
     // Perform clean up of the open locators
-    println!("Session Open Close [10a1]");
+    println!("\nSession Open Close [10a1]");
     let res = router_manager.del_locator(&locator).await;
     println!("Session Open Close [10a2]: {:?}", res);
+    assert!(res.is_ok());
 }
 
 #[test]

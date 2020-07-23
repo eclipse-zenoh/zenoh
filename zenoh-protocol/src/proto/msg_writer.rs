@@ -46,7 +46,7 @@ impl WBuf {
 
         check!(self.write(msg.header));
         match msg.get_body() {
-            SessionBody::Frame { sn, payload, .. } => {
+            SessionBody::Frame(Frame { sn, payload, .. }) => {
                 check!(self.write_zint(*sn));
                 match payload {
                     FramePayload::Fragment { buffer, .. } => {
@@ -60,13 +60,13 @@ impl WBuf {
                 }
             },
 
-            SessionBody::Scout { what, .. } => {
+            SessionBody::Scout(Scout { what, .. }) => {
                 if let Some(w) = *what {
                     check!(self.write_zint(w));
                 }
             },
 
-            SessionBody::Hello { pid, whatami, locators } => {
+            SessionBody::Hello(Hello { pid, whatami, locators }) => {
                 if let Some(pid) = pid {
                     check!(self.write_bytes_array(&pid.id));
                 }
@@ -80,7 +80,7 @@ impl WBuf {
                 }
             }, 
 
-            SessionBody::Open { version, whatami, pid, lease, initial_sn, sn_resolution, locators } => {
+            SessionBody::Open(Open { version, whatami, pid, lease, initial_sn, sn_resolution, locators }) => {
                 check!(self.write(*version));
                 check!(self.write_zint(*whatami));
                 check!(self.write_bytes_array(&pid.id));
@@ -105,7 +105,7 @@ impl WBuf {
                 }
             },
 
-            SessionBody::Accept { whatami, opid, apid, initial_sn, sn_resolution, lease, locators } => {
+            SessionBody::Accept(Accept { whatami, opid, apid, initial_sn, sn_resolution, lease, locators }) => {
                 check!(self.write_zint(*whatami));
                 check!(self.write_bytes_array(&opid.id));
                 check!(self.write_bytes_array(&apid.id));
@@ -135,35 +135,35 @@ impl WBuf {
                 }
             },
 
-            SessionBody::Close { pid, reason, .. } => {
+            SessionBody::Close(Close { pid, reason, .. }) => {
                 if let Some(p) = pid {
                     check!(self.write_bytes_array(&p.id));
                 }
                 check!(self.write(*reason));
             },
 
-            SessionBody::Sync { sn, count, .. } => {
+            SessionBody::Sync(Sync { sn, count, .. }) => {
                 check!(self.write_zint(*sn));
                 if let Some(c) = *count {
                     check!(self.write_zint(c));
                 }
             },
 
-            SessionBody::AckNack { sn, mask } => {
+            SessionBody::AckNack(AckNack { sn, mask }) => {
                 check!(self.write_zint(*sn));
                 if let Some(m) = *mask {
                     check!(self.write_zint(m));
                 }
             },
 
-            SessionBody::KeepAlive { pid } => {
+            SessionBody::KeepAlive(KeepAlive { pid }) => {
                 if let Some(p) = pid {
                     check!(self.write_bytes_array(&p.id));
                 }
             },
 
-            SessionBody::Ping { hash }
-            | SessionBody::Pong { hash } => {
+            SessionBody::Ping(Ping { hash })
+            | SessionBody::Pong(Pong { hash }) => {
                 check!(self.write_zint(*hash));
             }
         }
@@ -181,11 +181,11 @@ impl WBuf {
 
         check!(self.write(msg.header));
         match &msg.body {
-            ZenohBody::Declare { declarations } => {
+            ZenohBody::Declare(Declare { declarations }) => {
                 check!(self.write_declarations(&declarations));
             },
 
-            ZenohBody::Data { key, info, payload } => {
+            ZenohBody::Data(Data { key, info, payload }) => {
                 check!(self.write_reskey(&key));
                 if let Some(rbuf) = info {
                     check!(self.write_rbuf(&rbuf));
@@ -193,9 +193,9 @@ impl WBuf {
                 check!(self.write_rbuf(&payload));
             },
 
-            ZenohBody::Unit { } => {},
+            ZenohBody::Unit(Unit { }) => {},
 
-            ZenohBody::Pull { key, pull_id, max_samples, .. } => {
+            ZenohBody::Pull(Pull { key, pull_id, max_samples, .. }) => {
                 check!(self.write_reskey(&key));
                 check!(self.write_zint(*pull_id));
                 if let Some(n) = max_samples {
@@ -203,7 +203,7 @@ impl WBuf {
                 } 
             },
 
-            ZenohBody::Query { key, predicate, qid, target, consolidation } => {
+            ZenohBody::Query(Query { key, predicate, qid, target, consolidation }) => {
                 check!(self.write_reskey(&key));
                 check!(self.write_string(predicate));
                 check!(self.write_zint(*qid));

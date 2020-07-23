@@ -305,7 +305,7 @@ mod tests {
 
     use crate::core::ResKey;
     use crate::io::{RBuf, WBuf};
-    use crate::proto::{FramePayload, SeqNumGenerator, SessionBody, SessionMessage, ZenohMessage};
+    use crate::proto::{FramePayload, SeqNumGenerator, SessionBody, SessionMessage, Frame, ZenohMessage};
     use crate::session::defaults::SESSION_SEQ_NUM_RESOLUTION;    
 
     use zenoh_util::zasynclock;
@@ -382,7 +382,7 @@ mod tests {
             let mut zmsgs_out: Vec<ZenohMessage> = Vec::new();
             for msg in deserialized.drain(..) {
                 match msg.body {
-                    SessionBody::Frame { payload, .. } => match payload {
+                    SessionBody::Frame(Frame { payload, .. }) => match payload {
                         FramePayload::Messages { mut messages } => zmsgs_out.append(&mut messages),
                         _ => assert!(false)
                     },
@@ -460,7 +460,7 @@ mod tests {
                     let msg = rbuf.read_session_message().unwrap();
 
                     match msg.body {
-                        SessionBody::Frame { payload, .. } => match payload {
+                        SessionBody::Frame(Frame { payload, .. }) => match payload {
                             FramePayload::Fragment { buffer, is_final } => {
                                 assert!(!buffer.is_empty());
                                 for s in buffer.drain_slices().drain(..) {

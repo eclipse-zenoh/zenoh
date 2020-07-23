@@ -59,7 +59,7 @@ async fn main() {
         mode: SubMode::Push,
         period: None
     };
-    session.declare_direct_subscriber(&reskey, &sub_info,
+    session.declare_callback_subscriber(&reskey, &sub_info,
         move |_res_name: &str, _payload: RBuf, _data_info: Option<RBuf>| {
             if count == 0 {
                 start = Instant::now();

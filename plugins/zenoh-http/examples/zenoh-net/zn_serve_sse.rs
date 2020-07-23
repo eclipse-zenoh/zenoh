@@ -84,7 +84,7 @@ async fn main() {
 
     println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}", path);
     loop {
-        session.write_wo(&rid.into(), value.as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT).await.unwrap();
+        session.write_ext(&rid.into(), value.as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT).await.unwrap();
         async_std::task::sleep(std::time::Duration::new(1, 0)).await;
     }
 }

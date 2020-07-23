@@ -58,7 +58,7 @@ async fn main() {
         mode: SubMode::Push,
         period: None
     };
-    session.declare_direct_subscriber(&reskey, &sub_info,
+    session.declare_callback_subscriber(&reskey, &sub_info,
         move |_res_name: &str, payload: RBuf, _data_info: Option<RBuf>| {
             messages.fetch_add(1, Ordering::Relaxed);
             bytes.fetch_add(payload.len(), Ordering::Relaxed);

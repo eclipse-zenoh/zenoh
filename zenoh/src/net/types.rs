@@ -12,34 +12,81 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::fmt;
-use std::collections::HashMap;
 use pin_project_lite::pin_project;
 use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
 use crate::net::Session;
 
-pub use zenoh_protocol::io::{RBuf, WBuf};
-pub use zenoh_protocol::core::{
-    ZInt,
-    ResourceId,
-    ResKey,
-    PeerId,
-    QueryConsolidation,
-    QueryTarget,
-    Target,
-    Reliability,
-    SubMode,
-    Period,
-    SubInfo,
-    whatami
-};
-pub use zenoh_protocol::proto::DataInfo;
-pub use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+/// A read-only bytes buffer.
+pub use zenoh_protocol::io::RBuf;
 
+/// A writable bytes buffer.
+pub use zenoh_protocol::io::WBuf;
+
+/// A numerical Id mapped to a resource name with [declare_resource](Session::declare_resource).
+pub use zenoh_protocol::core::ResourceId;
+
+/// Informations to configure a subscription.
+pub use zenoh_protocol::core::SubInfo;
+
+/// The global unique id of a zenoh peer.
+pub use zenoh_protocol::core::PeerId;
+
+/// A time period.
+pub use zenoh_protocol::core::Period;
+
+/// The [Queryable](Queryable)s that should be target of a [query](Session::query).
+pub use zenoh_protocol::core::Target;
+
+/// The [Queryable](Queryable)s that should be target of a [query](Session::query).
+pub use zenoh_protocol::core::QueryTarget;
+
+/// The kind of consolidation that should be applied on replies to a [query](Session::query).
+pub use zenoh_protocol::core::QueryConsolidation;
+
+/// The kind of reliability.
+pub use zenoh_protocol::core::Reliability;
+
+/// A resource key.
+pub use zenoh_protocol::core::ResKey;
+
+/// The subscription mode.
+pub use zenoh_protocol::core::SubMode;
+
+/// A zenoh integer.
+pub use zenoh_protocol::core::ZInt;
+
+pub use zenoh_protocol::core::whatami;
+
+/// Some informations about the associated data.
+/// 
+/// # Examples
+/// ```
+/// # use zenoh_protocol::io::RBuf;
+/// # use zenoh_protocol::proto::DataInfo;
+/// # let sample = zenoh::net::Sample { res_name: "".to_string(), payload: RBuf::new(), data_info: None };
+/// if let Some(mut info) = sample.data_info {
+///     let info: DataInfo = info.read_datainfo().unwrap();
+/// }
+/// ```
+pub use zenoh_protocol::proto::DataInfo;
+
+/// A zenoh error.
+pub use zenoh_util::core::ZError;
+
+/// The kind of zenoh error.
+pub use zenoh_util::core::ZErrorKind;
+
+/// A zenoh result.
+pub use zenoh_util::core::ZResult;
+
+/// Struct to pass to [open](fn.open.html) to configure the zenoh-net [Session](struct.Session.html).
 pub type Config = zenoh_router::runtime::Config;
 
-pub type Properties = HashMap<ZInt, Vec<u8>>;
+/// A list of key/value pairs.
+pub type Properties = Vec<(ZInt, Vec<u8>)>;
 
+/// A zenoh value.
 #[derive(Debug)]
 pub struct Sample {
     pub res_name: String,
@@ -47,14 +94,17 @@ pub struct Sample {
     pub data_info: Option<RBuf>,
 }
 
+/// The callback that will be called on each data for a [CallbackSubscriber](CallbackSubscriber).
 pub type DataHandler = dyn FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static;
 
+/// Structs received b y a [Queryable](Queryable).
 pub struct Query {
     pub res_name: String,
     pub predicate: String,
     pub replies_sender: RepliesSender,
 }
 
+/// Structs returned by a [query](Session::query).
 pub struct Reply {
     pub data: Sample,
     pub source_kind: ZInt, 
@@ -63,6 +113,7 @@ pub struct Reply {
 
 pub(crate) type Id = usize;
 
+/// A publisher.
 #[derive(Clone)]
 pub struct Publisher {
     pub(crate) id: Id,
@@ -82,6 +133,7 @@ impl fmt::Debug for Publisher {
 }
 
 pin_project! {
+    /// A subscriber that provides data through a stream.
     #[derive(Clone)]
     pub struct Subscriber {
         pub(crate) id: Id,
@@ -144,8 +196,9 @@ impl fmt::Debug for Subscriber {
     }
 }
 
+/// A subscriber that provides data through a callback.
 #[derive(Clone)]
-pub struct DirectSubscriber {
+pub struct CallbackSubscriber {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) resname: String,
@@ -153,8 +206,8 @@ pub struct DirectSubscriber {
     pub(crate) dhandler: Arc<RwLock<DataHandler>>,
 }
 
-impl DirectSubscriber {
-    /// Pull available data for a pull-mode [DirectSubscriber](DirectSubscriber).
+impl CallbackSubscriber {
+    /// Pull available data for a pull-mode [CallbackSubscriber](CallbackSubscriber).
     ///
     /// # Examples
     /// ```
@@ -167,7 +220,7 @@ impl DirectSubscriber {
     /// #     mode: SubMode::Pull,
     /// #     period: None
     /// # };
-    /// let subscriber = session.declare_direct_subscriber(&"/resource/name".into(), &sub_info, 
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, 
     ///     |res_name, payload, _info| { println!("Received : {} {}", res_name, payload); }
     /// ).await.unwrap();
     /// subscriber.pull();
@@ -178,19 +231,20 @@ impl DirectSubscriber {
     }
 }
 
-impl PartialEq for DirectSubscriber {
-    fn eq(&self, other: &DirectSubscriber) -> bool {
+impl PartialEq for CallbackSubscriber {
+    fn eq(&self, other: &CallbackSubscriber) -> bool {
         self.id == other.id
     }
 }
 
-impl fmt::Debug for DirectSubscriber {
+impl fmt::Debug for CallbackSubscriber {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "DirectSubscriber{{ id:{}, resname:{} }}", self.id, self.resname)
+        write!(f, "CallbackSubscriber{{ id:{}, resname:{} }}", self.id, self.resname)
     }
 }
 
 pin_project! {
+    /// An entity able to reply to queries.
     #[derive(Clone)]
     pub struct Queryable {
         pub(crate) id: Id,
@@ -224,6 +278,7 @@ impl fmt::Debug for Queryable {
     }
 }
 
+/// Struct used by a [Queryable](Queryable) to send replies to queries.
 pub struct RepliesSender{
     pub(crate) kind: ZInt,
     pub(crate) sender: Sender<(ZInt, Sample)>,

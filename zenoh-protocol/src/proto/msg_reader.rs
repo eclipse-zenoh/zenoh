@@ -64,7 +64,7 @@ impl RBuf {
                         FramePayload::Messages { messages }
                     };
 
-                    let body = SessionBody::Frame { ch, sn, payload };
+                    let body = SessionBody::Frame(Frame { ch, sn, payload });
                     break (header, body)
                 },
                 
@@ -82,7 +82,7 @@ impl RBuf {
                     }; 
                     let forwarding = smsg::has_flag(header, smsg::flag::T);
 
-                    let body = SessionBody::Scout { what, pid_replies, forwarding };
+                    let body = SessionBody::Scout(Scout { what, pid_replies, forwarding });
                     break (header, body)
                 },
 
@@ -103,7 +103,7 @@ impl RBuf {
                         None 
                     };
                     
-                    let body = SessionBody::Hello { pid, whatami, locators };
+                    let body = SessionBody::Hello(Hello { pid, whatami, locators });
                     break (header, body)
                 },
 
@@ -130,7 +130,7 @@ impl RBuf {
                         (None, None)
                     };
 
-                    let body = SessionBody::Open { version, whatami, pid, lease, initial_sn, sn_resolution, locators };
+                    let body = SessionBody::Open(Open { version, whatami, pid, lease, initial_sn, sn_resolution, locators });
                     break (header, body)
                 },
 
@@ -161,7 +161,7 @@ impl RBuf {
                         (None, None, None)
                     };
 
-                    let body = SessionBody::Accept { whatami, opid, apid, initial_sn, sn_resolution, lease, locators };
+                    let body = SessionBody::Accept(Accept { whatami, opid, apid, initial_sn, sn_resolution, lease, locators });
                     break (header, body)
                 },
 
@@ -174,7 +174,7 @@ impl RBuf {
                     };
                     let reason = self.read()?;
 
-                    let body = SessionBody::Close { pid, reason, link_only };
+                    let body = SessionBody::Close(Close { pid, reason, link_only });
                     break (header, body)
                 },
 
@@ -187,7 +187,7 @@ impl RBuf {
                         None 
                     };
                     
-                    let body = SessionBody::Sync { ch, sn, count };
+                    let body = SessionBody::Sync(Sync { ch, sn, count });
                     break (header, body)
                 },
 
@@ -199,7 +199,7 @@ impl RBuf {
                         None 
                     };
                     
-                    let body = SessionBody::AckNack { sn, mask };
+                    let body = SessionBody::AckNack(AckNack { sn, mask });
                     break (header, body)
                 },
 
@@ -210,7 +210,7 @@ impl RBuf {
                         None 
                     };
                     
-                    let body = SessionBody::KeepAlive { pid };
+                    let body = SessionBody::KeepAlive(KeepAlive { pid });
                     break (header, body)
                 },
 
@@ -218,9 +218,9 @@ impl RBuf {
                     let hash = self.read_zint()?;
                     
                     let body = if smsg::has_flag(header, smsg::flag::P) {
-                        SessionBody::Ping { hash }
+                        SessionBody::Ping(Ping { hash })
                     } else {
-                        SessionBody::Pong { hash }
+                        SessionBody::Pong(Pong { hash })
                     };
 
                     break (header, body)
@@ -260,7 +260,7 @@ impl RBuf {
                     };
                     let payload = self.read_rbuf()?;
 
-                    let body = ZenohBody::Data { key, info, payload };
+                    let body = ZenohBody::Data(Data { key, info, payload });
                     break (header, body, channel)
                 },
 
@@ -279,7 +279,7 @@ impl RBuf {
                 DECLARE => {
                     let declarations = self.read_declarations()?;
 
-                    let body = ZenohBody::Declare { declarations };
+                    let body = ZenohBody::Declare(Declare { declarations });
                     let channel = zmsg::default_channel::DECLARE;
                     break (header, body, channel)
                 },
@@ -287,7 +287,7 @@ impl RBuf {
                 UNIT => {
                     let channel = zmsg::has_flag(header, zmsg::flag::R);
 
-                    let body = ZenohBody::Unit {};
+                    let body = ZenohBody::Unit(Unit {});
                     break (header, body, channel)
                 },
 
@@ -301,7 +301,7 @@ impl RBuf {
                         None 
                     };
 
-                    let body = ZenohBody::Pull { key, pull_id, max_samples, is_final };
+                    let body = ZenohBody::Pull(Pull { key, pull_id, max_samples, is_final });
                     let channel = zmsg::default_channel::PULL;
                     break (header, body, channel)
                 },
@@ -317,7 +317,7 @@ impl RBuf {
                     };
                     let consolidation = self.read_consolidation()?;
                     
-                    let body = ZenohBody::Query { key, predicate, qid, target, consolidation };
+                    let body = ZenohBody::Query(Query { key, predicate, qid, target, consolidation });
                     let channel = zmsg::default_channel::QUERY;
                     break (header, body, channel)
                 },

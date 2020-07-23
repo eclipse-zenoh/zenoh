@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use crate::core::{PeerId, ZInt, WhatAmI};
 use crate::io::WBuf;
 use crate::link::{Link, Locator};
-use crate::proto::{Attachment, SessionMessage, SessionBody, smsg};
+use crate::proto::{Attachment, SessionMessage, SessionBody, Open, Accept, Close, smsg};
 use crate::session::defaults::SESSION_SEQ_NUM_RESOLUTION;
 use crate::session::{Action, Session, SessionManagerInner, TransportTrait};
 
@@ -627,15 +627,15 @@ impl InitialSession {
 impl TransportTrait for InitialSession {
     async fn receive_message(&self, link: &Link, message: SessionMessage) -> Action {
         match message.body {
-            SessionBody::Open { version, whatami, pid, lease, initial_sn, sn_resolution, locators } => {
+            SessionBody::Open(Open { version, whatami, pid, lease, initial_sn, sn_resolution, locators }) => {
                 self.process_open(link, version, whatami, pid, lease, initial_sn, sn_resolution, locators).await
             },
 
-            SessionBody::Accept { whatami, opid, apid, initial_sn, sn_resolution, lease, locators } => {
+            SessionBody::Accept(Accept { whatami, opid, apid, initial_sn, sn_resolution, lease, locators }) => {
                 self.process_accept(link, whatami, opid, apid, initial_sn, sn_resolution, lease, locators).await
             },
 
-            SessionBody::Close { pid, reason, link_only } => {
+            SessionBody::Close(Close { pid, reason, link_only }) => {
                 self.process_close(link, pid, reason, link_only).await
             },
 

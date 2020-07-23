@@ -14,7 +14,7 @@
 use async_trait::async_trait;
 
 use crate::link::Link;
-use crate::proto::{ZenohMessage, ZenohBody, Declaration, Primitives, zmsg};
+use crate::proto::{ZenohMessage, ZenohBody, Declare, Data, Query, Pull, Declaration, Primitives, zmsg};
 use crate::session::SessionEventHandler;
 use zenoh_util::zerror;
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
@@ -35,7 +35,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
     async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         let reliability = msg.is_reliable();
         match msg.body {
-            ZenohBody::Declare{ declarations, .. } => {
+            ZenohBody::Declare(Declare{ declarations, .. }) => {
                 for declaration in declarations {
                     match declaration {
                         Declaration::Resource { rid, key } => {
@@ -67,7 +67,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 }
             },
             
-            ZenohBody::Data { key, info, payload, .. } => {
+            ZenohBody::Data(Data{ key, info, payload, .. }) => {
                 match msg.reply_context {
                     None => {
                         self.primitives.data(&key, reliability, &info, payload).await;
@@ -91,11 +91,11 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 }
             },
 
-            ZenohBody::Query{ key, predicate, qid, target, consolidation, .. } => {
+            ZenohBody::Query(Query{ key, predicate, qid, target, consolidation, .. }) => {
                 self.primitives.query(&key, &predicate, qid, target.unwrap_or_default(), consolidation).await;
             },
 
-            ZenohBody::Pull{ key, pull_id, max_samples, .. } => {
+            ZenohBody::Pull(Pull{ key, pull_id, max_samples, .. }) => {
                 self.primitives.pull(zmsg::has_flag(msg.header, zmsg::flag::F), &key, pull_id, &max_samples).await;
             }
         }

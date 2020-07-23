@@ -47,7 +47,7 @@ pub(crate) struct SessionState {
     remote_resources:   HashMap<ResourceId, String>,
     publishers:         HashMap<Id, Publisher>,
     subscribers:        HashMap<Id, Subscriber>,
-    direct_subscribers: HashMap<Id, DirectSubscriber>,
+    callback_subscribers: HashMap<Id, CallbackSubscriber>,
     queryables:         HashMap<Id, Queryable>,
     queries:            HashMap<ZInt, Sender<Reply>>,
 }
@@ -63,7 +63,7 @@ impl SessionState {
             remote_resources:   HashMap::new(),
             publishers:         HashMap::new(),
             subscribers:        HashMap::new(),
-            direct_subscribers: HashMap::new(),
+            callback_subscribers: HashMap::new(),
             queryables:         HashMap::new(),
             queries:            HashMap::new(),
         }
@@ -127,6 +127,7 @@ impl fmt::Debug for SessionState {
     }
 }
 
+/// A zenoh-net session.
 #[derive(Clone)]
 pub struct Session {
     runtime: Runtime,
@@ -195,13 +196,33 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub fn info(&self) -> Properties {
+    pub async fn info(&self) -> Properties {
         // @TODO: implement
         trace!("info()");
         let mut info = Properties::new();
-        info.insert(ZN_INFO_PEER_KEY, b"tcp/somewhere:7887".to_vec());
-        info.insert(ZN_INFO_PID_KEY, vec![1u8, 2, 3]);
-        info.insert(ZN_INFO_PEER_PID_KEY, vec![4u8, 5, 6]);
+        let runtime = self.runtime.read().await;
+        info.push((ZN_INFO_PID_KEY, runtime.pid.id.clone()));
+        for session in runtime.orchestrator.manager.get_sessions().await {
+            if let Ok(what) = session.get_whatami() {
+                if what & whatami::PEER != 0 {
+                    if let Ok(peer) = session.get_pid() {
+                        info.push((ZN_INFO_PEER_PID_KEY, peer.id));
+                    }
+                }
+            }
+        }
+        if runtime.orchestrator.whatami & whatami::BROKER != 0 {
+            info.push((ZN_INFO_ROUTER_PID_KEY, runtime.pid.id.clone()));
+        }
+        for session in runtime.orchestrator.manager.get_sessions().await {
+            if let Ok(what) = session.get_whatami() {
+                if what & whatami::BROKER != 0 {
+                    if let Ok(peer) = session.get_pid() {
+                        info.push((ZN_INFO_ROUTER_PID_KEY, peer.id));
+                    }
+                }
+            }
+        }
         info
     }
 
@@ -374,7 +395,7 @@ impl Session {
         Ok(sub)
     }
 
-    /// Declare a [DirectSubscriber](DirectSubscriber) for the given resource key.
+    /// Declare a [CallbackSubscriber](CallbackSubscriber) for the given resource key.
     /// 
     /// # Arguments
     ///
@@ -393,21 +414,21 @@ impl Session {
     ///     mode: SubMode::Push,
     ///     period: None
     /// };
-    /// let subscriber = session.declare_direct_subscriber(&"/resource/name".into(), &sub_info, 
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, 
     ///     |res_name, payload, _info| { println!("Received : {} {}", res_name, payload); }
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_direct_subscriber<DataHandler>(&self, resource: &ResKey, info: &SubInfo, data_handler: DataHandler) -> ZResult<DirectSubscriber>
+    pub async fn declare_callback_subscriber<DataHandler>(&self, resource: &ResKey, info: &SubInfo, data_handler: DataHandler) -> ZResult<CallbackSubscriber>
         where DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static
     {
-        trace!("declare_direct_subscriber({:?})", resource);
+        trace!("declare_callback_subscriber({:?})", resource);
         let mut state = self.state.write().await;
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = state.localkey_to_resname(resource)?;
         let dhandler = Arc::new(RwLock::new(data_handler));
-        let sub = DirectSubscriber{ id, reskey: resource.clone(), resname, session: self.clone(), dhandler };
-        state.direct_subscribers.insert(id, sub.clone());
+        let sub = CallbackSubscriber{ id, reskey: resource.clone(), resname, session: self.clone(), dhandler };
+        state.callback_subscribers.insert(id, sub.clone());
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
@@ -445,7 +466,7 @@ impl Session {
 
         // Note: there might be several Subscribers on the same ResKey.
         // Before calling forget_subscriber(reskey), check if this was the last one.
-        if !state.direct_subscribers.values().any(|s| s.reskey == subscriber.reskey)
+        if !state.callback_subscribers.values().any(|s| s.reskey == subscriber.reskey)
            && !state.subscribers.values().any(|s| s.reskey == subscriber.reskey) {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
@@ -454,11 +475,11 @@ impl Session {
         Ok(())
     }
     
-    /// Undeclare a [DirectSubscriber](DirectSubscriber) previously declared with [declare_direct_subscriber](Session::declare_direct_subscriber).
+    /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
     /// 
     /// # Arguments
     ///
-    /// * `subscriber` - The direct [DirectSubscriber](DirectSubscriber) to undeclare
+    /// * `subscriber` - The [CallbackSubscriber](CallbackSubscriber) to undeclare
     /// 
     /// # Examples
     /// ```
@@ -472,19 +493,19 @@ impl Session {
     /// #     period: None
     /// # };
     /// # fn data_handler(res_name: &str, payload: RBuf, _info: Option<RBuf>) { println!("Received : {} {}", res_name, payload); };
-    /// let subscriber = session.declare_direct_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
-    /// session.undeclare_direct_subscriber(subscriber).await;
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
+    /// session.undeclare_callback_subscriber(subscriber).await;
     /// # })
     /// ```
-    pub async fn undeclare_direct_subscriber(&self, subscriber: DirectSubscriber) -> ZResult<()>
+    pub async fn undeclare_callback_subscriber(&self, subscriber: CallbackSubscriber) -> ZResult<()>
     {
-        trace!("undeclare_direct_subscriber({:?})", subscriber);
+        trace!("undeclare_callback_subscriber({:?})", subscriber);
         let mut state = self.state.write().await;
-        state.direct_subscribers.remove(&subscriber.id);
+        state.callback_subscribers.remove(&subscriber.id);
 
         // Note: there might be several Subscribers on the same ResKey.
         // Before calling forget_subscriber(reskey), check if this was the last one.
-        if !state.direct_subscribers.values().any(|s| s.reskey == subscriber.reskey)
+        if !state.callback_subscribers.values().any(|s| s.reskey == subscriber.reskey)
            && !state.subscribers.values().any(|s| s.reskey == subscriber.reskey) {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
@@ -607,11 +628,11 @@ impl Session {
     /// use zenoh::net::*;
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.write_wo(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT).await.unwrap();
+    /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT).await.unwrap();
     /// # })
     /// ```
-    pub async fn write_wo(&self, resource: &ResKey, payload: RBuf, encoding: ZInt, kind: ZInt) -> ZResult<()> {
-        trace!("write_wo({:?}, [...])", resource);
+    pub async fn write_ext(&self, resource: &ResKey, payload: RBuf, encoding: ZInt, kind: ZInt) -> ZResult<()> {
+        trace!("write_ext({:?}, [...])", resource);
         let state = self.state.read().await;
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
@@ -657,14 +678,15 @@ impl Session {
     /// use futures::prelude::*;
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.query(
+    /// let mut replies = session.query(
     ///     &"/resource/name".into(),
     ///     "predicate",
     ///     QueryTarget::default(),
     ///     QueryConsolidation::default()
-    /// ).await.unwrap().for_each( async move |reply| 
-    ///     println!(">> Received {:?}", reply.data)
-    /// ).await;
+    /// ).await.unwrap();
+    /// while let Some(reply) = replies.next().await {
+    ///     println!(">> Received {:?}", reply.data);
+    /// }
     /// # })
     /// ```
     pub async fn query(&self,
@@ -734,8 +756,8 @@ impl Primitives for Session {
             let state = self.state.read().await;
             match state.reskey_to_resname(reskey) {
                 Ok(resname) => {
-                    // Call matching direct_subscribers
-                    for sub in state.direct_subscribers.values() {
+                    // Call matching callback_subscribers
+                    for sub in state.callback_subscribers.values() {
                         if rname::intersect(&sub.resname, &resname) {
                             let handler = &mut *sub.dhandler.write().await;
                             handler(&resname, payload.clone(), info.clone());

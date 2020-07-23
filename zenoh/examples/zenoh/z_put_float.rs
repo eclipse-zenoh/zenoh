@@ -55,7 +55,7 @@ async fn main() {
     let workspace = zenoh.workspace(None).await.unwrap();
 
     println!("Put Float ('{}': '{}')...\n", path, value);
-    workspace.put(&path.try_into().unwrap(), &Value::Float(value)).await.unwrap();
+    workspace.put(&path.try_into().unwrap(), Value::Float(value)).await.unwrap();
 
     zenoh.close().await.unwrap();
 }

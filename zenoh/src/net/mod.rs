@@ -34,7 +34,7 @@ pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
     vec![]
 }
 
-/// Open a zenoh-net session.
+/// Open a zenoh-net [Session](Session).
 /// 
 /// # Examples
 /// ```

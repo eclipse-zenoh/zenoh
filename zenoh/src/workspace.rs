@@ -50,19 +50,20 @@ impl Workspace {
         }
     }
 
-    pub async fn put(&self, path: &Path, value: &Value) -> ZResult<()> {
+    pub async fn put(&self, path: &Path, value: Value) -> ZResult<()> {
         debug!("put on {:?}", path);
-        self.session.write_wo(
+        let (encoding, payload) = value.encode();
+        self.session.write_ext(
             &self.path_to_reskey(path),
-            value.into(),
-            value.encoding(),
+            payload,
+            encoding,
             data_kind::PUT
         ).await
     }
 
     pub async fn delete(&self, path: &Path) -> ZResult<()> {
         debug!("delete on {:?}", path);
-        self.session.write_wo(
+        self.session.write_ext(
             &self.path_to_reskey(path),
             RBuf::empty(),
             encoding::RAW,
@@ -110,7 +111,7 @@ impl Workspace {
             period: None
         };
     
-        let _ = self.session.declare_direct_subscriber(&reskey, &sub_info,
+        let _ = self.session.declare_callback_subscriber(&reskey, &sub_info,
             move |res_name: &str, payload: RBuf, data_info: Option<RBuf>| {
                 match Change::new(res_name, payload, data_info) {
                     Ok(change) => callback(change),
@@ -156,6 +157,7 @@ fn reply_to_data(reply: Reply) -> ZResult<Data> {
 }
 
 fn data_to_sample(data: Data) -> Sample {
+    let (encoding, payload) = data.value.encode();
     let info = DataInfo {
         source_id: None,
         source_sn: None,
@@ -163,11 +165,11 @@ fn data_to_sample(data: Data) -> Sample {
         fist_broker_sn: None,
         timestamp: None,
         kind: None,
-        encoding: Some(data.value.encoding()),
+        encoding: Some(encoding),
     };
     let mut infobuf = WBuf::new(64, false);
     infobuf.write_datainfo(&info);
-    Sample { res_name: data.path.to_string(), payload: data.value.into(), data_info: Some(infobuf.into()) }
+    Sample { res_name: data.path.to_string(), payload, data_info: Some(infobuf.into()) }
 }
 
 pin_project! {
