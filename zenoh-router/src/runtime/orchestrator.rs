@@ -19,7 +19,7 @@ use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 use zenoh_util::zerror;
 use zenoh_protocol::io::{WBuf, RBuf};
 use zenoh_protocol::core::{WhatAmI, whatami};
-use zenoh_protocol::proto::{SessionMessage, SessionBody};
+use zenoh_protocol::proto::{SessionMessage, SessionBody, Scout, Hello};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::session::SessionManager;
 use crate::runtime::Config;
@@ -251,7 +251,7 @@ impl SessionOrchestrator {
                 log::trace!("Received UDP datagram {}", rbuf);
                 if let Ok(msg) = rbuf.read_session_message() {
                     log::trace!("Received {:?}", msg);
-                    if let SessionBody::Hello{whatami, locators, ..} = msg.get_body() {
+                    if let SessionBody::Hello(Hello{whatami, locators, ..}) = msg.get_body() {
                         let whatami = whatami.or(Some(whatami::BROKER)).unwrap();
                         if whatami & what != 0 {
                             log::info!("Found {:?}", msg);
@@ -316,7 +316,7 @@ impl SessionOrchestrator {
                 log::trace!("Received UDP datagram {}", rbuf);
                 if let Ok(msg) = rbuf.read_session_message() {
                     log::trace!("Received {:?}", msg);
-                    if let SessionBody::Hello{pid, whatami, locators} = msg.get_body() {
+                    if let SessionBody::Hello(Hello{pid, whatami, locators}) = msg.get_body() {
                         let whatami = whatami.or(Some(whatami::BROKER)).unwrap();
                         if whatami & what != 0 {
                             match pid {
@@ -390,7 +390,7 @@ impl SessionOrchestrator {
             log::trace!("Received UDP datagram {}", rbuf);
             if let Ok(msg) = rbuf.read_session_message() {
                 log::trace!("Received {:?}", msg);
-                if let SessionBody::Scout{what, pid_replies, ..} = msg.get_body() {
+                if let SessionBody::Scout(Scout{what, pid_replies, ..}) = msg.get_body() {
                     let what = what.or(Some(whatami::BROKER)).unwrap();
                     if what & self.whatami != 0 {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);

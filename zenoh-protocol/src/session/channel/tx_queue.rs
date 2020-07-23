@@ -480,7 +480,7 @@ mod tests {
 
     use crate::core::ResKey;
     use crate::io::RBuf;
-    use crate::proto::{FramePayload, SeqNumGenerator, SessionBody, ZenohMessage};
+    use crate::proto::{FramePayload, SeqNumGenerator, SessionBody, Frame, ZenohMessage};
     use crate::session::defaults::{QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION};
 
     use super::*;
@@ -525,7 +525,7 @@ mod tests {
                 // Deserialize the messages
                 while let Ok(msg) = rbuf.read_session_message() {
                     match msg.body {
-                        SessionBody::Frame { payload, .. } => match payload {
+                        SessionBody::Frame(Frame { payload, .. }) => match payload {
                             FramePayload::Messages { messages } => {
                                 c_messages.fetch_add(messages.len(), Ordering::Relaxed);
                             },

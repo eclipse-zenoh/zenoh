@@ -17,7 +17,7 @@ use super::{Channel, DefragBuffer};
 
 use crate::core::{PeerId, ZInt};
 use crate::link::Link;
-use crate::proto::{FramePayload, SessionBody, SessionMessage, SeqNum};
+use crate::proto::{FramePayload, SessionBody, SessionMessage, SeqNum, Frame, KeepAlive, Close};
 use crate::session::{Action, TransportTrait};
 
 use zenoh_util::{zasynclock, zasyncread, zasyncopt};
@@ -242,7 +242,7 @@ impl TransportTrait for Channel {
 
         // Process the received message
         match message.body {
-            SessionBody::Frame { ch, sn, payload } => {
+            SessionBody::Frame(Frame { ch, sn, payload }) => {
                 match ch {
                     true => self.process_reliable_frame(sn, payload).await,
                     false => self.process_best_effort_frame(sn, payload).await
@@ -253,7 +253,7 @@ impl TransportTrait for Channel {
                 self.delete().await;
                 Action::Close
             },
-            SessionBody::Close { pid, reason, link_only } => {
+            SessionBody::Close(Close { pid, reason, link_only }) => {
                 self.process_close(link, pid, reason, link_only).await
             },
             SessionBody::Hello { .. } => {
@@ -261,7 +261,7 @@ impl TransportTrait for Channel {
                 self.delete().await;
                 Action::Close
             },
-            SessionBody::KeepAlive { pid } => {
+            SessionBody::KeepAlive(KeepAlive { pid }) => {
                 self.process_keep_alive(link, pid).await
             },            
             SessionBody::Ping { .. } => {
