@@ -174,11 +174,7 @@ impl Channel {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) {
-        log::debug!("Closing the session with peer: {}", self.get_keep_alive());
-        // Stop the timer
-        let mut timer = self.timer.clone();
-        timer.stop().await;
-
+        log::debug!("Closing the session with peer: {}", self.pid);
         // Delete the session on the manager
         let _ = self.manager.del_session(&self.pid).await;            
 
@@ -196,7 +192,7 @@ impl Channel {
     }
 
     pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {     
-        log::trace!("Closing link {} with peer: {}", link, self.get_pid());
+        log::trace!("Closing link {} with peer: {}", link, self.pid);
 
         let guard = zasyncread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
@@ -221,7 +217,7 @@ impl Channel {
     }
 
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing session with peer: {}", self.get_pid());
+        log::trace!("Closing session with peer: {}", self.pid);
 
         // Close message to be sent on all the links
         let peer_id = Some(self.manager.config.pid.clone());
@@ -252,12 +248,12 @@ impl Channel {
                 l.schedule_zenoh_message(message, QUEUE_PRIO_DATA).await;
             } else {
                 log::trace!("Zenoh message has been dropped because link {} does not exist\
-                            in session with peer: {}", link, self.get_pid());
+                            in session with peer: {}", link, self.pid);
             }
         } else {
             let guard = zasyncread!(self.links);
             if guard.is_empty() {                
-                log::trace!("Zenoh message has been dropped because no links are available in session with peer: {}", self.get_pid());
+                log::trace!("Zenoh message has been dropped because no links are available in session with peer: {}", self.pid);
             } else {
                 guard[0].schedule_zenoh_message(message, QUEUE_PRIO_DATA).await;
             }
@@ -271,7 +267,7 @@ impl Channel {
         let mut guard = zasyncwrite!(self.links);
         if zlinkget!(guard, &link).is_some() {
             return zerror!(ZErrorKind::InvalidLink { 
-                descr: format!("Can not add Link {} with peer: {}", link, self.get_pid())
+                descr: format!("Can not add Link {} with peer: {}", link, self.pid)
             });
         }
 
@@ -301,7 +297,7 @@ impl Channel {
             link.close().await           
         } else {
             zerror!(ZErrorKind::InvalidLink { 
-                descr: format!("Can not delete Link {} with peer: {}", link, self.get_pid())
+                descr: format!("Can not delete Link {} with peer: {}", link, self.pid)
             })
         }
     }

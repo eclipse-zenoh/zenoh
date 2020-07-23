@@ -256,6 +256,7 @@ async fn session_lease(locator: Locator) {
     let mut links = c_ses1.get_links().await.unwrap();
     println!("Session Lease [4a2]: {:?}", links);
     assert_eq!(links.len(), 1);
+    let start = Instant::now();
     for l in links.drain(..) {
         let res = c_ses1.close_link(&l).await;
         println!("Session Lease [4a3]: {:?}", res);
@@ -265,8 +266,7 @@ async fn session_lease(locator: Locator) {
 
     /* [5] */
     // Verify that the session has been closed on the router
-    let lease = Duration::from_millis(lease as u64);
-    let start = Instant::now();
+    let lease = Duration::from_millis(lease as u64);    
     let barrier = router_handler.get_barrier(&client01_id).await;
     let res = barrier.wait().timeout(TIMEOUT).await;
     assert!(res.is_ok());
@@ -290,9 +290,14 @@ async fn session_lease(locator: Locator) {
 
     // Verify that the session handler is no longer valid
     println!("Session Lease [5c1]");
-    let peer = c_ses1.get_pid();    
-    println!("Session Lease [5c2]: {:?}", peer);
-    assert!(peer.is_err());
+    let peer = async {
+        while c_ses1.get_pid().is_ok() {
+            task::yield_now().await;
+        }
+    };
+    let res = peer.timeout(TIMEOUT).await;
+    println!("Session Lease [5c2]: {:?}", res);
+    assert!(res.is_ok());
 
     /* [6] */
     // Perform clean up of the open locators
