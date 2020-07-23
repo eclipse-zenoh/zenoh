@@ -22,10 +22,23 @@ int main(int argc, char** argv) {
   if (s == 0) {
     printf("Error creating session!\n");
     exit(-1);
-  } 
-  sleep(1);
+  }   
+  ZNProperties *ps = zn_info(s);  
+  int n = zn_properties_len(ps);
+  int id;
+  
+  for (int i = 0; i < n; ++i) {
+    id = zn_property_id(ps, i);
+    const zn_bytes *bs = zn_property_value(ps, i);
+    printf("> %d - ", id);
+    for (int j = 0; j < bs->len; j++) {      
+      printf("%d", (int)bs->val[j]);
+    }
+    printf("\n");
+  }
+  
   const char *data = "Hello from C";
-  const char *key = "/zenoh/demo/quote";
+  const char *key = "/demo/example/quote";
   zn_write(s, key, data, strlen(data));
   zn_close(s);
 }

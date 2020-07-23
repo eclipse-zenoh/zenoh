@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #![recursion_limit="256"]
-#![feature(async_closure)]
+
 use libc::{c_char, c_uchar, c_ulong, c_uint, c_int};
 use std::ffi::CStr;
 use std::slice;
@@ -32,10 +32,17 @@ pub static PEER_MODE : c_int = whatami::PEER as c_int;
 #[no_mangle]
 pub static CLIENT_MODE : c_int = whatami::CLIENT as c_int;
 
+// Properties returned by zn_info()
+#[no_mangle]
+pub static ZN_INFO_PID_KEY: c_uint        = 0x00 as c_uint;
+#[no_mangle]
+pub static ZN_INFO_PEER_PID_KEY: c_uint   = 0x01 as c_uint;
+#[no_mangle]
+pub static ZN_INFO_ROUTER_PID_KEY: c_uint = 0x02 as c_uint;
 
 pub struct ZNSession(zenoh::net::Session);
 
-pub struct ZProperties(zenoh::net::Properties);
+pub struct ZNProperties(zenoh::net::Properties);
 
 pub struct ZNSubscriber(Option<Arc<Sender<bool>>>);
 
@@ -95,9 +102,48 @@ pub extern "C" fn zn_query_consolidation_last_hop() -> *mut ZNQueryConsolidation
 }
 
 #[no_mangle]
-pub extern "C" fn zn_properties_make() -> *mut ZProperties {
-  Box::into_raw(Box::new(ZProperties(zenoh::net::Properties::new())))
+pub extern "C" fn zn_properties_make() -> *mut ZNProperties {
+  Box::into_raw(Box::new(ZNProperties(zenoh::net::Properties::new())))
 }
+
+/// Get the properties length
+/// 
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// 
+#[no_mangle]
+pub unsafe extern "C" fn zn_properties_len(ps: *mut ZNProperties) -> c_uint {
+  Box::from_raw(ps).0.len() as c_uint
+}
+
+/// Get the properties n-th property ID
+/// 
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// 
+#[no_mangle]
+pub unsafe extern "C" fn zn_property_id(ps: *mut ZNProperties, n: c_uint) -> c_uint {
+  let bps = Box::from_raw(ps);    
+  let r = bps.0[n as usize].0 as c_uint;
+  Box::into_raw(bps);
+  r
+
+}
+
+/// Get the properties n-th property value
+/// 
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// 
+#[no_mangle]
+pub unsafe extern "C" fn zn_property_value(ps: *mut ZNProperties, n: c_uint) ->  *const zn_bytes {
+  let bps = Box::from_raw(ps);  
+  let ptr = bps.0[n as usize].1.as_ptr();
+  let value = Box::new(zn_bytes { val: ptr as *const c_uchar, len: bps.0[n as usize].1.len() as c_uint});
+  Box::into_raw(bps);
+  Box::into_raw(value)
+}
+
 
 /// Add a property
 /// 
@@ -105,10 +151,11 @@ pub extern "C" fn zn_properties_make() -> *mut ZProperties {
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 /// 
 #[no_mangle]
-pub unsafe extern "C" fn zn_properties_add(rps: *mut ZProperties, id: c_ulong, value: *const c_char) -> *mut ZProperties {
+pub unsafe extern "C" fn zn_properties_add(rps: *mut ZNProperties, id: c_ulong, value: *const c_char) -> *mut ZNProperties {
   let mut ps = Box::from_raw(rps);  
   let bs = CStr::from_ptr(value).to_bytes();
   ps.0.push((id as zenoh::net::ZInt, Vec::from(bs)));
+  Box::into_raw(ps);
   rps
 }
 
@@ -118,18 +165,18 @@ pub unsafe extern "C" fn zn_properties_add(rps: *mut ZProperties, id: c_ulong, v
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 /// 
 #[no_mangle]
-pub unsafe extern "C" fn zn_properties_free(rps: *mut ZProperties ) {
+pub unsafe extern "C" fn zn_properties_free(rps: *mut ZNProperties ) {
   let ps = Box::from_raw(rps);  
   drop(ps);
 }
 
-/// Add a property
+/// Open a zenoh session
 /// 
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 /// 
 #[no_mangle]
-pub unsafe extern "C" fn zn_open(mode: c_int, locator: *const c_char, _ps: *const ZProperties) -> *mut ZNSession {  
+pub unsafe extern "C" fn zn_open(mode: c_int, locator: *const c_char, _ps: *const ZNProperties) -> *mut ZNSession {  
 
   let s = task::block_on(async move {
     let c : Config = Default::default();    
@@ -144,7 +191,21 @@ pub unsafe extern "C" fn zn_open(mode: c_int, locator: *const c_char, _ps: *cons
   Box::into_raw(Box::new(ZNSession(s)))
 }
 
-/// Add a property
+/// Return information on currently open session along with the the kind of entity for which the 
+/// session has been established.
+/// 
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// 
+#[no_mangle]
+pub unsafe extern "C" fn zn_info(session: *mut ZNSession)-> *mut ZNProperties {  
+  let s = Box::from_raw(session);
+  let ps = task::block_on(s.0.info());
+  let bps = Box::new(ZNProperties(ps));
+  Box::into_raw(s);
+  Box::into_raw(bps)
+}
+/// Close a zenoh session
 /// 
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
@@ -156,7 +217,7 @@ pub unsafe extern "C" fn zn_close(session: *mut ZNSession) {
   let _ = Box::into_raw(s);
 }
 
-/// Add a property
+/// Declare a zenoh resource
 /// 
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
@@ -171,7 +232,7 @@ pub unsafe extern "C" fn zn_declare_resource(session: *mut ZNSession, r_name: *c
   r
 }
 
-/// Add a property
+/// Declare a zenoh resource with a suffix
 /// 
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
@@ -182,7 +243,7 @@ pub unsafe extern "C" fn zn_declare_resource_ws(session: *mut ZNSession, rid: c_
   let s = Box::from_raw(session);
   let sfx = CStr::from_ptr(suffix).to_str().unwrap();
   let r = task::block_on(s.0.declare_resource(&ResKey::RIdWithSuffix(rid as ResourceId, sfx.to_string()))).unwrap() as c_ulong;
-  let _ = Box::into_raw(s);
+  let _ = Box::into_raw(s);  
   r
 }
 
@@ -207,7 +268,7 @@ pub unsafe extern "C" fn zn_write(session: *mut ZNSession, r_name: *const c_char
   
 }
 
-/// Writes a named resource. 
+/// Writes a named resource using a resource id. This is the most wire efficient way of writing in zenoh. 
 /// 
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
