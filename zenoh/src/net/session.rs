@@ -196,13 +196,33 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub fn info(&self) -> Properties {
+    pub async fn info(&self) -> Properties {
         // @TODO: implement
         trace!("info()");
         let mut info = Properties::new();
-        info.insert(ZN_INFO_PEER_KEY, b"tcp/somewhere:7887".to_vec());
-        info.insert(ZN_INFO_PID_KEY, vec![1u8, 2, 3]);
-        info.insert(ZN_INFO_PEER_PID_KEY, vec![4u8, 5, 6]);
+        let runtime = self.runtime.read().await;
+        info.push((ZN_INFO_PID_KEY, runtime.pid.id.clone()));
+        for session in runtime.orchestrator.manager.get_sessions().await {
+            if let Ok(what) = session.get_whatami() {
+                if what & whatami::PEER != 0 {
+                    if let Ok(peer) = session.get_peer() {
+                        info.push((ZN_INFO_PEER_PID_KEY, peer.id));
+                    }
+                }
+            }
+        }
+        if runtime.orchestrator.whatami & whatami::BROKER != 0 {
+            info.push((ZN_INFO_ROUTER_PID_KEY, runtime.pid.id.clone()));
+        }
+        for session in runtime.orchestrator.manager.get_sessions().await {
+            if let Ok(what) = session.get_whatami() {
+                if what & whatami::BROKER != 0 {
+                    if let Ok(peer) = session.get_peer() {
+                        info.push((ZN_INFO_ROUTER_PID_KEY, peer.id));
+                    }
+                }
+            }
+        }
         info
     }
 

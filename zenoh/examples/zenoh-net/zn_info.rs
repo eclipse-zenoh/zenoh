@@ -13,7 +13,6 @@
 //
 use clap::{App, Arg};
 use zenoh::net::*;
-use zenoh::net::properties::*;
 
 //
 // Argument parsing -- look at the main for the zenoh-related code
@@ -38,14 +37,14 @@ async fn main() {
     let config : Config = parse_args();
 
     let mut ps = Properties::new();
-    ps.insert(ZN_USER_KEY, b"user".to_vec());
-    ps.insert(ZN_PASSWD_KEY, b"password".to_vec());
+    ps.push((properties::ZN_USER_KEY, b"user".to_vec()));
+    ps.push((properties::ZN_PASSWD_KEY, b"password".to_vec()));
 
     println!("Openning session...");
     let session = open(config, Some(ps)).await.unwrap();
 
-    let info = session.info();
-    println!("LOCATOR :  \"{}\"", String::from_utf8_lossy(info.get(&ZN_INFO_PEER_KEY).unwrap()));
-    println!("PID :      {:02x?}", info.get(&ZN_INFO_PID_KEY).unwrap());
-    println!("PEER PID : {:02x?}", info.get(&ZN_INFO_PEER_PID_KEY).unwrap());
+    let info = session.info().await;
+    for (key, value) in info {
+        println!("{} : {}", properties::to_str(key).unwrap(), hex::encode_upper(value));
+    }
 }

@@ -31,6 +31,7 @@ regex = "1"
 log = "0.4"
 lazy_static = "1.4.0"
 serde_json = "1.0"
+hex = "0.4.2"
 zenoh-protocol = { version = "0.5.0", path = "../zenoh-protocol" }
 zenoh-router = { version = "0.5.0", path = "../zenoh-router" }
 zenoh-util = { version = "0.5.0", path = "../zenoh-util" }

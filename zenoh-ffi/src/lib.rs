@@ -108,7 +108,7 @@ pub extern "C" fn zn_properties_make() -> *mut ZProperties {
 pub unsafe extern "C" fn zn_properties_add(rps: *mut ZProperties, id: c_ulong, value: *const c_char) -> *mut ZProperties {
   let mut ps = Box::from_raw(rps);  
   let bs = CStr::from_ptr(value).to_bytes();
-  ps.0.insert(id as zenoh::net::ZInt, Vec::from(bs));
+  ps.0.push((id as zenoh::net::ZInt, Vec::from(bs)));
   rps
 }
 

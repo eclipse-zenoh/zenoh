@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::fmt;
-use std::collections::HashMap;
 use pin_project_lite::pin_project;
 use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
 use async_std::stream::Stream;
@@ -85,7 +84,7 @@ pub use zenoh_util::core::ZResult;
 pub type Config = zenoh_router::runtime::Config;
 
 /// A list of key/value pairs.
-pub type Properties = HashMap<ZInt, Vec<u8>>;
+pub type Properties = Vec<(ZInt, Vec<u8>)>;
 
 /// A zenoh value.
 #[derive(Debug)]
