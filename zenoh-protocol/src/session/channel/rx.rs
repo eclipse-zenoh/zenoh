@@ -20,7 +20,7 @@ use crate::link::Link;
 use crate::proto::{FramePayload, SessionBody, SessionMessage, SeqNum, Frame, KeepAlive, Close};
 use crate::session::{Action, TransportTrait};
 
-use zenoh_util::{zasynclock, zasyncread, zasyncopt};
+use zenoh_util::{zasynclock, zasyncread};
 
 
 
@@ -101,7 +101,11 @@ impl Channel {
                             match guard.defrag_buffer.defragment() {
                                 Ok(msg) => {
                                     log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
-                                    let _ = zasyncopt!(self.callback).handle_message(msg).await;
+                                    if let Some(callback) = zasyncread!(self.callback).as_ref() {
+                                        let _ = callback.handle_message(msg).await;
+                                    } else {
+                                        log::debug!("No callback available, dropping reliable message: {}", msg);
+                                    }
                                 },
                                 Err(e) => log::trace!("Session: {}. Defragmentation error: {:?}", self.get_pid(), e)
                             }
@@ -110,7 +114,11 @@ impl Channel {
                     FramePayload::Messages { mut messages } => {
                         for msg in messages.drain(..) {
                             log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
-                            let _ = zasyncopt!(self.callback).handle_message(msg).await;
+                            if let Some(callback) = zasyncread!(self.callback).as_ref() {
+                                let _ = callback.handle_message(msg).await;
+                            } else {
+                                log::debug!("No callback available, dropping reliable message: {}", msg);
+                            }
                         }                        
                     }
                 }
@@ -156,7 +164,11 @@ impl Channel {
                             match guard.defrag_buffer.defragment() {
                                 Ok(msg) => {
                                     log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
-                                    let _ = zasyncopt!(self.callback).handle_message(msg).await;
+                                    if let Some(callback) = zasyncread!(self.callback).as_ref() {
+                                        let _ = callback.handle_message(msg).await;
+                                    } else {
+                                        log::debug!("No callback available, dropping best effort message: {}", msg);
+                                    }
                                 },
                                 Err(e) => log::trace!("Session: {}. Defragmentation error: {:?}", self.get_pid(), e)
                             }
@@ -165,7 +177,11 @@ impl Channel {
                     FramePayload::Messages { mut messages } => {
                         for msg in messages.drain(..) {
                             log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
-                            let _ = zasyncopt!(self.callback).handle_message(msg).await;
+                            if let Some(callback) = zasyncread!(self.callback).as_ref() {
+                                let _ = callback.handle_message(msg).await;
+                            } else {
+                                log::debug!("No callback available, dropping best effort message: {}", msg);
+                            }
                         }                        
                     }
                 }
