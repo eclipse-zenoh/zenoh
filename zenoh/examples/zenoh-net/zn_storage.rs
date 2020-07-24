@@ -81,7 +81,7 @@ async fn main() {
                 println!(">> [Query handler        ] Handling '{}{}'", query.res_name, query.predicate);
                 for (stored_name, (data, data_info)) in stored.iter() {
                     if resource_name::intersect(&query.res_name, stored_name) {
-                        query.replies_sender.send(Sample{
+                        query.reply(Sample{
                             res_name: stored_name.clone(),
                             payload: data.clone(),
                             data_info: data_info.clone(),

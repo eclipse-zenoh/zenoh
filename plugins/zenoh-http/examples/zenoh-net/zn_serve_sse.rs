@@ -63,7 +63,7 @@ async fn main() {
 
     async_std::task::spawn(
         queryable.for_each(async move |request|{
-            request.replies_sender.send(Sample {
+            request.reply(Sample {
                 res_name: path.to_string(),
                 payload: HTML.as_bytes().into(),
                 data_info: None,

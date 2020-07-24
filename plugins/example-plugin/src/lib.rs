@@ -74,7 +74,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 info!("Handling query '{}{}'", query.res_name, query.predicate);
                 for (rname, (data, data_info)) in stored.iter() {
                     if resource_name::intersect(&query.res_name, rname) {
-                        query.replies_sender.send(Sample{
+                        query.reply(Sample{
                             res_name: rname.clone(), 
                             payload: data.clone(), 
                             data_info: data_info.clone(),

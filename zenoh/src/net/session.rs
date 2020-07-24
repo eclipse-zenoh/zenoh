@@ -533,7 +533,7 @@ impl Session {
     /// let session = open(Config::peer(), None).await.unwrap();
     /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
     /// while let Some(query) = queryable.next().await { 
-    ///     query.replies_sender.send(Sample{
+    ///     query.reply(Sample{
     ///         res_name: "/resource/name".to_string(),
     ///         payload: "value".as_bytes().into(),
     ///         data_info: None,

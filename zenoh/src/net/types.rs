@@ -104,6 +104,18 @@ pub struct Query {
     pub replies_sender: RepliesSender,
 }
 
+impl Query {
+    #[inline(always)]
+    pub async fn reply(&'_ self, msg: Sample) {
+        self.replies_sender.send(msg).await
+    }
+
+    #[inline(always)]
+    pub fn try_reply(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
+        self.replies_sender.try_send(msg)
+    }
+}
+
 /// Structs returned by a [query](Session::query).
 pub struct Reply {
     pub data: Sample,
@@ -285,10 +297,12 @@ pub struct RepliesSender{
 }
 
 impl RepliesSender{
+    #[inline(always)]
     pub async fn send(&'_ self, msg: Sample) {
         self.sender.send((self.kind, msg)).await
     }
 
+    #[inline(always)]
     pub fn try_send(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
         match self.sender.try_send((self.kind, msg)) {
             Ok(()) => {Ok(())}
@@ -297,18 +311,22 @@ impl RepliesSender{
         }
     }
 
+    #[inline(always)]
     pub fn capacity(&self) -> usize {
         self.sender.capacity()
     }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.sender.is_empty()
     }
 
+    #[inline(always)]
     pub fn is_full(&self) -> bool {
         self.sender.is_full()
     }
 
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.sender.len()
     }
