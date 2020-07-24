@@ -55,7 +55,7 @@ async fn main() {
         QueryConsolidation::default()
     ).await.unwrap();
     while let Some(reply) = replies.next().await {
-        println!(">> [Reply handler] received reply data {:?} : {}",
+        println!(">> [Reply handler] received ('{}': '{}')",
             reply.data.res_name, String::from_utf8_lossy(&reply.data.payload.to_vec()))
     }
 
