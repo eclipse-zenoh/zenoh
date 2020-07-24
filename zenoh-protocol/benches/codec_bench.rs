@@ -22,27 +22,27 @@ use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::proto::{Attachment, Channel, FramePayload, SessionMessage, ZenohMessage, channel};
 use zenoh_util::core::ZResult;
 
-fn _bench_zint_write((v, buf): (u64, &mut WBuf)) {
+fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
     buf.write_zint(v);
 }
 
-fn _bench_zint_write_two((v, buf): (&[u64; 2], &mut WBuf)) {
+fn _bench_zint_write_two((v, buf): (&[ZInt; 2], &mut WBuf)) {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
 }
 
-fn _bench_zint_write_three((v, buf): (&[u64; 3], &mut WBuf)) {
+fn _bench_zint_write_three((v, buf): (&[ZInt; 3], &mut WBuf)) {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     buf.write_zint(v[2]);
 }
 
-fn bench_one_zint_codec((v, buf): (u64, &mut WBuf)) -> ZResult<()> {
+fn bench_one_zint_codec((v, buf): (ZInt, &mut WBuf)) -> ZResult<()> {
     buf.write_zint(v);
     RBuf::from(&*buf).read_zint().map(|_| ())
 }
 
-fn bench_two_zint_codec((v, buf): (&[u64;2], &mut WBuf)) -> ZResult<()> {
+fn bench_two_zint_codec((v, buf): (&[ZInt;2], &mut WBuf)) -> ZResult<()> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     let mut rbuf = RBuf::from(&*buf);
@@ -50,7 +50,7 @@ fn bench_two_zint_codec((v, buf): (&[u64;2], &mut WBuf)) -> ZResult<()> {
     rbuf.read_zint().map(|_| ())
 }
 
-fn bench_three_zint_codec((v, buf): (&[u64;3], &mut WBuf)) -> ZResult<()> {
+fn bench_three_zint_codec((v, buf): (&[ZInt;3], &mut WBuf)) -> ZResult<()> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     buf.write_zint(v[2]);
@@ -107,9 +107,9 @@ fn bench_write_10bytes1((v, buf): (u8, &mut WBuf)) {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut buf = WBuf::new(64, true);
-    let rs3: [u64;3] = [u64::from(rand::random::<u8>()), u64::from(rand::random::<u8>()), u64::from(rand::random::<u8>())];
-    let rs2: [u64;2] = [u64::from(rand::random::<u8>()), u64::from(rand::random::<u8>())];
-    let _ns: [u64;4] = [0; 4];
+    let rs3: [ZInt;3] = [ZInt::from(rand::random::<u8>()), ZInt::from(rand::random::<u8>()), ZInt::from(rand::random::<u8>())];
+    let rs2: [ZInt;2] = [ZInt::from(rand::random::<u8>()), ZInt::from(rand::random::<u8>())];
+    let _ns: [ZInt;4] = [0; 4];
     let len = String::from("u8");
     // reliable: bool,
     // key: ResKey,

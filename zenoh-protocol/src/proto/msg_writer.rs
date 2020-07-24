@@ -11,11 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use std::convert::TryFrom;
+
+use super::msg::*;
+use super::decl::*;
+
 use crate::io::WBuf;
 use crate::core::*;
 use crate::link::Locator;
-use super::msg::*;
-use super::decl::*;
+
+use zenoh_util::to_zint;
+
 
 macro_rules! check {
     ($op:expr) => (if !$op { return false })
@@ -254,8 +260,7 @@ impl WBuf {
     }
 
     pub fn write_properties(&mut self, props: &[Property]) {
-        let len = props.len() as ZInt;
-        self.write_zint(len);
+        self.write_zint(to_zint!(props.len()));
         for p in props {
             self.write_property(p);
         }
@@ -288,8 +293,7 @@ impl WBuf {
     }
 
     fn write_locators(&mut self, locators: &[Locator]) -> bool {
-        let len = locators.len() as ZInt;
-        check!(self.write_zint(len));
+        check!(self.write_zint(to_zint!(locators.len())));
         for l in locators {
             check!(self.write_string(&l.to_string()));
         }
@@ -298,8 +302,7 @@ impl WBuf {
     }
 
     fn write_declarations(&mut self, declarations: &[Declaration]) -> bool {
-        let len = declarations.len() as ZInt;
-        check!(self.write_zint(len));
+        check!(self.write_zint(to_zint!(declarations.len())));
         for l in declarations {
             check!(self.write_declaration(l));
         }
@@ -404,13 +407,13 @@ impl WBuf {
     fn write_consolidation(&mut self, consolidation: &QueryConsolidation) -> bool {
         match consolidation {
             QueryConsolidation::None        => self.write_zint(0),
-            QueryConsolidation::LastHop  => self.write_zint(1),
+            QueryConsolidation::LastHop     => self.write_zint(1),
             QueryConsolidation::Incremental => self.write_zint(2),
         }
     }
 
     fn write_timestamp(&mut self, tstamp: &TimeStamp) -> bool {
-        self.write_zint(tstamp.time) &&
+        self.write_u64_as_zint(tstamp.time) &&
         self.write_bytes(tstamp.id.as_bytes())
     }
 

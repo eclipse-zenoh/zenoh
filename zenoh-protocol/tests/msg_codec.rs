@@ -51,7 +51,7 @@ fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
 
 fn gen_reply_context(is_final: bool) -> ReplyContext {
     let qid = gen!(ZInt);
-    let source_kind = thread_rng().gen_range::<u64, u64, u64>(0, 4) ;
+    let source_kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4) ;
     let replier_id = if is_final { None } else { Some(gen_pid()) };
     ReplyContext::make(qid, source_kind, replier_id)
 }
@@ -111,7 +111,7 @@ fn gen_key() -> ResKey {
 }
 
 fn gen_query_target() -> QueryTarget {
-    let kind = thread_rng().gen_range::<u64, u64, u64>(0, 4) ;
+    let kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4) ;
     let target = gen_target();
     QueryTarget{ kind, target }
 }

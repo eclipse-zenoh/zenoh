@@ -157,7 +157,7 @@ impl Channel {
         // Lease event
         let event = SessionLeaseEvent::new(zasyncopt!(self.w_self).clone());
         // Session lease interval is expressed in milliseconds
-        let interval = Duration::from_millis(self.lease);
+        let interval = Duration::from_millis(self.lease as u64);
         let event = TimedEvent::periodic(interval, event);
         let handle = event.get_handle();
         // Update the handle

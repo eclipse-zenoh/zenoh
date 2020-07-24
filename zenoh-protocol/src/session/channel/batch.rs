@@ -300,6 +300,7 @@ impl SerializationBatch {
 #[cfg(test)]
 mod tests {
     use async_std::task;
+    use std::convert::TryFrom;
 
     use super::*;
 
@@ -322,7 +323,7 @@ mod tests {
             let sn_best_effort = Arc::new(Mutex::new(
                 SeqNumGenerator::new(0, *SESSION_SEQ_NUM_RESOLUTION)
             ));    
-            let mut batch = SerializationBatch::new(batch_size, *is_streamed, sn_reliable.clone(), sn_best_effort.clone());            
+            let mut batch = SerializationBatch::new(batch_size, *is_streamed, sn_reliable.clone(), sn_best_effort.clone());
 
             // Serialize the messages until the batch is full
             let mut smsgs_in: Vec<SessionMessage> = Vec::new();
@@ -347,7 +348,7 @@ mod tests {
 
                 // Create a ZenohMessage                
                 if zmsgs_in.len() % 4 == 0 {
-                    // Change channel (reliable/best effort) every two messages
+                    // Change channel (reliable/best effort) every four messages
                     reliable = !reliable;
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
@@ -427,8 +428,8 @@ mod tests {
                 };
 
                 // Serialize the message
-                let mut wbuf = WBuf::new(batch_size, false); 
-                wbuf.write_zenoh_message(&msg_in);
+                let mut wbuf = WBuf::new(batch_size, false);
+                wbuf.write_zenoh_message(&msg_in);          
 
                 print!("Streamed: {}\t\tBatch: {}\t\tPload: {}",is_streamed, batch_size, payload_size);
 
@@ -443,7 +444,7 @@ mod tests {
                     ); 
                     let written = batch.serialize_zenoh_fragment(
                         msg_in.is_reliable(), guard.get(), &mut wbuf, to_write
-                    ).await;
+                    ).await;                    
                     assert_ne!(written, 0);
                     // Keep serializing
                     to_write -= written;                    
@@ -493,8 +494,11 @@ mod tests {
         task::block_on(async {
             let batch_size: Vec<usize> = vec![128, 512, 1_024, 4_096, 8_192, 16_384, 32_768, 65_535];
             let mut payload_size: Vec<usize> = Vec::new();
-            let mut size = 8;
+            let mut size: usize = 8;
             for _ in 0..16 {
+                if ZInt::try_from(size).is_err() {
+                    break
+                }
                 payload_size.push(size);
                 size *= 2;
             } 

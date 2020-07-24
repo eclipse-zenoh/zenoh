@@ -15,15 +15,15 @@ use async_std::sync::{Arc, Weak};
 use std::collections::HashMap;
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::core::rname::intersect;
-use zenoh_protocol::core::{ResKey, SubInfo};
+use zenoh_protocol::core::{ResKey, SubInfo, ZInt};
 use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
 
 
 pub(super) struct Context {
     pub(super) face: Arc<FaceState>,
-    pub(super) local_rid: Option<u64>,
-    pub(super) remote_rid: Option<u64>,
+    pub(super) local_rid: Option<ZInt>,
+    pub(super) remote_rid: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
     #[allow(dead_code)]
     pub(super) qabl: bool,
@@ -37,7 +37,7 @@ pub struct Resource {
     pub(super) childs: HashMap<String, Arc<Resource>>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) route: HashMap<usize, (Arc<FaceState>, u64, String)>
+    pub(super) route: HashMap<usize, (Arc<FaceState>, ZInt, String)>
 }
 
 impl Resource {
@@ -236,8 +236,8 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key(prefix: &Arc<Resource>, suffix: &str, sid: usize) -> (u64, String) {
-        fn get_best_key_(prefix: &Arc<Resource>, suffix: &str, sid: usize, checkchilds: bool) -> (u64, String) {
+    pub fn get_best_key(prefix: &Arc<Resource>, suffix: &str, sid: usize) -> (ZInt, String) {
+        fn get_best_key_(prefix: &Arc<Resource>, suffix: &str, sid: usize, checkchilds: bool) -> (ZInt, String) {
             if checkchilds && ! suffix.is_empty() {
                 let (chunk, rest) = Resource::fst_chunk(suffix);
                 if let Some(child) = prefix.childs.get(chunk) {
@@ -317,7 +317,7 @@ impl Resource {
     }
 }
 
-pub async fn declare_resource(tables: &mut Tables, face: &mut Arc<FaceState>, rid: u64, prefixid: u64, suffix: &str) {
+pub async fn declare_resource(tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt, prefixid: ZInt, suffix: &str) {
     match face.remote_mappings.get(&rid) {
         Some(_res) => {
             // if _res.read().name() != rname {
@@ -358,7 +358,7 @@ pub async fn declare_resource(tables: &mut Tables, face: &mut Arc<FaceState>, ri
     }
 }
 
-pub async fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: u64) {
+pub async fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
     unsafe {
         match Arc::get_mut_unchecked(face).remote_mappings.remove(&rid) {
             Some(mut res) => {Resource::clean(&mut res)}

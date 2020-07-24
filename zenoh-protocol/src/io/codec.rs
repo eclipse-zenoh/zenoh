@@ -11,38 +11,52 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use std::convert::TryFrom;
+
 use super::{ArcSlice, RBuf, WBuf};
 use crate::core::{ZInt, ZINT_MAX_BYTES};
 
-use zenoh_util::zerror;
+use zenoh_util::{to_zint, zerror};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 
-pub fn encoded_size_of(v: ZInt) -> usize {
-    // Note that the sizes are already shifted by 2 bits
-    if v <= 0xff { 0 } 
-    else if v <= 0xffff { 0x04 } 
-    else if v <= 0xffff_ffff { 0x08 }
-    else { 0x0c }
-}
 
 impl RBuf {
 
     pub fn read_zint(&mut self) -> ZResult<ZInt> {
-        let mut v : ZInt = 0;
+        let mut v: ZInt = 0;
         let mut b = self.read()?;
         let mut i = 0;
         let mut k = ZINT_MAX_BYTES;
         while b > 0x7f && k > 0 {
-            v |= ((b & 0x7f) as ZInt)    << i;
+            v |= ((b & 0x7f) as ZInt) << i;
             i += 7;
             b = self.read()?;
             k -=1;
         }
         if k > 0 {
-            v |= ((b & 0x7f) as ZInt)    << i;
+            v |= ((b & 0x7f) as ZInt) << i;
             Ok(v)
         } else {
-            zerror!(ZErrorKind::InvalidMessage { descr: "Invalid ZInt (out of 64-bit bound)".to_string() }) 
+            zerror!(ZErrorKind::InvalidMessage { descr: format!("Invalid ZInt (larget than ZInt max value: {})", ZInt::MAX) })
+        }
+    }
+
+    pub fn read_zint_as_u64(&mut self) -> ZResult<u64> {
+        let mut v: u64 = 0;
+        let mut b = self.read()?;
+        let mut i = 0;
+        let mut k = ZINT_MAX_BYTES;
+        while b > 0x7f && k > 0 {
+            v |= ((b & 0x7f) as u64) << i;
+            i += 7;
+            b = self.read()?;
+            k -=1;
+        }
+        if k > 0 {
+            v |= ((b & 0x7f) as u64) << i;
+            Ok(v)
+        } else {
+            zerror!(ZErrorKind::InvalidMessage { descr: "Invalid ZInt (out of 64-bits bounds)".to_string() })
         }
     }
 
@@ -82,26 +96,36 @@ impl WBuf {
         self.write(b)
     }
 
+    pub fn write_u64_as_zint(&mut self, v: u64) -> bool {
+        let mut c = v;
+        let mut b : u8 = (c & 0xff) as u8;
+        while c > 0x7f && self.write(b | 0x80) {
+            c >>= 7;
+            b = (c & 0xff) as u8;
+        }
+        self.write(b)
+    }
+
     // Same as write_bytes but with array length before the bytes.
     pub fn write_bytes_array(&mut self, s: &[u8]) -> bool {
-        self.write_zint(s.len() as ZInt) &&
+        self.write_zint(to_zint!(s.len())) &&
         self.write_bytes(s)
     }
 
     pub fn write_string(&mut self, s: &str) -> bool {
-        self.write_zint(s.len() as ZInt) &&
+        self.write_zint(to_zint!(s.len())) &&
         self.write_bytes(s.as_bytes())
     }
 
     // Similar than write_bytes_array but zero-copy as slice is shared
     pub fn write_bytes_slice(&mut self, slice: &ArcSlice) -> bool {
-        self.write_zint(slice.len() as ZInt) &&
+        self.write_zint(to_zint!(slice.len())) &&
         self.write_slice(slice.clone())
     }
 
     // Similar than write_bytes_array but zero-copy as RBuf contains slices that are shared
     pub fn write_rbuf(&mut self, rbuf: &RBuf) -> bool {
-        if self.write_zint(rbuf.len() as ZInt) {
+        if self.write_zint(to_zint!(rbuf.len())) {
             self.write_rbuf_slices(&rbuf)            
         } else {
             false

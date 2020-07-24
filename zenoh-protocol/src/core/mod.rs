@@ -58,93 +58,93 @@ pub enum ResKey {
 use ResKey::*;
 
 impl ResKey {
-  pub fn rid(&self) -> ResourceId {
-      match self {
-          RName(_) => NO_RESOURCE_ID,
-          RId(rid) | RIdWithSuffix(rid, _) => *rid,
-      }
-  }
-
-  pub fn is_numerical(&self) -> bool {
-    match self {
-      RId(_) => true,
-      _ => false
+    pub fn rid(&self) -> ResourceId {
+        match self {
+            RName(_) => NO_RESOURCE_ID,
+            RId(rid) | RIdWithSuffix(rid, _) => *rid,
+        }
     }
-  }
+
+    pub fn is_numerical(&self) -> bool {
+        match self {
+            RId(_) => true,
+            _ => false
+        }
+    }
 }
 
 impl fmt::Debug for ResKey {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-      match self {
-          RName(name) => write!(f, "{}", name),
-          RId(rid) => write!(f, "{}", rid),
-          RIdWithSuffix(rid, suffix) => write!(f, "{}, {}", rid, suffix),
-      }
-  }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RName(name) => write!(f, "{}", name),
+            RId(rid) => write!(f, "{}", rid),
+            RIdWithSuffix(rid, suffix) => write!(f, "{}, {}", rid, suffix),
+        }
+    }
 }
 
 impl fmt::Display for ResKey {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    fmt::Debug::fmt(self, f)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 impl From<ResourceId> for ResKey {
-  fn from(rid: ResourceId) -> ResKey {
-      RId(rid)
-  }
+    fn from(rid: ResourceId) -> ResKey {
+        RId(rid)
+    }
 }
 
 impl From<&str> for ResKey {
-  fn from(name: &str) -> ResKey {
-      RName(name.to_string())
-  }
+    fn from(name: &str) -> ResKey {
+        RName(name.to_string())
+    }
 }
 
 impl From<String> for ResKey {
-  fn from(name: String) -> ResKey {
-      RName(name)
-  }
+    fn from(name: String) -> ResKey {
+        RName(name)
+    }
 }
 
 impl From<(ResourceId, &str)> for ResKey {
-  fn from(tuple: (ResourceId, &str)) -> ResKey {
-    if tuple.1.is_empty() {
-      RId(tuple.0)
-    } else if tuple.0 == NO_RESOURCE_ID {
-      RName(tuple.1.to_string())
-    } else {
-      RIdWithSuffix(tuple.0, tuple.1.to_string())
+    fn from(tuple: (ResourceId, &str)) -> ResKey {
+        if tuple.1.is_empty() {
+            RId(tuple.0)
+        } else if tuple.0 == NO_RESOURCE_ID {
+            RName(tuple.1.to_string())
+        } else {
+            RIdWithSuffix(tuple.0, tuple.1.to_string())
+        }
     }
-  }
 }
 
 impl From<(ResourceId, String)> for ResKey {
-  fn from(tuple: (ResourceId, String)) -> ResKey {
-    if tuple.1.is_empty() {
-      RId(tuple.0)
-    } else if tuple.0 == NO_RESOURCE_ID {
-      RName(tuple.1)
-    } else {
-      RIdWithSuffix(tuple.0, tuple.1)
+    fn from(tuple: (ResourceId, String)) -> ResKey {
+        if tuple.1.is_empty() {
+            RId(tuple.0)
+        } else if tuple.0 == NO_RESOURCE_ID {
+            RName(tuple.1)
+        } else {
+            RIdWithSuffix(tuple.0, tuple.1)
+        }
     }
-  }
 }
 
 impl<'a> From<&'a ResKey> for (ResourceId, &'a str) {
-  fn from(key: &'a ResKey) -> (ResourceId, &'a str) {
-    match key {
-      RId(rid) => (*rid, ""),
-      RName(name) => (NO_RESOURCE_ID, &name[..]), //(&(0 as u64)
-      RIdWithSuffix(rid, suffix) => (*rid, &suffix[..])
+    fn from(key: &'a ResKey) -> (ResourceId, &'a str) {
+        match key {
+            RId(rid) => (*rid, ""),
+            RName(name) => (NO_RESOURCE_ID, &name[..]), //(&(0 as u64)
+            RIdWithSuffix(rid, suffix) => (*rid, &suffix[..])
+        }
     }
-  }
 }
 
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Property {
-    pub key:   ZInt,
+    pub key: ZInt,
     pub value: Vec<u8>
 }
 
@@ -154,33 +154,33 @@ pub struct PeerId {
 }
 
 impl fmt::Debug for PeerId {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{}", hex::encode_upper(&self.id))
-  }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", hex::encode_upper(&self.id))
+    }
 }
 
 impl fmt::Display for PeerId {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    fmt::Debug::fmt(self, f)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct TimeStamp {
-  pub time: u64,
-  pub id: Uuid
+    pub time: u64,
+    pub id: Uuid
 }
 
 impl fmt::Debug for TimeStamp {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{}/{}", self.time, self.id)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.time, self.id)
+    }
 }
 
 impl fmt::Display for TimeStamp {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    fmt::Debug::fmt(self, f)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -204,19 +204,19 @@ pub struct SubInfo {
 }
 
 impl Default for SubInfo {
-  fn default() -> SubInfo {
-    SubInfo {
-      reliability: Reliability::Reliable,
-      mode : SubMode::Push,
-      period: None
-    }  
-  }
+    fn default() -> SubInfo {
+        SubInfo {
+            reliability: Reliability::Reliable,
+            mode : SubMode::Push,
+            period: None
+        }  
+    }
 }
 
 pub mod queryable {
-    pub const ALL_KINDS      : crate::core::ZInt = 0x01;
-    pub const STORAGE        : crate::core::ZInt = 0x02;
-    pub const EVAL           : crate::core::ZInt = 0x04;
+    pub const ALL_KINDS : crate::core::ZInt = 0x01;
+    pub const STORAGE   : crate::core::ZInt = 0x02;
+    pub const EVAL      : crate::core::ZInt = 0x04;
 }
 
 
@@ -253,9 +253,9 @@ pub struct QueryTarget {
 
 impl Default for QueryTarget {
     fn default() -> Self { 
-        QueryTarget {            
+        QueryTarget {
             kind : queryable::ALL_KINDS, 
             target : Target::default(), 
         }
-     }
+    }
 }

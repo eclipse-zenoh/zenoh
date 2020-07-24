@@ -65,7 +65,7 @@ pub mod encoding {
     }
 
     pub fn to_mime(i: ZInt) -> ZResult<Mime> {
-        if i < MIMES.len() as u64 {
+        if i < MIMES.len() as ZInt {
             Ok(MIMES[i as usize].clone())
         } else {
             zerror!(ZErrorKind::Other { descr: format!("Unknown encoding id {}", i)})
