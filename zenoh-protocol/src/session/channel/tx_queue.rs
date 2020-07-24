@@ -473,7 +473,8 @@ impl TransmissionQueue {
 
 #[cfg(test)]
 mod tests {
-    use async_std::sync::{Arc, Mutex};
+    use async_std::prelude::*;
+    use async_std::sync::{Arc, Barrier, Mutex};
     use async_std::task;
     use std::convert::TryFrom;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -486,12 +487,15 @@ mod tests {
 
     use super::*;
 
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+
     #[test]
     fn tx_queue() {        
         async fn schedule(
             num_msg: usize,
             payload_size: usize,
-            queue: Arc<TransmissionQueue>
+            queue: &Arc<TransmissionQueue>
         ) {
             // Send reliable messages
             let reliable = true;
@@ -505,22 +509,26 @@ mod tests {
                 reliable, key, info, payload, reply_context, attachment
             );
             
+            println!(">>> Sending {} messages with payload size: {}", num_msg, payload_size);
             for _ in 0..num_msg {
                 queue.push_zenoh_message(message.clone(), QUEUE_PRIO_DATA).await;
             }            
         }
 
         async fn consume(
-            queue: Arc<TransmissionQueue>, 
-            c_batches: Arc<AtomicUsize>, 
-            c_bytes: Arc<AtomicUsize>, 
-            c_messages: Arc<AtomicUsize>,
-            c_fragments: Arc<AtomicUsize>
+            queue: Arc<TransmissionQueue>,                     
+            c_threshold: Arc<AtomicUsize>,
+            c_barrier: Arc<Barrier>
         ) {
+            let mut batches: usize = 0;
+            let mut bytes: usize = 0;
+            let mut msgs: usize = 0;            
+            let mut fragments: usize = 0;
+
             loop {
                 let (batch, priority) = queue.pull().await;   
-                c_batches.fetch_add(1, Ordering::Relaxed);
-                c_bytes.fetch_add(batch.len(), Ordering::Relaxed);           
+                batches += 1;
+                bytes += batch.len();           
                 // Create a RBuf for deserialization starting from the batch
                 let mut rbuf: RBuf = batch.get_serialized_messages().into();
                 // Deserialize the messages
@@ -528,17 +536,28 @@ mod tests {
                     match msg.body {
                         SessionBody::Frame(Frame { payload, .. }) => match payload {
                             FramePayload::Messages { messages } => {
-                                c_messages.fetch_add(messages.len(), Ordering::Relaxed);
+                                msgs += messages.len();
                             },
                             FramePayload::Fragment { is_final, .. } => {
-                                c_fragments.fetch_add(1, Ordering::Relaxed);
+                                fragments += 1;
                                 if is_final {
-                                    c_messages.fetch_add(1, Ordering::Relaxed);
+                                    msgs += 1;
                                 }
                             }
                         },
-                        _ => { c_messages.fetch_add(1, Ordering::Relaxed); }
-                    }                 
+                        _ => { msgs += 1; }
+                    }
+                    // Synchronize for this test
+                    if msgs == c_threshold.load(Ordering::SeqCst) {
+                        println!("    Received {} messages, {} bytes, {} batches, {} fragments", msgs, bytes, batches, fragments);
+                        let res = c_barrier.wait().timeout(TIMEOUT).await;
+                        assert!(res.is_ok());
+                        // Reset counters
+                        batches = 0;
+                        bytes = 0;
+                        msgs = 0;            
+                        fragments = 0;
+                    }   
                 }
                 // Reinsert the batch
                 queue.push_serialization_batch(batch, priority).await;
@@ -558,20 +577,16 @@ mod tests {
             batch_size, is_streamed, sn_reliable, sn_best_effort
         ));       
 
-        // Counters
-        let counter_batches = Arc::new(AtomicUsize::new(0));
-        let counter_bytes = Arc::new(AtomicUsize::new(0));
-        let counter_messages = Arc::new(AtomicUsize::new(0));
-        let counter_fragments = Arc::new(AtomicUsize::new(0));
+        // Synch variables
+        let barrier = Arc::new(Barrier::new(2));
+        let threshold = Arc::new(AtomicUsize::new(0));
 
         // Consume task
         let c_queue = queue.clone();
-        let c_batches = counter_batches.clone();
-        let c_bytes = counter_bytes.clone();
-        let c_messages = counter_messages.clone();
-        let c_fragments = counter_fragments.clone();
+        let c_barrier = barrier.clone();
+        let c_threshold = threshold.clone();
         task::spawn(async move {
-            consume(c_queue, c_batches, c_bytes, c_messages, c_fragments).await;
+            consume(c_queue, c_threshold, c_barrier).await;
         });
                 
         // Total amount of bytes to send in each test
@@ -579,24 +594,20 @@ mod tests {
         let max_msgs: usize = 1_000;
         // Paylod size of the messages
         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
-        // Sleep time for reading the number of received messages after scheduling completion
-        let sleep = Duration::from_millis(1_000);
+        
         task::block_on(async {
             for ps in payload_sizes.iter() {
                 if ZInt::try_from(*ps).is_err() {
                     break
                 }
+                
                 let num_msg = max_msgs.min(bytes / ps);
-                println!(">>> Sending {} messages with payload size: {}", num_msg, ps);                      
-                schedule(num_msg, *ps, queue.clone()).await;
-                task::sleep(sleep).await;  
+                threshold.store(num_msg, Ordering::SeqCst);
+                
+                schedule(num_msg, *ps, &queue).await;
 
-                let messages = counter_messages.swap(0, Ordering::Relaxed);
-                let batches = counter_batches.swap(0, Ordering::Relaxed);
-                let bytes = counter_bytes.swap(0, Ordering::Relaxed);    
-                let fragments = counter_fragments.swap(0, Ordering::Relaxed);            
-                println!("    Received {} messages, {} bytes, {} batches, {} fragments", messages, bytes, batches, fragments);
-                assert_eq!(num_msg, messages);  
+                let res = barrier.wait().timeout(TIMEOUT).await;
+                assert!(res.is_ok()); 
             }    
         }); 
     }
