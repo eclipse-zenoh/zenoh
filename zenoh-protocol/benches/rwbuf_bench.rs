@@ -17,17 +17,18 @@ extern crate rand;
 
 use criterion::{Criterion, black_box};
 
+use zenoh_protocol::core::ZInt;
 use zenoh_protocol::io::WBuf;
 
-fn bench_foo((v, buf): (u64, &mut WBuf)) {  
+fn bench_foo((v, buf): (ZInt, &mut WBuf)) {  
   buf.write_zint(v);
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut buf = WBuf::new(64, true);     
-    let rs3: [u64;3] = [u64::from(rand::random::<u8>()), u64::from(rand::random::<u8>()), u64::from(rand::random::<u8>())];     
-    let _rs2: [u64;2] = [u64::from(rand::random::<u8>()), u64::from(rand::random::<u8>())];
-    let _ns: [u64;4] = [0; 4];
+    let rs3: [ZInt;3] = [ZInt::from(rand::random::<u8>()), ZInt::from(rand::random::<u8>()), ZInt::from(rand::random::<u8>())];     
+    let _rs2: [ZInt;2] = [ZInt::from(rand::random::<u8>()), ZInt::from(rand::random::<u8>())];
+    let _ns: [ZInt;4] = [0; 4];
     let _len = String::from("u8");
 
     c.bench_function("bench_foo u8", |b| b.iter(|| {

@@ -16,12 +16,12 @@ use async_std::task;
 use async_trait::async_trait;
 use futures::prelude::*;
 use std::fmt;
-use std::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::collections::HashMap;
 use async_std::sync::RwLock;
 use log::{error, warn, trace};
 use zenoh_protocol:: {
-    core::{ rname, ResourceId, ResKey, QueryTarget, QueryConsolidation, queryable },
+    core::{ AtomicZInt, rname, ResourceId, ResKey, QueryTarget, QueryConsolidation, queryable },
     io::RBuf,
     proto::Primitives,
 };
@@ -41,7 +41,7 @@ zconfigurable! {
 pub(crate) struct SessionState {
     primitives:         Option<Arc<dyn Primitives + Send + Sync>>, // @TODO replace with MaybeUninit ??
     rid_counter:        AtomicUsize,  // @TODO: manage rollover and uniqueness
-    qid_counter:        AtomicU64,
+    qid_counter:        AtomicZInt,
     decl_id_counter:    AtomicUsize,
     local_resources:    HashMap<ResourceId, String>,
     remote_resources:   HashMap<ResourceId, String>,
@@ -57,7 +57,7 @@ impl SessionState {
         SessionState  {
             primitives:         None,
             rid_counter:        AtomicUsize::new(1),  // Note: start at 1 because 0 is reserved for NO_RESOURCE
-            qid_counter:        AtomicU64::new(0),
+            qid_counter:        AtomicZInt::new(0),
             decl_id_counter:    AtomicUsize::new(0),
             local_resources:    HashMap::new(),
             remote_resources:   HashMap::new(),

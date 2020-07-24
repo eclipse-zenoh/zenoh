@@ -158,3 +158,13 @@ macro_rules! to_zerror {
         |e| { zerror!($kind, $descr, e) }
     )
 }
+
+// This macro is a shorthand for the conversion to ZInt
+// This macro requires to previously import the following:
+//   use std::convert::TryFrom;
+#[macro_export]
+macro_rules! to_zint {
+    ($val:expr) => {
+        ZInt::try_from($val).expect(&format!("Can not encode {} as ZInt (max ZInt value: {})", $val, ZInt::MAX))
+    };
+}

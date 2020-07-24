@@ -521,7 +521,7 @@ impl RBuf {
     }
 
     pub fn read_timestamp(&mut self) -> ZResult<TimeStamp> {
-        let time = self.read_zint()?;
+        let time = self.read_zint_as_u64()?;
         let mut bytes = [0u8; 16];
         self.read_bytes(&mut bytes[..])?;
         let id = uuid::Builder::from_bytes(bytes).build();

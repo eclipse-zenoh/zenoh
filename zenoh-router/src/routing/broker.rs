@@ -146,7 +146,7 @@ impl Tables {
             // @TODO temporarily propagate to everybody (clients)
             // if whatami != whatami::CLIENT {
             if true {
-                let mut local_id = 0;
+                let mut local_id: ZInt = 0;
                 for (id, face) in t.faces.iter() {
                     if *id != fid {
                         for sub in face.subs.iter() {

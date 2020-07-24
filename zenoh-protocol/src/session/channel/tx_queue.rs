@@ -475,10 +475,11 @@ impl TransmissionQueue {
 mod tests {
     use async_std::sync::{Arc, Mutex};
     use async_std::task;
+    use std::convert::TryFrom;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
-    use crate::core::ResKey;
+    use crate::core::{ResKey, ZInt};
     use crate::io::RBuf;
     use crate::proto::{FramePayload, SeqNumGenerator, SessionBody, Frame, ZenohMessage};
     use crate::session::defaults::{QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION};
@@ -486,7 +487,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn transmission_queue() {        
+    fn tx_queue() {        
         async fn schedule(
             num_msg: usize,
             payload_size: usize,
@@ -581,7 +582,10 @@ mod tests {
         // Sleep time for reading the number of received messages after scheduling completion
         let sleep = Duration::from_millis(1_000);
         task::block_on(async {
-            for ps in payload_sizes.iter() {                
+            for ps in payload_sizes.iter() {
+                if ZInt::try_from(*ps).is_err() {
+                    break
+                }
                 let num_msg = max_msgs.min(bytes / ps);
                 println!(">>> Sending {} messages with payload size: {}", num_msg, ps);                      
                 schedule(num_msg, *ps, queue.clone()).await;

@@ -142,7 +142,7 @@ impl ChannelLink {
         // Keep alive event
         let event = KeepAliveEvent::new(queue.clone(), link.clone());
         // Keep alive interval is expressed in milliseconds
-        let interval = Duration::from_millis(keep_alive);
+        let interval = Duration::from_millis(keep_alive as u64);
         let ka_event = TimedEvent::periodic(interval, event);
         // Get the handle of the periodic event
         let ka_handle = ka_event.get_handle();
@@ -150,7 +150,7 @@ impl ChannelLink {
         // Lease event
         let event = LinkLeaseEvent::new(ch, alive.clone(), link.clone());
         // Keep alive interval is expressed in milliseconds
-        let interval = Duration::from_millis(lease);
+        let interval = Duration::from_millis(lease as u64);
         let ll_event = TimedEvent::periodic(interval, event);
         // Get the handle of the periodic event
         let ll_handle = ll_event.get_handle();

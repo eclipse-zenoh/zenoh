@@ -26,12 +26,12 @@ pub struct FaceState {
     pub(super) id: usize,
     pub(super) whatami: WhatAmI,
     pub(super) primitives: OwnedPrimitives,
-    pub(super) local_mappings: HashMap<u64, Arc<Resource>>,
-    pub(super) remote_mappings: HashMap<u64, Arc<Resource>>,
+    pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
+    pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) subs: Vec<Arc<Resource>>,
     pub(super) qabl: Vec<Arc<Resource>>,
     pub(super) next_qid: ZInt,
-    pub(super) pending_queries: HashMap<u64, Arc<Query>>,
+    pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
 }
 
 impl FaceState {
@@ -79,13 +79,13 @@ pub struct Face {
 
 #[async_trait]
 impl Primitives for Face {
-    async fn resource(&self, rid: u64, reskey: &ResKey) {
+    async fn resource(&self, rid: ZInt, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix).await;
     }
 
-    async fn forget_resource(&self, rid: u64) {
+    async fn forget_resource(&self, rid: ZInt) {
         let mut tables = self.tables.write().await;
         undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
     }

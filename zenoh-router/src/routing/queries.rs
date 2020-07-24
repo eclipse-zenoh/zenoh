@@ -27,9 +27,9 @@ pub(crate) struct Query {
     src_qid: ZInt,
 }
 
-type QueryRoute = HashMap<usize, (Arc<FaceState>, u64, String, u64)>;
+type QueryRoute = HashMap<usize, (Arc<FaceState>, ZInt, String, ZInt)>;
 
-pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: u64, suffix: &str) {
+pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: ZInt, suffix: &str) {
     let prefix = {
         match prefixid {
             0 => {Some(tables.root_res.clone())}
@@ -112,7 +112,7 @@ pub(crate) async fn declare_queryable(tables: &mut Tables, face: &mut Arc<FaceSt
     }
 }
 
-pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: u64, suffix: &str) {
+pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, prefixid: ZInt, suffix: &str) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => {
             match Resource::get_resource(prefix, suffix) {
@@ -131,7 +131,7 @@ pub async fn undeclare_queryable(tables: &mut Tables, face: &mut Arc<FaceState>,
     }
 }
 
-async fn route_query_to_map(tables: &mut Tables, face: &Arc<FaceState>, qid: ZInt, rid: u64, suffix: &str/*, _predicate: &str, */
+async fn route_query_to_map(tables: &mut Tables, face: &Arc<FaceState>, qid: ZInt, rid: ZInt, suffix: &str/*, _predicate: &str, */
 /*_qid: ZInt, _target: &Option<QueryTarget>, _consolidation: &QueryConsolidation*/) -> Option<QueryRoute> {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => {
@@ -165,11 +165,11 @@ async fn route_query_to_map(tables: &mut Tables, face: &Arc<FaceState>, qid: ZIn
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<FaceState>, rid: u64, suffix: &str, predicate: &str, 
+pub(crate) async fn route_query(tables: &mut Tables, face: &Arc<FaceState>, rid: ZInt, suffix: &str, predicate: &str, 
                                 qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
     if let Some(outfaces) = route_query_to_map(tables, face, qid, rid, suffix).await {
         let outfaces = outfaces.into_iter().filter(|(_, (outface, _, _, _))| face.whatami != whatami::PEER || outface.whatami != whatami::PEER)
-                                           .map(|(_, v)| v).collect::<Vec<(Arc<FaceState>, u64, String, u64)>>();
+                                           .map(|(_, v)| v).collect::<Vec<(Arc<FaceState>, ZInt, String, ZInt)>>();
         match outfaces.len() {
             0 => {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face.id, qid);
