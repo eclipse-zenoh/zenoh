@@ -174,13 +174,7 @@ impl Channel {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) {
-        log::debug!("Closing the session with peer: {}", self.pid);
-        // Close all the links
-        let mut guard = zasyncwrite!(self.links);
-        for l in guard.drain(..) {
-            let _ = l.close().await;
-        }
-        
+        log::debug!("Closing the session with peer: {}", self.pid);        
         // Delete the session on the manager
         let _ = self.manager.del_session(&self.pid).await;            
 
@@ -188,7 +182,13 @@ impl Channel {
         let mut guard = zasyncwrite!(self.callback);
         if let Some(callback) = guard.take() {
             callback.close().await;
-        }               
+        } 
+        
+        // Close all the links
+        let mut guard = zasyncwrite!(self.links);
+        for l in guard.drain(..) {
+            let _ = l.close().await;
+        }
     }
 
     pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {     
