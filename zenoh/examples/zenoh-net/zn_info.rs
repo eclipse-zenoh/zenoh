@@ -44,7 +44,7 @@ async fn main() {
     let session = open(config, Some(ps)).await.unwrap();
 
     let info = session.info().await;
-    for (key, value) in info {
+    for (key, value) in info {        
         println!("{} : {}", properties::to_str(key).unwrap(), hex::encode_upper(value));
     }
 }

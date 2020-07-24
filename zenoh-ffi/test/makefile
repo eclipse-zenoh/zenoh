@@ -13,7 +13,7 @@
 #
 
 debug:
-	clang -I ../include -L ../../target/debug/ -lzenoh_ffi session_test.c -o session_test
+	clang -I ../include -L ../../target/debug/ -lzenoh_ffi test_session.c -o test_session
 	clang -I ../include -L ../../target/debug/ -lzenoh_ffi test_sub.c -o test_sub
 	clang -I ../include -L ../../target/debug/ -lzenoh_ffi test_query.c -o test_query
 release:
@@ -27,4 +27,4 @@ all:
 	make release
 
 clean:
-	rm thrput_test session_test
+	$(RM) thrput_test test_session test_sub test_query
