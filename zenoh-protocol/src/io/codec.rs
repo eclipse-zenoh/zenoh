@@ -20,44 +20,34 @@ use zenoh_util::{to_zint, zerror};
 use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 
 
-impl RBuf {
-
-    pub fn read_zint(&mut self) -> ZResult<ZInt> {
-        let mut v: ZInt = 0;
-        let mut b = self.read()?;
+macro_rules! read_zint {
+    ($buf:expr, $res:ty) => {
+        let mut v: $res = 0;
+        let mut b = $buf.read()?;
         let mut i = 0;
         let mut k = ZINT_MAX_BYTES;
         while b > 0x7f && k > 0 {
-            v |= ((b & 0x7f) as ZInt) << i;
+            v |= ((b & 0x7f) as $res) << i;
             i += 7;
-            b = self.read()?;
+            b = $buf.read()?;
             k -=1;
         }
         if k > 0 {
-            v |= ((b & 0x7f) as ZInt) << i;
-            Ok(v)
+            v |= ((b & 0x7f) as $res) << i;
+            return Ok(v)
         } else {
-            zerror!(ZErrorKind::InvalidMessage { descr: format!("Invalid ZInt (larget than ZInt max value: {})", ZInt::MAX) })
+            return zerror!(ZErrorKind::InvalidMessage { descr: format!("Invalid ZInt (larget than ZInt max value: {})", ZInt::MAX) })
         }
+    };
+}
+
+impl RBuf {
+    pub fn read_zint(&mut self) -> ZResult<ZInt> {
+        read_zint!(self, ZInt);
     }
 
     pub fn read_zint_as_u64(&mut self) -> ZResult<u64> {
-        let mut v: u64 = 0;
-        let mut b = self.read()?;
-        let mut i = 0;
-        let mut k = ZINT_MAX_BYTES;
-        while b > 0x7f && k > 0 {
-            v |= ((b & 0x7f) as u64) << i;
-            i += 7;
-            b = self.read()?;
-            k -=1;
-        }
-        if k > 0 {
-            v |= ((b & 0x7f) as u64) << i;
-            Ok(v)
-        } else {
-            zerror!(ZErrorKind::InvalidMessage { descr: "Invalid ZInt (out of 64-bits bounds)".to_string() })
-        }
+        read_zint!(self, u64);
     }
 
     // Same as read_bytes but with array length before the bytes.
@@ -82,28 +72,28 @@ impl RBuf {
     }
 }
 
-impl WBuf {
 
+macro_rules! write_zint {
+    ($buf:expr, $val:expr) => {
+        let mut c = $val;
+        let mut b: u8 = (c & 0xff) as u8;
+        while c > 0x7f && $buf.write(b | 0x80) {
+            c >>= 7;
+            b = (c & 0xff) as u8;
+        }
+        return $buf.write(b)
+    };
+}
+
+impl WBuf {
     /// This the traditional VByte encoding, in which an arbirary integer
     /// is encoded as a sequence of 7 bits integers
     pub fn write_zint(&mut self, v: ZInt) -> bool {
-        let mut c = v;
-        let mut b : u8 = (c & 0xff) as u8;
-        while c > 0x7f && self.write(b | 0x80) {
-            c >>= 7;
-            b = (c & 0xff) as u8;
-        }
-        self.write(b)
+        write_zint!(self, v);
     }
 
     pub fn write_u64_as_zint(&mut self, v: u64) -> bool {
-        let mut c = v;
-        let mut b : u8 = (c & 0xff) as u8;
-        while c > 0x7f && self.write(b | 0x80) {
-            c >>= 7;
-            b = (c & 0xff) as u8;
-        }
-        self.write(b)
+        write_zint!(self, v);
     }
 
     // Same as write_bytes but with array length before the bytes.
