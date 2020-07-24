@@ -19,7 +19,7 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 
 pub(super) struct DefragBuffer {
-    // Keep tracks of the next expected fragment
+    // Keep track of the next expected fragment
     sn: SeqNum,
     buffer: RBuf
 }
