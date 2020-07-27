@@ -1,4 +1,4 @@
- //
+//
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
 // This program and the accompanying materials are made available under the
@@ -11,31 +11,28 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#![recursion_limit="256"]
+#![recursion_limit = "256"]
 
-use log::{debug, info};
-use std::collections::HashMap;
+use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use futures::select;
-use clap::{Arg, ArgMatches};
-use zenoh_router::runtime::Runtime;
-use zenoh::net::*;
-use zenoh::net::utils::resource_name;
+use log::{debug, info};
+use std::collections::HashMap;
 use zenoh::net::queryable::STORAGE;
-
+use zenoh::net::utils::resource_name;
+use zenoh::net::*;
+use zenoh_router::runtime::Runtime;
 
 #[no_mangle]
-pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>>
-{
+pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
     vec![
         Arg::from_usage("--storage-selector 'The selection of resources to be stored'")
-        .default_value("/demo/example/**")
+            .default_value("/demo/example/**"),
     ]
 }
 
 #[no_mangle]
-pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>)
-{
+pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
     async_std::task::spawn(run(runtime, args));
 }
 
@@ -49,18 +46,21 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None
+        period: None,
     };
 
     let selector: ResKey = args.value_of("storage-selector").unwrap().into();
     debug!("Run example-plugin with storage-selector={}", selector);
 
     debug!("Declaring Subscriber on {}", selector);
-    let mut sub = session.declare_subscriber(&selector, &sub_info).await.unwrap();
+    let mut sub = session
+        .declare_subscriber(&selector, &sub_info)
+        .await
+        .unwrap();
 
     debug!("Declaring Queryable on {}", selector);
     let mut queryable = session.declare_queryable(&selector, STORAGE).await.unwrap();
-    
+
     loop {
         select!(
             sample = sub.next().fuse() => {
@@ -75,8 +75,8 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 for (rname, (data, data_info)) in stored.iter() {
                     if resource_name::intersect(&query.res_name, rname) {
                         query.reply(Sample{
-                            res_name: rname.clone(), 
-                            payload: data.clone(), 
+                            res_name: rname.clone(),
+                            payload: data.clone(),
                             data_info: data_info.clone(),
                         }).await;
                     }
@@ -85,4 +85,3 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         );
     }
 }
-
