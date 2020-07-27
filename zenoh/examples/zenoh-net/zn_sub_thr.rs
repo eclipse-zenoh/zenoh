@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::{App, Arg};
 use async_std::future;
+use clap::{App, Arg};
 use std::time::Instant;
-use zenoh::net::*;
 use zenoh::net::ResKey::*;
+use zenoh::net::*;
 
 const N: u128 = 100000;
 
@@ -27,16 +27,31 @@ fn print_stats(start: Instant) {
 //
 // Argument parsing -- look at the main for the zenoh-related code
 //
-fn parse_args() -> Config  {
+fn parse_args() -> Config {
     let args = App::new("zenoh-net throughput sub example")
-        .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
-            .possible_values(&["peer", "client"]).default_value("peer"))
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
+        ))
         .get_matches();
 
     Config::default()
-        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap())
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        )
 }
 
 #[async_std::main]
@@ -45,11 +60,14 @@ async fn main() {
     env_logger::init();
 
     let config = parse_args();
-    
+
     println!("Openning session...");
     let session = open(config, None).await.unwrap();
 
-    let reskey = RId(session.declare_resource(&RName("/test/thr".to_string())).await.unwrap());
+    let reskey = RId(session
+        .declare_resource(&RName("/test/thr".to_string()))
+        .await
+        .unwrap());
 
     let mut count = 0u128;
     let mut start = Instant::now();
@@ -57,26 +75,31 @@ async fn main() {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None
+        period: None,
     };
-    session.declare_callback_subscriber(&reskey, &sub_info,
-        move |_res_name: &str, _payload: RBuf, _data_info: Option<RBuf>| {
-            if count == 0 {
-                start = Instant::now();
-                count += 1;
-            } else if count < N {
-                count += 1;
-            } else {
-                print_stats(start);
-                count = 0;
-            }
-        }
-    ).await.unwrap();
+    session
+        .declare_callback_subscriber(
+            &reskey,
+            &sub_info,
+            move |_res_name: &str, _payload: RBuf, _data_info: Option<RBuf>| {
+                if count == 0 {
+                    start = Instant::now();
+                    count += 1;
+                } else if count < N {
+                    count += 1;
+                } else {
+                    print_stats(start);
+                    count = 0;
+                }
+            },
+        )
+        .await
+        .unwrap();
 
     // Stop forever
     future::pending::<()>().await;
 
-    // @TODO: Uncomment these once the writer starvation has been solved on the RwLock      
+    // @TODO: Uncomment these once the writer starvation has been solved on the RwLock
     // session.undeclare_subscriber(sub).await.unwrap();
     // session.close().await.unwrap();
 }

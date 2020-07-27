@@ -13,18 +13,17 @@
 //
 pub mod properties {
     use super::super::ZInt;
+    use zenoh_util::core::{ZError, ZErrorKind, ZResult};
     use zenoh_util::zerror;
-    use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 
     // Properties accepted in open()
     pub const ZN_USER_KEY: ZInt = 0x50;
     pub const ZN_PASSWD_KEY: ZInt = 0x51;
 
     // Properties returned by info()
-    pub const ZN_INFO_PID_KEY: ZInt        = 0x00;
-    pub const ZN_INFO_PEER_PID_KEY: ZInt   = 0x01;
+    pub const ZN_INFO_PID_KEY: ZInt = 0x00;
+    pub const ZN_INFO_PEER_PID_KEY: ZInt = 0x01;
     pub const ZN_INFO_ROUTER_PID_KEY: ZInt = 0x02;
-
 
     pub fn to_str(i: ZInt) -> ZResult<String> {
         match i {
@@ -33,7 +32,9 @@ pub mod properties {
             0x02 => Ok("ZN_INFO_ROUTER_PID_KEY".to_string()),
             0x50 => Ok("ZN_USER_KEY".to_string()),
             0x51 => Ok("ZN_PASSWD_KEY".to_string()),
-            _ => zerror!(ZErrorKind::Other { descr: format!("Unknown property key {}", i)}),
+            _ => zerror!(ZErrorKind::Other {
+                descr: format!("Unknown property key {}", i)
+            }),
         }
     }
 }

@@ -13,28 +13,47 @@
 //
 use clap::{App, Arg};
 use std::convert::TryInto;
-use zenoh::*;
 use zenoh::net::Config;
+use zenoh::*;
 
 //
 // Argument parsing -- look at the main for the zenoh-related code
 //
-fn parse_args() -> (Config, String, String)  {
+fn parse_args() -> (Config, String, String) {
     let args = App::new("zenoh put example")
-        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-            .possible_values(&["peer", "client"]).default_value("peer"))
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
-        .arg(Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
-            .default_value("/demo/example/zenoh-rs-put"))
-        .arg(Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to put.'")
-            .default_value("Put from Rust!"))
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(
+            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
+                .default_value("/demo/example/zenoh-rs-put"),
+        )
+        .arg(
+            Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to put.'")
+                .default_value("Put from Rust!"),
+        )
         .get_matches();
 
     let config = Config::default()
-        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
-    let path    = args.value_of("path").unwrap().to_string();
-    let value   = args.value_of("value").unwrap().to_string();
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        );
+    let path = args.value_of("path").unwrap().to_string();
+    let value = args.value_of("value").unwrap().to_string();
 
     (config, path, value)
 }
@@ -48,12 +67,15 @@ async fn main() {
 
     println!("New zenoh...");
     let zenoh = Zenoh::new(config, None).await.unwrap();
-    
+
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();
 
     println!("Put Data ('{}': '{}')...\n", path, value);
-    workspace.put(&path.try_into().unwrap(), Value::StringUTF8(value)).await.unwrap();
+    workspace
+        .put(&path.try_into().unwrap(), Value::StringUTF8(value))
+        .await
+        .unwrap();
 
     zenoh.close().await.unwrap();
 }

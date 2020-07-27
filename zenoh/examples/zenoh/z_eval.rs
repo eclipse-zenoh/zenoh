@@ -14,27 +14,43 @@
 #![feature(async_closure)]
 
 use clap::{App, Arg};
-use std::convert::TryFrom;
 use futures::prelude::*;
-use zenoh::*;
+use std::convert::TryFrom;
 use zenoh::net::Config;
-
+use zenoh::*;
 
 //
 // Argument parsing -- look at the main for the zenoh-related code
 //
-fn parse_args() -> (Config, String)  {
+fn parse_args() -> (Config, String) {
     let args = App::new("zenoh eval example")
-        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-            .possible_values(&["peer", "client"]).default_value("peer"))
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
-        .arg(Arg::from_usage("-p, --path=[PATH] 'The path the eval will respond for'")
-            .default_value("/demo/example/eval"))
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(
+            Arg::from_usage("-p, --path=[PATH] 'The path the eval will respond for'")
+                .default_value("/demo/example/eval"),
+        )
         .get_matches();
 
     let config = Config::default()
-        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        );
     let path = args.value_of("path").unwrap().to_string();
 
     (config, path)
@@ -56,41 +72,57 @@ async fn main() {
 
     println!("New zenoh...");
     let zenoh = Zenoh::new(config, None).await.unwrap();
-    
+
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();
 
     println!("Register eval for {}'...\n", path);
     let mut get_stream = workspace.register_eval(&path.into()).await.unwrap();
     while let Some(get_request) = get_stream.next().await {
-        println!(">> [Eval listener] received get with selector: {}", get_request.selector);
+        println!(
+            ">> [Eval listener] received get with selector: {}",
+            get_request.selector
+        );
 
         // The returned Value is a StringValue with a 'name' part which is set in 3 possible ways,
         // depending the properties specified in the selector. For example, with the
         // following selectors:
         // - "/zenoh/example/eval" : no properties are set, a default value is used for the name
         // - "/zenoh/example/eval?(name=Bob)" : "Bob" is used for the name
-        // - "/zenoh/example/eval?(name=/zenoh/example/name)" : the Eval function does a GET 
+        // - "/zenoh/example/eval?(name=/zenoh/example/name)" : the Eval function does a GET
         //      on "/zenoh/example/name" an uses the 1st result for the name
-        let mut name = get_request.selector.properties.get("name").cloned().unwrap_or_else(|| "Rust!".to_string());
+        let mut name = get_request
+            .selector
+            .properties
+            .get("name")
+            .cloned()
+            .unwrap_or_else(|| "Rust!".to_string());
         if name.starts_with('/') {
             println!("   >> Get name to use from path: {}", name);
             if let Ok(selector) = Selector::try_from(name.as_str()) {
                 match workspace.get(&selector).await.unwrap().next().await {
-                    Some(Data{ path:_, value: Value::StringUTF8(s) }) => name = s,
+                    Some(Data {
+                        path: _,
+                        value: Value::StringUTF8(s),
+                    }) => name = s,
                     Some(_) => println!("Failed to get name from '{}' : not a UTF-8 String", name),
-                    None    => println!("Failed to get name from '{}' : not found", name)
+                    None => println!("Failed to get name from '{}' : not found", name),
                 }
             } else {
-                println!("Failed to get value from '{}' : this is not a valid Selector", name);
+                println!(
+                    "Failed to get value from '{}' : this is not a valid Selector",
+                    name
+                );
             }
         }
         let s = format!("Eval from {}", name);
         println!(r#"   >> Returning string: "{}""#, s);
-        get_request.reply( Data {
-            path: path.clone(),
-            value: Value::StringUTF8(s) 
-        }).await;
+        get_request
+            .reply(Data {
+                path: path.clone(),
+                value: Value::StringUTF8(s),
+            })
+            .await;
     }
 
     zenoh.close().await.unwrap();

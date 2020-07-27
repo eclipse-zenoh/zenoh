@@ -11,23 +11,22 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
-use std::convert::TryFrom;
-use regex::Regex;
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-use zenoh_util::zerror;
 use crate::net::ResKey;
+use regex::Regex;
+use std::convert::TryFrom;
+use std::fmt;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Path {
-    pub(crate) p: String
+    pub(crate) p: String,
 }
 
 impl Path {
-
     fn is_valid(path: &str) -> bool {
-        !path.is_empty() &&
-        !path.contains(|c| c == '?' || c == '#' || c == '[' || c == ']' || c == '*')
+        !path.is_empty()
+            && !path.contains(|c| c == '?' || c == '#' || c == '[' || c == ']' || c == '*')
     }
 
     pub(crate) fn remove_useless_slashes(path: &str) -> String {
@@ -36,7 +35,7 @@ impl Path {
         }
         let p = RE.replace_all(path, "/");
         if p.ends_with('/') {
-            p[..p.len()-1].to_string()
+            p[..p.len() - 1].to_string()
         } else {
             p.to_string()
         }
@@ -44,9 +43,11 @@ impl Path {
 
     pub fn new(p: String) -> ZResult<Path> {
         if !Self::is_valid(&p) {
-            zerror!(ZErrorKind::InvalidPath{ path: p })
+            zerror!(ZErrorKind::InvalidPath { path: p })
         } else {
-            Ok(Path{p: Self::remove_useless_slashes(&p)})
+            Ok(Path {
+                p: Self::remove_useless_slashes(&p),
+            })
         }
     }
 
@@ -60,9 +61,13 @@ impl Path {
 
     pub fn with_prefix(&self, prefix: &Path) -> Self {
         if self.is_relative() {
-            Self { p: format!("{}/{}", prefix.p, self.p) }
+            Self {
+                p: format!("{}/{}", prefix.p, self.p),
+            }
         } else {
-            Self { p: format!("{}{}", prefix.p, self.p) }
+            Self {
+                p: format!("{}{}", prefix.p, self.p),
+            }
         }
     }
 }
@@ -87,7 +92,6 @@ impl TryFrom<&str> for Path {
     }
 }
 
-
 impl From<Path> for ResKey {
     fn from(path: Path) -> Self {
         ResKey::from(path.p.as_str())
@@ -107,27 +111,33 @@ mod tests {
 
     #[test]
     fn test_path() {
+        assert_eq!(Path::try_from("a/b").unwrap(), Path { p: "a/b".into() });
 
-        assert_eq!(Path::try_from("a/b").unwrap(), 
-            Path { p: "a/b".into() });
+        assert_eq!(Path::try_from("/a/b").unwrap(), Path { p: "/a/b".into() });
 
-        assert_eq!(Path::try_from("/a/b").unwrap(), 
-            Path { p: "/a/b".into() });
-
-        assert_eq!(Path::try_from("////a///b///").unwrap(), 
-            Path { p: "/a/b".into() });
+        assert_eq!(
+            Path::try_from("////a///b///").unwrap(),
+            Path { p: "/a/b".into() }
+        );
 
         assert!(Path::try_from("a/b").unwrap().is_relative());
         assert!(!Path::try_from("/a/b").unwrap().is_relative());
 
-        assert_eq!(Path::try_from("c/d").unwrap()
-            .with_prefix(&"/a/b".try_into().unwrap()),
-            Path { p: "/a/b/c/d".into() });
-        assert_eq!(Path::try_from("/c/d").unwrap()
-            .with_prefix(&"/a/b".try_into().unwrap()),
-            Path { p: "/a/b/c/d".into() });
-
-
+        assert_eq!(
+            Path::try_from("c/d")
+                .unwrap()
+                .with_prefix(&"/a/b".try_into().unwrap()),
+            Path {
+                p: "/a/b/c/d".into()
+            }
+        );
+        assert_eq!(
+            Path::try_from("/c/d")
+                .unwrap()
+                .with_prefix(&"/a/b".try_into().unwrap()),
+            Path {
+                p: "/a/b/c/d".into()
+            }
+        );
     }
-
 }

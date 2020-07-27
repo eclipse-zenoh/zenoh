@@ -23,10 +23,16 @@ pub use consts::*;
 mod session;
 pub use session::*;
 
-pub use zenoh_protocol::proto::{encoding, data_kind};
+pub use zenoh_protocol::proto::{data_kind, encoding};
 
-pub mod queryable { pub use zenoh_protocol::core::queryable::*; }
-pub mod utils { pub mod resource_name { pub use zenoh_protocol::core::rname::intersect; } }
+pub mod queryable {
+    pub use zenoh_protocol::core::queryable::*;
+}
+pub mod utils {
+    pub mod resource_name {
+        pub use zenoh_protocol::core::rname::intersect;
+    }
+}
 
 pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
     // @TODO: implement
@@ -35,7 +41,7 @@ pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
 }
 
 /// Open a zenoh-net [Session](Session).
-/// 
+///
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
@@ -48,4 +54,3 @@ pub async fn open(config: Config, ps: Option<Properties>) -> ZResult<Session> {
     debug!("open(\"{}\", {:?})", config, ps);
     Ok(Session::new(config, ps).await)
 }
-
