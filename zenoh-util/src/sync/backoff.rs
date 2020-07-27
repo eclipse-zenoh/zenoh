@@ -18,7 +18,6 @@ use std::sync::atomic::spin_loop_hint;
 const SPIN_LIMIT: usize = 6;
 const YIELD_LIMIT: usize = 10;
 
-
 /// Performs exponential backoff in spin loops.
 ///
 /// This is the async version of the Backoff implementation provided by

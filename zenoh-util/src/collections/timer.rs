@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::prelude::*;
-use async_std::sync::{Arc, Mutex, Receiver, RecvError, Sender, Weak, channel};
+use async_std::sync::{channel, Arc, Mutex, Receiver, RecvError, Sender, Weak};
 use async_std::task;
 use async_trait::async_trait;
 
@@ -50,31 +50,25 @@ pub struct TimedEvent {
     when: Instant,
     period: Option<Duration>,
     future: TimedFuture,
-    fused: Arc<AtomicBool>
+    fused: Arc<AtomicBool>,
 }
 
 impl TimedEvent {
-    pub fn once(
-        when: Instant,
-        event: impl Timed + Send + Sync + 'static
-    ) -> TimedEvent {
+    pub fn once(when: Instant, event: impl Timed + Send + Sync + 'static) -> TimedEvent {
         TimedEvent {
             when,
             period: None,
             future: Arc::new(event),
-            fused: Arc::new(AtomicBool::new(true))
+            fused: Arc::new(AtomicBool::new(true)),
         }
     }
 
-    pub fn periodic(
-        interval: Duration,
-        event: impl Timed + Send + Sync + 'static
-    ) -> TimedEvent {
+    pub fn periodic(interval: Duration, event: impl Timed + Send + Sync + 'static) -> TimedEvent {
         TimedEvent {
             when: Instant::now() + interval,
             period: Some(interval),
             future: Arc::new(event),
-            fused: Arc::new(AtomicBool::new(true))
+            fused: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -93,7 +87,7 @@ impl Ord for TimedEvent {
     fn cmp(&self, other: &Self) -> ComparisonOrdering {
         // The usual cmp is defined as: self.when.cmp(&other.when)
         // This would make the events odered from largets to the smallest in the heap.
-        // However, we want the events to be ordered from the smallets to the largest. 
+        // However, we want the events to be ordered from the smallets to the largest.
         // As a consequence of this, we swap the comparison terms, converting the heap
         // from a max-heap into a min-heap.
         other.when.cmp(&self.when)
@@ -114,27 +108,27 @@ impl PartialEq for TimedEvent {
 
 async fn timer_task(
     events: Arc<Mutex<BinaryHeap<TimedEvent>>>,
-    new_event: Receiver<(bool, TimedEvent)>
+    new_event: Receiver<(bool, TimedEvent)>,
 ) -> Result<(), RecvError> {
     // Error message
     let e = "Timer has been dropped. Unable to run timed events.";
 
     // Acquire the lock
     let mut events = events.lock().await;
-    
-    loop { 
+
+    loop {
         // Fuuture for adding new events
         let new = new_event.recv();
 
         match events.peek() {
             Some(next) => {
                 // Future for waiting an event timing
-                let wait = async {    
+                let wait = async {
                     let next = next.clone();
                     let now = Instant::now();
-                    if next.when > now {              
+                    if next.when > now {
                         task::sleep(next.when - now).await;
-                    }                        
+                    }
                     Ok((false, next))
                 };
 
@@ -143,8 +137,8 @@ async fn timer_task(
                         if is_new {
                             // A new event has just been added: push it onto the heap
                             events.push(ev);
-                            continue
-                        } 
+                            continue;
+                        }
 
                         // We are ready to serve the event, remove it from the heap
                         let _ = events.pop();
@@ -161,25 +155,25 @@ async fn timer_task(
                                 events.push(ev);
                             }
                         }
-                    },
+                    }
                     Err(_) => {
                         // Channel error
-                        log::trace!("{}", e);                       
-                        return Ok(())
-                    }    
-                }                
-            },
+                        log::trace!("{}", e);
+                        return Ok(());
+                    }
+                }
+            }
             None => match new.await {
                 Ok((_, ev)) => {
                     events.push(ev);
-                    continue
-                },
+                    continue;
+                }
                 Err(_) => {
                     // Channel error
                     log::trace!("{}", e);
-                    return Ok(())
+                    return Ok(());
                 }
-            } 
+            },
         }
     }
 }
@@ -218,7 +212,8 @@ impl Timer {
     pub async fn start(&mut self) {
         if self.sl_sender.is_none() {
             // Create the channels
-            let (ev_sender, ev_receiver) = channel::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
+            let (ev_sender, ev_receiver) =
+                channel::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
             let (sl_sender, sl_receiver) = channel::<()>(1);
 
             // Store the channels handlers

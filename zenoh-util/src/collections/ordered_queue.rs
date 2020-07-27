@@ -13,19 +13,15 @@
 //
 use std::fmt;
 
-
 // Structs for OrderedQueue
 pub struct OrderedElement<T> {
     element: T,
-    sn: usize
+    sn: usize,
 }
 
 impl<T> OrderedElement<T> {
     fn new(element: T, sn: usize) -> Self {
-        Self {
-            element,
-            sn
-        }
+        Self { element, sn }
     }
 
     fn into_inner(self) -> T {
@@ -38,7 +34,6 @@ impl<T: Clone> OrderedElement<T> {
         self.element.clone()
     }
 }
-
 
 pub struct OrderedQueue<T> {
     buff: Vec<Option<OrderedElement<T>>>,
@@ -83,7 +78,7 @@ impl<T> OrderedQueue<T> {
 
         // Check if the queue is empty
         if self.is_empty() {
-            return mask
+            return mask;
         }
 
         // Create the bitmask
@@ -91,15 +86,17 @@ impl<T> OrderedQueue<T> {
         let mut index = self.pointer;
         loop {
             match &self.buff[index] {
-                Some(element) => if element.sn == self.last {
-                    break
-                },
-                None => mask |= 1 << iteration
+                Some(element) => {
+                    if element.sn == self.last {
+                        break;
+                    }
+                }
+                None => mask |= 1 << iteration,
             }
             iteration += 1;
             index = (index + 1) % self.capacity();
         }
-        
+
         mask
     }
 
@@ -111,9 +108,9 @@ impl<T> OrderedQueue<T> {
         // Compute the circular gaps
         let gap_base = base.wrapping_sub(self.first);
         let gap_last = self.last.wrapping_sub(self.first);
-        
+
         let count = if gap_base <= gap_last {
-            gap_base 
+            gap_base
         } else {
             self.capacity()
         };
@@ -136,7 +133,7 @@ impl<T> OrderedQueue<T> {
     }
 
     // This operation does not modify the base or the pointer
-    // It simply removes an element if it matches the sn 
+    // It simply removes an element if it matches the sn
     pub fn try_remove(&mut self, sn: usize) -> Option<T> {
         if !self.is_empty() {
             let gap = sn.wrapping_sub(self.first);
@@ -151,7 +148,7 @@ impl<T> OrderedQueue<T> {
                     if self.is_empty() {
                         self.last = self.first;
                     }
-                    return Some(element.into_inner())
+                    return Some(element.into_inner());
                 }
             }
         }
@@ -171,7 +168,7 @@ impl<T> OrderedQueue<T> {
                 if self.is_empty() {
                     self.last = self.first;
                 }
-                return Some(element.into_inner())
+                return Some(element.into_inner());
             }
         }
         None
@@ -182,7 +179,7 @@ impl<T> OrderedQueue<T> {
         let gap = sn.wrapping_sub(self.first);
         // Return error if the gap is larger than the capacity
         if gap >= self.capacity() {
-            return Some(element)
+            return Some(element);
         }
 
         // Increment the counter
@@ -195,14 +192,14 @@ impl<T> OrderedQueue<T> {
         // Insert the element in the queue
         let index = (self.pointer + gap) % self.capacity();
         self.buff[index] = Some(OrderedElement::new(element, sn));
-        
+
         None
     }
 }
 
 impl<T: Clone> OrderedQueue<T> {
     // This operation does not modify the base or the pointer
-    // It simply gets a clone of an element if it matches the sn 
+    // It simply gets a clone of an element if it matches the sn
     pub fn try_get(&self, sn: usize) -> Option<T> {
         if !self.is_empty() {
             let gap = sn.wrapping_sub(self.first);
@@ -210,7 +207,7 @@ impl<T: Clone> OrderedQueue<T> {
             if let Some(element) = &self.buff[index] {
                 if element.sn == sn {
                     // The element is the right one, take with unwrap
-                    return Some(self.buff[index].as_ref().unwrap().inner_clone())
+                    return Some(self.buff[index].as_ref().unwrap().inner_clone());
                 }
             }
         }
@@ -231,7 +228,7 @@ impl<T> fmt::Debug for OrderedQueue<T> {
             }
             match &self.buff[index] {
                 Some(e) => s.push_str(&format!("{}", e.sn)),
-                None => s.push_str("None")
+                None => s.push_str("None"),
             }
             index = (index + 1) % self.capacity();
         }

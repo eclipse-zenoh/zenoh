@@ -13,20 +13,19 @@
 //
 use std::collections::VecDeque;
 
-
 pub(crate) struct CircularBuffer<T> {
     buffer: VecDeque<T>,
     capacity: usize,
-    n: usize
+    n: usize,
 }
 
 impl<T> CircularBuffer<T> {
     pub(crate) fn new(capacity: usize) -> CircularBuffer<T> {
-        let buffer = VecDeque::<T>::with_capacity(capacity);        
+        let buffer = VecDeque::<T>::with_capacity(capacity);
         CircularBuffer {
-            buffer, 
-            capacity, 
-            n: 0
+            buffer,
+            capacity,
+            n: 0,
         }
     }
 
@@ -35,9 +34,9 @@ impl<T> CircularBuffer<T> {
         if self.n < self.capacity {
             self.buffer.push_back(elem);
             self.n += 1;
-            true             
-        } else { 
-            false 
+            true
+        } else {
+            false
         }
     }
 
@@ -49,7 +48,7 @@ impl<T> CircularBuffer<T> {
         }
         x
     }
-    
+
     #[inline]
     #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
@@ -57,7 +56,7 @@ impl<T> CircularBuffer<T> {
     }
 
     #[inline]
-    pub(crate) fn is_full(&self) -> bool{
+    pub(crate) fn is_full(&self) -> bool {
         self.n == self.capacity
     }
 

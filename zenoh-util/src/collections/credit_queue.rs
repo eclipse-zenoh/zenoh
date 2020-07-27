@@ -12,22 +12,18 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::{Mutex, MutexGuard};
-use std::sync::atomic::{
-    AtomicIsize,
-    Ordering
-};
+use std::sync::atomic::{AtomicIsize, Ordering};
 
-use crate::zasynclock;
 use crate::collections::CircularBuffer;
 use crate::sync::Condition;
-
+use crate::zasynclock;
 
 type SpendingClosure<T> = Box<dyn Fn(&T) -> isize + Send + Sync>;
 
 pub struct CreditBuffer<T> {
     capacity: usize,
     credit: isize,
-    spending: SpendingClosure<T>
+    spending: SpendingClosure<T>,
 }
 
 impl<T> CreditBuffer<T> {
@@ -35,42 +31,43 @@ impl<T> CreditBuffer<T> {
         CreditBuffer {
             capacity,
             credit,
-            spending
+            spending,
         }
     }
 
-    pub fn spending_policy<F>(f: F) -> SpendingClosure<T> 
-    where F: Fn(&T) -> isize + Send + Sync + 'static
+    pub fn spending_policy<F>(f: F) -> SpendingClosure<T>
+    where
+        F: Fn(&T) -> isize + Send + Sync + 'static,
     {
         Box::new(f)
     }
 }
 
 /// Credit-based queue
-/// 
+///
 /// This queue is meant to be used in scenario where a credit-based fair queueing (a.k.a. scheduling) is desired.
-/// The [`CreditQueue`][CreditQueue] implementation leverages the [`async-std`](https://docs.rs/async-std) library, 
+/// The [`CreditQueue`][CreditQueue] implementation leverages the [`async-std`](https://docs.rs/async-std) library,
 /// making it a good choice for all the applications using the [`async-std`](https://docs.rs/async-std) library.
-/// 
+///
 /// Multiple priority queues can be configured with different queue capacity (i.e. number of elements
 /// that can be stored), initial credit amount and spending policy.
-/// 
+///
 pub struct CreditQueue<T> {
     state: Mutex<Vec<CircularBuffer<T>>>,
     credit: Vec<AtomicIsize>,
     spending: Vec<SpendingClosure<T>>,
     not_full: Condition,
-    not_empty: Condition
+    not_empty: Condition,
 }
 
 impl<T> CreditQueue<T> {
     /// Create a new credit-based queue.
-    /// 
+    ///
     /// # Arguments
     /// * `queue` - A vector containing the parameters for the queues in the form of tuples: (capacity, credits)      
     ///
     /// * `concurrency_level` - The desired concurrency_level when accessing a single priority queue.
-    /// 
+    ///
     pub fn new(mut queues: Vec<CreditBuffer<T>>, concurrency_level: usize) -> CreditQueue<T> {
         let mut state = Vec::with_capacity(queues.len());
         let mut credit = Vec::with_capacity(queues.len());
@@ -80,8 +77,8 @@ impl<T> CreditQueue<T> {
             credit.push(AtomicIsize::new(buffer.credit));
             spending.push(buffer.spending);
         }
-         
-        CreditQueue { 
+
+        CreditQueue {
             state: Mutex::new(state),
             credit,
             spending,
@@ -127,10 +124,10 @@ impl<T> CreditQueue<T> {
                 q[priority].push(t);
                 if self.not_empty.has_waiting_list() {
                     self.not_empty.notify(q).await;
-                } 
+                }
                 return;
             }
-            self.not_full.wait(q).await;  
+            self.not_full.wait(q).await;
         }
     }
 
@@ -151,9 +148,9 @@ impl<T> CreditQueue<T> {
                     }
                     break;
                 }
-                self.not_full.wait(q).await;  
+                self.not_full.wait(q).await;
             }
-        }         
+        }
     }
 
     pub async fn pull(&self) -> T {
@@ -179,13 +176,14 @@ impl<T> CreditQueue<T> {
         let guard = loop {
             // Acquire the lock
             let guard = zasynclock!(self.state);
-            // Compute the total number of buffers we can drain from 
-            let can_drain = guard.iter().enumerate().fold(0, |acc, (i, x)| 
+            // Compute the total number of buffers we can drain from
+            let can_drain = guard.iter().enumerate().fold(0, |acc, (i, x)| {
                 if !x.is_empty() && self.get_credit(i) > 0 {
                     acc + 1
                 } else {
                     acc
-                });
+                }
+            });
             // If there are no buffers available, we wait
             if can_drain == 0 {
                 self.not_empty.wait(guard).await;
@@ -198,7 +196,7 @@ impl<T> CreditQueue<T> {
             queue: self,
             drained: 0,
             guard,
-            priority: 0
+            priority: 0,
         }
     }
 
@@ -208,7 +206,7 @@ impl<T> CreditQueue<T> {
             queue: self,
             drained: 0,
             guard: zasynclock!(self.state),
-            priority: 0
+            priority: 0,
         }
     }
 }
@@ -217,7 +215,7 @@ pub struct Drain<'a, T> {
     queue: &'a CreditQueue<T>,
     drained: usize,
     guard: MutexGuard<'a, Vec<CircularBuffer<T>>>,
-    priority: usize
+    priority: usize,
 }
 
 impl<'a, T> Drain<'a, T> {
@@ -242,25 +240,31 @@ impl<'a, T> Iterator for Drain<'_, T> {
             if self.queue.get_credit(self.priority) > 0 {
                 if let Some(e) = self.guard[self.priority].pull() {
                     self.drained += 1;
-                    self.queue.spend(self.priority, (self.queue.spending[self.priority])(&e));
-                    return Some(e)
+                    self.queue
+                        .spend(self.priority, (self.queue.spending[self.priority])(&e));
+                    return Some(e);
                 }
             }
 
             self.priority += 1;
             if self.priority == self.guard.len() {
-                return None
+                return None;
             }
         }
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let (min, max) = self.guard.iter().enumerate().fold((0, 0), |(min, max), (i, x)| 
-            if !x.is_empty() && self.queue.get_credit(i) > 0 {
-                (min + 1, max + x.len())
-            } else {
-                (min, max)
+        let (min, max) = self
+            .guard
+            .iter()
+            .enumerate()
+            .fold((0, 0), |(min, max), (i, x)| {
+                if !x.is_empty() && self.queue.get_credit(i) > 0 {
+                    (min + 1, max + x.len())
+                } else {
+                    (min, max)
+                }
             });
         (min, Some(max))
     }

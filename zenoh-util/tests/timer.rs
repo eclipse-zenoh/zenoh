@@ -16,11 +16,11 @@ use async_std::task;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
-use zenoh_util::collections::{Timer, Timed, TimedEvent};
+use zenoh_util::collections::{Timed, TimedEvent, Timer};
 
 #[derive(Clone)]
 struct MyEvent {
-    counter: Arc<AtomicUsize>
+    counter: Arc<AtomicUsize>,
 }
 
 #[async_trait]
@@ -39,7 +39,7 @@ async fn run() {
 
     // Create my custom event
     let myev = MyEvent {
-        counter: counter.clone()
+        counter: counter.clone(),
     };
 
     // Default testing interval: 1 s
@@ -48,7 +48,7 @@ async fn run() {
     /* [1] */
     println!("Timer [1]: Once event and run");
     // Fire a once timed event
-    let now = Instant::now(); 
+    let now = Instant::now();
     let event = TimedEvent::once(now + (2 * interval), myev.clone());
 
     // Add the event to the timer
@@ -64,7 +64,7 @@ async fn run() {
     /* [2] */
     println!("Timer [2]: Once event and defuse");
     // Fire a once timed event and defuse it before it is executed
-    let now = Instant::now(); 
+    let now = Instant::now();
     let event = TimedEvent::once(now + (2 * interval), myev.clone());
     let handle = event.get_handle();
 

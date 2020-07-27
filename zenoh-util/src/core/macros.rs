@@ -17,13 +17,13 @@
 // if it fails, it falls back on lock().await
 #[macro_export]
 macro_rules! zasynclock {
-    ($var:expr) => (
-        if let Some(g) = $var.try_lock() { 
-            g 
-        } else { 
-            $var.lock().await 
+    ($var:expr) => {
+        if let Some(g) = $var.try_lock() {
+            g
+        } else {
+            $var.lock().await
         }
-    );
+    };
 }
 
 // This macro performs an async read on RwLock<T>
@@ -31,13 +31,13 @@ macro_rules! zasynclock {
 // if it fails, it falls back on read().await
 #[macro_export]
 macro_rules! zasyncread {
-    ($var:expr) => (
-        if let Some(g) = $var.try_read() { 
-            g 
-        } else { 
-            $var.read().await 
+    ($var:expr) => {
+        if let Some(g) = $var.try_read() {
+            g
+        } else {
+            $var.read().await
         }
-    );
+    };
 }
 
 // This macro performs an async write on RwLock<T>
@@ -45,22 +45,22 @@ macro_rules! zasyncread {
 // if it fails, it falls back on write().await
 #[macro_export]
 macro_rules! zasyncwrite {
-    ($var:expr) => (
-        if let Some(g) = $var.try_write() { 
-            g 
-        } else { 
-            $var.write().await 
+    ($var:expr) => {
+        if let Some(g) = $var.try_write() {
+            g
+        } else {
+            $var.write().await
         }
-    );
+    };
 }
 
 // This macro returns &T from RwLock<Option<T>>
 // This macro assumes that Option is always Some(T)
 #[macro_export]
 macro_rules! zasyncopt {
-    ($var:expr) => (
+    ($var:expr) => {
         zasyncread!($var).as_ref().unwrap()
-    );
+    };
 }
 
 // This macro performs an async send on Channel<T>
@@ -68,11 +68,11 @@ macro_rules! zasyncopt {
 // if it fails, it falls back on send().await
 #[macro_export]
 macro_rules! zasyncsend {
-    ($ch:expr, $var:expr) => (
-        if $ch.try_send($var).is_err() { 
+    ($ch:expr, $var:expr) => {
+        if $ch.try_send($var).is_err() {
             $ch.send($var).await;
         }
-    );
+    };
 }
 
 // This macro performs an async recv on Channel<T>
@@ -80,28 +80,28 @@ macro_rules! zasyncsend {
 // if it fails, it falls back on recv().await
 #[macro_export]
 macro_rules! zasyncrecv {
-    ($ch:expr) => (
-        if let Ok(v) = $ch.try_recv() { 
+    ($ch:expr) => {
+        if let Ok(v) = $ch.try_recv() {
             Ok(v)
         } else {
             $ch.recv().await
         }
-    );
+    };
 }
 
-// This macro performs an upgrade on a weak pointer returning 
+// This macro performs an upgrade on a weak pointer returning
 // a ZError with custom description in case of error
 #[macro_export]
 macro_rules! zweak {
-    ($var:expr, $descr:expr) => (
-        if let Some(inner) = $var.upgrade() { 
+    ($var:expr, $descr:expr) => {
+        if let Some(inner) = $var.upgrade() {
             inner
         } else {
             return zerror!(ZErrorKind::InvalidReference {
                 descr: $descr.to_string()
-            })
+            });
         }
-    );
+    };
 }
 
 // This macro allows to define some compile time configurable static constants
@@ -110,22 +110,22 @@ macro_rules! zconfigurable {
     ($(#[$attr:meta])* static ref $N:ident : $T:ty = $e:expr; $($t:tt)*) => {
         lazy_static!($(#[$attr])* static ref $N : $T = match option_env!(stringify!($N)) {
             Some(value) => {value.parse().unwrap()}
-            None => {$e} 
-        };) ; 
+            None => {$e}
+        };) ;
         zconfigurable!($($t)*);
     };
     ($(#[$attr:meta])* pub static ref $N:ident : $T:ty = $e:expr; $($t:tt)*) => {
         lazy_static!($(#[$attr])* pub static ref $N : $T = match option_env!(stringify!($N)) {
             Some(value) => {value.parse().unwrap()}
-            None => {$e} 
-        };) ; 
+            None => {$e}
+        };) ;
         zconfigurable!($($t)*);
     };
     ($(#[$attr:meta])* pub ($($vis:tt)+) static ref $N:ident : $T:ty = $e:expr; $($t:tt)*) => {
         lazy_static!($(#[$attr])* pub ($($vis)+) static ref $N : $T = match option_env!(stringify!($N)) {
             Some(value) => {value.parse().unwrap()}
-            None => {$e} 
-        };) ; 
+            None => {$e}
+        };) ;
         zconfigurable!($($t)*);
     };
     () => ()
@@ -135,28 +135,51 @@ macro_rules! zconfigurable {
 // This macro is a shorthand for the creation of a ZError
 #[macro_export]
 macro_rules! zerror {
-    ($kind:expr) => (Err(ZError::new($kind, file!(), line!(), None)));
-    ($kind:expr, $source:expr) => (Err(ZError::new($kind, file!(), line!(), Some(Box::new($source)))));
-    ($kind:ident, $descr:expr, $source:expr) => (
-        Err(ZError::new(ZErrorKind::$kind{descr:$descr}, file!(), line!(), Some(Box::new($source))));
-    )
+    ($kind:expr) => {
+        Err(ZError::new($kind, file!(), line!(), None))
+    };
+    ($kind:expr, $source:expr) => {
+        Err(ZError::new(
+            $kind,
+            file!(),
+            line!(),
+            Some(Box::new($source)),
+        ))
+    };
+    ($kind:ident, $descr:expr, $source:expr) => {
+        Err(ZError::new(
+            ZErrorKind::$kind { descr: $descr },
+            file!(),
+            line!(),
+            Some(Box::new($source)),
+        ));
+    };
 }
 
 #[macro_export]
 macro_rules! zerror2 {
-    ($kind:expr) => (ZError::new($kind, file!(), line!(), None));
-    ($kind:expr, $source:expr) => (ZError::new($kind, file!(), line!(), Some(Box::new($source))));
-    ($kind:ident, $descr:expr, $source:expr) => (
-        ZError::new(ZErrorKind::$kind{descr:$descr}, file!(), line!(), Some(Box::new($source)));
-    )
+    ($kind:expr) => {
+        ZError::new($kind, file!(), line!(), None)
+    };
+    ($kind:expr, $source:expr) => {
+        ZError::new($kind, file!(), line!(), Some(Box::new($source)))
+    };
+    ($kind:ident, $descr:expr, $source:expr) => {
+        ZError::new(
+            ZErrorKind::$kind { descr: $descr },
+            file!(),
+            line!(),
+            Some(Box::new($source)),
+        );
+    };
 }
 
 // This macro is a shorthand for the conversion of any Error into a ZError
 #[macro_export]
 macro_rules! to_zerror {
-    ($kind:ident, $descr:expr) => (
-        |e| { zerror!($kind, $descr, e) }
-    )
+    ($kind:ident, $descr:expr) => {
+        |e| zerror!($kind, $descr, e)
+    };
 }
 
 // This macro is a shorthand for the conversion to ZInt
@@ -165,6 +188,10 @@ macro_rules! to_zerror {
 #[macro_export]
 macro_rules! to_zint {
     ($val:expr) => {
-        ZInt::try_from($val).expect(&format!("Can not encode {} as ZInt (max ZInt value: {})", $val, ZInt::MAX))
+        ZInt::try_from($val).expect(&format!(
+            "Can not encode {} as ZInt (max ZInt value: {})",
+            $val,
+            ZInt::MAX
+        ))
     };
 }

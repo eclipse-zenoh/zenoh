@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use crate::zasynclock;
+use async_std::sync::Mutex;
+use log::warn;
 use std::cmp;
 use std::time::Duration;
-use log::warn;
-use async_std::sync::Mutex;
-use crate::zasynclock;
 
 mod ntp64;
 pub use ntp64::*;
@@ -26,40 +26,39 @@ pub use timestamp::*;
 mod clock;
 pub use clock::*;
 
-// Counter size (in bits) 
+// Counter size (in bits)
 const CSIZE: u8 = 4u8;
 // Bit-mask of the counter part within the 64 bits time
 const CMASK: u64 = (1u64 << CSIZE) - 1u64;
 // Bit-mask of the logical clock part within the 64 bits time
-const LMASK: u64 = ! CMASK;
+const LMASK: u64 = !CMASK;
 
 // HLC Delta in milliseconds: maximum accepted drift for an external timestamp.
 // I.e.: if an incoming timestamp has a time > now() + delta, then the HLC is not updated.
 const DELTA_MS: u64 = 100;
 
-pub struct HLC<Clock>
-{
+pub struct HLC<Clock> {
     id: Vec<u8>,
     clock: Clock,
     delta: NTP64,
-    last_time: Mutex<NTP64>
+    last_time: Mutex<NTP64>,
 }
 
 impl HLC<()> {
-    pub fn with_system_time(id: Vec<u8>) -> HLC<fn() -> NTP64>
-    {
+    pub fn with_system_time(id: Vec<u8>) -> HLC<fn() -> NTP64> {
         HLC::with_clock(id, system_time_clock)
     }
 }
 
-
-impl<Clock: Fn() -> NTP64> HLC<Clock>
-{
-
-    pub fn with_clock(id: Vec<u8>, clock: Clock) -> HLC<Clock>
-    {
+impl<Clock: Fn() -> NTP64> HLC<Clock> {
+    pub fn with_clock(id: Vec<u8>, clock: Clock) -> HLC<Clock> {
         let delta = NTP64::from(Duration::from_millis(DELTA_MS));
-        HLC { id, clock, delta, last_time: Default::default() }
+        HLC {
+            id,
+            clock,
+            delta,
+            last_time: Default::default(),
+        }
     }
 
     pub async fn new_timestamp(&self) -> Timestamp {
@@ -79,10 +78,13 @@ impl<Clock: Fn() -> NTP64> HLC<Clock>
         now.0 &= LMASK;
         let msg_time = timestamp.get_time();
         if *msg_time > now && *msg_time - now > self.delta {
-            let err_msg = format!("incoming timestamp from {} exceeding delta {}ms is rejected: {} vs. now: {}",
+            let err_msg = format!(
+                "incoming timestamp from {} exceeding delta {}ms is rejected: {} vs. now: {}",
                 hex::encode_upper(timestamp.get_id()),
                 self.delta.as_duration().as_millis(),
-                msg_time, now);
+                msg_time,
+                now
+            );
             warn!("{}", err_msg);
             Err(err_msg)
         } else {
@@ -91,7 +93,7 @@ impl<Clock: Fn() -> NTP64> HLC<Clock>
             if max_time == now {
                 *last_time = now;
             } else if max_time == *msg_time {
-                *last_time = *msg_time + 1; 
+                *last_time = *msg_time + 1;
             } else {
                 *last_time += 1;
             }
@@ -100,19 +102,17 @@ impl<Clock: Fn() -> NTP64> HLC<Clock>
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use crate::hlc::*;
-    use std::time::{Duration};
-    use async_std::task;
     use async_std::sync::Arc;
+    use async_std::task;
     use futures::join;
+    use std::time::Duration;
 
     #[test]
     fn hlc_parallel() {
-        task::block_on(async{
+        task::block_on(async {
             let id0: Vec<u8> = vec![0x00];
             let id1: Vec<u8> = vec![0x01];
             let id2: Vec<u8> = vec![0x02];
@@ -141,7 +141,7 @@ mod tests {
             let t1 = {
                 let hlc1 = hlc1.clone();
                 let hlc2 = hlc2.clone();
-                task::spawn(async move  {
+                task::spawn(async move {
                     let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
                     for _ in 0..NB_TIME {
                         let ts = hlc1.new_timestamp().await;
@@ -154,7 +154,7 @@ mod tests {
             let t2 = {
                 let hlc2 = hlc3.clone();
                 let hlc3 = hlc3.clone();
-                task::spawn(async move  {
+                task::spawn(async move {
                     let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
                     for _ in 0..NB_TIME {
                         let ts = hlc2.new_timestamp().await;
@@ -167,7 +167,7 @@ mod tests {
             let t3 = {
                 let hlc3 = hlc3.clone();
                 let hlc0 = hlc0.clone();
-                task::spawn(async move  {
+                task::spawn(async move {
                     let mut times: Vec<Timestamp> = Vec::with_capacity(10000);
                     for _ in 0..NB_TIME {
                         let ts = hlc3.new_timestamp().await;
@@ -186,28 +186,28 @@ mod tests {
             assert!(vecs.3.iter().is_sorted());
 
             // test that there is no duplicate amongst all timestamps
-            let mut all_times: Vec<Timestamp> =  vecs.0.into_iter()
+            let mut all_times: Vec<Timestamp> = vecs
+                .0
+                .into_iter()
                 .chain(vecs.1.into_iter())
                 .chain(vecs.2.into_iter())
                 .chain(vecs.3.into_iter())
                 .collect::<Vec<Timestamp>>();
-            assert_eq!(NB_TIME*4, all_times.len());
+            assert_eq!(NB_TIME * 4, all_times.len());
             all_times.sort();
             all_times.dedup();
-            assert_eq!(NB_TIME*4, all_times.len());
-
+            assert_eq!(NB_TIME * 4, all_times.len());
         });
     }
 
-
     #[test]
     fn hlc_update_with_timestamp() {
-        task::block_on(async{
+        task::block_on(async {
             let id: Vec<u8> = vec![
-                0x01, 0x02, 0x03, 0x04, 0x05, 0x07, 0x08,
-                0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f];
+                0x01, 0x02, 0x03, 0x04, 0x05, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+            ];
             let hlc = HLC::with_system_time(id.clone());
-        
+
             // Test that updating with an old Timestamp don't break the HLC
             let past_ts = Timestamp::new(Default::default(), id.clone());
             let now_ts = hlc.new_timestamp().await;
@@ -217,7 +217,7 @@ mod tests {
             // Test that updating with a Timestamp exceeding the delta is refused
             let now_ts = hlc.new_timestamp().await;
             let future_time = now_ts.get_time() + NTP64::from(Duration::from_millis(500));
-            let future_ts = Timestamp::new(future_time , id.clone());
+            let future_ts = Timestamp::new(future_time, id.clone());
             assert!(hlc.update_with_timestamp(&future_ts).await.is_err())
         });
     }
