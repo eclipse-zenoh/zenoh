@@ -53,6 +53,4 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Run rustfmt
-      uses: actions-rs/cargo@v1
-      with:
-        command: fmt -- --check
+      run: cargo fmt -- --check
