@@ -10,64 +10,78 @@
 //
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+use super::Runtime;
+use crate::plugins::PluginsMgr;
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
 use async_trait::async_trait;
 use futures::future;
 use log::trace;
-use zenoh_protocol:: {
-    core::{ ResKey, ZInt, PeerId, QueryConsolidation, SubInfo, QueryTarget, queryable::EVAL},
-    io::RBuf,
-    proto::Primitives,    
-};
-use super::Runtime;
-use crate::plugins::PluginsMgr;
 use serde_json::json;
+use zenoh_protocol::{
+    core::{queryable::EVAL, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt},
+    io::RBuf,
+    proto::Primitives,
+};
 
 pub struct AdminSpace {
     runtime: Runtime,
     plugins_mgr: PluginsMgr,
     primitives: Mutex<Option<Arc<dyn Primitives + Send + Sync>>>,
     pid_str: String,
-    router_path: String
+    router_path: String,
 }
 
 impl AdminSpace {
-
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr) {
         let pid_str = runtime.get_pid_str().await;
         let router_path = format!("/@/router/{}", pid_str);
 
-        let admin = Arc::new(AdminSpace { 
+        let admin = Arc::new(AdminSpace {
             runtime: runtime.clone(),
             plugins_mgr,
             primitives: Mutex::new(None),
             pid_str,
-            router_path });
+            router_path,
+        });
 
-        let primitives = runtime.read().await
-            .broker.new_primitives(admin.clone()).await;
+        let primitives = runtime
+            .read()
+            .await
+            .broker
+            .new_primitives(admin.clone())
+            .await;
         admin.primitives.lock().await.replace(primitives.clone());
 
         // declare queryable on router_path
-        primitives.queryable(&admin.router_path.clone().into()).await;
+        primitives
+            .queryable(&admin.router_path.clone().into())
+            .await;
     }
 
     pub async fn create_reply_payload(&self) -> RBuf {
         let session_mgr = &self.runtime.read().await.orchestrator.manager;
 
         // plugins info
-        let plugins: Vec<serde_json::Value> = self.plugins_mgr.plugins.iter().map(|plugin|
-            json!({
-                "name": plugin.name,
-                "path": plugin.path
+        let plugins: Vec<serde_json::Value> = self
+            .plugins_mgr
+            .plugins
+            .iter()
+            .map(|plugin| {
+                json!({
+                    "name": plugin.name,
+                    "path": plugin.path
+                })
             })
-        ).collect();
+            .collect();
 
         // locators info
-        let locators: Vec<serde_json::Value> = session_mgr.get_locators().await.iter().map(|locator|
-            json!(locator.to_string())
-        ).collect();
+        let locators: Vec<serde_json::Value> = session_mgr
+            .get_locators()
+            .await
+            .iter()
+            .map(|locator| json!(locator.to_string()))
+            .collect();
 
         // sessions info
         let sessions = future::join_all(session_mgr.get_sessions().await.iter().map(async move |session|
@@ -89,13 +103,10 @@ impl AdminSpace {
         log::debug!("JSON: {:?}", json);
         RBuf::from(json.to_string().as_bytes())
     }
-
 }
-
 
 #[async_trait]
 impl Primitives for AdminSpace {
-
     async fn resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
     }
@@ -129,39 +140,88 @@ impl Primitives for AdminSpace {
     }
 
     async fn data(&self, reskey: &ResKey, _reliable: bool, info: &Option<RBuf>, payload: RBuf) {
-        trace!("recv Data {:?} {:?} {:?} {:?}", reskey, _reliable, info, payload);
+        trace!(
+            "recv Data {:?} {:?} {:?} {:?}",
+            reskey,
+            _reliable,
+            info,
+            payload
+        );
     }
 
-    async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, _consolidation: QueryConsolidation) {
-        trace!("recv Query {:?} {:?} {:?} {:?}", reskey, predicate, target, _consolidation);
+    async fn query(
+        &self,
+        reskey: &ResKey,
+        predicate: &str,
+        qid: ZInt,
+        target: QueryTarget,
+        _consolidation: QueryConsolidation,
+    ) {
+        trace!(
+            "recv Query {:?} {:?} {:?} {:?}",
+            reskey,
+            predicate,
+            target,
+            _consolidation
+        );
         let payload = self.create_reply_payload().await;
 
         // The following are cloned to be moved in the task below
         // (could be removed if the lock used in router (face::tables) is re-entrant)
         let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
         let reskey = ResKey::RName(self.router_path.clone());
-        let replier_id = self.runtime.read().await.pid.clone();   // @TODO build/use prebuilt specific pid
+        let replier_id = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
 
-        task::spawn( async move { // router is not re-entrant
-            primitives.reply_data(qid, EVAL, replier_id.clone(), reskey, None, payload).await;
+        task::spawn(async move {
+            // router is not re-entrant
+            primitives
+                .reply_data(qid, EVAL, replier_id.clone(), reskey, None, payload)
+                .await;
             primitives.reply_final(qid).await;
         });
     }
 
-    async fn reply_data(&self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
-        trace!("recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}", qid, source_kind, replier_id, reskey, info, payload);
+    async fn reply_data(
+        &self,
+        qid: ZInt,
+        source_kind: ZInt,
+        replier_id: PeerId,
+        reskey: ResKey,
+        info: Option<RBuf>,
+        payload: RBuf,
+    ) {
+        trace!(
+            "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
+            qid,
+            source_kind,
+            replier_id,
+            reskey,
+            info,
+            payload
+        );
     }
 
     async fn reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 
-    async fn pull(&self, _is_final: bool, _reskey: &ResKey, _pull_id: ZInt, _max_samples: &Option<ZInt>) {
-        trace!("recv Pull {:?} {:?} {:?} {:?}", _is_final, _reskey, _pull_id, _max_samples);
+    async fn pull(
+        &self,
+        _is_final: bool,
+        _reskey: &ResKey,
+        _pull_id: ZInt,
+        _max_samples: &Option<ZInt>,
+    ) {
+        trace!(
+            "recv Pull {:?} {:?} {:?} {:?}",
+            _is_final,
+            _reskey,
+            _pull_id,
+            _max_samples
+        );
     }
 
     async fn close(&self) {
         trace!("recv Close");
     }
-
 }

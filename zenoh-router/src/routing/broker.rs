@@ -11,31 +11,31 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_trait::async_trait;
 use async_std::sync::RwLock;
 use async_std::sync::{Arc, Weak};
-use std::collections::{HashMap};
+use async_trait::async_trait;
+use std::collections::HashMap;
 
-use zenoh_protocol::core::{ResKey, ZInt, SubInfo, SubMode, Reliability, WhatAmI, whatami};
-use zenoh_protocol::proto::{Primitives, Mux, DeMux};
-use zenoh_protocol::session::{Session, SessionHandler, SessionEventHandler};
+use zenoh_protocol::core::{whatami, Reliability, ResKey, SubInfo, SubMode, WhatAmI, ZInt};
+use zenoh_protocol::proto::{DeMux, Mux, Primitives};
+use zenoh_protocol::session::{Session, SessionEventHandler, SessionHandler};
 
 use zenoh_util::core::ZResult;
 
-use crate::routing::face::{FaceState, Face};
+use crate::routing::face::{Face, FaceState};
 
-pub use crate::routing::resource::*;
 pub use crate::routing::pubsub::*;
 pub use crate::routing::queries::*;
+pub use crate::routing::resource::*;
 
-/// # Examples 
+/// # Examples
 /// ```
 ///   use async_std::sync::Arc;
 ///   use zenoh_protocol::core::{PeerId, whatami::PEER};
 ///   use zenoh_protocol::io::RBuf;
 ///   use zenoh_protocol::session::{SessionManager, SessionManagerConfig};
 ///   use zenoh_router::routing::broker::Broker;
-/// 
+///
 ///   async{
 ///     // implement Primitives trait
 ///     use zenoh_protocol::proto::Mux;
@@ -44,7 +44,7 @@ pub use crate::routing::queries::*;
 ///   
 ///     // Instanciate broker
 ///     let broker = Arc::new(Broker::new());
-/// 
+///
 ///     // Instanciate SessionManager and plug it to the broker
 ///     let config = SessionManagerConfig {
 ///         version: 0,
@@ -53,17 +53,17 @@ pub use crate::routing::queries::*;
 ///         handler: broker.clone()
 ///     };
 ///     let manager = SessionManager::new(config, None);
-/// 
+///
 ///     // Declare new primitives
 ///     let primitives = broker.new_primitives(dummy_primitives).await;
 ///     
 ///     // Use primitives
 ///     primitives.data(&"/demo".to_string().into(), true, &None, RBuf::from(vec![1, 2])).await;
-/// 
+///
 ///     // Close primitives
 ///     primitives.close().await;
 ///   };
-/// 
+///
 /// ```
 pub struct Broker {
     pub tables: Arc<RwLock<Tables>>,
@@ -72,14 +72,20 @@ pub struct Broker {
 impl Broker {
     pub fn new() -> Broker {
         Broker {
-            tables: Tables::new()
+            tables: Tables::new(),
         }
     }
-    
-    pub async fn new_primitives(&self, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<dyn Primitives + Send + Sync> {
+
+    pub async fn new_primitives(
+        &self,
+        primitives: Arc<dyn Primitives + Send + Sync>,
+    ) -> Arc<dyn Primitives + Send + Sync> {
         Arc::new(Face {
-            tables: self.tables.clone(), 
-            state: Tables::open_face(&self.tables, whatami::CLIENT, primitives).await.upgrade().unwrap(),
+            tables: self.tables.clone(),
+            state: Tables::open_face(&self.tables, whatami::CLIENT, primitives)
+                .await
+                .upgrade()
+                .unwrap(),
         })
     }
 }
@@ -92,11 +98,17 @@ impl Default for Broker {
 
 #[async_trait]
 impl SessionHandler for Broker {
-    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    async fn new_session(
+        &self,
+        session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         let whatami = session.get_whatami()?;
         let handler = Arc::new(DeMux::new(Face {
-            tables: self.tables.clone(), 
-            state: Tables::open_face(&self.tables, whatami, Arc::new(Mux::new(Arc::new(session)))).await.upgrade().unwrap(),
+            tables: self.tables.clone(),
+            state: Tables::open_face(&self.tables, whatami, Arc::new(Mux::new(Arc::new(session))))
+                .await
+                .upgrade()
+                .unwrap(),
         }));
         Ok(handler)
     }
@@ -109,7 +121,6 @@ pub struct Tables {
 }
 
 impl Tables {
-
     pub fn new() -> Arc<RwLock<Tables>> {
         Arc::new(RwLock::new(Tables {
             face_counter: 0,
@@ -128,21 +139,33 @@ impl Tables {
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub(crate) fn get_mapping<'a>(&'a self, face: &'a FaceState, rid: &ZInt) -> Option<&'a Arc<Resource>> {
+    pub(crate) fn get_mapping<'a>(
+        &'a self,
+        face: &'a FaceState,
+        rid: &ZInt,
+    ) -> Option<&'a Arc<Resource>> {
         match rid {
-            0 => {Some(&self.root_res)}
-            rid => {face.get_mapping(rid)}
+            0 => Some(&self.root_res),
+            rid => face.get_mapping(rid),
         }
     }
 
-    pub async fn open_face(tables: &Arc<RwLock<Tables>>, whatami: WhatAmI, primitives: Arc<dyn Primitives + Send + Sync>) -> Weak<FaceState> {
+    pub async fn open_face(
+        tables: &Arc<RwLock<Tables>>,
+        whatami: WhatAmI,
+        primitives: Arc<dyn Primitives + Send + Sync>,
+    ) -> Weak<FaceState> {
         unsafe {
             let mut t = tables.write().await;
             let fid = t.face_counter;
             log::debug!("New face {}", fid);
             t.face_counter += 1;
-            let mut newface = t.faces.entry(fid).or_insert_with(|| FaceState::new(fid, whatami, primitives.clone())).clone();
-            
+            let mut newface = t
+                .faces
+                .entry(fid)
+                .or_insert_with(|| FaceState::new(fid, whatami, primitives.clone()))
+                .clone();
+
             // @TODO temporarily propagate to everybody (clients)
             // if whatami != whatami::CLIENT {
             if true {
@@ -154,7 +177,8 @@ impl Tables {
                             match nonwild_prefix {
                                 Some(mut nonwild_prefix) => {
                                     local_id += 1;
-                                    Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.insert(fid, 
+                                    Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.insert(
+                                        fid,
                                         Arc::new(Context {
                                             face: newface.clone(),
                                             local_rid: Some(local_id),
@@ -162,16 +186,36 @@ impl Tables {
                                             subs: None,
                                             qabl: false,
                                             last_values: HashMap::new(),
-                                    }));
-                                    Arc::get_mut_unchecked(&mut newface).local_mappings.insert(local_id, nonwild_prefix.clone());
+                                        }),
+                                    );
+                                    Arc::get_mut_unchecked(&mut newface)
+                                        .local_mappings
+                                        .insert(local_id, nonwild_prefix.clone());
 
-                                    let sub_info = SubInfo { reliability: Reliability::Reliable, mode: SubMode::Push, period: None }; 
-                                    primitives.resource(local_id, &ResKey::RName(nonwild_prefix.name())).await;
-                                    primitives.subscriber(&ResKey::RIdWithSuffix(local_id, wildsuffix), &sub_info).await;
+                                    let sub_info = SubInfo {
+                                        reliability: Reliability::Reliable,
+                                        mode: SubMode::Push,
+                                        period: None,
+                                    };
+                                    primitives
+                                        .resource(local_id, &ResKey::RName(nonwild_prefix.name()))
+                                        .await;
+                                    primitives
+                                        .subscriber(
+                                            &ResKey::RIdWithSuffix(local_id, wildsuffix),
+                                            &sub_info,
+                                        )
+                                        .await;
                                 }
                                 None => {
-                                    let sub_info = SubInfo { reliability: Reliability::Reliable, mode: SubMode::Push, period: None }; 
-                                    primitives.subscriber(&ResKey::RName(wildsuffix), &sub_info).await;
+                                    let sub_info = SubInfo {
+                                        reliability: Reliability::Reliable,
+                                        mode: SubMode::Push,
+                                        period: None,
+                                    };
+                                    primitives
+                                        .subscriber(&ResKey::RName(wildsuffix), &sub_info)
+                                        .await;
                                 }
                             }
                         }
@@ -181,7 +225,8 @@ impl Tables {
                             match nonwild_prefix {
                                 Some(mut nonwild_prefix) => {
                                     local_id += 1;
-                                    Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.insert(fid, 
+                                    Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.insert(
+                                        fid,
                                         Arc::new(Context {
                                             face: newface.clone(),
                                             local_rid: Some(local_id),
@@ -189,11 +234,18 @@ impl Tables {
                                             subs: None,
                                             qabl: false,
                                             last_values: HashMap::new(),
-                                    }));
-                                    Arc::get_mut_unchecked(&mut newface).local_mappings.insert(local_id, nonwild_prefix.clone());
+                                        }),
+                                    );
+                                    Arc::get_mut_unchecked(&mut newface)
+                                        .local_mappings
+                                        .insert(local_id, nonwild_prefix.clone());
 
-                                    primitives.resource(local_id, &ResKey::RName(nonwild_prefix.name())).await;
-                                    primitives.queryable(&ResKey::RIdWithSuffix(local_id, wildsuffix)).await;
+                                    primitives
+                                        .resource(local_id, &ResKey::RName(nonwild_prefix.name()))
+                                        .await;
+                                    primitives
+                                        .queryable(&ResKey::RIdWithSuffix(local_id, wildsuffix))
+                                        .await;
                                 }
                                 None => {
                                     primitives.queryable(&ResKey::RName(wildsuffix)).await;
@@ -234,8 +286,8 @@ impl Tables {
                     Resource::clean(&mut res);
                 }
                 t.faces.remove(&face.id);
-            }
-            None => log::error!("Face already closed!")
+            },
+            None => log::error!("Face already closed!"),
         }
     }
 
@@ -244,7 +296,7 @@ impl Tables {
         for match_ in &res.matches {
             for (fid, context) in &match_.upgrade().unwrap().contexts {
                 if let Some(subinfo) = &context.subs {
-                    if  SubMode::Push == subinfo.mode {
+                    if SubMode::Push == subinfo.mode {
                         let (rid, suffix) = Resource::get_best_key(res, "", *fid);
                         dests.insert(*fid, (context.face.clone(), rid, suffix));
                     }
@@ -259,15 +311,14 @@ impl Tables {
 
         let resclone = res.clone();
         for match_ in &mut Arc::get_mut_unchecked(res).matches {
-            if ! Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
+            if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
                 Tables::build_direct_tables(&mut match_.upgrade().unwrap());
             }
         }
     }
-    
+
     pub async fn get_matches(tables: &Arc<RwLock<Tables>>, rname: &str) -> Vec<Weak<Resource>> {
         let t = tables.read().await;
         Resource::get_matches_from(rname, &t.root_res)
     }
-
 }

@@ -11,29 +11,31 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::path::{Path, PathBuf};
-use log::{debug, trace, warn};
-use libloading::{Library, Symbol};
-use clap::{Arg, ArgMatches};
 use super::runtime::Runtime;
-
+use clap::{Arg, ArgMatches};
+use libloading::{Library, Symbol};
+use log::{debug, trace, warn};
+use std::path::{Path, PathBuf};
 
 pub struct PluginsMgr {
     pub search_paths: Vec<PathBuf>,
-    pub plugins: Vec<Plugin>
+    pub plugins: Vec<Plugin>,
 }
 
-
 impl PluginsMgr {
-
     pub fn new() -> PluginsMgr {
         let mut search_paths: Vec<PathBuf> = vec![];
-        if let Some(dir) = Self::home_dir() { 
+        if let Some(dir) = Self::home_dir() {
             let mut dir = dir;
-            dir.push(".zenoh/lib"); search_paths.push(dir)
+            dir.push(".zenoh/lib");
+            search_paths.push(dir)
         };
-        if let Some(dir) = Self::exe_parent_dir() { search_paths.push(dir) };
-        if let Some(dir) = Self::current_dir() { search_paths.push(dir) };
+        if let Some(dir) = Self::exe_parent_dir() {
+            search_paths.push(dir)
+        };
+        if let Some(dir) = Self::current_dir() {
+            search_paths.push(dir)
+        };
         let usr_local_lib = PathBuf::from("/usr/local/lib");
         if usr_local_lib.is_dir() {
             search_paths.push(usr_local_lib);
@@ -42,10 +44,13 @@ impl PluginsMgr {
         if usr_lib.is_dir() {
             search_paths.push(usr_lib);
         }
-        
+
         // let plugins: Vec<Plugin> = vec![];
 
-        PluginsMgr { search_paths, plugins: vec![] }
+        PluginsMgr {
+            search_paths,
+            plugins: vec![],
+        }
     }
 
     fn exe_parent_dir() -> Option<PathBuf> {
@@ -77,7 +82,10 @@ impl PluginsMgr {
         match std::env::current_dir() {
             Ok(path) => Some(path),
             Err(err) => {
-                warn!("Invalid current dir: '{}'. Can't use it to search plugins.", err);
+                warn!(
+                    "Invalid current dir: '{}'. Can't use it to search plugins.",
+                    err
+                );
                 None
             }
         }
@@ -88,22 +96,27 @@ impl PluginsMgr {
         for dir in &self.search_paths {
             trace!("Search plugins in dir {:?} ", dir);
             match dir.read_dir() {
-                Ok(read_dir) =>
+                Ok(read_dir) => {
                     for entry in read_dir {
                         if let Ok(entry) = entry {
                             if let Ok(filename) = entry.file_name().into_string() {
                                 if filename.starts_with(prefix) && filename.ends_with(extension) {
-                                    let name = &filename[(prefix.len())..(filename.len()-extension.len())];
+                                    let name = &filename
+                                        [(prefix.len())..(filename.len() - extension.len())];
                                     let path = entry.path();
                                     match Plugin::load(name, path) {
-                                            Ok(plugin) => self.plugins.push(plugin),
-                                            Err(err) => warn!("{}", err)
+                                        Ok(plugin) => self.plugins.push(plugin),
+                                        Err(err) => warn!("{}", err),
                                     }
                                 }
                             }
                         }
                     }
-                Err(err) => debug!("Failed to read in directory {:?} ({}). Can't use it to search plugins.", dir, err)
+                }
+                Err(err) => debug!(
+                    "Failed to read in directory {:?} ({}). Can't use it to search plugins.",
+                    dir, err
+                ),
             }
         }
     }
@@ -121,7 +134,7 @@ impl PluginsMgr {
             let name = file.file_name().unwrap();
             match Plugin::load(name.to_str().unwrap(), file.clone()) {
                 Ok(plugin) => self.plugins.push(plugin),
-                Err(err) => panic!(err)
+                Err(err) => panic!(err),
             }
         });
     }
@@ -151,18 +164,16 @@ impl Default for PluginsMgr {
 pub struct Plugin {
     pub name: String,
     pub path: PathBuf,
-    lib: Library
+    lib: Library,
 }
 
 const START_FN_NAME: &[u8; 6] = b"start\0";
 const GET_ARGS_FN_NAME: &[u8; 18] = b"get_expected_args\0";
 
-type StartFn<'lib> = Symbol<'lib, unsafe extern fn(Runtime, &ArgMatches)>;
-type GetArgsFn<'lib, 'a, 'b> = Symbol<'lib, unsafe extern fn() -> Vec<Arg<'a, 'b>>>;
-
+type StartFn<'lib> = Symbol<'lib, unsafe extern "C" fn(Runtime, &ArgMatches)>;
+type GetArgsFn<'lib, 'a, 'b> = Symbol<'lib, unsafe extern "C" fn() -> Vec<Arg<'a, 'b>>>;
 
 impl Plugin {
-
     pub fn load(name: &str, path: PathBuf) -> Result<Plugin, String> {
         debug!("Load plugin {} from {:?}", name, path);
         match Library::new(path.as_os_str()) {
@@ -171,15 +182,26 @@ impl Plugin {
                     // check if it has the expected operations
                     // NOTE: we don't save the symbols here
                     if lib.get::<GetArgsFn>(GET_ARGS_FN_NAME).is_err() {
-                        return Err(format!("Failed to load plugin from {}: it lacks a get_expected_args() operation", path.to_string_lossy()))
+                        return Err(format!("Failed to load plugin from {}: it lacks a get_expected_args() operation", path.to_string_lossy()));
                     };
                     if lib.get::<StartFn>(START_FN_NAME).is_err() {
-                        return Err(format!("Failed to load plugin from {}: it lacks a start() operation", path.to_string_lossy()))
+                        return Err(format!(
+                            "Failed to load plugin from {}: it lacks a start() operation",
+                            path.to_string_lossy()
+                        ));
                     };
                 }
-                Ok(Plugin { name: name.to_string(), path, lib })
+                Ok(Plugin {
+                    name: name.to_string(),
+                    path,
+                    lib,
+                })
             }
-            Err(err) => Err(format!("Failed to load plugin from {}: {}", path.to_string_lossy(), err))
+            Err(err) => Err(format!(
+                "Failed to load plugin from {}: {}",
+                path.to_string_lossy(),
+                err
+            )),
         }
     }
 

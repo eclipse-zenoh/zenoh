@@ -11,22 +11,24 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use async_std::future;
 use async_std::task;
 use clap::{App, Arg};
+use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use zenoh_protocol::core::whatami;
 use zenoh_router::plugins::PluginsMgr;
-use zenoh_router::runtime::{ AdminSpace, Runtime, Config };
+use zenoh_router::runtime::{AdminSpace, Config, Runtime};
 
 const PLUGINS_PREFIX: &str = "zplugin_";
 
 fn get_plugins_from_args() -> Vec<String> {
-    let mut result: Vec<String> = vec![]; 
+    let mut result: Vec<String> = vec![];
     let mut iter = std::env::args();
     while let Some(arg) = iter.next() {
         if arg == "-P" {
-            if let Some(arg2) = iter.next() { result.push(arg2); }
+            if let Some(arg2) = iter.next() {
+                result.push(arg2);
+            }
         } else if arg.starts_with("--plugin=") {
             result.push(arg);
         }
@@ -34,28 +36,37 @@ fn get_plugins_from_args() -> Vec<String> {
     result
 }
 
-
 fn main() {
     task::block_on(async {
         env_logger::init();
 
         let app = App::new("The zenoh router")
-        .arg(Arg::from_usage("-l, --listener=[LOCATOR]... \
+            .arg(
+                Arg::from_usage(
+                    "-l, --listener=[LOCATOR]... \
             'A locator on which this router will listen for incoming sessions. \
-            Repeat this option to open several listeners.'")
-            .default_value("tcp/0.0.0.0:7447"))
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]... \
+            Repeat this option to open several listeners.'",
+                )
+                .default_value("tcp/0.0.0.0:7447"),
+            )
+            .arg(Arg::from_usage(
+                "-e, --peer=[LOCATOR]... \
             'A peer locator this router will try to connect to. \
-            Repeat this option to connect to several peers.'"))
-        .arg(Arg::from_usage("-P, --plugin=[PATH_TO_PLUGIN]... \
+            Repeat this option to connect to several peers.'",
+            ))
+            .arg(Arg::from_usage(
+                "-P, --plugin=[PATH_TO_PLUGIN]... \
              'A plugin that must be loaded. Repeat this option to load several plugins.
-             Note that when set this option disable the automatic search and load of plugins.'"));
+             Note that when set this option disable the automatic search and load of plugins.'",
+            ));
 
         let mut plugins_mgr = PluginsMgr::new();
-        // Get specified plugins from command line 
+        // Get specified plugins from command line
         let plugins = get_plugins_from_args();
         if plugins.is_empty() {
-            plugins_mgr.search_and_load_plugins(&format!("{}{}" ,DLL_PREFIX, PLUGINS_PREFIX), DLL_SUFFIX).await;
+            plugins_mgr
+                .search_and_load_plugins(&format!("{}{}", DLL_PREFIX, PLUGINS_PREFIX), DLL_SUFFIX)
+                .await;
         } else {
             plugins_mgr.load_plugins(plugins)
         }
@@ -63,10 +74,16 @@ fn main() {
         // Add plugins' expected args and parse command line
         let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
 
-        let listeners = args.values_of("listener").map(|v| v.map(|l| l.parse().unwrap()).collect())
-            .or_else(|| Some(vec![])).unwrap();
-        let peers = args.values_of("peer").map(|v| v.map(|l| l.parse().unwrap()).collect())
-            .or_else(|| Some(vec![])).unwrap();
+        let listeners = args
+            .values_of("listener")
+            .map(|v| v.map(|l| l.parse().unwrap()).collect())
+            .or_else(|| Some(vec![]))
+            .unwrap();
+        let peers = args
+            .values_of("peer")
+            .map(|v| v.map(|l| l.parse().unwrap()).collect())
+            .or_else(|| Some(vec![]))
+            .unwrap();
 
         let config = Config {
             whatami: whatami::BROKER,
@@ -80,7 +97,7 @@ fn main() {
             Ok(runtime) => runtime,
             _ => std::process::exit(-1),
         };
-        
+
         plugins_mgr.start_plugins(&runtime, &args).await;
 
         AdminSpace::start(&runtime, plugins_mgr).await;
