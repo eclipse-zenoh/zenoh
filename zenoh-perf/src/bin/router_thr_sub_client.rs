@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::future;
-use async_std::task;
 use async_std::sync::{Arc, Mutex};
+use async_std::task;
 use async_trait::async_trait;
 
 use rand::RngCore;
@@ -22,7 +22,9 @@ use std::time::Instant;
 use zenoh_protocol::core::{PeerId, ResKey, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::whatami;
-use zenoh_protocol::proto::{Primitives, SubInfo, Reliability, SubMode, QueryConsolidation, QueryTarget, Reply};
+use zenoh_protocol::proto::{
+    Primitives, QueryConsolidation, QueryTarget, Reliability, Reply, SubInfo, SubMode,
+};
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig};
 use zenoh_router::routing::broker::Broker;
 
@@ -30,11 +32,10 @@ const N: usize = 100_000;
 
 struct Stats {
     count: usize,
-    start: Instant
+    start: Instant,
 }
 
 impl Stats {
-
     pub fn print(&self) {
         let elapsed = self.start.elapsed().as_secs_f64();
         let thpt = N as f64 / elapsed;
@@ -51,8 +52,8 @@ impl ThrouputPrimitives {
         ThrouputPrimitives {
             stats: Mutex::new(Stats {
                 count: 0,
-                start: Instant::now()
-            })
+                start: Instant::now(),
+            }),
         }
     }
 }
@@ -65,16 +66,15 @@ impl Default for ThrouputPrimitives {
 
 #[async_trait]
 impl Primitives for ThrouputPrimitives {
-
     async fn resource(&self, _rid: ZInt, _reskey: &ResKey) {}
     async fn forget_resource(&self, _rid: ZInt) {}
-    
+
     async fn publisher(&self, _reskey: &ResKey) {}
     async fn forget_publisher(&self, _reskey: &ResKey) {}
-    
+
     async fn subscriber(&self, _reskey: &ResKey, _sub_info: &SubInfo) {}
     async fn forget_subscriber(&self, _reskey: &ResKey) {}
-    
+
     async fn queryable(&self, _reskey: &ResKey) {}
     async fn forget_queryable(&self, _reskey: &ResKey) {}
 
@@ -88,19 +88,33 @@ impl Primitives for ThrouputPrimitives {
         } else {
             stats.print();
             stats.count = 0;
-        }  
+        }
     }
-    async fn query(&self, _reskey: &ResKey, _predicate: &str, _qid: ZInt, _target: QueryTarget, _consolidation: QueryConsolidation) {}
+    async fn query(
+        &self,
+        _reskey: &ResKey,
+        _predicate: &str,
+        _qid: ZInt,
+        _target: QueryTarget,
+        _consolidation: QueryConsolidation,
+    ) {
+    }
     async fn reply(&self, _qid: ZInt, _reply: &Reply) {}
-    async fn pull(&self, _is_final: bool, _reskey: &ResKey, _pull_id: ZInt, _max_samples: &Option<ZInt>) {}
+    async fn pull(
+        &self,
+        _is_final: bool,
+        _reskey: &ResKey,
+        _pull_id: ZInt,
+        _max_samples: &Option<ZInt>,
+    ) {
+    }
 
     async fn close(&self) {}
 }
 
-
 fn print_usage(bin: String) {
     println!(
-"Usage:
+        "Usage:
     cargo run --release --bin {} [<locator to connect to>]
 Example: 
     cargo run --release --bin {} tcp/127.0.0.1:7447",
@@ -118,9 +132,13 @@ fn main() {
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
-    
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
 
     let my_primitives = Arc::new(ThrouputPrimitives::new());
     let broker = Arc::new(Broker::new());
@@ -128,28 +146,30 @@ fn main() {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::CLIENT,
-        id: PeerId{id: pid},
-        handler: broker.clone()
+        id: PeerId { id: pid },
+        handler: broker.clone(),
     };
     let manager = SessionManager::new(config, None);
-
 
     task::block_on(async {
         let mut has_locator = false;
         let attachment = None;
         for locator in args {
             has_locator = true;
-            if let Err(_err) =  manager.open_session(&locator.parse().unwrap(), &attachment).await {
+            if let Err(_err) = manager
+                .open_session(&locator.parse().unwrap(), &attachment)
+                .await
+            {
                 println!("Unable to connect to {}!", locator);
-                return
+                return;
             }
         }
-    
+
         if !has_locator {
             print_usage(bin);
-            return
+            return;
         }
-        
+
         let primitives = broker.new_primitives(my_primitives).await;
 
         primitives.resource(1, &"/tp".to_string().into()).await;
@@ -157,7 +177,7 @@ fn main() {
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
-            period: None
+            period: None,
         };
         primitives.subscriber(&rid, &sub_info).await;
 

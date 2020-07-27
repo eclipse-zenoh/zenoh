@@ -18,28 +18,36 @@ use clap::{App, Arg};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use zenoh::net::*;
 use zenoh::net::ResKey::*;
-
+use zenoh::net::*;
 
 #[async_std::main]
 async fn main() {
     // initiate logging
     env_logger::init();
 
-    let args = App::new("zenoh-net throughput sub example")        
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
+    let args = App::new("zenoh-net throughput sub example")
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
+        ))
         .get_matches();
 
-    let config = Config::new("peer").unwrap()
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
-    
+    let config = Config::new("peer").unwrap().add_peers(
+        args.values_of("peer")
+            .map(|p| p.collect())
+            .or_else(|| Some(vec![]))
+            .unwrap(),
+    );
+
     let session = open(config, None).await.unwrap();
 
-    let reskey = RId(session.declare_resource(&RName("/test/thr".to_string())).await.unwrap());
+    let reskey = RId(session
+        .declare_resource(&RName("/test/thr".to_string()))
+        .await
+        .unwrap());
 
     let messages = Arc::new(AtomicUsize::new(0));
-    let bytes = Arc::new(AtomicUsize::new(0));   
+    let bytes = Arc::new(AtomicUsize::new(0));
 
     let c_messages = messages.clone();
     let c_bytes = bytes.clone();
@@ -56,19 +64,24 @@ async fn main() {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None
+        period: None,
     };
-    session.declare_callback_subscriber(&reskey, &sub_info,
-        move |_res_name: &str, payload: RBuf, _data_info: Option<RBuf>| {
-            messages.fetch_add(1, Ordering::Relaxed);
-            bytes.fetch_add(payload.len(), Ordering::Relaxed);
-        }
-    ).await.unwrap();
+    session
+        .declare_callback_subscriber(
+            &reskey,
+            &sub_info,
+            move |_res_name: &str, payload: RBuf, _data_info: Option<RBuf>| {
+                messages.fetch_add(1, Ordering::Relaxed);
+                bytes.fetch_add(payload.len(), Ordering::Relaxed);
+            },
+        )
+        .await
+        .unwrap();
 
     // Stop forever
     future::pending::<()>().await;
 
-    // @TODO: Uncomment these once the writer starvation has been solved on the RwLock      
+    // @TODO: Uncomment these once the writer starvation has been solved on the RwLock
     // session.undeclare_subscriber(sub).await.unwrap();
     // session.close().await.unwrap();
 }

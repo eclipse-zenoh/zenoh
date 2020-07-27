@@ -18,24 +18,26 @@ use rand::RngCore;
 
 use zenoh_protocol::core::{PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{ZenohMessage, WhatAmI, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{DummyHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig};
-
+use zenoh_protocol::proto::{whatami, WhatAmI, ZenohMessage};
+use zenoh_protocol::session::{
+    DummyHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+};
 
 struct MySH {}
 
 impl MySH {
     fn new() -> Self {
-        Self { }
+        Self {}
     }
 }
 
 #[async_trait]
 impl SessionHandler for MySH {
-    async fn new_session(&self, 
-        _whatami: WhatAmI, 
-        _session: Arc<dyn SessionEventHandler + Send + Sync>
+    async fn new_session(
+        &self,
+        _whatami: WhatAmI,
+        _session: Arc<dyn SessionEventHandler + Send + Sync>,
     ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         Arc::new(DummyHandler::new())
     }
@@ -43,7 +45,7 @@ impl SessionHandler for MySH {
 
 fn print_usage(bin: String) {
     println!(
-"Usage:
+        "Usage:
     cargo run --release --bin {} <payload size in bytes> <locator to connect to>
 Example: 
     cargo run --release --bin {} 8100 tcp/127.0.0.1:7447",
@@ -61,8 +63,13 @@ fn main() {
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
 
     // Get next arg
     let value = if let Some(value) = args.next() {
@@ -91,12 +98,12 @@ fn main() {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::PEER,
-        id: PeerId{id: pid},
-        handler: Arc::new(MySH::new())
+        id: PeerId { id: pid },
+        handler: Arc::new(MySH::new()),
     };
     let manager = SessionManager::new(config, None);
 
-    let attachment = None; 
+    let attachment = None;
 
     // Connect to publisher
     task::block_on(async {
@@ -115,14 +122,13 @@ fn main() {
         let payload = RBuf::from(vec![0u8; payload]);
         let reply_context = None;
 
-        let message = ZenohMessage::make_data(
-            reliable, key, info, payload, reply_context, attachment
-        );
+        let message =
+            ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
 
         loop {
             let res = session.handle_message(message.clone()).await;
             if res.is_err() {
-                break
+                break;
             }
         }
     });

@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::prelude::*;
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
-use async_std::task;
+use async_std::prelude::*;
 use async_std::sync::Arc;
+use async_std::task;
 use rand::RngCore;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -22,13 +22,16 @@ use zenoh_protocol::core::PeerId;
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::proto::{SessionBody, SessionMessage};
 
-
-async fn handle_client(mut stream: TcpStream, bs: usize, length: bool) -> Result<(), Box<dyn std::error::Error>> {
+async fn handle_client(
+    mut stream: TcpStream,
+    bs: usize,
+    length: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let counter = Arc::new(AtomicUsize::new(0));
 
     let mut apid = vec![0, 0, 0, 0];
     rand::thread_rng().fill_bytes(&mut apid);
-    let apid = PeerId{ id: apid };
+    let apid = PeerId { id: apid };
 
     let mut buffer = vec![0u8; bs];
 
@@ -39,22 +42,39 @@ async fn handle_client(mut stream: TcpStream, bs: usize, length: bool) -> Result
         rbuf.read()?;
         rbuf.read()?;
     }
-    
+
     let message = rbuf.read_session_message()?;
 
     match message.get_body() {
-        SessionBody::Open { version: _, whatami, pid, lease: _, initial_sn, sn_resolution: _, locators: _ } => {            
+        SessionBody::Open {
+            version: _,
+            whatami,
+            pid,
+            lease: _,
+            initial_sn,
+            sn_resolution: _,
+            locators: _,
+        } => {
             let opid = pid.clone();
-            let sn_resolution = None;   
+            let sn_resolution = None;
             let lease = None;
             let locators = None;
             let attachment = None;
-            let message = SessionMessage::make_accept(*whatami, opid, apid, *initial_sn, sn_resolution, lease, locators, attachment);
+            let message = SessionMessage::make_accept(
+                *whatami,
+                opid,
+                apid,
+                *initial_sn,
+                sn_resolution,
+                lease,
+                locators,
+                attachment,
+            );
 
-            let mut wbuf = WBuf::new(32, false);        
+            let mut wbuf = WBuf::new(32, false);
             // Reserve 16 bits to write the lenght
             if length {
-                wbuf.write_bytes(&[0u8, 0u8]); 
+                wbuf.write_bytes(&[0u8, 0u8]);
             }
             wbuf.write_session_message(&message);
             if length {
@@ -66,8 +86,8 @@ async fn handle_client(mut stream: TcpStream, bs: usize, length: bool) -> Result
 
             let bf = wbuf.get_first_slice(..);
             stream.write_all(bf).await?;
-        },
-        _ => return Ok(())
+        }
+        _ => return Ok(()),
     }
 
     let c_c = counter.clone();
@@ -75,7 +95,7 @@ async fn handle_client(mut stream: TcpStream, bs: usize, length: bool) -> Result
         loop {
             task::sleep(Duration::from_secs(1)).await;
             let c = c_c.swap(0, Ordering::Relaxed);
-            println!("{:.3} Gbit/s", (8_f64*c as f64)/1000000000_f64);
+            println!("{:.3} Gbit/s", (8_f64 * c as f64) / 1000000000_f64);
         }
     });
 
@@ -101,7 +121,7 @@ async fn run(addr: SocketAddr, bs: usize, length: bool) -> Result<(), Box<dyn st
 
 fn print_usage(bin: String) {
     println!(
-"Usage:
+        "Usage:
     cargo run --release --bin {} <TCP address to listen on> <buffer size> <has length>
 Example: 
     cargo run --release --bin {} 127.0.0.1:7447 8192 true",
@@ -115,9 +135,14 @@ fn main() {
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
-    
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
+
     // Get next arg
     let value = if let Some(value) = args.next() {
         value
@@ -129,7 +154,7 @@ fn main() {
     } else {
         return print_usage(bin);
     };
-    
+
     // Get next arg
     let value = if let Some(value) = args.next() {
         value

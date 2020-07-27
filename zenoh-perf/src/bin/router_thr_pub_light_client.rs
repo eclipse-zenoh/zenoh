@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::task;
 use async_std::sync::{Arc, Mutex};
+use async_std::task;
 use async_trait::async_trait;
 
 use rand::RngCore;
@@ -21,8 +21,10 @@ use std::time::Duration;
 use zenoh_protocol::core::{PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{Primitives, Mux, WhatAmI, whatami};
-use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionHandler, SessionEventHandler, DummyHandler};
+use zenoh_protocol::proto::{whatami, Mux, Primitives, WhatAmI};
+use zenoh_protocol::session::{
+    DummyHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+};
 
 struct LightSessionHandler {
     pub handler: Mutex<Option<Arc<dyn SessionEventHandler + Send + Sync>>>,
@@ -30,22 +32,27 @@ struct LightSessionHandler {
 
 impl LightSessionHandler {
     pub fn new() -> LightSessionHandler {
-        LightSessionHandler { handler: Mutex::new(None),}
+        LightSessionHandler {
+            handler: Mutex::new(None),
+        }
     }
 }
 
 #[async_trait]
 impl SessionHandler for LightSessionHandler {
-    async fn new_session(&self, _whatami: WhatAmI, session: Arc<dyn SessionEventHandler + Send + Sync>) -> Arc<dyn SessionEventHandler + Send + Sync> {
+    async fn new_session(
+        &self,
+        _whatami: WhatAmI,
+        session: Arc<dyn SessionEventHandler + Send + Sync>,
+    ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         *self.handler.lock().await = Some(session);
         Arc::new(DummyHandler::new())
     }
 }
 
-
 fn print_usage(bin: String) {
     println!(
-"Usage:
+        "Usage:
     cargo run --release --bin {} <payload size in bytes> <locator to connect to>
 Example: 
     cargo run --release --bin {} 8100 tcp/127.0.0.1:7447",
@@ -63,9 +70,14 @@ fn main() {
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
-    
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
+
     // Get next arg
     let value = if let Some(value) = args.next() {
         value
@@ -94,8 +106,8 @@ fn main() {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::CLIENT,
-        id: PeerId{id: pid.clone()},
-        handler: session_handler.clone()
+        id: PeerId { id: pid.clone() },
+        handler: session_handler.clone(),
     };
     let manager = SessionManager::new(config, None);
 
@@ -103,10 +115,18 @@ fn main() {
         let attachment = None;
         if let Err(_err) = manager.open_session(&connect_to, &attachment).await {
             println!("Unable to connect to {}!", connect_to);
-            return
+            return;
         }
-    
-        let primitives = Mux::new(session_handler.handler.lock().await.as_ref().unwrap().clone());
+
+        let primitives = Mux::new(
+            session_handler
+                .handler
+                .lock()
+                .await
+                .as_ref()
+                .unwrap()
+                .clone(),
+        );
 
         primitives.resource(1, &"/tp".to_string().into()).await;
         let rid = ResKey::RId(1);
@@ -115,7 +135,7 @@ fn main() {
         // @TODO: Fix writer starvation in the RwLock and remove this sleep
         // Wait for the declare to arrive
         task::sleep(Duration::from_millis(1_000)).await;
-        
+
         let payload = RBuf::from(vec![0u8; pl_size]);
         loop {
             primitives.data(&rid, true, &None, payload.clone()).await;
