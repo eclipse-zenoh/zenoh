@@ -16,16 +16,15 @@ use std::time::Duration;
 
 use super::{ChannelLink, ChannelRxBestEffort, ChannelRxReliable, SessionLeaseEvent};
 
-use crate::core::{PeerId, ZInt, WhatAmI};
+use crate::core::{PeerId, WhatAmI, ZInt};
 use crate::link::Link;
 use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
-use crate::session::{SessionEventHandler, SessionManagerInner};
 use crate::session::defaults::QUEUE_PRIO_DATA;
+use crate::session::{SessionEventHandler, SessionManagerInner};
 
-use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror, zasyncopt};
 use zenoh_util::collections::{TimedEvent, TimedHandle, Timer};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-
+use zenoh_util::{zasynclock, zasyncopt, zasyncread, zasyncwrite, zerror};
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
@@ -53,9 +52,9 @@ pub(crate) struct Channel {
     pub(super) lease: ZInt,
     // Keep alive interval
     pub(super) keep_alive: ZInt,
-    // The SN resolution 
+    // The SN resolution
     pub(super) sn_resolution: ZInt,
-    // The batch size 
+    // The batch size
     pub(super) batch_size: usize,
     // The sn generator for the TX reliable channel
     pub(super) tx_sn_reliable: Arc<Mutex<SeqNumGenerator>>,
@@ -74,21 +73,21 @@ pub(crate) struct Channel {
     // The callback
     pub(super) callback: RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>,
     // Weak reference to self
-    pub(super) w_self: RwLock<Option<Weak<Self>>>
+    pub(super) w_self: RwLock<Option<Weak<Self>>>,
 }
 
 impl Channel {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         manager: Arc<SessionManagerInner>,
-        pid: PeerId, 
+        pid: PeerId,
         whatami: WhatAmI,
         lease: ZInt,
         keep_alive: ZInt,
-        sn_resolution: ZInt, 
+        sn_resolution: ZInt,
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
-        batch_size: usize        
+        batch_size: usize,
     ) -> Channel {
         Channel {
             manager,
@@ -98,16 +97,22 @@ impl Channel {
             keep_alive,
             sn_resolution,
             batch_size,
-            tx_sn_reliable: Arc::new(Mutex::new(SeqNumGenerator::new(initial_sn_tx, sn_resolution))),
-            tx_sn_best_effort: Arc::new(Mutex::new(SeqNumGenerator::new(initial_sn_tx, sn_resolution))),            
+            tx_sn_reliable: Arc::new(Mutex::new(SeqNumGenerator::new(
+                initial_sn_tx,
+                sn_resolution,
+            ))),
+            tx_sn_best_effort: Arc::new(Mutex::new(SeqNumGenerator::new(
+                initial_sn_tx,
+                sn_resolution,
+            ))),
             rx_reliable: Mutex::new(ChannelRxReliable::new(initial_sn_rx, sn_resolution)),
             rx_best_effort: Mutex::new(ChannelRxBestEffort::new(initial_sn_rx, sn_resolution)),
             links: Arc::new(RwLock::new(Vec::new())),
             timer: Timer::new(),
             lease_event_handle: Mutex::new(None),
             callback: RwLock::new(None),
-            w_self: RwLock::new(None)
-        }        
+            w_self: RwLock::new(None),
+        }
     }
 
     pub(crate) async fn initialize(&self, w_self: Weak<Self>) {
@@ -116,7 +121,6 @@ impl Channel {
         // Start the session lease timeout
         self.start_session_lease().await;
     }
-
 
     /*************************************/
     /*            ACCESSORS              */
@@ -145,7 +149,7 @@ impl Channel {
         zasyncread!(self.callback).clone()
     }
 
-    pub(crate) async fn set_callback(&self, callback: Arc<dyn SessionEventHandler + Send + Sync>) {        
+    pub(crate) async fn set_callback(&self, callback: Arc<dyn SessionEventHandler + Send + Sync>) {
         let mut guard = zasyncwrite!(self.callback);
         *guard = Some(callback.clone());
     }
@@ -169,21 +173,21 @@ impl Channel {
         // Add the event to the timer
         self.timer.add(event).await;
     }
-                
+
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) {
-        log::debug!("Closing the session with peer: {}", self.pid);        
+        log::debug!("Closing the session with peer: {}", self.pid);
         // Delete the session on the manager
-        let _ = self.manager.del_session(&self.pid).await;            
+        let _ = self.manager.del_session(&self.pid).await;
 
         // Notify the callback
         let mut guard = zasyncwrite!(self.callback);
         if let Some(callback) = guard.take() {
             callback.close().await;
-        } 
-        
+        }
+
         // Close all the links
         let mut guard = zasyncwrite!(self.links);
         for l in guard.drain(..) {
@@ -191,16 +195,16 @@ impl Channel {
         }
     }
 
-    pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {     
+    pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.pid);
 
         let guard = zasyncread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
             // Close message to be sent on the target link
             let peer_id = Some(self.manager.config.pid.clone());
-            let reason_id = reason;              
-            let link_only = true;  // This is should always be true when closing a link              
-            let attachment = None;  // No attachment here
+            let reason_id = reason;
+            let link_only = true; // This is should always be true when closing a link
+            let attachment = None; // No attachment here
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
             // Schedule the close message for transmission
@@ -221,19 +225,20 @@ impl Channel {
 
         // Close message to be sent on all the links
         let peer_id = Some(self.manager.config.pid.clone());
-        let reason_id = reason;              
-        let link_only = false;  // This is should always be false for user-triggered close              
-        let attachment = None;  // No attachment here
+        let reason_id = reason;
+        let link_only = false; // This is should always be false for user-triggered close
+        let attachment = None; // No attachment here
         let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
         let mut links = zasyncread!(self.links).clone();
         for link in links.drain(..) {
-            link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA).await;
+            link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA)
+                .await;
         }
 
         // Terminate and clean up the session
         self.delete().await;
-        
+
         Ok(())
     }
 
@@ -247,34 +252,46 @@ impl Channel {
             if let Some(l) = zlinkget!(guard, &link) {
                 l.schedule_zenoh_message(message, QUEUE_PRIO_DATA).await;
             } else {
-                log::trace!("Zenoh message has been dropped because link {} does not exist\
-                            in session with peer: {}", link, self.pid);
+                log::trace!(
+                    "Zenoh message has been dropped because link {} does not exist\
+                            in session with peer: {}",
+                    link,
+                    self.pid
+                );
             }
         } else {
             let guard = zasyncread!(self.links);
-            if guard.is_empty() {                
+            if guard.is_empty() {
                 log::trace!("Zenoh message has been dropped because no links are available in session with peer: {}", self.pid);
             } else {
-                guard[0].schedule_zenoh_message(message, QUEUE_PRIO_DATA).await;
+                guard[0]
+                    .schedule_zenoh_message(message, QUEUE_PRIO_DATA)
+                    .await;
             }
         }
     }
 
     /*************************************/
     /*               LINK                */
-    /*************************************/    
+    /*************************************/
     pub(crate) async fn add_link(&self, link: Link) -> ZResult<()> {
         let mut guard = zasyncwrite!(self.links);
         if zlinkget!(guard, &link).is_some() {
-            return zerror!(ZErrorKind::InvalidLink { 
+            return zerror!(ZErrorKind::InvalidLink {
                 descr: format!("Can not add Link {} with peer: {}", link, self.pid)
             });
         }
 
         // Create a channel link from a link
         let link = ChannelLink::new(
-            zasyncopt!(self.w_self).clone(), link, self.batch_size, self.keep_alive, self.lease,
-            self.tx_sn_reliable.clone(), self.tx_sn_best_effort.clone(), self.timer.clone()
+            zasyncopt!(self.w_self).clone(),
+            link,
+            self.batch_size,
+            self.keep_alive,
+            self.lease,
+            self.tx_sn_reliable.clone(),
+            self.tx_sn_best_effort.clone(),
+            self.timer.clone(),
         );
 
         // Add the link to the channel
@@ -282,11 +299,11 @@ impl Channel {
 
         // Restart the session lease event
         self.start_session_lease().await;
-        
+
         Ok(())
     }
 
-    pub(crate) async fn del_link(&self, link: &Link) -> ZResult<()> { 
+    pub(crate) async fn del_link(&self, link: &Link) -> ZResult<()> {
         // Try to remove the link
         let mut guard = zasyncwrite!(self.links);
         if let Some(index) = zlinkindex!(guard, link) {
@@ -294,15 +311,18 @@ impl Channel {
             self.start_session_lease().await;
             // Remove and close the link
             let link = guard.remove(index);
-            link.close().await           
+            link.close().await
         } else {
-            zerror!(ZErrorKind::InvalidLink { 
+            zerror!(ZErrorKind::InvalidLink {
                 descr: format!("Can not delete Link {} with peer: {}", link, self.pid)
             })
         }
     }
 
     pub(crate) async fn get_links(&self) -> Vec<Link> {
-        zasyncread!(self.links).iter().map(|l| l.get_link().clone()).collect()
+        zasyncread!(self.links)
+            .iter()
+            .map(|l| l.get_link().clone())
+            .collect()
     }
 }

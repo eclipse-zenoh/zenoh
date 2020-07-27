@@ -11,23 +11,22 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::io::RBuf;
 use crate::core::*;
+use crate::io::RBuf;
 use crate::link::Locator;
 
-use super::msg::*;
 use super::decl::*;
+use super::msg::*;
 
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-
 
 impl RBuf {
     pub fn read_session_message(&mut self) -> ZResult<SessionMessage> {
         use super::smsg::id::*;
 
         let mut attachment = None;
-        
+
         // Read the message
         let (header, body) = loop {
             // Read the header
@@ -49,7 +48,7 @@ impl RBuf {
 
                         FramePayload::Fragment { buffer, is_final }
                     } else {
-                        // @TODO: modify the get_pos/set_pos to mark/revert 
+                        // @TODO: modify the get_pos/set_pos to mark/revert
                         let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
                         loop {
                             let pos = self.get_pos();
@@ -57,55 +56,63 @@ impl RBuf {
                                 messages.push(msg);
                             } else {
                                 self.set_pos(pos)?;
-                                break
+                                break;
                             }
                         }
-                        
+
                         FramePayload::Messages { messages }
                     };
 
                     let body = SessionBody::Frame(Frame { ch, sn, payload });
-                    break (header, body)
-                },
-                
+                    break (header, body);
+                }
+
                 ATTACHMENT => {
                     attachment = Some(self.read_deco_attachment(header)?);
-                    continue
-                },
+                    continue;
+                }
 
                 SCOUT => {
                     let pid_replies = smsg::has_flag(header, smsg::flag::I);
                     let what = if smsg::has_flag(header, smsg::flag::W) {
                         Some(self.read_zint()?)
-                    } else { 
-                        None 
-                    }; 
+                    } else {
+                        None
+                    };
                     let forwarding = smsg::has_flag(header, smsg::flag::T);
 
-                    let body = SessionBody::Scout(Scout { what, pid_replies, forwarding });
-                    break (header, body)
-                },
+                    let body = SessionBody::Scout(Scout {
+                        what,
+                        pid_replies,
+                        forwarding,
+                    });
+                    break (header, body);
+                }
 
                 HELLO => {
                     let pid = if smsg::has_flag(header, smsg::flag::I) {
                         Some(self.read_peerid()?)
-                    } else { 
+                    } else {
                         None
                     };
                     let whatami = if smsg::has_flag(header, smsg::flag::W) {
                         Some(self.read_zint()?)
-                    } else { 
+                    } else {
                         None
                     };
                     let locators = if smsg::has_flag(header, smsg::flag::L) {
                         Some(self.read_locators()?)
-                    } else { 
-                        None 
+                    } else {
+                        None
                     };
-                    
-                    let body = SessionBody::Hello(Hello { pid, whatami, locators });
-                    break (header, body)
-                },
+
+                    let body = SessionBody::Hello(Hello {
+                        pid,
+                        whatami,
+                        locators,
+                    });
+                    break (header, body);
+                }
 
                 OPEN => {
                     let version = self.read()?;
@@ -122,24 +129,33 @@ impl RBuf {
                         };
                         let locators = if smsg::has_flag(options, smsg::flag::L) {
                             Some(self.read_locators()?)
-                        } else { 
-                            None 
+                        } else {
+                            None
                         };
                         (sn_resolution, locators)
                     } else {
                         (None, None)
                     };
 
-                    let body = SessionBody::Open(Open { version, whatami, pid, lease, initial_sn, sn_resolution, locators });
-                    break (header, body)
-                },
+                    let body = SessionBody::Open(Open {
+                        version,
+                        whatami,
+                        pid,
+                        lease,
+                        initial_sn,
+                        sn_resolution,
+                        locators,
+                    });
+                    break (header, body);
+                }
 
                 ACCEPT => {
                     let whatami = self.read_zint()?;
                     let opid = self.read_peerid()?;
                     let apid = self.read_peerid()?;
                     let initial_sn = self.read_zint()?;
-                    let (sn_resolution, lease, locators) = if smsg::has_flag(header, smsg::flag::O) {
+                    let (sn_resolution, lease, locators) = if smsg::has_flag(header, smsg::flag::O)
+                    {
                         let options = self.read()?;
                         let sn_resolution = if smsg::has_flag(options, smsg::flag::S) {
                             Some(self.read_zint()?)
@@ -153,86 +169,104 @@ impl RBuf {
                         };
                         let locators = if smsg::has_flag(options, smsg::flag::L) {
                             Some(self.read_locators()?)
-                        } else { 
-                            None 
+                        } else {
+                            None
                         };
                         (sn_resolution, lease, locators)
                     } else {
                         (None, None, None)
                     };
 
-                    let body = SessionBody::Accept(Accept { whatami, opid, apid, initial_sn, sn_resolution, lease, locators });
-                    break (header, body)
-                },
+                    let body = SessionBody::Accept(Accept {
+                        whatami,
+                        opid,
+                        apid,
+                        initial_sn,
+                        sn_resolution,
+                        lease,
+                        locators,
+                    });
+                    break (header, body);
+                }
 
                 CLOSE => {
                     let link_only = smsg::has_flag(header, smsg::flag::K);
                     let pid = if smsg::has_flag(header, smsg::flag::I) {
                         Some(self.read_peerid()?)
-                    } else { 
-                        None 
+                    } else {
+                        None
                     };
                     let reason = self.read()?;
 
-                    let body = SessionBody::Close(Close { pid, reason, link_only });
-                    break (header, body)
-                },
+                    let body = SessionBody::Close(Close {
+                        pid,
+                        reason,
+                        link_only,
+                    });
+                    break (header, body);
+                }
 
                 SYNC => {
                     let ch = smsg::has_flag(header, smsg::flag::R);
                     let sn = self.read_zint()?;
                     let count = if smsg::has_flag(header, smsg::flag::C) {
                         Some(self.read_zint()?)
-                    } else { 
-                        None 
+                    } else {
+                        None
                     };
-                    
+
                     let body = SessionBody::Sync(Sync { ch, sn, count });
-                    break (header, body)
-                },
+                    break (header, body);
+                }
 
                 ACK_NACK => {
                     let sn = self.read_zint()?;
                     let mask = if smsg::has_flag(header, smsg::flag::M) {
                         Some(self.read_zint()?)
-                    } else { 
-                        None 
+                    } else {
+                        None
                     };
-                    
+
                     let body = SessionBody::AckNack(AckNack { sn, mask });
-                    break (header, body)
-                },
+                    break (header, body);
+                }
 
                 KEEP_ALIVE => {
                     let pid = if smsg::has_flag(header, smsg::flag::I) {
                         Some(self.read_peerid()?)
-                    } else { 
-                        None 
+                    } else {
+                        None
                     };
-                    
+
                     let body = SessionBody::KeepAlive(KeepAlive { pid });
-                    break (header, body)
-                },
+                    break (header, body);
+                }
 
                 PING_PONG => {
                     let hash = self.read_zint()?;
-                    
+
                     let body = if smsg::has_flag(header, smsg::flag::P) {
                         SessionBody::Ping(Ping { hash })
                     } else {
                         SessionBody::Pong(Pong { hash })
                     };
 
-                    break (header, body)
-                },                
+                    break (header, body);
+                }
 
-                unknown => return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Session message with unknown ID: {}", unknown)
-                })
+                unknown => {
+                    return zerror!(ZErrorKind::InvalidMessage {
+                        descr: format!("Session message with unknown ID: {}", unknown)
+                    })
+                }
             }
         };
 
-        Ok(SessionMessage { header, body, attachment })        
+        Ok(SessionMessage {
+            header,
+            body,
+            attachment,
+        })
     }
 
     pub fn read_zenoh_message(&mut self) -> ZResult<ZenohMessage> {
@@ -255,25 +289,25 @@ impl RBuf {
                     let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
                     let info = if zmsg::has_flag(header, zmsg::flag::I) {
                         Some(RBuf::from(self.read_bytes_array()?))
-                    } else { 
-                        None 
+                    } else {
+                        None
                     };
                     let payload = self.read_rbuf()?;
 
                     let body = ZenohBody::Data(Data { key, info, payload });
-                    break (header, body, channel)
-                },
+                    break (header, body, channel);
+                }
 
                 // Decorators
                 REPLY_CONTEXT => {
                     reply_context = Some(self.read_deco_reply(header)?);
-                    continue
-                },
+                    continue;
+                }
 
                 ATTACHMENT => {
                     attachment = Some(self.read_deco_attachment(header)?);
-                    continue
-                },
+                    continue;
+                }
 
                 // Messages
                 DECLARE => {
@@ -281,15 +315,15 @@ impl RBuf {
 
                     let body = ZenohBody::Declare(Declare { declarations });
                     let channel = zmsg::default_channel::DECLARE;
-                    break (header, body, channel)
-                },
+                    break (header, body, channel);
+                }
 
                 UNIT => {
                     let channel = zmsg::has_flag(header, zmsg::flag::R);
 
                     let body = ZenohBody::Unit(Unit {});
-                    break (header, body, channel)
-                },
+                    break (header, body, channel);
+                }
 
                 PULL => {
                     let is_final = zmsg::has_flag(header, zmsg::flag::F);
@@ -297,14 +331,19 @@ impl RBuf {
                     let pull_id = self.read_zint()?;
                     let max_samples = if zmsg::has_flag(header, zmsg::flag::N) {
                         Some(self.read_zint()?)
-                    } else { 
-                        None 
+                    } else {
+                        None
                     };
 
-                    let body = ZenohBody::Pull(Pull { key, pull_id, max_samples, is_final });
+                    let body = ZenohBody::Pull(Pull {
+                        key,
+                        pull_id,
+                        max_samples,
+                        is_final,
+                    });
                     let channel = zmsg::default_channel::PULL;
-                    break (header, body, channel)
-                },
+                    break (header, body, channel);
+                }
 
                 QUERY => {
                     let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
@@ -312,23 +351,37 @@ impl RBuf {
                     let qid = self.read_zint()?;
                     let target = if zmsg::has_flag(header, zmsg::flag::T) {
                         Some(self.read_query_target()?)
-                    } else { 
-                        None 
+                    } else {
+                        None
                     };
                     let consolidation = self.read_consolidation()?;
-                    
-                    let body = ZenohBody::Query(Query { key, predicate, qid, target, consolidation });
-                    let channel = zmsg::default_channel::QUERY;
-                    break (header, body, channel)
-                },
 
-                unknown => return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Zenoh message with unknown ID: {}", unknown)
-                })
+                    let body = ZenohBody::Query(Query {
+                        key,
+                        predicate,
+                        qid,
+                        target,
+                        consolidation,
+                    });
+                    let channel = zmsg::default_channel::QUERY;
+                    break (header, body, channel);
+                }
+
+                unknown => {
+                    return zerror!(ZErrorKind::InvalidMessage {
+                        descr: format!("Zenoh message with unknown ID: {}", unknown)
+                    })
+                }
             }
         };
 
-        Ok(ZenohMessage { header, body, channel, reply_context, attachment })
+        Ok(ZenohMessage {
+            header,
+            body,
+            channel,
+            reply_context,
+            attachment,
+        })
     }
 
     fn read_deco_attachment(&mut self, header: u8) -> ZResult<Attachment> {
@@ -342,37 +395,66 @@ impl RBuf {
         let is_final = zmsg::has_flag(header, zmsg::flag::F);
         let qid = self.read_zint()?;
         let source_kind = self.read_zint()?;
-        let replier_id = if is_final { None } else {
+        let replier_id = if is_final {
+            None
+        } else {
             Some(self.read_peerid()?)
         };
-        Ok(ReplyContext{ is_final, qid, source_kind, replier_id })
+        Ok(ReplyContext {
+            is_final,
+            qid,
+            source_kind,
+            replier_id,
+        })
     }
 
     pub fn read_datainfo(&mut self) -> ZResult<DataInfo> {
         let header = self.read()?;
         let source_id = if header & zmsg::info_flag::SRCID > 0 {
             Some(self.read_peerid()?)
-        } else { None };
+        } else {
+            None
+        };
         let source_sn = if header & zmsg::info_flag::SRCSN > 0 {
             Some(self.read_zint()?)
-        } else { None };
+        } else {
+            None
+        };
         let fist_broker_id = if header & zmsg::info_flag::BKRID > 0 {
             Some(self.read_peerid()?)
-        } else { None };
+        } else {
+            None
+        };
         let fist_broker_sn = if header & zmsg::info_flag::BKRSN > 0 {
             Some(self.read_zint()?)
-        } else { None };
+        } else {
+            None
+        };
         let timestamp = if header & zmsg::info_flag::TS > 0 {
             Some(self.read_timestamp()?)
-        } else { None };
+        } else {
+            None
+        };
         let kind = if header & zmsg::info_flag::KIND > 0 {
             Some(self.read_zint()?)
-        } else { None };
+        } else {
+            None
+        };
         let encoding = if header & zmsg::info_flag::ENC > 0 {
             Some(self.read_zint()?)
-        } else { None };
+        } else {
+            None
+        };
 
-        Ok(DataInfo { source_id, source_sn, fist_broker_id, fist_broker_sn, timestamp, kind, encoding })
+        Ok(DataInfo {
+            source_id,
+            source_sn,
+            fist_broker_id,
+            fist_broker_sn,
+            timestamp,
+            kind,
+            encoding,
+        })
     }
 
     pub fn read_properties(&mut self) -> ZResult<Vec<Property>> {
@@ -387,7 +469,7 @@ impl RBuf {
     fn read_property(&mut self) -> ZResult<Property> {
         let key = self.read_zint()?;
         let value = self.read_bytes_array()?;
-        Ok(Property{ key, value })
+        Ok(Property { key, value })
     }
 
     fn read_locators(&mut self) -> ZResult<Vec<Locator>> {
@@ -409,14 +491,14 @@ impl RBuf {
     }
 
     fn read_declaration(&mut self) -> ZResult<Declaration> {
-        use super::decl::{Declaration::*, id::*};
+        use super::decl::{id::*, Declaration::*};
 
         macro_rules! read_key_delc {
             ($buf:ident, $header:ident, $type:ident) => {{
-                Ok($type{ 
-                    key: $buf.read_reskey(zmsg::has_flag($header, zmsg::flag::K))?
+                Ok($type {
+                    key: $buf.read_reskey(zmsg::has_flag($header, zmsg::flag::K))?,
                 })
-            }}
+            }};
         }
 
         let header = self.read()?;
@@ -424,17 +506,17 @@ impl RBuf {
             RESOURCE => {
                 let rid = self.read_zint()?;
                 let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
-                Ok(Resource{ rid, key })
+                Ok(Resource { rid, key })
             }
 
             FORGET_RESOURCE => {
                 let rid = self.read_zint()?;
-                Ok(ForgetResource{ rid })
+                Ok(ForgetResource { rid })
             }
 
             SUBSCRIBER => {
                 let reliability = if zmsg::has_flag(header, zmsg::flag::R) {
-                    Reliability::Reliable 
+                    Reliability::Reliable
                 } else {
                     Reliability::BestEffort
                 };
@@ -444,7 +526,14 @@ impl RBuf {
                 } else {
                     (SubMode::Push, None)
                 };
-                Ok(Subscriber{ key, info: SubInfo { reliability, mode, period } })
+                Ok(Subscriber {
+                    key,
+                    info: SubInfo {
+                        reliability,
+                        mode,
+                        period,
+                    },
+                })
             }
 
             FORGET_SUBSCRIBER => read_key_delc!(self, header, ForgetSubscriber),
@@ -453,7 +542,7 @@ impl RBuf {
             QUERYABLE => read_key_delc!(self, header, Queryable),
             FORGET_QUERYABLE => read_key_delc!(self, header, ForgetQueryable),
 
-            id => panic!("UNEXPECTED ID FOR Declaration: {}", id)   //@TODO: return error
+            id => panic!("UNEXPECTED ID FOR Declaration: {}", id), //@TODO: return error
         }
     }
 
@@ -463,13 +552,13 @@ impl RBuf {
         let mode = match mode_flag & !PERIOD {
             id::MODE_PUSH => SubMode::Push,
             id::MODE_PULL => SubMode::Pull,
-            id => panic!("UNEXPECTED ID FOR SubMode: {}", id)   //@TODO: return error
+            id => panic!("UNEXPECTED ID FOR SubMode: {}", id), //@TODO: return error
         };
-        let period = if mode_flag & PERIOD > 0{
-            Some(Period{
-                origin:   self.read_zint()?,
-                period:   self.read_zint()?,
-                duration: self.read_zint()?
+        let period = if mode_flag & PERIOD > 0 {
+            Some(Period {
+                origin: self.read_zint()?,
+                period: self.read_zint()?,
+                duration: self.read_zint()?,
             })
         } else {
             None
@@ -494,7 +583,7 @@ impl RBuf {
     fn read_query_target(&mut self) -> ZResult<QueryTarget> {
         let kind = self.read_zint()?;
         let target = self.read_target()?;
-        Ok(QueryTarget{ kind, target })
+        Ok(QueryTarget { kind, target })
     }
 
     fn read_target(&mut self) -> ZResult<Target> {
@@ -503,11 +592,11 @@ impl RBuf {
             0 => Ok(Target::BestMatching),
             1 => {
                 let n = self.read_zint()?;
-                Ok(Target::Complete{n})
-            },
+                Ok(Target::Complete { n })
+            }
             2 => Ok(Target::All),
             3 => Ok(Target::None),
-            id => panic!("UNEXPECTED ID FOR Target: {}", id)   //@TODO: return error
+            id => panic!("UNEXPECTED ID FOR Target: {}", id), //@TODO: return error
         }
     }
 
@@ -516,7 +605,7 @@ impl RBuf {
             0 => Ok(QueryConsolidation::None),
             1 => Ok(QueryConsolidation::LastHop),
             2 => Ok(QueryConsolidation::Incremental),
-            id => panic!("UNEXPECTED ID FOR QueryConsolidation: {}", id)   //@TODO: return error
+            id => panic!("UNEXPECTED ID FOR QueryConsolidation: {}", id), //@TODO: return error
         }
     }
 
@@ -532,5 +621,4 @@ impl RBuf {
         let id = self.read_bytes_array()?;
         Ok(PeerId { id })
     }
-
 }

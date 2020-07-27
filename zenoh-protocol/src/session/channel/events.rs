@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use super::{Channel, LinkAlive, TransmissionQueue};
 
 use crate::link::Link;
-use crate::proto::{SessionMessage, smsg};
+use crate::proto::{smsg, SessionMessage};
 use crate::session::defaults::QUEUE_PRIO_CTRL;
 
 use zenoh_util::collections::Timed;
@@ -27,15 +27,12 @@ use zenoh_util::collections::Timed;
 /*************************************/
 pub(super) struct KeepAliveEvent {
     queue: Arc<TransmissionQueue>,
-    link: Link
+    link: Link,
 }
 
 impl KeepAliveEvent {
-    pub(super) fn new(queue: Arc<TransmissionQueue>, link: Link) -> KeepAliveEvent {        
-        KeepAliveEvent {
-            queue,
-            link
-        }
+    pub(super) fn new(queue: Arc<TransmissionQueue>, link: Link) -> KeepAliveEvent {
+        KeepAliveEvent { queue, link }
     }
 }
 
@@ -49,7 +46,9 @@ impl Timed for KeepAliveEvent {
         let message = SessionMessage::make_keep_alive(pid, attachment);
 
         // Push the KEEP_ALIVE messages on the queue
-        self.queue.push_session_message(message, QUEUE_PRIO_CTRL).await;
+        self.queue
+            .push_session_message(message, QUEUE_PRIO_CTRL)
+            .await;
     }
 }
 
@@ -59,39 +58,39 @@ impl Timed for KeepAliveEvent {
 pub(super) struct LinkLeaseEvent {
     ch: Weak<Channel>,
     alive: Arc<LinkAlive>,
-    link: Link
+    link: Link,
 }
 
 impl LinkLeaseEvent {
-    pub(super) fn new(ch: Weak<Channel>, alive: Arc<LinkAlive>, link: Link) -> LinkLeaseEvent {        
-        LinkLeaseEvent {
-            ch,
-            alive,
-            link
-        }
+    pub(super) fn new(ch: Weak<Channel>, alive: Arc<LinkAlive>, link: Link) -> LinkLeaseEvent {
+        LinkLeaseEvent { ch, alive, link }
     }
 }
 
 #[async_trait]
 impl Timed for LinkLeaseEvent {
-    async fn run(&mut self) {     
+    async fn run(&mut self) {
         if self.alive.reset() {
             // The link was alive
-            return
+            return;
         }
 
         // Close the link or eventually the whole session
-        if let Some(ch) = self.ch.upgrade() {  
+        if let Some(ch) = self.ch.upgrade() {
             let links = ch.get_links().await;
             if links.len() == 1 && links[0] == self.link {
-                log::warn!("Link {} has expired with peer: {}. No links left. Closing the session.", self.link, ch.get_pid());
+                log::warn!(
+                    "Link {} has expired with peer: {}. No links left. Closing the session.",
+                    self.link,
+                    ch.get_pid()
+                );
                 // The last link has expired, close the whole session
-                let _ = ch.close(smsg::close_reason::EXPIRED).await;                
+                let _ = ch.close(smsg::close_reason::EXPIRED).await;
             } else {
                 log::warn!("Link {} has expired with peer: {}", self.link, ch.get_pid());
                 // Close only the link
                 let _ = ch.close_link(&self.link, smsg::close_reason::EXPIRED).await;
-            }            
+            }
         }
     }
 }
@@ -100,27 +99,25 @@ impl Timed for LinkLeaseEvent {
 /*        SESSION LEASE EVENT        */
 /*************************************/
 pub(super) struct SessionLeaseEvent {
-    ch: Weak<Channel>
+    ch: Weak<Channel>,
 }
 
 impl SessionLeaseEvent {
-    pub(super) fn new(ch: Weak<Channel>) -> SessionLeaseEvent {        
-        SessionLeaseEvent {
-            ch
-        }
+    pub(super) fn new(ch: Weak<Channel>) -> SessionLeaseEvent {
+        SessionLeaseEvent { ch }
     }
 }
 
 #[async_trait]
 impl Timed for SessionLeaseEvent {
     async fn run(&mut self) {
-        if let Some(ch) = self.ch.upgrade() {     
+        if let Some(ch) = self.ch.upgrade() {
             let links = ch.get_links().await;
             if links.is_empty() {
                 log::warn!("Session has expired with peer: {}", ch.get_pid());
                 // The last link has expired, close the whole session
-                let _ = ch.delete().await;                
-            }  
+                let _ = ch.delete().await;
+            }
         }
     }
 }

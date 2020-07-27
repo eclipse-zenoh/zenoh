@@ -17,18 +17,17 @@ use crate::proto::{SeqNum, ZenohMessage};
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
-
 pub(super) struct DefragBuffer {
     // Keep track of the next expected fragment
     sn: SeqNum,
-    buffer: RBuf
+    buffer: RBuf,
 }
 
 impl DefragBuffer {
     pub(super) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> DefragBuffer {
         DefragBuffer {
             sn: SeqNum::new(initial_sn, sn_resolution),
-            buffer: RBuf::new()
+            buffer: RBuf::new(),
         }
     }
 
@@ -46,14 +45,14 @@ impl DefragBuffer {
     pub(super) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
         self.sn.set(sn)
     }
-    
+
     pub(super) fn push(&mut self, sn: ZInt, mut buffer: RBuf) -> ZResult<()> {
         if sn != self.sn.get() {
             self.clear();
             return zerror!(ZErrorKind::InvalidMessage {
                 descr: format!("Expected SN {}, received {}", self.sn.get(), sn)
-            })
-        }        
+            });
+        }
 
         buffer.drain_into_rbuf(&mut self.buffer);
         self.sn.increment();

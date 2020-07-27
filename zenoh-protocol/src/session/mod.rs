@@ -26,8 +26,8 @@ use async_trait::async_trait;
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
 
-use zenoh_util::{zerror, zweak};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::{zerror, zweak};
 
 /*********************************************************/
 /*           Trait for implementing a transport          */
@@ -66,7 +66,7 @@ pub trait TransportTrait {
 pub enum Action {
     ChangeTransport(Transport),
     Close,
-    Read
+    Read,
 }
 
 /*********************************************************/
@@ -85,7 +85,10 @@ pub trait SessionEventHandler {
 
 #[async_trait]
 pub trait SessionHandler {
-    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>>;
+    async fn new_session(
+        &self,
+        session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>>;
 }
 
 // Define an empty SessionCallback for the listener session
@@ -107,6 +110,6 @@ impl SessionEventHandler for DummyHandler {
     async fn new_link(&self, _link: Link) {}
 
     async fn del_link(&self, _link: Link) {}
-    
+
     async fn close(&self) {}
 }

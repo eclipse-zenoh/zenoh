@@ -11,17 +11,16 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
 use super::ArcSlice;
 use async_std::sync::Arc;
+use std::fmt;
 use std::io::IoSlice;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::ops::RangeBounds;
 
-
-// Notes: 
+// Notes:
 //  - Wbuf has 2 flavors:
-//    - contigous: 
+//    - contigous:
 //      - it is a Vec<u8> which is contigous in memory
 //      - it is initialized with a fixed capacity and won't be extended
 //      - if a write exceeds capacity, 'false' is returned
@@ -37,14 +36,14 @@ use std::ops::RangeBounds;
 #[derive(Clone)]
 enum Slice {
     External(ArcSlice),
-    Internal(usize, Option<usize>)
+    Internal(usize, Option<usize>),
 }
 
 impl Slice {
     fn is_external(&self) -> bool {
         match self {
             Slice::External(_) => true,
-            Slice::Internal(_, _) => false
+            Slice::Internal(_, _) => false,
         }
     }
 }
@@ -54,11 +53,10 @@ impl fmt::Debug for Slice {
         match self {
             Slice::External(s) => write!(f, "ext({})", s.len()),
             Slice::Internal(start, Some(end)) => write!(f, "int({}, {})", start, end),
-            Slice::Internal(start, None) => write!(f, "int({}, None)", start)
+            Slice::Internal(start, None) => write!(f, "int({}, None)", start),
         }
     }
 }
-
 
 #[derive(Clone)]
 pub struct WBuf {
@@ -66,17 +64,22 @@ pub struct WBuf {
     buf: Vec<u8>,
     contiguous: bool,
     capacity: usize,
-    copy_pos: (usize, usize),       // (index in slices, index in the slice)
-    mark: (Vec<Slice>, usize)       // (backup of slices, len of buf)
+    copy_pos: (usize, usize),  // (index in slices, index in the slice)
+    mark: (Vec<Slice>, usize), // (backup of slices, len of buf)
 }
 
-
 impl WBuf {
-
     pub fn new(capacity: usize, contiguous: bool) -> WBuf {
         let buf = Vec::with_capacity(capacity);
         let slices = [Slice::Internal(0, None)].to_vec();
-        WBuf { mark:(slices.clone(), 0), slices, buf, contiguous, capacity, copy_pos:(0, 0) }
+        WBuf {
+            mark: (slices.clone(), 0),
+            slices,
+            buf,
+            contiguous,
+            capacity,
+            copy_pos: (0, 0),
+        }
     }
 
     #[inline]
@@ -88,21 +91,20 @@ impl WBuf {
         match s {
             Slice::External(s) => s.len(),
             Slice::Internal(start, Some(end)) => end - start,
-            Slice::Internal(start, None) => self.buf.len() - start
+            Slice::Internal(start, None) => self.buf.len() - start,
         }
     }
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.slices.iter().fold(0,
-            |acc, slice| acc + self.slice_len(slice)
-        )
+        self.slices
+            .iter()
+            .fold(0, |acc, slice| acc + self.slice_len(slice))
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.buf.is_empty() &&
-        self.slices.iter().find(|s| s.is_external()).is_none()
+        self.buf.is_empty() && self.slices.iter().find(|s| s.is_external()).is_none()
     }
 
     pub fn clear(&mut self) {
@@ -117,46 +119,50 @@ impl WBuf {
         let arc_buf = Arc::new(self.buf.clone());
         if self.contiguous {
             if !self.buf.is_empty() {
-                [ ArcSlice::from(arc_buf) ].to_vec()
+                [ArcSlice::from(arc_buf)].to_vec()
             } else {
                 [].to_vec()
             }
         } else {
-            self.slices.iter().map(
-                |s| match s {
+            self.slices
+                .iter()
+                .map(|s| match s {
                     Slice::External(arcs) => arcs.clone(),
-                    Slice::Internal(start, Some(end)) => ArcSlice::new(arc_buf.clone(), *start, *end),
-                    Slice::Internal(start, None) => ArcSlice::new(arc_buf.clone(), *start, arc_buf.len()),
-                }
-            ).filter(
-                |s| !s.is_empty()
-            ).collect()
+                    Slice::Internal(start, Some(end)) => {
+                        ArcSlice::new(arc_buf.clone(), *start, *end)
+                    }
+                    Slice::Internal(start, None) => {
+                        ArcSlice::new(arc_buf.clone(), *start, arc_buf.len())
+                    }
+                })
+                .filter(|s| !s.is_empty())
+                .collect()
         }
     }
 
     pub fn as_ioslices(&self) -> Vec<IoSlice> {
         if self.contiguous {
             if !self.buf.is_empty() {
-                [ IoSlice::new(&self.buf[..]) ].to_vec()
+                [IoSlice::new(&self.buf[..])].to_vec()
             } else {
                 [].to_vec()
             }
         } else {
-            self.slices.iter().map(
-                |s| match s {
+            self.slices
+                .iter()
+                .map(|s| match s {
                     Slice::External(arcs) => arcs.as_ioslice(),
                     Slice::Internal(start, Some(end)) => IoSlice::new(&self.buf[*start..*end]),
                     Slice::Internal(start, None) => IoSlice::new(&self.buf[*start..]),
-                }
-            ).filter(
-                |s| !s.is_empty()
-            ).collect()
+                })
+                .filter(|s| !s.is_empty())
+                .collect()
         }
     }
 
-    pub fn get_first_slice<R>(&self, range: R) -> &[u8] 
+    pub fn get_first_slice<R>(&self, range: R) -> &[u8]
     where
-        R: RangeBounds<usize>
+        R: RangeBounds<usize>,
     {
         if let Some(Slice::Internal(_, _)) = self.slices.first() {
             let len = self.buf.len();
@@ -170,16 +176,16 @@ impl WBuf {
                 Excluded(&n) => n,
                 Unbounded => len,
             };
-          
+
             &self.buf[start..end]
         } else {
             panic!("Cannot return 1st wlice of WBuf as mutable: it's an external ArcSlice");
         }
     }
 
-    pub fn get_first_slice_mut<R>(&mut self, range: R) -> &mut [u8] 
+    pub fn get_first_slice_mut<R>(&mut self, range: R) -> &mut [u8]
     where
-        R: RangeBounds<usize>
+        R: RangeBounds<usize>,
     {
         if let Some(Slice::Internal(_, _)) = self.slices.first() {
             let len = self.buf.len();
@@ -205,7 +211,7 @@ impl WBuf {
             Some(Slice::External(ref s)) => s.as_slice(),
             Some(Slice::Internal(start, Some(end))) => &self.buf[*start..*end],
             Some(Slice::Internal(start, None)) => &self.buf[*start..],
-            None => panic!("Shouln't happen: copy_pos.0 is out of bound in {:?}", self)
+            None => panic!("Shouln't happen: copy_pos.0 is out of bound in {:?}", self),
         }
     }
 
@@ -271,9 +277,9 @@ impl WBuf {
 
     #[inline]
     pub fn revert(&mut self) {
-       // restaure slices and truncate buf to saved len
-       self.slices = self.mark.0.clone();
-       self.buf.truncate(self.mark.1);
+        // restaure slices and truncate buf to saved len
+        self.slices = self.mark.0.clone();
+        self.buf.truncate(self.mark.1);
     }
 
     #[inline]
@@ -281,8 +287,7 @@ impl WBuf {
         // We can write in buf if
         //   - non contiguous
         //   - OR: writing won't exceed buf capacity
-        !self.contiguous ||
-        self.buf.len() + size <= self.buf.capacity()
+        !self.contiguous || self.buf.len() + size <= self.buf.capacity()
     }
 
     pub fn write(&mut self, b: u8) -> bool {
@@ -311,7 +316,8 @@ impl WBuf {
             // If last slice was an internal without end, set it
             if let Some(&mut Slice::Internal(start, None)) = self.slices.last_mut() {
                 self.slices.pop();
-                self.slices.push(Slice::Internal(start, Some(self.buf.len())));
+                self.slices
+                    .push(Slice::Internal(start, Some(self.buf.len())));
             }
             // Push the ArcSlice in slices list
             self.slices.push(Slice::External(slice));
@@ -331,11 +337,20 @@ impl WBuf {
 impl fmt::Display for WBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.contiguous {
-            write!(f, "WBuf{{ contiguous: {}, len: {}, capacity: {} }}",
-                self.contiguous, self.buf.len(), self.buf.capacity())
+            write!(
+                f,
+                "WBuf{{ contiguous: {}, len: {}, capacity: {} }}",
+                self.contiguous,
+                self.buf.len(),
+                self.buf.capacity()
+            )
         } else {
-            write!(f, "WBuf{{ contiguous: {}, buf len: {}, slices: [",
-                self.contiguous, self.buf.len())?;
+            write!(
+                f,
+                "WBuf{{ contiguous: {}, buf len: {}, slices: [",
+                self.contiguous,
+                self.buf.len()
+            )?;
             for s in &self.slices {
                 write!(f, " {:?}", s)?;
             }
@@ -347,24 +362,36 @@ impl fmt::Display for WBuf {
 impl fmt::Debug for WBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.contiguous {
-            write!(f, "WBuf{{ contiguous: {}, len: {}, capacity: {},\n  buf: {:02x?}\n}}",
-                self.contiguous, self.buf.len(), self.buf.capacity(), self.buf)
+            write!(
+                f,
+                "WBuf{{ contiguous: {}, len: {}, capacity: {},\n  buf: {:02x?}\n}}",
+                self.contiguous,
+                self.buf.len(),
+                self.buf.capacity(),
+                self.buf
+            )
         } else {
-            writeln!(f, "WBuf{{ contiguous: {}, buf len: {}, slices: [",
-                self.contiguous, self.buf.len())?;
+            writeln!(
+                f,
+                "WBuf{{ contiguous: {}, buf len: {}, slices: [",
+                self.contiguous,
+                self.buf.len()
+            )?;
             for slice in &self.slices {
                 match slice {
                     Slice::External(s) => writeln!(f, "  ext{}", s)?,
-                    Slice::Internal(start, Some(end)) => writeln!(f, "  int{:02x?}", &self.buf[*start..*end])?,
-                    Slice::Internal(start, None) => writeln!(f, "  int{:02x?}", &self.buf[*start..])?,
+                    Slice::Internal(start, Some(end)) => {
+                        writeln!(f, "  int{:02x?}", &self.buf[*start..*end])?
+                    }
+                    Slice::Internal(start, None) => {
+                        writeln!(f, "  int{:02x?}", &self.buf[*start..])?
+                    }
                 }
             }
             writeln!(f, "] }}")
         }
     }
 }
-  
-
 
 #[cfg(test)]
 mod tests {
@@ -372,7 +399,11 @@ mod tests {
 
     macro_rules! to_vec_vec {
         ($wbuf:ident) => {
-            $wbuf.as_ioslices().iter().map(|s| s.to_vec()).collect::<Vec<Vec<u8>>>()
+            $wbuf
+                .as_ioslices()
+                .iter()
+                .map(|s| s.to_vec())
+                .collect::<Vec<Vec<u8>>>()
         };
     }
 
@@ -397,13 +428,13 @@ mod tests {
         assert!(buf.write(1));
         assert_eq!(buf.len(), 2);
         assert!(!buf.is_empty());
-        assert_eq!(buf.capacity(),2);
+        assert_eq!(buf.capacity(), 2);
         assert_eq!(to_vec_vec!(buf), [[0, 1]]);
 
         assert!(!buf.write(2));
         assert_eq!(buf.len(), 2);
         assert!(!buf.is_empty());
-        assert_eq!(buf.capacity(),2);
+        assert_eq!(buf.capacity(), 2);
         assert_eq!(to_vec_vec!(buf), [[0, 1]]);
 
         // also test clear()
@@ -424,17 +455,17 @@ mod tests {
 
         assert!(buf.write_bytes(&[3, 4]));
         assert_eq!(buf.len(), 5);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
         assert!(!buf.write_bytes(&[5, 6]));
         assert_eq!(buf.len(), 5);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
         assert!(buf.write_bytes(&[5]));
         assert_eq!(buf.len(), 6);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4, 5]]);
 
         // also test clear()
@@ -455,17 +486,17 @@ mod tests {
 
         assert!(buf.write_slice(ArcSlice::from(&[3u8, 4] as &[u8])));
         assert_eq!(buf.len(), 5);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
         assert!(!buf.write_slice(ArcSlice::from(&[5u8, 6] as &[u8])));
         assert_eq!(buf.len(), 5);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
         assert!(buf.write_slice(ArcSlice::from(&[5u8] as &[u8])));
         assert_eq!(buf.len(), 6);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4, 5]]);
     }
 
@@ -529,7 +560,7 @@ mod tests {
         let mut buf = WBuf::new(6, true);
         assert!(buf.write_slice(ArcSlice::from(&[0u8, 1, 2, 3, 4, 5] as &[u8])));
 
-        let mut copy =  WBuf::new(10, true);
+        let mut copy = WBuf::new(10, true);
         buf.copy_into_wbuf(&mut copy, 3);
         assert_eq!(to_vec_vec!(copy), &[[0, 1, 2,]]);
         buf.copy_into_wbuf(&mut copy, 3);
@@ -557,7 +588,7 @@ mod tests {
         assert!(buf.write(1));
         assert_eq!(buf.len(), 2);
         assert!(!buf.is_empty());
-        assert_eq!(buf.capacity(),2);
+        assert_eq!(buf.capacity(), 2);
         assert_eq!(to_vec_vec!(buf), [[0, 1]]);
 
         assert!(buf.write(2));
@@ -584,7 +615,7 @@ mod tests {
 
         assert!(buf.write_bytes(&[3, 4]));
         assert_eq!(buf.len(), 5);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
         assert!(buf.write_bytes(&[5, 6]));
@@ -610,18 +641,21 @@ mod tests {
 
         assert!(buf.write_slice(ArcSlice::from(&[3u8, 4] as &[u8])));
         assert_eq!(buf.len(), 5);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2], vec![3, 4]]);
 
         assert!(buf.write_slice(ArcSlice::from(&[5u8, 6] as &[u8])));
         assert_eq!(buf.len(), 7);
-        assert_eq!(buf.capacity(),6);
+        assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2], vec![3, 4], vec![5, 6]]);
 
         assert!(buf.write_slice(ArcSlice::from(&[7u8] as &[u8])));
         assert_eq!(buf.len(), 8);
-        assert_eq!(buf.capacity(),6);
-        assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2], vec![3, 4], vec![5, 6], vec![7]]);
+        assert_eq!(buf.capacity(), 6);
+        assert_eq!(
+            to_vec_vec!(buf),
+            [vec![0, 1, 2], vec![3, 4], vec![5, 6], vec![7]]
+        );
     }
 
     #[test]
@@ -631,17 +665,22 @@ mod tests {
         assert!(buf.write(1));
         assert_eq!(to_vec_vec!(buf), [[0, 1]]);
 
-        
         assert!(buf.write_slice(ArcSlice::from(&[2u8, 3, 4] as &[u8])));
         assert_eq!(to_vec_vec!(buf), [vec![0, 1], vec![2, 3, 4]]);
 
         assert!(buf.write(5));
         assert!(buf.write_bytes(&[6, 7]));
         assert!(buf.write(8));
-        assert_eq!(to_vec_vec!(buf), [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8]]);
-        
+        assert_eq!(
+            to_vec_vec!(buf),
+            [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8]]
+        );
+
         assert!(buf.write_slice(ArcSlice::from(&[9u8, 10, 11] as &[u8])));
-        assert_eq!(to_vec_vec!(buf), [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8],  vec![9, 10, 11]]);
+        assert_eq!(
+            to_vec_vec!(buf),
+            [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8], vec![9, 10, 11]]
+        );
     }
 
     #[test]
@@ -661,7 +700,10 @@ mod tests {
         prefix[0] = 10;
         prefix[1] = 0;
 
-        assert_eq!(to_vec_vec!(buf), [vec![10, 0, 1, 2, 3, 4, 5], vec![6, 7, 8, 9, 10]]);
+        assert_eq!(
+            to_vec_vec!(buf),
+            [vec![10, 0, 1, 2, 3, 4, 5], vec![6, 7, 8, 9, 10]]
+        );
     }
 
     #[test]
@@ -714,9 +756,11 @@ mod tests {
         buf.mark();
         assert!(buf.write_slice(ArcSlice::from(&[10u8, 11] as &[u8])));
         buf.revert();
-        assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2, 3, 4], vec![5, 6], vec![7], vec![8, 9]]);
+        assert_eq!(
+            to_vec_vec!(buf),
+            [vec![0, 1, 2, 3, 4], vec![5, 6], vec![7], vec![8, 9]]
+        );
     }
-
 
     #[test]
     fn wbuf_noncontiguous_copy_into_slice() {
@@ -728,7 +772,10 @@ mod tests {
         assert!(buf.write_bytes(&[6, 7]));
         assert!(buf.write(8));
         assert!(buf.write_slice(ArcSlice::from(&[9u8, 10, 11] as &[u8])));
-        assert_eq!(to_vec_vec!(buf), [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8],  vec![9, 10, 11]]);
+        assert_eq!(
+            to_vec_vec!(buf),
+            [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8], vec![9, 10, 11]]
+        );
 
         let mut copy = vec![0; 12];
         buf.copy_into_slice(&mut copy[0..1]);
@@ -751,7 +798,10 @@ mod tests {
         assert!(buf.write_bytes(&[6, 7]));
         assert!(buf.write(8));
         assert!(buf.write_slice(ArcSlice::from(&[9u8, 10, 11] as &[u8])));
-        assert_eq!(to_vec_vec!(buf), [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8],  vec![9, 10, 11]]);
+        assert_eq!(
+            to_vec_vec!(buf),
+            [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8], vec![9, 10, 11]]
+        );
 
         let mut copy = WBuf::new(12, true);
         buf.copy_into_wbuf(&mut copy, 1);
@@ -763,5 +813,4 @@ mod tests {
         buf.copy_into_wbuf(&mut copy, 4);
         assert_eq!(to_vec_vec!(copy), &[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]);
     }
-
 }

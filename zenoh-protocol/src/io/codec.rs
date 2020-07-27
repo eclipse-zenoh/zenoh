@@ -16,9 +16,8 @@ use std::convert::TryFrom;
 use super::{ArcSlice, RBuf, WBuf};
 use crate::core::{ZInt, ZINT_MAX_BYTES};
 
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{to_zint, zerror};
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-
 
 macro_rules! read_zint {
     ($buf:expr, $res:ty) => {
@@ -30,13 +29,15 @@ macro_rules! read_zint {
             v |= ((b & 0x7f) as $res) << i;
             i += 7;
             b = $buf.read()?;
-            k -=1;
+            k -= 1;
         }
         if k > 0 {
             v |= ((b & 0x7f) as $res) << i;
-            return Ok(v)
+            return Ok(v);
         } else {
-            return zerror!(ZErrorKind::InvalidMessage { descr: format!("Invalid ZInt (larget than ZInt max value: {})", ZInt::MAX) })
+            return zerror!(ZErrorKind::InvalidMessage {
+                descr: format!("Invalid ZInt (larget than ZInt max value: {})", ZInt::MAX)
+            });
         }
     };
 }
@@ -65,13 +66,12 @@ impl RBuf {
         self.read_into_rbuf(&mut rbuf, len as usize)?;
         Ok(rbuf)
     }
-    
-    pub fn read_string(&mut self) -> ZResult<String> { 
+
+    pub fn read_string(&mut self) -> ZResult<String> {
         let bytes = self.read_bytes_array()?;
         Ok(String::from(String::from_utf8_lossy(&bytes)))
     }
 }
-
 
 macro_rules! write_zint {
     ($buf:expr, $val:expr) => {
@@ -81,7 +81,7 @@ macro_rules! write_zint {
             c >>= 7;
             b = (c & 0xff) as u8;
         }
-        return $buf.write(b)
+        return $buf.write(b);
     };
 }
 
@@ -98,25 +98,22 @@ impl WBuf {
 
     // Same as write_bytes but with array length before the bytes.
     pub fn write_bytes_array(&mut self, s: &[u8]) -> bool {
-        self.write_zint(to_zint!(s.len())) &&
-        self.write_bytes(s)
+        self.write_zint(to_zint!(s.len())) && self.write_bytes(s)
     }
 
     pub fn write_string(&mut self, s: &str) -> bool {
-        self.write_zint(to_zint!(s.len())) &&
-        self.write_bytes(s.as_bytes())
+        self.write_zint(to_zint!(s.len())) && self.write_bytes(s.as_bytes())
     }
 
     // Similar than write_bytes_array but zero-copy as slice is shared
     pub fn write_bytes_slice(&mut self, slice: &ArcSlice) -> bool {
-        self.write_zint(to_zint!(slice.len())) &&
-        self.write_slice(slice.clone())
+        self.write_zint(to_zint!(slice.len())) && self.write_slice(slice.clone())
     }
 
     // Similar than write_bytes_array but zero-copy as RBuf contains slices that are shared
     pub fn write_rbuf(&mut self, rbuf: &RBuf) -> bool {
         if self.write_zint(to_zint!(rbuf.len())) {
-            self.write_rbuf_slices(&rbuf)            
+            self.write_rbuf_slices(&rbuf)
         } else {
             false
         }
@@ -125,11 +122,10 @@ impl WBuf {
     // Writes all the slices of a given RBuf
     pub fn write_rbuf_slices(&mut self, rbuf: &RBuf) -> bool {
         for slice in rbuf.get_slices() {
-            if !self.write_slice(slice.clone()) { 
-                return false 
+            if !self.write_slice(slice.clone()) {
+                return false;
             }
         }
         true
     }
-
 }

@@ -93,8 +93,18 @@ impl Tcp {
         // Retrieve the source and destination socket addresses
         let src_addr = socket.local_addr().unwrap();
         let dst_addr = socket.peer_addr().unwrap();
-        if let Err(err) = zenoh_util::net::set_linger(&socket, Some(Duration::from_secs((*TCP_LINGER_TIMEOUT).try_into().unwrap()))) {
-            log::warn!("Unable to set LINGER option on TCP link {} => {} : {}", src_addr, dst_addr, err);
+        if let Err(err) = zenoh_util::net::set_linger(
+            &socket,
+            Some(Duration::from_secs(
+                (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
+            )),
+        ) {
+            log::warn!(
+                "Unable to set LINGER option on TCP link {} => {} : {}",
+                src_addr,
+                dst_addr,
+                err
+            );
         }
 
         // Build the Tcp object
@@ -543,7 +553,7 @@ impl ManagerTrait for ManagerTcp {
         let addr = get_tcp_addr!(locator);
         self.0.del_listener(&self.0, addr).await
     }
-    
+
     async fn get_listeners(&self) -> Vec<Locator> {
         self.0.get_listeners().await
     }

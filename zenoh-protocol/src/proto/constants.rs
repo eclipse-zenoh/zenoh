@@ -13,8 +13,8 @@
 //
 pub mod data_kind {
     use crate::core::ZInt;
+    use zenoh_util::core::{ZError, ZErrorKind, ZResult};
     use zenoh_util::zerror;
-    use zenoh_util::core::{ZResult, ZError, ZErrorKind};
 
     pub const PUT: ZInt = 0;
     pub const PATCH: ZInt = 1;
@@ -27,17 +27,19 @@ pub mod data_kind {
             0 => Ok("PUT".to_string()),
             1 => Ok("PATCH".to_string()),
             2 => Ok("DELETE".to_string()),
-            _ => zerror!(ZErrorKind::Other { descr: format!("Unknown kind id {}", i)}),
+            _ => zerror!(ZErrorKind::Other {
+                descr: format!("Unknown kind id {}", i)
+            }),
         }
     }
 }
 
 pub mod encoding {
     use crate::core::ZInt;
-    use zenoh_util::zerror;
-    use zenoh_util::core::{ZResult, ZError, ZErrorKind};
     use http_types::Mime;
     use std::str::FromStr;
+    use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+    use zenoh_util::zerror;
 
     lazy_static! {
     static ref MIMES: [Mime; 20] = [
@@ -50,8 +52,8 @@ pub mod encoding {
         /*  6 */ Mime::from_str("application/integer").unwrap(), // non iana standard
         /*  7 */ Mime::from_str("application/float").unwrap(), // non iana standard
         /*  8 */ Mime::from_str("application/xml").unwrap(), // if not readable from casual users (RFC 3023, section 3)
-        /*  9 */ Mime::from_str("application/xhtml+xml").unwrap(), 
-        /* 10 */ Mime::from_str("application/x-www-form-urlencoded").unwrap(), 
+        /*  9 */ Mime::from_str("application/xhtml+xml").unwrap(),
+        /* 10 */ Mime::from_str("application/x-www-form-urlencoded").unwrap(),
         /* 11 */ Mime::from_str("text/json").unwrap(), // non iana standard - if readable from casual users
         /* 12 */ Mime::from_str("text/htlm").unwrap(),
         /* 13 */ Mime::from_str("text/xml").unwrap(), // if readable from casual users (RFC 3023, section 3)
@@ -68,7 +70,9 @@ pub mod encoding {
         if i < MIMES.len() as ZInt {
             Ok(MIMES[i as usize].clone())
         } else {
-            zerror!(ZErrorKind::Other { descr: format!("Unknown encoding id {}", i)})
+            zerror!(ZErrorKind::Other {
+                descr: format!("Unknown encoding id {}", i)
+            })
         }
     }
 
@@ -99,7 +103,9 @@ pub mod encoding {
             "image/jpeg" => Ok(17),
             "image/png" => Ok(18),
             "image/gif" => Ok(19),
-            s => zerror!(ZErrorKind::Other { descr: format!("Unknown encoding '{}'",  s)}),
+            s => zerror!(ZErrorKind::Other {
+                descr: format!("Unknown encoding '{}'", s)
+            }),
         }
     }
 

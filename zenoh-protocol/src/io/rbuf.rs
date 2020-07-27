@@ -11,14 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
-use async_std::sync::Arc;
-use std::io::IoSlice;
 use super::ArcSlice;
+use async_std::sync::Arc;
+use std::fmt;
+use std::io::IoSlice;
 
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-
 
 #[derive(Clone, Default)]
 pub struct RBuf {
@@ -29,12 +28,18 @@ pub struct RBuf {
 impl RBuf {
     pub fn new() -> RBuf {
         let slices = Vec::with_capacity(32);
-        RBuf{ slices, pos:(0,0) } 
+        RBuf {
+            slices,
+            pos: (0, 0),
+        }
     }
 
     pub fn empty() -> RBuf {
         let slices = Vec::with_capacity(0);
-        RBuf{ slices, pos:(0,0) } 
+        RBuf {
+            slices,
+            pos: (0, 0),
+        }
     }
 
     #[inline]
@@ -46,7 +51,7 @@ impl RBuf {
     pub fn add_slice(&mut self, slice: ArcSlice) {
         self.slices.push(slice);
     }
-    
+
     #[inline]
     pub fn get_slices(&self) -> &[ArcSlice] {
         &self.slices[..]
@@ -95,7 +100,9 @@ impl RBuf {
             self.skip_bytes_no_check(n);
             Ok(())
         } else {
-            zerror!(ZErrorKind::BufferUnderflow { missing: n-remaining })
+            zerror!(ZErrorKind::BufferUnderflow {
+                missing: n - remaining
+            })
         }
     }
 
@@ -108,7 +115,7 @@ impl RBuf {
     pub fn get_pos(&self) -> usize {
         let mut result = self.pos.1;
         if self.pos.0 > 0 {
-            for i in 0 .. self.pos.0 {
+            for i in 0..self.pos.0 {
                 result += self.slices[i].len();
             }
         }
@@ -120,16 +127,16 @@ impl RBuf {
         self.slices.clear();
         self.pos.0 = 0;
     }
-    
+
     #[inline]
     fn current_slice(&self) -> &ArcSlice {
         &self.slices[self.pos.0]
-    }    
+    }
 
     #[inline]
     pub fn can_read(&self) -> bool {
-        self.pos.0 < self.slices.len() &&
-        (self.pos.0 < self.slices.len() - 1 || self.pos.1 < self.current_slice().len())
+        self.pos.0 < self.slices.len()
+            && (self.pos.0 < self.slices.len() - 1 || self.pos.1 < self.current_slice().len())
     }
 
     pub fn readable(&self) -> usize {
@@ -137,7 +144,7 @@ impl RBuf {
             0
         } else {
             let mut result = self.current_slice().len() - self.pos.1;
-            for s in &self.slices[self.pos.0+1..] {
+            for s in &self.slices[self.pos.0 + 1..] {
                 result += s.len()
             }
             result
@@ -150,7 +157,7 @@ impl RBuf {
             self.skip_bytes_no_check(1);
             Ok(b)
         } else {
-            zerror!(ZErrorKind::BufferUnderflow { missing: 1 }) 
+            zerror!(ZErrorKind::BufferUnderflow { missing: 1 })
         }
     }
 
@@ -160,7 +167,7 @@ impl RBuf {
             let b = self.current_slice()[self.pos.1];
             Ok(b)
         } else {
-            zerror!(ZErrorKind::BufferUnderflow { missing: 1 })  
+            zerror!(ZErrorKind::BufferUnderflow { missing: 1 })
         }
     }
 
@@ -175,7 +182,9 @@ impl RBuf {
         if len > 0 {
             let rem_in_current = self.slices[slicepos.0].len() - slicepos.1;
             let to_read = std::cmp::min(rem_in_current, len);
-            bs[0 .. to_read].copy_from_slice(self.slices[slicepos.0].get_sub_slice(slicepos.1, slicepos.1+to_read));
+            bs[0..to_read].copy_from_slice(
+                self.slices[slicepos.0].get_sub_slice(slicepos.1, slicepos.1 + to_read),
+            );
             self.get_bytes_no_check((slicepos.0 + 1, 0), &mut bs[to_read..])
         }
     }
@@ -185,7 +194,9 @@ impl RBuf {
         let len = bs.len();
         let remaining = self.readable();
         if len > remaining {
-            return zerror!(ZErrorKind::BufferUnderflow { missing: len-remaining })
+            return zerror!(ZErrorKind::BufferUnderflow {
+                missing: len - remaining
+            });
         }
         self.get_bytes_no_check(self.pos, bs);
         Ok(())
@@ -209,7 +220,7 @@ impl RBuf {
     // returns a Vec<u8> containing a copy of RBuf content (not considering read position)
     pub fn to_vec(&self) -> Vec<u8> {
         let mut vec = vec![0u8; self.len()];
-        self.get_bytes_no_check((0,0), &mut vec[..]);
+        self.get_bytes_no_check((0, 0), &mut vec[..]);
         vec
     }
 
@@ -219,8 +230,11 @@ impl RBuf {
         let mut to_copy = len;
         while to_copy > 0 {
             let remain_in_slice = self.current_slice().len() - self.pos.1;
-            let l = to_copy.min(remain_in_slice); 
-            dest.add_slice(self.current_slice().new_sub_slice(self.pos.1, self.pos.1+l));
+            let l = to_copy.min(remain_in_slice);
+            dest.add_slice(
+                self.current_slice()
+                    .new_sub_slice(self.pos.1, self.pos.1 + l),
+            );
             self.skip_bytes_no_check(l);
             to_copy -= l;
         }
@@ -232,7 +246,7 @@ impl RBuf {
             self.read_into_rbuf_no_check(dest, len);
             Ok(())
         } else {
-            zerror!(ZErrorKind::BufferUnderflow { missing: 1 }) 
+            zerror!(ZErrorKind::BufferUnderflow { missing: 1 })
         }
     }
 
@@ -244,7 +258,12 @@ impl RBuf {
 
 impl fmt::Display for RBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f,"RBuf{{ pos: {}, content: {} }}", self.get_pos(), hex::encode_upper(self.to_vec()))
+        write!(
+            f,
+            "RBuf{{ pos: {}, content: {} }}",
+            self.get_pos(),
+            hex::encode_upper(self.to_vec())
+        )
     }
 }
 
@@ -256,7 +275,7 @@ impl fmt::Debug for RBuf {
         } else {
             write!(f, "slices:")?;
             for s in &self.slices {
-                write!(f," {},", hex::encode_upper(s.as_slice()))?;
+                write!(f, " {},", hex::encode_upper(s.as_slice()))?;
             }
             write!(f, " }}")
         }
@@ -265,7 +284,10 @@ impl fmt::Debug for RBuf {
 
 impl From<ArcSlice> for RBuf {
     fn from(slice: ArcSlice) -> RBuf {
-        RBuf{ slices:vec![slice], pos:(0,0) } 
+        RBuf {
+            slices: vec![slice],
+            pos: (0, 0),
+        }
     }
 }
 
@@ -284,7 +306,10 @@ impl From<&[u8]> for RBuf {
 
 impl From<Vec<ArcSlice>> for RBuf {
     fn from(slices: Vec<ArcSlice>) -> RBuf {
-        RBuf{ slices, pos:(0,0) } 
+        RBuf {
+            slices,
+            pos: (0, 0),
+        }
     }
 }
 
@@ -326,8 +351,6 @@ impl PartialEq for RBuf {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,7 +377,10 @@ mod tests {
         assert_eq!(10, buf1.readable());
         assert_eq!(10, buf1.len());
         assert_eq!(1, buf1.as_ioslices().len());
-        assert_eq!(Some(&[0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9][..]), buf1.as_ioslices()[0].get(0..10));
+        assert_eq!(
+            Some(&[0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9][..]),
+            buf1.as_ioslices()[0].get(0..10)
+        );
 
         buf1.add_slice(v2.clone());
         assert!(!buf1.is_empty());
@@ -363,7 +389,10 @@ mod tests {
         assert_eq!(20, buf1.readable());
         assert_eq!(20, buf1.len());
         assert_eq!(2, buf1.as_ioslices().len());
-        assert_eq!(Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]), buf1.as_ioslices()[1].get(0..10));
+        assert_eq!(
+            Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
+            buf1.as_ioslices()[1].get(0..10)
+        );
 
         buf1.add_slice(v3.clone());
         assert!(!buf1.is_empty());
@@ -372,15 +401,20 @@ mod tests {
         assert_eq!(30, buf1.readable());
         assert_eq!(30, buf1.len());
         assert_eq!(3, buf1.as_ioslices().len());
-        assert_eq!(Some(&[20u8, 21, 22, 23, 24, 25, 26, 27, 28, 29][..]), buf1.as_ioslices()[2].get(0..10));
+        assert_eq!(
+            Some(&[20u8, 21, 22, 23, 24, 25, 26, 27, 28, 29][..]),
+            buf1.as_ioslices()[2].get(0..10)
+        );
 
         // test PartialEq
-        let v4 = vec![0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-            10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
+        let v4 = vec![
+            0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29,
+        ];
         assert_eq!(buf1, RBuf::from(v4));
 
         // test read
-        for i in 0 .. buf1.len()-1 {
+        for i in 0..buf1.len() - 1 {
             assert_eq!(i as u8, buf1.read().unwrap());
         }
         assert!(buf1.can_read());
@@ -394,7 +428,7 @@ mod tests {
         assert_eq!(3, buf1.as_ioslices().len());
 
         // test set_pos / get_pos
-        for i in 0 .. buf1.len()-1 {
+        for i in 0..buf1.len() - 1 {
             buf1.set_pos(i).unwrap();
             assert_eq!(i, buf1.get_pos());
             assert_eq!(i as u8, buf1.read().unwrap());
@@ -403,9 +437,9 @@ mod tests {
         // test read_bytes
         buf1.reset_pos();
         let mut bytes = [0u8; 3];
-        for i in 0 .. 10 {
+        for i in 0..10 {
             buf1.read_bytes(&mut bytes).unwrap();
-            assert_eq!( [i*3 as u8, i*3+1, i*3+2], bytes);
+            assert_eq!([i * 3 as u8, i * 3 + 1, i * 3 + 2], bytes);
         }
 
         // test other buffers sharing the same vecs
@@ -417,7 +451,7 @@ mod tests {
         assert_eq!(20, buf2.readable());
         assert_eq!(20, buf2.len());
         assert_eq!(2, buf2.as_ioslices().len());
-        for i in 0 .. buf2.len()-1 {
+        for i in 0..buf2.len() - 1 {
             assert_eq!(i as u8, buf2.read().unwrap());
         }
 
@@ -428,7 +462,7 @@ mod tests {
         assert_eq!(10, buf3.readable());
         assert_eq!(10, buf3.len());
         assert_eq!(1, buf3.as_ioslices().len());
-        for i in 0 .. buf3.len()-1 {
+        for i in 0..buf3.len() - 1 {
             assert_eq!(i as u8, buf3.read().unwrap());
         }
 
@@ -439,9 +473,14 @@ mod tests {
         assert!(buf1.read_into_rbuf(&mut dest, 24).is_ok());
         let dest_slices = dest.as_ioslices();
         assert_eq!(3, dest_slices.len());
-        assert_eq!(Some(&[1u8, 2, 3, 4, 5, 6, 7, 8, 9][..]), dest_slices[0].get(..));
-        assert_eq!(Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]), dest_slices[1].get(..));
+        assert_eq!(
+            Some(&[1u8, 2, 3, 4, 5, 6, 7, 8, 9][..]),
+            dest_slices[0].get(..)
+        );
+        assert_eq!(
+            Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
+            dest_slices[1].get(..)
+        );
         assert_eq!(Some(&[20u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
-
     }
 }
