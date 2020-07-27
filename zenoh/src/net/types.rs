@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
-use pin_project_lite::pin_project;
-use async_std::sync::{Arc, RwLock, Sender, Receiver, TrySendError};
-use async_std::stream::Stream;
 use crate::net::Session;
+use async_std::stream::Stream;
+use async_std::sync::{Arc, Receiver, RwLock, Sender, TrySendError};
+use pin_project_lite::pin_project;
+use std::fmt;
 
 /// A read-only bytes buffer.
 pub use zenoh_protocol::io::RBuf;
@@ -59,7 +59,7 @@ pub use zenoh_protocol::core::ZInt;
 pub use zenoh_protocol::core::whatami;
 
 /// Some informations about the associated data.
-/// 
+///
 /// # Examples
 /// ```
 /// # use zenoh_protocol::io::RBuf;
@@ -95,7 +95,10 @@ pub struct Sample {
 }
 
 /// The callback that will be called on each data for a [CallbackSubscriber](CallbackSubscriber).
-pub type DataHandler = dyn FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>) + Send + Sync + 'static;
+pub type DataHandler = dyn FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>)
+    + Send
+    + Sync
+    + 'static;
 
 /// Structs received b y a [Queryable](Queryable).
 pub struct Query {
@@ -119,7 +122,7 @@ impl Query {
 /// Structs returned by a [query](Session::query).
 pub struct Reply {
     pub data: Sample,
-    pub source_kind: ZInt, 
+    pub source_kind: ZInt,
     pub replier_id: PeerId,
 }
 
@@ -191,7 +194,10 @@ impl Stream for Subscriber {
     type Item = Sample;
 
     #[inline(always)]
-    fn poll_next(self: async_std::pin::Pin<&mut Self>, cx: &mut async_std::task::Context) -> async_std::task::Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: async_std::pin::Pin<&mut Self>,
+        cx: &mut async_std::task::Context,
+    ) -> async_std::task::Poll<Option<Self::Item>> {
         self.project().receiver.poll_next(cx)
     }
 }
@@ -204,7 +210,11 @@ impl PartialEq for Subscriber {
 
 impl fmt::Debug for Subscriber {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Subscriber{{ id:{}, resname:{} }}", self.id, self.resname)
+        write!(
+            f,
+            "Subscriber{{ id:{}, resname:{} }}",
+            self.id, self.resname
+        )
     }
 }
 
@@ -232,7 +242,7 @@ impl CallbackSubscriber {
     /// #     mode: SubMode::Pull,
     /// #     period: None
     /// # };
-    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, 
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info,
     ///     |res_name, payload, _info| { println!("Received : {} {}", res_name, payload); }
     /// ).await.unwrap();
     /// subscriber.pull();
@@ -251,7 +261,11 @@ impl PartialEq for CallbackSubscriber {
 
 impl fmt::Debug for CallbackSubscriber {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CallbackSubscriber{{ id:{}, resname:{} }}", self.id, self.resname)
+        write!(
+            f,
+            "CallbackSubscriber{{ id:{}, resname:{} }}",
+            self.id, self.resname
+        )
     }
 }
 
@@ -273,7 +287,10 @@ impl Stream for Queryable {
     type Item = Query;
 
     #[inline(always)]
-    fn poll_next(self: async_std::pin::Pin<&mut Self>, cx: &mut async_std::task::Context) -> async_std::task::Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: async_std::pin::Pin<&mut Self>,
+        cx: &mut async_std::task::Context,
+    ) -> async_std::task::Poll<Option<Self::Item>> {
         self.project().req_receiver.poll_next(cx)
     }
 }
@@ -291,12 +308,12 @@ impl fmt::Debug for Queryable {
 }
 
 /// Struct used by a [Queryable](Queryable) to send replies to queries.
-pub struct RepliesSender{
+pub struct RepliesSender {
     pub(crate) kind: ZInt,
     pub(crate) sender: Sender<(ZInt, Sample)>,
 }
 
-impl RepliesSender{
+impl RepliesSender {
     #[inline(always)]
     pub async fn send(&'_ self, msg: Sample) {
         self.sender.send((self.kind, msg)).await
@@ -305,9 +322,9 @@ impl RepliesSender{
     #[inline(always)]
     pub fn try_send(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
         match self.sender.try_send((self.kind, msg)) {
-            Ok(()) => {Ok(())}
-            Err(TrySendError::Full(sample)) => {Err(TrySendError::Full(sample.1))}
-            Err(TrySendError::Disconnected(sample)) => {Err(TrySendError::Disconnected(sample.1))}
+            Ok(()) => Ok(()),
+            Err(TrySendError::Full(sample)) => Err(TrySendError::Full(sample.1)),
+            Err(TrySendError::Disconnected(sample)) => Err(TrySendError::Disconnected(sample.1)),
         }
     }
 

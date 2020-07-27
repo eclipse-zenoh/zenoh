@@ -19,13 +19,13 @@ extern crate lazy_static;
 use log::debug;
 
 /// The network level zenoh API.
-/// 
+///
 /// # Examples
-/// 
+///
 /// Publish
 /// ```
 /// use zenoh::net::*;
-/// 
+///
 /// #[async_std::main]
 /// async fn main() {
 ///     let session = open(Config::default(), None).await.unwrap();
@@ -33,12 +33,12 @@ use log::debug;
 ///     session.close().await.unwrap();
 /// }
 /// ```
-/// 
+///
 /// Subscribe
 /// ```no_run
 /// use zenoh::net::*;
 /// use futures::prelude::*;
-/// 
+///
 /// #[async_std::main]
 /// async fn main() {
 ///     let session = open(Config::default(), None).await.unwrap();
@@ -51,12 +51,12 @@ use log::debug;
 ///     while let Some(sample) = subscriber.next().await { println!("Received : {:?}", sample); };
 /// }
 /// ```
-/// 
+///
 /// Query
 /// ```
 /// use zenoh::net::*;
 /// use futures::prelude::*;
-/// 
+///
 /// #[async_std::main]
 /// async fn main() {
 ///     let session = open(Config::default(), None).await.unwrap();
@@ -91,14 +91,15 @@ pub use values::*;
 type Config = net::Config;
 
 pub struct Zenoh {
-    session: Session
+    session: Session,
 }
 
 impl Zenoh {
-
     pub async fn new(config: Config, props: Option<Properties>) -> ZResult<Zenoh> {
         let zn_props = props.map(|p| p.0.iter().filter_map(prop_to_zn_prop).collect());
-        Ok(Zenoh { session: net::open(config, zn_props).await? })
+        Ok(Zenoh {
+            session: net::open(config, zn_props).await?,
+        })
     }
 
     pub async fn workspace(&self, prefix: Option<Path>) -> ZResult<Workspace> {
@@ -109,8 +110,6 @@ impl Zenoh {
     pub async fn close(&self) -> ZResult<()> {
         self.session.close().await
     }
-
-
 }
 
 fn prop_to_zn_prop(_prop: (&String, &String)) -> Option<(net::ZInt, Vec<u8>)> {

@@ -12,11 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use std::time::Instant;
-use std::convert::TryFrom;
 use futures::prelude::*;
-use zenoh::*;
+use std::convert::TryFrom;
+use std::time::Instant;
 use zenoh::net::Config;
+use zenoh::*;
 
 const N: u64 = 100000;
 
@@ -28,16 +28,31 @@ fn print_stats(start: Instant) {
 //
 // Argument parsing -- look at the main for the zenoh-related code
 //
-fn parse_args() -> Config  {
+fn parse_args() -> Config {
     let args = App::new("zenoh throughput sub example")
-        .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
-            .possible_values(&["peer", "client"]).default_value("peer"))
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
+        ))
         .get_matches();
 
     Config::default()
-        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap())
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        )
 }
 
 #[async_std::main]
@@ -46,10 +61,10 @@ async fn main() {
     env_logger::init();
 
     let config = parse_args();
-    
+
     println!("New zenoh...");
     let zenoh = Zenoh::new(config, None).await.unwrap();
-    
+
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();
 
@@ -58,8 +73,8 @@ async fn main() {
     let mut count = 0u64;
     let mut start = Instant::now();
 
-    workspace.subscribe_with_callback(&path_expr,
-        move |_change| {
+    workspace
+        .subscribe_with_callback(&path_expr, move |_change| {
             if count == 0 {
                 start = Instant::now();
                 count += 1;
@@ -69,8 +84,9 @@ async fn main() {
                 print_stats(start);
                 count = 0;
             }
-        }
-    ).await.unwrap();
+        })
+        .await
+        .unwrap();
 
     // Stop forever
     future::pending::<()>().await;

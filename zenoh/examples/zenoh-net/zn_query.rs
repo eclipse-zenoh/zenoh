@@ -20,19 +20,36 @@ use zenoh::net::*;
 //
 // Argument parsing -- look at the main for the zenoh-related code
 //
-fn parse_args() -> (Config, String)  {
+fn parse_args() -> (Config, String) {
     let args = App::new("zenoh-net query example")
-        .arg(Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
-            .possible_values(&["peer", "client"]).default_value("peer"))
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'"))
-        .arg(Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to query'")
-            .default_value("/demo/example/**"))
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(
+            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to query'")
+                .default_value("/demo/example/**"),
+        )
         .get_matches();
 
     let config = Config::default()
-        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
-        
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        );
+
     let selector = args.value_of("selector").unwrap().to_string();
 
     (config, selector)
@@ -49,14 +66,21 @@ async fn main() {
     let session = open(config, None).await.unwrap();
 
     println!("Sending Query '{}'...", selector);
-    let mut replies = session.query(
-        &selector.into(), "",
-        QueryTarget::default(),
-        QueryConsolidation::default()
-    ).await.unwrap();
+    let mut replies = session
+        .query(
+            &selector.into(),
+            "",
+            QueryTarget::default(),
+            QueryConsolidation::default(),
+        )
+        .await
+        .unwrap();
     while let Some(reply) = replies.next().await {
-        println!(">> [Reply handler] received ('{}': '{}')",
-            reply.data.res_name, String::from_utf8_lossy(&reply.data.payload.to_vec()))
+        println!(
+            ">> [Reply handler] received ('{}': '{}')",
+            reply.data.res_name,
+            String::from_utf8_lossy(&reply.data.payload.to_vec())
+        )
     }
 
     session.close().await.unwrap();

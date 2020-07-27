@@ -19,20 +19,39 @@ use zenoh::net::*;
 //
 fn parse_args() -> (Config, String, String) {
     let args = App::new("zenoh-net pub example")
-        .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-            .possible_values(&["peer", "client"]).default_value("peer"))
-        .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
-        .arg(Arg::from_usage("-p, --path=[PATH]        'The name of the resource to publish.'")
-            .default_value("/demo/example/zenoh-rs-pub"))
-        .arg(Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to publish.'")
-            .default_value("Pub from Rust!"))
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(
+            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to publish.'")
+                .default_value("/demo/example/zenoh-rs-pub"),
+        )
+        .arg(
+            Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to publish.'")
+                .default_value("Pub from Rust!"),
+        )
         .get_matches();
 
     let config = Config::default()
-        .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
-        .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap());
-    let path    = args.value_of("path").unwrap();
-    let value   = args.value_of("value").unwrap();
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        );
+    let path = args.value_of("path").unwrap();
+    let value = args.value_of("value").unwrap();
 
     (config, path.to_string(), value.to_string())
 }
@@ -46,16 +65,19 @@ async fn main() {
 
     println!("Openning session...");
     let session = open(config, None).await.unwrap();
-    
+
     print!("Declaring Resource {}", path);
     let rid = session.declare_resource(&path.into()).await.unwrap();
     println!(" => RId {}", rid);
-    
+
     println!("Declaring Publisher on {}", rid);
     let publ = session.declare_publisher(&rid.into()).await.unwrap();
-    
+
     println!("Writing Data ('{}': '{}')...\n", rid, value);
-    session.write(&rid.into(), value.as_bytes().into()).await.unwrap();
+    session
+        .write(&rid.into(), value.as_bytes().into())
+        .await
+        .unwrap();
 
     session.undeclare_publisher(publ).await.unwrap();
     session.close().await.unwrap();

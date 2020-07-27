@@ -12,18 +12,20 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use std::collections::HashMap;
-use std::fmt;
 use std::convert::From;
+use std::fmt;
 use std::ops::{Deref, DerefMut};
 
 const PROP_SEP: char = ';';
-const KV_SEP:   char = '=';
+const KV_SEP: char = '=';
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Properties(pub(crate) HashMap<String, String>);
 
 impl Default for Properties {
-    fn default() -> Self { Properties(HashMap::new()) }
+    fn default() -> Self {
+        Properties(HashMap::new())
+    }
 }
 
 impl Deref for Properties {
@@ -43,13 +45,13 @@ impl DerefMut for Properties {
 impl fmt::Display for Properties {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut it = self.0.iter();
-        if let Some((k,v)) = it.next() {
+        if let Some((k, v)) = it.next() {
             if v.is_empty() {
                 write!(f, "{}", k)?
             } else {
                 write!(f, "{}{}{}", k, KV_SEP, v)?
             }
-            for (k,v) in it {
+            for (k, v) in it {
                 if v.is_empty() {
                     write!(f, "{}{}", PROP_SEP, k)?
                 } else {
@@ -63,20 +65,23 @@ impl fmt::Display for Properties {
 
 impl From<&str> for Properties {
     fn from(s: &str) -> Self {
-        let p: HashMap<String, String> =
-            if !s.is_empty() {
-                s.split(PROP_SEP)
+        let p: HashMap<String, String> = if !s.is_empty() {
+            s.split(PROP_SEP)
                 .filter_map(|prop| {
-                    if prop.is_empty() { None }
-                    else {
+                    if prop.is_empty() {
+                        None
+                    } else {
                         let mut it = prop.splitn(2, KV_SEP);
-                        Some((it.next().unwrap().to_string(), it.next().unwrap_or("").to_string()))
+                        Some((
+                            it.next().unwrap().to_string(),
+                            it.next().unwrap_or("").to_string(),
+                        ))
                     }
                 })
                 .collect()
-            } else {
-                HashMap::new()
-            };
+        } else {
+            HashMap::new()
+        };
         Properties(p)
     }
 }
@@ -89,10 +94,11 @@ impl From<String> for Properties {
 
 impl From<&[(&str, &str)]> for Properties {
     fn from(kvs: &[(&str, &str)]) -> Properties {
-        let p: HashMap<String, String> = 
-            kvs.iter().cloned()
-               .map(|(k,v)| (k.to_string(), v.to_string()))
-               .collect();
+        let p: HashMap<String, String> = kvs
+            .iter()
+            .cloned()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
         Properties(p)
     }
 }
@@ -105,28 +111,31 @@ mod tests {
     fn test_properties() {
         assert!(Properties::from("").0.is_empty());
 
-        assert_eq!(
-            Properties::from("p1"),
-            Properties::from(&[("p1", "")][..]));
+        assert_eq!(Properties::from("p1"), Properties::from(&[("p1", "")][..]));
 
         assert_eq!(
             Properties::from("p1=v1"),
-            Properties::from(&[("p1", "v1")][..]));
+            Properties::from(&[("p1", "v1")][..])
+        );
 
         assert_eq!(
             Properties::from("p1=v1;p2=v2;"),
-            Properties::from(&[("p1", "v1"), ("p2", "v2")][..]));
-        
+            Properties::from(&[("p1", "v1"), ("p2", "v2")][..])
+        );
+
         assert_eq!(
             Properties::from("p1=v1;p2;p3=v3"),
-            Properties::from(&[("p1", "v1"), ("p2", ""), ("p3", "v3")][..]));
-            
+            Properties::from(&[("p1", "v1"), ("p2", ""), ("p3", "v3")][..])
+        );
+
         assert_eq!(
             Properties::from("p1=v 1;p 2=v2"),
-            Properties::from(&[("p1", "v 1"), ("p 2", "v2")][..]));
-    
+            Properties::from(&[("p1", "v 1"), ("p 2", "v2")][..])
+        );
+
         assert_eq!(
             Properties::from("p1=x=y;p2=a==b"),
-            Properties::from(&[("p1", "x=y"), ("p2", "a==b")][..]));
+            Properties::from(&[("p1", "x=y"), ("p2", "a==b")][..])
+        );
     }
 }

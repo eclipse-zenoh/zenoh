@@ -11,30 +11,30 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
-use std::convert::{From, TryFrom};
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-use zenoh_util::zerror;
 use crate::net::ResKey;
 use crate::Path;
+use std::convert::{From, TryFrom};
+use std::fmt;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PathExpr {
-    pub(crate) p: String
+    pub(crate) p: String,
 }
 
 impl PathExpr {
-
     fn is_valid(path: &str) -> bool {
-        !path.is_empty() &&
-        !path.contains(|c| c == '?' || c == '#' || c == '[' || c == ']')
+        !path.is_empty() && !path.contains(|c| c == '?' || c == '#' || c == '[' || c == ']')
     }
 
     pub fn new(p: String) -> ZResult<PathExpr> {
         if !Self::is_valid(&p) {
-            zerror!(ZErrorKind::InvalidPathExpr{ path: p })
+            zerror!(ZErrorKind::InvalidPathExpr { path: p })
         } else {
-            Ok(PathExpr{p: Path::remove_useless_slashes(&p)})
+            Ok(PathExpr {
+                p: Path::remove_useless_slashes(&p),
+            })
         }
     }
 
@@ -48,9 +48,13 @@ impl PathExpr {
 
     pub fn with_prefix(&self, prefix: &Path) -> Self {
         if self.is_relative() {
-            Self { p: format!("{}/{}", prefix.p, self.p) }
+            Self {
+                p: format!("{}/{}", prefix.p, self.p),
+            }
         } else {
-            Self { p: format!("{}{}", prefix.p, self.p) }
+            Self {
+                p: format!("{}{}", prefix.p, self.p),
+            }
         }
     }
 }
@@ -78,14 +82,14 @@ impl TryFrom<&str> for PathExpr {
 impl From<&Path> for PathExpr {
     fn from(path: &Path) -> Self {
         // No need to check validity as PathExpr is valid
-        PathExpr{p: path.p.clone()}
+        PathExpr { p: path.p.clone() }
     }
 }
 
 impl From<Path> for PathExpr {
     fn from(path: Path) -> Self {
         // No need to check validity as PathExpr is valid
-        PathExpr{p: path.p}
+        PathExpr { p: path.p }
     }
 }
 

@@ -11,13 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
-use std::convert::TryFrom;
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-use zenoh_util::zerror;
 use crate::{Path, PathExpr, Properties};
 use regex::Regex;
-
+use std::convert::TryFrom;
+use std::fmt;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Selector {
@@ -25,46 +24,50 @@ pub struct Selector {
     pub predicate: String,
     pub projection: Option<String>,
     pub properties: Properties,
-    pub fragment: Option<String>
+    pub fragment: Option<String>,
 }
 
 impl Selector {
-
     pub(crate) fn new(res_name: &str, predicate: &str) -> ZResult<Selector> {
-
         let path_expr: PathExpr = PathExpr::try_from(res_name)?;
 
         const REGEX_PROJECTION: &str = r"[^\[\]\(\)#]+";
         const REGEX_PROPERTIES: &str = ".*";
-        const REGEX_FRAGMENT:   &str = ".*";
+        const REGEX_FRAGMENT: &str = ".*";
 
         lazy_static! {
             static ref RE: Regex = Regex::new(&format!(
                 "(?:\\?(?P<proj>{})?(?:\\((?P<prop>{})\\))?)?(?:#(?P<frag>{}))?",
                 REGEX_PROJECTION, REGEX_PROPERTIES, REGEX_FRAGMENT
-            )).unwrap();
+            ))
+            .unwrap();
         }
 
         if let Some(caps) = RE.captures(predicate) {
-            Ok(Selector{
+            Ok(Selector {
                 path_expr,
                 predicate: predicate.to_string(),
                 projection: caps.name("proj").map(|s| s.as_str().to_string()),
-                properties: caps.name("prop").map(|s| s.as_str().into()).unwrap_or_default(),
-                fragment: caps.name("frag").map(|s| s.as_str().to_string())
+                properties: caps
+                    .name("prop")
+                    .map(|s| s.as_str().into())
+                    .unwrap_or_default(),
+                fragment: caps.name("frag").map(|s| s.as_str().to_string()),
             })
         } else {
-            zerror!(ZErrorKind::InvalidSelector{ selector: format!("{}{}", res_name, predicate) })
+            zerror!(ZErrorKind::InvalidSelector {
+                selector: format!("{}{}", res_name, predicate)
+            })
         }
     }
 
     pub fn with_prefix(&self, prefix: &Path) -> Selector {
-        Selector{
+        Selector {
             path_expr: self.path_expr.with_prefix(prefix),
             predicate: self.predicate.clone(),
             projection: self.projection.clone(),
             properties: self.properties.clone(),
-            fragment: self.fragment.clone()
+            fragment: self.fragment.clone(),
         }
     }
 
@@ -82,12 +85,11 @@ impl fmt::Display for Selector {
 impl TryFrom<&str> for Selector {
     type Error = ZError;
     fn try_from(s: &str) -> ZResult<Selector> {
-        let (path_expr, predicate) = 
-            if let Some(i) = s.find(|c| c == '?' || c == '#') {
-                s.split_at(i)
-            } else {
-                (s, "")
-            };
+        let (path_expr, predicate) = if let Some(i) = s.find(|c| c == '?' || c == '#') {
+            s.split_at(i)
+        } else {
+            (s, "")
+        };
         Self::new(path_expr, predicate)
     }
 }
@@ -99,8 +101,6 @@ impl TryFrom<String> for Selector {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,77 +108,92 @@ mod tests {
 
     #[test]
     fn test_selector() {
-        assert_eq!(Selector::try_from("/path/**").unwrap(),
-            Selector { 
+        assert_eq!(
+            Selector::try_from("/path/**").unwrap(),
+            Selector {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "".into(),
                 projection: None,
                 properties: Properties::default(),
                 fragment: None
-            });
+            }
+        );
 
-        assert_eq!(Selector::try_from("/path/**?proj").unwrap(),
-            Selector { 
+        assert_eq!(
+            Selector::try_from("/path/**?proj").unwrap(),
+            Selector {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj".into(),
                 projection: Some("proj".into()),
                 properties: Properties::default(),
                 fragment: None
-            });
+            }
+        );
 
-        assert_eq!(Selector::try_from("/path/**?(prop)").unwrap(),
-            Selector { 
+        assert_eq!(
+            Selector::try_from("/path/**?(prop)").unwrap(),
+            Selector {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?(prop)".into(),
                 projection: None,
                 properties: Properties::from(&[("prop", "")][..]),
                 fragment: None
-            });
+            }
+        );
 
-        assert_eq!(Selector::try_from("/path/**#frag").unwrap(),
-            Selector { 
+        assert_eq!(
+            Selector::try_from("/path/**#frag").unwrap(),
+            Selector {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "#frag".into(),
                 projection: None,
                 properties: Properties::default(),
                 fragment: Some("frag".into()),
-            });
+            }
+        );
 
-        assert_eq!(Selector::try_from("/path/**?proj(prop)").unwrap(),
-            Selector { 
+        assert_eq!(
+            Selector::try_from("/path/**?proj(prop)").unwrap(),
+            Selector {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj(prop)".into(),
                 projection: Some("proj".into()),
                 properties: Properties::from(&[("prop", "")][..]),
                 fragment: None
-            });
+            }
+        );
 
-        assert_eq!(Selector::try_from("/path/**?proj#frag").unwrap(),
-            Selector { 
+        assert_eq!(
+            Selector::try_from("/path/**?proj#frag").unwrap(),
+            Selector {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj#frag".into(),
                 projection: Some("proj".into()),
                 properties: Properties::default(),
                 fragment: Some("frag".into()),
-            });
+            }
+        );
 
-        assert_eq!(Selector::try_from("/path/**?(prop)#frag").unwrap(),
-            Selector { 
+        assert_eq!(
+            Selector::try_from("/path/**?(prop)#frag").unwrap(),
+            Selector {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?(prop)#frag".into(),
                 projection: None,
                 properties: Properties::from(&[("prop", "")][..]),
                 fragment: Some("frag".into()),
-            });
+            }
+        );
 
-        assert_eq!(Selector::try_from("/path/**?proj(prop)#frag").unwrap(),
-            Selector { 
+        assert_eq!(
+            Selector::try_from("/path/**?proj(prop)#frag").unwrap(),
+            Selector {
                 path_expr: "/path/**".try_into().unwrap(),
                 predicate: "?proj(prop)#frag".into(),
                 projection: Some("proj".into()),
                 properties: Properties::from(&[("prop", "")][..]),
                 fragment: Some("frag".into()),
-            });
-
+            }
+        );
     }
 }
