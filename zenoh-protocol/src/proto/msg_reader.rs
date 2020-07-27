@@ -420,12 +420,12 @@ impl RBuf {
         } else {
             None
         };
-        let fist_broker_id = if header & zmsg::info_flag::BKRID > 0 {
+        let first_broker_id = if header & zmsg::info_flag::BKRID > 0 {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let fist_broker_sn = if header & zmsg::info_flag::BKRSN > 0 {
+        let first_broker_sn = if header & zmsg::info_flag::BKRSN > 0 {
             Some(self.read_zint()?)
         } else {
             None
@@ -449,8 +449,8 @@ impl RBuf {
         Ok(DataInfo {
             source_id,
             source_sn,
-            fist_broker_id,
-            fist_broker_sn,
+            first_broker_id,
+            first_broker_sn,
             timestamp,
             kind,
             encoding,
@@ -609,12 +609,11 @@ impl RBuf {
         }
     }
 
-    pub fn read_timestamp(&mut self) -> ZResult<TimeStamp> {
+    pub fn read_timestamp(&mut self) -> ZResult<Timestamp> {
         let time = self.read_zint_as_u64()?;
         let mut bytes = [0u8; 16];
         self.read_bytes(&mut bytes[..])?;
-        let id = uuid::Builder::from_bytes(bytes).build();
-        Ok(TimeStamp { time, id })
+        Ok(Timestamp::new(uhlc::NTP64(time), bytes.into()))
     }
 
     fn read_peerid(&mut self) -> ZResult<PeerId> {

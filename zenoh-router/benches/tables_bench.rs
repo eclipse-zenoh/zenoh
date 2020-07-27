@@ -17,6 +17,7 @@ extern crate zenoh_router;
 use async_std::sync::Arc;
 use async_std::task;
 use criterion::{BenchmarkId, Criterion};
+use uhlc::HLC;
 use zenoh_protocol::core::{whatami, Reliability, SubInfo, SubMode};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::Mux;
@@ -27,7 +28,7 @@ use zenoh_router::routing::resource::*;
 
 fn tables_bench(c: &mut Criterion) {
     task::block_on(async {
-        let tables = Tables::new();
+        let tables = Tables::new(HLC::default());
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
 
         let face0 = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;

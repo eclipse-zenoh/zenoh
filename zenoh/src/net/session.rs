@@ -708,8 +708,8 @@ impl Session {
         let info = zenoh_protocol::proto::DataInfo {
             source_id: None,
             source_sn: None,
-            fist_broker_id: None,
-            fist_broker_sn: None,
+            first_broker_id: None,
+            first_broker_sn: None,
             timestamp: None,
             kind: Some(kind),
             encoding: Some(encoding),

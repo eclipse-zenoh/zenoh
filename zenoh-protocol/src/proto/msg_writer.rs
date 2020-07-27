@@ -263,10 +263,10 @@ impl WBuf {
         if info.source_sn.is_some() {
             header |= zmsg::info_flag::SRCSN
         }
-        if info.fist_broker_id.is_some() {
+        if info.first_broker_id.is_some() {
             header |= zmsg::info_flag::BKRID
         }
-        if info.fist_broker_sn.is_some() {
+        if info.first_broker_sn.is_some() {
             header |= zmsg::info_flag::BKRSN
         }
         if info.timestamp.is_some() {
@@ -286,10 +286,10 @@ impl WBuf {
         if let Some(sn) = &info.source_sn {
             check!(self.write_zint(*sn));
         }
-        if let Some(pid) = &info.fist_broker_id {
+        if let Some(pid) = &info.first_broker_id {
             check!(self.write_bytes_array(&pid.id));
         }
-        if let Some(sn) = &info.fist_broker_sn {
+        if let Some(sn) = &info.first_broker_sn {
             check!(self.write_zint(*sn));
         }
         if let Some(ts) = &info.timestamp {
@@ -451,7 +451,7 @@ impl WBuf {
         }
     }
 
-    fn write_timestamp(&mut self, tstamp: &TimeStamp) -> bool {
-        self.write_u64_as_zint(tstamp.time) && self.write_bytes(tstamp.id.as_bytes())
+    fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {
+        self.write_u64_as_zint(tstamp.get_time().as_u64()) && self.write_bytes(tstamp.get_id())
     }
 }

@@ -29,6 +29,7 @@ env_logger = "0.7.1"
 clap = "2"
 serde_json = { version = "1.0", features = ["preserve_order"] }
 socket2 = "0.3.12"
+uhlc = "0.1"
 zenoh-protocol =  { version = "0.5.0", path = "../zenoh-protocol" }
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
 
@@ -38,6 +39,10 @@ features = ["unstable"]
 
 [dev-dependencies]
 criterion = "0.3.2"
+
+[features]
+default = []
+add_timestamp = []
 
 [[bench]]
 name = "tables_bench"

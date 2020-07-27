@@ -14,7 +14,7 @@
 use std::convert::From;
 use std::fmt;
 use std::sync::atomic::AtomicU64;
-use uuid::Uuid;
+pub use uhlc::Timestamp;
 
 pub mod rname;
 
@@ -158,24 +158,6 @@ impl fmt::Debug for PeerId {
 }
 
 impl fmt::Display for PeerId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
-    }
-}
-
-#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct TimeStamp {
-    pub time: u64,
-    pub id: Uuid,
-}
-
-impl fmt::Debug for TimeStamp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}/{}", self.time, self.id)
-    }
-}
-
-impl fmt::Display for TimeStamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }

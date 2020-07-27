@@ -204,9 +204,9 @@ pub mod zmsg {
 pub struct DataInfo {
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
-    pub fist_broker_id: Option<PeerId>,
-    pub fist_broker_sn: Option<ZInt>,
-    pub timestamp: Option<TimeStamp>,
+    pub first_broker_id: Option<PeerId>,
+    pub first_broker_sn: Option<ZInt>,
+    pub timestamp: Option<Timestamp>,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
 }

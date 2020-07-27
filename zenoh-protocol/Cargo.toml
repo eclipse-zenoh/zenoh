@@ -31,6 +31,7 @@ log = "0.4.8"
 rand = "0.7.3"
 http-types = "2.2.1"
 uuid = { version = "0.8.1", features = ["v4"] }
+uhlc = "0.1"
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
 
 [dependencies.async-std]

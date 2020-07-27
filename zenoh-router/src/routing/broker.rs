@@ -15,6 +15,7 @@ use async_std::sync::RwLock;
 use async_std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use std::collections::HashMap;
+use uhlc::HLC;
 
 use zenoh_protocol::core::{whatami, Reliability, ResKey, SubInfo, SubMode, WhatAmI, ZInt};
 use zenoh_protocol::proto::{DeMux, Mux, Primitives};
@@ -70,9 +71,9 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new() -> Broker {
+    pub fn new(hlc: HLC) -> Broker {
         Broker {
-            tables: Tables::new(),
+            tables: Tables::new(hlc),
         }
     }
 
@@ -87,12 +88,6 @@ impl Broker {
                 .upgrade()
                 .unwrap(),
         })
-    }
-}
-
-impl Default for Broker {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -118,14 +113,16 @@ pub struct Tables {
     face_counter: usize,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
+    pub(crate) hlc: HLC,
 }
 
 impl Tables {
-    pub fn new() -> Arc<RwLock<Tables>> {
+    pub fn new(hlc: HLC) -> Arc<RwLock<Tables>> {
         Arc::new(RwLock::new(Tables {
             face_counter: 0,
             root_res: Resource::root(),
             faces: HashMap::new(),
+            hlc,
         }))
     }
 

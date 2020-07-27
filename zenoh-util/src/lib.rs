@@ -19,7 +19,6 @@ extern crate lazy_static;
 pub mod collections;
 pub mod core;
 pub mod ffi;
-pub mod hlc;
 pub mod net;
 pub mod sync;
 

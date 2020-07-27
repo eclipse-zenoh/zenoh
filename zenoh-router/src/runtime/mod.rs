@@ -16,6 +16,7 @@ use crate::runtime::orchestrator::SessionOrchestrator;
 use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::fmt;
 use std::time::Duration;
+use uhlc::HLC;
 use zenoh_protocol::core::{whatami, PeerId, WhatAmI};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
@@ -45,7 +46,8 @@ impl Runtime {
         };
         log::debug!("Generated PID: {}", pid);
 
-        let broker = Arc::new(Broker::new());
+        let hlc = HLC::with_system_time(pid.id.clone());
+        let broker = Arc::new(Broker::new(hlc));
 
         let sm_config = SessionManagerConfig {
             version,
