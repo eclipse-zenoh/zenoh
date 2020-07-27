@@ -52,3 +52,7 @@ jobs:
       run: cargo clippy --all --examples
     - name: Run tests
       run: cargo test --verbose
+    - name: Run rustfmt
+      uses: actions-rs/cargo@v1
+      with:
+        command: fmt -- --check
