@@ -27,7 +27,7 @@ fn print_usage(bin: String) {
     println!(
         "Usage:
     cargo run --release --bin {} <payload size in bytes> [<locator to connect to>]
-Example: 
+Example:
     cargo run --release --bin {} 8100 tcp/127.0.0.1:7447",
         bin, bin
     );

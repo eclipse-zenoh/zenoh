@@ -43,7 +43,7 @@ pub use crate::routing::resource::*;
 ///     use zenoh_protocol::proto::Mux;
 ///     use zenoh_protocol::session::DummyHandler;
 ///     let dummy_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
-///   
+///
 ///     // Instanciate broker
 ///     let broker = Arc::new(Broker::new(HLC::default()));
 ///
@@ -58,7 +58,7 @@ pub use crate::routing::resource::*;
 ///
 ///     // Declare new primitives
 ///     let primitives = broker.new_primitives(dummy_primitives).await;
-///     
+///
 ///     // Use primitives
 ///     primitives.data(&"/demo".to_string().into(), true, &None, RBuf::from(vec![1, 2])).await;
 ///

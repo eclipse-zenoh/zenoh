@@ -17,10 +17,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void query_callback(const zn_source_info *info, const zn_sample *sample) {    
-    printf(">> Received:\n\t (%.*s, %.*s)\n", 
-        sample->key.len, sample->key.val, 
-        sample->value.len, sample->value.val);    
+void query_callback(const zn_source_info *info, const zn_sample *sample) {
+    printf(">> Received:\n\t (%.*s, %.*s)\n",
+        sample->key.len, sample->key.val,
+        sample->value.len, sample->value.val);
 }
 
 int main(int argc, char** argv) {
@@ -28,11 +28,11 @@ int main(int argc, char** argv) {
     char *predicate = "";
     ZNSubscriber *sub = 0;
 
-    if (argc > 1) {        
-        key_expr = argv[1];        
+    if (argc > 1) {
+        key_expr = argv[1];
     }
-    if (argc > 2) {        
-        predicate = argv[2];        
+    if (argc > 2) {
+        predicate = argv[2];
     }
     printf("Query expression to %s:%s\n", key_expr, predicate);
 
@@ -41,8 +41,8 @@ int main(int argc, char** argv) {
     if (s == 0) {
         printf("Error creating session!\n");
         exit(-1);
-    } 
+    }
 
     zn_query(s, key_expr, predicate, zn_query_target_default(), zn_query_consolidation_default(), query_callback);
-    sleep(1);        
+    sleep(1);
 }

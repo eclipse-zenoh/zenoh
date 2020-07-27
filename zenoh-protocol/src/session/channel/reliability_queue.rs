@@ -68,7 +68,7 @@ impl<T> ReliabilityQueue<T> {
         self.sn.get()
     }
 
-    pub(super) fn set_base(&mut self, sn: ZInt) -> ZResult<()> {        
+    pub(super) fn set_base(&mut self, sn: ZInt) -> ZResult<()> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
@@ -78,9 +78,9 @@ impl<T> ReliabilityQueue<T> {
         };
 
         self.sn.set(sn)?;
-                
+
         if gap >= self.capacity() {
-            // If the gap is larger than the capacity, reset the queue            
+            // If the gap is larger than the capacity, reset the queue
             for i in 0..self.capacity() {
                 self.inner[i] = None;
             }
@@ -92,9 +92,9 @@ impl<T> ReliabilityQueue<T> {
                 if self.inner[self.index].is_some() {
                     self.len -= 1;
                     self.inner[self.index] = None;
-                }                
+                }
                 self.index = (self.index + 1) % self.capacity();
-            }           
+            }
         }
 
         Ok(())
@@ -161,7 +161,7 @@ impl<T> ReliabilityQueue<T> {
         }
     }
 
-    pub(super) fn pull(&mut self) -> Option<T> {        
+    pub(super) fn pull(&mut self) -> Option<T> {
         let t = self.inner[self.index].take();
         if t.is_some() {
             self.len -= 1;
@@ -171,14 +171,14 @@ impl<T> ReliabilityQueue<T> {
         t
     }
 
-    /// Returns a bitmask of surely missed messages. 
+    /// Returns a bitmask of surely missed messages.
     /// A bit is set to 1 iff the position in the queue is empty and
     /// there is at least one message with a higher sequence number.
     pub(super) fn get_mask(&self) -> ZInt {
         let mut mask: ZInt = 0;
         let mut count = 0;
         let mut i = 0;
-        while count < self.len() {        
+        while count < self.len() {
             let index = (self.index + i) % self.capacity();
             if self.inner[index].is_none() {
                 mask |= 1 << i;
@@ -371,7 +371,7 @@ mod tests {
         let size = 8;
         let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 8);
 
-        let mut sn: ZInt = 0;  
+        let mut sn: ZInt = 0;
         while sn < size as ZInt {
             let res = queue.insert(sn, sn);
             assert!(res.is_ok());
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(queue.get_mask(), mask);
 
         // Insert the missing elements
-        let mut sn: ZInt = 1;  
+        let mut sn: ZInt = 1;
         while sn < size as ZInt {
             let res = queue.insert(sn, sn);
             assert!(res.is_ok());
@@ -470,7 +470,7 @@ mod tests {
         // Rebase the queue
         let res = queue.set_base(4);
         assert!(res.is_ok());
-        
+
         // Verify that the base is correct
         assert_eq!(queue.get_base(), 4);
         // Verify that the length of the queue is correct
@@ -505,7 +505,7 @@ mod tests {
         assert!(res.is_ok());
         // Verify that the base is correct
         assert_eq!(queue.get_base(), 0);
-        
+
         // Fill the queue
         for i in 0..size as ZInt {
             // Push the element on the queue is correct
@@ -561,19 +561,19 @@ mod tests {
         let res = queue.remove(1);
         assert_eq!(res.unwrap(), 1);
         assert_eq!(queue.len(), 4);
-     
+
         let res = queue.remove(0);
         assert_eq!(res.unwrap(), 0);
         assert_eq!(queue.len(), 3);
-        
+
         let res = queue.remove(2);
         assert_eq!(res.unwrap(), 2);
         assert_eq!(queue.len(), 2);
-            
+
         let res = queue.remove(4);
         assert_eq!(res.unwrap(), 4);
         assert_eq!(queue.len(), 1);
-            
+
         let res = queue.remove(6);
         assert_eq!(res.unwrap(), 6);
         assert!(queue.is_empty());

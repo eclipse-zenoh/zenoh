@@ -30,7 +30,7 @@ pub mod channel {
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_536 bytes.    
+///       In any case, the lenght of a message must not exceed 65_536 bytes.
 ///
 /// The Attachment can decorate any message (i.e., SessionMessage and ZenohMessage) and it allows to
 /// append to the message any additional information. Since the information contained in the
