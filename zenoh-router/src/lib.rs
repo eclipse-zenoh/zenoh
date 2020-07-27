@@ -14,6 +14,6 @@
 #![feature(get_mut_unchecked)]
 #![feature(async_closure)]
 
+pub mod plugins;
 pub mod routing;
 pub mod runtime;
-pub mod plugins;

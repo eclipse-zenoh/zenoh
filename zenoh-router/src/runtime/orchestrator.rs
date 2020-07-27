@@ -11,18 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::net::UdpSocket;
-use std::time::Duration;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use socket2::{Socket, Domain, Type};
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-use zenoh_util::zerror;
-use zenoh_protocol::io::{WBuf, RBuf};
-use zenoh_protocol::core::{WhatAmI, whatami};
-use zenoh_protocol::proto::{SessionMessage, SessionBody, Scout, Hello};
-use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::SessionManager;
 use crate::runtime::Config;
+use async_std::net::UdpSocket;
+use socket2::{Domain, Socket, Type};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::time::Duration;
+use zenoh_protocol::core::{whatami, WhatAmI};
+use zenoh_protocol::io::{RBuf, WBuf};
+use zenoh_protocol::link::Locator;
+use zenoh_protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
+use zenoh_protocol::session::SessionManager;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror;
 
 const RCV_BUF_SIZE: usize = 65536;
 const SEND_BUF_INITIAL_SIZE: usize = 8;
@@ -43,22 +43,34 @@ pub struct SessionOrchestrator {
 }
 
 impl SessionOrchestrator {
-
     pub fn new(manager: SessionManager, whatami: WhatAmI) -> SessionOrchestrator {
-        SessionOrchestrator {
-            whatami,
-            manager,
-        }
+        SessionOrchestrator { whatami, manager }
     }
 
     pub async fn init(&mut self, config: Config) -> ZResult<()> {
         match self.whatami {
-            whatami::CLIENT => self.init_client(config.peers, &config.multicast_interface).await,
-            whatami::PEER => self.init_peer(config.listeners, config.peers, &config.multicast_interface, config.scouting_delay).await,
-            whatami::BROKER => self.init_broker(config.listeners, config.peers, &config.multicast_interface).await,
+            whatami::CLIENT => {
+                self.init_client(config.peers, &config.multicast_interface)
+                    .await
+            }
+            whatami::PEER => {
+                self.init_peer(
+                    config.listeners,
+                    config.peers,
+                    &config.multicast_interface,
+                    config.scouting_delay,
+                )
+                .await
+            }
+            whatami::BROKER => {
+                self.init_broker(config.listeners, config.peers, &config.multicast_interface)
+                    .await
+            }
             _ => {
                 log::error!("Unknown mode");
-                zerror!(ZErrorKind::Other{ descr: "Unknown mode".to_string()})
+                zerror!(ZErrorKind::Other {
+                    descr: "Unknown mode".to_string()
+                })
             }
         }
     }
@@ -70,57 +82,71 @@ impl SessionOrchestrator {
                 let iface = SessionOrchestrator::get_interface(iface)?;
                 let socket = SessionOrchestrator::bind_ucast_port(iface).await?;
                 self.connect_first(&socket, whatami::BROKER).await
-            },
+            }
             _ => {
                 for locator in &peers {
                     match self.manager.open_session(&locator, &None).await {
-                        Ok(_) => {return Ok (())},
-                        Err(err) => log::warn!("Unable to connect to {}! {}", locator, err)
+                        Ok(_) => return Ok(()),
+                        Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
                 }
                 log::error!("Unable to connect to any of {:?}! ", peers);
-                zerror!(ZErrorKind::IOError{ descr: "".to_string()})
-            },
+                zerror!(ZErrorKind::IOError {
+                    descr: "".to_string()
+                })
+            }
         }
     }
 
-    pub async fn init_peer(&mut self, mut listeners: Vec<Locator>, peers: Vec<Locator>, iface: &str, delay: Duration) -> ZResult<()> {
-
+    pub async fn init_peer(
+        &mut self,
+        mut listeners: Vec<Locator>,
+        peers: Vec<Locator>,
+        iface: &str,
+        delay: Duration,
+    ) -> ZResult<()> {
         if listeners.is_empty() {
             listeners.push(DEFAULT_LISTENER.parse().unwrap());
         }
         self.bind_listeners(&listeners).await?;
 
         let this = self.clone();
-        async_std::task::spawn( async move { this.connector(peers).await });
+        async_std::task::spawn(async move { this.connector(peers).await });
 
         let mcast_socket = SessionOrchestrator::bind_mcast_port().await?;
         let iface = SessionOrchestrator::get_interface(iface)?;
         let ucast_socket = SessionOrchestrator::bind_ucast_port(iface).await?;
         let this = self.clone();
-        async_std::task::spawn( async move {
+        async_std::task::spawn(async move {
             async_std::prelude::FutureExt::race(
                 this.responder(&mcast_socket, &ucast_socket),
-                this.scout(&ucast_socket, whatami::PEER | whatami::BROKER)
-            ).await; 
+                this.scout(&ucast_socket, whatami::PEER | whatami::BROKER),
+            )
+            .await;
         });
         async_std::task::sleep(delay).await;
         Ok(())
     }
 
-    pub async fn init_broker(&mut self, listeners: Vec<Locator>, peers: Vec<Locator>, iface: &str) -> ZResult<()> {
-
+    pub async fn init_broker(
+        &mut self,
+        listeners: Vec<Locator>,
+        peers: Vec<Locator>,
+        iface: &str,
+    ) -> ZResult<()> {
         self.bind_listeners(&listeners).await?;
 
         let this = self.clone();
-        async_std::task::spawn( async move { this.connector(peers).await });
+        async_std::task::spawn(async move { this.connector(peers).await });
 
         let mcast_socket = SessionOrchestrator::bind_mcast_port().await?;
         let iface = SessionOrchestrator::get_interface(iface)?;
         let ucast_socket = SessionOrchestrator::bind_ucast_port(iface).await?;
         let this = self.clone();
-        async_std::task::spawn( async move { this.responder(&mcast_socket, &ucast_socket).await;  });
-        Ok(()) 
+        async_std::task::spawn(async move {
+            this.responder(&mcast_socket, &ucast_socket).await;
+        });
+        Ok(())
     }
 
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
@@ -129,8 +155,13 @@ impl SessionOrchestrator {
                 Ok(locator) => log::info!("Listening on {}!", locator),
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", locator, err);
-                    return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
-                },
+                    return zerror!(
+                        ZErrorKind::IOError {
+                            descr: "".to_string()
+                        },
+                        err
+                    );
+                }
             }
         }
         Ok(())
@@ -141,86 +172,131 @@ impl SessionOrchestrator {
             match zenoh_util::net::get_default_multicast_interface() {
                 Some(addr) => Ok(addr),
                 None => {
-                    log::warn!("Unable to find active, non-loopback multicast interface. Will use 0.0.0.0");
+                    log::warn!(
+                        "Unable to find active, non-loopback multicast interface. Will use 0.0.0.0"
+                    );
                     Ok(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)))
-                },
+                }
             }
         } else {
             match name.parse::<IpAddr>() {
                 Ok(addr) => Ok(addr),
-                Err(_) => {
-                    match zenoh_util::net::get_interface(name) {
-                        Ok(opt_addr) => {
-                                match opt_addr {
-                                Some(addr) => Ok(addr),
-                                None => {
-                                    log::error!("Unable to find interface {}", name);
-                                    zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface {}", name) })
-                                }
-                            }
-                        },
-                        Err(err) => {
-                            log::error!("Unable to find interface {} : {}", name, err);
-                            zerror!(ZErrorKind::IOError{ descr: format!("Unable to find interface {} : {}", name, err) })
-                        },
+                Err(_) => match zenoh_util::net::get_interface(name) {
+                    Ok(opt_addr) => match opt_addr {
+                        Some(addr) => Ok(addr),
+                        None => {
+                            log::error!("Unable to find interface {}", name);
+                            zerror!(ZErrorKind::IOError {
+                                descr: format!("Unable to find interface {}", name)
+                            })
+                        }
+                    },
+                    Err(err) => {
+                        log::error!("Unable to find interface {} : {}", name, err);
+                        zerror!(ZErrorKind::IOError {
+                            descr: format!("Unable to find interface {} : {}", name, err)
+                        })
                     }
-                }
+                },
             }
         }
     }
 
     async fn bind_mcast_port() -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
-            Ok(socket) => {socket},
+            Ok(socket) => socket,
             Err(err) => {
                 log::error!("Unable to create datagram socket : {}", err);
-                return zerror!(ZErrorKind::IOError{ descr: "Unable to create datagram socket".to_string()}, err)
-            },
+                return zerror!(
+                    ZErrorKind::IOError {
+                        descr: "Unable to create datagram socket".to_string()
+                    },
+                    err
+                );
+            }
         };
         if let Err(err) = socket.set_reuse_address(true) {
             log::error!("Unable to set SO_REUSEADDR option : {}", err);
-            return zerror!(ZErrorKind::IOError{ descr: "Unable to set SO_REUSEADDR option".to_string()}, err)
+            return zerror!(
+                ZErrorKind::IOError {
+                    descr: "Unable to set SO_REUSEADDR option".to_string()
+                },
+                err
+            );
         }
         let addr = {
-            #[cfg(unix)] { MCAST_ADDR.parse().unwrap() } // See UNIX Network Programmping p.212
-            #[cfg(windows)] { IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) }
+            #[cfg(unix)]
+            {
+                MCAST_ADDR.parse().unwrap()
+            } // See UNIX Network Programmping p.212
+            #[cfg(windows)]
+            {
+                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+            }
         };
         match socket.bind(&SocketAddr::new(addr, MCAST_PORT.parse().unwrap()).into()) {
             Ok(()) => log::debug!("UDP port bound to {}:{}", addr, MCAST_PORT),
             Err(err) => {
                 log::error!("Unable to bind udp port {}:{} : {}", addr, MCAST_PORT, err);
-                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:{}", addr, MCAST_PORT)}, err)
-            },
+                return zerror!(
+                    ZErrorKind::IOError {
+                        descr: format!("Unable to bind udp port {}:{}", addr, MCAST_PORT)
+                    },
+                    err
+                );
+            }
         }
-        match socket.join_multicast_v4(&MCAST_ADDR.parse::<Ipv4Addr>().unwrap(), &Ipv4Addr::new(0, 0, 0, 0)) {
+        match socket.join_multicast_v4(
+            &MCAST_ADDR.parse::<Ipv4Addr>().unwrap(),
+            &Ipv4Addr::new(0, 0, 0, 0),
+        ) {
             Ok(()) => log::debug!("Joined multicast group {}", MCAST_ADDR),
             Err(err) => {
                 log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
-                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to join multicast group {}", MCAST_ADDR)}, err)
-            },
+                return zerror!(
+                    ZErrorKind::IOError {
+                        descr: format!("Unable to join multicast group {}", MCAST_ADDR)
+                    },
+                    err
+                );
+            }
         }
         Ok(socket.into_udp_socket().into())
     }
 
     async fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
-            Ok(socket) => {socket},
+            Ok(socket) => socket,
             Err(err) => {
                 log::error!("Unable to create datagram socket : {}", err);
-                return zerror!(ZErrorKind::IOError{ descr: "Unable to create datagram socket".to_string()}, err)
-            },
+                return zerror!(
+                    ZErrorKind::IOError {
+                        descr: "Unable to create datagram socket".to_string()
+                    },
+                    err
+                );
+            }
         };
         match socket.bind(&SocketAddr::new(addr, 0).into()) {
             Ok(()) => {
                 #[allow(clippy::or_fun_call)]
-                let local_addr = socket.local_addr()
-                    .or::<std::io::Error>(Ok(SocketAddr::new(addr, 0).into())).unwrap().as_std()
-                    .or(Some(SocketAddr::new(addr, 0))).unwrap();
+                let local_addr = socket
+                    .local_addr()
+                    .or::<std::io::Error>(Ok(SocketAddr::new(addr, 0).into()))
+                    .unwrap()
+                    .as_std()
+                    .or(Some(SocketAddr::new(addr, 0)))
+                    .unwrap();
                 log::debug!("UDP port bound to {}", local_addr);
-            },
+            }
             Err(err) => {
                 log::error!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
-                return zerror!(ZErrorKind::IOError{ descr: format!("Unable to bind udp port {}:0", addr.to_string())}, err)
+                return zerror!(
+                    ZErrorKind::IOError {
+                        descr: format!("Unable to bind udp port {}:0", addr.to_string())
+                    },
+                    err
+                );
             }
         }
         Ok(socket.into_udp_socket().into())
@@ -231,11 +307,27 @@ impl SessionOrchestrator {
             let mut delay = CLIENT_SCOUT_INITIAL_PERIOD;
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
             wbuf.write_session_message(&SessionMessage::make_scout(Some(what), true, false, None));
-            loop{
+            loop {
                 log::trace!("Send scout to {}:{}", MCAST_ADDR, MCAST_PORT);
-                if let Err(err) = socket.send_to(&RBuf::from(&wbuf).to_vec(), [MCAST_ADDR, MCAST_PORT].join(":")).await {
-                    log::error!("Unable to send scout to {}:{} : {}", MCAST_ADDR, MCAST_PORT, err);
-                    return zerror!(ZErrorKind::IOError{ descr: "".to_string()}, err)
+                if let Err(err) = socket
+                    .send_to(
+                        &RBuf::from(&wbuf).to_vec(),
+                        [MCAST_ADDR, MCAST_PORT].join(":"),
+                    )
+                    .await
+                {
+                    log::error!(
+                        "Unable to send scout to {}:{} : {}",
+                        MCAST_ADDR,
+                        MCAST_PORT,
+                        err
+                    );
+                    return zerror!(
+                        ZErrorKind::IOError {
+                            descr: "".to_string()
+                        },
+                        err
+                    );
                 }
                 async_std::task::sleep(Duration::from_millis(delay)).await;
                 if delay * CLIENT_SCOUT_PERIOD_INCREASE_FACTOR <= CLIENT_SCOUT_MAX_PERIOD {
@@ -251,45 +343,52 @@ impl SessionOrchestrator {
                 log::trace!("Received UDP datagram {}", rbuf);
                 if let Ok(msg) = rbuf.read_session_message() {
                     log::trace!("Received {:?}", msg);
-                    if let SessionBody::Hello(Hello{whatami, locators, ..}) = msg.get_body() {
+                    if let SessionBody::Hello(Hello {
+                        whatami, locators, ..
+                    }) = msg.get_body()
+                    {
                         let whatami = whatami.or(Some(whatami::BROKER)).unwrap();
                         if whatami & what != 0 {
                             log::info!("Found {:?}", msg);
                             if let Some(locators) = locators {
                                 for locator in locators {
                                     if self.manager.open_session(locator, &None).await.is_ok() {
-                                        log::debug!("Successfully connected to newly scouted {:?}", msg);
-                                        return Ok(())
+                                        log::debug!(
+                                            "Successfully connected to newly scouted {:?}",
+                                            msg
+                                        );
+                                        return Ok(());
                                     }
                                 }
                                 log::warn!("Unable to connect to scouted {:?}", msg);
-                            } else { log::warn!("Received hello with no locators : {:?}", msg); }
+                            } else {
+                                log::warn!("Received hello with no locators : {:?}", msg);
+                            }
                         } else {
                             log::warn!("Received unexpected hello : {:?}", msg);
                         }
                     }
                 }
-            }    
+            }
         };
         async_std::prelude::FutureExt::race(send, recv).await
     }
 
     // @TODO try to reconnect on disconnection
     async fn connector(&self, peers: Vec<Locator>) {
-        futures::future::join_all(
-            peers.into_iter().map(|peer| { async move {
-                loop {
-                    log::trace!("Trying to connect to configured peer {}", peer);
-                    if self.manager.open_session(&peer, &None).await.is_ok() {
-                        log::debug!("Successfully connected to configured peer {}", peer);
-                        break;
-                    } else {
-                        log::warn!("Unable to connect to configured peer {}", peer);
-                    }
-                    async_std::task::sleep(Duration::new(5, 0)).await;
+        futures::future::join_all(peers.into_iter().map(|peer| async move {
+            loop {
+                log::trace!("Trying to connect to configured peer {}", peer);
+                if self.manager.open_session(&peer, &None).await.is_ok() {
+                    log::debug!("Successfully connected to configured peer {}", peer);
+                    break;
+                } else {
+                    log::warn!("Unable to connect to configured peer {}", peer);
                 }
-            }})
-        ).await;
+                async_std::task::sleep(Duration::new(5, 0)).await;
+            }
+        }))
+        .await;
     }
 
     async fn scout(&self, ucast_socket: &UdpSocket, what: WhatAmI) {
@@ -297,10 +396,21 @@ impl SessionOrchestrator {
             let mut delay = PEER_SCOUT_INITIAL_PERIOD;
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
             wbuf.write_session_message(&SessionMessage::make_scout(Some(what), true, false, None));
-            loop{
+            loop {
                 log::trace!("Send scout to {}:{}", MCAST_ADDR, MCAST_PORT);
-                if let Err(err) = ucast_socket.send_to(&RBuf::from(&wbuf).to_vec(), [MCAST_ADDR, MCAST_PORT].join(":")).await {
-                    log::error!("Unable to send scout to {}:{} : {}", MCAST_ADDR, MCAST_PORT, err);
+                if let Err(err) = ucast_socket
+                    .send_to(
+                        &RBuf::from(&wbuf).to_vec(),
+                        [MCAST_ADDR, MCAST_PORT].join(":"),
+                    )
+                    .await
+                {
+                    log::error!(
+                        "Unable to send scout to {}:{} : {}",
+                        MCAST_ADDR,
+                        MCAST_PORT,
+                        err
+                    );
                 }
                 async_std::task::sleep(Duration::from_millis(delay)).await;
                 if delay * PEER_SCOUT_PERIOD_INCREASE_FACTOR <= PEER_SCOUT_MAX_PERIOD {
@@ -316,7 +426,12 @@ impl SessionOrchestrator {
                 log::trace!("Received UDP datagram {}", rbuf);
                 if let Ok(msg) = rbuf.read_session_message() {
                     log::trace!("Received {:?}", msg);
-                    if let SessionBody::Hello(Hello{pid, whatami, locators}) = msg.get_body() {
+                    if let SessionBody::Hello(Hello {
+                        pid,
+                        whatami,
+                        locators,
+                    }) = msg.get_body()
+                    {
                         let whatami = whatami.or(Some(whatami::BROKER)).unwrap();
                         if whatami & what != 0 {
                             match pid {
@@ -326,23 +441,47 @@ impl SessionOrchestrator {
                                             if let Some(locators) = locators {
                                                 let mut success = false;
                                                 for locator in locators {
-                                                    if self.manager.open_session(locator, &None).await.is_ok() {
+                                                    if self
+                                                        .manager
+                                                        .open_session(locator, &None)
+                                                        .await
+                                                        .is_ok()
+                                                    {
                                                         log::debug!("Successfully connected to newly scouted {:?}", msg);
                                                         success = true;
                                                         break;
                                                     }
                                                 }
-                                                if !success { log::warn!("Unable to connect to scouted {:?}", msg); }
-                                            } else { log::warn!("Received hello with no locators : {:?}", msg); }
-                                        } else { log::trace!("Scouted already connected peer : {:?}", msg); }
+                                                if !success {
+                                                    log::warn!(
+                                                        "Unable to connect to scouted {:?}",
+                                                        msg
+                                                    );
+                                                }
+                                            } else {
+                                                log::warn!(
+                                                    "Received hello with no locators : {:?}",
+                                                    msg
+                                                );
+                                            }
+                                        } else {
+                                            log::trace!(
+                                                "Scouted already connected peer : {:?}",
+                                                msg
+                                            );
+                                        }
                                     }
                                 }
-                                None => { log::warn!("Received hello with no pid : {:?}", msg); }
+                                None => {
+                                    log::warn!("Received hello with no pid : {:?}", msg);
+                                }
                             }
-                        } else { log::warn!("Received unexpected hello : {:?}", msg); }
+                        } else {
+                            log::warn!("Received unexpected hello : {:?}", msg);
+                        }
                     }
                 }
-            }    
+            }
         };
         async_std::prelude::FutureExt::race(send, recv).await;
     }
@@ -357,17 +496,21 @@ impl SessionOrchestrator {
                         match zenoh_util::net::get_local_addresses() {
                             Ok(ipaddrs) => {
                                 for ipaddr in ipaddrs {
-                                    if ! ipaddr.is_loopback() && ipaddr.is_ipv4() {
-                                        result.push(format!("tcp/{}:{}", ipaddr.to_string(), addr.port()).parse().unwrap());
+                                    if !ipaddr.is_loopback() && ipaddr.is_ipv4() {
+                                        result.push(
+                                            format!("tcp/{}:{}", ipaddr.to_string(), addr.port())
+                                                .parse()
+                                                .unwrap(),
+                                        );
                                     }
                                 }
-                            },
+                            }
                             Err(err) => log::error!("Unable to get local addresses : {}", err),
                         }
                     } else {
                         result.push(locator)
                     }
-                },
+                }
                 loc => result.push(loc),
             }
         }
@@ -380,9 +523,9 @@ impl SessionOrchestrator {
         loop {
             let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
             if let Ok(local_addr) = ucast_socket.local_addr() {
-                if local_addr == peer { 
+                if local_addr == peer {
                     log::trace!("Ignore UDP datagram from own socket");
-                    continue; 
+                    continue;
                 }
             }
 
@@ -390,16 +533,30 @@ impl SessionOrchestrator {
             log::trace!("Received UDP datagram {}", rbuf);
             if let Ok(msg) = rbuf.read_session_message() {
                 log::trace!("Received {:?}", msg);
-                if let SessionBody::Scout(Scout{what, pid_replies, ..}) = msg.get_body() {
+                if let SessionBody::Scout(Scout {
+                    what, pid_replies, ..
+                }) = msg.get_body()
+                {
                     let what = what.or(Some(whatami::BROKER)).unwrap();
                     if what & self.whatami != 0 {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-                        let pid  = if *pid_replies { Some(self.manager.pid()) } else { None };
-                        let hello = SessionMessage::make_hello( pid, Some(self.whatami), 
-                            Some(self.get_local_locators().await.clone()), None);
+                        let pid = if *pid_replies {
+                            Some(self.manager.pid())
+                        } else {
+                            None
+                        };
+                        let hello = SessionMessage::make_hello(
+                            pid,
+                            Some(self.whatami),
+                            Some(self.get_local_locators().await.clone()),
+                            None,
+                        );
                         log::trace!("Send {:?} to {}", hello, peer);
                         wbuf.write_session_message(&hello);
-                        if let Err(err) = ucast_socket.send_to(&RBuf::from(&wbuf).to_vec(), peer).await {
+                        if let Err(err) = ucast_socket
+                            .send_to(&RBuf::from(&wbuf).to_vec(), peer)
+                            .await
+                        {
                             log::error!("Unable to send {:?} to {} : {}", hello, peer, err);
                         }
                     }

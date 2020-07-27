@@ -11,16 +11,16 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
-use std::time::Duration;
-use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zenoh_util::core::{ZResult, ZError, ZErrorKind};
-use zenoh_util::zerror;
-use zenoh_protocol::core::{PeerId, WhatAmI, whatami};
-use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 use crate::routing::broker::Broker;
 use crate::runtime::orchestrator::SessionOrchestrator;
+use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::fmt;
+use std::time::Duration;
+use zenoh_protocol::core::{whatami, PeerId, WhatAmI};
+use zenoh_protocol::link::Locator;
+use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror;
 
 pub mod orchestrator;
 
@@ -35,13 +35,14 @@ pub struct RuntimeState {
 
 #[derive(Clone)]
 pub struct Runtime {
-    state: Arc<RwLock<RuntimeState>>
+    state: Arc<RwLock<RuntimeState>>,
 }
 
 impl Runtime {
-
     pub async fn new(version: u8, config: Config) -> ZResult<Runtime> {
-        let pid = PeerId{id: uuid::Uuid::new_v4().as_bytes().to_vec()};
+        let pid = PeerId {
+            id: uuid::Uuid::new_v4().as_bytes().to_vec(),
+        };
         log::debug!("Generated PID: {}", pid);
 
         let broker = Arc::new(Broker::new());
@@ -50,7 +51,7 @@ impl Runtime {
             version,
             whatami: config.whatami,
             id: pid.clone(),
-            handler: broker.clone()
+            handler: broker.clone(),
         };
 
         let sm_opt_config = SessionManagerOptionalConfig {
@@ -61,22 +62,25 @@ impl Runtime {
             timeout: None,
             retries: None,
             max_sessions: None,
-            max_links: None 
+            max_links: None,
         };
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
         let mut orchestrator = SessionOrchestrator::new(session_manager, config.whatami);
         match orchestrator.init(config).await {
-            Ok(()) => {
-                Ok(Runtime { 
-                    state: Arc::new(RwLock::new(RuntimeState {
-                        pid,
-                        broker,
-                        orchestrator,
-                    }))
-                })
-            },
-            Err(err) => zerror!(ZErrorKind::Other{ descr: "".to_string()}, err),
+            Ok(()) => Ok(Runtime {
+                state: Arc::new(RwLock::new(RuntimeState {
+                    pid,
+                    broker,
+                    orchestrator,
+                })),
+            }),
+            Err(err) => zerror!(
+                ZErrorKind::Other {
+                    descr: "".to_string()
+                },
+                err
+            ),
         }
     }
 
@@ -98,7 +102,7 @@ impl Runtime {
 }
 
 /// Struct to pass to [open](../../zenoh/net/fn.open.html) to configure the zenoh-net [Session](../../zenoh/net/struct.Session.html).
-/// 
+///
 /// # Examples
 /// ```
 /// # use zenoh_router::runtime::Config;
@@ -116,16 +120,15 @@ pub struct Config {
 }
 
 impl Config {
-
     fn default(whatami: WhatAmI) -> Config {
-        Config { 
+        Config {
             whatami,
             peers: vec![],
             listeners: vec![],
             multicast_interface: "auto".to_string(),
             scouting_delay: Duration::new(0, 250_000_000),
         }
-    }        
+    }
 
     pub fn mode(mut self, w: whatami::Type) -> Self {
         self.whatami = w;
@@ -146,7 +149,8 @@ impl Config {
     }
 
     pub fn add_peers(mut self, locators: Vec<&str>) -> Self {
-        self.peers.extend(locators.iter().map(|l| l.parse().unwrap()));
+        self.peers
+            .extend(locators.iter().map(|l| l.parse().unwrap()));
         self
     }
 
@@ -156,7 +160,8 @@ impl Config {
     }
 
     pub fn add_listeners(mut self, locators: Vec<&str>) -> Self {
-        self.listeners.extend(locators.iter().map(|l| l.parse().unwrap()));
+        self.listeners
+            .extend(locators.iter().map(|l| l.parse().unwrap()));
         self
     }
 
@@ -176,7 +181,7 @@ impl Config {
             "client" => Ok(whatami::CLIENT),
             "router" => Ok(whatami::ROUTER),
             "broker" => Ok(whatami::BROKER),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -191,4 +196,3 @@ impl fmt::Display for Config {
         fmt::Debug::fmt(self, f)
     }
 }
-

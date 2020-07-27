@@ -11,16 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_trait::async_trait;
 use async_std::sync::{Arc, RwLock};
+use async_trait::async_trait;
 use std::collections::HashMap;
 
-use zenoh_protocol::core::{ZInt, ResKey, PeerId, SubInfo, QueryTarget, QueryConsolidation, WhatAmI};
-use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::Primitives;
 use crate::routing::broker::*;
 use crate::routing::ownedprimitives::OwnedPrimitives;
-
+use zenoh_protocol::core::{
+    PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, WhatAmI, ZInt,
+};
+use zenoh_protocol::io::RBuf;
+use zenoh_protocol::proto::Primitives;
 
 pub struct FaceState {
     pub(super) id: usize,
@@ -35,7 +36,11 @@ pub struct FaceState {
 }
 
 impl FaceState {
-    pub(super) fn new(id: usize, whatami: WhatAmI, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<FaceState> {
+    pub(super) fn new(
+        id: usize,
+        whatami: WhatAmI,
+        primitives: Arc<dyn Primitives + Send + Sync>,
+    ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
             whatami,
@@ -52,20 +57,17 @@ impl FaceState {
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(super) fn get_mapping(&self, prefixid: &ZInt) -> Option<&std::sync::Arc<Resource>> {
         match self.remote_mappings.get(prefixid) {
-            Some(prefix) => {Some(prefix)}
-            None => {
-                match self.local_mappings.get(prefixid) {
-                    Some(prefix) => {Some(prefix)}
-                    None => {None}
-                }
-            }
+            Some(prefix) => Some(prefix),
+            None => match self.local_mappings.get(prefixid) {
+                Some(prefix) => Some(prefix),
+                None => None,
+            },
         }
     }
 
     pub(super) fn get_next_local_id(&self) -> ZInt {
         let mut id = 1;
-        while self.local_mappings.get(&id).is_some() || 
-              self.remote_mappings.get(&id).is_some() {
+        while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
             id += 1;
         }
         id
@@ -89,11 +91,18 @@ impl Primitives for Face {
         let mut tables = self.tables.write().await;
         undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
     }
-    
+
     async fn subscriber(&self, reskey: &ResKey, sub_info: &SubInfo) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        declare_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix, sub_info).await;
+        declare_subscription(
+            &mut tables,
+            &mut self.state.clone(),
+            prefixid,
+            suffix,
+            sub_info,
+        )
+        .await;
     }
 
     async fn forget_subscriber(&self, reskey: &ResKey) {
@@ -101,11 +110,11 @@ impl Primitives for Face {
         let mut tables = self.tables.write().await;
         undeclare_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
     }
-    
+
     async fn publisher(&self, _reskey: &ResKey) {}
 
     async fn forget_publisher(&self, _reskey: &ResKey) {}
-    
+
     async fn queryable(&self, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
@@ -121,18 +130,62 @@ impl Primitives for Face {
     async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        route_data(&mut tables, &self.state, prefixid, suffix, reliable, info, payload).await;
+        route_data(
+            &mut tables,
+            &self.state,
+            prefixid,
+            suffix,
+            reliable,
+            info,
+            payload,
+        )
+        .await;
     }
 
-    async fn query(&self, reskey: &ResKey, predicate: &str, qid: ZInt, target: QueryTarget, consolidation: QueryConsolidation) {
+    async fn query(
+        &self,
+        reskey: &ResKey,
+        predicate: &str,
+        qid: ZInt,
+        target: QueryTarget,
+        consolidation: QueryConsolidation,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        route_query(&mut tables, &self.state, prefixid, suffix, predicate, qid, target, consolidation).await;
+        route_query(
+            &mut tables,
+            &self.state,
+            prefixid,
+            suffix,
+            predicate,
+            qid,
+            target,
+            consolidation,
+        )
+        .await;
     }
 
-    async fn reply_data(&self, qid: ZInt, source_kind: ZInt, replier_id: PeerId, reskey: ResKey, info: Option<RBuf>, payload: RBuf) {
+    async fn reply_data(
+        &self,
+        qid: ZInt,
+        source_kind: ZInt,
+        replier_id: PeerId,
+        reskey: ResKey,
+        info: Option<RBuf>,
+        payload: RBuf,
+    ) {
         let mut tables = self.tables.write().await;
-        route_reply_data(&mut tables, &mut self.state.clone(), qid, source_kind, replier_id, reskey, info, payload).await;
+        route_reply_data(
+            &mut tables,
+            &mut self.state.clone(),
+            qid,
+            source_kind,
+            replier_id,
+            reskey,
+            info,
+            payload,
+        )
+        .await;
     }
 
     async fn reply_final(&self, qid: ZInt) {
@@ -140,10 +193,25 @@ impl Primitives for Face {
         route_reply_final(&mut tables, &mut self.state.clone(), qid).await;
     }
 
-    async fn pull(&self, is_final: bool, reskey: &ResKey, pull_id: ZInt, max_samples: &Option<ZInt>) {
+    async fn pull(
+        &self,
+        is_final: bool,
+        reskey: &ResKey,
+        pull_id: ZInt,
+        max_samples: &Option<ZInt>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        pull_data(&mut tables, &self.state.clone(), is_final, prefixid, suffix, pull_id, max_samples).await;
+        pull_data(
+            &mut tables,
+            &self.state.clone(),
+            is_final,
+            prefixid,
+            suffix,
+            pull_id,
+            max_samples,
+        )
+        .await;
     }
 
     async fn close(&self) {
