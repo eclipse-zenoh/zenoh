@@ -17,9 +17,8 @@ use std::fmt;
 use std::hash::Hash;
 use std::str::FromStr;
 
-use zenoh_util::zerror;
 use zenoh_util::core::{ZError, ZErrorKind};
-
+use zenoh_util::zerror;
 
 /*************************************/
 /*          LOCATOR                  */
@@ -35,7 +34,7 @@ const DEFAULT_PORT: &str = "7447";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LocatorProtocol {
-    Tcp
+    Tcp,
 }
 
 impl fmt::Display for LocatorProtocol {
@@ -49,7 +48,7 @@ impl fmt::Display for LocatorProtocol {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Locator {
-    Tcp(SocketAddr)
+    Tcp(SocketAddr),
 }
 
 impl FromStr for Locator {
@@ -58,8 +57,8 @@ impl FromStr for Locator {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let split = s.split(PROTO_SEPARATOR).collect::<Vec<&str>>();
         let (proto, addr) = match split.len() {
-            1 => {(DEFAULT_TRANSPORT, s)}
-            _ => {(split[0], split[1])}
+            1 => (DEFAULT_TRANSPORT, s),
+            _ => (split[0], split[1]),
         };
         match proto {
             STR_TCP => {
@@ -67,30 +66,26 @@ impl FromStr for Locator {
                 let addr = match split.len() {
                     1 => {
                         match addr.parse::<u16>() {
-                            Ok(_) => {[DEFAULT_HOST, addr].join(&PORT_SEPARATOR.to_string())} // port only
-                            Err(_) => {[addr, DEFAULT_PORT].join(&PORT_SEPARATOR.to_string())} // host only
+                            Ok(_) => [DEFAULT_HOST, addr].join(&PORT_SEPARATOR.to_string()), // port only
+                            Err(_) => [addr, DEFAULT_PORT].join(&PORT_SEPARATOR.to_string()), // host only
                         }
                     }
-                    _ => {addr.to_string()}
+                    _ => addr.to_string(),
                 };
                 let addr: SocketAddr = match addr.parse() {
                     Ok(addr) => addr,
                     Err(e) => {
                         let e = format!("Invalid TCP locator: {}", e);
                         log::warn!("{}", e);
-                        return zerror!(ZErrorKind::InvalidLocator {
-                            descr: e
-                        })
+                        return zerror!(ZErrorKind::InvalidLocator { descr: e });
                     }
                 };
                 Ok(Locator::Tcp(addr))
-            },
+            }
             _ => {
                 let e = format!("Invalid protocol locator: {}", proto);
                 log::warn!("{}", e);
-                zerror!(ZErrorKind::InvalidLocator {
-                    descr: e
-                })
+                zerror!(ZErrorKind::InvalidLocator { descr: e })
             }
         }
     }

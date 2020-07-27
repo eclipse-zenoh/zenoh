@@ -11,23 +11,21 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
 use async_std::sync::Arc;
+use std::fmt;
 use std::io::IoSlice;
-
 
 #[derive(Clone)]
 pub struct ArcSlice {
     buf: Arc<Vec<u8>>,
     start: usize,
-    end: usize
+    end: usize,
 }
 
 impl ArcSlice {
-
     pub fn new(buf: Arc<Vec<u8>>, start: usize, end: usize) -> ArcSlice {
         assert!(end <= buf.len());
-        ArcSlice{ buf, start, end }
+        ArcSlice { buf, start, end }
     }
 
     #[inline]
@@ -52,21 +50,24 @@ impl ArcSlice {
 
     pub fn get_sub_slice(&self, start: usize, end: usize) -> &[u8] {
         assert!(end <= self.len());
-        &self.buf[self.start + start .. self.start + end]
-    }
-    
-    pub fn new_sub_slice(&self, start: usize, end: usize) -> ArcSlice {
-        assert!(end <= self.len());
-        ArcSlice{ buf: self.buf.clone(), start: self.start + start, end: self.start + end }
+        &self.buf[self.start + start..self.start + end]
     }
 
+    pub fn new_sub_slice(&self, start: usize, end: usize) -> ArcSlice {
+        assert!(end <= self.len());
+        ArcSlice {
+            buf: self.buf.clone(),
+            start: self.start + start,
+            end: self.start + end,
+        }
+    }
 }
 
 impl std::ops::Index<usize> for ArcSlice {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
-        std::ops::Index::index(&**self.buf, index+self.start)
+        std::ops::Index::index(&**self.buf, index + self.start)
     }
 }
 
@@ -75,11 +76,16 @@ impl fmt::Display for ArcSlice {
         write!(f, "{:02x?}", self.as_slice())
     }
 }
-  
+
 impl fmt::Debug for ArcSlice {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ArcSlice{{ start: {}, end:{}, buf:\n {:02x?} \n}}",
-            self.start, self.end, &self.buf[..])
+        write!(
+            f,
+            "ArcSlice{{ start: {}, end:{}, buf:\n {:02x?} \n}}",
+            self.start,
+            self.end,
+            &self.buf[..]
+        )
     }
 }
 

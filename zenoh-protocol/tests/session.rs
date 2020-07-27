@@ -18,36 +18,30 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use zenoh_protocol::core::{PeerId, ZInt, whatami};
+use zenoh_protocol::core::{whatami, PeerId, ZInt};
 use zenoh_protocol::link::{Link, Locator};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
-    DummyHandler,
-    SessionEventHandler,
-    Session,
-    SessionHandler,
-    SessionManager,
-    SessionManagerConfig,
-    SessionManagerOptionalConfig
+    DummyHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 
-use zenoh_util::zasynclock;
 use zenoh_util::core::ZResult;
-
+use zenoh_util::zasynclock;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 // Session Handler for the router
 struct SHRouterLease {
     new_ses_bar: Arc<Barrier>,
-    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>
+    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>,
 }
 
 impl SHRouterLease {
     fn new(barrier: Arc<Barrier>) -> Self {
-        Self { 
+        Self {
             new_ses_bar: barrier,
-            sessions: Mutex::new(HashMap::new()) 
+            sessions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -58,7 +52,10 @@ impl SHRouterLease {
 
 #[async_trait]
 impl SessionHandler for SHRouterLease {
-    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    async fn new_session(
+        &self,
+        session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         let barrier = Arc::new(Barrier::new(2));
         let mh = Arc::new(MHRouterLease::new(barrier.clone()));
         let peer = session.get_pid()?;
@@ -70,7 +67,7 @@ impl SessionHandler for SHRouterLease {
 }
 
 struct MHRouterLease {
-    barrier: Arc<Barrier>
+    barrier: Arc<Barrier>,
 }
 
 impl MHRouterLease {
@@ -82,7 +79,7 @@ impl MHRouterLease {
 #[async_trait]
 impl SessionEventHandler for MHRouterLease {
     async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-        Ok(()) 
+        Ok(())
     }
 
     async fn new_link(&self, _link: Link) {}
@@ -96,12 +93,14 @@ impl SessionEventHandler for MHRouterLease {
 
 // Session Handler for the client
 struct SHClientLease {
-    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>
+    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>,
 }
 
 impl SHClientLease {
     fn new() -> Self {
-        Self { sessions: Mutex::new(HashMap::new()) }
+        Self {
+            sessions: Mutex::new(HashMap::new()),
+        }
     }
 
     async fn get_barrier(&self, peer: &PeerId) -> Arc<Barrier> {
@@ -111,7 +110,10 @@ impl SHClientLease {
 
 #[async_trait]
 impl SessionHandler for SHClientLease {
-    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    async fn new_session(
+        &self,
+        session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         let barrier = Arc::new(Barrier::new(2));
         let mh = Arc::new(MHCLientLease::new(barrier.clone()));
         let peer = session.get_pid()?;
@@ -121,7 +123,7 @@ impl SessionHandler for SHClientLease {
 }
 
 struct MHCLientLease {
-    barrier: Arc<Barrier>
+    barrier: Arc<Barrier>,
 }
 
 impl MHCLientLease {
@@ -133,7 +135,7 @@ impl MHCLientLease {
 #[async_trait]
 impl SessionEventHandler for MHCLientLease {
     async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-        Ok(()) 
+        Ok(())
     }
 
     async fn new_link(&self, _link: Link) {}
@@ -145,13 +147,12 @@ impl SessionEventHandler for MHCLientLease {
     }
 }
 
-
 async fn session_lease(locator: Locator) {
     let attachment = None;
-    
+
     // Common session lease in milliseconds
     let lease: ZInt = 1_000;
-    
+
     /* [ROUTER] */
     let router_id = PeerId { id: vec![0u8] };
 
@@ -164,7 +165,7 @@ async fn session_lease(locator: Locator) {
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: router_handler.clone()
+        handler: router_handler.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: Some(lease),
@@ -174,10 +175,9 @@ async fn session_lease(locator: Locator) {
         timeout: None,
         retries: None,
         max_sessions: None,
-        max_links: None 
+        max_links: None,
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
-
 
     /* [CLIENT] */
     let client01_id = PeerId { id: vec![1u8] };
@@ -188,7 +188,7 @@ async fn session_lease(locator: Locator) {
         version: 0,
         whatami: whatami::CLIENT,
         id: client01_id.clone(),
-        handler: client01_handler.clone()
+        handler: client01_handler.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: Some(lease),
@@ -198,15 +198,14 @@ async fn session_lease(locator: Locator) {
         timeout: None,
         retries: None,
         max_sessions: None,
-        max_links: None 
+        max_links: None,
     };
     let client01_manager = SessionManager::new(config, Some(opt_config));
-
 
     /* [1] */
     println!("\nSession Lease [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_locator(&locator).await; 
+    let res = router_manager.add_locator(&locator).await;
     println!("Session Lease [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Lease [1a2]");
@@ -214,11 +213,10 @@ async fn session_lease(locator: Locator) {
     println!("Session Lease [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
-
     /* [2] */
-    // Open a session from the client to the router 
+    // Open a session from the client to the router
     println!("\nSession Lease [2a1]");
-    let res = client01_manager.open_session(&locator, &attachment).await;    
+    let res = client01_manager.open_session(&locator, &attachment).await;
     println!("Session Lease [2a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -231,7 +229,6 @@ async fn session_lease(locator: Locator) {
     let links = c_ses1.get_links().await.unwrap();
     println!("Session Lease [2c2]: {:?}", links);
     assert_eq!(links.len(), 1);
-
 
     /* [3] */
     // Verify that the session has been open on the router
@@ -248,8 +245,7 @@ async fn session_lease(locator: Locator) {
     let links = r_ses1.get_links().await.unwrap();
     println!("Session Lease [3d2]: {:?}", links);
     assert_eq!(links.len(), 1);
-  
-    
+
     /* [4] */
     // Close all the links to trigger session lease expiration
     println!("\nSession Lease [4a1]");
@@ -263,10 +259,9 @@ async fn session_lease(locator: Locator) {
         assert!(res.is_ok());
     }
 
-
     /* [5] */
     // Verify that the session has been closed on the router
-    let lease = Duration::from_millis(lease as u64);    
+    let lease = Duration::from_millis(lease as u64);
     let barrier = router_handler.get_barrier(&client01_id).await;
     let res = barrier.wait().timeout(TIMEOUT).await;
     assert!(res.is_ok());
@@ -307,20 +302,17 @@ async fn session_lease(locator: Locator) {
     assert!(res.is_ok());
 }
 
-
-
-
 #[cfg(test)]
 struct SHRouterOpenClose {
     new_ses_bar: Arc<Barrier>,
-    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>
+    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>,
 }
 
 impl SHRouterOpenClose {
     fn new(barrier: Arc<Barrier>) -> Self {
-        Self { 
+        Self {
             new_ses_bar: barrier,
-            sessions: Mutex::new(HashMap::new()) 
+            sessions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -331,7 +323,10 @@ impl SHRouterOpenClose {
 
 #[async_trait]
 impl SessionHandler for SHRouterOpenClose {
-    async fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    async fn new_session(
+        &self,
+        session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         let barrier = Arc::new(Barrier::new(2));
         let mh = Arc::new(MHRouterOpenClose::new(barrier.clone()));
         let peer = session.get_pid()?;
@@ -343,7 +338,7 @@ impl SessionHandler for SHRouterOpenClose {
 }
 
 struct MHRouterOpenClose {
-    barrier: Arc<Barrier>
+    barrier: Arc<Barrier>,
 }
 
 impl MHRouterOpenClose {
@@ -355,7 +350,7 @@ impl MHRouterOpenClose {
 #[async_trait]
 impl SessionEventHandler for MHRouterOpenClose {
     async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-        Ok(()) 
+        Ok(())
     }
 
     async fn new_link(&self, _link: Link) {
@@ -374,17 +369,19 @@ struct SHClientOpenClose {}
 
 impl SHClientOpenClose {
     fn new() -> Self {
-        Self { }
+        Self {}
     }
 }
 
 #[async_trait]
 impl SessionHandler for SHClientOpenClose {
-    async fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    async fn new_session(
+        &self,
+        _session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         Ok(Arc::new(DummyHandler::new()))
     }
 }
-
 
 async fn session_open_close(locator: Locator) {
     let attachment = None;
@@ -401,7 +398,7 @@ async fn session_open_close(locator: Locator) {
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: router_handler.clone()
+        handler: router_handler.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -411,10 +408,9 @@ async fn session_open_close(locator: Locator) {
         timeout: None,
         retries: None,
         max_sessions: Some(1),
-        max_links: Some(2) 
+        max_links: Some(2),
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
-
 
     /* [CLIENT] */
     let client01_id = PeerId { id: vec![1u8] };
@@ -425,7 +421,7 @@ async fn session_open_close(locator: Locator) {
         version: 0,
         whatami: whatami::CLIENT,
         id: client01_id.clone(),
-        handler: Arc::new(SHClientOpenClose::new())
+        handler: Arc::new(SHClientOpenClose::new()),
     };
     let client01_manager = SessionManager::new(config, None);
 
@@ -434,15 +430,14 @@ async fn session_open_close(locator: Locator) {
         version: 0,
         whatami: whatami::CLIENT,
         id: client02_id.clone(),
-        handler: Arc::new(SHClientOpenClose::new())
+        handler: Arc::new(SHClientOpenClose::new()),
     };
     let client02_manager = SessionManager::new(config, None);
-
 
     /* [1] */
     println!("\nSession Open Close [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_locator(&locator).await; 
+    let res = router_manager.add_locator(&locator).await;
     println!("Session Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Open Close [1a2]");
@@ -450,10 +445,10 @@ async fn session_open_close(locator: Locator) {
     println!("Session Open Close [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
-    // Open a first session from the client to the router 
+    // Open a first session from the client to the router
     // -> This should be accepted
     println!("Session Open Close [1c1]");
-    let res = client01_manager.open_session(&locator, &attachment).await;    
+    let res = client01_manager.open_session(&locator, &attachment).await;
     println!("Session Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -482,9 +477,8 @@ async fn session_open_close(locator: Locator) {
     println!("Session Open Close [1g2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
-
     /* [2] */
-    // Open a second session from the client to the router 
+    // Open a second session from the client to the router
     // -> This should be accepted
     println!("\nSession Open Close [2a1]");
     let res = client01_manager.open_session(&locator, &attachment).await;
@@ -518,7 +512,6 @@ async fn session_open_close(locator: Locator) {
     println!("Session Open Close [2e2]: {:?}", links);
     assert_eq!(links.len(), 2);
 
-
     /* [3] */
     // Open session -> This should be rejected because
     // of the maximum limit of links per session
@@ -547,7 +540,6 @@ async fn session_open_close(locator: Locator) {
     let links = r_ses1.get_links().await.unwrap();
     println!("Session Open Close [3e2]: {:?}", links);
     assert_eq!(links.len(), 2);
-
 
     /* [4] */
     // Close the open session on the client
@@ -603,7 +595,6 @@ async fn session_open_close(locator: Locator) {
     println!("Session Open Close [5e2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
-
     /* [6] */
     // Open session -> This should be rejected because
     // of the maximum limit of sessions
@@ -628,7 +619,6 @@ async fn session_open_close(locator: Locator) {
     println!("Session Open Close [6d2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
-
     /* [7] */
     // Close the open session on the client
     println!("\nSession Open Close [7a1]");
@@ -649,7 +639,6 @@ async fn session_open_close(locator: Locator) {
     let sessions = router_manager.get_sessions().await;
     println!("Session Open Close [7c2]: {:?}", sessions);
     assert_eq!(sessions.len(), 0);
-
 
     /* [8] */
     // Open session -> This should be accepted because
@@ -682,7 +671,6 @@ async fn session_open_close(locator: Locator) {
     let links = r_ses1.get_links().await.unwrap();
     println!("Session Open Close [8e2]: {:?}", links);
     assert_eq!(links.len(), 1);
-
 
     /* [9] */
     // Close the open session on the client

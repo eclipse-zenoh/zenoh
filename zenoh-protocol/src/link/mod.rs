@@ -29,9 +29,8 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 
 use crate::session::Transport;
-use zenoh_util::zweak;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-
+use zenoh_util::zweak;
 
 /*************************************/
 /*              LINK                 */
@@ -45,7 +44,7 @@ pub struct Link {
     dst: Locator,
     is_reliable: bool,
     is_streamed: bool,
-    inner: Weak<dyn LinkTrait + Send + Sync>
+    inner: Weak<dyn LinkTrait + Send + Sync>,
 }
 
 impl Link {
@@ -56,7 +55,7 @@ impl Link {
             dst: link.get_dst(),
             is_reliable: link.is_reliable(),
             is_streamed: link.is_streamed(),
-            inner: Arc::downgrade(&link)
+            inner: Arc::downgrade(&link),
         }
     }
 
@@ -113,7 +112,7 @@ impl Link {
 impl Eq for Link {}
 
 impl PartialEq for Link {
-    fn eq(&self, other: &Self) -> bool {        
+    fn eq(&self, other: &Self) -> bool {
         self.inner.ptr_eq(&other.inner)
     }
 }

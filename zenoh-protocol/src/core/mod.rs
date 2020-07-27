@@ -21,7 +21,7 @@ pub mod rname;
 pub type ZInt = u64;
 pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
-pub const ZINT_MAX_BYTES : usize = 10;
+pub const ZINT_MAX_BYTES: usize = 10;
 
 // WhatAmI values
 pub type WhatAmI = whatami::Type;
@@ -30,17 +30,16 @@ pub mod whatami {
 
     pub type Type = ZInt;
 
-    pub const BROKER        : Type = 1;      // 0x01
-    pub const ROUTER        : Type = 1 << 1; // 0x02
-    pub const PEER          : Type = 1 << 2; // 0x04
-    pub const CLIENT        : Type = 1 << 3; // 0x08
-    // b4-b13: Reserved
+    pub const BROKER: Type = 1; // 0x01
+    pub const ROUTER: Type = 1 << 1; // 0x02
+    pub const PEER: Type = 1 << 2; // 0x04
+    pub const CLIENT: Type = 1 << 3; // 0x08
+                                     // b4-b13: Reserved
 }
 
 pub type ResourceId = ZInt;
 
 pub const NO_RESOURCE_ID: ResourceId = 0;
-
 
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
@@ -68,7 +67,7 @@ impl ResKey {
     pub fn is_numerical(&self) -> bool {
         match self {
             RId(_) => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -136,21 +135,20 @@ impl<'a> From<&'a ResKey> for (ResourceId, &'a str) {
         match key {
             RId(rid) => (*rid, ""),
             RName(name) => (NO_RESOURCE_ID, &name[..]), //(&(0 as u64)
-            RIdWithSuffix(rid, suffix) => (*rid, &suffix[..])
+            RIdWithSuffix(rid, suffix) => (*rid, &suffix[..]),
         }
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Property {
     pub key: ZInt,
-    pub value: Vec<u8>
+    pub value: Vec<u8>,
 }
 
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub struct PeerId {
-    pub id: Vec<u8>
+    pub id: Vec<u8>,
 }
 
 impl fmt::Debug for PeerId {
@@ -168,7 +166,7 @@ impl fmt::Display for PeerId {
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct TimeStamp {
     pub time: u64,
-    pub id: Uuid
+    pub id: Uuid,
 }
 
 impl fmt::Debug for TimeStamp {
@@ -184,16 +182,22 @@ impl fmt::Display for TimeStamp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Reliability { BestEffort, Reliable }
+pub enum Reliability {
+    BestEffort,
+    Reliable,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SubMode { Push, Pull }
+pub enum SubMode {
+    Push,
+    Pull,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Period { 
+pub struct Period {
     pub origin: ZInt,
     pub period: ZInt,
-    pub duration: ZInt
+    pub duration: ZInt,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -207,55 +211,57 @@ impl Default for SubInfo {
     fn default() -> SubInfo {
         SubInfo {
             reliability: Reliability::Reliable,
-            mode : SubMode::Push,
-            period: None
-        }  
+            mode: SubMode::Push,
+            period: None,
+        }
     }
 }
 
 pub mod queryable {
-    pub const ALL_KINDS : crate::core::ZInt = 0x01;
-    pub const STORAGE   : crate::core::ZInt = 0x02;
-    pub const EVAL      : crate::core::ZInt = 0x04;
+    pub const ALL_KINDS: crate::core::ZInt = 0x01;
+    pub const STORAGE: crate::core::ZInt = 0x02;
+    pub const EVAL: crate::core::ZInt = 0x04;
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryConsolidation {
     None,
-    LastHop, 
-    Incremental
-    // @TODO: add more if necessary
+    LastHop,
+    Incremental, // @TODO: add more if necessary
 }
 
 impl Default for QueryConsolidation {
-    fn default() -> Self { QueryConsolidation::Incremental }
+    fn default() -> Self {
+        QueryConsolidation::Incremental
+    }
 }
 
 // @TODO: The query target is incomplete
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,
-    Complete {n: ZInt},
+    Complete { n: ZInt },
     All,
     None,
 }
 
 impl Default for Target {
-    fn default() -> Self { Target::BestMatching }
+    fn default() -> Self {
+        Target::BestMatching
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryTarget {
-    pub kind : ZInt,
-    pub target : Target,
+    pub kind: ZInt,
+    pub target: Target,
 }
 
 impl Default for QueryTarget {
-    fn default() -> Self { 
+    fn default() -> Self {
         QueryTarget {
-            kind : queryable::ALL_KINDS, 
-            target : Target::default(), 
+            kind: queryable::ALL_KINDS,
+            target: Target::default(),
         }
     }
 }

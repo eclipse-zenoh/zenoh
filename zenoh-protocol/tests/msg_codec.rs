@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use zenoh_protocol::io::{ RBuf, WBuf };
-use zenoh_protocol::proto::*;
-use zenoh_protocol::core::*;
 use rand::*;
+use zenoh_protocol::core::*;
+use zenoh_protocol::io::{RBuf, WBuf};
+use zenoh_protocol::proto::*;
 
 const NUM_ITER: usize = 100;
 const PROPS_LENGTH: usize = 3;
@@ -24,19 +24,23 @@ const MAX_INFO_SIZE: usize = 128;
 const MAX_PAYLOAD_SIZE: usize = 256;
 
 macro_rules! gen {
-    ($name:ty) => (thread_rng().gen::<$name>());
+    ($name:ty) => {
+        thread_rng().gen::<$name>()
+    };
 }
 
 fn gen_buffer(max_size: usize) -> Vec<u8> {
-    let len : usize = thread_rng().gen_range(1, max_size+1);
-    let mut buf : Vec<u8> = Vec::with_capacity(len);
+    let len: usize = thread_rng().gen_range(1, max_size + 1);
+    let mut buf: Vec<u8> = Vec::with_capacity(len);
     buf.resize(len, 0);
     thread_rng().fill(buf.as_mut_slice());
     buf
 }
 
 fn gen_pid() -> PeerId {
-    PeerId{ id: gen_buffer(PID_MAX_SIZE) }
+    PeerId {
+        id: gen_buffer(PID_MAX_SIZE),
+    }
 }
 
 fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
@@ -44,19 +48,19 @@ fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
     for _ in 0..len {
         let key = gen!(ZInt);
         let value = gen_buffer(max_size);
-        props.push(Property{ key, value });
+        props.push(Property { key, value });
     }
     props
 }
 
 fn gen_reply_context(is_final: bool) -> ReplyContext {
     let qid = gen!(ZInt);
-    let source_kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4) ;
+    let source_kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4);
     let replier_id = if is_final { None } else { Some(gen_pid()) };
     ReplyContext::make(qid, source_kind, replier_id)
 }
 
-fn gen_attachment() -> Attachment {    
+fn gen_attachment() -> Attachment {
     let mut wbuf = WBuf::new(PROP_MAX_SIZE, false);
     let props = gen_props(PROPS_LENGTH, PROP_MAX_SIZE);
     wbuf.write_properties(&props);
@@ -68,37 +72,56 @@ fn gen_attachment() -> Attachment {
 fn gen_declarations() -> Vec<Declaration> {
     use zenoh_protocol::proto::Declaration::*;
     let mut decls = Vec::new();
-    decls.push(Resource  { rid: gen!(ZInt), key: gen_key() });
+    decls.push(Resource {
+        rid: gen!(ZInt),
+        key: gen_key(),
+    });
     decls.push(ForgetResource { rid: gen!(ZInt) });
     decls.push(Publisher { key: gen_key() });
     decls.push(ForgetPublisher { key: gen_key() });
-    decls.push(Subscriber { key: gen_key(), info:
-        SubInfo { 
+    decls.push(Subscriber {
+        key: gen_key(),
+        info: SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
             period: None,
-        } });
-    decls.push(Subscriber { key: gen_key(), info:
-        SubInfo { 
+        },
+    });
+    decls.push(Subscriber {
+        key: gen_key(),
+        info: SubInfo {
             reliability: Reliability::BestEffort,
             mode: SubMode::Pull,
             period: None,
-        } });
-    decls.push(Subscriber { key: gen_key(), info:
-        SubInfo { 
+        },
+    });
+    decls.push(Subscriber {
+        key: gen_key(),
+        info: SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Pull,
-            period: Some(Period {origin: gen!(ZInt), period: gen!(ZInt), duration: gen!(ZInt)} ),
-        } });
-    decls.push(Subscriber             { key: gen_key(), info:
-        SubInfo { 
+            period: Some(Period {
+                origin: gen!(ZInt),
+                period: gen!(ZInt),
+                duration: gen!(ZInt),
+            }),
+        },
+    });
+    decls.push(Subscriber {
+        key: gen_key(),
+        info: SubInfo {
             reliability: Reliability::BestEffort,
             mode: SubMode::Push,
-            period: Some(Period {origin: gen!(ZInt), period: gen!(ZInt), duration: gen!(ZInt)} ),
-        } });
+            period: Some(Period {
+                origin: gen!(ZInt),
+                period: gen!(ZInt),
+                duration: gen!(ZInt),
+            }),
+        },
+    });
     decls.push(ForgetSubscriber { key: gen_key() });
-    decls.push(Queryable                { key: gen_key() });
-    decls.push(ForgetQueryable    { key: gen_key() });
+    decls.push(Queryable { key: gen_key() });
+    decls.push(ForgetQueryable { key: gen_key() });
     decls
 }
 
@@ -106,22 +129,22 @@ fn gen_key() -> ResKey {
     match thread_rng().gen_range::<u8, u8, u8>(0, 3) {
         0 => ResKey::from(gen!(ZInt)),
         1 => ResKey::from("my_resource".to_string()),
-        _ => ResKey::from((gen!(ZInt), "my_resource".to_string()))
+        _ => ResKey::from((gen!(ZInt), "my_resource".to_string())),
     }
 }
 
 fn gen_query_target() -> QueryTarget {
-    let kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4) ;
+    let kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4);
     let target = gen_target();
-    QueryTarget{ kind, target }
+    QueryTarget { kind, target }
 }
 
 fn gen_target() -> Target {
     match thread_rng().gen_range::<u8, u8, u8>(0, 4) {
         0 => Target::BestMatching,
-        1 => Target::Complete { n:3 },
+        1 => Target::Complete { n: 3 },
         2 => Target::All,
-        _ => Target::None
+        _ => Target::None,
     }
 }
 
@@ -129,7 +152,7 @@ fn gen_consolidation() -> QueryConsolidation {
     match thread_rng().gen_range::<u8, u8, u8>(0, 3) {
         0 => QueryConsolidation::None,
         1 => QueryConsolidation::LastHop,
-        _ => QueryConsolidation::Incremental
+        _ => QueryConsolidation::Incremental,
     }
 }
 
@@ -188,7 +211,13 @@ fn scout_tests() {
 fn hello_tests() {
     for _ in 0..NUM_ITER {
         let wami = [None, Some(gen!(ZInt))];
-        let locators = [None, Some(vec!["tcp/1.2.3.4:1234".parse().unwrap(), "tcp/4.5.6.7:4567".parse().unwrap()])];
+        let locators = [
+            None,
+            Some(vec![
+                "tcp/1.2.3.4:1234".parse().unwrap(),
+                "tcp/4.5.6.7:4567".parse().unwrap(),
+            ]),
+        ];
         let attachment = [None, Some(gen_attachment())];
 
         for w in wami.iter() {
@@ -202,20 +231,34 @@ fn hello_tests() {
     }
 }
 
-
 #[test]
 fn open_tests() {
     for _ in 0..NUM_ITER {
         let wami = [whatami::BROKER, whatami::CLIENT];
         let sn_resolution = [None, Some(gen!(ZInt))];
-        let locators = [None, Some(vec!["tcp/1.2.3.4:1234".parse().unwrap(), "tcp/4.5.6.7:4567".parse().unwrap()])];
+        let locators = [
+            None,
+            Some(vec![
+                "tcp/1.2.3.4:1234".parse().unwrap(),
+                "tcp/4.5.6.7:4567".parse().unwrap(),
+            ]),
+        ];
         let attachment = [None, Some(gen_attachment())];
 
         for w in wami.iter() {
             for s in sn_resolution.iter() {
                 for l in locators.iter() {
                     for a in attachment.iter() {
-                        let msg = SessionMessage::make_open(gen!(u8), *w, gen_pid(), gen!(ZInt), gen!(ZInt), s.clone(), l.clone(), a.clone());
+                        let msg = SessionMessage::make_open(
+                            gen!(u8),
+                            *w,
+                            gen_pid(),
+                            gen!(ZInt),
+                            gen!(ZInt),
+                            s.clone(),
+                            l.clone(),
+                            a.clone(),
+                        );
                         test_write_read_session_message(msg);
                     }
                 }
@@ -230,7 +273,13 @@ fn accept_tests() {
         let wami = [whatami::BROKER, whatami::CLIENT];
         let sn_resolution = [None, Some(gen!(ZInt))];
         let lease = [None, Some(gen!(ZInt))];
-        let locators = [None, Some(vec!["tcp/1.2.3.4:1234".parse().unwrap(), "tcp/4.5.6.7:4567".parse().unwrap()])];
+        let locators = [
+            None,
+            Some(vec![
+                "tcp/1.2.3.4:1234".parse().unwrap(),
+                "tcp/4.5.6.7:4567".parse().unwrap(),
+            ]),
+        ];
         let attachment = [None, Some(gen_attachment())];
 
         for w in wami.iter() {
@@ -238,7 +287,16 @@ fn accept_tests() {
                 for d in lease.iter() {
                     for l in locators.iter() {
                         for a in attachment.iter() {
-                            let msg = SessionMessage::make_accept(*w, gen_pid(), gen_pid(), gen!(ZInt), s.clone(), d.clone(), l.clone(), a.clone());
+                            let msg = SessionMessage::make_accept(
+                                *w,
+                                gen_pid(),
+                                gen_pid(),
+                                gen!(ZInt),
+                                s.clone(),
+                                d.clone(),
+                                l.clone(),
+                                a.clone(),
+                            );
                             test_write_read_session_message(msg);
                         }
                     }
@@ -265,7 +323,6 @@ fn close_tests() {
         }
     }
 }
-
 
 #[test]
 fn sync_tests() {
@@ -305,7 +362,7 @@ fn keep_alive_tests() {
     for _ in 0..NUM_ITER {
         let pid = [None, Some(gen_pid())];
         let attachment = [None, Some(gen_attachment())];
-        
+
         for p in pid.iter() {
             for a in attachment.iter() {
                 let msg = SessionMessage::make_keep_alive(p.clone(), a.clone());
@@ -319,7 +376,7 @@ fn keep_alive_tests() {
 fn ping_tests() {
     for _ in 0..NUM_ITER {
         let attachment = [None, Some(gen_attachment())];
-        
+
         for a in attachment.iter() {
             let msg = SessionMessage::make_ping(gen!(ZInt), a.clone());
             test_write_read_session_message(msg);
@@ -331,7 +388,7 @@ fn ping_tests() {
 fn pong_tests() {
     for _ in 0..NUM_ITER {
         let attachment = [None, Some(gen_attachment())];
-        
+
         for a in attachment.iter() {
             let msg = SessionMessage::make_pong(gen!(ZInt), a.clone());
             test_write_read_session_message(msg);
@@ -345,20 +402,35 @@ fn frame_tests() {
 
     for _ in 0..NUM_ITER {
         let ch = [channel::RELIABLE, channel::BEST_EFFORT];
-        let reply_context = [None, Some(gen_reply_context(false)), Some(gen_reply_context(true))];
+        let reply_context = [
+            None,
+            Some(gen_reply_context(false)),
+            Some(gen_reply_context(true)),
+        ];
         let attachment = [None, Some(gen_attachment())];
 
         let mut payload = Vec::new();
-        payload.push(FramePayload::Fragment { buffer: RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)), is_final: false });
-        payload.push(FramePayload::Fragment { buffer: RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)), is_final: true });
+        payload.push(FramePayload::Fragment {
+            buffer: RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+            is_final: false,
+        });
+        payload.push(FramePayload::Fragment {
+            buffer: RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+            is_final: true,
+        });
         for c in ch.iter() {
             for r in reply_context.iter() {
                 for a in attachment.iter() {
-                    payload.push(FramePayload::Messages { messages: vec![ZenohMessage::make_unit(*c, r.clone(), a.clone()); msg_payload_count] });
+                    payload.push(FramePayload::Messages {
+                        messages: vec![
+                            ZenohMessage::make_unit(*c, r.clone(), a.clone());
+                            msg_payload_count
+                        ],
+                    });
                 }
             }
         }
-        
+
         for c in ch.iter() {
             for p in payload.iter() {
                 for a in attachment.iter() {
@@ -371,15 +443,15 @@ fn frame_tests() {
 }
 
 #[test]
-fn frame_batching_tests() {     
-    for _ in 0..NUM_ITER {        
+fn frame_batching_tests() {
+    for _ in 0..NUM_ITER {
         // Contigous batch
         let mut wbuf = WBuf::new(64, true);
         // Written messages
         let mut written: Vec<SessionMessage> = Vec::new();
 
         // Create empty frame message
-        let ch = channel::RELIABLE;        
+        let ch = channel::RELIABLE;
         let payload = FramePayload::Messages { messages: vec![] };
         let sn = gen!(ZInt);
         let sattachment = None;
@@ -395,34 +467,42 @@ fn frame_batching_tests() {
         let payload = RBuf::from(vec![0u8; 1]);
         let reply_context = None;
         let zattachment = None;
-        let data = ZenohMessage::make_data(reliable, key, info, payload, reply_context, zattachment);
+        let data =
+            ZenohMessage::make_data(reliable, key, info, payload, reply_context, zattachment);
 
         // Write the first data message
         assert!(wbuf.write_zenoh_message(&data));
 
         // Store the first session message written
-        let payload = FramePayload::Messages { messages: vec![data.clone(); 1] };
-        written.push(SessionMessage::make_frame(ch, sn, payload, sattachment.clone()));
+        let payload = FramePayload::Messages {
+            messages: vec![data.clone(); 1],
+        };
+        written.push(SessionMessage::make_frame(
+            ch,
+            sn,
+            payload,
+            sattachment.clone(),
+        ));
 
         // Write the second frame header
         assert!(wbuf.write_session_message(&frame));
 
         // Write until we fill the batch
         let mut messages: Vec<ZenohMessage> = Vec::new();
-        loop {           
+        loop {
             wbuf.mark();
             if wbuf.write_zenoh_message(&data) {
                 messages.push(data.clone());
             } else {
                 wbuf.revert();
-                break
+                break;
             }
         }
 
         // Store the second session message written
         let payload = FramePayload::Messages { messages };
-        written.push(SessionMessage::make_frame(ch, sn, payload, sattachment));        
-        
+        written.push(SessionMessage::make_frame(ch, sn, payload, sattachment));
+
         // Deserialize from the buffer
         let mut rbuf = RBuf::from(&wbuf);
 
@@ -433,15 +513,14 @@ fn frame_batching_tests() {
                 Ok(msg) => read.push(msg),
                 Err(_) => {
                     assert!(rbuf.set_pos(pos).is_ok());
-                    break
-                }                
+                    break;
+                }
             }
         }
 
         assert_eq!(written, read);
     }
 }
-
 
 /*************************************/
 /*         ZENOH MESSAGES            */
@@ -464,14 +543,25 @@ fn data_tests() {
     for _ in 0..NUM_ITER {
         let ch = [channel::RELIABLE, channel::BEST_EFFORT];
         let info = [None, Some(RBuf::from(gen_buffer(MAX_INFO_SIZE)))];
-        let reply_context = [None, Some(gen_reply_context(false)), Some(gen_reply_context(true))];
+        let reply_context = [
+            None,
+            Some(gen_reply_context(false)),
+            Some(gen_reply_context(true)),
+        ];
         let attachment = [None, Some(gen_attachment())];
 
         for c in ch.iter() {
             for i in info.iter() {
                 for r in reply_context.iter() {
                     for a in attachment.iter() {
-                        let msg = ZenohMessage::make_data(*c, gen_key(), i.clone(), RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)), r.clone(), a.clone());
+                        let msg = ZenohMessage::make_data(
+                            *c,
+                            gen_key(),
+                            i.clone(),
+                            RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                            r.clone(),
+                            a.clone(),
+                        );
                         test_write_read_zenoh_message(msg);
                     }
                 }
@@ -484,7 +574,11 @@ fn data_tests() {
 fn unit_tests() {
     for _ in 0..NUM_ITER {
         let ch = [channel::RELIABLE, channel::BEST_EFFORT];
-        let reply_context = [None, Some(gen_reply_context(false)), Some(gen_reply_context(true))];
+        let reply_context = [
+            None,
+            Some(gen_reply_context(false)),
+            Some(gen_reply_context(true)),
+        ];
         let attachment = [None, Some(gen_attachment())];
 
         for c in ch.iter() {
@@ -508,7 +602,8 @@ fn pull_tests() {
         for f in is_final.iter() {
             for m in max_samples.iter() {
                 for a in attachment.iter() {
-                    let msg = ZenohMessage::make_pull(*f, gen_key(), gen!(ZInt), m.clone(), a.clone());
+                    let msg =
+                        ZenohMessage::make_pull(*f, gen_key(), gen!(ZInt), m.clone(), a.clone());
                     test_write_read_zenoh_message(msg);
                 }
             }
@@ -526,7 +621,14 @@ fn query_tests() {
         for p in predicate.iter() {
             for t in target.iter() {
                 for a in attachment.iter() {
-                    let msg = ZenohMessage::make_query(gen_key(), p.clone(), gen!(ZInt), t.clone(), gen_consolidation(), a.clone());
+                    let msg = ZenohMessage::make_query(
+                        gen_key(),
+                        p.clone(),
+                        gen!(ZInt),
+                        t.clone(),
+                        gen_consolidation(),
+                        a.clone(),
+                    );
                     test_write_read_zenoh_message(msg);
                 }
             }

@@ -17,22 +17,22 @@ use async_std::task;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh_protocol::core::{PeerId, ResKey, whatami};
+use zenoh_protocol::core::{whatami, PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::{Link, Locator};
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol::session::{SessionEventHandler, Session, SessionHandler, SessionManager, SessionManagerConfig};
+use zenoh_protocol::session::{
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+};
 use zenoh_util::core::ZResult;
-
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 // Messages to send at each test
 const MSG_COUNT: usize = 1_000;
 
-
 // Session Handler for the router
 struct SHRouter {
-    barrier: Arc<Barrier>
+    barrier: Arc<Barrier>,
 }
 
 impl SHRouter {
@@ -43,8 +43,11 @@ impl SHRouter {
 
 #[async_trait]
 impl SessionHandler for SHRouter {
-    async fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        let arc = Arc::new(SCRouter::new(self.barrier.clone()));        
+    async fn new_session(
+        &self,
+        _session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+        let arc = Arc::new(SCRouter::new(self.barrier.clone()));
         Ok(arc)
     }
 }
@@ -52,14 +55,14 @@ impl SessionHandler for SHRouter {
 // Session Callback for the router
 pub struct SCRouter {
     barrier: Arc<Barrier>,
-    count: AtomicUsize
+    count: AtomicUsize,
 }
 
 impl SCRouter {
     pub fn new(barrier: Arc<Barrier>) -> Self {
         Self {
             barrier,
-            count: AtomicUsize::new(0)
+            count: AtomicUsize::new(0),
         }
     }
 }
@@ -71,7 +74,7 @@ impl SessionEventHandler for SCRouter {
         if self.count.load(Ordering::SeqCst) == MSG_COUNT {
             self.count.store(0, Ordering::SeqCst);
             let res = self.barrier.wait().timeout(TIMEOUT).await;
-            assert!(res.is_ok());            
+            assert!(res.is_ok());
         }
         Ok(())
     }
@@ -82,7 +85,6 @@ impl SessionEventHandler for SCRouter {
 
     async fn close(&self) {}
 }
-
 
 // Session Handler for the client
 struct SHClient {}
@@ -95,20 +97,23 @@ impl SHClient {
 
 #[async_trait]
 impl SessionHandler for SHClient {
-    async fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    async fn new_session(
+        &self,
+        _session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         Ok(Arc::new(SCClient::new()))
     }
 }
 
 // Session Callback for the client
 pub struct SCClient {
-    count: AtomicUsize
+    count: AtomicUsize,
 }
 
 impl SCClient {
     pub fn new() -> Self {
         Self {
-            count: AtomicUsize::new(0) 
+            count: AtomicUsize::new(0),
         }
     }
 }
@@ -127,14 +132,13 @@ impl SessionEventHandler for SCClient {
     async fn close(&self) {}
 }
 
-
 async fn channel_base_inner() {
     // Define the locator
     let locator: Locator = "tcp/127.0.0.1:8888".parse().unwrap();
 
     // Define client and router IDs
-    let client_id = PeerId{id: vec![0u8]};
-    let router_id = PeerId{id: vec![1u8]};
+    let client_id = PeerId { id: vec![0u8] };
+    let router_id = PeerId { id: vec![1u8] };
 
     // The barrier for synchronizing the test
     let barrier = Arc::new(Barrier::new(2));
@@ -145,7 +149,7 @@ async fn channel_base_inner() {
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id,
-        handler: router_handler.clone()
+        handler: router_handler.clone(),
     };
     let router_manager = SessionManager::new(config, None);
 
@@ -154,12 +158,12 @@ async fn channel_base_inner() {
         version: 0,
         whatami: whatami::CLIENT,
         id: client_id,
-        handler: Arc::new(SHClient::new())
+        handler: Arc::new(SHClient::new()),
     };
     let client_manager = SessionManager::new(config, None);
 
     // Create the listener on the router
-    let res = router_manager.add_locator(&locator).await; 
+    let res = router_manager.add_locator(&locator).await;
     assert!(res.is_ok());
 
     // Create an empty session with the client
@@ -181,17 +185,17 @@ async fn channel_base_inner() {
 
     // Schedule the messages
     println!("Sending {} reliable messages via schedule()", MSG_COUNT);
-    for _ in 0..MSG_COUNT { 
+    for _ in 0..MSG_COUNT {
         session.schedule(message.clone(), None).await.unwrap();
     }
 
     // Wait for the messages to arrive to the other side
-    let res = barrier.wait().timeout(TIMEOUT).await;    
+    let res = barrier.wait().timeout(TIMEOUT).await;
     assert!(res.is_ok());
 
     /* [2] */
     // Send unreliable messages by using schedule()
-    let reliable = false; 
+    let reliable = false;
     let key = ResKey::RName("/test".to_string());
     let info = None;
     let payload = RBuf::from(vec![0u8; 1]);
@@ -201,12 +205,12 @@ async fn channel_base_inner() {
 
     // Schedule the messages
     println!("Sending {} best effort messages via schedule()", MSG_COUNT);
-    for _ in 0..MSG_COUNT { 
+    for _ in 0..MSG_COUNT {
         session.schedule(message.clone(), None).await.unwrap();
     }
 
     // Wait for the messages to arrive to the other side
-    let res = barrier.wait().timeout(TIMEOUT).await;    
+    let res = barrier.wait().timeout(TIMEOUT).await;
     assert!(res.is_ok());
 
     /* [3] */
@@ -220,18 +224,21 @@ async fn channel_base_inner() {
     let message = ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
 
     // Schedule the messages
-    println!("Sending {} reliable messages via handle_message()", MSG_COUNT);
-    for _ in 0..MSG_COUNT { 
+    println!(
+        "Sending {} reliable messages via handle_message()",
+        MSG_COUNT
+    );
+    for _ in 0..MSG_COUNT {
         session.handle_message(message.clone()).await.unwrap();
     }
 
     // Wait for the messages to arrive to the other side
-    let res = barrier.wait().timeout(TIMEOUT).await;    
+    let res = barrier.wait().timeout(TIMEOUT).await;
     assert!(res.is_ok());
 
     /* [4] */
     // Send unreliable messages by using handle_message()
-    let reliable = false; 
+    let reliable = false;
     let key = ResKey::RName("/test".to_string());
     let info = None;
     let payload = RBuf::from(vec![0u8; 1]);
@@ -240,13 +247,16 @@ async fn channel_base_inner() {
     let message = ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
 
     // Schedule the messages
-    println!("Sending {} best effort messages via handle_message()", MSG_COUNT);
-    for _ in 0..MSG_COUNT { 
+    println!(
+        "Sending {} best effort messages via handle_message()",
+        MSG_COUNT
+    );
+    for _ in 0..MSG_COUNT {
         session.handle_message(message.clone()).await.unwrap();
     }
 
     // Wait for the messages to arrive to the other side
-    let res = barrier.wait().timeout(TIMEOUT).await;    
+    let res = barrier.wait().timeout(TIMEOUT).await;
     assert!(res.is_ok());
 
     let _ = session.close().await;
