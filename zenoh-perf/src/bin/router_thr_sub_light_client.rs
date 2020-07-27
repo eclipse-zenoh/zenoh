@@ -12,26 +12,30 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::future;
-use async_std::task;
 use async_std::sync::{Arc, Mutex};
+use async_std::task;
 use async_trait::async_trait;
 use rand::RngCore;
 use std::time::Instant;
 use zenoh_protocol::core::{PeerId, ResKey, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{Primitives, SubInfo, Reliability, SubMode, QueryConsolidation, QueryTarget, Reply, Mux, DeMux, WhatAmI, whatami};
-use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionHandler, SessionEventHandler};
+use zenoh_protocol::proto::{
+    whatami, DeMux, Mux, Primitives, QueryConsolidation, QueryTarget, Reliability, Reply, SubInfo,
+    SubMode, WhatAmI,
+};
+use zenoh_protocol::session::{
+    SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+};
 
 const N: usize = 100_000;
 
 struct Stats {
     count: usize,
-    start: Instant
+    start: Instant,
 }
 
 impl Stats {
-
     pub fn print(&self) {
         let elapsed = self.start.elapsed().as_secs_f64();
         let thpt = N as f64 / elapsed;
@@ -48,8 +52,8 @@ impl ThrouputPrimitives {
         ThrouputPrimitives {
             stats: Mutex::new(Stats {
                 count: 0,
-                start: Instant::now()
-            })
+                start: Instant::now(),
+            }),
         }
     }
 }
@@ -62,16 +66,15 @@ impl Default for ThrouputPrimitives {
 
 #[async_trait]
 impl Primitives for ThrouputPrimitives {
-
     async fn resource(&self, _rid: ZInt, _reskey: &ResKey) {}
     async fn forget_resource(&self, _rid: ZInt) {}
-    
+
     async fn publisher(&self, _reskey: &ResKey) {}
     async fn forget_publisher(&self, _reskey: &ResKey) {}
-    
+
     async fn subscriber(&self, _reskey: &ResKey, _sub_info: &SubInfo) {}
     async fn forget_subscriber(&self, _reskey: &ResKey) {}
-    
+
     async fn queryable(&self, _reskey: &ResKey) {}
     async fn forget_queryable(&self, _reskey: &ResKey) {}
 
@@ -85,11 +88,26 @@ impl Primitives for ThrouputPrimitives {
         } else {
             stats.print();
             stats.count = 0;
-        }  
+        }
     }
-    async fn query(&self, _reskey: &ResKey, _predicate: &str, _qid: ZInt, _target: QueryTarget, _consolidation: QueryConsolidation) {}
+    async fn query(
+        &self,
+        _reskey: &ResKey,
+        _predicate: &str,
+        _qid: ZInt,
+        _target: QueryTarget,
+        _consolidation: QueryConsolidation,
+    ) {
+    }
     async fn reply(&self, _qid: ZInt, _reply: &Reply) {}
-    async fn pull(&self, _is_final: bool, _reskey: &ResKey, _pull_id: ZInt, _max_samples: &Option<ZInt>) {}
+    async fn pull(
+        &self,
+        _is_final: bool,
+        _reskey: &ResKey,
+        _pull_id: ZInt,
+        _max_samples: &Option<ZInt>,
+    ) {
+    }
 
     async fn close(&self) {}
 }
@@ -100,22 +118,27 @@ struct LightSessionHandler {
 
 impl LightSessionHandler {
     pub fn new() -> LightSessionHandler {
-        LightSessionHandler { handler: Mutex::new(None),}
+        LightSessionHandler {
+            handler: Mutex::new(None),
+        }
     }
 }
 
 #[async_trait]
 impl SessionHandler for LightSessionHandler {
-    async fn new_session(&self, _whatami: WhatAmI, session: Arc<dyn SessionEventHandler + Send + Sync>) -> Arc<dyn SessionEventHandler + Send + Sync> {
+    async fn new_session(
+        &self,
+        _whatami: WhatAmI,
+        session: Arc<dyn SessionEventHandler + Send + Sync>,
+    ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         *self.handler.lock().await = Some(session);
         Arc::new(DeMux::new(ThrouputPrimitives::new()))
     }
 }
 
-
 fn print_usage(bin: String) {
     println!(
-"Usage:
+        "Usage:
     cargo run --release --bin {} <locator to connect to>
 Example: 
     cargo run --release --bin {} tcp/127.0.0.1:7447",
@@ -133,9 +156,14 @@ fn main() {
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
-    
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
+
     // Get next arg
     let value = if let Some(value) = args.next() {
         value
@@ -152,26 +180,34 @@ fn main() {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::CLIENT,
-        id: PeerId{id: pid.clone()},
-        handler: session_handler.clone()
+        id: PeerId { id: pid.clone() },
+        handler: session_handler.clone(),
     };
     let manager = SessionManager::new(config, None);
 
     task::block_on(async {
         let attachment = None;
-        if let Err(_err) =  manager.open_session(&connect_to, &attachment).await {
+        if let Err(_err) = manager.open_session(&connect_to, &attachment).await {
             println!("Unable to connect to {}!", connect_to);
-            return
+            return;
         }
-    
-        let primitives = Mux::new(session_handler.handler.lock().await.as_ref().unwrap().clone());
+
+        let primitives = Mux::new(
+            session_handler
+                .handler
+                .lock()
+                .await
+                .as_ref()
+                .unwrap()
+                .clone(),
+        );
 
         primitives.resource(1, &"/tp".to_string().into()).await;
         let rid = ResKey::RId(1);
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
-            period: None
+            period: None,
         };
         primitives.subscriber(&rid, &sub_info).await;
 

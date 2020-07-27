@@ -19,30 +19,34 @@ use rand::RngCore;
 use slab::Slab;
 
 use zenoh_protocol::core::PeerId;
-use zenoh_protocol::proto::{ZenohMessage, WhatAmI, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig};
+use zenoh_protocol::proto::{whatami, WhatAmI, ZenohMessage};
+use zenoh_protocol::session::{
+    SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+};
 use zenoh_util::core::ZResult;
-
 
 type Table = Arc<Mutex<Slab<Arc<dyn SessionEventHandler + Send + Sync>>>>;
 
 // Session Handler for the peer
 struct MySH {
-    table: Table
+    table: Table,
 }
 
 impl MySH {
     fn new() -> Self {
-        Self { table: Arc::new(Mutex::new(Slab::new())) }
+        Self {
+            table: Arc::new(Mutex::new(Slab::new())),
+        }
     }
 }
 
 #[async_trait]
 impl SessionHandler for MySH {
-    async fn new_session(&self, 
-        _whatami: WhatAmI, 
-        session: Arc<dyn SessionEventHandler + Send + Sync>
+    async fn new_session(
+        &self,
+        _whatami: WhatAmI,
+        session: Arc<dyn SessionEventHandler + Send + Sync>,
     ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         let index = self.table.lock().await.insert(session);
         Arc::new(MyMH::new(self.table.clone(), index))
@@ -52,7 +56,7 @@ impl SessionHandler for MySH {
 // Message Handler for the peer
 struct MyMH {
     table: Table,
-    index: usize
+    index: usize,
 }
 
 impl MyMH {
@@ -79,7 +83,7 @@ impl SessionEventHandler for MyMH {
 
 fn print_usage(bin: String) {
     println!(
-"Usage:
+        "Usage:
     cargo run --release --bin {} <locator to listen on>
 Example: 
     cargo run --release --bin {} tcp/127.0.0.1:7447",
@@ -97,8 +101,13 @@ fn main() {
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
 
     // Get next arg
     let value = if let Some(value) = args.next() {
@@ -111,13 +120,13 @@ fn main() {
     } else {
         return print_usage(bin);
     };
-    
+
     // Create the session manager
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::PEER,
-        id: PeerId{id: pid},
-        handler: Arc::new(MySH::new())
+        id: PeerId { id: pid },
+        handler: Arc::new(MySH::new()),
     };
     let manager = SessionManager::new(config, None);
 

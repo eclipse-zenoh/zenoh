@@ -11,22 +11,21 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::task;
 use async_std::sync::Arc;
+use async_std::task;
 
 use rand::RngCore;
 use std::time::Duration;
 
 use zenoh_protocol::core::{PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{Mux, whatami};
-use zenoh_protocol::session::{SessionManager, SessionManagerConfig, DummyHandler};
+use zenoh_protocol::proto::{whatami, Mux};
+use zenoh_protocol::session::{DummyHandler, SessionManager, SessionManagerConfig};
 use zenoh_router::routing::broker::Broker;
-
 
 fn print_usage(bin: String) {
     println!(
-"Usage:
+        "Usage:
     cargo run --release --bin {} <payload size in bytes> [<locator to connect to>]
 Example: 
     cargo run --release --bin {} 8100 tcp/127.0.0.1:7447",
@@ -44,9 +43,14 @@ fn main() {
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
-    
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
+
     // Get next arg
     let value = if let Some(value) = args.next() {
         value
@@ -59,33 +63,36 @@ fn main() {
         return print_usage(bin);
     };
 
-    let my_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));  
+    let my_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
     let broker = Arc::new(Broker::new());
 
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::CLIENT,
-        id: PeerId{id: pid},
-        handler: broker.clone()
+        id: PeerId { id: pid },
+        handler: broker.clone(),
     };
     let manager = SessionManager::new(config, None);
 
-    task::block_on(async{
+    task::block_on(async {
         let mut has_locator = false;
         let attachment = None;
         for locator in args {
             has_locator = true;
-            if let Err(_err) =  manager.open_session(&locator.parse().unwrap(), &attachment).await {
+            if let Err(_err) = manager
+                .open_session(&locator.parse().unwrap(), &attachment)
+                .await
+            {
                 println!("Unable to connect to {}!", locator);
-                return
+                return;
             }
         }
 
         if !has_locator {
             print_usage(bin);
-            return
+            return;
         }
-    
+
         let primitives = broker.new_primitives(my_primitives).await;
 
         primitives.resource(1, &"/tp".to_string().into()).await;
@@ -95,7 +102,7 @@ fn main() {
         // @TODO: Fix writer starvation in the RwLock and remove this sleep
         // Wait for the declare to arrive
         task::sleep(Duration::from_millis(1_000)).await;
-        
+
         let payload = RBuf::from(vec![0u8; pl_size]);
         loop {
             primitives.data(&rid, true, &None, payload.clone()).await;

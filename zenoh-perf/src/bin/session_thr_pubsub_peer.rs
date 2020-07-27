@@ -20,28 +20,34 @@ use std::time::Duration;
 
 use zenoh_protocol::core::{PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{ZenohMessage, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig};
+use zenoh_protocol::proto::{whatami, ZenohMessage};
+use zenoh_protocol::session::{
+    SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+};
 use zenoh_util::core::ZResult;
 
 // Session Handler for the peer
 struct MySH {
     counter: Arc<AtomicUsize>,
-    active: AtomicBool
+    active: AtomicBool,
 }
 
 impl MySH {
     fn new(counter: Arc<AtomicUsize>) -> Self {
-        Self { counter, active: AtomicBool::new(false) }
+        Self {
+            counter,
+            active: AtomicBool::new(false),
+        }
     }
 }
 
 #[async_trait]
 impl SessionHandler for MySH {
-    async fn new_session(&self, 
-        _whatami: whatami::Type, 
-        _session: Arc<dyn SessionEventHandler + Send + Sync>
+    async fn new_session(
+        &self,
+        _whatami: whatami::Type,
+        _session: Arc<dyn SessionEventHandler + Send + Sync>,
     ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         if !self.active.swap(true, Ordering::Acquire) {
             let count = self.counter.clone();
@@ -59,7 +65,7 @@ impl SessionHandler for MySH {
 
 // Message Handler for the peer
 struct MyMH {
-    counter: Arc<AtomicUsize>
+    counter: Arc<AtomicUsize>,
 }
 
 impl MyMH {
@@ -100,8 +106,13 @@ fn main() {
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
 
     // Get next arg
     let value = if let Some(value) = args.next() {
@@ -142,8 +153,8 @@ fn main() {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::PEER,
-        id: PeerId{id: pid},
-        handler: Arc::new(MySH::new(count))
+        id: PeerId { id: pid },
+        handler: Arc::new(MySH::new(count)),
     };
     let manager = SessionManager::new(config, None);
 
@@ -175,15 +186,13 @@ fn main() {
         let payload = RBuf::from(vec![0u8; payload]);
         let reply_context = None;
 
-
-        let message = ZenohMessage::make_data(
-            reliable, key, info, payload, reply_context, attachment
-        );
+        let message =
+            ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
 
         loop {
             let res = session.handle_message(message.clone()).await;
             if res.is_err() {
-                break
+                break;
             }
         }
     });

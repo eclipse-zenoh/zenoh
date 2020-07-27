@@ -20,28 +20,34 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use zenoh_protocol::core::PeerId;
-use zenoh_protocol::proto::{ZenohMessage, whatami};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::session::{SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig};
+use zenoh_protocol::proto::{whatami, ZenohMessage};
+use zenoh_protocol::session::{
+    SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+};
 use zenoh_util::core::ZResult;
 
 // Session Handler for the peer
 struct MySH {
     counter: Arc<AtomicUsize>,
-    active: AtomicBool
+    active: AtomicBool,
 }
 
 impl MySH {
     fn new(counter: Arc<AtomicUsize>) -> Self {
-        Self { counter, active: AtomicBool::new(false) }
+        Self {
+            counter,
+            active: AtomicBool::new(false),
+        }
     }
 }
 
 #[async_trait]
 impl SessionHandler for MySH {
-    async fn new_session(&self, 
-        _whatami: whatami::Type, 
-        _session: Arc<dyn SessionEventHandler + Send + Sync>
+    async fn new_session(
+        &self,
+        _whatami: whatami::Type,
+        _session: Arc<dyn SessionEventHandler + Send + Sync>,
     ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         if !self.active.swap(true, Ordering::Acquire) {
             let count = self.counter.clone();
@@ -59,7 +65,7 @@ impl SessionHandler for MySH {
 
 // Message Handler for the peer
 struct MyMH {
-    counter: Arc<AtomicUsize>
+    counter: Arc<AtomicUsize>,
 }
 
 impl MyMH {
@@ -82,7 +88,7 @@ impl SessionEventHandler for MyMH {
 
 fn print_usage(bin: String) {
     println!(
-"Usage:
+        "Usage:
     cargo run --release --bin {} <locator to connect to>
 Example: 
     cargo run --release --bin {} tcp/127.0.0.1:7447",
@@ -103,15 +109,20 @@ fn main() {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::PEER,
-        id: PeerId{id: pid},
-        handler: Arc::new(MySH::new(count))
+        id: PeerId { id: pid },
+        handler: Arc::new(MySH::new(count)),
     };
     let manager = SessionManager::new(config, None);
 
     let mut args = std::env::args();
     // Get exe name
-    let bin = args.next().unwrap()
-                .split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
+    let bin = args
+        .next()
+        .unwrap()
+        .split(std::path::MAIN_SEPARATOR)
+        .last()
+        .unwrap()
+        .to_string();
 
     // Get next arg
     let value = if let Some(value) = args.next() {
@@ -126,7 +137,7 @@ fn main() {
     };
 
     let attachment = None;
-    
+
     // Connect to publisher
     task::block_on(async {
         if manager.open_session(&connect_to, &attachment).await.is_ok() {
@@ -135,7 +146,7 @@ fn main() {
             println!("Failed to open session on {}", connect_to);
             return;
         };
-        
+
         // Stop forever
         future::pending::<()>().await;
     });

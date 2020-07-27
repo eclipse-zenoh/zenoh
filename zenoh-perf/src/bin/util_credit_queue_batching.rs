@@ -12,30 +12,21 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::prelude::*;
-use async_std::task;
 use async_std::sync::Arc;
+use async_std::task;
 use std::time::Instant;
 
-use zenoh_util::collections::{
-    CreditBuffer,
-    CreditQueue
-};
+use zenoh_util::collections::{CreditBuffer, CreditQueue};
 
 const SIZE: usize = 1_024;
 const CREDIT: isize = 100;
 const BATCH: usize = 64;
 
-fn main() {    
-    task::block_on(async {  
-        let first = CreditBuffer::new(
-            SIZE, 1isize, CreditBuffer::spending_policy(|_e| 0isize)
-        );
-        let second = CreditBuffer::new(
-            SIZE, 1isize, CreditBuffer::spending_policy(|_e| 0isize)
-        );
-        let third = CreditBuffer::new(
-            SIZE, 1isize, CreditBuffer::spending_policy(|_e| 1isize)
-        );
+fn main() {
+    task::block_on(async {
+        let first = CreditBuffer::new(SIZE, 1isize, CreditBuffer::spending_policy(|_e| 0isize));
+        let second = CreditBuffer::new(SIZE, 1isize, CreditBuffer::spending_policy(|_e| 0isize));
+        let third = CreditBuffer::new(SIZE, 1isize, CreditBuffer::spending_policy(|_e| 1isize));
         let queues = vec![first, second, third];
 
         let acb = Arc::new(CreditQueue::<usize>::new(queues, 16));
@@ -47,37 +38,37 @@ fn main() {
         let now = Instant::now();
         let n = 1_000_000usize;
 
-        let p1 = task::spawn(async move  {
-            for _ in 0..n/BATCH {
-                let v = vec![0; BATCH];  
+        let p1 = task::spawn(async move {
+            for _ in 0..n / BATCH {
+                let v = vec![0; BATCH];
                 cq1.push_batch(v, 0).await;
             }
         });
 
-        let p2 = task::spawn(async move  {
-            for _ in 0..n/BATCH {  
-                let v = vec![1; BATCH];  
+        let p2 = task::spawn(async move {
+            for _ in 0..n / BATCH {
+                let v = vec![1; BATCH];
                 cq2.push_batch(v, 1).await;
             }
         });
 
-        let p3 = task::spawn(async move  {
-            for _ in 0..n/BATCH {   
-                let v = vec![2; BATCH];  
+        let p3 = task::spawn(async move {
+            for _ in 0..n / BATCH {
+                let v = vec![2; BATCH];
                 cq3.push_batch(v, 2).await;
             }
         });
 
-        let p4 = task::spawn(async move  {
-            for _ in 0..n/BATCH {   
-                let v = vec![2; BATCH];  
+        let p4 = task::spawn(async move {
+            for _ in 0..n / BATCH {
+                let v = vec![2; BATCH];
                 cq4.push_batch(v, 2).await;
             }
-        });        
+        });
 
         let c1 = task::spawn(async move {
             let mut count: usize = 0;
-            while count < 4*n {
+            while count < 4 * n {
                 let mut drain = cq5.drain().await;
                 for j in &mut drain {
                     count += 1;
