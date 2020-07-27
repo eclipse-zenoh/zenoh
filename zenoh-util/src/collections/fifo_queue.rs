@@ -13,23 +13,22 @@
 //
 use async_std::sync::{Mutex, MutexGuard};
 
-use crate::zasynclock;
 use crate::collections::CircularBuffer;
 use crate::sync::Condition;
-
+use crate::zasynclock;
 
 pub struct FifoQueue<T> {
     buffer: Mutex<CircularBuffer<T>>,
     not_empty: Condition,
-    not_full: Condition
+    not_full: Condition,
 }
 
 impl<T> FifoQueue<T> {
     pub fn new(capacity: usize, concurrency_level: usize) -> FifoQueue<T> {
-        FifoQueue { 
+        FifoQueue {
             buffer: Mutex::new(CircularBuffer::new(capacity)),
             not_empty: Condition::new(concurrency_level),
-            not_full: Condition::new(concurrency_level)            
+            not_full: Condition::new(concurrency_level),
         }
     }
 
@@ -40,11 +39,11 @@ impl<T> FifoQueue<T> {
                 q.push(x);
                 if self.not_empty.has_waiting_list() {
                     self.not_empty.notify(q).await;
-                }                    
+                }
                 return;
             }
-            self.not_full.wait(q).await;            
-        }            
+            self.not_full.wait(q).await;
+        }
     }
 
     pub async fn pull(&self) -> T {
@@ -76,7 +75,7 @@ impl<T> FifoQueue<T> {
         Drain {
             queue: self,
             drained: false,
-            guard
+            guard,
         }
     }
 
@@ -85,7 +84,7 @@ impl<T> FifoQueue<T> {
         Drain {
             queue: self,
             drained: false,
-            guard: zasynclock!(self.buffer)
+            guard: zasynclock!(self.buffer),
         }
     }
 }
@@ -93,7 +92,7 @@ impl<T> FifoQueue<T> {
 pub struct Drain<'a, T> {
     queue: &'a FifoQueue<T>,
     drained: bool,
-    guard: MutexGuard<'a, CircularBuffer<T>>
+    guard: MutexGuard<'a, CircularBuffer<T>>,
 }
 
 impl<'a, T> Drain<'a, T> {
@@ -116,7 +115,7 @@ impl<'a, T> Iterator for Drain<'_, T> {
     fn next(&mut self) -> Option<T> {
         if let Some(e) = self.guard.pull() {
             self.drained = true;
-            return Some(e)
+            return Some(e);
         }
         None
     }

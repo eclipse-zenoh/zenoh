@@ -11,13 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::fmt;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::ops::{Add, AddAssign, Sub};
 use humantime::format_rfc3339_nanos;
+use std::fmt;
+use std::ops::{Add, AddAssign, Sub};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // maximal number of seconds that can be represented in the 32-bits part
-const MAX_NB_SEC: u64 = (1u64 << 32) -1;
+const MAX_NB_SEC: u64 = (1u64 << 32) - 1;
 // number of NTP fraction per second (2^32)
 const FRAC_PER_SEC: u64 = 1u64 << 32;
 // Bit-mask for the fraction of a second part within an NTP timestamp
@@ -26,16 +26,14 @@ const FRAC_MASK: u64 = 0xFFFF_FFFFu64;
 // number of nanoseconds in 1 second
 const NANO_PER_SEC: u64 = 1_000_000_000;
 
-
 // A timestamp using the NTP 64-bits format (https://tools.ietf.org/html/rfc5905#section-6)
 // Note that this timestamp in actually similar to a std::time::Duration, as it doesn't
 // define an EPOCH. Only the as_system_time() and Display::fmt() operation assume that
 // a UNIX_EPOCH (1st Jan 1970) to display the timpestamp in RFC-3339 format.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct NTP64( pub(crate) u64);
+pub struct NTP64(pub(crate) u64);
 
 impl NTP64 {
-
     #[inline]
     pub fn as_u64(&self) -> u64 {
         self.0
@@ -67,7 +65,7 @@ impl Add for NTP64 {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
-        Self (self.0 + other.0)
+        Self(self.0 + other.0)
     }
 }
 
@@ -103,14 +101,14 @@ impl Add<u64> for NTP64 {
 
     #[inline]
     fn add(self, other: u64) -> Self {
-        Self (self.0 + other)
+        Self(self.0 + other)
     }
 }
 
 impl AddAssign<u64> for NTP64 {
     #[inline]
     fn add_assign(&mut self, other: u64) {
-        *self = Self (self.0 + other);
+        *self = Self(self.0 + other);
     }
 }
 
@@ -119,7 +117,7 @@ impl Sub for NTP64 {
 
     #[inline]
     fn sub(self, other: Self) -> Self {
-        Self (self.0 - other.0)
+        Self(self.0 - other.0)
     }
 }
 
@@ -140,6 +138,6 @@ impl From<Duration> for NTP64 {
         let secs = duration.as_secs();
         assert!(secs <= MAX_NB_SEC);
         let nanos: u64 = duration.subsec_nanos().into();
-        NTP64((secs << 32) + ((nanos * FRAC_PER_SEC) / NANO_PER_SEC) +1)
+        NTP64((secs << 32) + ((nanos * FRAC_PER_SEC) / NANO_PER_SEC) + 1)
     }
 }

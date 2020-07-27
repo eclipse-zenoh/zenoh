@@ -13,15 +13,14 @@
 //
 use async_std::sync::Mutex;
 
-use crate::zasynclock;
 use crate::collections::CircularBuffer;
 use crate::sync::Condition;
-
+use crate::zasynclock;
 
 pub struct PriorityQueue<T> {
     state: Mutex<Vec<CircularBuffer<T>>>,
     not_full: Condition,
-    not_empty: Condition
+    not_empty: Condition,
 }
 
 impl<T> PriorityQueue<T> {
@@ -30,11 +29,11 @@ impl<T> PriorityQueue<T> {
         for c in capacity.iter() {
             state.push(CircularBuffer::new(*c));
         }
-         
-        PriorityQueue { 
+
+        PriorityQueue {
             state: Mutex::new(state),
             not_full: Condition::new(concurrency_level),
-            not_empty: Condition::new(concurrency_level)
+            not_empty: Condition::new(concurrency_level),
         }
     }
 
@@ -48,9 +47,9 @@ impl<T> PriorityQueue<T> {
                     self.not_empty.notify(q).await;
                 }
                 return;
-            }                            
-            self.not_full.wait(q).await; 
-        }            
+            }
+            self.not_full.wait(q).await;
+        }
     }
 
     pub async fn pull(&self) -> T {
@@ -60,7 +59,7 @@ impl<T> PriorityQueue<T> {
                 if let Some(e) = q[priority].pull() {
                     if self.not_full.has_waiting_list() {
                         self.not_full.notify(q).await;
-                    }                   
+                    }
                     return e;
                 }
             }

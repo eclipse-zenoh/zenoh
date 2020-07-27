@@ -11,10 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use rand::{
-    Rng,
-    thread_rng
-};
+use rand::{thread_rng, Rng};
 
 use zenoh_util::collections::OrderedQueue;
 
@@ -49,7 +46,7 @@ fn ordered_queue_order() {
     let sn: usize = 0;
 
     // Add the second element
-    let res = queue.try_push(1, sn+1);
+    let res = queue.try_push(1, sn + 1);
     assert!(res.is_none());
     let res = queue.try_pop();
     assert_eq!(res, None);
@@ -85,7 +82,7 @@ fn ordered_queue_full() {
     let res = queue.try_push(2, sn);
     match res {
         Some(msg) => assert_eq!(msg, 2),
-        None => assert!(false)
+        None => assert!(false),
     }
 
     // Drain the queue
@@ -124,14 +121,14 @@ fn ordered_queue_overflow() {
     let min = usize::min_value();
     let max = usize::max_value();
 
-    queue.set_base(max-1);
-    let res = queue.try_push(0, max-1);
+    queue.set_base(max - 1);
+    let res = queue.try_push(0, max - 1);
     assert!(res.is_none());
     let res = queue.try_push(1, max);
     assert!(res.is_none());
     let res = queue.try_push(2, min);
     assert!(res.is_none());
-    let res = queue.try_push(3, min+1);
+    let res = queue.try_push(3, min + 1);
     assert!(res.is_none());
     let res = queue.try_pop();
     assert_eq!(res, Some(0));
@@ -148,14 +145,13 @@ fn ordered_queue_overflow() {
     assert_eq!(queue.len(), 0);
 }
 
-
 #[test]
 fn ordered_queue_mask() {
     // Test the deterministic insertion of elements and mask
     let size = 64;
     let mut queue: OrderedQueue<usize> = OrderedQueue::new(size);
 
-    let mut sn: usize = 0;  
+    let mut sn: usize = 0;
     while sn < size {
         let res = queue.try_push(sn, sn);
         assert!(res.is_none());
@@ -167,7 +163,7 @@ fn ordered_queue_mask() {
     assert_eq!(queue.get_mask(), mask);
 
     // Insert the missing elements
-    let mut sn: usize = 1;  
+    let mut sn: usize = 1;
     while sn < size {
         let res = queue.try_push(sn, sn);
         assert!(res.is_none());
@@ -297,7 +293,7 @@ fn ordered_queue_rebase() {
     assert_eq!(queue.len(), size);
 
     // Rebase beyond the current boundaries triggering a reset
-    let base = 2*size;
+    let base = 2 * size;
     queue.set_base(base);
     assert_eq!(queue.get_base(), base);
 
@@ -340,19 +336,19 @@ fn ordered_queue_remove() {
     let res = queue.try_remove(1);
     assert_eq!(res, Some(1));
     assert_eq!(queue.len(), 4);
- 
+
     let res = queue.try_remove(0);
     assert_eq!(res, Some(0));
     assert_eq!(queue.len(), 3);
-    
+
     let res = queue.try_remove(2);
     assert_eq!(res, Some(2));
     assert_eq!(queue.len(), 2);
-        
+
     let res = queue.try_remove(4);
     assert_eq!(res, Some(4));
     assert_eq!(queue.len(), 1);
-        
+
     let res = queue.try_remove(6);
     assert_eq!(res, Some(6));
     assert_eq!(queue.len(), 0);
