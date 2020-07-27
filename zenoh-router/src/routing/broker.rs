@@ -32,6 +32,7 @@ pub use crate::routing::resource::*;
 /// # Examples
 /// ```
 ///   use async_std::sync::Arc;
+///   use uhlc::HLC;
 ///   use zenoh_protocol::core::{PeerId, whatami::PEER};
 ///   use zenoh_protocol::io::RBuf;
 ///   use zenoh_protocol::session::{SessionManager, SessionManagerConfig};
@@ -44,7 +45,7 @@ pub use crate::routing::resource::*;
 ///     let dummy_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
 ///   
 ///     // Instanciate broker
-///     let broker = Arc::new(Broker::new());
+///     let broker = Arc::new(Broker::new(HLC::default()));
 ///
 ///     // Instanciate SessionManager and plug it to the broker
 ///     let config = SessionManagerConfig {
