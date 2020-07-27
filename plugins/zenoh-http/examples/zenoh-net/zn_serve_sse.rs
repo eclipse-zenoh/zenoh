@@ -15,8 +15,8 @@
 
 use clap::{App, Arg};
 use futures::prelude::*;
-use zenoh::net::*;
 use zenoh::net::queryable::EVAL;
+use zenoh::net::*;
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -35,15 +35,30 @@ if(typeof(EventSource) !== "undefined") {
 // Argument parsing -- look at the main for the zenoh-related code
 //
 fn parse_args() -> Config {
-  let args = App::new("zenoh-net ssl server example")
-    .arg(Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-        .possible_values(&["peer", "client"]).default_value("peer"))
-    .arg(Arg::from_usage("-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'"))
-    .get_matches();
+    let args = App::new("zenoh-net ssl server example")
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .get_matches();
 
-  Config::default()
-    .mode(args.value_of("mode").map(|m| Config::parse_mode(m)).unwrap().unwrap())
-    .add_peers(args.values_of("peer").map(|p| p.collect()).or_else(|| Some(vec![])).unwrap())
+    Config::default()
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        )
 }
 
 #[async_std::main]
@@ -52,8 +67,8 @@ async fn main() {
     env_logger::init();
 
     let config = parse_args();
-    let path    = "/demo/sse";
-    let value   = "Pub from sse server!";
+    let path = "/demo/sse";
+    let value = "Pub from sse server!";
 
     println!("Openning session...");
     let session = open(config, None).await.unwrap();
@@ -61,30 +76,41 @@ async fn main() {
     println!("Declaring Queryable on {}", path);
     let queryable = session.declare_queryable(&path.into(), EVAL).await.unwrap();
 
-    async_std::task::spawn(
-        queryable.for_each(async move |request|{
-            request.reply(Sample {
+    async_std::task::spawn(queryable.for_each(async move |request| {
+        request
+            .reply(Sample {
                 res_name: path.to_string(),
                 payload: HTML.as_bytes().into(),
                 data_info: None,
-            }).await;
-        })
-    );
+            })
+            .await;
+    }));
 
     let event_path = [path, "/event"].concat();
 
     print!("Declaring Resource {}", event_path);
     let rid = session.declare_resource(&event_path.into()).await.unwrap();
     println!(" => RId {}", rid);
-    
+
     println!("Declaring Publisher on {}", rid);
     let _publ = session.declare_publisher(&rid.into()).await.unwrap();
 
     println!("Writing Data periodically ('{}': '{}')...", rid, value);
 
-    println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}", path);
+    println!(
+        "Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}",
+        path
+    );
     loop {
-        session.write_ext(&rid.into(), value.as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT).await.unwrap();
+        session
+            .write_ext(
+                &rid.into(),
+                value.as_bytes().into(),
+                encoding::TEXT_PLAIN,
+                data_kind::PUT,
+            )
+            .await
+            .unwrap();
         async_std::task::sleep(std::time::Duration::new(1, 0)).await;
     }
 }
