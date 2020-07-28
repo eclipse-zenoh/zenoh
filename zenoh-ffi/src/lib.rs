@@ -202,7 +202,7 @@ pub unsafe extern "C" fn zn_query_res_name(query: *mut ZNQuery) -> *const zn_str
     let bq = Box::from_raw(query);
     let rn = zn_string {
         val: bq.0.res_name.as_ptr() as *const c_char,
-        len: bq.0.res_name.len() as c_uint
+        len: bq.0.res_name.len() as c_uint,
     };
     let _ = Box::into_raw(bq);
     Box::into_raw(Box::new(rn))
@@ -218,7 +218,7 @@ pub unsafe extern "C" fn zn_query_predicate(query: *mut ZNQuery) -> *const zn_st
     let bq = Box::from_raw(query);
     let rn = zn_string {
         val: bq.0.predicate.as_ptr() as *const c_char,
-        len: bq.0.predicate.len() as c_uint
+        len: bq.0.predicate.len() as c_uint,
     };
     let _ = Box::into_raw(bq);
     Box::into_raw(Box::new(rn))
