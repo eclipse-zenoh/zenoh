@@ -35,6 +35,16 @@ pub mod whatami {
     pub const PEER: Type = 1 << 2; // 0x04
     pub const CLIENT: Type = 1 << 3; // 0x08
                                      // b4-b13: Reserved
+
+    pub fn to_str(w: Type) -> String {
+        match w {
+            BROKER => "Broker".to_string(),
+            ROUTER => "Router".to_string(),
+            PEER => "Peer".to_string(),
+            CLIENT => "Client".to_string(),
+            i => i.to_string(),
+        }
+    }
 }
 
 pub type ResourceId = ZInt;

@@ -11,7 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use log::debug;
+use async_std::sync::channel;
+use futures::prelude::*;
+use log::{debug, trace};
+use zenoh_protocol::core::WhatAmI;
+use zenoh_router::runtime::orchestrator::{Loop, SessionOrchestrator};
 
 mod types;
 pub use types::*;
@@ -34,13 +38,61 @@ pub mod utils {
     }
 }
 
-pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
-    // @TODO: implement
-    debug!("scout({}, {}, {})", _iface, _tries, _period);
-    vec![]
+/// Scout for routers and/or peers.
+///
+/// [scout](scout) spawns a task that periodically sends scout messages and returns
+/// a [HelloStream](HelloStream) : a stream of received [Hello](Hello) messages.
+///
+/// Drop the returned [HelloStream](HelloStream) to stop the scouting task.
+///
+/// # Arguments
+///
+/// * `what` - The kind of zenoh process to scout for
+/// * `iface` - The network interface to use for multicast (or "auto")
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use zenoh::net::*;
+/// use futures::prelude::*;
+///
+/// let mut stream = scout(whatami::PEER | whatami::BROKER | whatami::ROUTER, "auto").await;
+/// while let Some(hello) = stream.next().await {
+///     println!("{}", hello);
+/// }
+/// # })
+/// ```
+pub async fn scout(what: WhatAmI, iface: &str) -> HelloStream {
+    debug!("scout({}, {})", what, iface);
+    let (hello_sender, hello_receiver) = channel::<Hello>(1);
+    let (stop_sender, mut stop_receiver) = channel::<()>(1);
+    let iface = SessionOrchestrator::get_interface(iface).unwrap();
+    let socket = SessionOrchestrator::bind_ucast_port(iface).await.unwrap();
+    async_std::task::spawn(async move {
+        let hello_sender = &hello_sender;
+        let scout = SessionOrchestrator::scout(&socket, what, async move |hello| {
+            hello_sender.send(hello).await;
+            Loop::Continue
+        });
+        let stop = async move {
+            stop_receiver.next().await;
+            trace!("stop scout({}, {})", what, iface);
+        };
+        async_std::prelude::FutureExt::race(scout, stop).await;
+    });
+
+    HelloStream {
+        hello_receiver,
+        stop_sender,
+    }
 }
 
 /// Open a zenoh-net [Session](Session).
+///
+/// # Arguments
+///
+/// * `config` - The configuration of the zenoh-net session
+/// * `ps` - Optional properties
 ///
 /// # Examples
 /// ```

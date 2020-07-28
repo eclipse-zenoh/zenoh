@@ -58,6 +58,9 @@ pub use zenoh_protocol::core::ZInt;
 
 pub use zenoh_protocol::core::whatami;
 
+/// A zenoh Hello message.
+pub use zenoh_protocol::proto::Hello;
+
 /// Some informations about the associated data.
 ///
 /// # Examples
@@ -85,6 +88,28 @@ pub type Config = zenoh_router::runtime::Config;
 
 /// A list of key/value pairs.
 pub type Properties = Vec<(ZInt, Vec<u8>)>;
+
+pin_project! {
+    /// A stream of [Hello](Hello) messages.
+    #[derive(Clone, Debug)]
+    pub struct HelloStream {
+        #[pin]
+        pub(crate) hello_receiver: Receiver<Hello>,
+        pub(crate) stop_sender: Sender<()>,
+    }
+}
+
+impl Stream for HelloStream {
+    type Item = Hello;
+
+    #[inline(always)]
+    fn poll_next(
+        self: async_std::pin::Pin<&mut Self>,
+        cx: &mut async_std::task::Context,
+    ) -> async_std::task::Poll<Option<Self::Item>> {
+        self.project().hello_receiver.poll_next(cx)
+    }
+}
 
 /// A zenoh value.
 #[derive(Debug)]
