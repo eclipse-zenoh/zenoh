@@ -17,14 +17,17 @@
 #include <unistd.h>
 #include <string.h>
 
+const char *key_expr = "/demo/example/zenoh-rs-eval";
+const char *value = "Hello from C";
+
 void replier(ZNQuery *query) {
     const zn_string *res = zn_query_res_name(query);
     const zn_string *pred = zn_query_predicate(query);
-    printf("Received query: %.*s:%.*s", res->len, res->val, pred->len, pred->val);
+    printf("Received query: %.*s:%.*s\n", res->len, res->val, pred->len, pred->val);
+    zn_send_reply(query, key_expr, (const unsigned char *)value, strlen(value));
 }
 
 int main(int argc, char** argv) {
-    char *key_expr = "/demo/example/zenoh-rs-eval";
     ZNQueryable *q = 0;
 
     if (argc > 1) {
@@ -40,8 +43,13 @@ int main(int argc, char** argv) {
     }
 
     q = zn_declare_queryable(s, key_expr, EVAL, replier);
-
-    sleep(5);
+    if (q == 0) {
+        printf("Unable to register queryable\n");
+        return -1;
+    }
+    char ch;
+    printf("Press a key to terminate...\n");
+    scanf("%c", &ch);
 
     zn_undeclare_queryable(q);
 }

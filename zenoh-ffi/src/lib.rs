@@ -445,7 +445,6 @@ pub unsafe extern "C" fn zn_declare_subscriber(
                         callback(&sample)
                     },
                     _ = rx.recv().fuse() => {
-                            print!("Notification thread undeclaring sub!\n");
                             let _ = s.0.undeclare_subscriber(sub).await;
                             return ()
                     }
@@ -569,7 +568,6 @@ pub unsafe extern "C" fn zn_declare_queryable(
                   Box::from_raw(rbquery);
                 },
                 _ = rx.recv().fuse() => {
-                    print!("Notification thread undeclaring sub!\n");
                     let _ = s.0.undeclare_queryable(queryable).await;
                     return ()
                 })
