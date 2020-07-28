@@ -17,18 +17,18 @@
 #include <unistd.h>
 #include <string.h>
 
-void sub_callback(const zn_sample *sample) {    
-    printf(">> Received:\n\t (%.*s, %.*s)\n", 
-        sample->key.len, sample->key.val, 
-        sample->value.len, sample->value.val);    
+void sub_callback(const zn_sample *sample) {
+    printf(">> Received:\n\t (%.*s, %.*s)\n",
+        sample->key.len, sample->key.val,
+        sample->value.len, sample->value.val);
 }
 
 int main(int argc, char** argv) {
     char *key_expr = "/demo/example/**";
     ZNSubscriber *sub = 0;
 
-    if (argc > 1) {        
-        key_expr = argv[1];        
+    if (argc > 1) {
+        key_expr = argv[1];
     }
     printf("Subscription expression to %s\n", key_expr);
 
@@ -37,12 +37,12 @@ int main(int argc, char** argv) {
     if (s == 0) {
         printf("Error creating session!\n");
         exit(-1);
-    } 
-    
+    }
+
     sub = zn_declare_subscriber(s, key_expr, sub_callback);
 
     sleep(5);
 
     zn_undeclare_subscriber(sub);
-    
+
 }

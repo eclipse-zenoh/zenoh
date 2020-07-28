@@ -41,7 +41,7 @@ pub enum Declaration {
     /// +---------------+
     /// ~    ResKey     ~ if  K==1 then only numerical id
     /// +---------------+
-    ///    
+    ///
     /// @Olivier, the idea would be to be able to declare a
     /// resource using an ID to avoid sending the prefix.
     /// If we do this however, we open the door to receiving declaration

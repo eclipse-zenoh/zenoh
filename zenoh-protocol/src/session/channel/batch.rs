@@ -70,7 +70,7 @@ impl SerializationBatch {
     ///                   In case of `is_streamed` being true, the first 2 bytes of the serialization batch
     ///                   are used to encode the total amount of serialized bytes as 16-bits little endian.
     ///                   Writing these 2 bytes allows the receiver to detect the amount of bytes it is expected
-    ///                   to read when operating on non-boundary preserving transport protocols.  
+    ///                   to read when operating on non-boundary preserving transport protocols.
     ///
     /// * `sn_reliable` - The sequence number generator for the reliable channel.
     ///

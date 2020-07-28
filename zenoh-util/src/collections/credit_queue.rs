@@ -64,7 +64,7 @@ impl<T> CreditQueue<T> {
     /// Create a new credit-based queue.
     ///
     /// # Arguments
-    /// * `queue` - A vector containing the parameters for the queues in the form of tuples: (capacity, credits)      
+    /// * `queue` - A vector containing the parameters for the queues in the form of tuples: (capacity, credits)
     ///
     /// * `concurrency_level` - The desired concurrency_level when accessing a single priority queue.
     ///
