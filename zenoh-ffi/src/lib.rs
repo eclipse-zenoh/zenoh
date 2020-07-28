@@ -35,6 +35,14 @@ pub static PEER_MODE: c_int = whatami::PEER as c_int;
 #[no_mangle]
 pub static CLIENT_MODE: c_int = whatami::CLIENT as c_int;
 
+// Flags used in Queryable declaration and in queries
+#[no_mangle]
+pub static ALL_KINDS: c_uint = zenoh::net::queryable::ALL_KINDS as c_uint;
+#[no_mangle]
+pub static STORAGE: c_uint = zenoh::net::queryable::STORAGE as c_uint;
+#[no_mangle]
+pub static EVAL: c_uint = zenoh::net::queryable::EVAL as c_uint;
+
 // Properties returned by zn_info()
 #[no_mangle]
 pub static ZN_INFO_PID_KEY: c_uint = 0x00 as c_uint;
@@ -52,6 +60,10 @@ pub struct ZNSubscriber(Option<Arc<Sender<bool>>>);
 pub struct ZNQueryTarget(zenoh::net::QueryTarget);
 
 pub struct ZNQueryConsolidation(zenoh::net::QueryConsolidation);
+
+pub struct ZNQueryable(Option<Arc<Sender<bool>>>);
+
+pub struct ZNQuery(zenoh::net::Query);
 
 #[repr(C)]
 pub struct zn_string {
@@ -180,7 +192,41 @@ pub unsafe extern "C" fn zn_properties_free(rps: *mut ZNProperties) {
     drop(ps);
 }
 
+/// Return the resource name for this query
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_query_res_name(query: *mut ZNQuery) -> *const zn_string {
+    let bq = Box::from_raw(query);
+    let rn = zn_string {
+        val: bq.0.res_name.as_ptr() as *const c_char,
+        len: bq.0.res_name.len() as c_uint
+    };
+    let _ = Box::into_raw(bq);
+    Box::into_raw(Box::new(rn))
+}
+
+/// Return the predicate for this query
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_query_predicate(query: *mut ZNQuery) -> *const zn_string {
+    let bq = Box::from_raw(query);
+    let rn = zn_string {
+        val: bq.0.predicate.as_ptr() as *const c_char,
+        len: bq.0.predicate.len() as c_uint
+    };
+    let _ = Box::into_raw(bq);
+    Box::into_raw(Box::new(rn))
+}
+
 /// Open a zenoh session
+///
+/// Returns the created session or null if the creation did not succeed
 ///
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
@@ -201,9 +247,11 @@ pub unsafe extern "C" fn zn_open(
         };
 
         open(config, None).await
-    })
-    .unwrap();
-    Box::into_raw(Box::new(ZNSession(s)))
+    });
+    match s {
+        Ok(v) => Box::into_raw(Box::new(ZNSession(v))),
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 /// Return information on currently open session along with the the kind of entity for which the
@@ -342,6 +390,8 @@ pub unsafe extern "C" fn zn_write_wrid(
 
 /// Declares a zenoh subscriber
 ///
+/// Returns the created subscriber or null if the declaration failed.
+///
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 ///
@@ -352,7 +402,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
     callback: extern "C" fn(*const zn_sample),
 ) -> *mut ZNSubscriber {
     if session.is_null() || r_name.is_null() {
-        return Box::into_raw(Box::new(ZNSubscriber(None)));
+        return std::ptr::null_mut();
     }
 
     let si: SubInfo = Default::default();
@@ -368,7 +418,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
     // does any blocking call we do not incour the risk of blocking
     // any of the task resolving futures.
     task::spawn_blocking(move || {
-        (task::block_on(async move {
+        task::block_on(async move {
             let key = zn_string {
                 val: std::ptr::null(),
                 len: 0,
@@ -401,7 +451,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
                     }
                 )
             }
-        }))
+        })
     });
     Box::into_raw(Box::new(r))
 }
@@ -469,6 +519,111 @@ pub unsafe extern "C" fn zn_query(
 
                 callback(&source_info, &sample)
             }
+            let _ = Box::into_raw(s);
         })
     });
+}
+
+/// Declares a zenoh queryable entity
+///
+/// Returns the queryable entity or null if the creation was unsuccessful.
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_declare_queryable(
+    session: *mut ZNSession,
+    r_name: *const c_char,
+    kind: c_uint,
+    callback: extern "C" fn(*mut ZNQuery),
+) -> *mut ZNQueryable {
+    if session.is_null() || r_name.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let s = Box::from_raw(session);
+    let name = CStr::from_ptr(r_name).to_str().unwrap();
+
+    let (tx, rx) = channel::<bool>(1);
+    let r = ZNQueryable(Some(Arc::new(tx)));
+
+    let mut queryable: zenoh::net::Queryable =
+        task::block_on(s.0.declare_queryable(&ResKey::RName(name.to_string()), kind as ZInt))
+            .unwrap();
+    // Note: This is done to ensure that even if the call-back into C
+    // does any blocking call we do not incour the risk of blocking
+    // any of the task resolving futures.
+    task::spawn_blocking(move || {
+        task::block_on(async move {
+            loop {
+                select!(
+                query = queryable.next().fuse() => {
+                  // This is a bit brutal but avoids an allocation and
+                  // a copy that would be otherwise required to add the
+                  // C string terminator. See the test_sub.c to find out how to deal
+                  // with non null terminated strings.
+                  let bquery = Box::new(ZNQuery(query.unwrap()));
+                  let rbquery = Box::into_raw(bquery);
+                  callback(rbquery);
+                  Box::from_raw(rbquery);
+                },
+                _ = rx.recv().fuse() => {
+                    print!("Notification thread undeclaring sub!\n");
+                    let _ = s.0.undeclare_queryable(queryable).await;
+                    return ()
+                })
+            }
+        })
+    });
+    Box::into_raw(Box::new(r))
+}
+
+/// Un-declares a zenoh queryable
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_undeclare_queryable(sub: *mut ZNQueryable) {
+    match *Box::from_raw(sub) {
+        ZNQueryable(Some(tx)) => smol::block_on(tx.send(true)),
+        ZNQueryable(None) => (),
+    }
+}
+
+/// Sends a reply to a query.
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_send_reply(
+    query: *mut ZNQuery,
+    key: *const c_char,
+    payload: *const c_uchar,
+    len: c_uint,
+) {
+    let q = Box::from_raw(query);
+
+    let name = CStr::from_ptr(key).to_str().unwrap();
+    let s = Sample {
+        res_name: name.to_string(),
+        payload: slice::from_raw_parts(payload as *const u8, len as usize).into(),
+        data_info: None,
+    };
+    task::block_on(q.0.replies_sender.send(s));
+    let _ = Box::into_raw(q);
+}
+
+/// Notifies the zenoh runtime that there won't be any more replies sent for this
+/// query.
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_close_query(query: *mut ZNQuery) {
+    let bq = Box::from_raw(query);
+    std::mem::drop(bq);
 }
