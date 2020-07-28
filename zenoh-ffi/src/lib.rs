@@ -368,7 +368,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
     // does any blocking call we do not incour the risk of blocking
     // any of the task resolving futures.
     task::spawn_blocking(move || {
-        (task::block_on(async move {
+        task::block_on(async move {
             let key = zn_string {
                 val: std::ptr::null(),
                 len: 0,
@@ -401,7 +401,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
                     }
                 )
             }
-        }))
+        })
     });
     Box::into_raw(Box::new(r))
 }

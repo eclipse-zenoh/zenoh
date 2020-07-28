@@ -17,19 +17,22 @@ use std::fmt;
 use crate::core::ZInt;
 use crate::proto::SeqNum;
 
-use zenoh_util::zerror;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-
+use zenoh_util::zerror;
 
 pub(super) struct ReliabilityQueue<T> {
     sn: SeqNum,
     index: usize,
     len: usize,
-    inner: Vec<Option<T>>
+    inner: Vec<Option<T>>,
 }
 
 impl<T> ReliabilityQueue<T> {
-    pub(super) fn new(capacity: usize, initial_sn: ZInt, sn_resolution: ZInt) -> ReliabilityQueue<T> {
+    pub(super) fn new(
+        capacity: usize,
+        initial_sn: ZInt,
+        sn_resolution: ZInt,
+    ) -> ReliabilityQueue<T> {
         let mut inner = Vec::with_capacity(capacity);
         for _ in 0..capacity {
             inner.push(None);
@@ -39,7 +42,7 @@ impl<T> ReliabilityQueue<T> {
             sn: SeqNum::new(initial_sn, sn_resolution),
             index: 0,
             len: 0,
-            inner
+            inner,
         }
     }
 
@@ -68,19 +71,19 @@ impl<T> ReliabilityQueue<T> {
         self.sn.get()
     }
 
-    pub(super) fn set_base(&mut self, sn: ZInt) -> ZResult<()> {        
+    pub(super) fn set_base(&mut self, sn: ZInt) -> ZResult<()> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
-                Err(_) => usize::MAX
+                Err(_) => usize::MAX,
             },
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
 
         self.sn.set(sn)?;
-                
+
         if gap >= self.capacity() {
-            // If the gap is larger than the capacity, reset the queue            
+            // If the gap is larger than the capacity, reset the queue
             for i in 0..self.capacity() {
                 self.inner[i] = None;
             }
@@ -92,32 +95,37 @@ impl<T> ReliabilityQueue<T> {
                 if self.inner[self.index].is_some() {
                     self.len -= 1;
                     self.inner[self.index] = None;
-                }                
+                }
                 self.index = (self.index + 1) % self.capacity();
-            }           
+            }
         }
 
         Ok(())
     }
 
-    pub(super) fn insert(&mut self, t: T, sn: ZInt) -> ZResult<()>{
+    pub(super) fn insert(&mut self, t: T, sn: ZInt) -> ZResult<()> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
-                Err(e) => return zerror!(ZErrorKind::InvalidResolution {
-                    descr: e.to_string()
-                })
+                Err(e) => {
+                    return zerror!(ZErrorKind::InvalidResolution {
+                        descr: e.to_string()
+                    })
+                }
             },
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
 
         if gap >= self.capacity() {
-            let e = format!("Sequence number is out of sequence number window: {}.\
-                             Base: {}. Capacity: {}", sn, self.sn.get(), self.capacity());
+            let e = format!(
+                "Sequence number is out of sequence number window: {}.\
+                             Base: {}. Capacity: {}",
+                sn,
+                self.sn.get(),
+                self.capacity()
+            );
             log::trace!("{}", e);
-            return zerror!(ZErrorKind::Other {
-                descr: e
-            })
+            return zerror!(ZErrorKind::Other { descr: e });
         }
 
         self.len += 1;
@@ -131,20 +139,25 @@ impl<T> ReliabilityQueue<T> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
-                Err(e) => return zerror!(ZErrorKind::InvalidResolution {
-                    descr: e.to_string()
-                })
+                Err(e) => {
+                    return zerror!(ZErrorKind::InvalidResolution {
+                        descr: e.to_string()
+                    })
+                }
             },
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
 
         if gap >= self.capacity() {
-            let e = format!("Sequence number is out of sequence number window: {}.\
-                             Base: {}. Capacity: {}", sn, self.sn.get(), self.capacity());
+            let e = format!(
+                "Sequence number is out of sequence number window: {}.\
+                             Base: {}. Capacity: {}",
+                sn,
+                self.sn.get(),
+                self.capacity()
+            );
             log::trace!("{}", e);
-            return zerror!(ZErrorKind::Other {
-                descr: e
-            })
+            return zerror!(ZErrorKind::Other { descr: e });
         }
 
         let index = (self.index + gap) % self.capacity();
@@ -154,14 +167,14 @@ impl<T> ReliabilityQueue<T> {
             Some(t) => {
                 self.len -= 1;
                 Ok(t)
-            },
+            }
             None => zerror!(ZErrorKind::Other {
                 descr: "Sequence number not found: {}".to_string()
-            })
+            }),
         }
     }
 
-    pub(super) fn pull(&mut self) -> Option<T> {        
+    pub(super) fn pull(&mut self) -> Option<T> {
         let t = self.inner[self.index].take();
         if t.is_some() {
             self.len -= 1;
@@ -171,14 +184,14 @@ impl<T> ReliabilityQueue<T> {
         t
     }
 
-    /// Returns a bitmask of surely missed messages. 
+    /// Returns a bitmask of surely missed messages.
     /// A bit is set to 1 iff the position in the queue is empty and
     /// there is at least one message with a higher sequence number.
     pub(super) fn get_mask(&self) -> ZInt {
         let mut mask: ZInt = 0;
         let mut count = 0;
         let mut i = 0;
-        while count < self.len() {        
+        while count < self.len() {
             let index = (self.index + i) % self.capacity();
             if self.inner[index].is_none() {
                 mask |= 1 << i;
@@ -196,20 +209,25 @@ impl<T: Clone> ReliabilityQueue<T> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
-                Err(e) => return zerror!(ZErrorKind::InvalidResolution {
-                    descr: e.to_string()
-                })
+                Err(e) => {
+                    return zerror!(ZErrorKind::InvalidResolution {
+                        descr: e.to_string()
+                    })
+                }
             },
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
 
         if gap >= self.capacity() {
-            let e = format!("Sequence number is out of sequence number window: {}.\
-                             Base: {}. Capacity: {}", sn, self.sn.get(), self.capacity());
+            let e = format!(
+                "Sequence number is out of sequence number window: {}.\
+                             Base: {}. Capacity: {}",
+                sn,
+                self.sn.get(),
+                self.capacity()
+            );
             log::trace!("{}", e);
-            return zerror!(ZErrorKind::Other {
-                descr: e
-            })
+            return zerror!(ZErrorKind::Other { descr: e });
         }
 
         let index = (self.index + gap) % self.capacity();
@@ -219,7 +237,7 @@ impl<T: Clone> ReliabilityQueue<T> {
             Some(t) => Ok(t),
             None => zerror!(ZErrorKind::Other {
                 descr: "Sequence number not found: {}".to_string()
-            })
+            }),
         }
     }
 }
@@ -233,11 +251,10 @@ impl<T: fmt::Debug> fmt::Debug for ReliabilityQueue<T> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use rand::{Rng, thread_rng};
     use super::*;
+    use rand::{thread_rng, Rng};
 
     #[test]
     fn reliability_queue_simple() {
@@ -270,7 +287,7 @@ mod tests {
         let sn: ZInt = 0;
 
         // Add the second element
-        let res = queue.insert(1, sn+1);
+        let res = queue.insert(1, sn + 1);
         assert!(res.is_ok());
         let res = queue.pull();
         assert_eq!(res, None);
@@ -339,15 +356,15 @@ mod tests {
         let min: ZInt = 0;
         let max: ZInt = 3;
 
-        let res = queue.set_base(max-1);
+        let res = queue.set_base(max - 1);
         assert!(res.is_ok());
-        let res = queue.insert(0, max-1);
+        let res = queue.insert(0, max - 1);
         assert!(res.is_ok());
         let res = queue.insert(1, max);
         assert!(res.is_ok());
         let res = queue.insert(2, min);
         assert!(res.is_ok());
-        let res = queue.insert(3, min+1);
+        let res = queue.insert(3, min + 1);
         assert!(res.is_ok());
         let res = queue.pull();
         assert_eq!(res, Some(0));
@@ -364,14 +381,13 @@ mod tests {
         assert!(queue.is_empty());
     }
 
-
     #[test]
     fn reliability_queue_mask() {
         // Test the deterministic insertion of elements and mask
         let size = 8;
         let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 8);
 
-        let mut sn: ZInt = 0;  
+        let mut sn: ZInt = 0;
         while sn < size as ZInt {
             let res = queue.insert(sn, sn);
             assert!(res.is_ok());
@@ -383,7 +399,7 @@ mod tests {
         assert_eq!(queue.get_mask(), mask);
 
         // Insert the missing elements
-        let mut sn: ZInt = 1;  
+        let mut sn: ZInt = 1;
         while sn < size as ZInt {
             let res = queue.insert(sn, sn);
             assert!(res.is_ok());
@@ -470,7 +486,7 @@ mod tests {
         // Rebase the queue
         let res = queue.set_base(4);
         assert!(res.is_ok());
-        
+
         // Verify that the base is correct
         assert_eq!(queue.get_base(), 4);
         // Verify that the length of the queue is correct
@@ -505,7 +521,7 @@ mod tests {
         assert!(res.is_ok());
         // Verify that the base is correct
         assert_eq!(queue.get_base(), 0);
-        
+
         // Fill the queue
         for i in 0..size as ZInt {
             // Push the element on the queue is correct
@@ -561,19 +577,19 @@ mod tests {
         let res = queue.remove(1);
         assert_eq!(res.unwrap(), 1);
         assert_eq!(queue.len(), 4);
-     
+
         let res = queue.remove(0);
         assert_eq!(res.unwrap(), 0);
         assert_eq!(queue.len(), 3);
-        
+
         let res = queue.remove(2);
         assert_eq!(res.unwrap(), 2);
         assert_eq!(queue.len(), 2);
-            
+
         let res = queue.remove(4);
         assert_eq!(res.unwrap(), 4);
         assert_eq!(queue.len(), 1);
-            
+
         let res = queue.remove(6);
         assert_eq!(res.unwrap(), 6);
         assert!(queue.is_empty());

@@ -65,10 +65,7 @@ impl ResKey {
     }
 
     pub fn is_numerical(&self) -> bool {
-        match self {
-            RId(_) => true,
-            _ => false,
-        }
+        std::matches!(self, RId(_))
     }
 }
 
