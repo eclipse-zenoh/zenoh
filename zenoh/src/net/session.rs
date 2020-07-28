@@ -17,7 +17,6 @@ use async_std::sync::RwLock;
 use async_std::sync::{channel, Arc, Receiver, Sender};
 use async_std::task;
 use async_trait::async_trait;
-use futures::prelude::*;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::fmt;

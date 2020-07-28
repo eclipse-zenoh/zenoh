@@ -34,7 +34,7 @@ const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
 const MCAST_ADDR: &str = "224.0.0.224";
 const MCAST_PORT: &str = "7447";
 
-enum Loop {
+pub enum Loop {
     Continue,
     Break,
 }
@@ -170,7 +170,7 @@ impl SessionOrchestrator {
         Ok(())
     }
 
-    fn get_interface(name: &str) -> ZResult<IpAddr> {
+    pub fn get_interface(name: &str) -> ZResult<IpAddr> {
         if name == "auto" {
             match zenoh_util::net::get_default_multicast_interface() {
                 Some(addr) => Ok(addr),
@@ -205,7 +205,7 @@ impl SessionOrchestrator {
         }
     }
 
-    async fn bind_mcast_port() -> ZResult<UdpSocket> {
+    pub async fn bind_mcast_port() -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -267,7 +267,7 @@ impl SessionOrchestrator {
         Ok(socket.into_udp_socket().into())
     }
 
-    async fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
+    pub async fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -322,7 +322,7 @@ impl SessionOrchestrator {
         .await;
     }
 
-    async fn scout<Fut, F>(&self, socket: &UdpSocket, what: WhatAmI, mut f: F)
+    pub async fn scout<Fut, F>(socket: &UdpSocket, what: WhatAmI, mut f: F)
     where
         F: FnMut(Hello) -> Fut,
         Fut: Future<Output = Loop>,
@@ -379,7 +379,7 @@ impl SessionOrchestrator {
     }
 
     async fn connect_first(&self, socket: &UdpSocket, what: WhatAmI) -> ZResult<()> {
-        SessionOrchestrator::scout(self, socket, what, async move |hello| {
+        SessionOrchestrator::scout(socket, what, async move |hello| {
             log::info!("Found {:?}", hello);
             if let Some(locators) = &hello.locators {
                 for locator in locators {
@@ -399,7 +399,7 @@ impl SessionOrchestrator {
     }
 
     async fn connect_all(&self, ucast_socket: &UdpSocket, what: WhatAmI) {
-        SessionOrchestrator::scout(self, ucast_socket, what, async move |hello| {
+        SessionOrchestrator::scout(ucast_socket, what, async move |hello| {
             match &hello.pid {
                 Some(pid) => {
                     if pid != &self.manager.pid() {

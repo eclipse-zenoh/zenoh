@@ -15,6 +15,7 @@ use super::decl::Declaration;
 use crate::core::*;
 use crate::io::RBuf;
 use crate::link::Locator;
+use std::fmt;
 
 // Channel values
 pub type Channel = channel::Type;
@@ -600,6 +601,27 @@ pub struct Hello {
     pub pid: Option<PeerId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
+}
+
+impl fmt::Display for Hello {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let what = match self.whatami {
+            Some(what) => whatami::to_str(what),
+            None => whatami::to_str(whatami::BROKER),
+        };
+        let locators = match &self.locators {
+            Some(locators) => locators
+                .iter()
+                .map(|locator| locator.to_string())
+                .collect::<Vec<String>>(),
+            None => vec![],
+        };
+        f.debug_struct("Hello")
+            .field("pid", &self.pid)
+            .field("whatami", &what)
+            .field("locators", &locators)
+            .finish()
+    }
 }
 
 // NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
