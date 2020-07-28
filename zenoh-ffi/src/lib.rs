@@ -13,6 +13,7 @@
 //
 #![recursion_limit = "256"]
 
+use async_std::prelude::FutureExt;
 use async_std::sync::{channel, Arc, Sender};
 use async_std::task;
 use futures::prelude::*;
@@ -71,6 +72,8 @@ pub struct ZNQueryable(Option<Arc<Sender<bool>>>);
 pub struct ZNQuery(zenoh::net::Query);
 
 pub struct ZNSubInfo(zenoh::net::SubInfo);
+
+pub struct ZNScoutInfo(std::vec::Vec<Hello>);
 
 #[repr(C)]
 pub struct zn_string {
@@ -241,6 +244,32 @@ pub extern "C" fn zn_subinfo_pull() -> *mut ZNSubInfo {
         period: None,
     };
     Box::into_raw(Box::new(ZNSubInfo(si)))
+}
+/// Scout for zenoh endpoints.
+///
+/// The scout mask allows to specify what to scout for.
+#[no_mangle]
+pub unsafe extern "C" fn zn_scout(
+    what: c_uint,
+    iface: *const c_char,
+    scout_period: c_ulong,
+) -> *mut ZNScoutInfo {
+    let w = what as ZInt;
+    let i = CStr::from_ptr(iface).to_str().unwrap();
+
+    let hellos = task::block_on(async move {
+        let mut hs = std::vec::Vec::<Hello>::new();
+        let mut stream = zenoh::net::scout(w, i).await;
+        let scout = async {
+            while let Some(hello) = stream.next().await {
+                hs.push(hello)
+            }
+        };
+        let timeout = async_std::task::sleep(std::time::Duration::from_millis(scout_period));
+        FutureExt::race(scout, timeout).await;
+        hs
+    });
+    Box::into_raw(Box::new(ZNScoutInfo(hellos)))
 }
 
 /// Open a zenoh session
