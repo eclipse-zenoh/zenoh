@@ -134,18 +134,16 @@ pub struct Session {
 }
 
 impl Session {
-    pub(super) async fn new(config: Config, _ps: Option<Properties>) -> Session {
-        let runtime = match Runtime::new(0, config).await {
-            Ok(runtime) => runtime,
-            _ => std::process::exit(-1),
-        };
-
-        let session = Self::init(runtime).await;
-
-        // Workaround for the declare_and_shoot problem
-        task::sleep(std::time::Duration::from_millis(200)).await;
-
-        session
+    pub(super) async fn new(config: Config, _ps: Option<Properties>) -> ZResult<Session> {
+        match Runtime::new(0, config).await {
+            Ok(runtime) => {
+                let session = Self::init(runtime).await;
+                // Workaround for the declare_and_shoot problem
+                task::sleep(std::time::Duration::from_millis(200)).await;
+                Ok(session)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Initialize a Session with an existing Runtime.
