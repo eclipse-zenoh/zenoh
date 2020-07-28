@@ -71,8 +71,24 @@ impl Selector {
         }
     }
 
+    pub fn strip_prefix(&self, prefix: &Path) -> Option<Self> {
+        self.path_expr
+            .strip_prefix(prefix)
+            .map(|path_expr| Selector {
+                path_expr,
+                predicate: self.predicate.clone(),
+                projection: self.projection.clone(),
+                properties: self.properties.clone(),
+                fragment: self.fragment.clone(),
+            })
+    }
+
     pub fn is_relative(&self) -> bool {
         self.path_expr.is_relative()
+    }
+
+    pub fn matches(&self, path: &Path) -> bool {
+        self.path_expr.matches(path)
     }
 }
 

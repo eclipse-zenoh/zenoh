@@ -30,7 +30,7 @@ pub enum Value {
 }
 
 impl Value {
-    pub(crate) fn encode(self) -> (ZInt, RBuf) {
+    pub fn encode(self) -> (ZInt, RBuf) {
         use Value::*;
         match self {
             Encoded(encoding, buf) => (encoding, buf),
@@ -54,7 +54,7 @@ impl Value {
         }
     }
 
-    pub(crate) fn decode(encoding: ZInt, mut payload: RBuf) -> ZResult<Value> {
+    pub fn decode(encoding: ZInt, mut payload: RBuf) -> ZResult<Value> {
         use Value::*;
         match encoding {
             RAW => Ok(Raw(payload)),

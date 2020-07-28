@@ -72,10 +72,12 @@ use log::debug;
 /// }
 /// ```
 pub mod net;
-use net::{Session, ZResult};
+use net::Session;
+pub use net::ZResult;
+use zenoh_router::runtime::Runtime;
 
 mod workspace;
-pub use workspace::{Data, Workspace};
+pub use workspace::*;
 
 mod properties;
 pub use properties::Properties;
@@ -102,6 +104,20 @@ impl Zenoh {
         Ok(Zenoh {
             session: net::open(config, zn_props).await?,
         })
+    }
+
+    /// Initialize a Zenoh API with an existing Runtime.
+    /// This operation is used by the plugins to share the same Runtime than the router.
+    #[doc(hidden)]
+    pub async fn init(runtime: Runtime) -> Zenoh {
+        Zenoh {
+            session: Session::init(runtime).await,
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn session(&self) -> &Session {
+        &self.session
     }
 
     pub async fn workspace(&self, prefix: Option<Path>) -> ZResult<Workspace> {
