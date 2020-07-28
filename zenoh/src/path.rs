@@ -18,7 +18,7 @@ use std::fmt;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Path {
     pub(crate) p: String,
 }
@@ -69,6 +69,12 @@ impl Path {
                 p: format!("{}{}", prefix.p, self.p),
             }
         }
+    }
+
+    pub fn strip_prefix(&self, prefix: &Path) -> Option<Self> {
+        self.p
+            .strip_prefix(&prefix.p)
+            .map(|p| Path { p: p.to_string() })
     }
 }
 

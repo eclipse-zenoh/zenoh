@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use crate::net::utils::resource_name;
 use crate::net::ResKey;
 use crate::Path;
 use std::convert::{From, TryFrom};
@@ -18,7 +19,7 @@ use std::fmt;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PathExpr {
     pub(crate) p: String,
 }
@@ -56,6 +57,16 @@ impl PathExpr {
                 p: format!("{}{}", prefix.p, self.p),
             }
         }
+    }
+
+    pub fn strip_prefix(&self, prefix: &Path) -> Option<Self> {
+        self.p
+            .strip_prefix(&prefix.p)
+            .map(|p| PathExpr { p: p.to_string() })
+    }
+
+    pub fn matches(&self, path: &Path) -> bool {
+        resource_name::intersect(&self.p, &path.p)
     }
 }
 
