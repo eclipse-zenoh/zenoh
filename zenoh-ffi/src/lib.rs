@@ -65,6 +65,8 @@ pub struct ZNQueryable(Option<Arc<Sender<bool>>>);
 
 pub struct ZNQuery(zenoh::net::Query);
 
+pub struct ZNSubInfo(zenoh::net::SubInfo);
+
 #[repr(C)]
 pub struct zn_string {
     val: *const c_char,
@@ -130,7 +132,7 @@ pub extern "C" fn zn_properties_make() -> *mut ZNProperties {
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_properties_len(ps: *mut ZNProperties) -> c_uint {
-    Box::from_raw(ps).0.len() as c_uint
+    (*ps).0.len() as c_uint
 }
 
 /// Get the properties n-th property ID
@@ -140,10 +142,7 @@ pub unsafe extern "C" fn zn_properties_len(ps: *mut ZNProperties) -> c_uint {
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_property_id(ps: *mut ZNProperties, n: c_uint) -> c_uint {
-    let bps = Box::from_raw(ps);
-    let r = bps.0[n as usize].0 as c_uint;
-    Box::into_raw(bps);
-    r
+    (*ps).0[n as usize].0 as c_uint
 }
 
 /// Get the properties n-th property value
@@ -153,13 +152,11 @@ pub unsafe extern "C" fn zn_property_id(ps: *mut ZNProperties, n: c_uint) -> c_u
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_property_value(ps: *mut ZNProperties, n: c_uint) -> *const zn_bytes {
-    let bps = Box::from_raw(ps);
-    let ptr = bps.0[n as usize].1.as_ptr();
+    let ptr = (*ps).0[n as usize].1.as_ptr();
     let value = Box::new(zn_bytes {
         val: ptr as *const c_uchar,
-        len: bps.0[n as usize].1.len() as c_uint,
+        len: (*ps).0[n as usize].1.len() as c_uint,
     });
-    Box::into_raw(bps);
     Box::into_raw(value)
 }
 
@@ -170,15 +167,13 @@ pub unsafe extern "C" fn zn_property_value(ps: *mut ZNProperties, n: c_uint) -> 
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_properties_add(
-    rps: *mut ZNProperties,
+    ps: *mut ZNProperties,
     id: c_ulong,
     value: *const c_char,
 ) -> *mut ZNProperties {
-    let mut ps = Box::from_raw(rps);
     let bs = CStr::from_ptr(value).to_bytes();
-    ps.0.push((to_zint!(id), Vec::from(bs)));
-    Box::into_raw(ps);
-    rps
+    (*ps).0.push((to_zint!(id), Vec::from(bs)));
+    ps
 }
 
 /// Add a property
@@ -187,9 +182,9 @@ pub unsafe extern "C" fn zn_properties_add(
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 ///
 #[no_mangle]
-pub unsafe extern "C" fn zn_properties_free(rps: *mut ZNProperties) {
-    let ps = Box::from_raw(rps);
-    drop(ps);
+pub unsafe extern "C" fn zn_properties_free(ps: *mut ZNProperties) {
+    let bps = Box::from_raw(ps);
+    drop(bps);
 }
 
 /// Return the resource name for this query
@@ -199,12 +194,10 @@ pub unsafe extern "C" fn zn_properties_free(rps: *mut ZNProperties) {
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_query_res_name(query: *mut ZNQuery) -> *const zn_string {
-    let bq = Box::from_raw(query);
     let rn = zn_string {
-        val: bq.0.res_name.as_ptr() as *const c_char,
-        len: bq.0.res_name.len() as c_uint,
+        val: (*query).0.res_name.as_ptr() as *const c_char,
+        len: (*query).0.res_name.len() as c_uint,
     };
-    let _ = Box::into_raw(bq);
     Box::into_raw(Box::new(rn))
 }
 
@@ -215,13 +208,20 @@ pub unsafe extern "C" fn zn_query_res_name(query: *mut ZNQuery) -> *const zn_str
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_query_predicate(query: *mut ZNQuery) -> *const zn_string {
-    let bq = Box::from_raw(query);
-    let rn = zn_string {
-        val: bq.0.predicate.as_ptr() as *const c_char,
-        len: bq.0.predicate.len() as c_uint,
+    let pred = zn_string {
+        val: (*query).0.predicate.as_ptr() as *const c_char,
+        len: (*query).0.predicate.len() as c_uint,
     };
-    let _ = Box::into_raw(bq);
-    Box::into_raw(Box::new(rn))
+    Box::into_raw(Box::new(pred))
+}
+
+/// Create the default subscriber info.
+///
+/// This describes a reliable push subscriber without any negotiated schedule.
+/// Starting from this default variants can be created.
+#[no_mangle]
+pub extern "C" fn zn_subinfo_default() -> *mut ZNSubInfo {
+    Box::into_raw(Box::new(ZNSubInfo(SubInfo::default())))
 }
 
 /// Open a zenoh session
@@ -262,10 +262,8 @@ pub unsafe extern "C" fn zn_open(
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_info(session: *mut ZNSession) -> *mut ZNProperties {
-    let s = Box::from_raw(session);
-    let ps = task::block_on(s.0.info());
+    let ps = task::block_on((*session).0.info());
     let bps = Box::new(ZNProperties(ps));
-    Box::into_raw(s);
     Box::into_raw(bps)
 }
 /// Close a zenoh session
@@ -275,9 +273,7 @@ pub unsafe extern "C" fn zn_info(session: *mut ZNSession) -> *mut ZNProperties {
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_close(session: *mut ZNSession) {
-    let s = Box::from_raw(session);
-    task::block_on(s.0.close()).unwrap();
-    let _ = Box::into_raw(s);
+    task::block_on((*session).0.close()).unwrap();
 }
 
 /// Declare a zenoh resource
@@ -292,13 +288,14 @@ pub unsafe extern "C" fn zn_declare_resource(
 ) -> c_ulong {
     if r_name.is_null() {
         return 0;
-    };
-    let s = Box::from_raw(session);
+    }
     let name = CStr::from_ptr(r_name).to_str().unwrap();
-    let r =
-        task::block_on(s.0.declare_resource(&ResKey::RName(name.to_string()))).unwrap() as c_ulong;
-    Box::into_raw(s);
-    r
+    task::block_on(
+        (*session)
+            .0
+            .declare_resource(&ResKey::RName(name.to_string())),
+    )
+    .unwrap() as c_ulong
 }
 
 /// Declare a zenoh resource with a suffix
@@ -314,15 +311,14 @@ pub unsafe extern "C" fn zn_declare_resource_ws(
 ) -> c_ulong {
     if suffix.is_null() {
         return 0;
-    };
-    let s = Box::from_raw(session);
+    }
     let sfx = CStr::from_ptr(suffix).to_str().unwrap();
-    let r = task::block_on(
-        s.0.declare_resource(&ResKey::RIdWithSuffix(to_zint!(rid), sfx.to_string())),
+    task::block_on(
+        (*session)
+            .0
+            .declare_resource(&ResKey::RIdWithSuffix(to_zint!(rid), sfx.to_string())),
     )
-    .unwrap() as c_ulong;
-    let _ = Box::into_raw(s);
-    r
+    .unwrap() as c_ulong
 }
 
 /// Writes a named resource.
@@ -339,19 +335,17 @@ pub unsafe extern "C" fn zn_write(
 ) -> c_int {
     if r_name.is_null() {
         return -1;
-    };
-    let s = Box::from_raw(session);
+    }
+
     let name = CStr::from_ptr(r_name).to_str().unwrap();
     let r = ResKey::RName(name.to_string());
-    let r = match task::block_on(s.0.write(
+    match task::block_on((*session).0.write(
         &r,
         slice::from_raw_parts(payload as *const u8, len as usize).into(),
     )) {
         Ok(()) => 0,
         _ => 1,
-    };
-    let _ = Box::into_raw(s);
-    r
+    }
 }
 
 /// Writes a named resource using a resource id. This is the most wire efficient way of writing in zenoh.
@@ -366,7 +360,6 @@ pub unsafe extern "C" fn zn_write_wrid(
     payload: *const c_char,
     len: c_uint,
 ) -> c_int {
-    let s = Box::from_raw(session);
     let r = {
         #[cfg(unix)]
         {
@@ -377,15 +370,13 @@ pub unsafe extern "C" fn zn_write_wrid(
             ResKey::RId(to_zint!(r_id))
         }
     };
-    let r = match smol::block_on(s.0.write(
+    match smol::block_on((*session).0.write(
         &r,
         slice::from_raw_parts(payload as *const u8, len as usize).into(),
     )) {
         Ok(()) => 0,
         _ => 1,
-    };
-    let _ = Box::into_raw(s);
-    r
+    }
 }
 
 /// Declares a zenoh subscriber
@@ -406,14 +397,17 @@ pub unsafe extern "C" fn zn_declare_subscriber(
     }
 
     let si: SubInfo = Default::default();
-    let s = Box::from_raw(session);
     let name = CStr::from_ptr(r_name).to_str().unwrap();
 
     let (tx, rx) = channel::<bool>(1);
-    let r = ZNSubscriber(Some(Arc::new(tx)));
-
-    let mut sub: Subscriber =
-        task::block_on(s.0.declare_subscriber(&ResKey::RName(name.to_string()), &si)).unwrap();
+    let rsub = ZNSubscriber(Some(Arc::new(tx)));
+    let s = Box::from_raw(session);
+    let mut sub: Subscriber = task::block_on(
+        (*session)
+            .0
+            .declare_subscriber(&ResKey::RName(name.to_string()), &si),
+    )
+    .unwrap();
     // Note: This is done to ensure that even if the call-back into C
     // does any blocking call we do not incour the risk of blocking
     // any of the task resolving futures.
@@ -445,14 +439,15 @@ pub unsafe extern "C" fn zn_declare_subscriber(
                         callback(&sample)
                     },
                     _ = rx.recv().fuse() => {
-                            let _ = s.0.undeclare_subscriber(sub).await;
+                            let _ = (s).0.undeclare_subscriber(sub).await;
+                            Box::into_raw(s);
                             return ()
                     }
                 )
             }
         })
     });
-    Box::into_raw(Box::new(r))
+    Box::into_raw(Box::new(rsub))
 }
 
 // Un-declares a zenoh subscriber
@@ -569,6 +564,7 @@ pub unsafe extern "C" fn zn_declare_queryable(
                 },
                 _ = rx.recv().fuse() => {
                     let _ = s.0.undeclare_queryable(queryable).await;
+                    Box::into_raw(s);
                     return ()
                 })
             }
@@ -602,16 +598,13 @@ pub unsafe extern "C" fn zn_send_reply(
     payload: *const c_uchar,
     len: c_uint,
 ) {
-    let q = Box::from_raw(query);
-
     let name = CStr::from_ptr(key).to_str().unwrap();
     let s = Sample {
         res_name: name.to_string(),
         payload: slice::from_raw_parts(payload as *const u8, len as usize).into(),
         data_info: None,
     };
-    task::block_on(q.0.replies_sender.send(s));
-    let _ = Box::into_raw(q);
+    task::block_on((*query).0.replies_sender.send(s));
 }
 
 /// Notifies the zenoh runtime that there won't be any more replies sent for this
