@@ -52,5 +52,5 @@ pub async fn scout(_iface: &str, _tries: usize, _period: usize) -> Vec<String> {
 /// ```
 pub async fn open(config: Config, ps: Option<Properties>) -> ZResult<Session> {
     debug!("open(\"{}\", {:?})", config, ps);
-    Ok(Session::new(config, ps).await)
+    Session::new(config, ps).await
 }
