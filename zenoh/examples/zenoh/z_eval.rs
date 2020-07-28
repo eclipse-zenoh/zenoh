@@ -104,6 +104,7 @@ async fn main() {
                     Some(Data {
                         path: _,
                         value: Value::StringUTF8(s),
+                        timestamp: _,
                     }) => name = s,
                     Some(_) => println!("Failed to get name from '{}' : not a UTF-8 String", name),
                     None => println!("Failed to get name from '{}' : not found", name),
@@ -117,12 +118,7 @@ async fn main() {
         }
         let s = format!("Eval from {}", name);
         println!(r#"   >> Returning string: "{}""#, s);
-        get_request
-            .reply(Data {
-                path: path.clone(),
-                value: Value::StringUTF8(s),
-            })
-            .await;
+        get_request.reply(path.clone(), Value::StringUTF8(s)).await;
     }
 
     zenoh.close().await.unwrap();
