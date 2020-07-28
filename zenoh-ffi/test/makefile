@@ -30,4 +30,4 @@ all:
 	make release
 
 clean:
-	$(RM) thrput_test test_session test_sub test_query
+	$(RM) thrput_test test_session test_sub test_query test_queryable
