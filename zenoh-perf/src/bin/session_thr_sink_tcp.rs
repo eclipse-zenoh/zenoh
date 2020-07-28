@@ -123,7 +123,7 @@ fn print_usage(bin: String) {
     println!(
         "Usage:
     cargo run --release --bin {} <TCP address to listen on> <buffer size> <has length>
-Example: 
+Example:
     cargo run --release --bin {} 127.0.0.1:7447 8192 true",
         bin, bin
     );

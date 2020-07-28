@@ -116,7 +116,7 @@ fn print_usage(bin: String) {
     println!(
         "Usage:
     cargo run --release --bin {} [<locator to connect to>]
-Example: 
+Example:
     cargo run --release --bin {} tcp/127.0.0.1:7447",
         bin, bin
     );

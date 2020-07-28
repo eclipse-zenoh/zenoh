@@ -21,6 +21,7 @@ use async_std::task::{Context, Poll};
 use log::{debug, warn};
 use pin_project_lite::pin_project;
 use std::convert::TryInto;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Workspace {
     session: Session,
@@ -249,35 +250,47 @@ impl From<ZInt> for ChangeKind {
 pub struct Change {
     pub path: Path,
     pub value: Option<Value>,
-    //pub timestamp
+    pub timestamp: Timestamp,
     pub kind: ChangeKind,
+}
+
+// generate a reception timestamp with id=0x00
+fn new_reception_timestamp() -> Timestamp {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    Timestamp::new(now.into(), vec![0x00])
 }
 
 impl Change {
     fn new(res_name: &str, payload: RBuf, data_info: Option<RBuf>) -> ZResult<Change> {
         let path = res_name.try_into()?;
-        // let timestamp = ...TODO
-        let (kind, encoding) = data_info.map_or((ChangeKind::PUT, encoding::RAW), |mut rbuf| {
-            match rbuf.read_datainfo() {
+        let (kind, encoding, timestamp) = data_info.map_or_else(
+            || (ChangeKind::PUT, encoding::RAW, new_reception_timestamp()),
+            |mut rbuf| match rbuf.read_datainfo() {
                 Ok(info) => (
                     info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
                     info.encoding.unwrap_or(encoding::RAW),
+                    info.timestamp.unwrap_or_else(new_reception_timestamp),
                 ),
                 Err(e) => {
                     warn!(
                         "Received DataInfo that failed to be decoded: {}. Assume it's for a PUT",
                         e
                     );
-                    (ChangeKind::PUT, encoding::RAW)
+                    (ChangeKind::PUT, encoding::RAW, new_reception_timestamp())
                 }
-            }
-        });
+            },
+        );
         let value = if kind == ChangeKind::DELETE {
             None
         } else {
             Some(Value::decode(encoding, payload)?)
         };
-        Ok(Change { path, value, kind })
+        Ok(Change {
+            path,
+            value,
+            kind,
+            timestamp,
+        })
     }
 }
 

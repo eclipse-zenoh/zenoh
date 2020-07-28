@@ -47,8 +47,25 @@ jobs:
         command: check
 
     - name: Build
-      run: cargo build --verbose --all-targets
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --verbose --all-targets
+
     - name: Clippy
-      run: cargo clippy --all --examples
+      uses: actions-rs/cargo@v1
+      with:
+        command: clippy
+        args: --all --examples
+
     - name: Run tests
-      run: cargo test --verbose
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --verbose
+
+    - name: Run rustfmt
+      uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: -- --check
