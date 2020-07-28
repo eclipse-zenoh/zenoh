@@ -150,50 +150,46 @@ impl Workspace {
     }
 }
 
+// generate a reception timestamp with id=0x00
+fn new_reception_timestamp() -> Timestamp {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    Timestamp::new(now.into(), vec![0x00])
+}
+
 pub struct Data {
     pub path: Path,
     pub value: Value,
+    pub timestamp: Timestamp,
 }
 
 fn reply_to_data(reply: Reply) -> ZResult<Data> {
     let path: Path = reply.data.res_name.try_into().unwrap();
-    let encoding =
+    let (encoding, timestamp) =
         reply
             .data
             .data_info
-            .map_or(encoding::RAW, |mut rbuf| match rbuf.read_datainfo() {
-                Ok(info) => info.encoding.unwrap_or(encoding::RAW),
-                Err(e) => {
-                    warn!(
+            .map_or(
+                (encoding::RAW, new_reception_timestamp()),
+                |mut rbuf| match rbuf.read_datainfo() {
+                    Ok(info) => (
+                        info.encoding.unwrap_or(encoding::RAW),
+                        info.timestamp.unwrap_or_else(new_reception_timestamp),
+                    ),
+                    Err(e) => {
+                        warn!(
                         "Received DataInfo that failed to be decoded: {}. Assume it's RAW encoding",
                         e
                     );
-                    encoding::RAW
-                }
-            });
+                        (encoding::RAW, new_reception_timestamp())
+                    }
+                },
+            );
     let value = Value::decode(encoding, reply.data.payload)?;
-
-    Ok(Data { path, value })
-}
-
-fn data_to_sample(data: Data) -> Sample {
-    let (encoding, payload) = data.value.encode();
-    let info = DataInfo {
-        source_id: None,
-        source_sn: None,
-        first_broker_id: None,
-        first_broker_sn: None,
-        timestamp: None,
-        kind: None,
-        encoding: Some(encoding),
-    };
-    let mut infobuf = WBuf::new(64, false);
-    infobuf.write_datainfo(&info);
-    Sample {
-        res_name: data.path.to_string(),
-        payload,
-        data_info: Some(infobuf.into()),
-    }
+    Ok(Data {
+        path,
+        value,
+        timestamp,
+    })
 }
 
 pin_project! {
@@ -252,12 +248,6 @@ pub struct Change {
     pub value: Option<Value>,
     pub timestamp: Timestamp,
     pub kind: ChangeKind,
-}
-
-// generate a reception timestamp with id=0x00
-fn new_reception_timestamp() -> Timestamp {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(now.into(), vec![0x00])
 }
 
 impl Change {
@@ -322,14 +312,36 @@ impl Stream for ChangeStream {
     }
 }
 
+fn path_value_to_sample(path: Path, value: Value) -> Sample {
+    let (encoding, payload) = value.encode();
+    let info = DataInfo {
+        source_id: None,
+        source_sn: None,
+        first_broker_id: None,
+        first_broker_sn: None,
+        timestamp: None,
+        kind: None,
+        encoding: Some(encoding),
+    };
+    let mut infobuf = WBuf::new(16, false);
+    infobuf.write_datainfo(&info);
+    Sample {
+        res_name: path.to_string(),
+        payload,
+        data_info: Some(infobuf.into()),
+    }
+}
+
 pub struct GetRequest {
     pub selector: Selector,
     replies_sender: RepliesSender,
 }
 
 impl GetRequest {
-    pub async fn reply(&self, data: Data) {
-        self.replies_sender.send(data_to_sample(data)).await
+    pub async fn reply(&self, path: Path, value: Value) {
+        self.replies_sender
+            .send(path_value_to_sample(path, value))
+            .await
     }
 }
 
