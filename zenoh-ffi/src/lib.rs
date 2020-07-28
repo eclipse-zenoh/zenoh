@@ -55,7 +55,12 @@ pub struct ZNSession(zenoh::net::Session);
 
 pub struct ZNProperties(zenoh::net::Properties);
 
-pub struct ZNSubscriber(Option<Arc<Sender<bool>>>);
+enum ZnSubOps {
+    Pull,
+    Close,
+}
+
+pub struct ZNSubscriber(Option<Arc<Sender<ZnSubOps>>>);
 
 pub struct ZNQueryTarget(zenoh::net::QueryTarget);
 
@@ -128,7 +133,7 @@ pub extern "C" fn zn_properties_make() -> *mut ZNProperties {
 /// Get the properties length
 ///
 /// # Safety
-/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_properties_len(ps: *mut ZNProperties) -> c_uint {
@@ -138,7 +143,7 @@ pub unsafe extern "C" fn zn_properties_len(ps: *mut ZNProperties) -> c_uint {
 /// Get the properties n-th property ID
 ///
 /// # Safety
-/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_property_id(ps: *mut ZNProperties, n: c_uint) -> c_uint {
@@ -148,7 +153,7 @@ pub unsafe extern "C" fn zn_property_id(ps: *mut ZNProperties, n: c_uint) -> c_u
 /// Get the properties n-th property value
 ///
 /// # Safety
-/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_property_value(ps: *mut ZNProperties, n: c_uint) -> *const zn_bytes {
@@ -163,7 +168,7 @@ pub unsafe extern "C" fn zn_property_value(ps: *mut ZNProperties, n: c_uint) -> 
 /// Add a property
 ///
 /// # Safety
-/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_properties_add(
@@ -190,7 +195,7 @@ pub unsafe extern "C" fn zn_properties_free(ps: *mut ZNProperties) {
 /// Return the resource name for this query
 ///
 /// # Safety
-/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_query_res_name(query: *mut ZNQuery) -> *const zn_string {
@@ -204,7 +209,7 @@ pub unsafe extern "C" fn zn_query_res_name(query: *mut ZNQuery) -> *const zn_str
 /// Return the predicate for this query
 ///
 /// # Safety
-/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_query_predicate(query: *mut ZNQuery) -> *const zn_string {
@@ -217,11 +222,25 @@ pub unsafe extern "C" fn zn_query_predicate(query: *mut ZNQuery) -> *const zn_st
 
 /// Create the default subscriber info.
 ///
-/// This describes a reliable push subscriber without any negotiated schedule.
-/// Starting from this default variants can be created.
+/// This describes a reliable push subscriber without any negotiated
+/// schedule. Starting from this default variants can be created.
 #[no_mangle]
 pub extern "C" fn zn_subinfo_default() -> *mut ZNSubInfo {
     Box::into_raw(Box::new(ZNSubInfo(SubInfo::default())))
+}
+
+/// Create a subscriber info for a pull subscriber
+///
+/// This describes a reliable pull subscriber without any negotiated
+/// schedule.
+#[no_mangle]
+pub extern "C" fn zn_subinfo_pull() -> *mut ZNSubInfo {
+    let si = SubInfo {
+        reliability: Reliability::Reliable,
+        mode: SubMode::Push,
+        period: None,
+    };
+    Box::into_raw(Box::new(ZNSubInfo(si)))
 }
 
 /// Open a zenoh session
@@ -390,22 +409,23 @@ pub unsafe extern "C" fn zn_write_wrid(
 pub unsafe extern "C" fn zn_declare_subscriber(
     session: *mut ZNSession,
     r_name: *const c_char,
+    sub_info: *mut ZNSubInfo,
     callback: extern "C" fn(*const zn_sample),
 ) -> *mut ZNSubscriber {
     if session.is_null() || r_name.is_null() {
         return std::ptr::null_mut();
     }
 
-    let si: SubInfo = Default::default();
+    let si = Box::from_raw(sub_info);
     let name = CStr::from_ptr(r_name).to_str().unwrap();
 
-    let (tx, rx) = channel::<bool>(1);
+    let (tx, rx) = channel::<ZnSubOps>(8);
     let rsub = ZNSubscriber(Some(Arc::new(tx)));
     let s = Box::from_raw(session);
     let mut sub: Subscriber = task::block_on(
         (*session)
             .0
-            .declare_subscriber(&ResKey::RName(name.to_string()), &si),
+            .declare_subscriber(&ResKey::RName(name.to_string()), &si.0),
     )
     .unwrap();
     // Note: This is done to ensure that even if the call-back into C
@@ -438,10 +458,20 @@ pub unsafe extern "C" fn zn_declare_subscriber(
                         sample.value.len = data.len() as c_uint;
                         callback(&sample)
                     },
-                    _ = rx.recv().fuse() => {
-                            let _ = (s).0.undeclare_subscriber(sub).await;
-                            Box::into_raw(s);
-                            return ()
+                    op = rx.recv().fuse() => {
+                        match op {
+                            Ok(ZnSubOps::Pull) => {
+                                let _ = sub.pull().await;
+                                ()
+                            },
+
+                            Ok(ZnSubOps::Close) => {
+                                let _ = (s).0.undeclare_subscriber(sub).await;
+                                Box::into_raw(s);
+                                return ()
+                            },
+                            _ => return ()
+                        }
                     }
                 )
             }
@@ -456,9 +486,22 @@ pub unsafe extern "C" fn zn_declare_subscriber(
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 ///
 #[no_mangle]
+pub unsafe extern "C" fn zn_pull(sub: *mut ZNSubscriber) {
+    match *Box::from_raw(sub) {
+        ZNSubscriber(Some(tx)) => smol::block_on(tx.send(ZnSubOps::Pull)),
+        ZNSubscriber(None) => (),
+    }
+}
+
+// Un-declares a zenoh subscriber
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+///
+#[no_mangle]
 pub unsafe extern "C" fn zn_undeclare_subscriber(sub: *mut ZNSubscriber) {
     match *Box::from_raw(sub) {
-        ZNSubscriber(Some(tx)) => smol::block_on(tx.send(true)),
+        ZNSubscriber(Some(tx)) => smol::block_on(tx.send(ZnSubOps::Close)),
         ZNSubscriber(None) => (),
     }
 }

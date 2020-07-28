@@ -20,6 +20,8 @@ typedef struct ZNQueryable ZNQueryable;
 
 typedef struct ZNSession ZNSession;
 
+typedef struct ZNSubInfo ZNSubInfo;
+
 typedef struct ZNSubscriber ZNSubscriber;
 
 typedef struct zn_string {
@@ -124,6 +126,7 @@ unsigned long zn_declare_resource_ws(ZNSession *session, unsigned long rid, cons
  */
 ZNSubscriber *zn_declare_subscriber(ZNSession *session,
                                     const char *r_name,
+                                    ZNSubInfo *sub_info,
                                     void (*callback)(const zn_sample*));
 
 /**
@@ -154,7 +157,7 @@ ZNSession *zn_open(int mode, const char *locator, const ZNProperties *_ps);
  * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
  *
  */
-ZNProperties *zn_properties_add(ZNProperties *rps, unsigned long id, const char *value);
+ZNProperties *zn_properties_add(ZNProperties *ps, unsigned long id, const char *value);
 
 /**
  * Add a property
@@ -163,7 +166,7 @@ ZNProperties *zn_properties_add(ZNProperties *rps, unsigned long id, const char 
  * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
  *
  */
-void zn_properties_free(ZNProperties *rps);
+void zn_properties_free(ZNProperties *ps);
 
 /**
  * Get the properties length
@@ -243,6 +246,14 @@ ZNQueryTarget *zn_query_target_default(void);
  *
  */
 void zn_send_reply(ZNQuery *query, const char *key, const unsigned char *payload, unsigned int len);
+
+/**
+ * Create the default subscriber info.
+ *
+ * This describes a reliable push subscriber without any negotiated
+ * schedule. Starting from this default variants can be created.
+ */
+ZNSubInfo *zn_subinfo_default(void);
 
 /**
  * Un-declares a zenoh queryable
