@@ -72,7 +72,7 @@ impl Workspace {
             .write_ext(
                 &self.path_to_reskey(path),
                 RBuf::empty(),
-                encoding::RAW,
+                encoding::NONE,
                 data_kind::DELETE,
             )
             .await
@@ -81,7 +81,7 @@ impl Workspace {
     pub async fn get(&self, selector: &Selector) -> ZResult<DataStream> {
         debug!("get on {}", selector);
         let reskey = self.pathexpr_to_reskey(&selector.path_expr);
-        let decode_value = !selector.properties.contains_key("encoded");
+        let decode_value = !selector.properties.contains_key("raw");
 
         self.session
             .query(
@@ -109,7 +109,7 @@ impl Workspace {
                 descr: "Fragment not supported in selector for subscribe()".into()
             });
         }
-        let decode_value = !selector.properties.contains_key("encoded");
+        let decode_value = !selector.properties.contains_key("raw");
 
         let reskey = self.pathexpr_to_reskey(&selector.path_expr);
         let sub_info = SubInfo {
@@ -146,7 +146,7 @@ impl Workspace {
                 descr: "Fragment not supported in selector for subscribe()".into()
             });
         }
-        let decode_value = !selector.properties.contains_key("encoded");
+        let decode_value = !selector.properties.contains_key("raw");
 
         let reskey = self.pathexpr_to_reskey(&selector.path_expr);
         let sub_info = SubInfo {
@@ -197,30 +197,26 @@ pub struct Data {
 
 fn reply_to_data(reply: Reply, decode_value: bool) -> ZResult<Data> {
     let path: Path = reply.data.res_name.try_into().unwrap();
-    let (encoding, timestamp) =
-        reply
-            .data
-            .data_info
-            .map_or(
-                (encoding::RAW, new_reception_timestamp()),
-                |mut rbuf| match rbuf.read_datainfo() {
-                    Ok(info) => (
-                        info.encoding.unwrap_or(encoding::RAW),
-                        info.timestamp.unwrap_or_else(new_reception_timestamp),
-                    ),
-                    Err(e) => {
-                        warn!(
-                        "Received DataInfo that failed to be decoded: {}. Assume it's RAW encoding",
-                        e
-                    );
-                        (encoding::RAW, new_reception_timestamp())
-                    }
-                },
-            );
+    let (encoding, timestamp) = reply.data.data_info.map_or(
+        (encoding::APP_OCTET_STREAM, new_reception_timestamp()),
+        |mut rbuf| match rbuf.read_datainfo() {
+            Ok(info) => (
+                info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
+                info.timestamp.unwrap_or_else(new_reception_timestamp),
+            ),
+            Err(e) => {
+                warn!(
+                    "Received DataInfo that failed to be decoded: {}. Assume it's RAW encoding",
+                    e
+                );
+                (encoding::APP_OCTET_STREAM, new_reception_timestamp())
+            }
+        },
+    );
     let value = if decode_value {
         Value::decode(encoding, reply.data.payload)?
     } else {
-        Value::Encoded(encoding, reply.data.payload)
+        Value::Raw(encoding, reply.data.payload)
     };
     Ok(Data {
         path,
@@ -298,11 +294,17 @@ impl Change {
     ) -> ZResult<Change> {
         let path = res_name.try_into()?;
         let (kind, encoding, timestamp) = data_info.map_or_else(
-            || (ChangeKind::PUT, encoding::RAW, new_reception_timestamp()),
+            || {
+                (
+                    ChangeKind::PUT,
+                    encoding::APP_OCTET_STREAM,
+                    new_reception_timestamp(),
+                )
+            },
             |mut rbuf| match rbuf.read_datainfo() {
                 Ok(info) => (
                     info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
-                    info.encoding.unwrap_or(encoding::RAW),
+                    info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
                     info.timestamp.unwrap_or_else(new_reception_timestamp),
                 ),
                 Err(e) => {
@@ -310,7 +312,11 @@ impl Change {
                         "Received DataInfo that failed to be decoded: {}. Assume it's for a PUT",
                         e
                     );
-                    (ChangeKind::PUT, encoding::RAW, new_reception_timestamp())
+                    (
+                        ChangeKind::PUT,
+                        encoding::APP_OCTET_STREAM,
+                        new_reception_timestamp(),
+                    )
                 }
             },
         );
@@ -320,7 +326,7 @@ impl Change {
             if decode_value {
                 Some(Value::decode(encoding, payload)?)
             } else {
-                Some(Value::Encoded(encoding, payload))
+                Some(Value::Raw(encoding, payload))
             }
         };
         Ok(Change {

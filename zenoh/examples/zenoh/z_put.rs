@@ -73,7 +73,7 @@ async fn main() {
 
     println!("Put Data ('{}': '{}')...\n", path, value);
     workspace
-        .put(&path.try_into().unwrap(), Value::StringUTF8(value))
+        .put(&path.try_into().unwrap(), value.into())
         .await
         .unwrap();
 
