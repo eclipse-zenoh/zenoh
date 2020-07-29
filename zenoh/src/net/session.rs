@@ -666,7 +666,10 @@ impl Session {
         let state = self.state.read().await;
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.data(resource, true, &None, payload).await;
+        primitives
+            .data(resource, true, &None, payload.clone())
+            .await;
+        self.data(resource, true, &None, payload).await;
         Ok(())
     }
 
@@ -711,7 +714,14 @@ impl Session {
         let mut infobuf = zenoh_protocol::io::WBuf::new(64, false);
         infobuf.write_datainfo(&info);
         primitives
-            .data(resource, true, &Some(infobuf.into()), payload)
+            .data(
+                resource,
+                true,
+                &Some(infobuf.clone().into()),
+                payload.clone(),
+            )
+            .await;
+        self.data(resource, true, &Some(infobuf.into()), payload)
             .await;
         Ok(())
     }
