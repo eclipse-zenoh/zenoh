@@ -33,7 +33,7 @@ fn parse_args() -> (Config, String) {
             "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path-expr=[PATH_EXPR] 'The selection of resources to get'")
+            Arg::from_usage("-s, --selector=[selector] 'The selection of resources to get'")
                 .default_value("/demo/example/**"),
         )
         .get_matches();
@@ -51,9 +51,9 @@ fn parse_args() -> (Config, String) {
                 .or_else(|| Some(vec![]))
                 .unwrap(),
         );
-    let path_expr = args.value_of("path-expr").unwrap().to_string();
+    let selector = args.value_of("selector").unwrap().to_string();
 
-    (config, path_expr)
+    (config, selector)
 }
 
 #[async_std::main]
@@ -61,7 +61,7 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, path_expr) = parse_args();
+    let (config, selector) = parse_args();
 
     println!("New zenoh...");
     let zenoh = Zenoh::new(config, None).await.unwrap();
@@ -69,9 +69,9 @@ async fn main() {
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();
 
-    println!("Subscribe to {}'...\n", path_expr);
+    println!("Subscribe to {}'...\n", selector);
     let mut change_stream = workspace
-        .subscribe(&path_expr.try_into().unwrap())
+        .subscribe(&selector.try_into().unwrap())
         .await
         .unwrap();
     while let Some(change) = change_stream.next().await {

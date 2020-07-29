@@ -22,6 +22,7 @@ use log::{debug, warn};
 use pin_project_lite::pin_project;
 use std::convert::TryInto;
 use std::time::{SystemTime, UNIX_EPOCH};
+use zenoh_util::zerror;
 
 pub struct Workspace {
     session: Session,
@@ -80,6 +81,7 @@ impl Workspace {
     pub async fn get(&self, selector: &Selector) -> ZResult<DataStream> {
         debug!("get on {}", selector);
         let reskey = self.pathexpr_to_reskey(&selector.path_expr);
+        let decode_value = !selector.properties.contains_key("encoded");
 
         self.session
             .query(
@@ -89,12 +91,27 @@ impl Workspace {
                 QueryConsolidation::default(),
             )
             .await
-            .map(|receiver| DataStream { receiver })
+            .map(|receiver| DataStream {
+                receiver,
+                decode_value,
+            })
     }
 
-    pub async fn subscribe(&self, path_expr: &PathExpr) -> ZResult<ChangeStream> {
-        debug!("subscribe on {}", path_expr);
-        let reskey = self.pathexpr_to_reskey(&path_expr);
+    pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream> {
+        debug!("subscribe on {}", selector);
+        if selector.projection.is_some() {
+            return zerror!(ZErrorKind::Other {
+                descr: "Projection not supported in selector for subscribe()".into()
+            });
+        }
+        if selector.fragment.is_some() {
+            return zerror!(ZErrorKind::Other {
+                descr: "Fragment not supported in selector for subscribe()".into()
+            });
+        }
+        let decode_value = !selector.properties.contains_key("encoded");
+
+        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
@@ -104,19 +121,34 @@ impl Workspace {
         self.session
             .declare_subscriber(&reskey, &sub_info)
             .await
-            .map(|subscriber| ChangeStream { subscriber })
+            .map(|subscriber| ChangeStream {
+                subscriber,
+                decode_value,
+            })
     }
 
     pub async fn subscribe_with_callback<SubscribeCallback>(
         &self,
-        path_expr: &PathExpr,
+        selector: &Selector,
         mut callback: SubscribeCallback,
     ) -> ZResult<()>
     where
         SubscribeCallback: FnMut(Change) + Send + Sync + 'static,
     {
-        debug!("subscribe_with_callback on {}", path_expr);
-        let reskey = self.pathexpr_to_reskey(&path_expr);
+        debug!("subscribe_with_callback on {}", selector);
+        if selector.projection.is_some() {
+            return zerror!(ZErrorKind::Other {
+                descr: "Projection not supported in selector for subscribe()".into()
+            });
+        }
+        if selector.fragment.is_some() {
+            return zerror!(ZErrorKind::Other {
+                descr: "Fragment not supported in selector for subscribe()".into()
+            });
+        }
+        let decode_value = !selector.properties.contains_key("encoded");
+
+        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
@@ -126,7 +158,12 @@ impl Workspace {
         let _ = self
             .session
             .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
-                match Change::new(&sample.res_name, sample.payload, sample.data_info) {
+                match Change::new(
+                    &sample.res_name,
+                    sample.payload,
+                    sample.data_info,
+                    decode_value,
+                ) {
                     Ok(change) => callback(change),
                     Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
                 }
@@ -158,7 +195,7 @@ pub struct Data {
     pub timestamp: Timestamp,
 }
 
-fn reply_to_data(reply: Reply) -> ZResult<Data> {
+fn reply_to_data(reply: Reply, decode_value: bool) -> ZResult<Data> {
     let path: Path = reply.data.res_name.try_into().unwrap();
     let (encoding, timestamp) =
         reply
@@ -180,7 +217,11 @@ fn reply_to_data(reply: Reply) -> ZResult<Data> {
                     }
                 },
             );
-    let value = Value::decode(encoding, reply.data.payload)?;
+    let value = if decode_value {
+        Value::decode(encoding, reply.data.payload)?
+    } else {
+        Value::Encoded(encoding, reply.data.payload)
+    };
     Ok(Data {
         path,
         value,
@@ -191,7 +232,8 @@ fn reply_to_data(reply: Reply) -> ZResult<Data> {
 pin_project! {
     pub struct DataStream {
         #[pin]
-        receiver: Receiver<Reply>
+        receiver: Receiver<Reply>,
+        decode_value: bool,
     }
 }
 
@@ -200,8 +242,9 @@ impl Stream for DataStream {
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let decode_value = self.decode_value;
         match self.project().receiver.poll_next(cx) {
-            Poll::Ready(Some(reply)) => match reply_to_data(reply) {
+            Poll::Ready(Some(reply)) => match reply_to_data(reply, decode_value) {
                 Ok(data) => Poll::Ready(Some(data)),
                 Err(err) => {
                     warn!("Received an invalid Reply (drop it): {}", err);
@@ -247,7 +290,12 @@ pub struct Change {
 }
 
 impl Change {
-    fn new(res_name: &str, payload: RBuf, data_info: Option<RBuf>) -> ZResult<Change> {
+    fn new(
+        res_name: &str,
+        payload: RBuf,
+        data_info: Option<RBuf>,
+        decode_value: bool,
+    ) -> ZResult<Change> {
         let path = res_name.try_into()?;
         let (kind, encoding, timestamp) = data_info.map_or_else(
             || (ChangeKind::PUT, encoding::RAW, new_reception_timestamp()),
@@ -269,7 +317,11 @@ impl Change {
         let value = if kind == ChangeKind::DELETE {
             None
         } else {
-            Some(Value::decode(encoding, payload)?)
+            if decode_value {
+                Some(Value::decode(encoding, payload)?)
+            } else {
+                Some(Value::Encoded(encoding, payload))
+            }
         };
         Ok(Change {
             path,
@@ -283,7 +335,8 @@ impl Change {
 pin_project! {
     pub struct ChangeStream {
         #[pin]
-        subscriber: Subscriber
+        subscriber: Subscriber,
+        decode_value: bool,
     }
 }
 
@@ -292,9 +345,15 @@ impl Stream for ChangeStream {
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let decode_value = self.decode_value;
         match self.project().subscriber.poll_next(cx) {
             Poll::Ready(Some(sample)) => {
-                match Change::new(&sample.res_name, sample.payload, sample.data_info) {
+                match Change::new(
+                    &sample.res_name,
+                    sample.payload,
+                    sample.data_info,
+                    decode_value,
+                ) {
                     Ok(change) => Poll::Ready(Some(change)),
                     Err(err) => {
                         warn!("Received an invalid Sample (drop it): {}", err);

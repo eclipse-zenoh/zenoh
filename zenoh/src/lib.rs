@@ -73,7 +73,7 @@ use log::debug;
 /// ```
 pub mod net;
 use net::Session;
-pub use net::ZResult;
+pub use net::{ZError, ZErrorKind, ZResult};
 use zenoh_router::runtime::Runtime;
 
 mod workspace;
