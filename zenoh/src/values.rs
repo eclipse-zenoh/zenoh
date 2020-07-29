@@ -19,22 +19,20 @@ use zenoh_util::{zerror, zerror2};
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Encoded(ZInt, RBuf),
-    Raw(RBuf), // alias for Encoded(RAW, encoding_descr+data)
-    Custom { encoding_descr: String, data: RBuf }, // alias for Encoded(APP_CUSTOM, encoding_descr+data)
-    StringUTF8(String),                            // alias for Encoded(STRING, String)
-    Properties(Properties), // alias for Encoded(APP_PROPERTIES, props.to_string())
-    Json(String),           // alias for Encoded(APP_JSON, String)
-    Integer(i64),           // alias for Encoded(APP_INTEGER, i64.to_string())
-    Float(f64),             // alias for Encoded(APP_FLOAT, f64.to_string())
+    Raw(ZInt, RBuf),
+    Custom { encoding_descr: String, data: RBuf }, // equivalent to Raw(APP_CUSTOM, encoding_descr+data)
+    StringUTF8(String),                            // equivalent to Raw(STRING, String)
+    Properties(Properties), // equivalent to Raw(APP_PROPERTIES, props.to_string())
+    Json(String),           // equivalent to Raw(APP_JSON, String)
+    Integer(i64),           // equivalent to Raw(APP_INTEGER, i64.to_string())
+    Float(f64),             // equivalent to Raw(APP_FLOAT, f64.to_string())
 }
 
 impl Value {
     pub fn encode(self) -> (ZInt, RBuf) {
         use Value::*;
         match self {
-            Encoded(encoding, buf) => (encoding, buf),
-            Raw(buf) => (RAW, buf),
+            Raw(encoding, buf) => (encoding, buf),
             Custom {
                 encoding_descr,
                 data,
@@ -57,7 +55,6 @@ impl Value {
     pub fn decode(encoding: ZInt, mut payload: RBuf) -> ZResult<Value> {
         use Value::*;
         match encoding {
-            RAW => Ok(Raw(payload)),
             APP_CUSTOM => {
                 if let Ok(encoding_descr) = payload.read_string() {
                     let mut data = RBuf::empty();
@@ -145,7 +142,67 @@ impl Value {
                     })
                 })
                 .map(Float),
-            _ => Ok(Encoded(encoding, payload)),
+            _ => Ok(Raw(encoding, payload)),
         }
+    }
+}
+
+impl From<RBuf> for Value {
+    fn from(buf: RBuf) -> Self {
+        Value::Raw(APP_OCTET_STREAM, buf)
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    fn from(buf: Vec<u8>) -> Self {
+        Value::from(RBuf::from(buf))
+    }
+}
+
+impl From<&[u8]> for Value {
+    fn from(buf: &[u8]) -> Self {
+        Value::from(RBuf::from(buf))
+    }
+}
+
+impl From<String> for Value {
+    fn from(s: String) -> Self {
+        Value::StringUTF8(s)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Value::from(s.to_string())
+    }
+}
+
+impl From<Properties> for Value {
+    fn from(p: Properties) -> Self {
+        Value::Properties(p)
+    }
+}
+
+impl From<&serde_json::Value> for Value {
+    fn from(json: &serde_json::Value) -> Self {
+        Value::Json(json.to_string())
+    }
+}
+
+impl From<serde_json::Value> for Value {
+    fn from(json: serde_json::Value) -> Self {
+        Value::from(&json)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(i: i64) -> Self {
+        Value::Integer(i)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(f: f64) -> Self {
+        Value::Float(f)
     }
 }

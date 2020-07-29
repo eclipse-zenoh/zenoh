@@ -110,7 +110,7 @@ pub mod encoding {
     }
 
     pub const APP_OCTET_STREAM: ZInt = 0;
-    pub const RAW: ZInt = APP_OCTET_STREAM;
+    pub const NONE: ZInt = APP_OCTET_STREAM;
     pub const APP_CUSTOM: ZInt = 1;
     pub const TEXT_PLAIN: ZInt = 2;
     pub const STRING: ZInt = TEXT_PLAIN;
