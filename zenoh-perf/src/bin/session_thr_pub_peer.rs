@@ -16,13 +16,15 @@ use async_std::task;
 use async_trait::async_trait;
 use rand::RngCore;
 
-use zenoh_protocol::core::{PeerId, ResKey};
+use zenoh_protocol::core::{whatami, PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{whatami, WhatAmI, ZenohMessage};
+use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
-    DummyHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    DummyHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig,
 };
+use zenoh_util::core::ZResult;
 
 struct MySH {}
 
@@ -36,19 +38,18 @@ impl MySH {
 impl SessionHandler for MySH {
     async fn new_session(
         &self,
-        _whatami: WhatAmI,
-        _session: Arc<dyn SessionEventHandler + Send + Sync>,
-    ) -> Arc<dyn SessionEventHandler + Send + Sync> {
-        Arc::new(DummyHandler::new())
+        _session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+        Ok(Arc::new(DummyHandler::new()))
     }
 }
 
 fn print_usage(bin: String) {
     println!(
         "Usage:
-    cargo run --release --bin {} <payload size in bytes> <locator to connect to>
+    cargo run --release --bin {} <locator to connect to> <payload size in bytes>
 Example:
-    cargo run --release --bin {} 8100 tcp/127.0.0.1:7447",
+    cargo run --release --bin {} tcp/127.0.0.1:7447 1024",
         bin, bin
     );
 }
@@ -77,7 +78,7 @@ fn main() {
     } else {
         return print_usage(bin);
     };
-    let payload: usize = if let Ok(v) = value.parse() {
+    let connect_to: Locator = if let Ok(v) = value.parse() {
         v
     } else {
         return print_usage(bin);
@@ -89,7 +90,7 @@ fn main() {
     } else {
         return print_usage(bin);
     };
-    let connect_to: Locator = if let Ok(v) = value.parse() {
+    let payload: usize = if let Ok(v) = value.parse() {
         v
     } else {
         return print_usage(bin);

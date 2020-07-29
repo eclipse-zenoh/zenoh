@@ -46,20 +46,27 @@ struct CircularBatchIn {
     not_empty: Arc<Condition>,
 }
 
-macro_rules! zrefill {
+macro_rules! zgetbatch {
     ($batch:expr) => {
-        // Refill the batches
-        let mut empty_guard = zasynclock!($batch.state_empty);
-        if empty_guard.is_empty() {
-            // Drop the guard and wait for the batches to be available
-            $batch.not_full.wait(empty_guard).await;
-            // We have been notified that there are batches available:
-            // reacquire the lock on the state_empty
-            empty_guard = zasynclock!($batch.state_empty);
-        }
-        // Drain all the empty batches
-        while let Some(batch) = empty_guard.pull() {
-            $batch.inner.push_back(batch);
+        // Try to get a pointer to the first batch
+        if let Some(batch) = $batch.inner.front_mut() {
+            batch
+        } else {
+            // Refill the batches
+            let mut empty_guard = zasynclock!($batch.state_empty);
+            if empty_guard.is_empty() {
+                // Drop the guard and wait for the batches to be available
+                $batch.not_full.wait(empty_guard).await;
+                // We have been notified that there are batches available:
+                // reacquire the lock on the state_empty
+                empty_guard = zasynclock!($batch.state_empty);
+            }
+            // Drain all the empty batches
+            while let Some(batch) = empty_guard.pull() {
+                $batch.inner.push_back(batch);
+            }
+            // Return the first batch
+            $batch.inner.front_mut().unwrap()
         }
     };
 }
@@ -102,19 +109,10 @@ impl CircularBatchIn {
     }
 
     async fn try_serialize_session_message(&mut self, message: &SessionMessage) -> bool {
-        loop {
-            // Get the current serialization batch
-            let batch = if let Some(batch) = self.inner.front_mut() {
-                batch
-            } else {
-                // Refill the batches
-                zrefill!(self);
-                continue;
-            };
-
-            // Try to serialize the message on the current batch
-            return batch.serialize_session_message(&message).await;
-        }
+        // Get the current serialization batch
+        let batch = zgetbatch!(self);
+        // Try to serialize the message on the current batch
+        batch.serialize_session_message(&message).await
     }
 
     async fn serialize_session_message(&mut self, message: SessionMessage) {
@@ -175,13 +173,7 @@ impl CircularBatchIn {
         let mut to_write = wbuf.len();
         while to_write > 0 {
             // Get the current serialization batch
-            let batch = if let Some(batch) = self.inner.front_mut() {
-                batch
-            } else {
-                // Refill the batches
-                zrefill!(self);
-                continue;
-            };
+            let batch = zgetbatch!(self);
 
             // Get the frame SN
             let sn = guard.get();
@@ -217,19 +209,10 @@ impl CircularBatchIn {
     }
 
     async fn try_serialize_zenoh_message(&mut self, message: &ZenohMessage) -> bool {
-        loop {
-            // Get the current serialization batch
-            let batch = if let Some(batch) = self.inner.front_mut() {
-                batch
-            } else {
-                // Refill the batches
-                zrefill!(self);
-                continue;
-            };
-
-            // Try to serialize the message on the current batch
-            return batch.serialize_zenoh_message(&message).await;
-        }
+        // Get the current serialization batch
+        let batch = zgetbatch!(self);
+        // Try to serialize the message on the current batch
+        batch.serialize_zenoh_message(&message).await
     }
 
     async fn serialize_zenoh_message(&mut self, message: ZenohMessage) {
