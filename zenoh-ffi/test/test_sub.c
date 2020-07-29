@@ -32,14 +32,14 @@ int main(int argc, char** argv) {
     }
     printf("Subscription expression to %s\n", key_expr);
 
-    ZNSession *s = zn_open(PEER_MODE, 0, 0);
+    ZNSession *s = zn_open(PEER, 0, 0);
 
     if (s == 0) {
         printf("Error creating session!\n");
         exit(-1);
     }
 
-    sub = zn_declare_subscriber(s, key_expr, sub_callback);
+    sub = zn_declare_subscriber(s, key_expr, zn_subinfo_default(), sub_callback);
 
     sleep(5);
 

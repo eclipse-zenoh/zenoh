@@ -18,6 +18,8 @@ typedef struct ZNQueryTarget ZNQueryTarget;
 
 typedef struct ZNQueryable ZNQueryable;
 
+typedef struct ZNScout ZNScout;
+
 typedef struct ZNSession ZNSession;
 
 typedef struct ZNSubInfo ZNSubInfo;
@@ -46,15 +48,15 @@ typedef struct zn_source_info {
 
 extern const unsigned int ALL_KINDS;
 
-extern const int BROKER_MODE;
+extern const unsigned int BROKER;
 
-extern const int CLIENT_MODE;
+extern const unsigned int CLIENT;
 
 extern const unsigned int EVAL;
 
-extern const int PEER_MODE;
+extern const unsigned int PEER;
 
-extern const int ROUTER_MODE;
+extern const unsigned int ROUTER;
 
 extern const unsigned int STORAGE;
 
@@ -154,7 +156,7 @@ ZNSession *zn_open(int mode, const char *locator, const ZNProperties *_ps);
  * Add a property
  *
  * # Safety
- * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
  *
  */
 ZNProperties *zn_properties_add(ZNProperties *ps, unsigned long id, const char *value);
@@ -172,7 +174,7 @@ void zn_properties_free(ZNProperties *ps);
  * Get the properties length
  *
  * # Safety
- * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
  *
  */
 unsigned int zn_properties_len(ZNProperties *ps);
@@ -183,7 +185,7 @@ ZNProperties *zn_properties_make(void);
  * Get the properties n-th property ID
  *
  * # Safety
- * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
  *
  */
 unsigned int zn_property_id(ZNProperties *ps, unsigned int n);
@@ -192,10 +194,18 @@ unsigned int zn_property_id(ZNProperties *ps, unsigned int n);
  * Get the properties n-th property value
  *
  * # Safety
- * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
  *
  */
 const zn_bytes *zn_property_value(ZNProperties *ps, unsigned int n);
+
+/**
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ *
+ */
+void zn_pull(ZNSubscriber *sub);
 
 /**
  *
@@ -222,7 +232,7 @@ ZNQueryConsolidation *zn_query_consolidation_none(void);
  * Return the predicate for this query
  *
  * # Safety
- * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
  *
  */
 const zn_string *zn_query_predicate(ZNQuery *query);
@@ -231,12 +241,49 @@ const zn_string *zn_query_predicate(ZNQuery *query);
  * Return the resource name for this query
  *
  * # Safety
- * The main reason for this function to be unsafe is that it does casting of a pointer into a box.
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
  *
  */
 const zn_string *zn_query_res_name(ZNQuery *query);
 
 ZNQueryTarget *zn_query_target_default(void);
+
+/**
+ * The scout mask allows to specify what to scout for.
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+ZNScout *zn_scout(unsigned int what, const char *iface, unsigned long scout_period);
+
+/**
+ * Get the number of entities scouted  and available as part of
+ * the ZNScout
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+unsigned int zn_scout_len(ZNScout *si);
+
+/**
+ * Get the peer-id for the scouted entity at the given index
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+const unsigned char *zn_scout_peerid(ZNScout *si, unsigned int idx);
+
+/**
+ * Get the whatami for the scouted entity at the given index
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+unsigned int zn_scout_whatami(ZNScout *si, unsigned int idx);
 
 /**
  * Sends a reply to a query.
@@ -254,6 +301,14 @@ void zn_send_reply(ZNQuery *query, const char *key, const unsigned char *payload
  * schedule. Starting from this default variants can be created.
  */
 ZNSubInfo *zn_subinfo_default(void);
+
+/**
+ * Create a subscriber info for a pull subscriber
+ *
+ * This describes a reliable pull subscriber without any negotiated
+ * schedule.
+ */
+ZNSubInfo *zn_subinfo_pull(void);
 
 /**
  * Un-declares a zenoh queryable

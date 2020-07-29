@@ -20,7 +20,7 @@ use futures::prelude::*;
 use futures::select;
 use libc::{c_char, c_int, c_uchar, c_uint, c_ulong};
 use std::convert::TryFrom;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::slice;
 use zenoh::net::Config;
 use zenoh::net::*;
@@ -74,6 +74,8 @@ pub struct ZNQuery(zenoh::net::Query);
 pub struct ZNSubInfo(zenoh::net::SubInfo);
 
 pub struct ZNScout(std::vec::Vec<Hello>);
+
+pub struct ZNLocators(std::vec::Vec<std::ffi::CString>);
 
 #[repr(C)]
 pub struct zn_string {
@@ -252,6 +254,7 @@ pub extern "C" fn zn_subinfo_pull() -> *mut ZNSubInfo {
 /// # Safety
 /// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
+#[no_mangle]
 pub unsafe extern "C" fn zn_scout_len(si: *mut ZNScout) -> c_uint {
     (*si).0.len() as c_uint
 }
@@ -261,6 +264,7 @@ pub unsafe extern "C" fn zn_scout_len(si: *mut ZNScout) -> c_uint {
 /// # Safety
 /// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
+#[no_mangle]
 pub unsafe extern "C" fn zn_scout_whatami(si: *mut ZNScout, idx: c_uint) -> c_uint {
     match (*si).0[idx as usize].whatami {
         Some(w) => w as c_uint,
@@ -273,11 +277,61 @@ pub unsafe extern "C" fn zn_scout_whatami(si: *mut ZNScout, idx: c_uint) -> c_ui
 /// # Safety
 /// The main reason for this function to be unsafe is that it dereferences a pointer.
 ///
+#[no_mangle]
 pub unsafe extern "C" fn zn_scout_peerid(si: *mut ZNScout, idx: c_uint) -> *const c_uchar {
     match &(*si).0[idx as usize].pid {
         Some(v) => v.id.as_ptr() as *const c_uchar,
         None => std::ptr::null(),
     }
+}
+
+/// Get the locators for the scouted.
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_scout_locators(si: *mut ZNScout, idx: c_uint) -> *mut ZNLocators {
+    let mut vs = vec![];
+    match &(*si).0[idx as usize].locators {
+        Some(ls) => {
+            for l in ls {
+                vs.push(CString::new(format!("{}", l)).unwrap())
+            }
+        }
+        None => (),
+    }
+    Box::into_raw(Box::new(ZNLocators(vs)))
+}
+
+/// Get the number of locators for the scouted entity.
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_scout_locators_len(ls: *mut ZNLocators) -> c_uint {
+    (*ls).0.len() as c_uint
+}
+
+/// Get the locator at the given index.
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_scout_locator_get(ls: *mut ZNLocators, idx: c_uint) -> *const c_char {
+    (*ls).0[idx as usize].as_ptr()
+}
+
+/// Frees the locators
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_scout_locators_free(ls: *mut ZNLocators) {
+    drop(Box::from_raw(ls))
 }
 
 /// The scout mask allows to specify what to scout for.
@@ -307,6 +361,15 @@ pub unsafe extern "C" fn zn_scout(
         hs
     });
     Box::into_raw(Box::new(ZNScout(hellos)))
+}
+
+/// Frees the ZNSCout by releasing its associated memory.
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it does of a pointer into a box.
+#[no_mangle]
+pub unsafe extern "C" fn zn_scout_free(s: *mut ZNScout) {
+    drop(Box::from_raw(s))
 }
 
 /// Open a zenoh session

@@ -294,7 +294,7 @@ impl Change {
         res_name: &str,
         payload: RBuf,
         data_info: Option<RBuf>,
-        decode_value: bool,
+        _decode_value: bool,
     ) -> ZResult<Change> {
         let path = res_name.try_into()?;
         let (kind, encoding, timestamp) = data_info.map_or_else(
@@ -317,11 +317,7 @@ impl Change {
         let value = if kind == ChangeKind::DELETE {
             None
         } else {
-            if decode_value {
-                Some(Value::decode(encoding, payload)?)
-            } else {
-                Some(Value::Encoded(encoding, payload))
-            }
+            Some(Value::decode(encoding, payload)?)
         };
         Ok(Change {
             path,
