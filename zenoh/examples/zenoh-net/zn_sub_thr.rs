@@ -78,21 +78,17 @@ async fn main() {
         period: None,
     };
     session
-        .declare_callback_subscriber(
-            &reskey,
-            &sub_info,
-            move |_res_name: &str, _payload: RBuf, _data_info: Option<RBuf>| {
-                if count == 0 {
-                    start = Instant::now();
-                    count += 1;
-                } else if count < N {
-                    count += 1;
-                } else {
-                    print_stats(start);
-                    count = 0;
-                }
-            },
-        )
+        .declare_callback_subscriber(&reskey, &sub_info, move |_sample| {
+            if count == 0 {
+                start = Instant::now();
+                count += 1;
+            } else if count < N {
+                count += 1;
+            } else {
+                print_stats(start);
+                count = 0;
+            }
+        })
         .await
         .unwrap();
 

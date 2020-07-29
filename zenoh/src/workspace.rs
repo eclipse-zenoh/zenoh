@@ -125,16 +125,12 @@ impl Workspace {
 
         let _ = self
             .session
-            .declare_callback_subscriber(
-                &reskey,
-                &sub_info,
-                move |res_name: &str, payload: RBuf, data_info: Option<RBuf>| match Change::new(
-                    res_name, payload, data_info,
-                ) {
+            .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
+                match Change::new(&sample.res_name, sample.payload, sample.data_info) {
                     Ok(change) => callback(change),
                     Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
-                },
-            )
+                }
+            })
             .await;
         Ok(())
     }

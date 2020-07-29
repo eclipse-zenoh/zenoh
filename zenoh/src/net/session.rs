@@ -436,7 +436,7 @@ impl Session {
     ///     period: None
     /// };
     /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info,
-    ///     |res_name, payload, _info| { println!("Received : {} {}", res_name, payload); }
+    ///     |sample| { println!("Received : {} {}", sample.res_name, sample.payload); }
     /// ).await.unwrap();
     /// # })
     /// ```
@@ -447,10 +447,7 @@ impl Session {
         data_handler: DataHandler,
     ) -> ZResult<CallbackSubscriber>
     where
-        DataHandler: FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>)
-            + Send
-            + Sync
-            + 'static,
+        DataHandler: FnMut(Sample) + Send + Sync + 'static,
     {
         trace!("declare_callback_subscriber({:?})", resource);
         let mut state = self.state.write().await;
@@ -534,7 +531,7 @@ impl Session {
     /// #     mode: SubMode::Push,
     /// #     period: None
     /// # };
-    /// # fn data_handler(res_name: &str, payload: RBuf, _info: Option<RBuf>) { println!("Received : {} {}", res_name, payload); };
+    /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
     /// session.undeclare_callback_subscriber(subscriber).await;
     /// # })
@@ -842,7 +839,11 @@ impl Primitives for Session {
                     for sub in state.callback_subscribers.values() {
                         if rname::intersect(&sub.resname, &resname) {
                             let handler = &mut *sub.dhandler.write().await;
-                            handler(&resname, payload.clone(), info.clone());
+                            handler(Sample {
+                                res_name: resname.clone(),
+                                payload: payload.clone(),
+                                data_info: info.clone(),
+                            });
                         }
                     }
                     // Collect matching subscribers

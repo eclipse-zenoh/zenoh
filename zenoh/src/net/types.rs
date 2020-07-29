@@ -120,10 +120,7 @@ pub struct Sample {
 }
 
 /// The callback that will be called on each data for a [CallbackSubscriber](CallbackSubscriber).
-pub type DataHandler = dyn FnMut(/*res_name:*/ &str, /*payload:*/ RBuf, /*data_info:*/ Option<RBuf>)
-    + Send
-    + Sync
-    + 'static;
+pub type DataHandler = dyn FnMut(Sample) + Send + Sync + 'static;
 
 /// Structs received b y a [Queryable](Queryable).
 pub struct Query {
@@ -268,7 +265,7 @@ impl CallbackSubscriber {
     /// #     period: None
     /// # };
     /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info,
-    ///     |res_name, payload, _info| { println!("Received : {} {}", res_name, payload); }
+    ///     |sample| { println!("Received : {} {}", sample.res_name, sample.payload); }
     /// ).await.unwrap();
     /// subscriber.pull();
     /// # })
