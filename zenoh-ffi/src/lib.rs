@@ -19,9 +19,10 @@ use async_std::task;
 use futures::prelude::*;
 use futures::select;
 use libc::{c_char, c_int, c_uchar, c_uint, c_ulong};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::ffi::CStr;
 use std::slice;
+use std::time::Duration;
 use zenoh::net::Config;
 use zenoh::net::*;
 use zenoh_protocol::core::ZInt;
@@ -265,7 +266,8 @@ pub unsafe extern "C" fn zn_scout(
                 hs.push(hello)
             }
         };
-        let timeout = async_std::task::sleep(std::time::Duration::from_millis(scout_period));
+        let sp = Duration::from_millis(scout_period.try_into().unwrap());
+        let timeout = async_std::task::sleep(sp);
         FutureExt::race(scout, timeout).await;
         hs
     });
@@ -408,16 +410,7 @@ pub unsafe extern "C" fn zn_write_wrid(
     payload: *const c_char,
     len: c_uint,
 ) -> c_int {
-    let r = {
-        #[cfg(unix)]
-        {
-            ResKey::RId(to_zint!(r_id))
-        }
-        #[cfg(windows)]
-        {
-            ResKey::RId(to_zint!(r_id))
-        }
-    };
+    let r = ResKey::RId(to_zint!(r_id));
     match smol::block_on((*session).0.write(
         &r,
         slice::from_raw_parts(payload as *const u8, len as usize).into(),
