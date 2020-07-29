@@ -68,13 +68,13 @@ async fn main() {
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();
 
-    let path_expr = PathExpr::try_from("/test/thr").unwrap();
+    let selector = Selector::try_from("/test/thr").unwrap();
 
     let mut count = 0u64;
     let mut start = Instant::now();
 
     workspace
-        .subscribe_with_callback(&path_expr, move |_change| {
+        .subscribe_with_callback(&selector, move |_change| {
             if count == 0 {
                 start = Instant::now();
                 count += 1;

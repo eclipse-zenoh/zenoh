@@ -47,6 +47,10 @@ impl PathExpr {
         !self.p.starts_with('/')
     }
 
+    pub fn is_a_path(&self) -> bool {
+        !self.p.contains('*')
+    }
+
     pub fn with_prefix(&self, prefix: &Path) -> Self {
         if self.is_relative() {
             Self {

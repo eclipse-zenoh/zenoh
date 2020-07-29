@@ -19,11 +19,11 @@ use rand::RngCore;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use zenoh_protocol::core::PeerId;
-use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{whatami, ZenohMessage};
+use zenoh_protocol::core::{whatami, PeerId};
+use zenoh_protocol::link::{Link, Locator};
+use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
-    SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
 };
 use zenoh_util::core::ZResult;
 
@@ -46,9 +46,8 @@ impl MySH {
 impl SessionHandler for MySH {
     async fn new_session(
         &self,
-        _whatami: whatami::Type,
-        _session: Arc<dyn SessionEventHandler + Send + Sync>,
-    ) -> Arc<dyn SessionEventHandler + Send + Sync> {
+        _session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         if !self.active.swap(true, Ordering::Acquire) {
             let count = self.counter.clone();
             task::spawn(async move {
@@ -59,7 +58,7 @@ impl SessionHandler for MySH {
                 }
             });
         }
-        Arc::new(MyMH::new(self.counter.clone()))
+        Ok(Arc::new(MyMH::new(self.counter.clone())))
     }
 }
 
@@ -81,6 +80,8 @@ impl SessionEventHandler for MyMH {
         Ok(())
     }
 
+    async fn new_link(&self, _link: Link) {}
+    async fn del_link(&self, _link: Link) {}
     async fn close(&self) {}
 }
 
