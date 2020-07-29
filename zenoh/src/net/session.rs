@@ -48,7 +48,7 @@ pub(crate) struct SessionState {
     subscribers: HashMap<Id, Subscriber>,
     callback_subscribers: HashMap<Id, CallbackSubscriber>,
     queryables: HashMap<Id, Queryable>,
-    queries: HashMap<ZInt, Sender<Reply>>,
+    queries: HashMap<ZInt, (u8, Sender<Reply>)>,
 }
 
 impl SessionState {
@@ -780,15 +780,111 @@ impl Session {
         let mut state = self.state.write().await;
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = channel(*API_REPLY_RECEPTION_CHANNEL_SIZE);
-        state.queries.insert(qid, rep_sender);
+        state.queries.insert(qid, (2, rep_sender));
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives
-            .query(resource, predicate, qid, target, consolidation)
+            .query(
+                resource,
+                predicate,
+                qid,
+                target.clone(),
+                consolidation.clone(),
+            )
+            .await;
+        self.handle_query(true, resource, predicate, qid, target, consolidation)
             .await;
 
         Ok(rep_receiver)
+    }
+
+    async fn handle_query(
+        &self,
+        local: bool,
+        reskey: &ResKey,
+        predicate: &str,
+        qid: ZInt,
+        target: QueryTarget,
+        _consolidation: QueryConsolidation,
+    ) {
+        let (primitives, resname, kinds_and_senders) = {
+            let state = self.state.read().await;
+            match state.reskey_to_resname(reskey) {
+                Ok(resname) => {
+                    let kinds_and_senders = state
+                        .queryables
+                        .values()
+                        .filter(
+                            |queryable| match state.reskey_to_resname(&queryable.reskey) {
+                                Ok(qablname) => {
+                                    rname::intersect(&qablname, &resname)
+                                        && ((queryable.kind == queryable::ALL_KINDS
+                                            || target.kind == queryable::ALL_KINDS)
+                                            || (queryable.kind & target.kind != 0))
+                                }
+                                Err(err) => {
+                                    error!(
+                                        "{}. Internal error (queryable reskey to resname failed).",
+                                        err
+                                    );
+                                    false
+                                }
+                            },
+                        )
+                        .map(|qable| (qable.kind, qable.req_sender.clone()))
+                        .collect::<Vec<(ZInt, Sender<Query>)>>();
+                    (
+                        if local {
+                            Arc::new(self.clone())
+                        } else {
+                            state.primitives.as_ref().unwrap().clone()
+                        },
+                        resname,
+                        kinds_and_senders,
+                    )
+                }
+                Err(err) => {
+                    error!("Received Query for unkown reskey: {}", err);
+                    return;
+                }
+            }
+        };
+
+        let predicate = predicate.to_string();
+        let (rep_sender, mut rep_receiver) = channel(*API_REPLY_EMISSION_CHANNEL_SIZE);
+        let pid = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
+
+        for (kind, req_sender) in kinds_and_senders {
+            req_sender
+                .send(Query {
+                    res_name: resname.clone(),
+                    predicate: predicate.clone(),
+                    replies_sender: RepliesSender {
+                        kind,
+                        sender: rep_sender.clone(),
+                    },
+                })
+                .await;
+        }
+        drop(rep_sender); // all senders need to be dropped for the channel to close
+
+        // router is not re-entrant
+        task::spawn(async move {
+            while let Some((kind, sample)) = rep_receiver.next().await {
+                primitives
+                    .reply_data(
+                        qid,
+                        kind,
+                        pid.clone(),
+                        ResKey::RName(sample.res_name),
+                        sample.data_info,
+                        sample.payload,
+                    )
+                    .await;
+            }
+            primitives.reply_final(qid).await;
+        });
     }
 }
 
@@ -888,88 +984,17 @@ impl Primitives for Session {
         predicate: &str,
         qid: ZInt,
         target: QueryTarget,
-        _consolidation: QueryConsolidation,
+        consolidation: QueryConsolidation,
     ) {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             reskey,
             predicate,
             target,
-            _consolidation
+            consolidation
         );
-        let (primitives, resname, kinds_and_senders) = {
-            let state = self.state.read().await;
-            match state.reskey_to_resname(reskey) {
-                Ok(resname) => {
-                    let kinds_and_senders = state
-                        .queryables
-                        .values()
-                        .filter(
-                            |queryable| match state.reskey_to_resname(&queryable.reskey) {
-                                Ok(qablname) => {
-                                    rname::intersect(&qablname, &resname)
-                                        && ((queryable.kind == queryable::ALL_KINDS
-                                            || target.kind == queryable::ALL_KINDS)
-                                            || (queryable.kind & target.kind != 0))
-                                }
-                                Err(err) => {
-                                    error!(
-                                        "{}. Internal error (queryable reskey to resname failed).",
-                                        err
-                                    );
-                                    false
-                                }
-                            },
-                        )
-                        .map(|qable| (qable.kind, qable.req_sender.clone()))
-                        .collect::<Vec<(ZInt, Sender<Query>)>>();
-                    (
-                        state.primitives.as_ref().unwrap().clone(),
-                        resname,
-                        kinds_and_senders,
-                    )
-                }
-                Err(err) => {
-                    error!("Received Query for unkown reskey: {}", err);
-                    return;
-                }
-            }
-        };
-
-        let predicate = predicate.to_string();
-        let (rep_sender, mut rep_receiver) = channel(*API_REPLY_EMISSION_CHANNEL_SIZE);
-        let pid = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
-
-        for (kind, req_sender) in kinds_and_senders {
-            req_sender
-                .send(Query {
-                    res_name: resname.clone(),
-                    predicate: predicate.clone(),
-                    replies_sender: RepliesSender {
-                        kind,
-                        sender: rep_sender.clone(),
-                    },
-                })
-                .await;
-        }
-        drop(rep_sender); // all senders need to be dropped for the channel to close
-
-        task::spawn(async move {
-            // router is not re-entrant
-            while let Some((kind, sample)) = rep_receiver.next().await {
-                primitives
-                    .reply_data(
-                        qid,
-                        kind,
-                        pid.clone(),
-                        ResKey::RName(sample.res_name),
-                        sample.data_info,
-                        sample.payload,
-                    )
-                    .await;
-            }
-            primitives.reply_final(qid).await;
-        });
+        self.handle_query(false, reskey, predicate, qid, target, consolidation)
+            .await
     }
 
     async fn reply_data(
@@ -993,16 +1018,16 @@ impl Primitives for Session {
         let (rep_sender, reply) = {
             let state = &mut self.state.write().await;
             let rep_sender = match state.queries.get(&qid) {
-                Some(rep_sender) => rep_sender.clone(),
+                Some(query) => query.1.clone(),
                 None => {
-                    warn!("Received Reply for unkown Query: {}", qid);
+                    warn!("Received ReplyData for unkown Query: {}", qid);
                     return;
                 }
             };
             let res_name = match state.reskey_to_resname(&reskey) {
                 Ok(name) => name,
                 Err(e) => {
-                    error!("Received Reply for unkown reskey: {}", e);
+                    error!("Received ReplyData for unkown reskey: {}", e);
                     return;
                 }
             };
@@ -1024,7 +1049,19 @@ impl Primitives for Session {
 
     async fn reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
-        self.state.write().await.queries.remove(&qid);
+        let mut state = self.state.write().await;
+        match state.queries.get_mut(&qid) {
+            Some(mut query) => {
+                query.0 -= 1;
+                if query.0 == 0 {
+                    state.queries.remove(&qid);
+                }
+            }
+            None => {
+                warn!("Received ReplyFinal for unkown Query: {}", qid);
+                return;
+            }
+        }
     }
 
     async fn pull(
