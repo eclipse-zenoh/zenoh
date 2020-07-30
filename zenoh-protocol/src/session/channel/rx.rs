@@ -70,6 +70,91 @@ impl ChannelRxBestEffort {
     }
 }
 
+macro_rules! zcallback {
+    ($ch:expr, $msg:expr) => {
+        log::trace!("Session: {}. Message: {:?}", $ch.get_pid(), $msg);
+        match zasyncread!($ch.callback).as_ref() {
+            Some(callback) => {
+                let _ = callback.handle_message($msg).await;
+            }
+            None => {
+                log::debug!("No callback available, dropping message: {}", $msg);
+            }
+        }
+    };
+}
+
+macro_rules! zreceiveframe {
+    ($ch:expr, $guard:expr, $sn:expr, $payload:expr) => {
+        let precedes = match $guard.sn.precedes($sn) {
+            Ok(precedes) => precedes,
+            Err(e) => {
+                log::warn!(
+                    "Invalid SN in frame: {}. \
+                        Closing the session with peer: {}",
+                    e,
+                    $ch.get_pid()
+                );
+                // Drop the guard before closing the session
+                drop($guard);
+                // Delete the whole session
+                $ch.delete().await;
+                // Close the link
+                return Action::Close;
+            }
+        };
+
+        if !precedes {
+            log::warn!("Frame with invalid SN dropped: {}", $sn);
+            // Drop the fragments if needed
+            if !$guard.defrag_buffer.is_empty() {
+                $guard.defrag_buffer.clear();
+            }
+            // Keep reading
+            return Action::Read;
+        }
+
+        // Set will always return OK because we have already checked
+        // with precedes() that the sn has the right resolution
+        let _ = $guard.sn.set($sn);
+        match $payload {
+            FramePayload::Fragment { buffer, is_final } => {
+                if $guard.defrag_buffer.is_empty() {
+                    let _ = $guard.defrag_buffer.sync($sn);
+                }
+                let res = $guard.defrag_buffer.push($sn, buffer);
+                if let Err(e) = res {
+                    log::trace!("Session: {}. Defragmentation error: {:?}", $ch.get_pid(), e);
+                    $guard.defrag_buffer.clear();
+                    return Action::Read;
+                }
+
+                if is_final {
+                    let msg = match $guard.defrag_buffer.defragment() {
+                        Ok(msg) => msg,
+                        Err(e) => {
+                            log::trace!(
+                                "Session: {}. Defragmentation error: {:?}",
+                                $ch.get_pid(),
+                                e
+                            );
+                            return Action::Read;
+                        }
+                    };
+                    zcallback!($ch, msg);
+                }
+            }
+            FramePayload::Messages { mut messages } => {
+                for msg in messages.drain(..) {
+                    zcallback!($ch, msg);
+                }
+            }
+        }
+        // Keep reading
+        return Action::Read;
+    };
+}
+
 impl Channel {
     /*************************************/
     /*   MESSAGE RECEIVED FROM THE LINK  */
@@ -78,163 +163,13 @@ impl Channel {
         // @TODO: Implement the reordering and reliability. Wait for missing messages.
         let mut guard = zasynclock!(self.rx_reliable);
 
-        match guard.sn.precedes(sn) {
-            Ok(precedes) => {
-                if precedes {
-                    // Set will always return OK because we have already checked
-                    // with precedes() that the sn has the right resolution
-                    let _ = guard.sn.set(sn);
-                    match payload {
-                        FramePayload::Fragment { buffer, is_final } => {
-                            if guard.defrag_buffer.is_empty() {
-                                let _ = guard.defrag_buffer.sync(sn);
-                            }
-                            let res = guard.defrag_buffer.push(sn, buffer);
-                            if res.is_ok() && is_final {
-                                match guard.defrag_buffer.defragment() {
-                                    Ok(msg) => {
-                                        log::trace!(
-                                            "Session: {}. Message: {:?}",
-                                            self.get_pid(),
-                                            msg
-                                        );
-                                        if let Some(callback) = zasyncread!(self.callback).as_ref()
-                                        {
-                                            let _ = callback.handle_message(msg).await;
-                                        } else {
-                                            log::debug!("No callback available, dropping reliable message: {}", msg);
-                                        }
-                                    }
-                                    Err(e) => log::trace!(
-                                        "Session: {}. Defragmentation error: {:?}",
-                                        self.get_pid(),
-                                        e
-                                    ),
-                                }
-                            }
-                        }
-                        FramePayload::Messages { mut messages } => {
-                            for msg in messages.drain(..) {
-                                log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
-                                if let Some(callback) = zasyncread!(self.callback).as_ref() {
-                                    let _ = callback.handle_message(msg).await;
-                                } else {
-                                    log::debug!(
-                                        "No callback available, dropping reliable message: {}",
-                                        msg
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    // Keep reading
-                    Action::Read
-                } else {
-                    log::warn!("Reliableframe with invalid SN dropped: {}", sn);
-                    // Drop the fragments if needed
-                    if !guard.defrag_buffer.is_empty() {
-                        guard.defrag_buffer.clear();
-                    }
-                    // Keep reading
-                    Action::Read
-                }
-            }
-            Err(e) => {
-                log::warn!(
-                    "Invalid SN in reliable frame: {}. \
-                            Closing the session with peer: {}",
-                    e,
-                    self.get_pid()
-                );
-                // Drop the guard before closing the session
-                drop(guard);
-                // Delete the whole session
-                self.delete().await;
-                // Close the link
-                Action::Close
-            }
-        }
+        zreceiveframe!(self, guard, sn, payload);
     }
 
     async fn process_best_effort_frame(&self, sn: ZInt, payload: FramePayload) -> Action {
         let mut guard = zasynclock!(self.rx_best_effort);
 
-        match guard.sn.precedes(sn) {
-            Ok(precedes) => {
-                if precedes {
-                    // Set will always return OK because we have already checked
-                    // with precedes() that the sn has the right resolution
-                    let _ = guard.sn.set(sn);
-                    match payload {
-                        FramePayload::Fragment { buffer, is_final } => {
-                            if guard.defrag_buffer.is_empty() {
-                                let _ = guard.defrag_buffer.sync(sn);
-                            }
-                            let res = guard.defrag_buffer.push(sn, buffer);
-                            if res.is_ok() && is_final {
-                                match guard.defrag_buffer.defragment() {
-                                    Ok(msg) => {
-                                        log::trace!(
-                                            "Session: {}. Message: {:?}",
-                                            self.get_pid(),
-                                            msg
-                                        );
-                                        if let Some(callback) = zasyncread!(self.callback).as_ref()
-                                        {
-                                            let _ = callback.handle_message(msg).await;
-                                        } else {
-                                            log::debug!("No callback available, dropping best effort message: {}", msg);
-                                        }
-                                    }
-                                    Err(e) => log::trace!(
-                                        "Session: {}. Defragmentation error: {:?}",
-                                        self.get_pid(),
-                                        e
-                                    ),
-                                }
-                            }
-                        }
-                        FramePayload::Messages { mut messages } => {
-                            for msg in messages.drain(..) {
-                                log::trace!("Session: {}. Message: {:?}", self.get_pid(), msg);
-                                if let Some(callback) = zasyncread!(self.callback).as_ref() {
-                                    let _ = callback.handle_message(msg).await;
-                                } else {
-                                    log::debug!(
-                                        "No callback available, dropping best effort message: {}",
-                                        msg
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    // Keep reading
-                    Action::Read
-                } else {
-                    log::warn!("Best effort frame with invalid SN dropped: {}", sn);
-                    // Drop the fragments if needed
-                    if !guard.defrag_buffer.is_empty() {
-                        guard.defrag_buffer.clear();
-                    }
-                    // Keep reading
-                    Action::Read
-                }
-            }
-            Err(e) => {
-                log::warn!(
-                    "Invalid SN in best effort frame: {}. \
-                            Closing the session with peer: {}",
-                    e,
-                    self.get_pid()
-                );
-                // Drop the guard before closing the session
-                drop(guard);
-                // Delete the whole session
-                self.delete().await;
-                // Close the link
-                Action::Close
-            }
-        }
+        zreceiveframe!(self, guard, sn, payload);
     }
 
     async fn process_close(
