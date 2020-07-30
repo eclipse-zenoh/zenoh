@@ -14,9 +14,25 @@
 use clap::{App, Arg};
 use zenoh::net::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let (config, path, value) = parse_args();
+
+    println!("Opening session...");
+    let session = open(config, None).await.unwrap();
+
+    println!("Writing Data ('{}': '{}')...\n", path, value);
+    session
+        .write(&path.into(), value.as_bytes().into())
+        .await
+        .unwrap();
+
+    session.close().await.unwrap();
+}
+
 fn parse_args() -> (Config, String, String) {
     let args = App::new("zenoh-net write example")
         .arg(
@@ -54,22 +70,4 @@ fn parse_args() -> (Config, String, String) {
     let value = args.value_of("value").unwrap();
 
     (config, path.to_string(), value.to_string())
-}
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
-    let (config, path, value) = parse_args();
-
-    println!("Opening session...");
-    let session = open(config, None).await.unwrap();
-
-    println!("Writing Data ('{}': '{}')...\n", path, value);
-    session
-        .write(&path.into(), value.as_bytes().into())
-        .await
-        .unwrap();
-
-    session.close().await.unwrap();
 }

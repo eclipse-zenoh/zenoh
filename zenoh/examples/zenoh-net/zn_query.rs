@@ -17,9 +17,37 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use zenoh::net::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let (config, selector) = parse_args();
+
+    println!("Opening session...");
+    let session = open(config, None).await.unwrap();
+
+    println!("Sending Query '{}'...", selector);
+    let mut replies = session
+        .query(
+            &selector.into(),
+            "",
+            QueryTarget::default(),
+            QueryConsolidation::default(),
+        )
+        .await
+        .unwrap();
+    while let Some(reply) = replies.next().await {
+        println!(
+            ">> [Reply handler] received ('{}': '{}')",
+            reply.data.res_name,
+            String::from_utf8_lossy(&reply.data.payload.to_vec())
+        )
+    }
+
+    session.close().await.unwrap();
+}
+
 fn parse_args() -> (Config, String) {
     let args = App::new("zenoh-net query example")
         .arg(
@@ -53,35 +81,4 @@ fn parse_args() -> (Config, String) {
     let selector = args.value_of("selector").unwrap().to_string();
 
     (config, selector)
-}
-
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
-    let (config, selector) = parse_args();
-
-    println!("Opening session...");
-    let session = open(config, None).await.unwrap();
-
-    println!("Sending Query '{}'...", selector);
-    let mut replies = session
-        .query(
-            &selector.into(),
-            "",
-            QueryTarget::default(),
-            QueryConsolidation::default(),
-        )
-        .await
-        .unwrap();
-    while let Some(reply) = replies.next().await {
-        println!(
-            ">> [Reply handler] received ('{}': '{}')",
-            reply.data.res_name,
-            String::from_utf8_lossy(&reply.data.payload.to_vec())
-        )
-    }
-
-    session.close().await.unwrap();
 }

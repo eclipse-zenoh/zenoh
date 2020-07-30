@@ -31,36 +31,6 @@ if(typeof(EventSource) !== "undefined") {
 }
 </script>"#;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
-fn parse_args() -> Config {
-    let args = App::new("zenoh-net ssl server example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
-        )
-        .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
-        ))
-        .get_matches();
-
-    Config::default()
-        .mode(
-            args.value_of("mode")
-                .map(|m| Config::parse_mode(m))
-                .unwrap()
-                .unwrap(),
-        )
-        .add_peers(
-            args.values_of("peer")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        )
-}
-
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -113,4 +83,31 @@ async fn main() {
             .unwrap();
         async_std::task::sleep(std::time::Duration::new(1, 0)).await;
     }
+}
+
+fn parse_args() -> Config {
+    let args = App::new("zenoh-net ssl server example")
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .get_matches();
+
+    Config::default()
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        )
 }

@@ -17,47 +17,6 @@ use futures::select;
 use zenoh::net::queryable::EVAL;
 use zenoh::net::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
-fn parse_args() -> (Config, String, String) {
-    let args = App::new("zenoh-net eval example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
-        )
-        .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
-        ))
-        .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to evaluate.'")
-                .default_value("/demo/example/zenoh-rs-eval"),
-        )
-        .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")
-                .default_value("Eval from Rust!"),
-        )
-        .get_matches();
-
-    let config = Config::default()
-        .mode(
-            args.value_of("mode")
-                .map(|m| Config::parse_mode(m))
-                .unwrap()
-                .unwrap(),
-        )
-        .add_peers(
-            args.values_of("peer")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        );
-    let path = args.value_of("path").unwrap().to_string();
-    let value = args.value_of("value").unwrap().to_string();
-
-    (config, path, value)
-}
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -96,4 +55,43 @@ async fn main() {
 
     session.undeclare_queryable(queryable).await.unwrap();
     session.close().await.unwrap();
+}
+
+fn parse_args() -> (Config, String, String) {
+    let args = App::new("zenoh-net eval example")
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(
+            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to evaluate.'")
+                .default_value("/demo/example/zenoh-rs-eval"),
+        )
+        .arg(
+            Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")
+                .default_value("Eval from Rust!"),
+        )
+        .get_matches();
+
+    let config = Config::default()
+        .mode(
+            args.value_of("mode")
+                .map(|m| Config::parse_mode(m))
+                .unwrap()
+                .unwrap(),
+        )
+        .add_peers(
+            args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        );
+    let path = args.value_of("path").unwrap().to_string();
+    let value = args.value_of("value").unwrap().to_string();
+
+    (config, path, value)
 }
