@@ -55,7 +55,7 @@ async fn main() {
     ps.push((properties::ZN_USER_KEY, b"user".to_vec()));
     ps.push((properties::ZN_PASSWD_KEY, b"password".to_vec()));
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = open(config, Some(ps)).await.unwrap();
 
     let info = session.info().await;

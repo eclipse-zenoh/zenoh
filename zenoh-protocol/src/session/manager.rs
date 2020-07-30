@@ -81,7 +81,7 @@ use zenoh_util::{zasyncread, zasyncwrite, zerror};
 ///     keep_alive: Some(100),  // Set the default keep alive interval to 100ms
 ///     sn_resolution: None,    // Use the default sequence number resolution
 ///     batch_size: None,       // Use the default batch size
-///     timeout: Some(10_0000), // Timeout of 10s when opening a session
+///     timeout: Some(10_000),  // Timeout of 10s when opening a session
 ///     retries: Some(3),       // Tries to open a session 3 times before failure
 ///     max_sessions: Some(5),  // Accept any number of sessions
 ///     max_links: None         // Allow any number of links in a single session
@@ -239,7 +239,7 @@ impl SessionManager {
                         locator,
                         e,
                         to,
-                        i,
+                        i + 1,
                         retries
                     );
                     continue;

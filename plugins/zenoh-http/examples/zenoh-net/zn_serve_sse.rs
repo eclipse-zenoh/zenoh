@@ -70,7 +70,7 @@ async fn main() {
     let path = "/demo/sse";
     let value = "Pub from sse server!";
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = open(config, None).await.unwrap();
 
     println!("Declaring Queryable on {}", path);

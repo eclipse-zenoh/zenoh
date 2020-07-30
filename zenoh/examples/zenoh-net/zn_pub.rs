@@ -63,7 +63,7 @@ async fn main() {
 
     let (config, path, value) = parse_args();
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = open(config, None).await.unwrap();
 
     print!("Declaring Resource {}", path);

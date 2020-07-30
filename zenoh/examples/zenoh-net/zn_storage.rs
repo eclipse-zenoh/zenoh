@@ -66,7 +66,7 @@ async fn main() {
 
     let mut stored: HashMap<String, (RBuf, Option<RBuf>)> = HashMap::new();
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = open(config, None).await.unwrap();
 
     let sub_info = SubInfo {

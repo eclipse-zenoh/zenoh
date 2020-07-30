@@ -22,7 +22,6 @@ use libc::{c_char, c_int, c_uchar, c_uint, c_ulong};
 use std::convert::TryFrom;
 use std::ffi::{CStr, CString};
 use std::slice;
-use std::time::Duration;
 use zenoh::net::Config;
 use zenoh::net::*;
 use zenoh_protocol::core::ZInt;
