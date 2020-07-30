@@ -19,8 +19,8 @@ debug:
 	clang -I ../include -L ../../target/debug/ -lzenoh_ffi test_queryable.c -o test_queryable
 
 release:
-	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi session_test.c -o session_test
-	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi thrput_test.c -o thrput_test
+	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi test_session.c -o session_test
+	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi throughput_pub.c -o throughput_pub
 	clang -O3 -I ../include -L ../../target/debug/ -lzenoh_ffi test_sub.c -o test_sub
 	clang -O3 -I ../include -L ../../target/debug/ -lzenoh_ffi test_query.c -o test_query
 	clang -O3 -I ../include -L ../../target/debug/ -lzenoh_ffi test_queryable.c -o test_queryable

@@ -75,7 +75,7 @@ async fn main() {
 
     println!("Put Float ('{}': '{}')...\n", path, value);
     workspace
-        .put(&path.try_into().unwrap(), Value::Float(value))
+        .put(&path.try_into().unwrap(), value.into())
         .await
         .unwrap();
 

@@ -118,7 +118,7 @@ async fn main() {
         }
         let s = format!("Eval from {}", name);
         println!(r#"   >> Returning string: "{}""#, s);
-        get_request.reply(path.clone(), Value::StringUTF8(s)).await;
+        get_request.reply(path.clone(), s.into()).await;
     }
 
     zenoh.close().await.unwrap();
