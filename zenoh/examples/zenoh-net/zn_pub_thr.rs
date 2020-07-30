@@ -15,9 +15,31 @@ use clap::{App, Arg};
 use zenoh::net::ResKey::*;
 use zenoh::net::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+    let (config, size) = parse_args();
+
+    let data: RBuf = (0usize..size)
+        .map(|i| (i % 10) as u8)
+        .collect::<Vec<u8>>()
+        .into();
+
+    println!("Opening session...");
+    let session = open(config, None).await.unwrap();
+
+    let reskey = RId(session
+        .declare_resource(&RName("/test/thr".to_string()))
+        .await
+        .unwrap());
+    let _publ = session.declare_publisher(&reskey).await.unwrap();
+
+    loop {
+        session.write(&reskey, data.clone()).await.unwrap();
+    }
+}
+
 fn parse_args() -> (Config, usize) {
     let args = App::new("zenoh-net throughput pub example")
         .arg(
@@ -54,29 +76,4 @@ fn parse_args() -> (Config, usize) {
         .unwrap();
 
     (config, size)
-}
-
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-    let (config, size) = parse_args();
-
-    let data: RBuf = (0usize..size)
-        .map(|i| (i % 10) as u8)
-        .collect::<Vec<u8>>()
-        .into();
-
-    println!("Opening session...");
-    let session = open(config, None).await.unwrap();
-
-    let reskey = RId(session
-        .declare_resource(&RName("/test/thr".to_string()))
-        .await
-        .unwrap());
-    let _publ = session.declare_publisher(&reskey).await.unwrap();
-
-    loop {
-        session.write(&reskey, data.clone()).await.unwrap();
-    }
 }

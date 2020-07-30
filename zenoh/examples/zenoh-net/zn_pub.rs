@@ -14,9 +14,33 @@
 use clap::{App, Arg};
 use zenoh::net::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let (config, path, value) = parse_args();
+
+    println!("Opening session...");
+    let session = open(config, None).await.unwrap();
+
+    print!("Declaring Resource {}", path);
+    let rid = session.declare_resource(&path.into()).await.unwrap();
+    println!(" => RId {}", rid);
+
+    println!("Declaring Publisher on {}", rid);
+    let publ = session.declare_publisher(&rid.into()).await.unwrap();
+
+    println!("Writing Data ('{}': '{}')...\n", rid, value);
+    session
+        .write(&rid.into(), value.as_bytes().into())
+        .await
+        .unwrap();
+
+    session.undeclare_publisher(publ).await.unwrap();
+    session.close().await.unwrap();
+}
+
 fn parse_args() -> (Config, String, String) {
     let args = App::new("zenoh-net pub example")
         .arg(
@@ -54,31 +78,4 @@ fn parse_args() -> (Config, String, String) {
     let value = args.value_of("value").unwrap();
 
     (config, path.to_string(), value.to_string())
-}
-
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
-    let (config, path, value) = parse_args();
-
-    println!("Opening session...");
-    let session = open(config, None).await.unwrap();
-
-    print!("Declaring Resource {}", path);
-    let rid = session.declare_resource(&path.into()).await.unwrap();
-    println!(" => RId {}", rid);
-
-    println!("Declaring Publisher on {}", rid);
-    let publ = session.declare_publisher(&rid.into()).await.unwrap();
-
-    println!("Writing Data ('{}': '{}')...\n", rid, value);
-    session
-        .write(&rid.into(), value.as_bytes().into())
-        .await
-        .unwrap();
-
-    session.undeclare_publisher(publ).await.unwrap();
-    session.close().await.unwrap();
 }
