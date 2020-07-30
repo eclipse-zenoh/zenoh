@@ -90,6 +90,8 @@ pub use selector::Selector;
 mod values;
 pub use values::*;
 
+mod utils;
+
 pub use zenoh_protocol::core::Timestamp;
 
 type Config = net::Config;

@@ -12,8 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::queryable::EVAL;
-use crate::net::*;
-use crate::*;
+use crate::net::{
+    data_kind, encoding, DataInfo, Query, QueryConsolidation, QueryTarget, Queryable, RBuf,
+    Reliability, RepliesSender, Reply, ResKey, Sample, Session, SubInfo, SubMode, Subscriber, WBuf,
+    ZInt,
+};
+use crate::{utils, Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult};
 use async_std::pin::Pin;
 use async_std::stream::Stream;
 use async_std::sync::Receiver;
@@ -183,12 +187,6 @@ impl Workspace {
     }
 }
 
-// generate a reception timestamp with id=0x00
-fn new_reception_timestamp() -> Timestamp {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(now.into(), vec![0x00])
-}
-
 pub struct Data {
     pub path: Path,
     pub value: Value,
@@ -197,22 +195,7 @@ pub struct Data {
 
 fn reply_to_data(reply: Reply, decode_value: bool) -> ZResult<Data> {
     let path: Path = reply.data.res_name.try_into().unwrap();
-    let (encoding, timestamp) = reply.data.data_info.map_or(
-        (encoding::APP_OCTET_STREAM, new_reception_timestamp()),
-        |mut rbuf| match rbuf.read_datainfo() {
-            Ok(info) => (
-                info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
-                info.timestamp.unwrap_or_else(new_reception_timestamp),
-            ),
-            Err(e) => {
-                warn!(
-                    "Received DataInfo that failed to be decoded: {}. Assume it's RAW encoding",
-                    e
-                );
-                (encoding::APP_OCTET_STREAM, new_reception_timestamp())
-            }
-        },
-    );
+    let (_, encoding, timestamp) = utils::decode_data_info(reply.data.data_info);
     let value = if decode_value {
         Value::decode(encoding, reply.data.payload)?
     } else {
@@ -293,33 +276,7 @@ impl Change {
         decode_value: bool,
     ) -> ZResult<Change> {
         let path = res_name.try_into()?;
-        let (kind, encoding, timestamp) = data_info.map_or_else(
-            || {
-                (
-                    ChangeKind::PUT,
-                    encoding::APP_OCTET_STREAM,
-                    new_reception_timestamp(),
-                )
-            },
-            |mut rbuf| match rbuf.read_datainfo() {
-                Ok(info) => (
-                    info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
-                    info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
-                    info.timestamp.unwrap_or_else(new_reception_timestamp),
-                ),
-                Err(e) => {
-                    warn!(
-                        "Received DataInfo that failed to be decoded: {}. Assume it's for a PUT",
-                        e
-                    );
-                    (
-                        ChangeKind::PUT,
-                        encoding::APP_OCTET_STREAM,
-                        new_reception_timestamp(),
-                    )
-                }
-            },
-        );
+        let (kind, encoding, timestamp) = utils::decode_data_info(data_info);
         let value = if kind == ChangeKind::DELETE {
             None
         } else if decode_value {

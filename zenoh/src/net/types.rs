@@ -112,7 +112,7 @@ impl Stream for HelloStream {
 }
 
 /// A zenoh value.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Sample {
     pub res_name: String,
     pub payload: RBuf,
