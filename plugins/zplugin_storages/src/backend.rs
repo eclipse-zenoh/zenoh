@@ -67,18 +67,6 @@ pub(crate) async fn start_backend(
                                     }
                                     Err(e) => warn!("{}", e),
                                 }
-
-                                // match backend.create_storage(props).await {
-                                //     Ok(storage) => {
-                                //         match start_storage(storage, change.path.clone(), workspace.clone()).await {
-                                //             Ok(handle) => {
-                                //                 let _ = storages_handles.insert(change.path, handle);
-                                //             }
-                                //             Err(e) => warn!("{}", e),
-                                //         }
-                                //     }
-                                //     Err(e) => warn!("{}", e),
-                                // }
                             } else {
                                 warn!("Received a PUT on {} with invalid value: {:?}", change.path, change.value);
                             }
