@@ -255,12 +255,12 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             log::trace!("Http {:?}", req);
             match req.body_bytes().await {
                 Ok(bytes) => {
-                    let path = req.url().path();
+                    let resource = path_to_resource(req.url().path(), &req.state().1);
                     match req
                         .state()
                         .0
                         .write_ext(
-                            &path.into(),
+                            &resource,
                             bytes.into(),
                             enc_from_mime(req.content_type()),
                             data_kind::PUT,
@@ -288,12 +288,12 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             log::trace!("Http {:?}", req);
             match req.body_bytes().await {
                 Ok(bytes) => {
-                    let path = req.url().path();
+                    let resource = path_to_resource(req.url().path(), &req.state().1);
                     match req
                         .state()
                         .0
                         .write_ext(
-                            &path.into(),
+                            &resource,
                             bytes.into(),
                             enc_from_mime(req.content_type()),
                             data_kind::PATCH,
@@ -319,12 +319,12 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     app.at("*")
         .delete(async move |req: Request<(Session, String)>| {
             log::trace!("Http {:?}", req);
-            let path = req.url().path();
+            let resource = path_to_resource(req.url().path(), &req.state().1);
             match req
                 .state()
                 .0
                 .write_ext(
-                    &path.into(),
+                    &resource,
                     RBuf::new(),
                     enc_from_mime(req.content_type()),
                     data_kind::DELETE,
