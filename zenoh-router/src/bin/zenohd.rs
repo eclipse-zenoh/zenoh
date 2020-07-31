@@ -14,23 +14,20 @@
 use async_std::future;
 use async_std::task;
 use clap::{App, Arg};
-use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use zenoh_protocol::core::whatami;
 use zenoh_router::plugins::PluginsMgr;
 use zenoh_router::runtime::{AdminSpace, Config, Runtime};
-
-const PLUGINS_PREFIX: &str = "zplugin_";
 
 fn get_plugins_from_args() -> Vec<String> {
     let mut result: Vec<String> = vec![];
     let mut iter = std::env::args();
     while let Some(arg) = iter.next() {
-        if arg == "-P" {
+        if arg == "-P" || arg == "--plugin" {
             if let Some(arg2) = iter.next() {
                 result.push(arg2);
             }
         } else if arg.starts_with("--plugin=") {
-            result.push(arg);
+            result.push((&arg[9..]).to_string());
         }
     }
     result
@@ -56,19 +53,20 @@ fn main() {
             ))
             .arg(Arg::from_usage(
                 "-P, --plugin=[PATH_TO_PLUGIN]... \
-             'A plugin that must be loaded. Repeat this option to load several plugins.
-             Note that when set this option disable the automatic search and load of plugins.'",
+             'A plugin that must be loaded. Repeat this option to load several plugins.'",
+            ))
+            .arg(Arg::from_usage(
+                "--plugin-nolookup \
+             'When set, zenohd will not look for plugins nor try to load any plugin except the \
+             ones explicitely configured with -P or --plugin.'",
             ));
 
         let mut plugins_mgr = PluginsMgr::new();
         // Get specified plugins from command line
         let plugins = get_plugins_from_args();
-        if plugins.is_empty() {
-            plugins_mgr
-                .search_and_load_plugins(&format!("{}{}", DLL_PREFIX, PLUGINS_PREFIX), DLL_SUFFIX)
-                .await;
-        } else {
-            plugins_mgr.load_plugins(plugins)
+        plugins_mgr.load_plugins(plugins);
+        if !std::env::args().any(|arg| arg == "--plugin-nolookup") {
+            plugins_mgr.search_and_load_plugins().await;
         }
 
         // Add plugins' expected args and parse command line

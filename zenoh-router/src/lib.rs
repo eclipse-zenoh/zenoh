@@ -14,6 +14,9 @@
 #![feature(get_mut_unchecked)]
 #![feature(async_closure)]
 
+#[macro_use]
+extern crate lazy_static;
+
 pub mod plugins;
 pub mod routing;
 pub mod runtime;

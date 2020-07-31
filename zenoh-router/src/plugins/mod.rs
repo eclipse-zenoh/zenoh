@@ -15,7 +15,15 @@ use super::runtime::Runtime;
 use clap::{Arg, ArgMatches};
 use libloading::{Library, Symbol};
 use log::{debug, trace, warn};
+use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use std::path::{Path, PathBuf};
+use zenoh_util::zconfigurable;
+
+zconfigurable! {
+    static ref PLUGIN_PREFIX: String = "zplugin_".to_string();
+    static ref PLUGIN_FILE_PREFIX: String = format!("{}{}", DLL_PREFIX, *PLUGIN_PREFIX);
+    static ref PLUGIN_FILE_EXTENSION: String = DLL_SUFFIX.to_string();
+}
 
 pub struct PluginsMgr {
     pub search_paths: Vec<PathBuf>,
@@ -91,7 +99,7 @@ impl PluginsMgr {
         }
     }
 
-    pub async fn search_and_load_plugins(&mut self, prefix: &str, extension: &str) {
+    pub async fn search_and_load_plugins(&mut self) {
         log::debug!("Search for plugins to load in {:?}", self.search_paths);
         for dir in &self.search_paths {
             trace!("Search plugins in dir {:?} ", dir);
@@ -100,13 +108,23 @@ impl PluginsMgr {
                     for entry in read_dir {
                         if let Ok(entry) = entry {
                             if let Ok(filename) = entry.file_name().into_string() {
-                                if filename.starts_with(prefix) && filename.ends_with(extension) {
-                                    let name = &filename
-                                        [(prefix.len())..(filename.len() - extension.len())];
+                                if filename.starts_with(&*PLUGIN_FILE_PREFIX)
+                                    && filename.ends_with(&*PLUGIN_FILE_EXTENSION)
+                                {
+                                    let name = &filename[(PLUGIN_FILE_PREFIX.len())
+                                        ..(filename.len() - PLUGIN_FILE_EXTENSION.len())];
                                     let path = entry.path();
-                                    match Plugin::load(name, path) {
-                                        Ok(plugin) => self.plugins.push(plugin),
-                                        Err(err) => warn!("{}", err),
+                                    if !self.plugins.iter().any(|plugin| plugin.name == name) {
+                                        match Plugin::load(name, path) {
+                                            Ok(plugin) => self.plugins.push(plugin),
+                                            Err(err) => warn!("{}", err),
+                                        }
+                                    } else {
+                                        log::debug!(
+                                            "Do not load plugin {} from {:?} : already loaded.",
+                                            name,
+                                            path
+                                        );
                                     }
                                 }
                             }
@@ -131,8 +149,16 @@ impl PluginsMgr {
             if !file.is_file() {
                 panic!(format!("Path to plugin '{}' doesn't point to a file", path));
             }
-            let name = file.file_name().unwrap();
-            match Plugin::load(name.to_str().unwrap(), file.clone()) {
+            let filename = file.file_name().unwrap().to_str().unwrap();
+            let name = if filename.starts_with(&*PLUGIN_FILE_PREFIX)
+                && filename.ends_with(&*PLUGIN_FILE_EXTENSION)
+            {
+                &filename
+                    [(PLUGIN_FILE_PREFIX.len())..(filename.len() - PLUGIN_FILE_EXTENSION.len())]
+            } else {
+                filename
+            };
+            match Plugin::load(name, file.clone()) {
                 Ok(plugin) => self.plugins.push(plugin),
                 Err(err) => panic!(err),
             }
