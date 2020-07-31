@@ -134,7 +134,7 @@ pub struct Session {
 
 impl Session {
     pub(super) async fn new(config: Config, _ps: Option<Properties>) -> ZResult<Session> {
-        match Runtime::new(0, config).await {
+        match Runtime::new(0, config, None).await {
             Ok(runtime) => {
                 let session = Self::init(runtime).await;
                 // Workaround for the declare_and_shoot problem

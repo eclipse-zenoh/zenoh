@@ -21,7 +21,7 @@ use zenoh_protocol::core::{whatami, PeerId, WhatAmI};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::{zerror, zerror2};
 
 pub mod orchestrator;
 
@@ -40,11 +40,22 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, config: Config) -> ZResult<Runtime> {
-        let pid = PeerId {
-            id: uuid::Uuid::new_v4().as_bytes().to_vec(),
+    pub async fn new(version: u8, config: Config, id: Option<&str>) -> ZResult<Runtime> {
+        let pid = if let Some(s) = id {
+            PeerId {
+                id: hex::decode(s).map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: format!("Invalid id: {} - {}", s, e)
+                    })
+                })?,
+            }
+        } else {
+            PeerId {
+                id: uuid::Uuid::new_v4().as_bytes().to_vec(),
+            }
         };
-        log::debug!("Generated PID: {}", pid);
+
+        log::debug!("Using PID: {}", pid);
 
         let hlc = HLC::with_system_time(pid.id.clone());
         let broker = Arc::new(Broker::new(hlc));

@@ -33,6 +33,7 @@ socket2 = "0.3.12"
 uhlc = "0.1"
 zenoh-protocol =  { version = "0.5.0", path = "../zenoh-protocol" }
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
+hex = "0.4"
 
 [dependencies.async-std]
 version = "~1.6.0"

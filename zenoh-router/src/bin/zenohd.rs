@@ -47,9 +47,10 @@ fn main() {
                 .default_value("tcp/0.0.0.0:7447"),
             )
             .arg(Arg::from_usage(
-                "-e, --peer=[LOCATOR]... \
-            'A peer locator this router will try to connect to. \
-            Repeat this option to connect to several peers.'",
+                "-i, --id=[hex_string]... \
+            'The identifier (as an hexadecimal string - e.g.: 0A0B23...) that zenohd must use. \
+            WARNING: this identifier must be unique in the system! \
+            If not set, a random UUIDv4 will be used.'",
             ))
             .arg(Arg::from_usage(
                 "-P, --plugin=[PATH_TO_PLUGIN]... \
@@ -91,9 +92,12 @@ fn main() {
             scouting_delay: std::time::Duration::new(0, 200_000_000),
         };
 
-        let runtime = match Runtime::new(0, config).await {
+        let runtime = match Runtime::new(0, config, args.value_of("id")).await {
             Ok(runtime) => runtime,
-            _ => std::process::exit(-1),
+            Err(e) => {
+                println!("{}. Exiting...", e);
+                std::process::exit(-1);
+            }
         };
 
         plugins_mgr.start_plugins(&runtime, &args).await;
