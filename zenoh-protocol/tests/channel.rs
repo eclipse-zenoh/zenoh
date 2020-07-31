@@ -132,10 +132,7 @@ impl SessionEventHandler for SCClient {
     async fn close(&self) {}
 }
 
-async fn channel_base_inner() {
-    // Define the locator
-    let locator: Locator = "tcp/127.0.0.1:8888".parse().unwrap();
-
+async fn channel_base(locator: Locator) {
     // Define client and router IDs
     let client_id = PeerId { id: vec![0u8] };
     let router_id = PeerId { id: vec![1u8] };
@@ -263,6 +260,15 @@ async fn channel_base_inner() {
 }
 
 #[test]
-fn channel_base() {
-    task::block_on(channel_base_inner());
+fn channel_tcp() {
+    // Define the locator
+    let locator: Locator = "tcp/127.0.0.1:8888".parse().unwrap();
+    task::block_on(channel_base(locator));
 }
+
+// #[test]
+// fn channel_udp() {
+//     // Define the locator
+//     let locator: Locator = "udp/127.0.0.1:8888".parse().unwrap();
+//     task::block_on(channel_base(locator));
+// }

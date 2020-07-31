@@ -22,7 +22,7 @@ use std::fmt;
 use std::net::Shutdown;
 use std::time::Duration;
 
-use super::{Link, LinkTrait, Locator, ManagerTrait};
+use super::{Link, LinkTrait, Locator, ManagerTrait, PROTO_SEPARATOR, STR_TCP};
 use crate::io::{ArcSlice, RBuf};
 use crate::proto::SessionMessage;
 use crate::session::{Action, SessionManagerInner, Transport};
@@ -30,7 +30,7 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
 // Default MTU (TCP PDU) in bytes.
-const DEFAULT_MTU: usize = 65_536;
+const DEFAULT_MTU: usize = 65_535;
 
 zconfigurable! {
     // Size of buffer used to read from socket.
@@ -52,14 +52,11 @@ macro_rules! get_tcp_addr {
     ($locator:expr) => {
         match $locator {
             Locator::Tcp(addr) => addr,
-            // @TODO: uncomment the following when more links are added
-            // _ => {
-            //    let e = format!("Not a TCP locator: {}", $locator);
-            //    log::debug!("{}", e);
-            //    return zerror!(ZErrorKind::InvalidLocator {
-            //        descr: e
-            //    })
-            // }
+            _ => {
+                let e = format!("Not a TCP locator: {}", $locator);
+                log::debug!("{}", e);
+                return zerror!(ZErrorKind::InvalidLocator { descr: e });
+            }
         }
     };
 }
@@ -89,10 +86,14 @@ pub struct Tcp {
 }
 
 impl Tcp {
-    fn new(socket: TcpStream, transport: Transport, manager: Arc<ManagerTcpInner>) -> Tcp {
-        // Retrieve the source and destination socket addresses
-        let src_addr = socket.local_addr().unwrap();
-        let dst_addr = socket.peer_addr().unwrap();
+    fn new(
+        socket: TcpStream,
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+        transport: Transport,
+        manager: Arc<ManagerTcpInner>,
+    ) -> Tcp {
+        // Sett the TCP linger option
         if let Err(err) = zenoh_util::net::set_linger(
             &socket,
             Some(Duration::from_secs(
@@ -136,7 +137,7 @@ impl LinkTrait for Tcp {
 
         // Close the underlying TCP socket
         let res = self.socket.shutdown(Shutdown::Both);
-        log::trace!("TCP link shudown {}: {:?}", self, res);
+        log::trace!("TCP link shutdown {}: {:?}", self, res);
 
         // Delete the link from the manager
         let _ = self.manager.del_link(&self.src_addr, &self.dst_addr).await;
@@ -512,8 +513,6 @@ impl ManagerTcp {
 
 #[async_trait]
 impl ManagerTrait for ManagerTcp {
-    // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
-    #[allow(clippy::infallible_destructuring_match)]
     async fn new_link(&self, dst: &Locator, transport: &Transport) -> ZResult<Link> {
         let dst = get_tcp_addr!(dst);
         let link = self.0.new_link(&self.0, dst, transport).await?;
@@ -521,8 +520,6 @@ impl ManagerTrait for ManagerTcp {
         Ok(link)
     }
 
-    // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
-    #[allow(clippy::infallible_destructuring_match)]
     async fn get_link(&self, src: &Locator, dst: &Locator) -> ZResult<Link> {
         let src = get_tcp_addr!(src);
         let dst = get_tcp_addr!(dst);
@@ -531,8 +528,6 @@ impl ManagerTrait for ManagerTcp {
         Ok(link)
     }
 
-    // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
-    #[allow(clippy::infallible_destructuring_match)]
     async fn del_link(&self, src: &Locator, dst: &Locator) -> ZResult<()> {
         let src = get_tcp_addr!(src);
         let dst = get_tcp_addr!(dst);
@@ -540,15 +535,11 @@ impl ManagerTrait for ManagerTcp {
         Ok(())
     }
 
-    // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
-    #[allow(clippy::infallible_destructuring_match)]
     async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
         let addr = get_tcp_addr!(locator);
         self.0.new_listener(&self.0, addr).await
     }
 
-    // @TODO: remove the allow #[allow(clippy::infallible_destructuring_match)] when adding more transport links
-    #[allow(clippy::infallible_destructuring_match)]
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
         let addr = get_tcp_addr!(locator);
         self.0.del_listener(&self.0, addr).await
@@ -600,39 +591,61 @@ impl ManagerTcpInner {
     async fn new_link(
         &self,
         a_self: &Arc<Self>,
-        dst: &SocketAddr,
+        dst_addr: &SocketAddr,
         transport: &Transport,
     ) -> ZResult<Arc<Tcp>> {
         // Create the TCP connection
-        let stream = match TcpStream::connect(dst).await {
+        let stream = match TcpStream::connect(dst_addr).await {
             Ok(stream) => stream,
             Err(e) => {
-                let e = format!("Can not create a new TCP link bound to {}: {}", dst, e);
+                let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
                 log::warn!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });
             }
         };
         // Create a new link object
-        let link = Arc::new(Tcp::new(stream, transport.clone(), a_self.clone()));
+        let src_addr = match stream.local_addr() {
+            Ok(addr) => addr,
+            Err(e) => {
+                let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+        let dst_addr = match stream.peer_addr() {
+            Ok(addr) => addr,
+            Err(e) => {
+                let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+        let link = Arc::new(Tcp::new(
+            stream,
+            src_addr,
+            dst_addr,
+            transport.clone(),
+            a_self.clone(),
+        ));
         link.initizalize(Arc::downgrade(&link));
 
         // Store the ink object
         let key = (link.src_addr, link.dst_addr);
-        self.link.write().await.insert(key, link.clone());
+        zasyncwrite!(self.link).insert(key, link.clone());
         // Spawn the receive loop for the new link
         let _ = link.start().await;
 
         Ok(link)
     }
 
-    async fn del_link(&self, src: &SocketAddr, dst: &SocketAddr) -> ZResult<()> {
+    async fn del_link(&self, src_addr: &SocketAddr, dst_addr: &SocketAddr) -> ZResult<()> {
         // Remove the link from the manager list
-        match zasyncwrite!(self.link).remove(&(*src, *dst)) {
+        match zasyncwrite!(self.link).remove(&(*src_addr, *dst_addr)) {
             Some(_) => Ok(()),
             None => {
                 let e = format!(
                     "Can not delete TCP link because it has not been found: {} => {}",
-                    src, dst
+                    src_addr, dst_addr
                 );
                 log::trace!("{}", e);
                 zerror!(ZErrorKind::InvalidLink { descr: e })
@@ -640,14 +653,14 @@ impl ManagerTcpInner {
         }
     }
 
-    async fn get_link(&self, src: &SocketAddr, dst: &SocketAddr) -> ZResult<Arc<Tcp>> {
+    async fn get_link(&self, src_addr: &SocketAddr, dst_addr: &SocketAddr) -> ZResult<Arc<Tcp>> {
         // Remove the link from the manager list
-        match zasyncwrite!(self.link).get(&(*src, *dst)) {
+        match zasyncwrite!(self.link).get(&(*src_addr, *dst_addr)) {
             Some(link) => Ok(link.clone()),
             None => {
                 let e = format!(
                     "Can not get TCP link because it has not been found: {} => {}",
-                    src, dst
+                    src_addr, dst_addr
                 );
                 log::trace!("{}", e);
                 zerror!(ZErrorKind::InvalidLink { descr: e })
@@ -666,8 +679,15 @@ impl ManagerTcpInner {
             }
         };
 
-        let local_addr = socket.local_addr().unwrap();
-        let listener = Arc::new(ListenerTcpInner::new(socket.clone()));
+        let local_addr = match socket.local_addr() {
+            Ok(addr) => addr,
+            Err(e) => {
+                let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+        let listener = Arc::new(ListenerTcpInner::new(socket));
         // Update the list of active listeners on the manager
         zasyncwrite!(self.listener).insert(local_addr, listener.clone());
 
@@ -680,10 +700,14 @@ impl ManagerTcpInner {
             // Delete the listener from the manager
             zasyncwrite!(c_self.listener).remove(&c_addr);
         });
-        Ok(["tcp/".to_string(), local_addr.to_string()]
-            .concat()
-            .parse()
-            .unwrap())
+        Ok([
+            STR_TCP.to_string(),
+            PROTO_SEPARATOR.to_string(),
+            local_addr.to_string(),
+        ]
+        .concat()
+        .parse()
+        .unwrap())
     }
 
     async fn del_listener(&self, _a_self: &Arc<Self>, addr: &SocketAddr) -> ZResult<()> {
@@ -740,17 +764,35 @@ async fn accept_task(a_self: &Arc<ManagerTcpInner>, listener: Arc<ListenerTcpInn
                     continue;
                 }
             };
+            // Get the source and destination TCP addresses
+            let src_addr = match stream.local_addr() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    let e = format!("Can not accept TCP connection: {}", e);
+                    log::warn!("{}", e);
+                    continue;
+                }
+            };
+            let dst_addr = match stream.peer_addr() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    let e = format!("Can not accept TCP connection: {}", e);
+                    log::warn!("{}", e);
+                    continue;
+                }
+            };
 
-            log::debug!(
-                "Accepted TCP connection on {:?}: {:?}",
-                stream.local_addr(),
-                stream.peer_addr()
-            );
-
+            log::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
             // Retrieve the initial temporary session
             let initial = a_self.inner.get_initial_transport().await;
             // Create the new link object
-            let link = Arc::new(Tcp::new(stream, initial, a_self.clone()));
+            let link = Arc::new(Tcp::new(
+                stream,
+                src_addr,
+                dst_addr,
+                initial,
+                a_self.clone(),
+            ));
             link.initizalize(Arc::downgrade(&link));
 
             // Store a reference to the link into the manager

@@ -19,6 +19,7 @@ pub use manager::*;
 
 /* Import of Link modules */
 mod tcp;
+mod udp;
 
 /* General imports */
 use async_std::sync::{Arc, Weak};
