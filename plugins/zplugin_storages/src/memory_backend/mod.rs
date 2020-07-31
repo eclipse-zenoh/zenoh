@@ -12,11 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_trait::async_trait;
-use log::debug;
+use log::{debug, trace, warn};
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use zenoh::net::utils::resource_name;
 use zenoh::net::{Query, Sample};
-use zenoh::{utils, Properties, Value, ZResult};
+use zenoh::{utils, ChangeKind, Properties, Timestamp, Value, ZResult};
 use zenoh_backend_core::{Backend, Storage};
 
 pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
@@ -43,13 +44,14 @@ impl Backend for MemoryBackend {
 
 impl Drop for MemoryBackend {
     fn drop(&mut self) {
-        log::debug!("MemoryBackend::drop()");
+        // nothing to do in case of memory backend
+        log::trace!("MemoryBackend::drop()");
     }
 }
 
 struct MemoryStorage {
     admin_status: Value,
-    map: HashMap<String, Sample>,
+    map: HashMap<String, (Sample, Timestamp)>,
 }
 
 impl MemoryStorage {
@@ -71,16 +73,40 @@ impl Storage for MemoryStorage {
 
     async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
         debug!("on_sample {}", sample.res_name);
-        self.map.insert(sample.res_name.clone(), sample);
+        let (kind, _, timestamp) = utils::decode_data_info(sample.data_info.clone());
+        match kind {
+            ChangeKind::PUT => match self.map.entry(sample.res_name.clone()) {
+                Entry::Vacant(v) => {
+                    v.insert((sample, timestamp));
+                }
+                Entry::Occupied(mut o) => {
+                    if o.get().1 < timestamp {
+                        o.insert((sample, timestamp));
+                    }
+                }
+            },
+            ChangeKind::DELETE => {
+                self.map.remove(&sample.res_name);
+            }
+            ChangeKind::PATCH => {
+                warn!("Received PATCH for {}: not yet supported", sample.res_name);
+            }
+        }
         Ok(())
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
         debug!("on_query {}", query.res_name);
-        for (_stored_name, sample) in self.map.iter() {
-            if resource_name::intersect(&query.res_name, &sample.res_name) {
-                let s: Sample = sample.clone();
-                query.reply(s).await;
+        if !query.res_name.contains('*') {
+            if let Some((sample, _)) = self.map.get(&query.res_name) {
+                query.reply(sample.clone()).await;
+            }
+        } else {
+            for (_, (sample, _)) in self.map.iter() {
+                if resource_name::intersect(&query.res_name, &sample.res_name) {
+                    let s: Sample = sample.clone();
+                    query.reply(s).await;
+                }
             }
         }
         Ok(())
@@ -89,6 +115,7 @@ impl Storage for MemoryStorage {
 
 impl Drop for MemoryStorage {
     fn drop(&mut self) {
-        debug!("MemoryStorage::drop()");
+        // nothing to do in case of memory backend
+        trace!("MemoryStorage::drop()");
     }
 }
