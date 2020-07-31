@@ -90,12 +90,13 @@ pub use selector::Selector;
 mod values;
 pub use values::*;
 
-mod utils;
+pub mod utils;
 
 pub use zenoh_protocol::core::Timestamp;
 
 type Config = net::Config;
 
+#[derive(Clone)]
 pub struct Zenoh {
     session: Session,
 }

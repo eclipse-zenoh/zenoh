@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::{encoding, RBuf, ZInt};
-use crate::{ChangeKind, Timestamp};
+use crate::{ChangeKind, Properties, Timestamp, Value};
 use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -54,4 +54,13 @@ pub fn decode_data_info(data_info: Option<RBuf>) -> (ChangeKind, ZInt, Timestamp
 fn new_reception_timestamp() -> Timestamp {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     Timestamp::new(now.into(), vec![0x00])
+}
+
+pub fn properties_to_json_value(props: &Properties) -> Value {
+    let json_map = props
+        .iter()
+        .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+        .collect::<serde_json::map::Map<String, serde_json::Value>>();
+    let json_val = serde_json::Value::Object(json_map);
+    Value::Json(json_val.to_string())
 }

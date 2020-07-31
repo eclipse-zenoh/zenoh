@@ -12,30 +12,27 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_trait::async_trait;
-use log::{debug, trace};
+use log::debug;
 use std::collections::HashMap;
 use zenoh::net::utils::resource_name;
 use zenoh::net::{Query, Sample};
-use zenoh::{
-    GetRequest, Path, PathExpr, Properties, Timestamp, Value, ZError, ZErrorKind, ZResult,
-};
+use zenoh::{utils, Properties, Value, ZResult};
 use zenoh_backend_core::{Backend, Storage};
-use zenoh_util::zerror2;
 
-pub fn create_backend(_properties: Properties) -> ZResult<Box<dyn Backend>> {
-    let mut properties = Properties::default();
-    properties.insert("kind".to_string(), "memory".to_string());
-    Ok(Box::new(MemoryBackend { properties }))
+pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
+    // For now admin status is static and only contains a "kind"
+    let admin_status = Value::Json(r#"{"kind"="memory"}"#.to_string());
+    Ok(Box::new(MemoryBackend { admin_status }))
 }
 
 pub struct MemoryBackend {
-    properties: Properties,
+    admin_status: Value,
 }
 
 #[async_trait]
 impl Backend for MemoryBackend {
-    fn properties(&self) -> &Properties {
-        &self.properties
+    async fn get_admin_status(&self) -> Value {
+        self.admin_status.clone()
     }
 
     async fn create_storage(&mut self, properties: Properties) -> ZResult<Box<dyn Storage>> {
@@ -51,25 +48,16 @@ impl Drop for MemoryBackend {
 }
 
 struct MemoryStorage {
-    path_expr: PathExpr,
-    properties: Properties,
+    admin_status: Value,
     map: HashMap<String, Sample>,
 }
 
 impl MemoryStorage {
     async fn new(properties: Properties) -> ZResult<MemoryStorage> {
-        let path_expr = properties
-            .get("path_expr")
-            .ok_or_else(|| {
-                zerror2!(ZErrorKind::Other {
-                    descr: format!("No 'path_expr' property")
-                })
-            })
-            .and_then(|s| PathExpr::new(s.clone()))?;
+        let admin_status = utils::properties_to_json_value(&properties);
 
         Ok(MemoryStorage {
-            path_expr,
-            properties,
+            admin_status,
             map: HashMap::new(),
         })
     }
@@ -77,12 +65,8 @@ impl MemoryStorage {
 
 #[async_trait]
 impl Storage for MemoryStorage {
-    fn path_expr(&self) -> &PathExpr {
-        &self.path_expr
-    }
-
-    fn properties(&self) -> &Properties {
-        &self.properties
+    async fn get_admin_status(&self) -> Value {
+        self.admin_status.clone()
     }
 
     async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
@@ -93,7 +77,7 @@ impl Storage for MemoryStorage {
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
         debug!("on_query {}", query.res_name);
-        for (stored_name, sample) in self.map.iter() {
+        for (_stored_name, sample) in self.map.iter() {
             if resource_name::intersect(&query.res_name, &sample.res_name) {
                 let s: Sample = sample.clone();
                 query.reply(s).await;

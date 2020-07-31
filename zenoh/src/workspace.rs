@@ -25,9 +25,9 @@ use async_std::task::{Context, Poll};
 use log::{debug, warn};
 use pin_project_lite::pin_project;
 use std::convert::TryInto;
-use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh_util::zerror;
 
+#[derive(Clone)]
 pub struct Workspace {
     session: Session,
     prefix: Path,
@@ -39,6 +39,11 @@ impl Workspace {
             session,
             prefix: prefix.unwrap_or_else(|| "/".try_into().unwrap()),
         })
+    }
+
+    #[doc(hidden)]
+    pub fn session(&self) -> &Session {
+        &self.session
     }
 
     fn path_to_reskey(&self, path: &Path) -> ResKey {
@@ -261,6 +266,7 @@ impl From<ZInt> for ChangeKind {
     }
 }
 
+#[derive(Debug)]
 pub struct Change {
     pub path: Path,
     pub value: Option<Value>,
