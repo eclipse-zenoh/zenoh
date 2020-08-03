@@ -38,6 +38,9 @@ fn parse_args() -> Config {
         .arg(Arg::from_usage(
             "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
         ))
+        .arg(Arg::from_usage(
+            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
+        ))
         .get_matches();
 
     Config::default()
@@ -49,6 +52,12 @@ fn parse_args() -> Config {
         )
         .add_peers(
             args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        )
+        .add_listeners(
+            args.values_of("listener")
                 .map(|p| p.collect())
                 .or_else(|| Some(vec![]))
                 .unwrap(),

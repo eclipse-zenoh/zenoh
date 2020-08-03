@@ -29,7 +29,6 @@ pub const PORT_SEPARATOR: char = ':';
 // Protocol literals
 #[cfg(feature = "tcp")]
 pub const STR_TCP: &str = "tcp";
-
 #[cfg(feature = "udp")]
 pub const STR_UDP: &str = "udp";
 
