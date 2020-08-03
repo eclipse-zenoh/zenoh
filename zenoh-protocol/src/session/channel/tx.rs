@@ -49,24 +49,24 @@ struct CircularBatchIn {
 macro_rules! zgetbatch {
     ($batch:expr) => {
         // Try to get a pointer to the first batch
-        if let Some(batch) = $batch.inner.front_mut() {
-            batch
-        } else {
-            // Refill the batches
-            let mut empty_guard = zasynclock!($batch.state_empty);
-            if empty_guard.is_empty() {
-                // Drop the guard and wait for the batches to be available
-                $batch.not_full.wait(empty_guard).await;
-                // We have been notified that there are batches available:
-                // reacquire the lock on the state_empty
-                empty_guard = zasynclock!($batch.state_empty);
+        loop {
+            if let Some(batch) = $batch.inner.front_mut() {
+                break batch;
+            } else {
+                // Refill the batches
+                let mut empty_guard = zasynclock!($batch.state_empty);
+                if empty_guard.is_empty() {
+                    // Drop the guard and wait for the batches to be available
+                    $batch.not_full.wait(empty_guard).await;
+                    // We have been notified that there are batches available:
+                    // reacquire the lock on the state_empty
+                    empty_guard = zasynclock!($batch.state_empty);
+                }
+                // Drain all the empty batches
+                while let Some(batch) = empty_guard.pull() {
+                    $batch.inner.push_back(batch);
+                }
             }
-            // Drain all the empty batches
-            while let Some(batch) = empty_guard.pull() {
-                $batch.inner.push_back(batch);
-            }
-            // Return the first batch
-            $batch.inner.front_mut().unwrap()
         }
     };
 }
