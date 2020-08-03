@@ -29,7 +29,8 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
 // Default MTU (UDP PDU) in bytes.
-const DEFAULT_MTU: usize = 65_535;
+// const DEFAULT_MTU: usize = 65_535;
+const DEFAULT_MTU: usize = 8_192;
 
 zconfigurable! {
     // Size of the vector used to deserialize the messages.
@@ -149,7 +150,6 @@ impl LinkTrait for Udp {
     async fn send(&self, buffer: &[u8]) -> ZResult<()> {
         log::trace!("Sending {} bytes on UDP link: {}", buffer.len(), self);
 
-        // let res = (&self.socket).send_to(buffer, self.dst_addr).await;
         let res = if self.is_connected {
             (&self.socket).send(buffer).await
         } else {
@@ -679,11 +679,11 @@ async fn accept_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerUdpInn
         log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
 
         // Buffers for deserialization
-        // let mut buff = vec![0; DEFAULT_MTU];
-        let mut buff = vec![0; 128];
+        let mut buff = vec![0; DEFAULT_MTU];
         let mut rbuf = RBuf::new();
         let mut msgs = Vec::with_capacity(*UDP_READ_MESSAGES_VEC_SIZE);
         loop {
+            rbuf.clear();
             // Wait for incoming connections
             let (n, dst_addr) = match listener.socket.recv_from(&mut buff).await {
                 Ok((n, dst_addr)) => (n, dst_addr),

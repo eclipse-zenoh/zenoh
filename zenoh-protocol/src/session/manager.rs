@@ -621,7 +621,7 @@ impl Session {
     }
 
     pub async fn schedule(&self, message: ZenohMessage, link: Option<Link>) -> ZResult<()> {
-        log::trace!("{:?}. Schedule: {:?}", self, message);
+        // log::trace!("{:?}. Schedule: {:?}", self, message);
         let channel = zweak!(self.0, STR_ERR);
         channel.schedule(message, link).await;
         Ok(())
