@@ -28,7 +28,6 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
 // Default MTU (UDP PDU) in bytes.
-// const DEFAULT_MTU: usize = 65_535;
 const DEFAULT_MTU: usize = 8_192;
 
 zconfigurable! {
