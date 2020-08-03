@@ -222,7 +222,7 @@ impl LinkTrait for Tcp {
 async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
     let read_loop = async {
         // The link object to be passed to the transport
-        let link_obj: Link = Link::new(link.clone());
+        let lobj: Link = Link::new(link.clone());
         // Acquire the lock on the transport
         let mut guard = zasynclock!(link.transport);
 
@@ -280,7 +280,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                 let _ = link.manager.del_link(&link.src_addr, &link.dst_addr).await;
                 if $notify {
                     // Notify the transport
-                    let _ = guard.link_err(&link_obj).await;
+                    let _ = guard.link_err(&lobj).await;
                 }
                 // Exit
                 return Ok(());
@@ -315,7 +315,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                 }
 
                 for msg in messages.drain(..) {
-                    let res = guard.receive_message(&link_obj, msg).await;
+                    let res = guard.receive_message(&lobj, msg).await;
                     // Enforce the action as instructed by the upper logic
                     match res {
                         Ok(action) => match action {

@@ -23,7 +23,6 @@ use std::time::Duration;
 
 use super::{Link, LinkTrait, Locator, ManagerTrait, PROTO_SEPARATOR, STR_UDP};
 use crate::io::{ArcSlice, RBuf};
-use crate::proto::SessionMessage;
 use crate::session::{Action, SessionManagerInner, Transport};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
@@ -107,32 +106,6 @@ impl Udp {
     fn initizalize(&self, w_self: Weak<Self>) {
         *self.w_self.try_write().unwrap() = Some(w_self);
     }
-
-    async fn receive(&self, msgs: &mut Vec<SessionMessage>, link_obj: &Link) {
-        let mut guard = zasynclock!(self.transport);
-        for msg in msgs.drain(..) {
-            log::trace!("Received UDP message: {:?}", msg);
-            let res = guard.receive_message(link_obj, msg).await;
-            // Enforce the action as instructed by the upper logic
-            match res {
-                Ok(action) => match action {
-                    Action::Read => {}
-                    Action::ChangeTransport(transport) => {
-                        log::trace!("Change transport on UDP link: {}", self);
-                        *guard = transport
-                    }
-                    Action::Close => {
-                        let _ = self.close().await;
-                        return;
-                    }
-                },
-                Err(_) => {
-                    let _ = self.close().await;
-                    return;
-                }
-            }
-        }
-    }
 }
 
 #[async_trait]
@@ -141,7 +114,6 @@ impl LinkTrait for Udp {
         log::trace!("Closing UDP link: {}", self);
         // Stop the read loop
         self.stop().await?;
-
         // Delete the link from the manager
         let _ = self.manager.del_link(&self.src_addr, &self.dst_addr).await;
         Ok(())
@@ -234,7 +206,7 @@ async fn read_task(link: Arc<Udp>, stop: Receiver<()>) {
     // The accept future
     let read_loop = async {
         // The link object to be passed to the transport
-        let link_obj = Link::new(link.clone());
+        let lobj = Link::new(link.clone());
         // Acquire the lock on the transport
         let mut guard = zasynclock!(link.transport);
 
@@ -250,7 +222,7 @@ async fn read_task(link: Arc<Udp>, stop: Receiver<()>) {
                 let _ = link.manager.del_link(&link.src_addr, &link.dst_addr).await;
                 if $notify {
                     // Notify the transport
-                    let _ = guard.link_err(&link_obj).await;
+                    let _ = guard.link_err(&lobj).await;
                 }
                 // Exit
                 return Ok(());
@@ -258,6 +230,8 @@ async fn read_task(link: Arc<Udp>, stop: Receiver<()>) {
         }
 
         loop {
+            // Clear the rbuf
+            rbuf.clear();
             // Wait for incoming connections
             match link.socket.recv(&mut buff).await {
                 Ok(n) => {
@@ -288,7 +262,7 @@ async fn read_task(link: Arc<Udp>, stop: Receiver<()>) {
 
                     // Process all the messages
                     for msg in msgs.drain(..) {
-                        let res = guard.receive_message(&link_obj, msg).await;
+                        let res = guard.receive_message(&lobj, msg).await;
                         // Enforce the action as instructed by the upper logic
                         match res {
                             Ok(action) => match action {
@@ -421,10 +395,11 @@ impl ListenerUdpInner {
     }
 }
 
+type LinkKey = (SocketAddr, SocketAddr);
 struct ManagerUdpInner {
     inner: Arc<SessionManagerInner>,
     listeners: RwLock<HashMap<SocketAddr, Arc<ListenerUdpInner>>>,
-    links: RwLock<HashMap<(SocketAddr, SocketAddr), (Arc<Udp>, Link)>>,
+    links: RwLock<HashMap<LinkKey, (Arc<Udp>, Link)>>,
 }
 
 impl ManagerUdpInner {
@@ -496,11 +471,11 @@ impl ManagerUdpInner {
             true,
         ));
         link.initizalize(Arc::downgrade(&link));
-        let link_obj = Link::new(link.clone());
+        let lobj = Link::new(link.clone());
 
         // Store the ink object
         let key = (src_addr, dst_addr);
-        zasyncwrite!(self.links).insert(key, (link.clone(), link_obj));
+        zasyncwrite!(self.links).insert(key, (link.clone(), lobj));
 
         // Spawn the receive loop for the new link
         let _ = link.start().await;
@@ -524,7 +499,7 @@ impl ManagerUdpInner {
                     if let Some(listener) = guard_list.remove(src_addr) {
                         if listener.is_active() {
                             // Re-insert the listener
-                            guard_list.insert(src_addr.clone(), listener);
+                            guard_list.insert(*src_addr, listener);
                         } else {
                             // Send the stop signal
                             listener.sender.send(()).await;
@@ -546,14 +521,14 @@ impl ManagerUdpInner {
         }
     }
 
-    async fn get_link(&self, src: &SocketAddr, dst: &SocketAddr) -> ZResult<Arc<Udp>> {
+    async fn get_link(&self, src_addr: &SocketAddr, dst_addr: &SocketAddr) -> ZResult<Arc<Udp>> {
         // Remove the link from the manager list
-        match zasyncread!(self.links).get(&(*src, *dst)) {
+        match zasyncread!(self.links).get(&(*src_addr, *dst_addr)) {
             Some((link, _)) => Ok(link.clone()),
             None => {
                 let e = format!(
                     "Can not get UDP link because it has not been found: {} => {}",
-                    src, dst
+                    src_addr, dst_addr
                 );
                 log::trace!("{}", e);
                 zerror!(ZErrorKind::InvalidLink { descr: e })
@@ -609,7 +584,7 @@ impl ManagerUdpInner {
         let c_addr = local_addr;
         task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(&c_self, listener).await;
+            accept_read_task(&c_self, listener).await;
             // Delete the listener from the manager
             zasyncwrite!(c_self.listeners).remove(&c_addr);
         });
@@ -636,7 +611,7 @@ impl ManagerUdpInner {
                     .any(|&(src_addr, _)| &src_addr == addr);
                 if has_links {
                     // We can not remove yet the listener from the hashmap: reinsert it
-                    guard.insert(addr.clone(), listener);
+                    guard.insert(*addr, listener);
                 } else {
                     // Send the stop signal
                     listener.sender.send(()).await;
@@ -664,9 +639,52 @@ impl ManagerUdpInner {
     }
 }
 
-async fn accept_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerUdpInner>) {
-    // The accept future
-    let accept_loop = async {
+async fn accept_read_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerUdpInner>) {
+    // The accept/read future
+    let accept_read_loop = async {
+        macro_rules! zreceive {
+            ($link:expr, $lobj:expr, $msgs:expr) => {
+                let mut guard = zasynclock!($link.transport);
+                for msg in $msgs.drain(..) {
+                    log::trace!("Received UDP message: {:?}", msg);
+                    let res = guard.receive_message(&$lobj, msg).await;
+                    // Enforce the action as instructed by the upper logic
+                    match res {
+                        Ok(action) => match action {
+                            Action::Read => {}
+                            Action::ChangeTransport(transport) => {
+                                log::trace!("Change transport on UDP link: {}", $link);
+                                *guard = transport
+                            }
+                            Action::Close => {
+                                let _ = $link.close().await;
+                                continue;
+                            }
+                        },
+                        Err(_) => {
+                            let _ = $link.close().await;
+                            continue;
+                        }
+                    }
+                }
+            };
+        }
+
+        macro_rules! zaddlinktuple {
+            ($src:expr, $dst:expr, $link:expr, $lobj:expr) => {
+                zasyncwrite!(a_self.links).insert(($src, $dst), ($link.clone(), $lobj.clone()));
+            };
+        }
+
+        macro_rules! zgetlinktuple {
+            ($src:expr, $dst:expr) => {
+                match zasyncread!(a_self.links).get(&($src, $dst)) {
+                    Some((link, lobj)) => Some((link.clone(), lobj.clone())),
+                    None => None,
+                }
+            };
+        }
+
         let src_addr = match listener.socket.local_addr() {
             Ok(addr) => addr,
             Err(e) => {
@@ -683,6 +701,7 @@ async fn accept_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerUdpInn
         let mut rbuf = RBuf::new();
         let mut msgs = Vec::with_capacity(*UDP_READ_MESSAGES_VEC_SIZE);
         loop {
+            // Clear the rbuf
             rbuf.clear();
             // Wait for incoming connections
             let (n, dst_addr) = match listener.socket.recv_from(&mut buff).await {
@@ -708,6 +727,7 @@ async fn accept_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerUdpInn
             slice.extend_from_slice(&buff[..n]);
             rbuf.add_slice(ArcSlice::new(Arc::new(slice), 0, n));
 
+            log::trace!("UDP received: {} {}", n, rbuf);
             // Deserialize all the messages from the current RBuf
             msgs.clear();
             let mut error = false;
@@ -731,24 +751,20 @@ async fn accept_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerUdpInn
             if error {
                 let mut guard = zasyncwrite!(a_self.links);
                 // Remove the link from the set of available peers
-                if let Some((link, link_obj)) = guard.remove(&key) {
-                    link.receive(&mut msgs, &link_obj).await;
+                if let Some((link, lobj)) = guard.remove(&key) {
+                    zreceive!(link, lobj, msgs);
                 }
                 // Continue reading
                 continue;
             }
 
-            let guard = zasyncread!(a_self.links);
-            // Get existing link
-            match guard.get(&key) {
-                Some((link, link_obj)) => {
+            let res = zgetlinktuple!(src_addr, dst_addr);
+            match res {
+                Some((link, lobj)) => {
                     // Process all the messages
-                    let (link, link_obj) = (link.clone(), link_obj.clone());
-                    drop(guard);
-                    link.receive(&mut msgs, &link_obj).await;
+                    zreceive!(link, lobj, msgs);
                 }
                 None => {
-                    drop(guard);
                     // Create a new link if the listener is active
                     if listener.is_active() {
                         // A new peers has sent data to this socket
@@ -765,13 +781,11 @@ async fn accept_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerUdpInn
                             false,
                         ));
                         link.initizalize(Arc::downgrade(&link));
-                        let link_obj = Link::new(link.clone());
+                        let lobj = Link::new(link.clone());
                         // Add the new link to the set of connected peers
-                        let mut guard = zasyncwrite!(a_self.links); // Drop the read lock and acquire a write lock
-                        guard.insert(key, (link.clone(), link_obj.clone()));
-                        drop(guard);
+                        zaddlinktuple!(src_addr, dst_addr, link, lobj);
                         // Process all the messages
-                        link.receive(&mut msgs, &link_obj).await;
+                        zreceive!(link, lobj, msgs);
                     } else {
                         log::warn!(
                             "Rejected UDP connection from {}: listerner {} is not active",
@@ -780,11 +794,11 @@ async fn accept_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerUdpInn
                         );
                     }
                 }
-            };
+            }
         }
     };
 
     let stop = listener.receiver.recv();
-    let _ = accept_loop.race(stop).await;
+    let _ = accept_read_loop.race(stop).await;
     listener.barrier.wait().await;
 }
