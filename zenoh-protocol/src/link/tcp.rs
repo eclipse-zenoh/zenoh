@@ -30,11 +30,13 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
 // Default MTU (TCP PDU) in bytes.
-const DEFAULT_MTU: usize = 65_535;
+const TCP_MAX_MTU: usize = 65_535;
 
 zconfigurable! {
+    // Default MTU (TCP PDU) in bytes.
+    static ref TCP_DEFAULT_MTU: usize = TCP_MAX_MTU;
     // Size of buffer used to read from socket.
-    static ref TCP_READ_BUFFER_SIZE: usize = 2*DEFAULT_MTU;
+    static ref TCP_READ_BUFFER_SIZE: usize = 2*TCP_MAX_MTU;
     // Size of the vector used to deserialize the messages.
     static ref TCP_READ_MESSAGES_VEC_SIZE: usize = 32;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
@@ -207,7 +209,7 @@ impl LinkTrait for Tcp {
     }
 
     fn get_mtu(&self) -> usize {
-        DEFAULT_MTU
+        *TCP_DEFAULT_MTU
     }
 
     fn is_reliable(&self) -> bool {

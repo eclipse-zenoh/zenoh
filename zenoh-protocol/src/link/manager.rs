@@ -13,7 +13,9 @@
 //
 use async_std::sync::Arc;
 
+#[cfg(feature = "tcp")]
 use crate::link::tcp::ManagerTcp;
+#[cfg(feature = "udp")]
 use crate::link::udp::ManagerUdp;
 use crate::link::{LinkManager, LocatorProtocol};
 use crate::session::SessionManagerInner;
@@ -26,7 +28,9 @@ impl LinkManagerBuilder {
         protocol: &LocatorProtocol,
     ) -> LinkManager {
         match protocol {
+            #[cfg(feature = "tcp")]
             LocatorProtocol::Tcp => Arc::new(ManagerTcp::new(manager)),
+            #[cfg(feature = "udp")]
             LocatorProtocol::Udp => Arc::new(ManagerUdp::new(manager)),
         }
     }

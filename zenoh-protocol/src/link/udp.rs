@@ -27,10 +27,14 @@ use crate::session::{Action, SessionManagerInner, Transport};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
-// Default MTU (UDP PDU) in bytes.
-const DEFAULT_MTU: usize = 8_192;
+// Maximum MTU (UDP PDU) in bytes.
+const UDP_MAX_MTU: usize = 65_535;
 
 zconfigurable! {
+    // Default MTU (UDP PDU) in bytes.
+    static ref UDP_DEFAULT_MTU: usize = 8_192;
+    // Size of buffer used to read from socket.
+    static ref UDP_READ_BUFFER_SIZE: usize = UDP_MAX_MTU;
     // Size of the vector used to deserialize the messages.
     static ref UDP_READ_MESSAGES_VEC_SIZE: usize = 32;
     // Amount of time in microseconds to throttle the accept loop upon an error.
@@ -189,7 +193,7 @@ impl LinkTrait for Udp {
     }
 
     fn get_mtu(&self) -> usize {
-        DEFAULT_MTU
+        *UDP_DEFAULT_MTU
     }
 
     fn is_reliable(&self) -> bool {
@@ -210,7 +214,7 @@ async fn read_task(link: Arc<Udp>, stop: Receiver<()>) {
         let mut guard = zasynclock!(link.transport);
 
         // Buffers for deserialization
-        let mut buff = vec![0; DEFAULT_MTU];
+        let mut buff = vec![0; *UDP_READ_BUFFER_SIZE];
         let mut rbuf = RBuf::new();
         let mut msgs = Vec::with_capacity(*UDP_READ_MESSAGES_VEC_SIZE);
 
@@ -696,7 +700,7 @@ async fn accept_read_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerU
         log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
 
         // Buffers for deserialization
-        let mut buff = vec![0; DEFAULT_MTU];
+        let mut buff = vec![0; *UDP_READ_BUFFER_SIZE];
         let mut rbuf = RBuf::new();
         let mut msgs = Vec::with_capacity(*UDP_READ_MESSAGES_VEC_SIZE);
         loop {
