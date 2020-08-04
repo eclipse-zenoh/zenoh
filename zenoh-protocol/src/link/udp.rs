@@ -29,13 +29,17 @@ use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
 // Maximum MTU (UDP PDU) in bytes.
 const UDP_MAX_MTU: usize = 65_535;
+#[cfg(not(target_os = "linux"))]
+const UDP_MTU_LIMIT: usize = 9_216;
+#[cfg(target_os = "linux")]
+const UDP_MTU_LIMIT: usize = UDP_MAX_MTU;
 
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
     // NOTE: in order to support Mac OS X environment out of the box we set the
     //       default MTU for UDP to 8192 bytes. This is due to the default value
     //       of a maximum datagram size on Mac OS X being set to 9216 bytes.
-    static ref UDP_DEFAULT_MTU: usize = 8_192;
+    static ref UDP_DEFAULT_MTU: usize = UDP_MTU_LIMIT;
     // Size of buffer used to read from socket.
     static ref UDP_READ_BUFFER_SIZE: usize = UDP_MAX_MTU;
     // Size of the vector used to deserialize the messages.
