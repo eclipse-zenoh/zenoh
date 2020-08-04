@@ -18,7 +18,7 @@ use super::{Channel, LinkAlive, TransmissionQueue};
 
 use crate::link::Link;
 use crate::proto::{smsg, SessionMessage};
-use crate::session::defaults::QUEUE_PRIO_CTRL;
+use crate::session::defaults::QUEUE_PRIO_DATA;
 
 use zenoh_util::collections::Timed;
 
@@ -47,7 +47,7 @@ impl Timed for KeepAliveEvent {
 
         // Push the KEEP_ALIVE messages on the queue
         self.queue
-            .push_session_message(message, QUEUE_PRIO_CTRL)
+            .push_session_message(message, QUEUE_PRIO_DATA)
             .await;
     }
 }

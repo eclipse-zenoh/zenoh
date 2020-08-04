@@ -32,6 +32,9 @@ const UDP_MAX_MTU: usize = 65_535;
 
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
+    // NOTE: in order to support Mac OS X environment out of the box we set the
+    //       default MTU for UDP to 8192 bytes. This is due to the default value
+    //       of a maximum datagram size on Mac OS X being set to 9216 bytes.
     static ref UDP_DEFAULT_MTU: usize = 8_192;
     // Size of buffer used to read from socket.
     static ref UDP_READ_BUFFER_SIZE: usize = UDP_MAX_MTU;
