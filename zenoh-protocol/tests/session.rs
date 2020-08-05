@@ -30,6 +30,7 @@ use zenoh_util::core::ZResult;
 use zenoh_util::zasynclock;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
+const SLEEP: Duration = Duration::from_secs(1);
 
 // Session Handler for the router
 struct SHRouterLease {
@@ -301,7 +302,7 @@ async fn session_lease(locator: Locator) {
     println!("Session Open Close [6a2]: {:?}", res);
     assert!(res.is_ok());
 
-    task::sleep(Duration::from_secs(1)).await;
+    task::sleep(SLEEP).await;
 }
 
 #[cfg(test)]
@@ -702,7 +703,7 @@ async fn session_open_close(locator: Locator) {
     println!("Session Open Close [10a2]: {:?}", res);
     assert!(res.is_ok());
 
-    task::sleep(Duration::from_secs(1)).await;
+    task::sleep(SLEEP).await;
 }
 
 #[test]
