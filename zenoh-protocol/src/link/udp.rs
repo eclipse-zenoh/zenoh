@@ -28,10 +28,10 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
-//       UDP buffer size on the host to a reasonable size. Usually, default values of UDP buffers
+//       UDP buffer size on the host to a reasonable size. Usually, default values for UDP buffers
 //       size are undersized. Setting UDP buffers on the host to a size of 4M can be considered
 //       as a safe choice.
-//       Usually, on Linux systems this could be achived by executing:
+//       Usually, on Linux systems this could be achieved by executing:
 //           $ sysctl -w net.core.rmem_max=4194304
 //           $ sysctl -w net.core.rmem_default=4194304
 
