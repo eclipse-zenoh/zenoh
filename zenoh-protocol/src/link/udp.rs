@@ -27,18 +27,36 @@ use crate::session::{Action, SessionManagerInner, Transport};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
+// NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
+//       UDP buffer size on the host to a reasonable size. Usually, default values of UDP buffers
+//       size are undersized. Setting UDP buffers on the host to a size of 4M can be considered
+//       as a safe choice.
+//       Usually, on Linux systems this could be achived by executing:
+//           $ sysctl -w net.core.rmem_max=4194304
+//           $ sysctl -w net.core.rmem_default=4194304
+
 // Maximum MTU (UDP PDU) in bytes.
-const UDP_MAX_MTU: usize = 65_535;
-#[cfg(not(target_os = "linux"))]
-const UDP_MTU_LIMIT: usize = 9_216;
-#[cfg(target_os = "linux")]
+// NOTE: The UDP field size sets a theoretical limit of 65,535 bytes (8 byte header + 65,527 bytes of
+//       data) for a UDP datagram. However the actual limit for the data length, which is imposed by
+//       the underlying IPv4 protocol, is 65,507 bytes (65,535 − 8 byte UDP header − 20 byte IP header).
+//       Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via
+//       IPv6 Jumbograms, it's usage in Zenoh is discouraged unless the consequences are very well
+//       understood.
+const UDP_MAX_MTU: usize = 65_507;
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+// Linux default value of a maximum datagram size is set to UDP MAX MTU.
 const UDP_MTU_LIMIT: usize = UDP_MAX_MTU;
+
+#[cfg(target_os = "macos")]
+// Mac OS X default value of a maximum datagram size is set to 9216 bytes.
+const UDP_MTU_LIMIT: usize = 9_216;
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+const UDP_MTU_LIMIT: usize = 8_192;
 
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
-    // NOTE: in order to support Mac OS X environment out of the box we set the
-    //       default MTU for UDP to 8192 bytes. This is due to the default value
-    //       of a maximum datagram size on Mac OS X being set to 9216 bytes.
     static ref UDP_DEFAULT_MTU: usize = UDP_MTU_LIMIT;
     // Size of buffer used to read from socket.
     static ref UDP_READ_BUFFER_SIZE: usize = UDP_MAX_MTU;

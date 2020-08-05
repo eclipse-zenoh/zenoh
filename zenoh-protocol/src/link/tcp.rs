@@ -30,6 +30,11 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
 // Default MTU (TCP PDU) in bytes.
+// NOTE: Since TCP is a byte-stream oriented transport, theoretically it has
+//       no limit regarding the MTU. However, given the batching strategy
+//       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
+//       payload length in byte-streamed, the TCP MTU is constrained to
+//       2^16-1 bytes (i.e., 65535).
 const TCP_MAX_MTU: usize = 65_535;
 
 zconfigurable! {
