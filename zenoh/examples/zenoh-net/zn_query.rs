@@ -58,6 +58,9 @@ fn parse_args() -> (Config, String) {
         .arg(Arg::from_usage(
             "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
         ))
+        .arg(Arg::from_usage(
+            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
+        ))
         .arg(
             Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to query'")
                 .default_value("/demo/example/**"),
@@ -73,6 +76,12 @@ fn parse_args() -> (Config, String) {
         )
         .add_peers(
             args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        )
+        .add_listeners(
+            args.values_of("listener")
                 .map(|p| p.collect())
                 .or_else(|| Some(vec![]))
                 .unwrap(),

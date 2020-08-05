@@ -51,6 +51,9 @@ fn parse_args() -> (Config, usize) {
             "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
         ))
         .arg(Arg::from_usage(
+            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
+        ))
+        .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
         ))
         .get_matches();
@@ -64,6 +67,12 @@ fn parse_args() -> (Config, usize) {
         )
         .add_peers(
             args.values_of("peer")
+                .map(|p| p.collect())
+                .or_else(|| Some(vec![]))
+                .unwrap(),
+        )
+        .add_listeners(
+            args.values_of("listener")
                 .map(|p| p.collect())
                 .or_else(|| Some(vec![]))
                 .unwrap(),

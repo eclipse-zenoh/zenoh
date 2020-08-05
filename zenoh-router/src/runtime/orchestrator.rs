@@ -441,6 +441,7 @@ impl SessionOrchestrator {
         let mut result = vec![];
         for locator in self.manager.get_locators().await {
             match locator {
+                #[cfg(feature = "tcp")]
                 Locator::Tcp(addr) => {
                     if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
                         match zenoh_util::net::get_local_addresses() {

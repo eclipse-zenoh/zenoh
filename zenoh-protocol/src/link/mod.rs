@@ -18,7 +18,10 @@ mod manager;
 pub use manager::*;
 
 /* Import of Link modules */
+#[cfg(feature = "tcp")]
 mod tcp;
+#[cfg(feature = "udp")]
+mod udp;
 
 /* General imports */
 use async_std::sync::{Arc, Weak};

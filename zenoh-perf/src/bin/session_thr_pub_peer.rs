@@ -108,12 +108,15 @@ fn main() {
 
     // Connect to publisher
     task::block_on(async {
-        let session = if let Ok(s) = manager.open_session(&connect_to, &attachment).await {
-            println!("Opened session on {}", connect_to);
-            s
-        } else {
-            println!("Failed to open session on {}", connect_to);
-            return;
+        let session = match manager.open_session(&connect_to, &attachment).await {
+            Ok(s) => {
+                println!("Opened session on {}", connect_to);
+                s
+            }
+            Err(e) => {
+                println!("Failed to open session on {}: {}", connect_to, e);
+                return;
+            }
         };
 
         // Send reliable messages
