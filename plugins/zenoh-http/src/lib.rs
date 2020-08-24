@@ -346,7 +346,9 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 }
 
 fn path_to_resource(path: &str, pid: &str) -> ResKey {
-    if path.starts_with("/@/router/local/") {
+    if path == "/@/router/local" {
+        ResKey::from(format!("/@/router/{}", pid))
+    } else if path.starts_with("/@/router/local/") {
         ResKey::from(format!("/@/router/{}/{}", pid, &path[16..]))
     } else {
         ResKey::from(path)
