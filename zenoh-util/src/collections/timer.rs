@@ -40,7 +40,7 @@ pub struct TimedHandle(Weak<AtomicBool>);
 impl TimedHandle {
     pub fn defuse(self) {
         if let Some(arc) = self.0.upgrade() {
-            arc.store(false, AtomicOrdering::Relaxed);
+            arc.store(false, AtomicOrdering::Release);
         }
     }
 }
@@ -73,7 +73,7 @@ impl TimedEvent {
     }
 
     pub fn is_fused(&self) -> bool {
-        self.fused.load(AtomicOrdering::Relaxed)
+        self.fused.load(AtomicOrdering::Acquire)
     }
 
     pub fn get_handle(&self) -> TimedHandle {

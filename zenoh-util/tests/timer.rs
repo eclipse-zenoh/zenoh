@@ -102,7 +102,8 @@ async fn run() {
     let value = counter.swap(0, Ordering::SeqCst);
     assert_eq!(value, amount);
 
-    // Defuse the event
+    // Defuse the event (check if twice defusing don't cause troubles)
+    handle.clone().defuse();
     handle.defuse();
 
     // Wait a bit more to verify that not more events have been fired
