@@ -20,8 +20,8 @@ use log::trace;
 use serde_json::json;
 use zenoh_protocol::{
     core::{queryable::EVAL, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt},
-    io::RBuf,
-    proto::Primitives,
+    io::{RBuf, WBuf},
+    proto::{encoding, DataInfo, Primitives},
 };
 
 pub struct AdminSpace {
@@ -171,11 +171,28 @@ impl Primitives for AdminSpace {
         let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
         let reskey = ResKey::RName(self.router_path.clone());
         let replier_id = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
-
+        let data_info = DataInfo {
+            source_id: None,
+            source_sn: None,
+            first_broker_id: None,
+            first_broker_sn: None,
+            timestamp: None,
+            kind: None,
+            encoding: Some(encoding::APP_JSON),
+        };
+        let mut infobuf = WBuf::new(16, false);
+        infobuf.write_datainfo(&data_info);
         task::spawn(async move {
             // router is not re-entrant
             primitives
-                .reply_data(qid, EVAL, replier_id.clone(), reskey, None, payload)
+                .reply_data(
+                    qid,
+                    EVAL,
+                    replier_id.clone(),
+                    reskey,
+                    Some(infobuf.into()),
+                    payload,
+                )
                 .await;
             primitives.reply_final(qid).await;
         });
