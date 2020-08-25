@@ -27,7 +27,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 zenoh = { version = "0.5.0", path = "../../zenoh" }
-zenoh-router = { version = "0.5.0", path = "../../zenoh-router" }
+zenoh-router = { version = "0.5.0", path = "../../zenoh-router", features = ["add_timestamp"]  }
 zenoh-protocol = { version = "0.5.0", path = "../../zenoh-protocol" }
 futures = "0.3.5"
 clap = "2"
