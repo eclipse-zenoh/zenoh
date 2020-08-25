@@ -13,7 +13,6 @@
 //
 pub mod broker;
 pub mod face;
-pub mod ownedprimitives;
 pub mod pubsub;
 pub mod queries;
 pub mod resource;

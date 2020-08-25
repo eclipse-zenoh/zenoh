@@ -84,20 +84,12 @@ pub async fn declare_subscription(
                                 if let Some(rid) = ctx.local_rid {
                                     someface
                                         .primitives
-                                        .clone()
-                                        .subscriber(
-                                            (rid, wildsuffix).into(),
-                                            propa_sub_info.clone(),
-                                        )
+                                        .subscriber(&(rid, wildsuffix).into(), &propa_sub_info)
                                         .await;
                                 } else if let Some(rid) = ctx.remote_rid {
                                     someface
                                         .primitives
-                                        .clone()
-                                        .subscriber(
-                                            (rid, wildsuffix).into(),
-                                            propa_sub_info.clone(),
-                                        )
+                                        .subscriber(&(rid, wildsuffix).into(), &propa_sub_info)
                                         .await;
                                 } else {
                                     let rid = someface.get_next_local_id();
@@ -108,16 +100,11 @@ pub async fn declare_subscription(
 
                                     someface
                                         .primitives
-                                        .clone()
-                                        .resource(rid, nonwild_prefix.name().into())
+                                        .resource(rid, &nonwild_prefix.name().into())
                                         .await;
                                     someface
                                         .primitives
-                                        .clone()
-                                        .subscriber(
-                                            (rid, wildsuffix).into(),
-                                            propa_sub_info.clone(),
-                                        )
+                                        .subscriber(&(rid, wildsuffix).into(), &propa_sub_info)
                                         .await;
                                 }
                             } else {
@@ -139,21 +126,18 @@ pub async fn declare_subscription(
 
                                 someface
                                     .primitives
-                                    .clone()
-                                    .resource(rid, nonwild_prefix.name().into())
+                                    .resource(rid, &nonwild_prefix.name().into())
                                     .await;
                                 someface
                                     .primitives
-                                    .clone()
-                                    .subscriber((rid, wildsuffix).into(), propa_sub_info.clone())
+                                    .subscriber(&(rid, wildsuffix).into(), &propa_sub_info)
                                     .await;
                             }
                         }
                         None => {
                             someface
                                 .primitives
-                                .clone()
-                                .subscriber(ResKey::RName(wildsuffix), propa_sub_info.clone())
+                                .subscriber(&wildsuffix.into(), &propa_sub_info)
                                 .await;
                         }
                     }
@@ -342,12 +326,7 @@ pub async fn route_data(
                     };
                     if let Some(primitives) = primitives {
                         primitives
-                            .data(
-                                (rid, suffix).into(),
-                                reliable,
-                                info.clone(),
-                                payload.clone(),
-                            )
+                            .data(&(rid, suffix).into(), reliable, &info, payload.clone())
                             .await
                     }
                 }
@@ -378,11 +357,10 @@ pub async fn pull_data(
                                 let reskey: ResKey =
                                     Resource::get_best_key(&tables.root_res, name, face.id).into();
                                 face.primitives
-                                    .clone()
                                     .data(
-                                        reskey,
+                                        &reskey,
                                         subinfo.reliability == Reliability::Reliable,
-                                        info.clone(),
+                                        &info,
                                         data.clone(),
                                     )
                                     .await;

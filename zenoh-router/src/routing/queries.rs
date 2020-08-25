@@ -81,14 +81,12 @@ pub(crate) async fn declare_queryable(
                                 if let Some(rid) = ctx.local_rid {
                                     someface
                                         .primitives
-                                        .clone()
-                                        .queryable((rid, wildsuffix).into())
+                                        .queryable(&(rid, wildsuffix).into())
                                         .await;
                                 } else if let Some(rid) = ctx.remote_rid {
                                     someface
                                         .primitives
-                                        .clone()
-                                        .queryable((rid, wildsuffix).into())
+                                        .queryable(&(rid, wildsuffix).into())
                                         .await;
                                 } else {
                                     let rid = someface.get_next_local_id();
@@ -99,13 +97,11 @@ pub(crate) async fn declare_queryable(
 
                                     someface
                                         .primitives
-                                        .clone()
-                                        .resource(rid, nonwild_prefix.name().into())
+                                        .resource(rid, &nonwild_prefix.name().into())
                                         .await;
                                     someface
                                         .primitives
-                                        .clone()
-                                        .queryable((rid, wildsuffix).into())
+                                        .queryable(&(rid, wildsuffix).into())
                                         .await;
                                 }
                             } else {
@@ -127,22 +123,16 @@ pub(crate) async fn declare_queryable(
 
                                 someface
                                     .primitives
-                                    .clone()
-                                    .resource(rid, nonwild_prefix.name().into())
+                                    .resource(rid, &nonwild_prefix.name().into())
                                     .await;
                                 someface
                                     .primitives
-                                    .clone()
-                                    .queryable((rid, wildsuffix).into())
+                                    .queryable(&(rid, wildsuffix).into())
                                     .await;
                             }
                         }
                         None => {
-                            someface
-                                .primitives
-                                .clone()
-                                .queryable(ResKey::RName(wildsuffix))
-                                .await;
+                            someface.primitives.queryable(&wildsuffix.into()).await;
                         }
                     }
                 }
@@ -267,10 +257,9 @@ pub(crate) async fn route_query(
                 for (outface, rid, suffix, qid) in outfaces {
                     outface
                         .primitives
-                        .clone()
                         .query(
-                            (rid, suffix).into(),
-                            predicate.to_string(),
+                            &(rid, suffix).into(),
+                            predicate,
                             qid,
                             target.clone(),
                             consolidation.clone(),

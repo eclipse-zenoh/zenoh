@@ -16,7 +16,6 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 
 use crate::routing::broker::*;
-use crate::routing::ownedprimitives::OwnedPrimitives;
 use zenoh_protocol::core::{
     PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, WhatAmI, ZInt,
 };
@@ -26,7 +25,7 @@ use zenoh_protocol::proto::Primitives;
 pub struct FaceState {
     pub(super) id: usize,
     pub(super) whatami: WhatAmI,
-    pub(super) primitives: OwnedPrimitives,
+    pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) subs: Vec<Arc<Resource>>,
@@ -44,7 +43,7 @@ impl FaceState {
         Arc::new(FaceState {
             id,
             whatami,
-            primitives: OwnedPrimitives::new(primitives),
+            primitives,
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
             subs: Vec::new(),

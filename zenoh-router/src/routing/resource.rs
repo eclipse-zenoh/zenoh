@@ -16,7 +16,7 @@ use crate::routing::face::FaceState;
 use async_std::sync::{Arc, Weak};
 use std::collections::HashMap;
 use zenoh_protocol::core::rname::intersect;
-use zenoh_protocol::core::{ResKey, SubInfo, ZInt};
+use zenoh_protocol::core::{SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
 
 pub(super) struct Context {
@@ -369,8 +369,7 @@ pub async fn declare_resource(
                         .insert(local_rid, res.clone());
 
                     face.primitives
-                        .clone()
-                        .resource(local_rid, ResKey::RName(res.name()))
+                        .resource(local_rid, &res.name().into())
                         .await;
                 }
 
