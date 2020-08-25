@@ -11,14 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use log::{debug, trace, warn};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 use zenoh::net::utils::resource_name;
 use zenoh::net::{Query, Sample};
 use zenoh::{utils, ChangeKind, Properties, Timestamp, Value, ZResult};
 use zenoh_backend_core::{Backend, Storage};
+use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
 pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
     // For now admin status is static and only contains a "kind"
@@ -49,9 +52,35 @@ impl Drop for MemoryBackend {
     }
 }
 
+enum StoredValue {
+    Present {
+        ts: Timestamp,
+        sample: Sample,
+    },
+    Removed {
+        ts: Timestamp,
+        // handle of the TimedEvent that will eventually remove the entry from the map
+        cleanup_handle: TimedHandle,
+    },
+}
+
+impl StoredValue {
+    fn ts(&self) -> &Timestamp {
+        match self {
+            Present { ts, sample: _ } => &ts,
+            Removed {
+                ts,
+                cleanup_handle: _,
+            } => &ts,
+        }
+    }
+}
+use StoredValue::{Present, Removed};
+
 struct MemoryStorage {
     admin_status: Value,
-    map: HashMap<String, (Sample, Timestamp)>,
+    map: Arc<RwLock<HashMap<String, StoredValue>>>,
+    timer: Timer,
 }
 
 impl MemoryStorage {
@@ -60,8 +89,24 @@ impl MemoryStorage {
 
         Ok(MemoryStorage {
             admin_status,
-            map: HashMap::new(),
+            map: Arc::new(RwLock::new(HashMap::new())),
+            timer: Timer::new(),
         })
+    }
+}
+
+impl MemoryStorage {
+    async fn schedule_cleanup(&self, path: String) -> TimedHandle {
+        let event = TimedEvent::once(
+            Instant::now() + Duration::from_millis(CLEANUP_TIMEOUT_MS),
+            TimedCleanup {
+                map: self.map.clone(),
+                path,
+            },
+        );
+        let handle = event.get_handle();
+        self.timer.add(event).await;
+        handle
     }
 }
 
@@ -72,22 +117,68 @@ impl Storage for MemoryStorage {
     }
 
     async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
-        debug!("on_sample {}", sample.res_name);
+        trace!("on_sample for {}", sample.res_name);
         let (kind, _, timestamp) = utils::decode_data_info(sample.data_info.clone());
         match kind {
-            ChangeKind::PUT => match self.map.entry(sample.res_name.clone()) {
+            ChangeKind::PUT => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
-                    v.insert((sample, timestamp));
+                    v.insert(Present {
+                        sample,
+                        ts: timestamp,
+                    });
                 }
                 Entry::Occupied(mut o) => {
-                    if o.get().1 < timestamp {
-                        o.insert((sample, timestamp));
+                    let old_val = o.get();
+                    if old_val.ts() < &timestamp {
+                        if let Removed {
+                            ts: _,
+                            cleanup_handle,
+                        } = old_val
+                        {
+                            // cancel timed cleanup
+                            cleanup_handle.clone().defuse();
+                        }
+                        o.insert(Present {
+                            sample,
+                            ts: timestamp,
+                        });
+                    } else {
+                        debug!("PUT on {} dropped: out-of-date", sample.res_name);
                     }
                 }
             },
-            ChangeKind::DELETE => {
-                self.map.remove(&sample.res_name);
-            }
+            ChangeKind::DELETE => match self.map.write().await.entry(sample.res_name.clone()) {
+                Entry::Vacant(v) => {
+                    // NOTE: even if path is not known yet, we need to store the removal time:
+                    // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
+                    // we must drop the put.
+                    let cleanup_handle = self.schedule_cleanup(sample.res_name.clone()).await;
+                    v.insert(Removed {
+                        ts: timestamp,
+                        cleanup_handle,
+                    });
+                }
+                Entry::Occupied(mut o) => {
+                    match o.get() {
+                        Removed {
+                            ts: _,
+                            cleanup_handle: _,
+                        } => (), // nothing to do
+                        Present { sample: _, ts } => {
+                            if ts < &timestamp {
+                                let cleanup_handle =
+                                    self.schedule_cleanup(sample.res_name.clone()).await;
+                                o.insert(Removed {
+                                    ts: timestamp,
+                                    cleanup_handle,
+                                });
+                            } else {
+                                debug!("DEL on {} dropped: out-of-date", sample.res_name);
+                            }
+                        }
+                    }
+                }
+            },
             ChangeKind::PATCH => {
                 warn!("Received PATCH for {}: not yet supported", sample.res_name);
             }
@@ -96,16 +187,18 @@ impl Storage for MemoryStorage {
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-        debug!("on_query {}", query.res_name);
+        trace!("on_query for {}", query.res_name);
         if !query.res_name.contains('*') {
-            if let Some((sample, _)) = self.map.get(&query.res_name) {
+            if let Some(Present { sample, ts: _ }) = self.map.read().await.get(&query.res_name) {
                 query.reply(sample.clone()).await;
             }
         } else {
-            for (_, (sample, _)) in self.map.iter() {
-                if resource_name::intersect(&query.res_name, &sample.res_name) {
-                    let s: Sample = sample.clone();
-                    query.reply(s).await;
+            for (_, stored_value) in self.map.read().await.iter() {
+                if let Present { sample, ts: _ } = stored_value {
+                    if resource_name::intersect(&query.res_name, &sample.res_name) {
+                        let s: Sample = sample.clone();
+                        query.reply(s).await;
+                    }
                 }
             }
         }
@@ -117,5 +210,19 @@ impl Drop for MemoryStorage {
     fn drop(&mut self) {
         // nothing to do in case of memory backend
         trace!("MemoryStorage::drop()");
+    }
+}
+
+const CLEANUP_TIMEOUT_MS: u64 = 5000;
+
+struct TimedCleanup {
+    map: Arc<RwLock<HashMap<String, StoredValue>>>,
+    path: String,
+}
+
+#[async_trait]
+impl Timed for TimedCleanup {
+    async fn run(&mut self) {
+        self.map.write().await.remove(&self.path);
     }
 }

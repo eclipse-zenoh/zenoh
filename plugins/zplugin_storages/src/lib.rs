@@ -87,7 +87,6 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 ))
                 .unwrap();
                 let props = Properties::from([(STORAGE_PATH_EXPR_PROPERTY, path_expr)].as_ref());
-                debug!("------ PUT ON {}", storage_admin_path);
                 workspace
                     .put(&storage_admin_path, Value::Properties(props))
                     .await
