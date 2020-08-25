@@ -50,6 +50,16 @@ pub fn decode_data_info(data_info: Option<RBuf>) -> (ChangeKind, ZInt, Timestamp
     )
 }
 
+pub fn get_data_info_timestamp(data_info: Option<RBuf>) -> Option<Timestamp> {
+    data_info.and_then(|mut rbuf| match rbuf.read_datainfo_timestamp() {
+        Ok(ts) => ts,
+        Err(e) => {
+            warn!("Failed to decode DataInfo to get timestamp: {}", e);
+            None
+        }
+    })
+}
+
 // generate a reception timestamp with id=0x00
 fn new_reception_timestamp() -> Timestamp {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();

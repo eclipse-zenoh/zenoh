@@ -457,6 +457,27 @@ impl RBuf {
         })
     }
 
+    pub fn read_datainfo_timestamp(&mut self) -> ZResult<Option<Timestamp>> {
+        let header = self.read()?;
+        if header & zmsg::info_flag::TS > 0 {
+            if header & zmsg::info_flag::SRCID > 0 {
+                let _ = self.read_peerid()?;
+            }
+            if header & zmsg::info_flag::SRCSN > 0 {
+                let _ = self.read_zint()?;
+            }
+            if header & zmsg::info_flag::BKRID > 0 {
+                let _ = self.read_peerid()?;
+            }
+            if header & zmsg::info_flag::BKRSN > 0 {
+                let _ = self.read_zint()?;
+            }
+            Ok(Some(self.read_timestamp()?))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn read_properties(&mut self) -> ZResult<Vec<Property>> {
         let len = self.read_zint()?;
         let mut vec: Vec<Property> = Vec::new();

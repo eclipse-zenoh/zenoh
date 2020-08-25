@@ -19,6 +19,7 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::*;
+use zenoh::utils;
 use zenoh_router::runtime::Runtime;
 
 const PORT_SEPARATOR: char = ':';
@@ -63,8 +64,10 @@ fn sample_to_json(sample: Sample) -> String {
         "{{ \"key\": \"{}\", \"value\": \"{}\", \"time\": \"{}\" }}",
         sample.res_name,
         String::from_utf8_lossy(&sample.payload.to_vec()),
-        "None"
-    ) // TODO timestamp
+        utils::get_data_info_timestamp(sample.data_info)
+            .map(|ts| ts.to_string())
+            .unwrap_or_else(|| "None".to_string())
+    )
 }
 
 async fn to_json(results: async_std::sync::Receiver<Reply>) -> String {
