@@ -363,13 +363,20 @@ pub unsafe extern "C" fn zn_scout(
     Box::into_raw(Box::new(ZNScout(hellos)))
 }
 
-/// Frees the ZNSCout by releasing its associated memory.
+/// Frees the ZNScout by releasing its associated memory.
 ///
 /// # Safety
 /// The main reason for this function to be unsafe is that it does of a pointer into a box.
 #[no_mangle]
 pub unsafe extern "C" fn zn_scout_free(s: *mut ZNScout) {
     drop(Box::from_raw(s))
+}
+
+/// Initialise the zenoh runtime logger
+///
+#[no_mangle]
+pub extern "C" fn zn_init_logger() {
+    env_logger::init();
 }
 
 /// Open a zenoh session
