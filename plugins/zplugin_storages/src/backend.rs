@@ -19,7 +19,7 @@ use log::debug;
 use log::warn;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use zenoh::net::{queryable, Reliability, SubInfo, SubMode};
+use zenoh::net::{queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode};
 use zenoh::{ChangeKind, Path, PathExpr, Selector, Value, Workspace, ZError, ZErrorKind, ZResult};
 use zenoh_util::{zerror, zerror2};
 
@@ -118,7 +118,7 @@ async fn create_and_start_storage(
 }
 
 async fn start_storage(
-    storage: Box<dyn zenoh_backend_core::Storage>,
+    mut storage: Box<dyn zenoh_backend_core::Storage>,
     admin_path: Path,
     path_expr: PathExpr,
     workspace: Workspace,
@@ -142,6 +142,27 @@ async fn start_storage(
         .await
         .unwrap();
 
+    // align with other storages, querying them on path_expr
+    let mut replies = workspace
+        .session()
+        .query(
+            &path_expr.to_string().into(),
+            "",
+            QueryTarget::default(),
+            QueryConsolidation::default(),
+        )
+        .await
+        .unwrap();
+    while let Some(reply) = replies.next().await {
+        log::trace!("Storage {} aligns data {}", admin_path, reply.data.res_name);
+        if let Err(e) = storage.on_sample(reply.data).await {
+            warn!(
+                "Storage {} raised an error aligning a sample: {}",
+                admin_path, e
+            );
+        }
+    }
+
     // answer to queries on path_expr
     let mut storage_queryable = workspace
         .session()
@@ -151,7 +172,6 @@ async fn start_storage(
 
     let (tx, rx) = channel::<bool>(1);
     task::spawn(async move {
-        let mut storage = storage;
         loop {
             select!(
                 // on get request on storage_admin
