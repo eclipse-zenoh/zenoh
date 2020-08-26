@@ -70,28 +70,30 @@ impl SessionState {
 }
 
 impl SessionState {
-    pub fn reskey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
+    #[inline]
+    fn localid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
+        match self.local_resources.get(&rid) {
+            Some(name) => Ok(name.clone()),
+            None => zerror!(ZErrorKind::UnkownResourceId {
+                rid: format!("{}", rid)
+            }),
+        }
+    }
+
+    #[inline]
+    fn rid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
+        match self.remote_resources.get(&rid) {
+            Some(name) => Ok(name.clone()),
+            None => self.localid_to_resname(rid),
+        }
+    }
+
+    pub fn remotekey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
         use super::ResKey::*;
         match reskey {
             RName(name) => Ok(name.clone()),
-            RId(rid) => match self.remote_resources.get(&rid) {
-                Some(name) => Ok(name.clone()),
-                None => match self.local_resources.get(&rid) {
-                    Some(name) => Ok(name.clone()),
-                    None => zerror!(ZErrorKind::UnkownResourceId {
-                        rid: format!("{}", rid)
-                    }),
-                },
-            },
-            RIdWithSuffix(rid, suffix) => match self.remote_resources.get(&rid) {
-                Some(name) => Ok(name.clone() + suffix),
-                None => match self.local_resources.get(&rid) {
-                    Some(name) => Ok(name.clone() + suffix),
-                    None => zerror!(ZErrorKind::UnkownResourceId {
-                        rid: format!("{}", rid)
-                    }),
-                },
-            },
+            RId(rid) => self.rid_to_resname(&rid),
+            RIdWithSuffix(rid, suffix) => Ok(self.rid_to_resname(&rid)? + suffix),
         }
     }
 
@@ -99,18 +101,16 @@ impl SessionState {
         use super::ResKey::*;
         match reskey {
             RName(name) => Ok(name.clone()),
-            RId(rid) => match self.local_resources.get(&rid) {
-                Some(name) => Ok(name.clone()),
-                None => zerror!(ZErrorKind::UnkownResourceId {
-                    rid: format!("{}", rid)
-                }),
-            },
-            RIdWithSuffix(rid, suffix) => match self.local_resources.get(&rid) {
-                Some(name) => Ok(name.clone() + suffix),
-                None => zerror!(ZErrorKind::UnkownResourceId {
-                    rid: format!("{}", rid)
-                }),
-            },
+            RId(rid) => self.localid_to_resname(&rid),
+            RIdWithSuffix(rid, suffix) => Ok(self.localid_to_resname(&rid)? + suffix),
+        }
+    }
+
+    pub fn reskey_to_resname(&self, reskey: &ResKey, local: bool) -> ZResult<String> {
+        if local {
+            self.localkey_to_resname(reskey)
+        } else {
+            self.remotekey_to_resname(reskey)
         }
     }
 }
@@ -669,7 +669,7 @@ impl Session {
         primitives
             .data(resource, true, &None, payload.clone())
             .await;
-        self.data(resource, true, &None, payload).await;
+        self.handle_data(true, resource, true, &None, payload).await;
         Ok(())
     }
 
@@ -724,6 +724,55 @@ impl Session {
         self.data(resource, true, &Some(infobuf.into()), payload)
             .await;
         Ok(())
+    }
+
+    async fn handle_data(
+        &self,
+        local: bool,
+        reskey: &ResKey,
+        _reliable: bool,
+        info: &Option<RBuf>,
+        payload: RBuf,
+    ) {
+        let (resname, senders) = {
+            let state = self.state.read().await;
+            match state.reskey_to_resname(reskey, local) {
+                Ok(resname) => {
+                    // Call matching callback_subscribers
+                    for sub in state.callback_subscribers.values() {
+                        if rname::intersect(&sub.resname, &resname) {
+                            let handler = &mut *sub.dhandler.write().await;
+                            handler(Sample {
+                                res_name: resname.clone(),
+                                payload: payload.clone(),
+                                data_info: info.clone(),
+                            });
+                        }
+                    }
+                    // Collect matching subscribers
+                    let subs = state
+                        .subscribers
+                        .values()
+                        .filter(|sub| rname::intersect(&sub.resname, &resname))
+                        .map(|sub| sub.sender.clone())
+                        .collect::<Vec<Sender<Sample>>>();
+                    (resname, subs)
+                }
+                Err(err) => {
+                    error!("Received Data for unkown reskey: {}", err);
+                    return;
+                }
+            }
+        };
+        for sender in senders {
+            sender
+                .send(Sample {
+                    res_name: resname.clone(),
+                    payload: payload.clone(),
+                    data_info: info.clone(),
+                })
+                .await;
+        }
     }
 
     pub(crate) async fn pull(&self, reskey: &ResKey) -> ZResult<()> {
@@ -810,13 +859,13 @@ impl Session {
     ) {
         let (primitives, resname, kinds_and_senders) = {
             let state = self.state.read().await;
-            match state.reskey_to_resname(reskey) {
+            match state.reskey_to_resname(reskey, local) {
                 Ok(resname) => {
                     let kinds_and_senders = state
                         .queryables
                         .values()
                         .filter(
-                            |queryable| match state.reskey_to_resname(&queryable.reskey) {
+                            |queryable| match state.localkey_to_resname(&queryable.reskey) {
                                 Ok(qablname) => {
                                     rname::intersect(&qablname, &resname)
                                         && ((queryable.kind == queryable::ALL_KINDS
@@ -893,7 +942,7 @@ impl Primitives for Session {
     async fn resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
         let state = &mut self.state.write().await;
-        match state.reskey_to_resname(reskey) {
+        match state.remotekey_to_resname(reskey) {
             Ok(name) => {
                 state.remote_resources.insert(rid, name);
             }
@@ -929,53 +978,16 @@ impl Primitives for Session {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(&self, reskey: &ResKey, _reliable: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?}",
             reskey,
-            _reliable,
+            reliable,
             info,
             payload
         );
-        let (resname, senders) = {
-            let state = self.state.read().await;
-            match state.reskey_to_resname(reskey) {
-                Ok(resname) => {
-                    // Call matching callback_subscribers
-                    for sub in state.callback_subscribers.values() {
-                        if rname::intersect(&sub.resname, &resname) {
-                            let handler = &mut *sub.dhandler.write().await;
-                            handler(Sample {
-                                res_name: resname.clone(),
-                                payload: payload.clone(),
-                                data_info: info.clone(),
-                            });
-                        }
-                    }
-                    // Collect matching subscribers
-                    let subs = state
-                        .subscribers
-                        .values()
-                        .filter(|sub| rname::intersect(&sub.resname, &resname))
-                        .map(|sub| sub.sender.clone())
-                        .collect::<Vec<Sender<Sample>>>();
-                    (resname, subs)
-                }
-                Err(err) => {
-                    error!("Received Data for unkown reskey: {}", err);
-                    return;
-                }
-            }
-        };
-        for sender in senders {
-            sender
-                .send(Sample {
-                    res_name: resname.clone(),
-                    payload: payload.clone(),
-                    data_info: info.clone(),
-                })
-                .await;
-        }
+        self.handle_data(false, reskey, reliable, info, payload)
+            .await
     }
 
     async fn query(
@@ -1024,7 +1036,7 @@ impl Primitives for Session {
                     return;
                 }
             };
-            let res_name = match state.reskey_to_resname(&reskey) {
+            let res_name = match state.remotekey_to_resname(&reskey) {
                 Ok(name) => name,
                 Err(e) => {
                     error!("Received ReplyData for unkown reskey: {}", e);
