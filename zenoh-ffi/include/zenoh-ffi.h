@@ -8,6 +8,8 @@
 #include "zenoh-types.h"
 
 
+typedef struct ZNLocators ZNLocators;
+
 typedef struct ZNProperties ZNProperties;
 
 typedef struct ZNQuery ZNQuery;
@@ -142,6 +144,12 @@ ZNSubscriber *zn_declare_subscriber(ZNSession *session,
 ZNProperties *zn_info(ZNSession *session);
 
 /**
+ * Initialise the zenoh runtime logger
+ *
+ */
+void zn_init_logger(void);
+
+/**
  * Open a zenoh session
  *
  * Returns the created session or null if the creation did not succeed
@@ -258,6 +266,14 @@ ZNQueryTarget *zn_query_target_default(void);
 ZNScout *zn_scout(unsigned int what, const char *iface, unsigned long scout_period);
 
 /**
+ * Frees the ZNScout by releasing its associated memory.
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it does of a pointer into a box.
+ */
+void zn_scout_free(ZNScout *s);
+
+/**
  * Get the number of entities scouted  and available as part of
  * the ZNScout
  *
@@ -266,6 +282,42 @@ ZNScout *zn_scout(unsigned int what, const char *iface, unsigned long scout_peri
  *
  */
 unsigned int zn_scout_len(ZNScout *si);
+
+/**
+ * Get the locator at the given index.
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+const char *zn_scout_locator_get(ZNLocators *ls, unsigned int idx);
+
+/**
+ * Get the locators for the scouted.
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+ZNLocators *zn_scout_locators(ZNScout *si, unsigned int idx);
+
+/**
+ * Frees the locators
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+void zn_scout_locators_free(ZNLocators *ls);
+
+/**
+ * Get the number of locators for the scouted entity.
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+unsigned int zn_scout_locators_len(ZNLocators *ls);
 
 /**
  * Get the peer-id for the scouted entity at the given index
