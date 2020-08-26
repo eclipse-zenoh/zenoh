@@ -47,6 +47,11 @@ fn main() {
                 .default_value("tcp/0.0.0.0:7447"),
             )
             .arg(Arg::from_usage(
+                "-e, --peer=[LOCATOR]... \
+            'A peer locator this router will try to connect to. \
+            Repeat this option to connect to several peers.'",
+            ))
+            .arg(Arg::from_usage(
                 "-i, --id=[hex_string]... \
             'The identifier (as an hexadecimal string - e.g.: 0A0B23...) that zenohd must use. \
             WARNING: this identifier must be unique in the system! \
