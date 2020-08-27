@@ -40,7 +40,7 @@ uhlc = "0.1"
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
 
 [dependencies.async-std]
-version = "~1.6.0"
+version = "=1.6.2"
 features = ["unstable"]
 
 [dev-dependencies]
