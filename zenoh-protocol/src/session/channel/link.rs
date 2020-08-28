@@ -219,21 +219,23 @@ impl ChannelLink {
         self.alive.mark();
     }
 
+    #[inline]
     pub(super) async fn schedule_zenoh_message(&self, msg: ZenohMessage, priority: usize) {
-        if self.active.load(Ordering::Relaxed) {
+        if self.active.load(Ordering::Acquire) {
             self.queue.push_zenoh_message(msg, priority).await;
         }
     }
 
+    #[inline]
     pub(super) async fn schedule_session_message(&self, msg: SessionMessage, priority: usize) {
-        if self.active.load(Ordering::Relaxed) {
+        if self.active.load(Ordering::Acquire) {
             self.queue.push_session_message(msg, priority).await;
         }
     }
 
     pub(super) async fn close(mut self) -> ZResult<()> {
         // Deactivate the consume task if active
-        if self.active.swap(false, Ordering::Relaxed) {
+        if self.active.swap(false, Ordering::AcqRel) {
             // Send the signal
             let _ = self.signal.try_send(());
             // Defuse the timed events

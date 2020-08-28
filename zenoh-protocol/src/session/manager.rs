@@ -543,23 +543,27 @@ impl Session {
     /*************************************/
     /*         SESSION ACCESSORS         */
     /*************************************/
+    #[inline]
     pub(super) fn get_transport(&self) -> ZResult<Transport> {
         let channel = zweak!(self.0, STR_ERR);
         Ok(Transport::new(channel))
     }
 
+    #[inline]
     pub(super) async fn add_link(&self, link: Link) -> ZResult<()> {
         let channel = zweak!(self.0, STR_ERR);
         channel.add_link(link).await?;
         Ok(())
     }
 
+    #[inline]
     pub(super) async fn _del_link(&self, link: &Link) -> ZResult<()> {
         let channel = zweak!(self.0, STR_ERR);
         channel.del_link(&link).await?;
         Ok(())
     }
 
+    #[inline]
     pub(super) async fn get_callback(
         &self,
     ) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
@@ -568,6 +572,7 @@ impl Session {
         Ok(callback)
     }
 
+    #[inline]
     pub(super) async fn set_callback(
         &self,
         callback: Arc<dyn SessionEventHandler + Send + Sync>,
@@ -580,32 +585,38 @@ impl Session {
     /*************************************/
     /*          PUBLIC ACCESSORS         */
     /*************************************/
+    #[inline]
     pub fn get_pid(&self) -> ZResult<PeerId> {
         let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_pid())
     }
 
+    #[inline]
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
         let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_whatami())
     }
 
+    #[inline]
     pub fn get_lease(&self) -> ZResult<ZInt> {
         let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_lease())
     }
 
+    #[inline]
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
         let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_sn_resolution())
     }
 
+    #[inline]
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("{:?}. Close", self);
         let channel = zweak!(self.0, STR_ERR);
         channel.close(smsg::close_reason::GENERIC).await
     }
 
+    #[inline]
     pub async fn close_link(&self, link: &Link) -> ZResult<()> {
         let channel = zweak!(self.0, STR_ERR);
         channel
@@ -614,16 +625,18 @@ impl Session {
         Ok(())
     }
 
+    #[inline]
     pub async fn get_links(&self) -> ZResult<Vec<Link>> {
         log::trace!("{:?}. Get links", self);
         let channel = zweak!(self.0, STR_ERR);
         Ok(channel.get_links().await)
     }
 
-    pub async fn schedule(&self, message: ZenohMessage, link: Option<Link>) -> ZResult<()> {
-        // log::trace!("{:?}. Schedule: {:?}", self, message);
+    #[inline]
+    pub async fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
+        log::trace!("{:?}. Schedule: {:?}", self, message);
         let channel = zweak!(self.0, STR_ERR);
-        channel.schedule(message, link).await;
+        channel.schedule(message).await;
         Ok(())
     }
 }
@@ -632,13 +645,16 @@ impl Session {
 impl SessionEventHandler for Session {
     #[inline]
     async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        self.schedule(message, None).await
+        self.schedule(message).await
     }
 
+    #[inline]
     async fn new_link(&self, _link: Link) {}
 
+    #[inline]
     async fn del_link(&self, _link: Link) {}
 
+    #[inline]
     async fn close(&self) {}
 }
 
