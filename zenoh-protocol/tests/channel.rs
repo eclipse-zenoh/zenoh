@@ -124,7 +124,7 @@ impl SessionEventHandler for SCClient {
     async fn close(&self) {}
 }
 
-async fn channel_reliable(locator: Locator) {
+async fn channel_reliable(locators: Vec<Locator>) {
     // Define client and router IDs
     let client_id = PeerId { id: vec![0u8] };
     let router_id = PeerId { id: vec![1u8] };
@@ -134,7 +134,7 @@ async fn channel_reliable(locator: Locator) {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::ROUTER,
-        id: router_id,
+        id: router_id.clone(),
         handler: router_handler.clone(),
     };
     let router_manager = SessionManager::new(config, None);
@@ -149,15 +149,19 @@ async fn channel_reliable(locator: Locator) {
     let client_manager = SessionManager::new(config, None);
 
     // Create the listener on the router
-    let res = router_manager.add_locator(&locator).await;
-    assert!(res.is_ok());
+    for l in locators.iter() {
+        let res = router_manager.add_locator(l).await;
+        assert!(res.is_ok());
+    }
 
     // Create an empty session with the client
     // Open session -> This should be accepted
     let attachment = None;
-    let res = client_manager.open_session(&locator, &attachment).await;
-    assert_eq!(res.is_ok(), true);
-    let session = res.unwrap();
+    for l in locators.iter() {
+        let res = client_manager.open_session(l, &attachment).await;
+        assert_eq!(res.is_ok(), true);
+    }
+    let session = client_manager.get_session(&router_id).await.unwrap();
 
     // Create the message to send
     let reliable = true;
@@ -171,7 +175,7 @@ async fn channel_reliable(locator: Locator) {
     // Send reliable messages by using schedule()
     println!("Sending {} reliable messages...", MSG_COUNT);
     for _ in 0..MSG_COUNT {
-        session.schedule(message.clone(), None).await.unwrap();
+        session.schedule(message.clone()).await.unwrap();
     }
 
     // Wait for the messages to arrive to the other side
@@ -186,13 +190,15 @@ async fn channel_reliable(locator: Locator) {
     let res = session.close().await;
     assert!(res.is_ok());
 
-    let res = router_manager.del_locator(&locator).await;
-    assert!(res.is_ok());
+    for l in locators.iter() {
+        let res = router_manager.del_locator(l).await;
+        assert!(res.is_ok());
+    }
 
     task::sleep(SLEEP).await;
 }
 
-async fn channel_best_effort(locator: Locator) {
+async fn channel_best_effort(locators: Vec<Locator>) {
     // Define client and router IDs
     let client_id = PeerId { id: vec![0u8] };
     let router_id = PeerId { id: vec![1u8] };
@@ -202,7 +208,7 @@ async fn channel_best_effort(locator: Locator) {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::ROUTER,
-        id: router_id,
+        id: router_id.clone(),
         handler: router_handler.clone(),
     };
     let router_manager = SessionManager::new(config, None);
@@ -217,15 +223,19 @@ async fn channel_best_effort(locator: Locator) {
     let client_manager = SessionManager::new(config, None);
 
     // Create the listener on the router
-    let res = router_manager.add_locator(&locator).await;
-    assert!(res.is_ok());
+    for l in locators.iter() {
+        let res = router_manager.add_locator(l).await;
+        assert!(res.is_ok());
+    }
 
     // Create an empty session with the client
     // Open session -> This should be accepted
     let attachment = None;
-    let res = client_manager.open_session(&locator, &attachment).await;
-    assert_eq!(res.is_ok(), true);
-    let session = res.unwrap();
+    for l in locators.iter() {
+        let res = client_manager.open_session(l, &attachment).await;
+        assert_eq!(res.is_ok(), true);
+    }
+    let session = client_manager.get_session(&router_id).await.unwrap();
 
     // Create the message to send
     let reliable = false;
@@ -240,7 +250,7 @@ async fn channel_best_effort(locator: Locator) {
     // Send unreliable messages by using schedule()
     println!("Sending {} best effort messages...", MSG_COUNT);
     for _ in 0..MSG_COUNT {
-        session.schedule(message.clone(), None).await.unwrap();
+        session.schedule(message.clone()).await.unwrap();
     }
 
     // Wait to receive something
@@ -258,8 +268,10 @@ async fn channel_best_effort(locator: Locator) {
     let res = session.close().await;
     assert!(res.is_ok());
 
-    let res = router_manager.del_locator(&locator).await;
-    assert!(res.is_ok());
+    for l in locators.iter() {
+        let res = router_manager.del_locator(l).await;
+        assert!(res.is_ok());
+    }
 
     task::sleep(SLEEP).await;
 }
@@ -267,7 +279,7 @@ async fn channel_best_effort(locator: Locator) {
 #[test]
 fn channel_tcp() {
     // Define the locator
-    let locator: Locator = "tcp/127.0.0.1:8888".parse().unwrap();
+    let locator: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
     task::block_on(async {
         channel_reliable(locator.clone()).await;
         channel_best_effort(locator).await;
@@ -277,6 +289,19 @@ fn channel_tcp() {
 #[test]
 fn channel_udp() {
     // Define the locator
-    let locator: Locator = "udp/127.0.0.1:8888".parse().unwrap();
+    let locator: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
     task::block_on(async { channel_best_effort(locator).await });
+}
+
+#[test]
+fn channel_tcp_udp() {
+    // Define the locator
+    let locator: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7448".parse().unwrap(),
+        "udp/127.0.0.1:7448".parse().unwrap(),
+    ];
+    task::block_on(async {
+        channel_reliable(locator.clone()).await;
+        channel_best_effort(locator).await
+    });
 }

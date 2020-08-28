@@ -14,7 +14,8 @@
 use async_std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 
-use super::{ChannelLink, ChannelRxBestEffort, ChannelRxReliable, SessionLeaseEvent};
+use super::scheduling::FirstMatch;
+use super::{ChannelLink, ChannelRxBestEffort, ChannelRxReliable, Scheduling, SessionLeaseEvent};
 
 use crate::core::{PeerId, WhatAmI, ZInt};
 use crate::link::Link;
@@ -66,6 +67,8 @@ pub(crate) struct Channel {
     pub(super) rx_best_effort: Mutex<ChannelRxBestEffort>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Vec<ChannelLink>>>,
+    // The scehduling function
+    pub(super) scheduling: Box<dyn Scheduling + Send + Sync>,
     // The internal timer
     pub(super) timer: Timer,
     // The lease event
@@ -108,6 +111,7 @@ impl Channel {
             rx_reliable: Mutex::new(ChannelRxReliable::new(initial_sn_rx, sn_resolution)),
             rx_best_effort: Mutex::new(ChannelRxBestEffort::new(initial_sn_rx, sn_resolution)),
             links: Arc::new(RwLock::new(Vec::new())),
+            scheduling: Box::new(FirstMatch::new()),
             timer: Timer::new(),
             lease_event_handle: Mutex::new(None),
             callback: RwLock::new(None),
@@ -246,29 +250,9 @@ impl Channel {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue
-    pub(crate) async fn schedule(&self, message: ZenohMessage, link: Option<Link>) {
-        if let Some(link) = link {
-            let guard = zasyncread!(self.links);
-            if let Some(l) = zlinkget!(guard, &link) {
-                l.schedule_zenoh_message(message, QUEUE_PRIO_DATA).await;
-            } else {
-                log::trace!(
-                    "Zenoh message has been dropped because link {} does not exist\
-                            in session with peer: {}",
-                    link,
-                    self.pid
-                );
-            }
-        } else {
-            let guard = zasyncread!(self.links);
-            if guard.is_empty() {
-                log::trace!("Zenoh message has been dropped because no links are available in session with peer: {}", self.pid);
-            } else {
-                guard[0]
-                    .schedule_zenoh_message(message, QUEUE_PRIO_DATA)
-                    .await;
-            }
-        }
+    #[inline]
+    pub(crate) async fn schedule(&self, message: ZenohMessage) {
+        self.scheduling.schedule(message, &self.links).await;
     }
 
     /*************************************/

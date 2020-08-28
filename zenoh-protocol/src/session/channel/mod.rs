@@ -19,6 +19,7 @@ mod link;
 mod main;
 // mod reliability_queue;
 mod rx;
+mod scheduling;
 mod tx;
 
 use batch::*;
@@ -30,3 +31,12 @@ use rx::*;
 use tx::*;
 
 pub(crate) use main::*;
+
+use crate::proto::ZenohMessage;
+use async_std::sync::{Arc, RwLock};
+use async_trait::async_trait;
+
+#[async_trait]
+trait Scheduling {
+    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<ChannelLink>>>);
+}
