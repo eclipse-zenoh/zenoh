@@ -150,33 +150,44 @@ pub struct Reply {
 
 pub(crate) type Id = usize;
 
-/// A publisher.
-#[derive(Clone)]
-pub struct Publisher {
+#[derive(Debug)]
+pub(crate) struct PublisherState {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
 }
 
-impl PartialEq for Publisher {
-    fn eq(&self, other: &Publisher) -> bool {
-        self.id == other.id
-    }
+/// A publisher.
+pub struct Publisher {
+    pub(crate) state: Arc<PublisherState>,
 }
 
 impl fmt::Debug for Publisher {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Publisher{{ id:{} }}", self.id)
+        self.state.fmt(f)
+    }
+}
+
+pub struct SubscriberState {
+    pub(crate) id: Id,
+    pub(crate) reskey: ResKey,
+    pub(crate) resname: String,
+    pub(crate) sender: Sender<Sample>,
+}
+
+impl fmt::Debug for SubscriberState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Subscriber{{ id:{}, resname:{} }}",
+            self.id, self.resname
+        )
     }
 }
 
 /// A subscriber that provides data through a stream.
-#[derive(Clone)]
 pub struct Subscriber {
-    pub(crate) id: Id,
-    pub(crate) reskey: ResKey,
-    pub(crate) resname: String,
     pub(crate) session: Session,
-    pub(crate) sender: Sender<Sample>,
+    pub(crate) state: Arc<SubscriberState>,
     pub(crate) receiver: Receiver<Sample>,
 }
 
@@ -229,34 +240,37 @@ impl Subscriber {
     /// # })
     /// ```
     pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.reskey).await
-    }
-}
-
-impl PartialEq for Subscriber {
-    fn eq(&self, other: &Subscriber) -> bool {
-        self.id == other.id
+        self.session.pull(&self.state.reskey).await
     }
 }
 
 impl fmt::Debug for Subscriber {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.state.fmt(f)
+    }
+}
+
+pub struct CallbackSubscriberState {
+    pub(crate) id: Id,
+    pub(crate) reskey: ResKey,
+    pub(crate) resname: String,
+    pub(crate) dhandler: Arc<RwLock<DataHandler>>,
+}
+
+impl fmt::Debug for CallbackSubscriberState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Subscriber{{ id:{}, resname:{} }}",
+            "CallbackSubscriber{{ id:{}, resname:{} }}",
             self.id, self.resname
         )
     }
 }
 
 /// A subscriber that provides data through a callback.
-#[derive(Clone)]
 pub struct CallbackSubscriber {
-    pub(crate) id: Id,
-    pub(crate) reskey: ResKey,
-    pub(crate) resname: String,
     pub(crate) session: Session,
-    pub(crate) dhandler: Arc<RwLock<DataHandler>>,
+    pub(crate) state: Arc<CallbackSubscriberState>,
 }
 
 impl CallbackSubscriber {
@@ -280,34 +294,33 @@ impl CallbackSubscriber {
     /// # })
     /// ```
     pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.reskey).await
-    }
-}
-
-impl PartialEq for CallbackSubscriber {
-    fn eq(&self, other: &CallbackSubscriber) -> bool {
-        self.id == other.id
+        self.session.pull(&self.state.reskey).await
     }
 }
 
 impl fmt::Debug for CallbackSubscriber {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "CallbackSubscriber{{ id:{}, resname:{} }}",
-            self.id, self.resname
-        )
+        self.state.fmt(f)
+    }
+}
+
+pub struct QueryableState {
+    pub(crate) id: Id,
+    pub(crate) reskey: ResKey,
+    pub(crate) kind: ZInt,
+    pub(crate) q_sender: Sender<Query>,
+}
+
+impl fmt::Debug for QueryableState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Queryable{{ id:{}, reskey:{} }}", self.id, self.reskey)
     }
 }
 
 /// An entity able to reply to queries.
-#[derive(Clone)]
 pub struct Queryable {
-    pub(crate) id: Id,
-    pub(crate) reskey: ResKey,
-    pub(crate) kind: ZInt,
-    pub(crate) req_sender: Sender<Query>,
-    pub(crate) req_receiver: Receiver<Query>,
+    pub(crate) state: Arc<QueryableState>,
+    pub(crate) q_receiver: Receiver<Query>,
 }
 
 impl Queryable {
@@ -333,19 +346,13 @@ impl Queryable {
     /// ```
     #[inline]
     pub fn stream(&mut self) -> &mut Receiver<Query> {
-        &mut self.req_receiver
-    }
-}
-
-impl PartialEq for Queryable {
-    fn eq(&self, other: &Queryable) -> bool {
-        self.id == other.id
+        &mut self.q_receiver
     }
 }
 
 impl fmt::Debug for Queryable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Queryable{{ id:{} }}", self.id)
+        self.state.fmt(f)
     }
 }
 

@@ -96,7 +96,6 @@ pub use zenoh_protocol::core::Timestamp;
 
 type Config = net::Config;
 
-#[derive(Clone)]
 pub struct Zenoh {
     session: Session,
 }
@@ -128,7 +127,7 @@ impl Zenoh {
         Workspace::new(self.session.clone(), prefix).await
     }
 
-    pub async fn close(&self) -> ZResult<()> {
+    pub async fn close(self) -> ZResult<()> {
         self.session.close().await
     }
 }

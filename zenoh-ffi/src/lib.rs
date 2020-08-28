@@ -428,7 +428,7 @@ pub unsafe extern "C" fn zn_info(session: *mut ZNSession) -> *mut ZNProperties {
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_close(session: *mut ZNSession) {
-    task::block_on((*session).0.close()).unwrap();
+    task::block_on((*Box::from_raw(session)).0.close()).unwrap();
 }
 
 /// Declare a zenoh resource

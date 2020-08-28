@@ -157,7 +157,6 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     req,
                     async move |req: Request<(Session, String)>, sender| {
                         let resource = path_to_resource(req.url().path(), &req.state().1);
-                        let session = req.state().0.clone();
                         async_std::task::spawn(async move {
                             log::debug!(
                                 "Subscribe to {} for SSE stream (task {})",
@@ -165,7 +164,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                 async_std::task::current().id()
                             );
                             let sender = &sender;
-                            let mut sub = session
+                            let mut sub = req.state().0
                                 .declare_subscriber(&resource, &SSE_SUB_INFO)
                                 .await
                                 .unwrap();
@@ -186,7 +185,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                         "SSE timeout! Unsubscribe and terminate (task {})",
                                         async_std::task::current().id()
                                     );
-                                    if let Err(e) = session.undeclare_subscriber(sub).await {
+                                    if let Err(e) = req.state().0.undeclare_subscriber(sub).await {
                                         log::error!("Error undeclaring subscriber: {}", e);
                                     }
                                     break;

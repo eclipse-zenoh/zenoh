@@ -27,10 +27,15 @@ use pin_project_lite::pin_project;
 use std::convert::TryInto;
 use zenoh_util::zerror;
 
-#[derive(Clone)]
 pub struct Workspace {
     session: Session,
     prefix: Path,
+}
+
+impl Clone for Workspace {
+    fn clone(&self) -> Self {
+        Workspace{ session: self.session.clone(), prefix: self.prefix.clone()}
+    }
 }
 
 impl Workspace {
