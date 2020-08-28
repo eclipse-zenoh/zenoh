@@ -180,14 +180,14 @@ async fn start_storage(
                     get.reply(admin_path.clone(), storage.get_admin_status().await).await;
                 },
                 // on sample for path_expr
-                sample = storage_sub.next().fuse() => {
+                sample = storage_sub.stream().next().fuse() => {
                     let sample = sample.unwrap();
                     if let Err(e) = storage.on_sample(sample).await {
                         warn!("Storage {} raised an error receiving a sample: {}", admin_path, e);
                     }
                 },
                 // on query on path_expr
-                query = storage_queryable.next().fuse() => {
+                query = storage_queryable.stream().next().fuse() => {
                     let query = query.unwrap();
                     if let Err(e) = storage.on_query(query).await {
                         warn!("Storage {} raised an error receiving a query: {}", admin_path, e);

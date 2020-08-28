@@ -48,7 +48,7 @@ use log::debug;
 ///         period: None
 ///     };
 ///     let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-///     while let Some(sample) = subscriber.next().await { println!("Received : {:?}", sample); };
+///     while let Some(sample) = subscriber.stream().next().await { println!("Received : {:?}", sample); };
 /// }
 /// ```
 ///

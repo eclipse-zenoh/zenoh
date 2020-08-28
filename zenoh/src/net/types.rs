@@ -169,22 +169,43 @@ impl fmt::Debug for Publisher {
     }
 }
 
-pin_project! {
-    /// A subscriber that provides data through a stream.
-    #[derive(Clone)]
-    pub struct Subscriber {
-        pub(crate) id: Id,
-        pub(crate) reskey: ResKey,
-        pub(crate) resname: String,
-        pub(crate) session: Session,
-        #[pin]
-        pub(crate) sender: Sender<Sample>,
-        #[pin]
-        pub(crate) receiver: Receiver<Sample>,
-    }
+/// A subscriber that provides data through a stream.
+#[derive(Clone)]
+pub struct Subscriber {
+    pub(crate) id: Id,
+    pub(crate) reskey: ResKey,
+    pub(crate) resname: String,
+    pub(crate) session: Session,
+    pub(crate) sender: Sender<Sample>,
+    pub(crate) receiver: Receiver<Sample>,
 }
 
 impl Subscriber {
+    /// Get the stream from a [Subscriber](Subscriber).
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use futures::prelude::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #    reliability: Reliability::Reliable,
+    /// #    mode: SubMode::Push,
+    /// #    period: None,
+    /// # };
+    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// while let Some(sample) = subscriber.stream().next().await {
+    ///     println!("Received : {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    #[inline]
+    pub fn stream(&mut self) -> &mut Receiver<Sample> {
+        &mut self.receiver
+    }
+
     /// Pull available data for a pull-mode [Subscriber](Subscriber).
     ///
     /// # Examples
@@ -200,8 +221,8 @@ impl Subscriber {
     /// #     mode: SubMode::Pull,
     /// #     period: None
     /// # };
-    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// async_std::task::spawn(subscriber.clone().for_each(
+    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// async_std::task::spawn(subscriber.stream().clone().for_each(
     ///     async move |sample| { println!("Received : {:?}", sample); }
     /// ));
     /// subscriber.pull();
@@ -209,18 +230,6 @@ impl Subscriber {
     /// ```
     pub async fn pull(&self) -> ZResult<()> {
         self.session.pull(&self.reskey).await
-    }
-}
-
-impl Stream for Subscriber {
-    type Item = Sample;
-
-    #[inline(always)]
-    fn poll_next(
-        self: async_std::pin::Pin<&mut Self>,
-        cx: &mut async_std::task::Context,
-    ) -> async_std::task::Poll<Option<Self::Item>> {
-        self.project().receiver.poll_next(cx)
     }
 }
 
@@ -291,29 +300,40 @@ impl fmt::Debug for CallbackSubscriber {
     }
 }
 
-pin_project! {
-    /// An entity able to reply to queries.
-    #[derive(Clone)]
-    pub struct Queryable {
-        pub(crate) id: Id,
-        pub(crate) reskey: ResKey,
-        pub(crate) kind: ZInt,
-        #[pin]
-        pub(crate) req_sender: Sender<Query>,
-        #[pin]
-        pub(crate) req_receiver: Receiver<Query>,
-    }
+/// An entity able to reply to queries.
+#[derive(Clone)]
+pub struct Queryable {
+    pub(crate) id: Id,
+    pub(crate) reskey: ResKey,
+    pub(crate) kind: ZInt,
+    pub(crate) req_sender: Sender<Query>,
+    pub(crate) req_receiver: Receiver<Query>,
 }
 
-impl Stream for Queryable {
-    type Item = Query;
-
-    #[inline(always)]
-    fn poll_next(
-        self: async_std::pin::Pin<&mut Self>,
-        cx: &mut async_std::task::Context,
-    ) -> async_std::task::Poll<Option<Self::Item>> {
-        self.project().req_receiver.poll_next(cx)
+impl Queryable {
+    /// Get the stream from a [Queryable](Queryable).
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use zenoh::net::queryable::EVAL;
+    /// use futures::prelude::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// while let Some(query) = queryable.stream().next().await {
+    ///     query.reply(Sample{
+    ///         res_name: "/resource/name".to_string(),
+    ///         payload: "value".as_bytes().into(),
+    ///         data_info: None,
+    ///     }).await;
+    /// }
+    /// # })
+    /// ```
+    #[inline]
+    pub fn stream(&mut self) -> &mut Receiver<Query> {
+        &mut self.req_receiver
     }
 }
 

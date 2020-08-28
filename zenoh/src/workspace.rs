@@ -314,7 +314,7 @@ impl Stream for ChangeStream {
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let decode_value = self.decode_value;
-        match self.project().subscriber.poll_next(cx) {
+        match async_std::pin::Pin::new(self.project().subscriber.stream()).poll_next(cx) {
             Poll::Ready(Some(sample)) => {
                 match Change::new(
                     &sample.res_name,
@@ -387,7 +387,7 @@ impl Stream for GetRequestStream {
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match self.project().queryable.poll_next(cx) {
+        match async_std::pin::Pin::new(self.project().queryable.stream()).poll_next(cx) {
             Poll::Ready(Some(query)) => match query_to_get(query) {
                 Ok(get) => Poll::Ready(Some(get)),
                 Err(err) => {

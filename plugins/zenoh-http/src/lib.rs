@@ -170,7 +170,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                 .await
                                 .unwrap();
                             loop {
-                                let sample = sub.next().await.unwrap();
+                                let sample = sub.stream().next().await.unwrap();
                                 let send = async {
                                     sender
                                         .send(&get_kind_str(&sample), sample_to_json(sample), None)

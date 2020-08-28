@@ -572,7 +572,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
 
             loop {
                 select!(
-                    s = sub.next().fuse() => {
+                    s = sub.stream().next().fuse() => {
                         // This is a bit brutal but avoids an allocation and
                         // a copy that would be otherwise required to add the
                         // C string terminator. See the test_sub.c to find out how to deal
@@ -722,7 +722,7 @@ pub unsafe extern "C" fn zn_declare_queryable(
         task::block_on(async move {
             loop {
                 select!(
-                query = queryable.next().fuse() => {
+                query = queryable.stream().next().fuse() => {
                   // This is a bit brutal but avoids an allocation and
                   // a copy that would be otherwise required to add the
                   // C string terminator. See the test_sub.c to find out how to deal
