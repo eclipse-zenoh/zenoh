@@ -133,7 +133,10 @@ pub struct Session {
 
 impl Session {
     pub(crate) fn clone(&self) -> Self {
-        Session{ runtime: self.runtime.clone(), state: self.state.clone() }
+        Session {
+            runtime: self.runtime.clone(),
+            state: self.state.clone(),
+        }
     }
 
     pub(super) async fn new(config: Config, _ps: Option<Properties>) -> ZResult<Session> {
@@ -414,7 +417,11 @@ impl Session {
         drop(state);
         primitives.subscriber(resource, info).await;
 
-        Ok(Subscriber { session: self.clone(), state: sub_state, receiver })
+        Ok(Subscriber {
+            session: self.clone(),
+            state: sub_state,
+            receiver,
+        })
     }
 
     /// Declare a [CallbackSubscriber](CallbackSubscriber) for the given resource key.
@@ -467,7 +474,10 @@ impl Session {
         drop(state);
         primitives.subscriber(resource, info).await;
 
-        Ok(CallbackSubscriber { session: self.clone(), state: sub_state })
+        Ok(CallbackSubscriber {
+            session: self.clone(),
+            state: sub_state,
+        })
     }
 
     /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
@@ -606,7 +616,10 @@ impl Session {
         drop(state);
         primitives.queryable(resource).await;
 
-        Ok(Queryable { state: qable_state, q_receiver})
+        Ok(Queryable {
+            state: qable_state,
+            q_receiver,
+        })
     }
 
     /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).

@@ -34,7 +34,10 @@ pub struct Workspace {
 
 impl Clone for Workspace {
     fn clone(&self) -> Self {
-        Workspace{ session: self.session.clone(), prefix: self.prefix.clone()}
+        Workspace {
+            session: self.session.clone(),
+            prefix: self.prefix.clone(),
+        }
     }
 }
 

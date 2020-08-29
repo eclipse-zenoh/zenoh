@@ -164,7 +164,9 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                 async_std::task::current().id()
                             );
                             let sender = &sender;
-                            let mut sub = req.state().0
+                            let mut sub = req
+                                .state()
+                                .0
                                 .declare_subscriber(&resource, &SSE_SUB_INFO)
                                 .await
                                 .unwrap();
