@@ -48,9 +48,6 @@ async fn main() {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
                     sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
-                if let Some(mut info) = sample.data_info {
-                    let _info = info.read_datainfo();
-                }
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

@@ -14,7 +14,7 @@
 use crate::core::{PeerId, ResKey, ZInt};
 use crate::core::{QueryConsolidation, QueryTarget, SubInfo};
 use crate::io::RBuf;
-use crate::proto::{channel, Declaration, Primitives, ReplyContext, ZenohMessage};
+use crate::proto::{channel, DataInfo, Declaration, Primitives, ReplyContext, ZenohMessage};
 use crate::session::SessionEventHandler;
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -112,7 +112,13 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn data(&self, reskey: &ResKey, reliability: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        reliability: bool,
+        info: Option<DataInfo>,
+        payload: RBuf,
+    ) {
         self.handler
             .handle_message(ZenohMessage::make_data(
                 reliability,
@@ -156,7 +162,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        info: Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         self.handler

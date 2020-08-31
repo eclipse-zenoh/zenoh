@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 use zenoh_protocol::core::{whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt};
 use zenoh_protocol::io::RBuf;
+use zenoh_protocol::proto::DataInfo;
 
 use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
@@ -279,7 +280,7 @@ pub(crate) async fn route_reply_data(
     source_kind: ZInt,
     replier_id: PeerId,
     reskey: ResKey,
-    info: Option<RBuf>,
+    info: Option<DataInfo>,
     payload: RBuf,
 ) {
     match face.pending_queries.get(&qid) {

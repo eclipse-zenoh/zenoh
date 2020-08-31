@@ -60,7 +60,7 @@ pub use crate::routing::resource::*;
 ///     let primitives = broker.new_primitives(dummy_primitives).await;
 ///
 ///     // Use primitives
-///     primitives.data(&"/demo".to_string().into(), true, &None, RBuf::from(vec![1, 2])).await;
+///     primitives.data(&"/demo".to_string().into(), true, None, RBuf::from(vec![1, 2])).await;
 ///
 ///     // Close primitives
 ///     primitives.close().await;

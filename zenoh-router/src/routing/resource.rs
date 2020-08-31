@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use zenoh_protocol::core::rname::intersect;
 use zenoh_protocol::core::{SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
+use zenoh_protocol::proto::DataInfo;
 
 pub(super) struct Context {
     pub(super) face: Arc<FaceState>,
@@ -26,7 +27,7 @@ pub(super) struct Context {
     pub(super) subs: Option<SubInfo>,
     #[allow(dead_code)]
     pub(super) qabl: bool,
-    pub(super) last_values: HashMap<String, (Option<RBuf>, RBuf)>,
+    pub(super) last_values: HashMap<String, (Option<DataInfo>, RBuf)>,
 }
 
 pub struct Resource {

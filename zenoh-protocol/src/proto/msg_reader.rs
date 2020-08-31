@@ -288,7 +288,7 @@ impl RBuf {
                     let channel = zmsg::has_flag(header, zmsg::flag::R);
                     let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
                     let info = if zmsg::has_flag(header, zmsg::flag::I) {
-                        Some(RBuf::from(self.read_bytes_array()?))
+                        Some(self.read_datainfo()?)
                     } else {
                         None
                     };

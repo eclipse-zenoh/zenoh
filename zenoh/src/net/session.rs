@@ -606,10 +606,8 @@ impl Session {
         let state = self.state.read().await;
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives
-            .data(resource, true, &None, payload.clone())
-            .await;
-        self.handle_data(true, resource, true, &None, payload).await;
+        primitives.data(resource, true, None, payload.clone()).await;
+        self.handle_data(true, resource, true, None, payload).await;
         Ok(())
     }
 
@@ -651,18 +649,10 @@ impl Session {
             kind: Some(kind),
             encoding: Some(encoding),
         };
-        let mut infobuf = zenoh_protocol::io::WBuf::new(64, false);
-        infobuf.write_datainfo(&info);
         primitives
-            .data(
-                resource,
-                true,
-                &Some(infobuf.clone().into()),
-                payload.clone(),
-            )
+            .data(resource, true, Some(info.clone()), payload.clone())
             .await;
-        self.data(resource, true, &Some(infobuf.into()), payload)
-            .await;
+        self.data(resource, true, Some(info), payload).await;
         Ok(())
     }
 
@@ -671,7 +661,7 @@ impl Session {
         local: bool,
         reskey: &ResKey,
         _reliable: bool,
-        info: &Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         let (resname, senders) = {
@@ -918,7 +908,7 @@ impl Primitives for Session {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(&self, reskey: &ResKey, reliable: bool, info: Option<DataInfo>, payload: RBuf) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?}",
             reskey,
@@ -955,7 +945,7 @@ impl Primitives for Session {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        data_info: Option<RBuf>,
+        data_info: Option<DataInfo>,
         payload: RBuf,
     ) {
         trace!(

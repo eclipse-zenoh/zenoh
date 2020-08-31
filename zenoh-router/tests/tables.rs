@@ -21,7 +21,7 @@ use zenoh_protocol::core::{
     whatami, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, SubMode, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{Mux, Primitives};
+use zenoh_protocol::proto::{DataInfo, Mux, Primitives};
 use zenoh_protocol::session::DummyHandler;
 use zenoh_router::routing::broker::*;
 
@@ -461,7 +461,13 @@ impl Primitives for ClientPrimitives {
     async fn queryable(&self, _reskey: &ResKey) {}
     async fn forget_queryable(&self, _reskey: &ResKey) {}
 
-    async fn data(&self, reskey: &ResKey, _reliable: bool, _info: &Option<RBuf>, _payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        _reliable: bool,
+        _info: Option<DataInfo>,
+        _payload: RBuf,
+    ) {
         *self.data.lock().unwrap() = Some(reskey.clone());
     }
     async fn query(
@@ -479,7 +485,7 @@ impl Primitives for ClientPrimitives {
         _source_kind: ZInt,
         _replier_id: PeerId,
         _reskey: ResKey,
-        _info: Option<RBuf>,
+        _info: Option<DataInfo>,
         _payload: RBuf,
     ) {
     }
@@ -603,7 +609,7 @@ fn client_test() {
             0,
             "/test/client/z1_wr1",
             true,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;
@@ -629,7 +635,7 @@ fn client_test() {
             11,
             "/z1_wr2",
             true,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;
@@ -655,7 +661,7 @@ fn client_test() {
             0,
             "/test/client/**",
             true,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;
@@ -681,7 +687,7 @@ fn client_test() {
             12,
             "",
             true,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;
@@ -707,7 +713,7 @@ fn client_test() {
             22,
             "",
             true,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;

@@ -13,6 +13,7 @@
 //
 use crate::core::{PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt};
 use crate::io::RBuf;
+use crate::proto::DataInfo;
 use async_trait::async_trait;
 
 #[async_trait]
@@ -29,7 +30,7 @@ pub trait Primitives {
     async fn queryable(&self, reskey: &ResKey);
     async fn forget_queryable(&self, reskey: &ResKey);
 
-    async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf);
+    async fn data(&self, reskey: &ResKey, reliable: bool, info: Option<DataInfo>, payload: RBuf);
     async fn query(
         &self,
         reskey: &ResKey,
@@ -44,7 +45,7 @@ pub trait Primitives {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        info: Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
     );
     async fn reply_final(&self, qid: ZInt);

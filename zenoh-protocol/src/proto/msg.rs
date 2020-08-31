@@ -201,7 +201,7 @@ pub mod zmsg {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
@@ -239,7 +239,7 @@ pub struct Declare {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
     pub key: ResKey,
-    pub info: Option<RBuf>,
+    pub info: Option<DataInfo>,
     pub payload: RBuf,
 }
 
@@ -349,7 +349,7 @@ impl ZenohMessage {
     pub fn make_data(
         channel: Channel,
         key: ResKey,
-        info: Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
