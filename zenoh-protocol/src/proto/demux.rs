@@ -71,9 +71,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 key, info, payload, ..
             }) => match msg.reply_context {
                 None => {
-                    self.primitives
-                        .data(&key, reliability, &info, payload)
-                        .await;
+                    self.primitives.data(&key, reliability, info, payload).await;
                 }
                 Some(rep) => match rep.replier_id {
                     Some(replier_id) => {

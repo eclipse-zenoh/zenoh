@@ -20,7 +20,7 @@ use log::trace;
 use serde_json::json;
 use zenoh_protocol::{
     core::{queryable::EVAL, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt},
-    io::{RBuf, WBuf},
+    io::RBuf,
     proto::{encoding, DataInfo, Primitives},
 };
 
@@ -139,7 +139,7 @@ impl Primitives for AdminSpace {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(&self, reskey: &ResKey, _reliable: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(&self, reskey: &ResKey, _reliable: bool, info: Option<DataInfo>, payload: RBuf) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?}",
             reskey,
@@ -180,8 +180,6 @@ impl Primitives for AdminSpace {
             kind: None,
             encoding: Some(encoding::APP_JSON),
         };
-        let mut infobuf = WBuf::new(16, false);
-        infobuf.write_datainfo(&data_info);
         task::spawn(async move {
             // router is not re-entrant
             primitives
@@ -190,7 +188,7 @@ impl Primitives for AdminSpace {
                     EVAL,
                     replier_id.clone(),
                     reskey,
-                    Some(infobuf.into()),
+                    Some(data_info),
                     payload,
                 )
                 .await;
@@ -204,7 +202,7 @@ impl Primitives for AdminSpace {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        info: Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         trace!(

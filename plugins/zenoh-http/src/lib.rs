@@ -19,7 +19,6 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::*;
-use zenoh::utils;
 use zenoh_router::runtime::Runtime;
 
 const PORT_SEPARATOR: char = ':';
@@ -45,12 +44,8 @@ fn parse_http_port(arg: &str) -> String {
 }
 
 fn get_kind_str(sample: &Sample) -> String {
-    let info = sample.data_info.clone();
-    let kind = match info {
-        Some(mut buf) => match buf.read_datainfo() {
-            Ok(info) => info.kind.or(Some(data_kind::DEFAULT)).unwrap(),
-            _ => data_kind::DEFAULT,
-        },
+    let kind = match &sample.data_info {
+        Some(info) => info.kind.unwrap_or(data_kind::DEFAULT),
         None => data_kind::DEFAULT,
     };
     match data_kind::to_str(kind) {
@@ -64,7 +59,9 @@ fn sample_to_json(sample: Sample) -> String {
         "{{ \"key\": \"{}\", \"value\": \"{}\", \"time\": \"{}\" }}",
         sample.res_name,
         String::from_utf8_lossy(&sample.payload.to_vec()),
-        utils::get_data_info_timestamp(sample.data_info)
+        sample
+            .data_info
+            .and_then(|i| i.timestamp)
             .map(|ts| ts.to_string())
             .unwrap_or_else(|| "None".to_string())
     )

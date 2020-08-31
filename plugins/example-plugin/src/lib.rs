@@ -41,7 +41,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     let session = Session::init(runtime).await;
 
-    let mut stored: HashMap<String, (RBuf, Option<RBuf>)> = HashMap::new();
+    let mut stored: HashMap<String, (RBuf, Option<DataInfo>)> = HashMap::new();
 
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,

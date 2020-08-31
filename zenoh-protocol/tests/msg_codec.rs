@@ -12,20 +12,30 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use rand::*;
+use uhlc::Timestamp;
 use zenoh_protocol::core::*;
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::proto::*;
 
 const NUM_ITER: usize = 100;
 const PROPS_LENGTH: usize = 3;
-const PID_MAX_SIZE: usize = 128;
+const PID_MAX_SIZE: usize = 16;
 const PROP_MAX_SIZE: usize = 64;
-const MAX_INFO_SIZE: usize = 128;
 const MAX_PAYLOAD_SIZE: usize = 256;
 
 macro_rules! gen {
     ($name:ty) => {
         thread_rng().gen::<$name>()
+    };
+}
+
+macro_rules! option_gen {
+    ($e:expr) => {
+        if thread_rng().gen_bool(0.5) {
+            Some($e)
+        } else {
+            None
+        }
     };
 }
 
@@ -153,6 +163,26 @@ fn gen_consolidation() -> QueryConsolidation {
         0 => QueryConsolidation::None,
         1 => QueryConsolidation::LastHop,
         _ => QueryConsolidation::Incremental,
+    }
+}
+
+fn gen_timestamp() -> Timestamp {
+    // Timestamp::new(uhlc::NTP64(gen!(u64)), gen_buffer(PID_MAX_SIZE))
+    let mut buf: Vec<u8> = Vec::with_capacity(PID_MAX_SIZE);
+    buf.resize(PID_MAX_SIZE, 0);
+    thread_rng().fill(buf.as_mut_slice());
+    Timestamp::new(uhlc::NTP64(gen!(u64)), buf)
+}
+
+fn gen_data_info() -> DataInfo {
+    DataInfo {
+        source_id: option_gen!(gen_pid()),
+        source_sn: option_gen!(gen!(ZInt)),
+        first_broker_id: option_gen!(gen_pid()),
+        first_broker_sn: option_gen!(gen!(ZInt)),
+        timestamp: option_gen!(gen_timestamp()),
+        kind: option_gen!(gen!(ZInt)),
+        encoding: option_gen!(gen!(ZInt)),
     }
 }
 
@@ -542,7 +572,7 @@ fn declare_tests() {
 fn data_tests() {
     for _ in 0..NUM_ITER {
         let ch = [channel::RELIABLE, channel::BEST_EFFORT];
-        let info = [None, Some(RBuf::from(gen_buffer(MAX_INFO_SIZE)))];
+        let info = [None, Some(gen_data_info())];
         let reply_context = [
             None,
             Some(gen_reply_context(false)),

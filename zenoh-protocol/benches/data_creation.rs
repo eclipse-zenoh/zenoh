@@ -17,9 +17,9 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh_protocol::core::ResKey;
+use zenoh_protocol::core::{PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::ZenohMessage;
+use zenoh_protocol::proto::{DataInfo, ZenohMessage};
 
 fn consume_message(msg: ZenohMessage) {
     drop(msg);
@@ -37,7 +37,15 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     for n in &iters {
         let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
-        let info = Some(RBuf::from(vec![0; 1024]));
+        let info = Some(DataInfo {
+            source_id: Some(PeerId { id: vec![0; 16] }),
+            source_sn: Some(12345),
+            first_broker_id: Some(PeerId { id: vec![0; 16] }),
+            first_broker_sn: Some(12345),
+            timestamp: Some(uhlc::Timestamp::new(Default::default(), vec![0; 16])),
+            kind: Some(0),
+            encoding: Some(0),
+        });
         let payload = RBuf::from(vec![0; 1024]);
 
         c.bench_function(format!("{} msg_creation", n).as_str(), |b| {
@@ -58,7 +66,15 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
 
     let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
-    let info = Some(RBuf::from(vec![0; 1024]));
+    let info = Some(DataInfo {
+        source_id: Some(PeerId { id: vec![0; 16] }),
+        source_sn: Some(12345),
+        first_broker_id: Some(PeerId { id: vec![0; 16] }),
+        first_broker_sn: Some(12345),
+        timestamp: Some(uhlc::Timestamp::new(Default::default(), vec![0; 16])),
+        kind: Some(0),
+        encoding: Some(0),
+    });
     let payload = RBuf::from(vec![0; 1024]);
     let msg = Arc::new(ZenohMessage::make_data(
         reliable,

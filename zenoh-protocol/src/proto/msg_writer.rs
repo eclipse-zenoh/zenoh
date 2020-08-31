@@ -214,8 +214,8 @@ impl WBuf {
 
             ZenohBody::Data(Data { key, info, payload }) => {
                 check!(self.write_reskey(&key));
-                if let Some(rbuf) = info {
-                    check!(self.write_rbuf(&rbuf));
+                if let Some(data_info) = info {
+                    check!(self.write_datainfo(&data_info));
                 }
                 check!(self.write_rbuf(&payload));
             }
