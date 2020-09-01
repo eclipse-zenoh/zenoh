@@ -14,6 +14,7 @@
 use crate::net::Session;
 use async_std::stream::Stream;
 use async_std::sync::{Arc, Receiver, RwLock, Sender, TrySendError};
+use async_std::task;
 use pin_project_lite::pin_project;
 use std::fmt;
 
@@ -160,13 +161,19 @@ pub(crate) struct PublisherState {
 }
 
 /// A publisher.
+///
+/// Publishers are automatically undeclared on destruction in a spawned task.
 pub struct Publisher<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<PublisherState>,
+    pub(crate) alive: bool,
 }
 
 impl Publisher<'_> {
     /// Undeclare a [Publisher](Publisher) previously declared with [declare_publisher](Session::declare_publisher).
+    ///
+    /// Publishers are automatically undeclared on destruction, but you may want to use this function to handle errors or
+    /// undeclare the Publisher synchronously.
     ///
     /// # Examples
     /// ```
@@ -179,8 +186,19 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(self) -> ZResult<()> {
-        self.session.undeclare_publisher(self).await
+    pub async fn undeclare(mut self) -> ZResult<()> {
+        self.alive = false;
+        Session::undeclare_publisher(self.session, self.state.id).await
+    }
+}
+
+impl Drop for Publisher<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            let session = self.session.clone();
+            let id = self.state.id;
+            task::spawn(async move { Session::undeclare_publisher(&session, id).await });
+        }
     }
 }
 
@@ -208,35 +226,16 @@ impl fmt::Debug for SubscriberState {
 }
 
 /// A subscriber that provides data through a stream.
+///
+/// Subscribers are automatically undeclared on destruction in a spawned task.
 pub struct Subscriber<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<SubscriberState>,
+    pub(crate) alive: bool,
     pub(crate) receiver: Receiver<Sample>,
 }
 
 impl Subscriber<'_> {
-    /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Push,
-    /// #     period: None
-    /// # };
-    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// subscriber.undeclare().await.unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    pub async fn undeclare(self) -> ZResult<()> {
-        self.session.undeclare_subscriber(self).await
-    }
-
     /// Get the stream from a [Subscriber](Subscriber).
     ///
     /// # Examples
@@ -287,6 +286,42 @@ impl Subscriber<'_> {
     pub async fn pull(&self) -> ZResult<()> {
         self.session.pull(&self.state.reskey).await
     }
+
+    /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
+    ///
+    /// Subscribers are automatically undeclared on destruction, but you may want to use this function to handle errors or
+    /// undeclare the Subscriber synchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Push,
+    /// #     period: None
+    /// # };
+    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(mut self) -> ZResult<()> {
+        self.alive = false;
+        self.session.undeclare_subscriber(self.state.id).await
+    }
+}
+
+impl Drop for Subscriber<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            let session = self.session.clone();
+            let id = self.state.id;
+            task::spawn(async move { Session::undeclare_subscriber(&session, id).await });
+        }
+    }
 }
 
 impl fmt::Debug for Subscriber<'_> {
@@ -313,36 +348,15 @@ impl fmt::Debug for CallbackSubscriberState {
 }
 
 /// A subscriber that provides data through a callback.
+///
+/// Subscribers are automatically undeclared on destruction in a spawned task.
 pub struct CallbackSubscriber<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<CallbackSubscriberState>,
+    pub(crate) alive: bool,
 }
 
 impl CallbackSubscriber<'_> {
-    /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
-    ///
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Push,
-    /// #     period: None
-    /// # };
-    /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
-    /// subscriber.undeclare().await.unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    pub async fn undeclare(self) -> ZResult<()> {
-        self.session.undeclare_callback_subscriber(self).await
-    }
-
     /// Pull available data for a pull-mode [CallbackSubscriber](CallbackSubscriber).
     ///
     /// # Examples
@@ -364,6 +378,45 @@ impl CallbackSubscriber<'_> {
     /// ```
     pub async fn pull(&self) -> ZResult<()> {
         self.session.pull(&self.state.reskey).await
+    }
+
+    /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
+    ///
+    /// CallbackSubscribers are automatically undeclared on destruction, but you may want to use this function to handle errors or
+    /// undeclare the CallbackSubscriber synchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Push,
+    /// #     period: None
+    /// # };
+    /// # fn data_handler(_sample: Sample) { };
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(mut self) -> ZResult<()> {
+        self.alive = false;
+        self.session
+            .undeclare_callback_subscriber(self.state.id)
+            .await
+    }
+}
+
+impl Drop for CallbackSubscriber<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            let session = self.session.clone();
+            let id = self.state.id;
+            task::spawn(async move { Session::undeclare_callback_subscriber(&session, id).await });
+        }
     }
 }
 
@@ -387,31 +440,16 @@ impl fmt::Debug for QueryableState {
 }
 
 /// An entity able to reply to queries.
+///
+/// Queryables are automatically undeclared on destruction in a spawned task.
 pub struct Queryable<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<QueryableState>,
+    pub(crate) alive: bool,
     pub(crate) q_receiver: Receiver<Query>,
 }
 
 impl Queryable<'_> {
-    /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    /// use zenoh::net::queryable::EVAL;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
-    /// queryable.undeclare().await.unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    pub async fn undeclare(self) -> ZResult<()> {
-        self.session.undeclare_queryable(self).await
-    }
-
     /// Get the stream from a [Queryable](Queryable).
     ///
     /// # Examples
@@ -435,6 +473,38 @@ impl Queryable<'_> {
     #[inline]
     pub fn stream(&mut self) -> &mut Receiver<Query> {
         &mut self.q_receiver
+    }
+
+    /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
+    ///
+    /// Queryables are automatically undeclared on destruction, but you may want to use this function to handle errors or
+    /// undeclare the Queryable synchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use zenoh::net::queryable::EVAL;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// queryable.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(mut self) -> ZResult<()> {
+        self.alive = false;
+        self.session.undeclare_queryable(self.state.id).await
+    }
+}
+
+impl Drop for Queryable<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            let session = self.session.clone();
+            let id = self.state.id;
+            task::spawn(async move { Session::undeclare_queryable(&session, id).await });
+        }
     }
 }
 

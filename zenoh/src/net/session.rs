@@ -126,9 +126,11 @@ impl fmt::Debug for SessionState {
 }
 
 /// A zenoh-net session.
+/// 
 pub struct Session {
-    runtime: Runtime,
-    state: Arc<RwLock<SessionState>>,
+    pub(crate) runtime: Runtime,
+    pub(crate) state: Arc<RwLock<SessionState>>,
+    pub(crate) alive: bool,
 }
 
 impl Session {
@@ -136,6 +138,7 @@ impl Session {
         Session {
             runtime: self.runtime.clone(),
             state: self.state.clone(),
+            alive: false,
         }
     }
 
@@ -160,25 +163,14 @@ impl Session {
         let session = Session {
             runtime,
             state: state.clone(),
+            alive: true,
         };
         let primitives = Some(broker.new_primitives(Arc::new(session.clone())).await);
         state.write().await.primitives = primitives;
         session
     }
 
-    /// Close the zenoh-net session.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.close();
-    /// # })
-    /// ```
-    pub async fn close(self) -> ZResult<()> {
-        // @TODO: implement
+    async fn close_alive(&self) -> ZResult<()> {
         trace!("close()");
         self.runtime.close().await?;
 
@@ -195,6 +187,25 @@ impl Session {
         Ok(())
     }
 
+    /// Close the zenoh-net session.
+    ///
+    /// Sessions are automatically closed on destruction, but you may want to use this function to handle errors or
+    /// close the session synchronously.
+    /// 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// session.close();
+    /// # })
+    /// ```
+    pub async fn close(mut self) -> ZResult<()> {
+        self.alive = false;
+        self.close_alive().await
+    }
+
     /// Get informations about the zenoh-net session.
     ///
     /// # Examples
@@ -207,7 +218,6 @@ impl Session {
     /// # })
     /// ```
     pub async fn info(&self) -> Properties {
-        // @TODO: implement
         trace!("info()");
         let mut info = Properties::new();
         let runtime = self.runtime.read().await;
@@ -333,24 +343,25 @@ impl Session {
         Ok(Publisher {
             session: self,
             state: pub_state,
+            alive: true,
         })
     }
 
-    pub(crate) async fn undeclare_publisher(&self, publisher: Publisher<'_>) -> ZResult<()> {
-        trace!("undeclare_publisher({:?})", publisher);
+    pub(crate) async fn undeclare_publisher(&self, pid: usize) -> ZResult<()> {
         let mut state = self.state.write().await;
-        state.publishers.remove(&publisher.state.id);
-
-        // Note: there might be several Publishers on the same ResKey.
-        // Before calling forget_publisher(reskey), check if this was the last one.
-        if !state
-            .publishers
-            .values()
-            .any(|p| p.reskey == publisher.state.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.forget_publisher(&publisher.state.reskey).await;
+        if let Some(pub_state) = state.publishers.remove(&pid) {
+            trace!("undeclare_publisher({:?})", pub_state);
+            // Note: there might be several Publishers on the same ResKey.
+            // Before calling forget_publisher(reskey), check if this was the last one.
+            if !state
+                .publishers
+                .values()
+                .any(|p| p.reskey == pub_state.reskey)
+            {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.forget_publisher(&pub_state.reskey).await;
+            }
         }
         Ok(())
     }
@@ -407,29 +418,30 @@ impl Session {
         Ok(Subscriber {
             session: self,
             state: sub_state,
+            alive: true,
             receiver,
         })
     }
 
-    pub(crate) async fn undeclare_subscriber(&self, subscriber: Subscriber<'_>) -> ZResult<()> {
-        trace!("undeclare_subscriber({:?})", subscriber);
+    pub(crate) async fn undeclare_subscriber(&self, sid: usize) -> ZResult<()> {
         let mut state = self.state.write().await;
-        state.subscribers.remove(&subscriber.state.id);
-
-        // Note: there might be several Subscribers on the same ResKey.
-        // Before calling forget_subscriber(reskey), check if this was the last one.
-        if !state
-            .callback_subscribers
-            .values()
-            .any(|s| s.reskey == subscriber.state.reskey)
-            && !state
-                .subscribers
+        if let Some(sub_state) = state.subscribers.remove(&sid) {
+            trace!("undeclare_subscriber({:?})", sub_state);
+            // Note: there might be several Subscribers on the same ResKey.
+            // Before calling forget_subscriber(reskey), check if this was the last one.
+            if !state
+                .callback_subscribers
                 .values()
-                .any(|s| s.reskey == subscriber.state.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.forget_subscriber(&subscriber.state.reskey).await;
+                .any(|s| s.reskey == sub_state.reskey)
+                && !state
+                    .subscribers
+                    .values()
+                    .any(|s| s.reskey == sub_state.reskey)
+            {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.forget_subscriber(&sub_state.reskey).await;
+            }
         }
         Ok(())
     }
@@ -487,31 +499,29 @@ impl Session {
         Ok(CallbackSubscriber {
             session: self,
             state: sub_state,
+            alive: true,
         })
     }
 
-    pub(crate) async fn undeclare_callback_subscriber(
-        &self,
-        subscriber: CallbackSubscriber<'_>,
-    ) -> ZResult<()> {
-        trace!("undeclare_callback_subscriber({:?})", subscriber);
+    pub(crate) async fn undeclare_callback_subscriber(&self, sid: usize) -> ZResult<()> {
         let mut state = self.state.write().await;
-        state.callback_subscribers.remove(&subscriber.state.id);
-
-        // Note: there might be several Subscribers on the same ResKey.
-        // Before calling forget_subscriber(reskey), check if this was the last one.
-        if !state
-            .callback_subscribers
-            .values()
-            .any(|s| s.reskey == subscriber.state.reskey)
-            && !state
-                .subscribers
+        if let Some(sub_state) = state.callback_subscribers.remove(&sid) {
+            trace!("undeclare_callback_subscriber({:?})", sub_state);
+            // Note: there might be several Subscribers on the same ResKey.
+            // Before calling forget_subscriber(reskey), check if this was the last one.
+            if !state
+                .callback_subscribers
                 .values()
-                .any(|s| s.reskey == subscriber.state.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.forget_subscriber(&subscriber.state.reskey).await;
+                .any(|s| s.reskey == sub_state.reskey)
+                && !state
+                    .subscribers
+                    .values()
+                    .any(|s| s.reskey == sub_state.reskey)
+            {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.forget_subscriber(&sub_state.reskey).await;
+            }
         }
         Ok(())
     }
@@ -563,24 +573,25 @@ impl Session {
         Ok(Queryable {
             session: self,
             state: qable_state,
+            alive: true,
             q_receiver,
         })
     }
 
-    pub(crate) async fn undeclare_queryable(&self, queryable: Queryable<'_>) -> ZResult<()> {
-        trace!("undeclare_queryable({:?})", queryable);
+    pub(crate) async fn undeclare_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = self.state.write().await;
-        state.queryables.remove(&queryable.state.id);
-
-        // Note: there might be several Queryables on the same ResKey.
-        // Before calling forget_eval(reskey), check if this was the last one.
-        if !state
-            .queryables
-            .values()
-            .any(|e| e.reskey == queryable.state.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap();
-            primitives.forget_queryable(&queryable.state.reskey).await;
+        if let Some(qable_state) = state.queryables.remove(&qid) {
+            trace!("undeclare_queryable({:?})", qable_state);
+            // Note: there might be several Queryables on the same ResKey.
+            // Before calling forget_eval(reskey), check if this was the last one.
+            if !state
+                .queryables
+                .values()
+                .any(|e| e.reskey == qable_state.reskey)
+            {
+                let primitives = state.primitives.as_ref().unwrap();
+                primitives.forget_queryable(&qable_state.reskey).await;
+            }
         }
         Ok(())
     }
@@ -1023,6 +1034,15 @@ impl Primitives for Session {
 
     async fn close(&self) {
         trace!("recv Close");
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        if self.alive {
+            let this = self.clone();
+            task::spawn(async move { this.close_alive().await });
+        }
     }
 }
 
