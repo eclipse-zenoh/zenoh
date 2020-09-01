@@ -158,8 +158,27 @@ pub(crate) struct PublisherState {
 
 /// A publisher.
 pub struct Publisher<'a> {
-    pub(crate) _session: &'a Session,
+    pub(crate) session: &'a Session,
     pub(crate) state: Arc<PublisherState>,
+}
+
+impl Publisher<'_> {
+    /// Undeclare a [Publisher](Publisher) previously declared with [declare_publisher](Session::declare_publisher).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
+    /// publisher.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(self) -> ZResult<()> {
+        self.session.undeclare_publisher(self).await
+    }
 }
 
 impl fmt::Debug for Publisher<'_> {
@@ -193,6 +212,28 @@ pub struct Subscriber<'a> {
 }
 
 impl Subscriber<'_> {
+    /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Push,
+    /// #     period: None
+    /// # };
+    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(self) -> ZResult<()> {
+        self.session.undeclare_subscriber(self).await
+    }
+
     /// Get the stream from a [Subscriber](Subscriber).
     ///
     /// # Examples
@@ -275,6 +316,30 @@ pub struct CallbackSubscriber<'a> {
 }
 
 impl CallbackSubscriber<'_> {
+    /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
+    ///
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Push,
+    /// #     period: None
+    /// # };
+    /// # fn data_handler(_sample: Sample) { };
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(self) -> ZResult<()> {
+        self.session.undeclare_callback_subscriber(self).await
+    }
+
     /// Pull available data for a pull-mode [CallbackSubscriber](CallbackSubscriber).
     ///
     /// # Examples
@@ -320,12 +385,30 @@ impl fmt::Debug for QueryableState {
 
 /// An entity able to reply to queries.
 pub struct Queryable<'a> {
-    pub(crate) _session: &'a Session,
+    pub(crate) session: &'a Session,
     pub(crate) state: Arc<QueryableState>,
     pub(crate) q_receiver: Receiver<Query>,
 }
 
 impl Queryable<'_> {
+    /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use zenoh::net::queryable::EVAL;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// queryable.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(self) -> ZResult<()> {
+        self.session.undeclare_queryable(self).await
+    }
+
     /// Get the stream from a [Queryable](Queryable).
     ///
     /// # Examples

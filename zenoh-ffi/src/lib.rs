@@ -593,7 +593,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
                             },
 
                             Ok(ZnSubOps::Close) => {
-                                let _ = (s).0.undeclare_subscriber(sub).await;
+                                let _ = sub.undeclare().await;
                                 Box::into_raw(s);
                                 return ()
                             },
@@ -734,7 +734,7 @@ pub unsafe extern "C" fn zn_declare_queryable(
                   Box::from_raw(rbquery);
                 },
                 _ = rx.recv().fuse() => {
-                    let _ = s.0.undeclare_queryable(queryable).await;
+                    let _ = queryable.undeclare().await;
                     Box::into_raw(s);
                     return ()
                 })

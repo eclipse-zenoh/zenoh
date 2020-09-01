@@ -53,7 +53,7 @@ async fn main() {
         );
     }
 
-    session.undeclare_queryable(queryable).await.unwrap();
+    queryable.undeclare().await.unwrap();
     session.close().await.unwrap();
 }
 

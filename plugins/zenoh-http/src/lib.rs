@@ -187,7 +187,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                         "SSE timeout! Unsubscribe and terminate (task {})",
                                         async_std::task::current().id()
                                     );
-                                    if let Err(e) = req.state().0.undeclare_subscriber(sub).await {
+                                    if let Err(e) = sub.undeclare().await {
                                         log::error!("Error undeclaring subscriber: {}", e);
                                     }
                                     break;

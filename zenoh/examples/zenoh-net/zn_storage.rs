@@ -40,7 +40,7 @@ async fn main() {
     };
 
     println!("Declaring Subscriber on {}", selector);
-    let mut sub = session
+    let mut subscriber = session
         .declare_subscriber(&selector.clone().into(), &sub_info)
         .await
         .unwrap();
@@ -55,7 +55,7 @@ async fn main() {
     let mut input = [0u8];
     loop {
         select!(
-            sample = sub.stream().next().fuse() => {
+            sample = subscriber.stream().next().fuse() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
                     sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
@@ -82,8 +82,8 @@ async fn main() {
         );
     }
 
-    session.undeclare_queryable(queryable).await.unwrap();
-    session.undeclare_subscriber(sub).await.unwrap();
+    queryable.undeclare().await.unwrap();
+    subscriber.undeclare().await.unwrap();
     session.close().await.unwrap();
 }
 

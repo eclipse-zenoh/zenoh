@@ -331,28 +331,12 @@ impl Session {
         primitives.publisher(resource).await;
 
         Ok(Publisher {
-            _session: self,
+            session: self,
             state: pub_state,
         })
     }
 
-    /// Undeclare a [Publisher](Publisher) previously declared with [declare_publisher](Session::declare_publisher).
-    ///
-    /// # Arguments
-    ///
-    /// * `resource` - The [Publisher](Publisher) to undeclare
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
-    /// session.undeclare_publisher(publisher).await;
-    /// # })
-    /// ```
-    pub async fn undeclare_publisher(&self, publisher: Publisher<'_>) -> ZResult<()> {
+    pub(crate) async fn undeclare_publisher(&self, publisher: Publisher<'_>) -> ZResult<()> {
         trace!("undeclare_publisher({:?})", publisher);
         let mut state = self.state.write().await;
         state.publishers.remove(&publisher.state.id);
@@ -427,6 +411,29 @@ impl Session {
         })
     }
 
+    pub(crate) async fn undeclare_subscriber(&self, subscriber: Subscriber<'_>) -> ZResult<()> {
+        trace!("undeclare_subscriber({:?})", subscriber);
+        let mut state = self.state.write().await;
+        state.subscribers.remove(&subscriber.state.id);
+
+        // Note: there might be several Subscribers on the same ResKey.
+        // Before calling forget_subscriber(reskey), check if this was the last one.
+        if !state
+            .callback_subscribers
+            .values()
+            .any(|s| s.reskey == subscriber.state.reskey)
+            && !state
+                .subscribers
+                .values()
+                .any(|s| s.reskey == subscriber.state.reskey)
+        {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.forget_subscriber(&subscriber.state.reskey).await;
+        }
+        Ok(())
+    }
+
     /// Declare a [CallbackSubscriber](CallbackSubscriber) for the given resource key.
     ///
     /// # Arguments
@@ -483,73 +490,7 @@ impl Session {
         })
     }
 
-    /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
-    ///
-    /// # Arguments
-    ///
-    /// * `subscriber` - The [Subscriber](Subscriber) to undeclare
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Push,
-    /// #     period: None
-    /// # };
-    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// session.undeclare_subscriber(subscriber).await;
-    /// # })
-    /// ```
-    pub async fn undeclare_subscriber(&self, subscriber: Subscriber<'_>) -> ZResult<()> {
-        trace!("undeclare_subscriber({:?})", subscriber);
-        let mut state = self.state.write().await;
-        state.subscribers.remove(&subscriber.state.id);
-
-        // Note: there might be several Subscribers on the same ResKey.
-        // Before calling forget_subscriber(reskey), check if this was the last one.
-        if !state
-            .callback_subscribers
-            .values()
-            .any(|s| s.reskey == subscriber.state.reskey)
-            && !state
-                .subscribers
-                .values()
-                .any(|s| s.reskey == subscriber.state.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.forget_subscriber(&subscriber.state.reskey).await;
-        }
-        Ok(())
-    }
-
-    /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
-    ///
-    /// # Arguments
-    ///
-    /// * `subscriber` - The [CallbackSubscriber](CallbackSubscriber) to undeclare
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Push,
-    /// #     period: None
-    /// # };
-    /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
-    /// session.undeclare_callback_subscriber(subscriber).await;
-    /// # })
-    /// ```
-    pub async fn undeclare_callback_subscriber(
+    pub(crate) async fn undeclare_callback_subscriber(
         &self,
         subscriber: CallbackSubscriber<'_>,
     ) -> ZResult<()> {
@@ -620,30 +561,13 @@ impl Session {
         primitives.queryable(resource).await;
 
         Ok(Queryable {
-            _session: self,
+            session: self,
             state: qable_state,
             q_receiver,
         })
     }
 
-    /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
-    ///
-    /// # Arguments
-    ///
-    /// * `queryable` - The [Queryable](Queryable) to undeclare
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    /// use zenoh::net::queryable::EVAL;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
-    /// session.undeclare_queryable(queryable).await;
-    /// # })
-    /// ```
-    pub async fn undeclare_queryable(&self, queryable: Queryable<'_>) -> ZResult<()> {
+    pub(crate) async fn undeclare_queryable(&self, queryable: Queryable<'_>) -> ZResult<()> {
         trace!("undeclare_queryable({:?})", queryable);
         let mut state = self.state.write().await;
         state.queryables.remove(&queryable.state.id);
