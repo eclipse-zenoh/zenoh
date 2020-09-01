@@ -24,6 +24,7 @@ use async_std::task::{Context, Poll};
 use log::{debug, warn};
 use pin_project_lite::pin_project;
 use std::convert::TryInto;
+use zenoh_protocol::core::TimestampID;
 use zenoh_util::zerror;
 
 pub struct Workspace {
@@ -428,6 +429,10 @@ impl Stream for GetRequestStream {
 // generate a reception timestamp with id=0x00
 fn new_reception_timestamp() -> Timestamp {
     use std::time::{SystemTime, UNIX_EPOCH};
+
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(now.into(), vec![0x00])
+    Timestamp::new(
+        now.into(),
+        TimestampID::new(1, [0u8; TimestampID::MAX_SIZE]),
+    )
 }

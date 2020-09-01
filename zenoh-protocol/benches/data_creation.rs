@@ -38,11 +38,14 @@ fn criterion_benchmark(c: &mut Criterion) {
     for n in &iters {
         let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
         let info = Some(DataInfo {
-            source_id: Some(PeerId { id: vec![0; 16] }),
+            source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
             source_sn: Some(12345),
-            first_broker_id: Some(PeerId { id: vec![0; 16] }),
+            first_broker_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
             first_broker_sn: Some(12345),
-            timestamp: Some(uhlc::Timestamp::new(Default::default(), vec![0; 16])),
+            timestamp: Some(uhlc::Timestamp::new(
+                Default::default(),
+                uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
+            )),
             kind: Some(0),
             encoding: Some(0),
         });
@@ -67,11 +70,14 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
     let info = Some(DataInfo {
-        source_id: Some(PeerId { id: vec![0; 16] }),
+        source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
         source_sn: Some(12345),
-        first_broker_id: Some(PeerId { id: vec![0; 16] }),
+        first_broker_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
         first_broker_sn: Some(12345),
-        timestamp: Some(uhlc::Timestamp::new(Default::default(), vec![0; 16])),
+        timestamp: Some(uhlc::Timestamp::new(
+            Default::default(),
+            uhlc::ID::new(16, [0u8; uhlc::ID::MAX_SIZE]),
+        )),
         kind: Some(0),
         encoding: Some(0),
     });

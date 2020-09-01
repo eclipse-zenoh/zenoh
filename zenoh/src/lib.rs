@@ -92,7 +92,7 @@ pub use values::*;
 
 pub mod utils;
 
-pub use zenoh_protocol::core::Timestamp;
+pub use zenoh_protocol::core::{Timestamp, TimestampID};
 
 type Config = net::Config;
 

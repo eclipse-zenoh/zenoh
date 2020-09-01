@@ -155,7 +155,7 @@ async fn session_lease(locator: Locator) {
     let lease: ZInt = 1_000;
 
     /* [ROUTER] */
-    let router_id = PeerId { id: vec![0u8] };
+    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
     // Create the barrier to detect when a new session is open
     let router_new_barrier = Arc::new(Barrier::new(2));
@@ -181,7 +181,7 @@ async fn session_lease(locator: Locator) {
     let router_manager = SessionManager::new(config, Some(opt_config));
 
     /* [CLIENT] */
-    let client01_id = PeerId { id: vec![1u8] };
+    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
     let client01_handler = Arc::new(SHClientLease::new());
 
     // Create the transport session manager for the first client
@@ -390,7 +390,7 @@ async fn session_open_close(locator: Locator) {
     let attachment = None;
 
     /* [ROUTER] */
-    let router_id = PeerId { id: vec![0u8] };
+    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
     // Create the barrier to detect when a new session is open
     let router_new_barrier = Arc::new(Barrier::new(2));
@@ -416,8 +416,8 @@ async fn session_open_close(locator: Locator) {
     let router_manager = SessionManager::new(config, Some(opt_config));
 
     /* [CLIENT] */
-    let client01_id = PeerId { id: vec![1u8] };
-    let client02_id = PeerId { id: vec![2u8] };
+    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
 
     // Create the transport session manager for the first client
     let config = SessionManagerConfig {
