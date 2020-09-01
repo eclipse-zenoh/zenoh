@@ -92,7 +92,7 @@ path = "examples/zenoh-net/zn_write.rs"
 name = "zn_pub"
 path = "examples/zenoh-net/zn_pub.rs"
 
-[[example]] 
+[[example]]
 name = "zn_sub"
 path = "examples/zenoh-net/zn_sub.rs"
 

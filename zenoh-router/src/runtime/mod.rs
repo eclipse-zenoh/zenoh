@@ -62,7 +62,11 @@ impl Runtime {
 
         log::debug!("Using PID: {}", pid);
 
-        let hlc = HLC::with_system_time(uhlc::ID::from(&pid));
+        let hlc = if config.add_timestamp {
+            Some(HLC::with_system_time(uhlc::ID::from(&pid)))
+        } else {
+            None
+        };
         let broker = Arc::new(Broker::new(hlc));
 
         let sm_config = SessionManagerConfig {
@@ -135,6 +139,7 @@ pub struct Config {
     pub listeners: Vec<Locator>,
     pub multicast_interface: String,
     pub scouting_delay: Duration,
+    pub add_timestamp: bool,
 }
 
 impl Config {
@@ -145,6 +150,7 @@ impl Config {
             listeners: vec![],
             multicast_interface: "auto".to_string(),
             scouting_delay: Duration::new(0, 250_000_000),
+            add_timestamp: false,
         }
     }
 
@@ -201,6 +207,11 @@ impl Config {
             "broker" => Ok(whatami::BROKER),
             _ => Err(()),
         }
+    }
+
+    pub fn add_timestamp(mut self) -> Self {
+        self.add_timestamp = true;
+        self
     }
 }
 
