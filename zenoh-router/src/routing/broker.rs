@@ -44,14 +44,17 @@ pub use crate::routing::resource::*;
 ///     use zenoh_protocol::session::DummyHandler;
 ///     let dummy_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
 ///
+///     // UUID used for HLC and PeerId
+///     let id = uuid::Uuid::new_v4();
+///
 ///     // Instanciate broker
-///     let broker = Arc::new(Broker::new(HLC::default()));
+///     let broker = Arc::new(Broker::new(Some(HLC::with_system_time(id.into()))));
 ///
 ///     // Instanciate SessionManager and plug it to the broker
 ///     let config = SessionManagerConfig {
 ///         version: 0,
 ///         whatami: PEER,
-///         id: PeerId{id: vec![1, 2]},
+///         id: PeerId::from(id),
 ///         handler: broker.clone()
 ///     };
 ///     let manager = SessionManager::new(config, None);
@@ -72,7 +75,7 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new(hlc: HLC) -> Broker {
+    pub fn new(hlc: Option<HLC>) -> Broker {
         Broker {
             tables: Tables::new(hlc),
         }
@@ -114,11 +117,11 @@ pub struct Tables {
     face_counter: usize,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
-    pub(crate) hlc: HLC,
+    pub(crate) hlc: Option<HLC>,
 }
 
 impl Tables {
-    pub fn new(hlc: HLC) -> Arc<RwLock<Tables>> {
+    pub fn new(hlc: Option<HLC>) -> Arc<RwLock<Tables>> {
         Arc::new(RwLock::new(Tables {
             face_counter: 0,
             root_res: Resource::root(),

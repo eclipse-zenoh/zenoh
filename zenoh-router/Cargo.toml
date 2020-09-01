@@ -44,7 +44,6 @@ criterion = "0.3.3"
 
 [features]
 default = []
-no_timestamp = []
 
 [[bench]]
 name = "tables_bench"

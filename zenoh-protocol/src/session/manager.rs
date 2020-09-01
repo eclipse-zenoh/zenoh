@@ -63,7 +63,7 @@ use zenoh_util::{zasyncread, zasyncwrite, zerror};
 /// let config = SessionManagerConfig {
 ///     version: 0,
 ///     whatami: whatami::PEER,
-///     id: PeerId{id: vec![1, 2]},
+///     id: PeerId::from(uuid::Uuid::new_v4()),
 ///     handler: Arc::new(MySH::new())
 /// };
 /// let manager = SessionManager::new(config, None);
@@ -72,7 +72,7 @@ use zenoh_util::{zasyncread, zasyncwrite, zerror};
 /// let config = SessionManagerConfig {
 ///     version: 0,
 ///     whatami: whatami::PEER,
-///     id: PeerId{id: vec![3, 4]},
+///     id: PeerId::from(uuid::Uuid::new_v4()),
 ///     handler: Arc::new(MySH::new())
 /// };
 /// // Setting a value to None means to use the default value
