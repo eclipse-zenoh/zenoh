@@ -315,7 +315,7 @@ impl Session {
     /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher> {
+    pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher<'_>> {
         trace!("declare_publisher({:?})", resource);
         let mut state = self.state.write().await;
 
@@ -330,7 +330,10 @@ impl Session {
         drop(state);
         primitives.publisher(resource).await;
 
-        Ok(Publisher { state: pub_state })
+        Ok(Publisher {
+            _session: self,
+            state: pub_state,
+        })
     }
 
     /// Undeclare a [Publisher](Publisher) previously declared with [declare_publisher](Session::declare_publisher).
@@ -349,7 +352,7 @@ impl Session {
     /// session.undeclare_publisher(publisher).await;
     /// # })
     /// ```
-    pub async fn undeclare_publisher(&self, publisher: Publisher) -> ZResult<()> {
+    pub async fn undeclare_publisher(&self, publisher: Publisher<'_>) -> ZResult<()> {
         trace!("undeclare_publisher({:?})", publisher);
         let mut state = self.state.write().await;
         state.publishers.remove(&publisher.state.id);
@@ -399,7 +402,7 @@ impl Session {
         &self,
         resource: &ResKey,
         info: &SubInfo,
-    ) -> ZResult<Subscriber> {
+    ) -> ZResult<Subscriber<'_>> {
         trace!("declare_subscriber({:?})", resource);
         let mut state = self.state.write().await;
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
@@ -418,7 +421,7 @@ impl Session {
         primitives.subscriber(resource, info).await;
 
         Ok(Subscriber {
-            session: self.clone(),
+            session: self,
             state: sub_state,
             receiver,
         })
@@ -453,7 +456,7 @@ impl Session {
         resource: &ResKey,
         info: &SubInfo,
         data_handler: DataHandler,
-    ) -> ZResult<CallbackSubscriber>
+    ) -> ZResult<CallbackSubscriber<'_>>
     where
         DataHandler: FnMut(Sample) + Send + Sync + 'static,
     {
@@ -475,7 +478,7 @@ impl Session {
         primitives.subscriber(resource, info).await;
 
         Ok(CallbackSubscriber {
-            session: self.clone(),
+            session: self,
             state: sub_state,
         })
     }
@@ -501,7 +504,7 @@ impl Session {
     /// session.undeclare_subscriber(subscriber).await;
     /// # })
     /// ```
-    pub async fn undeclare_subscriber(&self, subscriber: Subscriber) -> ZResult<()> {
+    pub async fn undeclare_subscriber(&self, subscriber: Subscriber<'_>) -> ZResult<()> {
         trace!("undeclare_subscriber({:?})", subscriber);
         let mut state = self.state.write().await;
         state.subscribers.remove(&subscriber.state.id);
@@ -548,7 +551,7 @@ impl Session {
     /// ```
     pub async fn undeclare_callback_subscriber(
         &self,
-        subscriber: CallbackSubscriber,
+        subscriber: CallbackSubscriber<'_>,
     ) -> ZResult<()> {
         trace!("undeclare_callback_subscriber({:?})", subscriber);
         let mut state = self.state.write().await;
@@ -599,7 +602,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable> {
+    pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable<'_>> {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut state = self.state.write().await;
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
@@ -617,6 +620,7 @@ impl Session {
         primitives.queryable(resource).await;
 
         Ok(Queryable {
+            _session: self,
             state: qable_state,
             q_receiver,
         })
@@ -639,7 +643,7 @@ impl Session {
     /// session.undeclare_queryable(queryable).await;
     /// # })
     /// ```
-    pub async fn undeclare_queryable(&self, queryable: Queryable) -> ZResult<()> {
+    pub async fn undeclare_queryable(&self, queryable: Queryable<'_>) -> ZResult<()> {
         trace!("undeclare_queryable({:?})", queryable);
         let mut state = self.state.write().await;
         state.queryables.remove(&queryable.state.id);

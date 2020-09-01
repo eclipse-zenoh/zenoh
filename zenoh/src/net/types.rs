@@ -157,11 +157,12 @@ pub(crate) struct PublisherState {
 }
 
 /// A publisher.
-pub struct Publisher {
+pub struct Publisher<'a> {
+    pub(crate) _session: &'a Session,
     pub(crate) state: Arc<PublisherState>,
 }
 
-impl fmt::Debug for Publisher {
+impl fmt::Debug for Publisher<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.state.fmt(f)
     }
@@ -185,13 +186,13 @@ impl fmt::Debug for SubscriberState {
 }
 
 /// A subscriber that provides data through a stream.
-pub struct Subscriber {
-    pub(crate) session: Session,
+pub struct Subscriber<'a> {
+    pub(crate) session: &'a Session,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) receiver: Receiver<Sample>,
 }
 
-impl Subscriber {
+impl Subscriber<'_> {
     /// Get the stream from a [Subscriber](Subscriber).
     ///
     /// # Examples
@@ -244,7 +245,7 @@ impl Subscriber {
     }
 }
 
-impl fmt::Debug for Subscriber {
+impl fmt::Debug for Subscriber<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.state.fmt(f)
     }
@@ -268,12 +269,12 @@ impl fmt::Debug for CallbackSubscriberState {
 }
 
 /// A subscriber that provides data through a callback.
-pub struct CallbackSubscriber {
-    pub(crate) session: Session,
+pub struct CallbackSubscriber<'a> {
+    pub(crate) session: &'a Session,
     pub(crate) state: Arc<CallbackSubscriberState>,
 }
 
-impl CallbackSubscriber {
+impl CallbackSubscriber<'_> {
     /// Pull available data for a pull-mode [CallbackSubscriber](CallbackSubscriber).
     ///
     /// # Examples
@@ -298,7 +299,7 @@ impl CallbackSubscriber {
     }
 }
 
-impl fmt::Debug for CallbackSubscriber {
+impl fmt::Debug for CallbackSubscriber<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.state.fmt(f)
     }
@@ -318,12 +319,13 @@ impl fmt::Debug for QueryableState {
 }
 
 /// An entity able to reply to queries.
-pub struct Queryable {
+pub struct Queryable<'a> {
+    pub(crate) _session: &'a Session,
     pub(crate) state: Arc<QueryableState>,
     pub(crate) q_receiver: Receiver<Query>,
 }
 
-impl Queryable {
+impl Queryable<'_> {
     /// Get the stream from a [Queryable](Queryable).
     ///
     /// # Examples
@@ -350,7 +352,7 @@ impl Queryable {
     }
 }
 
-impl fmt::Debug for Queryable {
+impl fmt::Debug for Queryable<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.state.fmt(f)
     }

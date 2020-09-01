@@ -114,7 +114,7 @@ impl Workspace {
             })
     }
 
-    pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream> {
+    pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream<'_>> {
         debug!("subscribe on {}", selector);
         if selector.projection.is_some() {
             return zerror!(ZErrorKind::Other {
@@ -189,7 +189,7 @@ impl Workspace {
         Ok(())
     }
 
-    pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream> {
+    pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream<'_>> {
         debug!("eval on {}", path_expr);
         let reskey = self.pathexpr_to_reskey(&path_expr);
 
@@ -309,14 +309,14 @@ impl Change {
 }
 
 pin_project! {
-    pub struct ChangeStream {
+    pub struct ChangeStream<'a> {
         #[pin]
-        subscriber: Subscriber,
+        subscriber: Subscriber<'a>,
         decode_value: bool,
     }
 }
 
-impl Stream for ChangeStream {
+impl Stream for ChangeStream<'_> {
     type Item = Change;
 
     #[inline(always)]
@@ -384,13 +384,13 @@ fn query_to_get(query: Query) -> ZResult<GetRequest> {
 }
 
 pin_project! {
-    pub struct GetRequestStream {
+    pub struct GetRequestStream<'a> {
         #[pin]
-        queryable: Queryable
+        queryable: Queryable<'a>
     }
 }
 
-impl Stream for GetRequestStream {
+impl Stream for GetRequestStream<'_> {
     type Item = GetRequest;
 
     #[inline(always)]

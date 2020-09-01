@@ -712,14 +712,15 @@ pub unsafe extern "C" fn zn_declare_queryable(
     let (tx, rx) = channel::<bool>(1);
     let r = ZNQueryable(Some(Arc::new(tx)));
 
-    let mut queryable: zenoh::net::Queryable =
-        task::block_on(s.0.declare_queryable(&ResKey::RName(name.to_string()), kind as ZInt))
-            .unwrap();
     // Note: This is done to ensure that even if the call-back into C
     // does any blocking call we do not incour the risk of blocking
     // any of the task resolving futures.
     task::spawn_blocking(move || {
         task::block_on(async move {
+            let mut queryable: zenoh::net::Queryable =
+                s.0.declare_queryable(&ResKey::RName(name.to_string()), kind as ZInt)
+                    .await
+                    .unwrap();
             loop {
                 select!(
                 query = queryable.stream().next().fuse() => {
