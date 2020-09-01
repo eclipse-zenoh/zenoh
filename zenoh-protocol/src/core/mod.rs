@@ -13,10 +13,13 @@
 //
 use std::convert::From;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicU64;
-pub use uhlc::Timestamp;
 
 pub mod rname;
+
+pub use uhlc::Timestamp;
+pub type TimestampID = uhlc::ID;
 
 pub type ZInt = u64;
 pub type ZiInt = i64;
@@ -153,20 +156,69 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq)]
 pub struct PeerId {
-    pub id: Vec<u8>,
+    size: usize,
+    id: [u8; PeerId::MAX_SIZE],
+}
+
+impl PeerId {
+    pub const MAX_SIZE: usize = 16;
+
+    pub fn new(size: usize, id: [u8; PeerId::MAX_SIZE]) -> PeerId {
+        PeerId { size, id }
+    }
+
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    #[inline]
+    pub fn as_slice(&self) -> &[u8] {
+        &self.id[..self.size]
+    }
+}
+
+impl From<uuid::Uuid> for PeerId {
+    #[inline]
+    fn from(uuid: uuid::Uuid) -> Self {
+        PeerId {
+            size: 16,
+            id: *uuid.as_bytes(),
+        }
+    }
+}
+
+impl PartialEq for PeerId {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.size == other.size && self.as_slice() == other.as_slice()
+    }
+}
+
+impl Hash for PeerId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state);
+    }
 }
 
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", hex::encode_upper(&self.id))
+        write!(f, "{}", hex::encode_upper(self.as_slice()))
     }
 }
 
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
+    }
+}
+
+// A PeerID can be converted into a Timestamp's ID
+impl From<&PeerId> for uhlc::ID {
+    fn from(pid: &PeerId) -> Self {
+        uhlc::ID::new(pid.size, pid.id)
     }
 }
 

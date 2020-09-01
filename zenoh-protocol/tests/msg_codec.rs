@@ -19,7 +19,6 @@ use zenoh_protocol::proto::*;
 
 const NUM_ITER: usize = 100;
 const PROPS_LENGTH: usize = 3;
-const PID_MAX_SIZE: usize = 16;
 const PROP_MAX_SIZE: usize = 64;
 const MAX_PAYLOAD_SIZE: usize = 256;
 
@@ -48,9 +47,7 @@ fn gen_buffer(max_size: usize) -> Vec<u8> {
 }
 
 fn gen_pid() -> PeerId {
-    PeerId {
-        id: gen_buffer(PID_MAX_SIZE),
-    }
+    PeerId::from(uuid::Uuid::new_v4())
 }
 
 fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
@@ -167,11 +164,7 @@ fn gen_consolidation() -> QueryConsolidation {
 }
 
 fn gen_timestamp() -> Timestamp {
-    // Timestamp::new(uhlc::NTP64(gen!(u64)), gen_buffer(PID_MAX_SIZE))
-    let mut buf: Vec<u8> = Vec::with_capacity(PID_MAX_SIZE);
-    buf.resize(PID_MAX_SIZE, 0);
-    thread_rng().fill(buf.as_mut_slice());
-    Timestamp::new(uhlc::NTP64(gen!(u64)), buf)
+    Timestamp::new(uhlc::NTP64(gen!(u64)), uhlc::ID::from(uuid::Uuid::new_v4()))
 }
 
 fn gen_data_info() -> DataInfo {

@@ -280,7 +280,7 @@ pub unsafe extern "C" fn zn_scout_whatami(si: *mut ZNScout, idx: c_uint) -> c_ui
 #[no_mangle]
 pub unsafe extern "C" fn zn_scout_peerid(si: *mut ZNScout, idx: c_uint) -> *const c_uchar {
     match &(*si).0[idx as usize].pid {
-        Some(v) => v.id.as_ptr() as *const c_uchar,
+        Some(v) => v.as_slice().as_ptr() as *const c_uchar,
         None => std::ptr::null(),
     }
 }
@@ -673,8 +673,8 @@ pub unsafe extern "C" fn zn_query(
 
             while let Some(reply) = q.next().await {
                 source_info.kind = reply.source_kind as c_uint;
-                source_info.id.val = reply.replier_id.id.as_ptr() as *const c_uchar;
-                source_info.id.len = reply.replier_id.id.len() as c_uint;
+                source_info.id.val = reply.replier_id.as_slice().as_ptr() as *const c_uchar;
+                source_info.id.len = reply.replier_id.as_slice().len() as c_uint;
                 sample.key.val = reply.data.res_name.as_ptr() as *const c_char;
                 sample.key.len = reply.data.res_name.len() as c_uint;
                 let data = reply.data.payload.to_vec();

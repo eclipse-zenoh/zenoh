@@ -42,22 +42,27 @@ pub struct Runtime {
 impl Runtime {
     pub async fn new(version: u8, config: Config, id: Option<&str>) -> ZResult<Runtime> {
         let pid = if let Some(s) = id {
-            PeerId {
-                id: hex::decode(s).map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: format!("Invalid id: {} - {}", s, e)
-                    })
-                })?,
+            let vec = hex::decode(s).map_err(|e| {
+                zerror2!(ZErrorKind::Other {
+                    descr: format!("Invalid id: {} - {}", s, e)
+                })
+            })?;
+            let size = vec.len();
+            if size > PeerId::MAX_SIZE {
+                return zerror!(ZErrorKind::Other {
+                    descr: format!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
+                });
             }
+            let mut id = [0u8; PeerId::MAX_SIZE];
+            id[..size].copy_from_slice(vec.as_slice());
+            PeerId::new(size, id)
         } else {
-            PeerId {
-                id: uuid::Uuid::new_v4().as_bytes().to_vec(),
-            }
+            PeerId::from(uuid::Uuid::new_v4())
         };
 
         log::debug!("Using PID: {}", pid);
 
-        let hlc = HLC::with_system_time(pid.id.clone());
+        let hlc = HLC::with_system_time(uhlc::ID::from(&pid));
         let broker = Arc::new(Broker::new(hlc));
 
         let sm_config = SessionManagerConfig {

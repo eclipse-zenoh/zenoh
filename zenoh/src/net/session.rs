@@ -211,24 +211,24 @@ impl Session {
         trace!("info()");
         let mut info = Properties::new();
         let runtime = self.runtime.read().await;
-        info.push((ZN_INFO_PID_KEY, runtime.pid.id.clone()));
+        info.push((ZN_INFO_PID_KEY, runtime.pid.as_slice().to_vec()));
         for session in runtime.orchestrator.manager.get_sessions().await {
             if let Ok(what) = session.get_whatami() {
                 if what & whatami::PEER != 0 {
                     if let Ok(peer) = session.get_pid() {
-                        info.push((ZN_INFO_PEER_PID_KEY, peer.id));
+                        info.push((ZN_INFO_PEER_PID_KEY, peer.as_slice().to_vec()));
                     }
                 }
             }
         }
         if runtime.orchestrator.whatami & whatami::BROKER != 0 {
-            info.push((ZN_INFO_ROUTER_PID_KEY, runtime.pid.id.clone()));
+            info.push((ZN_INFO_ROUTER_PID_KEY, runtime.pid.as_slice().to_vec()));
         }
         for session in runtime.orchestrator.manager.get_sessions().await {
             if let Ok(what) = session.get_whatami() {
                 if what & whatami::BROKER != 0 {
                     if let Ok(peer) = session.get_pid() {
-                        info.push((ZN_INFO_ROUTER_PID_KEY, peer.id));
+                        info.push((ZN_INFO_ROUTER_PID_KEY, peer.as_slice().to_vec()));
                     }
                 }
             }

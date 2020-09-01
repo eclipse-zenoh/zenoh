@@ -240,6 +240,10 @@ impl Timed for TimedCleanup {
 // generate a reception timestamp with id=0x00
 fn new_reception_timestamp() -> Timestamp {
     use std::time::{SystemTime, UNIX_EPOCH};
+    use zenoh::TimestampID;
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(now.into(), vec![0x00])
+    Timestamp::new(
+        now.into(),
+        TimestampID::new(1, [0u8; TimestampID::MAX_SIZE]),
+    )
 }

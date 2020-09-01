@@ -251,10 +251,7 @@ pub async fn route_data_to_map(
 
 lazy_static! {
     static ref UNIQUE_TS: uhlc::Timestamp = {
-        let id: Vec<u8> = vec![
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-            0x0f, 0x10,
-        ];
+        let id = uhlc::ID::from(uuid::Uuid::new_v4());
         uhlc::Timestamp::new(Default::default(), id)
     };
 }
