@@ -13,13 +13,13 @@
 //
 #![recursion_limit = "512"]
 
-use async_std::sync::Sender;
+use async_std::sync::{Arc, Sender};
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use zenoh::{ChangeKind, Path, Properties, Selector, Value, Workspace, ZResult, Zenoh};
+use zenoh::{ChangeKind, Path, Properties, Selector, Value, ZResult, Zenoh};
 use zenoh_router::runtime::Runtime;
 
 mod backend;
@@ -59,7 +59,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         runtime.get_pid_str().await
     );
 
-    let zenoh = Zenoh::init(runtime).await;
+    let zenoh = Arc::new(Zenoh::init(runtime).await);
     let workspace = zenoh
         .workspace(Some(Path::try_from(backends_prefix.clone()).unwrap()))
         .await
@@ -70,10 +70,11 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     // Start Memory Backend and storages if configured via args
     if !args.is_present("no-backend") {
+        debug!("Memory backend enabled");
         let mem_backend = memory_backend::create_backend(Properties::default()).unwrap();
         let mem_backend_path =
             Path::try_from(format!("{}/{}", backends_prefix, MEMORY_BACKEND_NAME)).unwrap();
-        let handle = start_backend(mem_backend, mem_backend_path.clone(), workspace.clone())
+        let handle = start_backend(mem_backend, mem_backend_path.clone(), zenoh.clone())
             .await
             .unwrap();
         backend_handles.insert(mem_backend_path.clone(), handle);
@@ -81,6 +82,10 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         if let Some(values) = args.values_of("mem-storage") {
             let mut i: u32 = 1;
             for path_expr in values {
+                debug!(
+                    "Add memory storage {}-{} on {}",
+                    MEMORY_STORAGE_NAME, i, path_expr
+                );
                 let storage_admin_path = Path::try_from(format!(
                     "{}/storage/{}-{}",
                     mem_backend_path, MEMORY_STORAGE_NAME, i
@@ -107,7 +112,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     // Disable clippy check because no way to log the warn using map.entry().or_insert()
                     if !backend_handles.contains_key(&change.path) {
                         if let Some(value) = change.value {
-                            match load_and_start_backend(&change.path, value, &workspace).await {
+                            match load_and_start_backend(&change.path, value, zenoh.clone()).await {
                                 Ok(handle) => {
                                     let _ = backend_handles.insert(change.path, handle);
                                 }
@@ -135,9 +140,9 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 async fn load_and_start_backend(
     path: &Path,
     _value: Value,
-    workspace: &Workspace,
+    zenoh: Arc<Zenoh>,
 ) -> ZResult<Sender<bool>> {
     // TODO: find and load appropriate BACKEND depending to properties in "value"
     let mem_backend = memory_backend::create_backend(Properties::default()).unwrap();
-    start_backend(mem_backend, path.clone(), (*workspace).clone()).await
+    start_backend(mem_backend, path.clone(), zenoh).await
 }

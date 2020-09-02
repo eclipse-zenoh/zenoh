@@ -122,9 +122,9 @@ impl Zenoh {
         &self.session
     }
 
-    pub async fn workspace(&self, prefix: Option<Path>) -> ZResult<Workspace> {
+    pub async fn workspace(&self, prefix: Option<Path>) -> ZResult<Workspace<'_>> {
         debug!("New workspace with prefix: {:?}", prefix);
-        Workspace::new(self.session.clone(), prefix).await
+        Workspace::new(&self, prefix).await
     }
 
     pub async fn close(self) -> ZResult<()> {

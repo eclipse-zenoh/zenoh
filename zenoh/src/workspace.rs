@@ -13,10 +13,11 @@
 //
 use crate::net::queryable::EVAL;
 use crate::net::{
-    data_kind, encoding, DataInfo, Query, QueryConsolidation, QueryTarget, Queryable, RBuf,
-    Reliability, RepliesSender, Reply, ResKey, Sample, Session, SubInfo, SubMode, Subscriber, ZInt,
+    data_kind, encoding, CallbackSubscriber, DataInfo, Query, QueryConsolidation, QueryTarget,
+    Queryable, RBuf, Reliability, RepliesSender, Reply, ResKey, Sample, Session, SubInfo, SubMode,
+    Subscriber, ZInt,
 };
-use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult};
+use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
 use async_std::pin::Pin;
 use async_std::stream::Stream;
 use async_std::sync::Receiver;
@@ -27,31 +28,22 @@ use std::convert::TryInto;
 use zenoh_protocol::core::TimestampID;
 use zenoh_util::zerror;
 
-pub struct Workspace {
-    session: Session,
+pub struct Workspace<'a> {
+    zenoh: &'a Zenoh,
     prefix: Path,
 }
 
-impl Clone for Workspace {
-    fn clone(&self) -> Self {
-        Workspace {
-            session: self.session.clone(),
-            prefix: self.prefix.clone(),
-        }
-    }
-}
-
-impl Workspace {
-    pub(crate) async fn new(session: Session, prefix: Option<Path>) -> ZResult<Workspace> {
+impl Workspace<'_> {
+    pub(crate) async fn new(zenoh: &Zenoh, prefix: Option<Path>) -> ZResult<Workspace<'_>> {
         Ok(Workspace {
-            session,
+            zenoh,
             prefix: prefix.unwrap_or_else(|| "/".try_into().unwrap()),
         })
     }
 
     #[doc(hidden)]
     pub fn session(&self) -> &Session {
-        &self.session
+        &self.zenoh.session
     }
 
     fn path_to_reskey(&self, path: &Path) -> ResKey {
@@ -73,7 +65,7 @@ impl Workspace {
     pub async fn put(&self, path: &Path, value: Value) -> ZResult<()> {
         debug!("put on {:?}", path);
         let (encoding, payload) = value.encode();
-        self.session
+        self.session()
             .write_ext(
                 &self.path_to_reskey(path),
                 payload,
@@ -86,7 +78,7 @@ impl Workspace {
 
     pub async fn delete(&self, path: &Path) -> ZResult<()> {
         debug!("delete on {:?}", path);
-        self.session
+        self.session()
             .write_ext(
                 &self.path_to_reskey(path),
                 RBuf::empty(),
@@ -102,7 +94,7 @@ impl Workspace {
         let reskey = self.pathexpr_to_reskey(&selector.path_expr);
         let decode_value = !selector.properties.contains_key("raw");
 
-        self.session
+        self.session()
             .query(
                 &reskey,
                 &selector.predicate,
@@ -137,7 +129,7 @@ impl Workspace {
             period: None,
         };
 
-        self.session
+        self.session()
             .declare_subscriber(&reskey, &sub_info)
             .await
             .map(|subscriber| ChangeStream {
@@ -150,7 +142,7 @@ impl Workspace {
         &self,
         selector: &Selector,
         mut callback: SubscribeCallback,
-    ) -> ZResult<()>
+    ) -> ZResult<SubscriberHandle<'_>>
     where
         SubscribeCallback: FnMut(Change) + Send + Sync + 'static,
     {
@@ -174,8 +166,8 @@ impl Workspace {
             period: None,
         };
 
-        let _ = self
-            .session
+        let subscriber = self
+            .session()
             .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
                 match Change::new(
                     &sample.res_name,
@@ -187,15 +179,15 @@ impl Workspace {
                     Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
                 }
             })
-            .await;
-        Ok(())
+            .await?;
+        Ok(SubscriberHandle { subscriber })
     }
 
     pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream<'_>> {
         debug!("eval on {}", path_expr);
         let reskey = self.pathexpr_to_reskey(&path_expr);
 
-        self.session
+        self.session()
             .declare_queryable(&reskey, EVAL)
             .await
             .map(|queryable| GetRequestStream { queryable })
@@ -337,6 +329,12 @@ pin_project! {
     }
 }
 
+impl ChangeStream<'_> {
+    pub async fn close(self) -> ZResult<()> {
+        self.subscriber.undeclare().await
+    }
+}
+
 impl Stream for ChangeStream<'_> {
     type Item = Change;
 
@@ -382,6 +380,16 @@ fn path_value_to_sample(path: Path, value: Value) -> Sample {
     }
 }
 
+pub struct SubscriberHandle<'a> {
+    subscriber: CallbackSubscriber<'a>,
+}
+
+impl SubscriberHandle<'_> {
+    pub async fn close(self) -> ZResult<()> {
+        self.subscriber.undeclare().await
+    }
+}
+
 pub struct GetRequest {
     pub selector: Selector,
     replies_sender: RepliesSender,
@@ -406,6 +414,12 @@ pin_project! {
     pub struct GetRequestStream<'a> {
         #[pin]
         queryable: Queryable<'a>
+    }
+}
+
+impl GetRequestStream<'_> {
+    pub async fn close(self) -> ZResult<()> {
+        self.queryable.undeclare().await
     }
 }
 

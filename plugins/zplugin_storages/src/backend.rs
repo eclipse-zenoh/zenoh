@@ -11,15 +11,15 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{channel, Sender};
+use async_std::sync::{channel, Arc, Sender};
 use async_std::task;
 use futures::prelude::*;
 use futures::select;
-use log::{debug, error, warn};
+use log::{debug, error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use zenoh::net::{queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode};
-use zenoh::{ChangeKind, Path, PathExpr, Selector, Value, Workspace, ZError, ZErrorKind, ZResult};
+use zenoh::{ChangeKind, Path, PathExpr, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
 use zenoh_util::{zerror, zerror2};
 
 pub(crate) const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
@@ -27,12 +27,18 @@ pub(crate) const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 pub(crate) async fn start_backend(
     backend: Box<dyn zenoh_backend_core::Backend>,
     admin_path: Path,
-    workspace: Workspace,
+    zenoh: Arc<Zenoh>,
 ) -> ZResult<Sender<bool>> {
-    debug!("Start backend {}", admin_path);
+    let backend_name = admin_path.clone();
+    trace!("Starting backend {}", backend_name);
 
-    let (tx, rx) = channel::<bool>(1);
+    // Channel for the task to advertise when ready to receive requests
+    let (ready_tx, ready_rx) = channel::<bool>(1);
+    // Channel to stop the task
+    let (stop_tx, stop_rx) = channel::<bool>(1);
+
     task::spawn(async move {
+        let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
         // admin_path is "/@/.../backend/<beid>"
         // answer to GET on 'admin_path'
         let mut backend_admin = match workspace.register_eval(&PathExpr::from(&admin_path)).await {
@@ -43,8 +49,7 @@ pub(crate) async fn start_backend(
             }
         };
         // subscribe to PUT/DELETE on 'admin_path'/storage/*
-        let storages_admin_selector =
-            Selector::try_from(format!("{}/storage/*", &admin_path)).unwrap();
+        let storages_admin_selector = Selector::try_from("storage/*").unwrap();
         let mut storages_admin = match workspace.subscribe(&storages_admin_selector).await {
             Ok(storages_admin) => storages_admin,
             Err(e) => {
@@ -52,6 +57,11 @@ pub(crate) async fn start_backend(
                 return;
             }
         };
+
+        // now that the backend is ready to receive GET/PUT/DELETE,
+        // unblock the start_backend() operation below
+        ready_tx.send(true).await;
+
         let mut backend = backend;
         // Map owning handles on alive storages for this backend.
         // Once dropped, a handle will release/stop the backend.
@@ -67,11 +77,11 @@ pub(crate) async fn start_backend(
                 // on change for storages_admin
                 change = storages_admin.next().fuse() => {
                     let change = change.unwrap();
-                    debug!("{} received change for {}", admin_path, change.path);
+                    trace!("{} received change for {}", admin_path, change.path);
                     match change.kind {
                         ChangeKind::PUT => {
                             if let Some(value) = change.value {
-                                match create_and_start_storage(change.path.clone(), value, &mut backend, workspace.clone()).await {
+                                match create_and_start_storage(change.path.clone(), value, &mut backend, zenoh.clone()).await {
                                     Ok(handle) => {
                                         let _ = storages_handles.insert(change.path, handle);
                                     }
@@ -88,23 +98,28 @@ pub(crate) async fn start_backend(
                         ChangeKind::PATCH => warn!("PATCH not supported on {}", change.path),
                     }
                 },
-                _ = rx.recv().fuse() => {
-                    debug!("Dropping backend {}", admin_path);
+                _ = stop_rx.recv().fuse() => {
+                    trace!("Dropping backend {}", admin_path);
                     return ()
                 }
             );
         }
     });
 
-    Ok(tx)
+    // wait for the above task to be ready to receive GET/PUT/DELETE
+    let _ = ready_rx.recv().await;
+    trace!("Backend {} ready", backend_name);
+
+    Ok(stop_tx)
 }
 
 async fn create_and_start_storage(
     admin_path: Path,
     value: Value,
     backend: &mut Box<dyn zenoh_backend_core::Backend>,
-    workspace: Workspace,
+    zenoh: Arc<Zenoh>,
 ) -> ZResult<Sender<bool>> {
+    trace!("Create storage {}", admin_path);
     if let Value::Properties(props) = value {
         let path_expr_str = props.get(STORAGE_PATH_EXPR_PROPERTY).ok_or_else(|| {
             zerror2!(ZErrorKind::Other {
@@ -116,7 +131,7 @@ async fn create_and_start_storage(
         })?;
         let path_expr = PathExpr::try_from(path_expr_str.as_str())?;
         let storage = backend.create_storage(props).await?;
-        start_storage(storage, admin_path.clone(), path_expr, workspace.clone()).await
+        start_storage(storage, admin_path.clone(), path_expr, zenoh).await
     } else {
         zerror!(ZErrorKind::Other {
             descr: format!(
@@ -131,12 +146,14 @@ async fn start_storage(
     mut storage: Box<dyn zenoh_backend_core::Storage>,
     admin_path: Path,
     path_expr: PathExpr,
-    workspace: Workspace,
+    zenoh: Arc<Zenoh>,
 ) -> ZResult<Sender<bool>> {
     debug!("Start storage {} on {}", admin_path, path_expr);
-    let (tx, rx) = channel::<bool>(1);
 
+    let (tx, rx) = channel::<bool>(1);
     task::spawn(async move {
+        let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
+
         // admin_path is "/@/.../storage/<stid>"
         // answer to GET on 'admin_path'
         let mut storage_admin = match workspace.register_eval(&PathExpr::from(&admin_path)).await {
@@ -228,7 +245,7 @@ async fn start_storage(
                 },
                 // on storage handle drop
                 _ = rx.recv().fuse() => {
-                    debug!("Dropping storage {}", admin_path);
+                    trace!("Dropping storage {}", admin_path);
                     return ()
                 }
             );

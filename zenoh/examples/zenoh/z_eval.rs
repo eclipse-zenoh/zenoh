@@ -130,5 +130,6 @@ async fn main() {
         get_request.reply(path.clone(), s.into()).await;
     }
 
+    get_stream.close().await.unwrap();
     zenoh.close().await.unwrap();
 }

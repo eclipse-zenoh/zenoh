@@ -82,7 +82,7 @@ async fn main() {
     let mut count = 0u64;
     let mut start = Instant::now();
 
-    workspace
+    let subscriber = workspace
         .subscribe_with_callback(&selector, move |_change| {
             if count == 0 {
                 start = Instant::now();
@@ -100,5 +100,6 @@ async fn main() {
     // Stop forever
     future::pending::<()>().await;
 
+    subscriber.close().await.unwrap();
     zenoh.close().await.unwrap();
 }
