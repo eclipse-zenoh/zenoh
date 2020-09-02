@@ -24,9 +24,8 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let config = parse_args();
+    let (config, m) = parse_args();
 
-    println!("Opening session...");
     let session = open(config, None).await.unwrap();
 
     let reskey = RId(session
@@ -42,6 +41,7 @@ async fn main() {
         mode: SubMode::Push,
         period: None,
     };
+    let mut nm = 0;
     let _sub = session
         .declare_callback_subscriber(&reskey, &sub_info, move |_sample| {
             if count == 0 {
@@ -51,7 +51,10 @@ async fn main() {
                 count += 1;
             } else {
                 print_stats(start);
+                nm += 1;
                 count = 0;
+                print!("{}\n", nm);
+                if nm >= m { std::process::exit(0) }
             }
         })
         .await
@@ -71,7 +74,7 @@ fn print_stats(start: Instant) {
     println!("{} msg/s", thpt);
 }
 
-fn parse_args() -> Config {
+fn parse_args() -> (Config, u32) {
     let args = App::new("zenoh-net throughput sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
@@ -84,9 +87,14 @@ fn parse_args() -> Config {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
+        .arg(
+            Arg::from_usage("-s, --samples=[number] 'Number of throughput measurements.'")
+                .default_value("10")
+        )
         .get_matches();
 
-    Config::default()
+    let s: u32 = args.value_of("samples").unwrap().parse().unwrap();
+    let c = Config::default()
         .mode(
             args.value_of("mode")
                 .map(|m| Config::parse_mode(m))
@@ -104,5 +112,6 @@ fn parse_args() -> Config {
                 .map(|p| p.collect())
                 .or_else(|| Some(vec![]))
                 .unwrap(),
-        )
+        );
+    (c, s)
 }

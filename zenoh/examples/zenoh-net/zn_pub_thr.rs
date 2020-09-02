@@ -26,7 +26,6 @@ async fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    println!("Opening session...");
     let session = open(config, None).await.unwrap();
 
     let reskey = RId(session
