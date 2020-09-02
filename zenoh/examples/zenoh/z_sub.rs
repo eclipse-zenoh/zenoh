@@ -92,9 +92,10 @@ async fn main() {
             change = change_stream.next().fuse() => {
                 let change = change.unwrap();
                 println!(
-                    ">> [Subscription listener] received change {} : {:?} with timestamp {}",
+                    ">> [Subscription listener] received {:?} for {} : {:?} with timestamp {}",
+                    change.kind,
                     change.path,
-                    change.value.unwrap(),
+                    change.value,
                     change.timestamp
                 )
             }
