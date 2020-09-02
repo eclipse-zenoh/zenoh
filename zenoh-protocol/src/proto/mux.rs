@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::{PeerId, ResKey, ZInt};
+use crate::core::{PeerId, Reliability, ResKey, ZInt};
 use crate::core::{QueryConsolidation, QueryTarget, SubInfo};
 use crate::io::RBuf;
-use crate::proto::{channel, Declaration, Primitives, ReplyContext, ZenohMessage};
+use crate::proto::{DataInfo, Declaration, Primitives, ReplyContext, ZenohMessage};
 use crate::session::SessionEventHandler;
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -112,13 +112,19 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn data(&self, reskey: &ResKey, reliability: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        reliability: Reliability,
+        info: &Option<DataInfo>,
+        payload: RBuf,
+    ) {
         self.handler
             .handle_message(ZenohMessage::make_data(
-                reliability,
                 reskey.clone(),
-                info.clone(),
                 payload,
+                reliability,
+                info.clone(),
                 None,
                 None,
             ))
@@ -156,15 +162,15 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        info: Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         self.handler
             .handle_message(ZenohMessage::make_data(
-                channel::RELIABLE,
                 reskey,
-                info,
                 payload,
+                Reliability::Reliable,
+                info,
                 Some(ReplyContext::make(qid, source_kind, Some(replier_id))),
                 None,
             ))
@@ -174,7 +180,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
     async fn reply_final(&self, qid: ZInt) {
         self.handler
             .handle_message(ZenohMessage::make_unit(
-                channel::RELIABLE,
+                Reliability::Reliable,
                 Some(ReplyContext::make(qid, 0, None)),
                 None,
             ))

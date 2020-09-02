@@ -16,6 +16,7 @@ use std::collections::VecDeque;
 
 use super::SerializationBatch;
 
+use crate::core::Channel;
 use crate::io::WBuf;
 use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
 use crate::session::defaults::{
@@ -163,10 +164,10 @@ impl CircularBatchIn {
 
         // Acquire the lock on the SN generator to ensure that we have all
         // sequential sequence numbers for the fragments
-        let mut guard = if message.is_reliable() {
-            zasynclock!(self.sn_reliable)
+        let (ch, mut guard) = if message.is_reliable() {
+            (Channel::Reliable, zasynclock!(self.sn_reliable))
         } else {
-            zasynclock!(self.sn_best_effort)
+            (Channel::BestEffort, zasynclock!(self.sn_best_effort))
         };
 
         // Fragment the whole message
@@ -180,7 +181,7 @@ impl CircularBatchIn {
 
             // Serialize the message
             let written = batch
-                .serialize_zenoh_fragment(message.is_reliable(), sn, &mut wbuf, to_write)
+                .serialize_zenoh_fragment(ch, sn, &mut wbuf, to_write)
                 .await;
 
             // Update the amount of bytes left to write
@@ -504,7 +505,7 @@ mod tests {
     use std::convert::TryFrom;
     use std::time::Duration;
 
-    use crate::core::{ResKey, ZInt};
+    use crate::core::{Reliability, ResKey, ZInt};
     use crate::io::RBuf;
     use crate::proto::{Frame, FramePayload, SeqNumGenerator, SessionBody, ZenohMessage};
     use crate::session::defaults::{
@@ -519,15 +520,21 @@ mod tests {
     fn tx_queue() {
         async fn schedule(queue: Arc<TransmissionQueue>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
-            let reliable = true;
             let key = ResKey::RName("test".to_string());
-            let info = None;
             let payload = RBuf::from(vec![0u8; payload_size]);
+            let reliability = Reliability::Reliable;
+            let data_info = None;
             let reply_context = None;
             let attachment = None;
 
-            let message =
-                ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
+            let message = ZenohMessage::make_data(
+                key,
+                payload,
+                reliability,
+                data_info,
+                reply_context,
+                attachment,
+            );
 
             println!(
                 ">>> Sending {} messages with payload size: {}",

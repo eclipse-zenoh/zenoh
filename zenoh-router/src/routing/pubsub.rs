@@ -17,6 +17,7 @@ use uhlc::HLC;
 
 use zenoh_protocol::core::{whatami, Reliability, ResKey, SubInfo, SubMode, ZInt};
 use zenoh_protocol::io::RBuf;
+use zenoh_protocol::proto::DataInfo;
 
 use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
@@ -183,8 +184,8 @@ pub async fn route_data_to_map(
     face: &Arc<FaceState>,
     rid: ZInt,
     suffix: &str,
-    _reliable: bool,
-    info: &Option<RBuf>,
+    _reliability: Reliability,
+    info: &Option<DataInfo>,
     payload: &RBuf,
 ) -> Option<DataRoute> {
     match tables.get_mapping(&face, &rid) {
@@ -249,25 +250,22 @@ pub async fn route_data_to_map(
 }
 
 #[cfg(feature = "add_timestamp")]
-async fn treat_timestamp(hlc: &HLC, info: &Option<RBuf>) -> Result<Option<RBuf>, String> {
+async fn treat_timestamp(
+    hlc: &HLC,
+    data_info: &Option<DataInfo>,
+) -> Result<Option<DataInfo>, String> {
     use zenoh_protocol::io::WBuf;
     if let Some(buf) = info {
-        if let Ok(mut data_info) = buf.clone().read_datainfo() {
-            if let Some(ts) = data_info.timestamp {
-                // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
-                hlc.update_with_timestamp(&ts).await?;
-                Ok(Some(buf.clone()))
-            } else {
-                // Timestamp not present; add one
-                data_info.timestamp = Some(hlc.new_timestamp().await);
-                let mut newbuf = WBuf::new(64, true);
-                newbuf.write_datainfo(&data_info);
-                Ok(Some(newbuf.into()))
-            }
+        if let Some(ts) = data_info.timestamp {
+            // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
+            hlc.update_with_timestamp(&ts).await?;
+            Ok(Some(buf.clone()))
         } else {
-            // Failed to decode DataInfo; add one with a Timestamp
-            log::warn!("Failed to read DataInfo from buffer. Create a new one with timestamp.");
-            Ok(Some(new_datainfo(hlc.new_timestamp().await)))
+            // Timestamp not present; add one
+            data_info.timestamp = Some(hlc.new_timestamp().await);
+            let mut newbuf = WBuf::new(64, true);
+            newbuf.write_datainfo(&data_info);
+            Ok(Some(newbuf.into()))
         }
     } else {
         // No DataInfo; add one with a Timestamp
@@ -295,7 +293,7 @@ fn new_datainfo(ts: uhlc::Timestamp) -> RBuf {
 }
 
 #[cfg(not(feature = "add_timestamp"))]
-async fn treat_timestamp(_hlc: &HLC, info: &Option<RBuf>) -> Result<Option<RBuf>, String> {
+async fn treat_timestamp(_hlc: &HLC, info: &Option<DataInfo>) -> Result<Option<DataInfo>, String> {
     Ok(info.clone())
 }
 
@@ -304,12 +302,12 @@ pub async fn route_data(
     face: &Arc<FaceState>,
     rid: u64,
     suffix: &str,
-    reliable: bool,
-    info: &Option<RBuf>,
+    reliability: Reliability,
+    info: &Option<DataInfo>,
     payload: RBuf,
 ) {
     if let Some(outfaces) =
-        route_data_to_map(tables, face, rid, suffix, reliable, info, &payload).await
+        route_data_to_map(tables, face, rid, suffix, reliability, info, &payload).await
     {
         if let Ok(info) = treat_timestamp(&tables.hlc, info).await {
             for (_id, (outface, rid, suffix)) in outfaces {
@@ -326,7 +324,7 @@ pub async fn route_data(
                     };
                     if let Some(primitives) = primitives {
                         primitives
-                            .data(&(rid, suffix).into(), reliable, &info, payload.clone())
+                            .data(&(rid, suffix).into(), reliability, &info, payload.clone())
                             .await
                     }
                 }
@@ -357,12 +355,7 @@ pub async fn pull_data(
                                 let reskey: ResKey =
                                     Resource::get_best_key(&tables.root_res, name, face.id).into();
                                 face.primitives
-                                    .data(
-                                        &reskey,
-                                        subinfo.reliability == Reliability::Reliable,
-                                        &info,
-                                        data.clone(),
-                                    )
+                                    .data(&reskey, subinfo.reliability, &info, data.clone())
                                     .await;
                             }
                             Arc::get_mut_unchecked(&mut ctx).last_values.clear();

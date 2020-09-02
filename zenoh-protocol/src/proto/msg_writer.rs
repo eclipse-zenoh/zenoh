@@ -203,7 +203,10 @@ impl WBuf {
             check!(self.write_deco_attachment(attachment, false));
         }
         if let Some(reply_context) = &msg.reply_context {
-            check!(self.write_deco_reply(reply_context));
+            check!(self.write_deco_reply_context(reply_context));
+        }
+        if let Some(data_info) = &msg.data_info {
+            check!(self.write_deco_data_info(data_info));
         }
 
         check!(self.write(msg.header));
@@ -212,11 +215,8 @@ impl WBuf {
                 check!(self.write_declarations(&declarations));
             }
 
-            ZenohBody::Data(Data { key, info, payload }) => {
+            ZenohBody::Data(Data { key, payload }) => {
                 check!(self.write_reskey(&key));
-                if let Some(rbuf) = info {
-                    check!(self.write_rbuf(&rbuf));
-                }
                 check!(self.write_rbuf(&payload));
             }
 
@@ -255,31 +255,59 @@ impl WBuf {
         true
     }
 
-    pub fn write_datainfo(&mut self, info: &DataInfo) -> bool {
-        let mut header = 0u8;
-        if info.source_id.is_some() {
-            header |= zmsg::info_flag::SRCID
+    fn write_deco_attachment(&mut self, attachment: &Attachment, session: bool) -> bool {
+        if session {
+            check!(self.write(attachment.encoding | smsg::id::ATTACHMENT));
+        } else {
+            check!(self.write(attachment.encoding | zmsg::id::ATTACHMENT));
         }
-        if info.source_sn.is_some() {
-            header |= zmsg::info_flag::SRCSN
-        }
-        if info.first_broker_id.is_some() {
-            header |= zmsg::info_flag::BKRID
-        }
-        if info.first_broker_sn.is_some() {
-            header |= zmsg::info_flag::BKRSN
-        }
-        if info.timestamp.is_some() {
-            header |= zmsg::info_flag::TS
-        }
-        if info.kind.is_some() {
-            header |= zmsg::info_flag::KIND
-        }
-        if info.encoding.is_some() {
-            header |= zmsg::info_flag::ENC
+        self.write_rbuf(&attachment.buffer)
+    }
+
+    fn write_deco_reply_context(&mut self, reply_context: &ReplyContext) -> bool {
+        let fflag = if reply_context.is_final {
+            zmsg::flag::F
+        } else {
+            0
+        };
+        check!(self.write(zmsg::id::REPLY_CONTEXT | fflag));
+        check!(self.write_zint(reply_context.qid));
+        check!(self.write_zint(reply_context.source_kind));
+        if let Some(pid) = &reply_context.replier_id {
+            check!(self.write_bytes_array(&pid.id));
         }
 
+        true
+    }
+
+    pub fn write_deco_data_info(&mut self, info: &DataInfo) -> bool {
+        let header = zmsg::id::DATA_INFO;
         check!(self.write(header));
+
+        let mut options = 0u8;
+        if info.source_id.is_some() {
+            options |= zmsg::info_flag::SRCID
+        }
+        if info.source_sn.is_some() {
+            options |= zmsg::info_flag::SRCSN
+        }
+        if info.first_broker_id.is_some() {
+            options |= zmsg::info_flag::BKRID
+        }
+        if info.first_broker_sn.is_some() {
+            options |= zmsg::info_flag::BKRSN
+        }
+        if info.timestamp.is_some() {
+            options |= zmsg::info_flag::TS
+        }
+        if info.kind.is_some() {
+            options |= zmsg::info_flag::KIND
+        }
+        if info.encoding.is_some() {
+            options |= zmsg::info_flag::ENC
+        }
+        check!(self.write(options));
+
         if let Some(pid) = &info.source_id {
             check!(self.write_bytes_array(&pid.id));
         }
@@ -314,31 +342,6 @@ impl WBuf {
 
     fn write_property(&mut self, p: &Property) -> bool {
         self.write_zint(p.key) && self.write_bytes_array(&p.value)
-    }
-
-    fn write_deco_attachment(&mut self, attachment: &Attachment, session: bool) -> bool {
-        if session {
-            check!(self.write(attachment.encoding | smsg::id::ATTACHMENT));
-        } else {
-            check!(self.write(attachment.encoding | zmsg::id::ATTACHMENT));
-        }
-        self.write_rbuf(&attachment.buffer)
-    }
-
-    fn write_deco_reply(&mut self, reply_context: &ReplyContext) -> bool {
-        let fflag = if reply_context.is_final {
-            zmsg::flag::F
-        } else {
-            0
-        };
-        check!(self.write(zmsg::id::REPLY_CONTEXT | fflag));
-        check!(self.write_zint(reply_context.qid));
-        check!(self.write_zint(reply_context.source_kind));
-        if let Some(pid) = &reply_context.replier_id {
-            check!(self.write_bytes_array(&pid.id));
-        }
-
-        true
     }
 
     fn write_locators(&mut self, locators: &[Locator]) -> bool {

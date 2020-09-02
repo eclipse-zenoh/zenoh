@@ -17,7 +17,7 @@ use async_std::task;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh_protocol::core::{whatami, PeerId, ResKey};
+use zenoh_protocol::core::{whatami, PeerId, Reliability, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::{Link, Locator};
 use zenoh_protocol::proto::ZenohMessage;
@@ -164,13 +164,20 @@ async fn channel_reliable(locators: Vec<Locator>) {
     let session = client_manager.get_session(&router_id).await.unwrap();
 
     // Create the message to send
-    let reliable = true;
     let key = ResKey::RName("/test".to_string());
-    let info = None;
     let payload = RBuf::from(vec![0u8; 8]);
+    let reliability = Reliability::Reliable;
+    let data_info = None;
     let reply_context = None;
     let attachment = None;
-    let message = ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
+    let message = ZenohMessage::make_data(
+        key,
+        payload,
+        reliability,
+        data_info,
+        reply_context,
+        attachment,
+    );
 
     // Send reliable messages by using schedule()
     println!("Sending {} reliable messages...", MSG_COUNT);
@@ -238,13 +245,20 @@ async fn channel_best_effort(locators: Vec<Locator>) {
     let session = client_manager.get_session(&router_id).await.unwrap();
 
     // Create the message to send
-    let reliable = false;
     let key = ResKey::RName("/test".to_string());
-    let info = None;
     let payload = RBuf::from(vec![0u8; 8]);
+    let reliability = Reliability::BestEffort;
+    let data_info = None;
     let reply_context = None;
     let attachment = None;
-    let message = ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
+    let message = ZenohMessage::make_data(
+        key,
+        payload,
+        reliability,
+        data_info,
+        reply_context,
+        attachment,
+    );
 
     /* [1] */
     // Send unreliable messages by using schedule()

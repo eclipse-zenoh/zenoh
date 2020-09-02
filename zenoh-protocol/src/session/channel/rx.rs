@@ -15,7 +15,7 @@ use async_trait::async_trait;
 
 use super::{Channel, DefragBuffer};
 
-use crate::core::{PeerId, ZInt};
+use crate::core::{Channel as ChPr, PeerId, ZInt};
 use crate::link::Link;
 use crate::proto::{Close, Frame, FramePayload, KeepAlive, SeqNum, SessionBody, SessionMessage};
 use crate::session::{Action, TransportTrait};
@@ -242,8 +242,8 @@ impl TransportTrait for Channel {
         // Process the received message
         match message.body {
             SessionBody::Frame(Frame { ch, sn, payload }) => match ch {
-                true => self.process_reliable_frame(sn, payload).await,
-                false => self.process_best_effort_frame(sn, payload).await,
+                ChPr::Reliable => self.process_reliable_frame(sn, payload).await,
+                ChPr::BestEffort => self.process_best_effort_frame(sn, payload).await,
             },
             SessionBody::AckNack { .. } => {
                 log::debug!("Handling of AckNack Messages not yet implemented!");

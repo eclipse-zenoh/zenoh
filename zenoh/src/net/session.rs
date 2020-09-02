@@ -667,9 +667,10 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives
-            .data(resource, true, &None, payload.clone())
+            .data(resource, Reliability::Reliable, &None, payload.clone())
             .await;
-        self.handle_data(true, resource, true, &None, payload).await;
+        self.handle_data(true, resource, Reliability::Reliable, &None, payload)
+            .await;
         Ok(())
     }
 
@@ -688,7 +689,7 @@ impl Session {
     /// use zenoh::net::*;
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT).await.unwrap();
+    /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT, Reliability::Reliable).await.unwrap();
     /// # })
     /// ```
     pub async fn write_ext(
@@ -697,6 +698,7 @@ impl Session {
         payload: RBuf,
         encoding: ZInt,
         kind: ZInt,
+        reliability: Reliability,
     ) -> ZResult<()> {
         trace!("write_ext({:?}, [...])", resource);
         let state = self.state.read().await;
@@ -711,18 +713,11 @@ impl Session {
             kind: Some(kind),
             encoding: Some(encoding),
         };
-        let mut infobuf = zenoh_protocol::io::WBuf::new(64, false);
-        infobuf.write_datainfo(&info);
+        let data_info = Some(info);
         primitives
-            .data(
-                resource,
-                true,
-                &Some(infobuf.clone().into()),
-                payload.clone(),
-            )
+            .data(resource, reliability, &data_info, payload.clone())
             .await;
-        self.data(resource, true, &Some(infobuf.into()), payload)
-            .await;
+        self.data(resource, reliability, &data_info, payload).await;
         Ok(())
     }
 
@@ -730,8 +725,8 @@ impl Session {
         &self,
         local: bool,
         reskey: &ResKey,
-        _reliable: bool,
-        info: &Option<RBuf>,
+        _reliability: Reliability,
+        info: &Option<DataInfo>,
         payload: RBuf,
     ) {
         let (resname, senders) = {
@@ -978,15 +973,21 @@ impl Primitives for Session {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        reliability: Reliability,
+        info: &Option<DataInfo>,
+        payload: RBuf,
+    ) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?}",
             reskey,
-            reliable,
+            reliability,
             info,
             payload
         );
-        self.handle_data(false, reskey, reliable, info, payload)
+        self.handle_data(false, reskey, reliability, info, payload)
             .await
     }
 
@@ -1015,7 +1016,7 @@ impl Primitives for Session {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        data_info: Option<RBuf>,
+        data_info: Option<DataInfo>,
         payload: RBuf,
     ) {
         trace!(

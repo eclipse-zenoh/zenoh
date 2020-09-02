@@ -17,11 +17,9 @@ extern crate rand;
 
 use criterion::{black_box, Criterion};
 
-use zenoh_protocol::core::{ResKey, ZInt};
+use zenoh_protocol::core::{Channel, Reliability, ResKey, ZInt};
 use zenoh_protocol::io::{RBuf, WBuf};
-use zenoh_protocol::proto::{
-    channel, Attachment, Channel, FramePayload, SessionMessage, ZenohMessage,
-};
+use zenoh_protocol::proto::{Attachment, FramePayload, SessionMessage, ZenohMessage};
 use zenoh_util::core::ZResult;
 
 fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
@@ -63,7 +61,14 @@ fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> ZResult<()> {
 }
 
 fn bench_make_data(payload: RBuf) {
-    let _ = ZenohMessage::make_data(false, ResKey::RId(10), None, payload, None, None);
+    let _ = ZenohMessage::make_data(
+        ResKey::RId(10),
+        payload,
+        Reliability::Reliable,
+        None,
+        None,
+        None,
+    );
 }
 
 fn bench_write_data(buf: &mut WBuf, data: &ZenohMessage) {
@@ -85,7 +90,7 @@ fn bench_write_frame_header(
 }
 
 fn bench_make_frame_data(payload: FramePayload) {
-    let _ = SessionMessage::make_frame(false, 42, payload, None);
+    let _ = SessionMessage::make_frame(Channel::BestEffort, 42, payload, None);
 }
 
 fn bench_write_frame_data(buf: &mut WBuf, data: &SessionMessage) {
@@ -93,7 +98,7 @@ fn bench_write_frame_data(buf: &mut WBuf, data: &SessionMessage) {
 }
 
 fn bench_make_frame_frag(payload: FramePayload) {
-    let _ = SessionMessage::make_frame(false, 42, payload, None);
+    let _ = SessionMessage::make_frame(Channel::BestEffort, 42, payload, None);
 }
 
 fn bench_write_frame_frag(buf: &mut WBuf, data: &SessionMessage) {
@@ -133,7 +138,14 @@ fn criterion_benchmark(c: &mut Criterion) {
     // reply_context: Option<ReplyContext>,
     // attachment: Option<Attachment>>
     let payload = RBuf::from(vec![0u8, 32]);
-    let data = ZenohMessage::make_data(false, ResKey::RId(10), None, payload.clone(), None, None);
+    let data = ZenohMessage::make_data(
+        ResKey::RId(10),
+        payload.clone(),
+        Reliability::BestEffort,
+        None,
+        None,
+        None,
+    );
 
     c.bench_function(&format!("bench_one_zint_codec {}", len), |b| {
         b.iter(|| {

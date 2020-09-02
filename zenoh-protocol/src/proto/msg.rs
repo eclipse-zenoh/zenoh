@@ -17,21 +17,12 @@ use crate::io::RBuf;
 use crate::link::Locator;
 use std::fmt;
 
-// Channel values
-pub type Channel = channel::Type;
-pub mod channel {
-    pub type Type = bool;
-
-    pub const BEST_EFFORT: Type = false;
-    pub const RELIABLE: Type = true;
-}
-
 // -- Attachment decorator
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_536 bytes.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
 ///
 /// The Attachment can decorate any message (i.e., SessionMessage and ZenohMessage) and it allows to
 /// append to the message any additional information. Since the information contained in the
@@ -101,6 +92,48 @@ impl ReplyContext {
     }
 }
 
+// -- DataInfo decorator
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The **DataInfo** is a message decorator for **Data** messages.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|X| D_INFO  |
+/// +-+-+-+---------+
+/// |X|G|F|E|D|C|B|A|
+/// +---------------+
+/// ~   source_id   ~ if A==1
+/// +---------------+
+/// ~   source_sn   ~ if B==1
+/// +---------------+
+/// ~first_broker_id~ if C==1
+/// +---------------+
+/// ~first_broker_sn~ if D==1
+/// +---------------+
+/// ~   timestamp   ~ if E==1
+/// +---------------+
+/// ~      kind     ~ if F==1
+/// +---------------+
+/// ~   encoding    ~ if G==1
+/// +---------------+
+///
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataInfo {
+    pub source_id: Option<PeerId>,
+    pub source_sn: Option<ZInt>,
+    pub first_broker_id: Option<PeerId>,
+    pub first_broker_sn: Option<ZInt>,
+    pub timestamp: Option<Timestamp>,
+    pub kind: Option<ZInt>,
+    pub encoding: Option<ZInt>,
+}
+
 // Inner Message IDs
 mod imsg {
     pub(super) mod id {
@@ -124,6 +157,7 @@ mod imsg {
         pub(crate) const UNIT: u8 = 0x0f;
 
         // Message decorators
+        pub(crate) const DATA_INFO: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
     }
@@ -133,8 +167,8 @@ mod imsg {
 /*         ZENOH MESSAGES            */
 /*************************************/
 pub mod zmsg {
-    use super::channel;
     use super::imsg;
+    use crate::core::Reliability;
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -148,23 +182,25 @@ pub mod zmsg {
         pub const UNIT: u8 = imsg::id::UNIT;
 
         // Message decorators
+        pub const DATA_INFO: u8 = imsg::id::DATA_INFO;
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
     }
 
-    // Default channel for each Zenoh Message
-    pub mod default_channel {
-        use super::channel;
+    // Default reliability for each Zenoh Message
+    pub mod default_reliability {
+        use super::Reliability;
 
-        pub const DECLARE: channel::Type = channel::RELIABLE;
-        pub const DATA: channel::Type = channel::BEST_EFFORT;
-        pub const QUERY: channel::Type = channel::RELIABLE;
-        pub const PULL: channel::Type = channel::RELIABLE;
-        pub const UNIT: channel::Type = channel::BEST_EFFORT;
+        pub const DECLARE: Reliability = Reliability::Reliable;
+        pub const DATA: Reliability = Reliability::BestEffort;
+        pub const QUERY: Reliability = Reliability::Reliable;
+        pub const PULL: Reliability = Reliability::Reliable;
+        pub const UNIT: Reliability = Reliability::BestEffort;
     }
 
     // Zenoh message flags
     pub mod flag {
+        pub const D: u8 = 1 << 6; // 0x40 Dropping     if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final        if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 Info         if I==1 then Info is present
         pub const K: u8 = 1 << 7; // 0x80 ResourceKey  if K==1 then only numerical ID
@@ -201,17 +237,6 @@ pub mod zmsg {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct DataInfo {
-    pub source_id: Option<PeerId>,
-    pub source_sn: Option<ZInt>,
-    pub first_broker_id: Option<PeerId>,
-    pub first_broker_sn: Option<ZInt>,
-    pub timestamp: Option<Timestamp>,
-    pub kind: Option<ZInt>,
-    pub encoding: Option<ZInt>,
-}
-
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
 // |X|X|X| DECLARE |
@@ -225,11 +250,9 @@ pub struct Declare {
 
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// |K|I|R|  DATA   |
+// |K|D|R|  DATA   |
 // +-+-+-+---------+
 // ~    ResKey     ~ if K==1 -- Only numerical id
-// +---------------+
-// ~     Info      ~ if I==1
 // +---------------+
 // ~    Payload    ~
 // +---------------+
@@ -239,7 +262,6 @@ pub struct Declare {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
     pub key: ResKey,
-    pub info: Option<RBuf>,
     pub payload: RBuf,
 }
 
@@ -308,7 +330,8 @@ pub enum ZenohBody {
 pub struct ZenohMessage {
     pub header: u8,
     pub body: ZenohBody,
-    pub channel: Channel,
+    pub reliability: Reliability,
+    pub data_info: Option<DataInfo>,
     pub reply_context: Option<ReplyContext>,
     pub attachment: Option<Attachment>,
 }
@@ -317,8 +340,8 @@ impl std::fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?}",
-            self.body, self.reply_context, self.attachment
+            "{:?} {:?} {:?} {:?}",
+            self.body, self.data_info, self.reply_context, self.attachment
         )
     }
 }
@@ -339,7 +362,8 @@ impl ZenohMessage {
         ZenohMessage {
             header,
             body: ZenohBody::Declare(Declare { declarations }),
-            channel: zmsg::default_channel::DECLARE,
+            reliability: zmsg::default_reliability::DECLARE,
+            data_info: None,
             reply_context: None,
             attachment,
         }
@@ -347,39 +371,46 @@ impl ZenohMessage {
 
     #[allow(clippy::too_many_arguments)]
     pub fn make_data(
-        channel: Channel,
         key: ResKey,
-        info: Option<RBuf>,
         payload: RBuf,
+        reliability: Reliability,
+        data_info: Option<DataInfo>,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         let kflag = if key.is_numerical() { zmsg::flag::K } else { 0 };
-        let iflag = if info.is_some() { zmsg::flag::I } else { 0 };
-        let rflag = if channel { zmsg::flag::R } else { 0 };
-        let header = zmsg::id::DATA | iflag | rflag | kflag;
+        let (dflag, rflag) = match reliability {
+            Reliability::Reliable => (0, zmsg::flag::R),
+            Reliability::BestEffort => (0, 0),
+        }; // TODO: Handle Drop flag zmsgs::flag::D
+        let header = zmsg::id::DATA | rflag | dflag | kflag;
 
         ZenohMessage {
             header,
-            body: ZenohBody::Data(Data { key, info, payload }),
-            channel,
+            body: ZenohBody::Data(Data { key, payload }),
+            reliability,
+            data_info,
             reply_context,
             attachment,
         }
     }
 
     pub fn make_unit(
-        channel: Channel,
+        reliability: Reliability,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
-        let rflag = if channel { zmsg::flag::R } else { 0 };
+        let rflag = match reliability {
+            Reliability::Reliable => zmsg::flag::R,
+            Reliability::BestEffort => 0,
+        };
         let header = zmsg::id::UNIT | rflag;
 
         ZenohMessage {
             header,
             body: ZenohBody::Unit(Unit {}),
-            channel,
+            reliability,
+            data_info: None,
             reply_context,
             attachment,
         }
@@ -409,7 +440,8 @@ impl ZenohMessage {
                 max_samples,
                 is_final,
             }),
-            channel: zmsg::default_channel::PULL,
+            reliability: zmsg::default_reliability::PULL,
+            data_info: None,
             reply_context: None,
             attachment,
         }
@@ -436,7 +468,8 @@ impl ZenohMessage {
                 target,
                 consolidation,
             }),
-            channel: zmsg::default_channel::QUERY,
+            reliability: zmsg::default_reliability::QUERY,
+            data_info: None,
             reply_context: None,
             attachment,
         }
@@ -445,8 +478,10 @@ impl ZenohMessage {
     // -- Message Predicates
     #[inline]
     pub fn is_reliable(&self) -> bool {
-        // RELIABLE channel is internally represented as boolean with value "true"
-        self.channel
+        match self.reliability {
+            Reliability::Reliable => true,
+            Reliability::BestEffort => false,
+        }
     }
 
     #[inline]
@@ -545,7 +580,7 @@ pub enum FramePayload {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 // The SCOUT message can be sent at any point in time to solicit HELLO messages from matching parties.
 //
@@ -571,7 +606,7 @@ pub struct Scout {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 // The HELLO message is sent in any of the following three cases:
 //     1) in response to a SCOUT message;
@@ -628,7 +663,7 @@ impl fmt::Display for Hello {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 // The OPEN message is sent on a specific Locator to initiate a session with the peer associated
 // with that Locator.
@@ -676,7 +711,7 @@ pub struct Open {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 // The ACCEPT message is sent in response of an OPEN message in case of accepting the new incoming session.
 //
@@ -735,7 +770,7 @@ pub struct Accept {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 // The CLOSE message is sent in any of the following two cases:
 //     1) in response to an OPEN message which is not accepted;
@@ -766,7 +801,7 @@ pub struct Close {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 // The SYNC message allows to signal the corresponding peer the sequence number of the next message
 // to be transmitted on the reliable or best-effort channel. In the case of reliable channel, the
@@ -795,7 +830,7 @@ pub struct Sync {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 // The ACKNACK messages is used on the reliable channel to signal the corresponding peer the last
 // sequence number received and optionally a bitmask of the non-received messages.
@@ -819,7 +854,7 @@ pub struct AckNack {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 // The KEEP_ALIVE message can be sent periodically to avoid the expiration of the session lease
 // period in case there are no messages to be sent.
@@ -840,7 +875,7 @@ pub struct KeepAlive {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
@@ -864,7 +899,7 @@ pub struct Pong {
 //       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
 //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 //       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_536 bytes.
+//       In any case, the lenght of a message must not exceed 65_535 bytes.
 //
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
@@ -1063,7 +1098,10 @@ impl SessionMessage {
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         let cflag = if count.is_some() { smsg::flag::C } else { 0 };
-        let rflag = if ch { smsg::flag::R } else { 0 };
+        let rflag = match ch {
+            Channel::Reliable => smsg::flag::R,
+            Channel::BestEffort => 0,
+        };
         let header = smsg::id::SYNC | rflag | cflag;
 
         SessionMessage {
@@ -1127,7 +1165,10 @@ impl SessionMessage {
         payload: FramePayload,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
-        let rflag = if ch { smsg::flag::R } else { 0 };
+        let rflag = match ch {
+            Channel::Reliable => smsg::flag::R,
+            Channel::BestEffort => 0,
+        };
         let (eflag, fflag) = match &payload {
             FramePayload::Fragment { is_final, .. } => {
                 if *is_final {
@@ -1148,7 +1189,10 @@ impl SessionMessage {
     }
 
     pub fn make_frame_header(ch: Channel, is_fragment: Option<bool>) -> u8 {
-        let rflag = if ch { smsg::flag::R } else { 0 };
+        let rflag = match ch {
+            Channel::Reliable => smsg::flag::R,
+            Channel::BestEffort => 0,
+        };
         let (eflag, fflag) = if let Some(is_final) = is_fragment {
             if is_final {
                 (smsg::flag::E, smsg::flag::F)

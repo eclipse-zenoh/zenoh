@@ -13,7 +13,7 @@
 //
 use async_std::sync::{Arc, Mutex};
 
-use crate::core::ZInt;
+use crate::core::{Channel, ZInt};
 use crate::io::WBuf;
 use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
 
@@ -160,7 +160,7 @@ impl SerializationBatch {
     ///
     pub(super) async fn serialize_zenoh_fragment(
         &mut self,
-        reliable: bool,
+        ch: Channel,
         sn: ZInt,
         to_fragment: &mut WBuf,
         to_write: usize,
@@ -173,9 +173,7 @@ impl SerializationBatch {
             // Write the frame header
             let fragment = Some(is_final);
             let attachment = None;
-            let res = self
-                .buffer
-                .write_frame_header(reliable, sn, fragment, attachment);
+            let res = self.buffer.write_frame_header(ch, sn, fragment, attachment);
             if res {
                 // Compute the amount left
                 let space_left = self.buffer.capacity() - self.buffer.len();
@@ -241,7 +239,8 @@ impl SerializationBatch {
         // to start a new frame. Write a new frame header.
         let res = if let Some(frame) = new_frame {
             // Acquire the lock on the sn generator
-            let mut guard = if message.is_reliable() {
+            let is_reliable = message.is_reliable();
+            let mut guard = if is_reliable {
                 zasynclock!(self.sn_reliable)
             } else {
                 zasynclock!(self.sn_best_effort)
@@ -250,9 +249,12 @@ impl SerializationBatch {
             let sn = guard.get();
 
             // Serialize the new frame and the zenoh message
-            let res = self
-                .buffer
-                .write_frame_header(message.is_reliable(), sn, None, None)
+            let ch = if is_reliable {
+                Channel::Reliable
+            } else {
+                Channel::BestEffort
+            };
+            let res = self.buffer.write_frame_header(ch, sn, None, None)
                 && self.buffer.write_zenoh_message(&message);
             if res {
                 self.current_frame = frame;
@@ -312,7 +314,7 @@ mod tests {
 
     use super::*;
 
-    use crate::core::ResKey;
+    use crate::core::{Reliability, ResKey};
     use crate::io::{RBuf, WBuf};
     use crate::proto::{
         Frame, FramePayload, SeqNumGenerator, SessionBody, SessionMessage, ZenohMessage,
@@ -371,15 +373,20 @@ mod tests {
                     reliable = !reliable;
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
-                let info = None;
                 let payload = RBuf::from(vec![0u8; payload_size]);
+                let reliability = if reliable {
+                    Reliability::Reliable
+                } else {
+                    Reliability::BestEffort
+                };
+                let data_info = None;
                 let reply_context = None;
                 let attachment = None;
                 let msg = ZenohMessage::make_data(
-                    reliable,
                     key,
-                    info,
                     payload,
+                    reliability,
+                    data_info,
                     reply_context,
                     attachment,
                 );
@@ -434,18 +441,18 @@ mod tests {
                 *SESSION_SEQ_NUM_RESOLUTION,
             )));
 
-            for reliable in [false, true].iter() {
+            for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
                 // Create the ZenohMessage
                 let key = ResKey::RName("test".to_string());
-                let info = None;
                 let payload = RBuf::from(vec![0u8; payload_size]);
+                let data_info = None;
                 let reply_context = None;
                 let attachment = None;
                 let msg_in = ZenohMessage::make_data(
-                    *reliable,
                     key,
-                    info,
                     payload,
+                    *reliability,
+                    data_info,
                     reply_context,
                     attachment,
                 );
@@ -479,13 +486,13 @@ mod tests {
                         sn_reliable.clone(),
                         sn_best_effort.clone(),
                     );
+                    let ch = if msg_in.is_reliable() {
+                        Channel::Reliable
+                    } else {
+                        Channel::BestEffort
+                    };
                     let written = batch
-                        .serialize_zenoh_fragment(
-                            msg_in.is_reliable(),
-                            guard.get(),
-                            &mut wbuf,
-                            to_write,
-                        )
+                        .serialize_zenoh_fragment(ch, guard.get(), &mut wbuf, to_write)
                         .await;
                     assert_ne!(written, 0);
                     // Keep serializing

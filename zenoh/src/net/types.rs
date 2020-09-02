@@ -69,7 +69,7 @@ pub use zenoh_protocol::proto::Hello;
 /// # use zenoh_protocol::proto::DataInfo;
 /// # let sample = zenoh::net::Sample { res_name: "".to_string(), payload: RBuf::new(), data_info: None };
 /// if let Some(mut info) = sample.data_info {
-///     let info: DataInfo = info.read_datainfo().unwrap();
+///     // Access here the desired info ...
 /// }
 /// ```
 pub use zenoh_protocol::proto::DataInfo;
@@ -116,7 +116,7 @@ impl Stream for HelloStream {
 pub struct Sample {
     pub res_name: String,
     pub payload: RBuf,
-    pub data_info: Option<RBuf>,
+    pub data_info: Option<DataInfo>,
 }
 
 /// The callback that will be called on each data for a [CallbackSubscriber](CallbackSubscriber).

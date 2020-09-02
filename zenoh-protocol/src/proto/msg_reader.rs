@@ -36,7 +36,10 @@ impl RBuf {
             match smsg::mid(header) {
                 // Frame as first for optimization reasons
                 FRAME => {
-                    let ch = smsg::has_flag(header, smsg::flag::R);
+                    let ch = match smsg::has_flag(header, smsg::flag::R) {
+                        true => Channel::Reliable,
+                        false => Channel::BestEffort,
+                    };
                     let sn = self.read_zint()?;
 
                     let payload = if smsg::has_flag(header, smsg::flag::F) {
@@ -207,7 +210,10 @@ impl RBuf {
                 }
 
                 SYNC => {
-                    let ch = smsg::has_flag(header, smsg::flag::R);
+                    let ch = match smsg::has_flag(header, smsg::flag::R) {
+                        true => Channel::Reliable,
+                        false => Channel::BestEffort,
+                    };
                     let sn = self.read_zint()?;
                     let count = if smsg::has_flag(header, smsg::flag::C) {
                         Some(self.read_zint()?)
@@ -273,11 +279,12 @@ impl RBuf {
         use super::zmsg::id::*;
 
         // Message decorators
+        let mut data_info = None;
         let mut reply_context = None;
         let mut attachment = None;
 
         // Read the message
-        let (header, body, channel) = loop {
+        let (header, body, reliability) = loop {
             // Read the header
             let header = self.read()?;
 
@@ -285,22 +292,28 @@ impl RBuf {
             match zmsg::mid(header) {
                 // Message data as first for optimization reasons
                 DATA => {
-                    let channel = zmsg::has_flag(header, zmsg::flag::R);
-                    let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
-                    let info = if zmsg::has_flag(header, zmsg::flag::I) {
-                        Some(RBuf::from(self.read_bytes_array()?))
+                    let reliable = zmsg::has_flag(header, zmsg::flag::R);
+                    let _dropping = zmsg::has_flag(header, zmsg::flag::D);
+                    let reliability = if reliable {
+                        Reliability::Reliable
                     } else {
-                        None
+                        Reliability::BestEffort
                     };
+                    let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
                     let payload = self.read_rbuf()?;
 
-                    let body = ZenohBody::Data(Data { key, info, payload });
-                    break (header, body, channel);
+                    let body = ZenohBody::Data(Data { key, payload });
+                    break (header, body, reliability);
                 }
 
                 // Decorators
+                DATA_INFO => {
+                    data_info = Some(self.read_deco_data_info(header)?);
+                    continue;
+                }
+
                 REPLY_CONTEXT => {
-                    reply_context = Some(self.read_deco_reply(header)?);
+                    reply_context = Some(self.read_deco_reply_context(header)?);
                     continue;
                 }
 
@@ -314,15 +327,19 @@ impl RBuf {
                     let declarations = self.read_declarations()?;
 
                     let body = ZenohBody::Declare(Declare { declarations });
-                    let channel = zmsg::default_channel::DECLARE;
-                    break (header, body, channel);
+                    let reliability = zmsg::default_reliability::DECLARE;
+                    break (header, body, reliability);
                 }
 
                 UNIT => {
-                    let channel = zmsg::has_flag(header, zmsg::flag::R);
-
+                    let reliable = zmsg::has_flag(header, zmsg::flag::R);
+                    let reliability = if reliable {
+                        Reliability::Reliable
+                    } else {
+                        Reliability::BestEffort
+                    };
                     let body = ZenohBody::Unit(Unit {});
-                    break (header, body, channel);
+                    break (header, body, reliability);
                 }
 
                 PULL => {
@@ -341,8 +358,8 @@ impl RBuf {
                         max_samples,
                         is_final,
                     });
-                    let channel = zmsg::default_channel::PULL;
-                    break (header, body, channel);
+                    let reliability = zmsg::default_reliability::PULL;
+                    break (header, body, reliability);
                 }
 
                 QUERY => {
@@ -363,8 +380,8 @@ impl RBuf {
                         target,
                         consolidation,
                     });
-                    let channel = zmsg::default_channel::QUERY;
-                    break (header, body, channel);
+                    let reliability = zmsg::default_reliability::QUERY;
+                    break (header, body, reliability);
                 }
 
                 unknown => {
@@ -378,7 +395,8 @@ impl RBuf {
         Ok(ZenohMessage {
             header,
             body,
-            channel,
+            reliability,
+            data_info,
             reply_context,
             attachment,
         })
@@ -391,7 +409,7 @@ impl RBuf {
     }
 
     // @TODO: Update the ReplyContext format
-    fn read_deco_reply(&mut self, header: u8) -> ZResult<ReplyContext> {
+    fn read_deco_reply_context(&mut self, header: u8) -> ZResult<ReplyContext> {
         let is_final = zmsg::has_flag(header, zmsg::flag::F);
         let qid = self.read_zint()?;
         let source_kind = self.read_zint()?;
@@ -408,39 +426,39 @@ impl RBuf {
         })
     }
 
-    pub fn read_datainfo(&mut self) -> ZResult<DataInfo> {
-        let header = self.read()?;
-        let source_id = if header & zmsg::info_flag::SRCID > 0 {
+    pub fn read_deco_data_info(&mut self, _header: u8) -> ZResult<DataInfo> {
+        let options = self.read()?;
+        let source_id = if options & zmsg::info_flag::SRCID > 0 {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let source_sn = if header & zmsg::info_flag::SRCSN > 0 {
+        let source_sn = if options & zmsg::info_flag::SRCSN > 0 {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let first_broker_id = if header & zmsg::info_flag::BKRID > 0 {
+        let first_broker_id = if options & zmsg::info_flag::BKRID > 0 {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let first_broker_sn = if header & zmsg::info_flag::BKRSN > 0 {
+        let first_broker_sn = if options & zmsg::info_flag::BKRSN > 0 {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let timestamp = if header & zmsg::info_flag::TS > 0 {
+        let timestamp = if options & zmsg::info_flag::TS > 0 {
             Some(self.read_timestamp()?)
         } else {
             None
         };
-        let kind = if header & zmsg::info_flag::KIND > 0 {
+        let kind = if options & zmsg::info_flag::KIND > 0 {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let encoding = if header & zmsg::info_flag::ENC > 0 {
+        let encoding = if options & zmsg::info_flag::ENC > 0 {
             Some(self.read_zint()?)
         } else {
             None
@@ -455,27 +473,6 @@ impl RBuf {
             kind,
             encoding,
         })
-    }
-
-    pub fn read_datainfo_timestamp(&mut self) -> ZResult<Option<Timestamp>> {
-        let header = self.read()?;
-        if header & zmsg::info_flag::TS > 0 {
-            if header & zmsg::info_flag::SRCID > 0 {
-                let _ = self.read_peerid()?;
-            }
-            if header & zmsg::info_flag::SRCSN > 0 {
-                let _ = self.read_zint()?;
-            }
-            if header & zmsg::info_flag::BKRID > 0 {
-                let _ = self.read_peerid()?;
-            }
-            if header & zmsg::info_flag::BKRSN > 0 {
-                let _ = self.read_zint()?;
-            }
-            Ok(Some(self.read_timestamp()?))
-        } else {
-            Ok(None)
-        }
     }
 
     pub fn read_properties(&mut self) -> ZResult<Vec<Property>> {

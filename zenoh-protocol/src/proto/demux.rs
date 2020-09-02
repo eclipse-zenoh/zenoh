@@ -34,7 +34,6 @@ impl<P: Primitives + Send + Sync> DeMux<P> {
 #[async_trait]
 impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
     async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
-        let reliability = msg.is_reliable();
         match msg.body {
             ZenohBody::Declare(Declare { declarations, .. }) => {
                 for declaration in declarations {
@@ -67,18 +66,23 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 }
             }
 
-            ZenohBody::Data(Data {
-                key, info, payload, ..
-            }) => match msg.reply_context {
+            ZenohBody::Data(Data { key, payload }) => match msg.reply_context {
                 None => {
                     self.primitives
-                        .data(&key, reliability, &info, payload)
+                        .data(&key, msg.reliability, &msg.data_info, payload)
                         .await;
                 }
                 Some(rep) => match rep.replier_id {
                     Some(replier_id) => {
                         self.primitives
-                            .reply_data(rep.qid, rep.source_kind, replier_id, key, info, payload)
+                            .reply_data(
+                                rep.qid,
+                                rep.source_kind,
+                                replier_id,
+                                key,
+                                msg.data_info,
+                                payload,
+                            )
                             .await
                     }
                     None => {

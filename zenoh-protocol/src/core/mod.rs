@@ -170,19 +170,25 @@ impl fmt::Display for PeerId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Channel {
+    BestEffort,
+    Reliable,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Reliability {
     BestEffort,
     Reliable,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SubMode {
     Push,
     Pull,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Period {
     pub origin: ZInt,
     pub period: ZInt,

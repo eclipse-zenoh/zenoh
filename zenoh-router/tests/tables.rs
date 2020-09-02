@@ -21,7 +21,7 @@ use zenoh_protocol::core::{
     whatami, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, SubMode, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{Mux, Primitives};
+use zenoh_protocol::proto::{DataInfo, Mux, Primitives};
 use zenoh_protocol::session::DummyHandler;
 use zenoh_router::routing::broker::*;
 
@@ -461,7 +461,13 @@ impl Primitives for ClientPrimitives {
     async fn queryable(&self, _reskey: &ResKey) {}
     async fn forget_queryable(&self, _reskey: &ResKey) {}
 
-    async fn data(&self, reskey: &ResKey, _reliable: bool, _info: &Option<RBuf>, _payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        _reliability: Reliability,
+        _info: &Option<DataInfo>,
+        _payload: RBuf,
+    ) {
         *self.data.lock().unwrap() = Some(reskey.clone());
     }
     async fn query(
@@ -479,7 +485,7 @@ impl Primitives for ClientPrimitives {
         _source_kind: ZInt,
         _replier_id: PeerId,
         _reskey: ResKey,
-        _info: Option<RBuf>,
+        _info: Option<DataInfo>,
         _payload: RBuf,
     ) {
     }
@@ -602,7 +608,7 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             0,
             "/test/client/z1_wr1",
-            true,
+            Reliability::Reliable,
             &None,
             RBuf::new(),
         )
@@ -628,7 +634,7 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             11,
             "/z1_wr2",
-            true,
+            Reliability::Reliable,
             &None,
             RBuf::new(),
         )
@@ -654,7 +660,7 @@ fn client_test() {
             &mut face1.upgrade().unwrap(),
             0,
             "/test/client/**",
-            true,
+            Reliability::Reliable,
             &None,
             RBuf::new(),
         )
@@ -680,7 +686,7 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             12,
             "",
-            true,
+            Reliability::Reliable,
             &None,
             RBuf::new(),
         )
@@ -706,7 +712,7 @@ fn client_test() {
             &mut face1.upgrade().unwrap(),
             22,
             "",
-            true,
+            Reliability::Reliable,
             &None,
             RBuf::new(),
         )

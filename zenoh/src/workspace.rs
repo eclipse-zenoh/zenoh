@@ -14,8 +14,7 @@
 use crate::net::queryable::EVAL;
 use crate::net::{
     data_kind, encoding, DataInfo, Query, QueryConsolidation, QueryTarget, Queryable, RBuf,
-    Reliability, RepliesSender, Reply, ResKey, Sample, Session, SubInfo, SubMode, Subscriber, WBuf,
-    ZInt,
+    Reliability, RepliesSender, Reply, ResKey, Sample, Session, SubInfo, SubMode, Subscriber, ZInt,
 };
 use crate::{utils, Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult};
 use async_std::pin::Pin;
@@ -71,6 +70,7 @@ impl Workspace {
                 payload,
                 encoding,
                 data_kind::PUT,
+                Reliability::Reliable,
             )
             .await
     }
@@ -83,6 +83,7 @@ impl Workspace {
                 RBuf::empty(),
                 encoding::NONE,
                 data_kind::DELETE,
+                Reliability::Reliable,
             )
             .await
     }
@@ -278,7 +279,7 @@ impl Change {
     fn new(
         res_name: &str,
         payload: RBuf,
-        data_info: Option<RBuf>,
+        data_info: Option<DataInfo>,
         decode_value: bool,
     ) -> ZResult<Change> {
         let path = res_name.try_into()?;
@@ -346,12 +347,10 @@ fn path_value_to_sample(path: Path, value: Value) -> Sample {
         kind: None,
         encoding: Some(encoding),
     };
-    let mut infobuf = WBuf::new(16, false);
-    infobuf.write_datainfo(&info);
     Sample {
         res_name: path.to_string(),
         payload,
-        data_info: Some(infobuf.into()),
+        data_info: Some(info),
     }
 }
 

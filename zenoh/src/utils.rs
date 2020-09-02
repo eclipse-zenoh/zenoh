@@ -11,53 +11,27 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::net::{encoding, RBuf, ZInt};
+use crate::net::{encoding, DataInfo, ZInt};
 use crate::{ChangeKind, Properties, Timestamp, Value};
-use log::warn;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub fn decode_data_info(data_info: Option<RBuf>) -> (ChangeKind, ZInt, Timestamp) {
-    data_info.map_or_else(
-        || {
-            // If DataInfo is not present, simulate one,
-            // assuming a PUT of a simple buffer,
-            // and using a reception timestamp
-            (
-                ChangeKind::PUT,
-                encoding::APP_OCTET_STREAM,
-                new_reception_timestamp(),
-            )
-        },
-        |mut rbuf| match rbuf.read_datainfo() {
-            Ok(info) => (
-                info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
-                info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
-                info.timestamp.unwrap_or_else(new_reception_timestamp),
-            ),
-            Err(e) => {
-                // Same than if DataInfo was not present, but with a log.
-                warn!(
-                    "Received DataInfo that failed to be decoded: {}. Assume it's for a PUT",
-                    e
-                );
-                (
-                    ChangeKind::PUT,
-                    encoding::APP_OCTET_STREAM,
-                    new_reception_timestamp(),
-                )
-            }
-        },
-    )
-}
-
-pub fn get_data_info_timestamp(data_info: Option<RBuf>) -> Option<Timestamp> {
-    data_info.and_then(|mut rbuf| match rbuf.read_datainfo_timestamp() {
-        Ok(ts) => ts,
-        Err(e) => {
-            warn!("Failed to decode DataInfo to get timestamp: {}", e);
-            None
-        }
-    })
+pub fn decode_data_info(data_info: Option<DataInfo>) -> (ChangeKind, ZInt, Timestamp) {
+    if let Some(info) = data_info {
+        (
+            info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+            info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
+            info.timestamp.unwrap_or_else(new_reception_timestamp),
+        )
+    } else {
+        // If DataInfo is not present, simulate one,
+        // assuming a PUT of a simple buffer,
+        // and using a reception timestamp
+        (
+            ChangeKind::PUT,
+            encoding::APP_OCTET_STREAM,
+            new_reception_timestamp(),
+        )
+    }
 }
 
 // generate a reception timestamp with id=0x00

@@ -85,7 +85,16 @@ fn tables_bench(c: &mut Criterion) {
                 b.iter(|| {
                     task::block_on(async {
                         let mut tables = tables.write().await;
-                        route_data_to_map(&mut tables, &face0, 2, "", true, &None, &payload).await;
+                        route_data_to_map(
+                            &mut tables,
+                            &face0,
+                            2,
+                            "",
+                            Reliability::Reliable,
+                            &None,
+                            &payload,
+                        )
+                        .await;
                     })
                 })
             });
@@ -99,7 +108,7 @@ fn tables_bench(c: &mut Criterion) {
                             &face0,
                             0,
                             "/bench/tables/*",
-                            true,
+                            Reliability::Reliable,
                             &None,
                             &payload,
                         )
@@ -117,7 +126,7 @@ fn tables_bench(c: &mut Criterion) {
                             &face0,
                             0,
                             "/bench/tables/A*",
-                            true,
+                            Reliability::Reliable,
                             &None,
                             &payload,
                         )
