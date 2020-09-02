@@ -53,7 +53,6 @@ async fn main() {
                 print_stats(start);
                 nm += 1;
                 count = 0;
-                print!("{}\n", nm);
                 if nm >= m { std::process::exit(0) }
             }
         })
