@@ -428,37 +428,37 @@ impl RBuf {
 
     pub fn read_deco_data_info(&mut self, _header: u8) -> ZResult<DataInfo> {
         let options = self.read()?;
-        let source_id = if options & zmsg::info_flag::SRCID > 0 {
+        let source_id = if zmsg::has_flag(options, zmsg::info_flag::SRCID) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let source_sn = if options & zmsg::info_flag::SRCSN > 0 {
+        let source_sn = if zmsg::has_flag(options, zmsg::info_flag::SRCSN) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let first_broker_id = if options & zmsg::info_flag::BKRID > 0 {
+        let first_router_id = if zmsg::has_flag(options, zmsg::info_flag::RTRID) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let first_broker_sn = if options & zmsg::info_flag::BKRSN > 0 {
+        let first_router_sn = if zmsg::has_flag(options, zmsg::info_flag::RTRSN) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let timestamp = if options & zmsg::info_flag::TS > 0 {
+        let timestamp = if zmsg::has_flag(options, zmsg::info_flag::TS) {
             Some(self.read_timestamp()?)
         } else {
             None
         };
-        let kind = if options & zmsg::info_flag::KIND > 0 {
+        let kind = if zmsg::has_flag(options, zmsg::info_flag::KIND) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let encoding = if options & zmsg::info_flag::ENC > 0 {
+        let encoding = if zmsg::has_flag(options, zmsg::info_flag::ENC) {
             Some(self.read_zint()?)
         } else {
             None
@@ -467,8 +467,8 @@ impl RBuf {
         Ok(DataInfo {
             source_id,
             source_sn,
-            first_broker_id,
-            first_broker_sn,
+            first_router_id,
+            first_router_sn,
             timestamp,
             kind,
             encoding,

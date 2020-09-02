@@ -56,7 +56,7 @@ pub mod utils {
 /// use zenoh::net::*;
 /// use futures::prelude::*;
 ///
-/// let mut stream = scout(whatami::PEER | whatami::BROKER | whatami::ROUTER, "auto").await;
+/// let mut stream = scout(whatami::PEER | whatami::ROUTER, "auto").await;
 /// while let Some(hello) = stream.next().await {
 ///     println!("{}", hello);
 /// }

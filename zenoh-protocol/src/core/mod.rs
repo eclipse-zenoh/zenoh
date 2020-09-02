@@ -33,15 +33,13 @@ pub mod whatami {
 
     pub type Type = ZInt;
 
-    pub const BROKER: Type = 1; // 0x01
-    pub const ROUTER: Type = 1 << 1; // 0x02
-    pub const PEER: Type = 1 << 2; // 0x04
-    pub const CLIENT: Type = 1 << 3; // 0x08
+    pub const ROUTER: Type = 1; // 0x01
+    pub const PEER: Type = 1 << 1; // 0x02
+    pub const CLIENT: Type = 1 << 2; // 0x04
                                      // b4-b13: Reserved
 
     pub fn to_str(w: Type) -> String {
         match w {
-            BROKER => "Broker".to_string(),
             ROUTER => "Router".to_string(),
             PEER => "Peer".to_string(),
             CLIENT => "Client".to_string(),

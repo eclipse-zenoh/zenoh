@@ -369,8 +369,8 @@ fn path_value_to_sample(path: Path, value: Value) -> Sample {
     let info = DataInfo {
         source_id: None,
         source_sn: None,
-        first_broker_id: None,
-        first_broker_sn: None,
+        first_router_id: None,
+        first_router_sn: None,
         timestamp: None,
         kind: None,
         encoding: Some(encoding),

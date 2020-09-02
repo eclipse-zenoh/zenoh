@@ -111,9 +111,9 @@ impl ReplyContext {
 /// +---------------+
 /// ~   source_sn   ~ if B==1
 /// +---------------+
-/// ~first_broker_id~ if C==1
+/// ~first_router_id~ if C==1
 /// +---------------+
-/// ~first_broker_sn~ if D==1
+/// ~first_router_sn~ if D==1
 /// +---------------+
 /// ~   timestamp   ~ if E==1
 /// +---------------+
@@ -127,8 +127,8 @@ impl ReplyContext {
 pub struct DataInfo {
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
-    pub first_broker_id: Option<PeerId>,
-    pub first_broker_sn: Option<ZInt>,
+    pub first_router_id: Option<PeerId>,
+    pub first_router_sn: Option<ZInt>,
     pub timestamp: Option<Timestamp>,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
@@ -216,8 +216,8 @@ pub mod zmsg {
     pub mod info_flag {
         pub const SRCID: u8 = 1; // 0x01
         pub const SRCSN: u8 = 1 << 1; // 0x02
-        pub const BKRID: u8 = 1 << 2; // 0x04
-        pub const BKRSN: u8 = 1 << 3; // 0x08
+        pub const RTRID: u8 = 1 << 2; // 0x04
+        pub const RTRSN: u8 = 1 << 3; // 0x08
         pub const TS: u8 = 1 << 4; // 0x10
         pub const KIND: u8 = 1 << 5; // 0x20
         pub const ENC: u8 = 1 << 6; // 0x40
@@ -643,7 +643,7 @@ impl fmt::Display for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let what = match self.whatami {
             Some(what) => whatami::to_str(what),
-            None => whatami::to_str(whatami::BROKER),
+            None => whatami::to_str(whatami::ROUTER),
         };
         let locators = match &self.locators {
             Some(locators) => locators
@@ -675,7 +675,7 @@ impl fmt::Display for Hello {
 // +-+-+-+-+-------+
 // | v_maj | v_min | -- Protocol Version VMaj.VMin
 // +-------+-------+
-// ~    whatami    ~ -- E.g., client, broker, router, peer or a combination of them
+// ~    whatami    ~ -- E.g., client, router, peer or a combination of them
 // +---------------+
 // ~   o_peer_id   ~ -- PID of the sender of the OPEN
 // +---------------+
@@ -986,7 +986,7 @@ impl SessionMessage {
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         let iflag = if pid.is_some() { smsg::flag::I } else { 0 };
-        let wflag = if whatami.is_some() && whatami.unwrap() != whatami::BROKER {
+        let wflag = if whatami.is_some() && whatami.unwrap() != whatami::ROUTER {
             smsg::flag::W
         } else {
             0

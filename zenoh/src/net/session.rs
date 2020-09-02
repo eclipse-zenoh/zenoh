@@ -231,12 +231,12 @@ impl Session {
                 }
             }
         }
-        if runtime.orchestrator.whatami & whatami::BROKER != 0 {
+        if runtime.orchestrator.whatami & whatami::ROUTER != 0 {
             info.push((ZN_INFO_ROUTER_PID_KEY, runtime.pid.as_slice().to_vec()));
         }
         for session in runtime.orchestrator.manager.get_sessions().await {
             if let Ok(what) = session.get_whatami() {
-                if what & whatami::BROKER != 0 {
+                if what & whatami::ROUTER != 0 {
                     if let Ok(peer) = session.get_pid() {
                         info.push((ZN_INFO_ROUTER_PID_KEY, peer.as_slice().to_vec()));
                     }
@@ -658,8 +658,8 @@ impl Session {
         let info = zenoh_protocol::proto::DataInfo {
             source_id: None,
             source_sn: None,
-            first_broker_id: None,
-            first_broker_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
             timestamp: None,
             kind: Some(kind),
             encoding: Some(encoding),
