@@ -28,8 +28,6 @@ use zenoh_protocol::core::ZInt;
 use zenoh_util::to_zint;
 
 #[no_mangle]
-pub static BROKER: c_uint = whatami::BROKER as c_uint;
-#[no_mangle]
 pub static ROUTER: c_uint = whatami::ROUTER as c_uint;
 #[no_mangle]
 pub static PEER: c_uint = whatami::PEER as c_uint;

@@ -40,8 +40,8 @@ fn criterion_benchmark(c: &mut Criterion) {
         let info = Some(DataInfo {
             source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
             source_sn: Some(12345),
-            first_broker_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
-            first_broker_sn: Some(12345),
+            first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+            first_router_sn: Some(12345),
             timestamp: Some(uhlc::Timestamp::new(
                 Default::default(),
                 uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
@@ -72,8 +72,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     let info = Some(DataInfo {
         source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
         source_sn: Some(12345),
-        first_broker_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
-        first_broker_sn: Some(12345),
+        first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+        first_router_sn: Some(12345),
         timestamp: Some(uhlc::Timestamp::new(
             Default::default(),
             uhlc::ID::new(16, [0u8; uhlc::ID::MAX_SIZE]),

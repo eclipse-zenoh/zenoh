@@ -171,8 +171,8 @@ fn gen_data_info() -> DataInfo {
     DataInfo {
         source_id: option_gen!(gen_pid()),
         source_sn: option_gen!(gen!(ZInt)),
-        first_broker_id: option_gen!(gen_pid()),
-        first_broker_sn: option_gen!(gen!(ZInt)),
+        first_router_id: option_gen!(gen_pid()),
+        first_router_sn: option_gen!(gen!(ZInt)),
         timestamp: option_gen!(gen_timestamp()),
         kind: option_gen!(gen!(ZInt)),
         encoding: option_gen!(gen!(ZInt)),
@@ -257,7 +257,7 @@ fn hello_tests() {
 #[test]
 fn open_tests() {
     for _ in 0..NUM_ITER {
-        let wami = [whatami::BROKER, whatami::CLIENT];
+        let wami = [whatami::ROUTER, whatami::CLIENT];
         let sn_resolution = [None, Some(gen!(ZInt))];
         let locators = [
             None,
@@ -293,7 +293,7 @@ fn open_tests() {
 #[test]
 fn accept_tests() {
     for _ in 0..NUM_ITER {
-        let wami = [whatami::BROKER, whatami::CLIENT];
+        let wami = [whatami::ROUTER, whatami::CLIENT];
         let sn_resolution = [None, Some(gen!(ZInt))];
         let lease = [None, Some(gen!(ZInt))];
         let locators = [

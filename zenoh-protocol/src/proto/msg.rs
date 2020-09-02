@@ -205,8 +205,8 @@ pub mod zmsg {
 pub struct DataInfo {
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
-    pub first_broker_id: Option<PeerId>,
-    pub first_broker_sn: Option<ZInt>,
+    pub first_router_id: Option<PeerId>,
+    pub first_router_sn: Option<ZInt>,
     pub timestamp: Option<Timestamp>,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
@@ -608,7 +608,7 @@ impl fmt::Display for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let what = match self.whatami {
             Some(what) => whatami::to_str(what),
-            None => whatami::to_str(whatami::BROKER),
+            None => whatami::to_str(whatami::ROUTER),
         };
         let locators = match &self.locators {
             Some(locators) => locators
@@ -640,7 +640,7 @@ impl fmt::Display for Hello {
 // +-+-+-+-+-------+
 // | v_maj | v_min | -- Protocol Version VMaj.VMin
 // +-------+-------+
-// ~    whatami    ~ -- E.g., client, broker, router, peer or a combination of them
+// ~    whatami    ~ -- E.g., client, router, peer or a combination of them
 // +---------------+
 // ~   o_peer_id   ~ -- PID of the sender of the OPEN
 // +---------------+
@@ -951,7 +951,7 @@ impl SessionMessage {
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         let iflag = if pid.is_some() { smsg::flag::I } else { 0 };
-        let wflag = if whatami.is_some() && whatami.unwrap() != whatami::BROKER {
+        let wflag = if whatami.is_some() && whatami.unwrap() != whatami::ROUTER {
             smsg::flag::W
         } else {
             0

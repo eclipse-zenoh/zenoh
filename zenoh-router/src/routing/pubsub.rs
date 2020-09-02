@@ -73,7 +73,7 @@ pub async fn declare_subscription(
             for (id, someface) in &mut tables.faces {
                 if face.id != *id
                     && (face.whatami != whatami::PEER || someface.whatami != whatami::PEER)
-                    && (face.whatami != whatami::BROKER || someface.whatami != whatami::BROKER)
+                    && (face.whatami != whatami::ROUTER || someface.whatami != whatami::ROUTER)
                 {
                     let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(&res);
                     match nonwild_prefix {
@@ -280,8 +280,8 @@ pub async fn route_data(
         for (_id, (outface, rid, suffix)) in outfaces {
             if !Arc::ptr_eq(face, &outface) {
                 let primitives = {
-                    if (face.whatami != whatami::PEER && face.whatami != whatami::BROKER)
-                        || (outface.whatami != whatami::PEER && outface.whatami != whatami::BROKER)
+                    if (face.whatami != whatami::PEER && face.whatami != whatami::ROUTER)
+                        || (outface.whatami != whatami::PEER && outface.whatami != whatami::ROUTER)
                     {
                         Some(outface.primitives.clone())
                     } else {
@@ -328,8 +328,8 @@ fn new_datainfo(ts: uhlc::Timestamp) -> DataInfo {
     DataInfo {
         source_id: None,
         source_sn: None,
-        first_broker_id: None,
-        first_broker_sn: None,
+        first_router_id: None,
+        first_router_sn: None,
         timestamp: Some(ts),
         kind: None,
         encoding: None,

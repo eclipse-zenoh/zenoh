@@ -83,7 +83,7 @@ impl WBuf {
                     check!(self.write_peerid(pid));
                 }
                 if let Some(w) = *whatami {
-                    if w != whatami::BROKER {
+                    if w != whatami::ROUTER {
                         check!(self.write_zint(w));
                     }
                 }
@@ -263,10 +263,10 @@ impl WBuf {
         if info.source_sn.is_some() {
             header |= zmsg::info_flag::SRCSN
         }
-        if info.first_broker_id.is_some() {
+        if info.first_router_id.is_some() {
             header |= zmsg::info_flag::BKRID
         }
-        if info.first_broker_sn.is_some() {
+        if info.first_router_sn.is_some() {
             header |= zmsg::info_flag::BKRSN
         }
         if info.timestamp.is_some() {
@@ -286,10 +286,10 @@ impl WBuf {
         if let Some(sn) = &info.source_sn {
             check!(self.write_zint(*sn));
         }
-        if let Some(pid) = &info.first_broker_id {
+        if let Some(pid) = &info.first_router_id {
             check!(self.write_peerid(pid));
         }
-        if let Some(sn) = &info.first_broker_sn {
+        if let Some(sn) = &info.first_router_sn {
             check!(self.write_zint(*sn));
         }
         if let Some(ts) = &info.timestamp {

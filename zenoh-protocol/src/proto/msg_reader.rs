@@ -420,12 +420,12 @@ impl RBuf {
         } else {
             None
         };
-        let first_broker_id = if header & zmsg::info_flag::BKRID > 0 {
+        let first_router_id = if header & zmsg::info_flag::BKRID > 0 {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let first_broker_sn = if header & zmsg::info_flag::BKRSN > 0 {
+        let first_router_sn = if header & zmsg::info_flag::BKRSN > 0 {
             Some(self.read_zint()?)
         } else {
             None
@@ -449,8 +449,8 @@ impl RBuf {
         Ok(DataInfo {
             source_id,
             source_sn,
-            first_broker_id,
-            first_broker_sn,
+            first_router_id,
+            first_router_sn,
             timestamp,
             kind,
             encoding,

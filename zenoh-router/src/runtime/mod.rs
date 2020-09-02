@@ -204,7 +204,6 @@ impl Config {
             "peer" => Ok(whatami::PEER),
             "client" => Ok(whatami::CLIENT),
             "router" => Ok(whatami::ROUTER),
-            "broker" => Ok(whatami::BROKER),
             _ => Err(()),
         }
     }

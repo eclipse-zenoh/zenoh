@@ -96,7 +96,7 @@ fn main() {
         let add_timestamp = !std::env::args().any(|arg| arg == "--no-timestamp");
 
         let config = Config {
-            whatami: whatami::BROKER,
+            whatami: whatami::ROUTER,
             peers,
             listeners,
             multicast_interface: "auto".to_string(),

@@ -65,7 +65,7 @@ impl SessionOrchestrator {
                 )
                 .await
             }
-            whatami::BROKER => {
+            whatami::ROUTER => {
                 self.init_broker(config.listeners, config.peers, &config.multicast_interface)
                     .await
             }
@@ -84,7 +84,7 @@ impl SessionOrchestrator {
                 log::info!("Scouting for router ...");
                 let iface = SessionOrchestrator::get_interface(iface)?;
                 let socket = SessionOrchestrator::bind_ucast_port(iface).await?;
-                self.connect_first(&socket, whatami::BROKER).await
+                self.connect_first(&socket, whatami::ROUTER).await
             }
             _ => {
                 for locator in &peers {
@@ -123,7 +123,7 @@ impl SessionOrchestrator {
         async_std::task::spawn(async move {
             async_std::prelude::FutureExt::race(
                 this.responder(&mcast_socket, &ucast_socket),
-                this.connect_all(&ucast_socket, whatami::PEER | whatami::BROKER),
+                this.connect_all(&ucast_socket, whatami::PEER | whatami::ROUTER),
             )
             .await;
         });
@@ -363,7 +363,7 @@ impl SessionOrchestrator {
                 if let Ok(msg) = rbuf.read_session_message() {
                     log::trace!("Received {:?}", msg);
                     if let SessionBody::Hello(hello) = msg.get_body() {
-                        let whatami = hello.whatami.or(Some(whatami::BROKER)).unwrap();
+                        let whatami = hello.whatami.or(Some(whatami::ROUTER)).unwrap();
                         if whatami & what != 0 {
                             if let Loop::Break = f(hello.clone()).await {
                                 break;
@@ -488,7 +488,7 @@ impl SessionOrchestrator {
                     what, pid_replies, ..
                 }) = msg.get_body()
                 {
-                    let what = what.or(Some(whatami::BROKER)).unwrap();
+                    let what = what.or(Some(whatami::ROUTER)).unwrap();
                     if what & self.whatami != 0 {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
                         let pid = if *pid_replies {
