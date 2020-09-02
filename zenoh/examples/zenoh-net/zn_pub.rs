@@ -29,7 +29,7 @@ async fn main() {
     println!(" => RId {}", rid);
 
     println!("Declaring Publisher on {}", rid);
-    let publ = session.declare_publisher(&rid.into()).await.unwrap();
+    let publisher = session.declare_publisher(&rid.into()).await.unwrap();
 
     println!("Writing Data ('{}': '{}')...\n", rid, value);
     session
@@ -37,7 +37,7 @@ async fn main() {
         .await
         .unwrap();
 
-    session.undeclare_publisher(publ).await.unwrap();
+    publisher.undeclare().await.unwrap();
     session.close().await.unwrap();
 }
 

@@ -28,7 +28,7 @@ use zenoh_router::routing::broker::*;
 #[test]
 fn base_test() {
     task::block_on(async {
-        let tables = Tables::new(HLC::default());
+        let tables = Tables::new(Some(HLC::default()));
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
         let face = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
         declare_resource(
@@ -124,7 +124,7 @@ fn match_test() {
             "/x/*e",
         ];
 
-        let tables = Tables::new(HLC::default());
+        let tables = Tables::new(Some(HLC::default()));
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
         let face = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
         for (i, rname) in rnames.iter().enumerate() {
@@ -158,7 +158,7 @@ fn match_test() {
 #[test]
 fn clean_test() {
     task::block_on(async {
-        let tables = Tables::new(HLC::default());
+        let tables = Tables::new(Some(HLC::default()));
 
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
         let face0 = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
@@ -465,7 +465,7 @@ impl Primitives for ClientPrimitives {
         &self,
         reskey: &ResKey,
         _reliability: Reliability,
-        _info: &Option<DataInfo>,
+        _info: Option<DataInfo>,
         _payload: RBuf,
     ) {
         *self.data.lock().unwrap() = Some(reskey.clone());
@@ -505,7 +505,7 @@ impl Primitives for ClientPrimitives {
 #[test]
 fn client_test() {
     task::block_on(async {
-        let tables = Tables::new(HLC::default());
+        let tables = Tables::new(Some(HLC::default()));
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
@@ -609,7 +609,7 @@ fn client_test() {
             0,
             "/test/client/z1_wr1",
             Reliability::Reliable,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;
@@ -635,7 +635,7 @@ fn client_test() {
             11,
             "/z1_wr2",
             Reliability::Reliable,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;
@@ -661,7 +661,7 @@ fn client_test() {
             0,
             "/test/client/**",
             Reliability::Reliable,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;
@@ -687,7 +687,7 @@ fn client_test() {
             12,
             "",
             Reliability::Reliable,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;
@@ -713,7 +713,7 @@ fn client_test() {
             22,
             "",
             Reliability::Reliable,
-            &None,
+            None,
             RBuf::new(),
         )
         .await;

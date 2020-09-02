@@ -116,7 +116,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         &self,
         reskey: &ResKey,
         reliability: Reliability,
-        info: &Option<DataInfo>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         self.handler

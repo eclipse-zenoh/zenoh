@@ -11,34 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::net::{encoding, DataInfo, ZInt};
-use crate::{ChangeKind, Properties, Timestamp, Value};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-pub fn decode_data_info(data_info: Option<DataInfo>) -> (ChangeKind, ZInt, Timestamp) {
-    if let Some(info) = data_info {
-        (
-            info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
-            info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
-            info.timestamp.unwrap_or_else(new_reception_timestamp),
-        )
-    } else {
-        // If DataInfo is not present, simulate one,
-        // assuming a PUT of a simple buffer,
-        // and using a reception timestamp
-        (
-            ChangeKind::PUT,
-            encoding::APP_OCTET_STREAM,
-            new_reception_timestamp(),
-        )
-    }
-}
-
-// generate a reception timestamp with id=0x00
-fn new_reception_timestamp() -> Timestamp {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(now.into(), vec![0x00])
-}
+use crate::{Properties, Value};
 
 pub fn properties_to_json_value(props: &Properties) -> Value {
     let json_map = props

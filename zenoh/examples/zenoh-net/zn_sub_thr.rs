@@ -42,7 +42,7 @@ async fn main() {
         mode: SubMode::Push,
         period: None,
     };
-    session
+    let _sub = session
         .declare_callback_subscriber(&reskey, &sub_info, move |_sample| {
             if count == 0 {
                 start = Instant::now();

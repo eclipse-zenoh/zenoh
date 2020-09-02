@@ -48,7 +48,7 @@ use log::debug;
 ///         period: None
 ///     };
 ///     let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-///     while let Some(sample) = subscriber.next().await { println!("Received : {:?}", sample); };
+///     while let Some(sample) = subscriber.stream().next().await { println!("Received : {:?}", sample); };
 /// }
 /// ```
 ///
@@ -92,11 +92,10 @@ pub use values::*;
 
 pub mod utils;
 
-pub use zenoh_protocol::core::Timestamp;
+pub use zenoh_protocol::core::{Timestamp, TimestampID};
 
 type Config = net::Config;
 
-#[derive(Clone)]
 pub struct Zenoh {
     session: Session,
 }
@@ -128,7 +127,7 @@ impl Zenoh {
         Workspace::new(self.session.clone(), prefix).await
     }
 
-    pub async fn close(&self) -> ZResult<()> {
+    pub async fn close(self) -> ZResult<()> {
         self.session.close().await
     }
 }

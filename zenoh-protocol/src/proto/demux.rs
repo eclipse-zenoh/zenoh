@@ -69,7 +69,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
             ZenohBody::Data(Data { key, payload }) => match msg.reply_context {
                 None => {
                     self.primitives
-                        .data(&key, msg.reliability, &msg.data_info, payload)
+                        .data(&key, msg.reliability, msg.data_info, payload)
                         .await;
                 }
                 Some(rep) => match rep.replier_id {

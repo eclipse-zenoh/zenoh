@@ -317,6 +317,7 @@ pub struct Query {
 }
 
 // Zenoh messages at zenoh level
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ZenohBody {
     Declare(Declare),

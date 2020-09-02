@@ -34,7 +34,7 @@ pub trait Primitives {
         &self,
         reskey: &ResKey,
         reliability: Reliability,
-        info: &Option<DataInfo>,
+        info: Option<DataInfo>,
         payload: RBuf,
     );
     async fn query(

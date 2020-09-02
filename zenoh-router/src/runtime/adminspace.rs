@@ -146,7 +146,7 @@ impl Primitives for AdminSpace {
         &self,
         reskey: &ResKey,
         reliability: Reliability,
-        info: &Option<DataInfo>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         trace!(

@@ -191,7 +191,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // Frame benchmark
-    let ch = channel::RELIABLE;
+    let ch = Channel::Reliable;
     let is_fragment = Some(true);
     c.bench_function("bench_make_frame_header", |b| {
         b.iter(|| {
@@ -219,7 +219,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     let frame_data_payload = FramePayload::Messages {
         messages: vec![data; 1],
     };
-    let frame_data = SessionMessage::make_frame(false, 42, frame_data_payload.clone(), None);
+    let frame_data =
+        SessionMessage::make_frame(Channel::BestEffort, 42, frame_data_payload.clone(), None);
     c.bench_function("bench_write_frame_data", |b| {
         b.iter(|| {
             let _ = bench_write_frame_data(&mut buf, &frame_data);
@@ -241,7 +242,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         buffer: payload.clone(),
         is_final: false,
     };
-    let frame_frag = SessionMessage::make_frame(false, 42, frame_frag_payload, None);
+    let frame_frag = SessionMessage::make_frame(Channel::BestEffort, 42, frame_frag_payload, None);
     c.bench_function("bench_write_frame_frag", |b| {
         b.iter(|| {
             let _ = bench_write_frame_frag(&mut buf, &frame_frag);

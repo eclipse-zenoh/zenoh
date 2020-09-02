@@ -44,11 +44,9 @@ fn parse_http_port(arg: &str) -> String {
 }
 
 fn get_kind_str(sample: &Sample) -> String {
-    let info = sample.data_info.clone();
-    let kind = if let Some(info) = info {
-        info.kind.or(Some(data_kind::DEFAULT)).unwrap()
-    } else {
-        data_kind::DEFAULT
+    let kind = match &sample.data_info {
+        Some(info) => info.kind.unwrap_or(data_kind::DEFAULT),
+        None => data_kind::DEFAULT,
     };
     match data_kind::to_str(kind) {
         Ok(string) => string,
@@ -57,18 +55,15 @@ fn get_kind_str(sample: &Sample) -> String {
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let ts = if let Some(info) = sample.data_info {
-        info.timestamp
-            .map(|ts| ts.to_string())
-            .unwrap_or_else(|| "None".to_string())
-    } else {
-        "None".to_string()
-    };
     format!(
         "{{ \"key\": \"{}\", \"value\": \"{}\", \"time\": \"{}\" }}",
         sample.res_name,
         String::from_utf8_lossy(&sample.payload.to_vec()),
-        ts
+        sample
+            .data_info
+            .and_then(|i| i.timestamp)
+            .map(|ts| ts.to_string())
+            .unwrap_or_else(|| "None".to_string())
     )
 }
 
@@ -159,7 +154,6 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     req,
                     async move |req: Request<(Session, String)>, sender| {
                         let resource = path_to_resource(req.url().path(), &req.state().1);
-                        let session = req.state().0.clone();
                         async_std::task::spawn(async move {
                             log::debug!(
                                 "Subscribe to {} for SSE stream (task {})",
@@ -167,12 +161,14 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                 async_std::task::current().id()
                             );
                             let sender = &sender;
-                            let mut sub = session
+                            let mut sub = req
+                                .state()
+                                .0
                                 .declare_subscriber(&resource, &SSE_SUB_INFO)
                                 .await
                                 .unwrap();
                             loop {
-                                let sample = sub.next().await.unwrap();
+                                let sample = sub.stream().next().await.unwrap();
                                 let send = async {
                                     sender
                                         .send(&get_kind_str(&sample), sample_to_json(sample), None)
@@ -188,7 +184,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                         "SSE timeout! Unsubscribe and terminate (task {})",
                                         async_std::task::current().id()
                                     );
-                                    if let Err(e) = session.undeclare_subscriber(sub).await {
+                                    if let Err(e) = sub.undeclare().await {
                                         log::error!("Error undeclaring subscriber: {}", e);
                                     }
                                     break;

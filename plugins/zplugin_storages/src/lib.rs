@@ -129,7 +129,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         }
     } else {
         error!("Failed to subscribe on {}", backends_admin_selector);
-    }
+    };
 }
 
 async fn load_and_start_backend(

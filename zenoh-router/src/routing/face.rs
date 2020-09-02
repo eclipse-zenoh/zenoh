@@ -130,7 +130,7 @@ impl Primitives for Face {
         &self,
         reskey: &ResKey,
         reliability: Reliability,
-        info: &Option<DataInfo>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         let (prefixid, suffix) = reskey.into();

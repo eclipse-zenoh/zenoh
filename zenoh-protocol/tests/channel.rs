@@ -126,8 +126,8 @@ impl SessionEventHandler for SCClient {
 
 async fn channel_reliable(locators: Vec<Locator>) {
     // Define client and router IDs
-    let client_id = PeerId { id: vec![0u8] };
-    let router_id = PeerId { id: vec![1u8] };
+    let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
     // Create the router session manager
     let router_handler = Arc::new(SHRouter::new());
@@ -207,8 +207,8 @@ async fn channel_reliable(locators: Vec<Locator>) {
 
 async fn channel_best_effort(locators: Vec<Locator>) {
     // Define client and router IDs
-    let client_id = PeerId { id: vec![0u8] };
-    let router_id = PeerId { id: vec![1u8] };
+    let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
     // Create the router session manager
     let router_handler = Arc::new(SHRouter::new());

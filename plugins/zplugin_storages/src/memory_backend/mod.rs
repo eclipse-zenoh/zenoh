@@ -118,7 +118,17 @@ impl Storage for MemoryStorage {
 
     async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
         trace!("on_sample for {}", sample.res_name);
-        let (kind, _, timestamp) = utils::decode_data_info(sample.data_info.clone());
+        let (kind, timestamp) = if let Some(ref info) = sample.data_info {
+            (
+                info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+                match &info.timestamp {
+                    Some(ts) => ts.clone(),
+                    None => new_reception_timestamp(),
+                },
+            )
+        } else {
+            (ChangeKind::PUT, new_reception_timestamp())
+        };
         match kind {
             ChangeKind::PUT => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
@@ -225,4 +235,15 @@ impl Timed for TimedCleanup {
     async fn run(&mut self) {
         self.map.write().await.remove(&self.path);
     }
+}
+
+// generate a reception timestamp with id=0x00
+fn new_reception_timestamp() -> Timestamp {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use zenoh::TimestampID;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    Timestamp::new(
+        now.into(),
+        TimestampID::new(1, [0u8; TimestampID::MAX_SIZE]),
+    )
 }

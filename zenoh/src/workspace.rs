@@ -16,7 +16,7 @@ use crate::net::{
     data_kind, encoding, DataInfo, Query, QueryConsolidation, QueryTarget, Queryable, RBuf,
     Reliability, RepliesSender, Reply, ResKey, Sample, Session, SubInfo, SubMode, Subscriber, ZInt,
 };
-use crate::{utils, Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult};
+use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult};
 use async_std::pin::Pin;
 use async_std::stream::Stream;
 use async_std::sync::Receiver;
@@ -24,12 +24,21 @@ use async_std::task::{Context, Poll};
 use log::{debug, warn};
 use pin_project_lite::pin_project;
 use std::convert::TryInto;
+use zenoh_protocol::core::TimestampID;
 use zenoh_util::zerror;
 
-#[derive(Clone)]
 pub struct Workspace {
     session: Session,
     prefix: Path,
+}
+
+impl Clone for Workspace {
+    fn clone(&self) -> Self {
+        Workspace {
+            session: self.session.clone(),
+            prefix: self.prefix.clone(),
+        }
+    }
 }
 
 impl Workspace {
@@ -107,7 +116,7 @@ impl Workspace {
             })
     }
 
-    pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream> {
+    pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream<'_>> {
         debug!("subscribe on {}", selector);
         if selector.projection.is_some() {
             return zerror!(ZErrorKind::Other {
@@ -182,7 +191,7 @@ impl Workspace {
         Ok(())
     }
 
-    pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream> {
+    pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream<'_>> {
         debug!("eval on {}", path_expr);
         let reskey = self.pathexpr_to_reskey(&path_expr);
 
@@ -201,7 +210,14 @@ pub struct Data {
 
 fn reply_to_data(reply: Reply, decode_value: bool) -> ZResult<Data> {
     let path: Path = reply.data.res_name.try_into().unwrap();
-    let (_, encoding, timestamp) = utils::decode_data_info(reply.data.data_info);
+    let (encoding, timestamp) = if let Some(info) = reply.data.data_info {
+        (
+            info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
+            info.timestamp.unwrap_or_else(new_reception_timestamp),
+        )
+    } else {
+        (encoding::APP_OCTET_STREAM, new_reception_timestamp())
+    };
     let value = if decode_value {
         Value::decode(encoding, reply.data.payload)?
     } else {
@@ -283,7 +299,19 @@ impl Change {
         decode_value: bool,
     ) -> ZResult<Change> {
         let path = res_name.try_into()?;
-        let (kind, encoding, timestamp) = utils::decode_data_info(data_info);
+        let (kind, encoding, timestamp) = if let Some(info) = data_info {
+            (
+                info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+                info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
+                info.timestamp.unwrap_or_else(new_reception_timestamp),
+            )
+        } else {
+            (
+                ChangeKind::PUT,
+                encoding::APP_OCTET_STREAM,
+                new_reception_timestamp(),
+            )
+        };
         let value = if kind == ChangeKind::DELETE {
             None
         } else if decode_value {
@@ -302,20 +330,20 @@ impl Change {
 }
 
 pin_project! {
-    pub struct ChangeStream {
+    pub struct ChangeStream<'a> {
         #[pin]
-        subscriber: Subscriber,
+        subscriber: Subscriber<'a>,
         decode_value: bool,
     }
 }
 
-impl Stream for ChangeStream {
+impl Stream for ChangeStream<'_> {
     type Item = Change;
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let decode_value = self.decode_value;
-        match self.project().subscriber.poll_next(cx) {
+        match async_std::pin::Pin::new(self.project().subscriber.stream()).poll_next(cx) {
             Poll::Ready(Some(sample)) => {
                 match Change::new(
                     &sample.res_name,
@@ -375,18 +403,18 @@ fn query_to_get(query: Query) -> ZResult<GetRequest> {
 }
 
 pin_project! {
-    pub struct GetRequestStream {
+    pub struct GetRequestStream<'a> {
         #[pin]
-        queryable: Queryable
+        queryable: Queryable<'a>
     }
 }
 
-impl Stream for GetRequestStream {
+impl Stream for GetRequestStream<'_> {
     type Item = GetRequest;
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match self.project().queryable.poll_next(cx) {
+        match async_std::pin::Pin::new(self.project().queryable.stream()).poll_next(cx) {
             Poll::Ready(Some(query)) => match query_to_get(query) {
                 Ok(get) => Poll::Ready(Some(get)),
                 Err(err) => {
@@ -398,4 +426,15 @@ impl Stream for GetRequestStream {
             Poll::Pending => Poll::Pending,
         }
     }
+}
+
+// generate a reception timestamp with id=0x00
+fn new_reception_timestamp() -> Timestamp {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    Timestamp::new(
+        now.into(),
+        TimestampID::new(1, [0u8; TimestampID::MAX_SIZE]),
+    )
 }

@@ -249,23 +249,71 @@ pub async fn route_data_to_map(
     }
 }
 
-#[cfg(feature = "add_timestamp")]
-async fn treat_timestamp(
-    hlc: &HLC,
-    data_info: &Option<DataInfo>,
-) -> Result<Option<DataInfo>, String> {
-    use zenoh_protocol::io::WBuf;
-    if let Some(buf) = info {
-        if let Some(ts) = data_info.timestamp {
+pub async fn route_data(
+    tables: &mut Tables,
+    face: &Arc<FaceState>,
+    rid: u64,
+    suffix: &str,
+    reliability: Reliability,
+    info: Option<DataInfo>,
+    payload: RBuf,
+) {
+    if let Some(outfaces) =
+        route_data_to_map(tables, face, rid, suffix, reliability, &info, &payload).await
+    {
+        // if an HLC was configured (via Config.add_timestamp),
+        // check DataInfo and add a timestamp if there isn't
+        let data_info = match &tables.hlc {
+            Some(hlc) => match treat_timestamp(hlc, info).await {
+                Ok(info) => info,
+                Err(e) => {
+                    log::error!(
+                        "Error treating timestamp for received Data ({}): drop it!",
+                        e
+                    );
+                    return;
+                }
+            },
+            None => info,
+        };
+
+        for (_id, (outface, rid, suffix)) in outfaces {
+            if !Arc::ptr_eq(face, &outface) {
+                let primitives = {
+                    if (face.whatami != whatami::PEER && face.whatami != whatami::BROKER)
+                        || (outface.whatami != whatami::PEER && outface.whatami != whatami::BROKER)
+                    {
+                        Some(outface.primitives.clone())
+                    } else {
+                        None
+                    }
+                };
+                if let Some(primitives) = primitives {
+                    primitives
+                        .data(
+                            &(rid, suffix).into(),
+                            reliability,
+                            data_info.clone(),
+                            payload.clone(),
+                        )
+                        .await
+                }
+            }
+        }
+    }
+}
+
+async fn treat_timestamp(hlc: &HLC, info: Option<DataInfo>) -> Result<Option<DataInfo>, String> {
+    if let Some(mut data_info) = info {
+        if let Some(ref ts) = data_info.timestamp {
             // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
-            hlc.update_with_timestamp(&ts).await?;
-            Ok(Some(buf.clone()))
+            hlc.update_with_timestamp(ts).await?;
+            Ok(Some(data_info))
         } else {
             // Timestamp not present; add one
             data_info.timestamp = Some(hlc.new_timestamp().await);
-            let mut newbuf = WBuf::new(64, true);
-            newbuf.write_datainfo(&data_info);
-            Ok(Some(newbuf.into()))
+            log::trace!("Adding timestamp to DataInfo: {:?}", data_info.timestamp);
+            Ok(Some(data_info))
         }
     } else {
         // No DataInfo; add one with a Timestamp
@@ -273,12 +321,8 @@ async fn treat_timestamp(
     }
 }
 
-#[cfg(feature = "add_timestamp")]
-fn new_datainfo(ts: uhlc::Timestamp) -> RBuf {
-    use zenoh_protocol::io::WBuf;
-    use zenoh_protocol::proto::DataInfo;
-
-    let data_info = DataInfo {
+fn new_datainfo(ts: uhlc::Timestamp) -> DataInfo {
+    DataInfo {
         source_id: None,
         source_sn: None,
         first_broker_id: None,
@@ -286,52 +330,6 @@ fn new_datainfo(ts: uhlc::Timestamp) -> RBuf {
         timestamp: Some(ts),
         kind: None,
         encoding: None,
-    };
-    let mut newbuf = WBuf::new(32, true);
-    newbuf.write_datainfo(&data_info);
-    newbuf.into()
-}
-
-#[cfg(not(feature = "add_timestamp"))]
-async fn treat_timestamp(_hlc: &HLC, info: &Option<DataInfo>) -> Result<Option<DataInfo>, String> {
-    Ok(info.clone())
-}
-
-pub async fn route_data(
-    tables: &mut Tables,
-    face: &Arc<FaceState>,
-    rid: u64,
-    suffix: &str,
-    reliability: Reliability,
-    info: &Option<DataInfo>,
-    payload: RBuf,
-) {
-    if let Some(outfaces) =
-        route_data_to_map(tables, face, rid, suffix, reliability, info, &payload).await
-    {
-        if let Ok(info) = treat_timestamp(&tables.hlc, info).await {
-            for (_id, (outface, rid, suffix)) in outfaces {
-                if !Arc::ptr_eq(face, &outface) {
-                    let primitives = {
-                        if (face.whatami != whatami::PEER && face.whatami != whatami::BROKER)
-                            || (outface.whatami != whatami::PEER
-                                && outface.whatami != whatami::BROKER)
-                        {
-                            Some(outface.primitives.clone())
-                        } else {
-                            None
-                        }
-                    };
-                    if let Some(primitives) = primitives {
-                        primitives
-                            .data(&(rid, suffix).into(), reliability, &info, payload.clone())
-                            .await
-                    }
-                }
-            }
-        } else {
-            log::error!("Received Data with a Timestamp that is too far in the futur! Drop it.");
-        }
     }
 }
 
@@ -355,7 +353,7 @@ pub async fn pull_data(
                                 let reskey: ResKey =
                                     Resource::get_best_key(&tables.root_res, name, face.id).into();
                                 face.primitives
-                                    .data(&reskey, subinfo.reliability, &info, data.clone())
+                                    .data(&reskey, subinfo.reliability, info.clone(), data.clone())
                                     .await;
                             }
                             Arc::get_mut_unchecked(&mut ctx).last_values.clear();

@@ -629,13 +629,28 @@ impl RBuf {
 
     pub fn read_timestamp(&mut self) -> ZResult<Timestamp> {
         let time = self.read_zint_as_u64()?;
-        let mut bytes = [0u8; 16];
-        self.read_bytes(&mut bytes[..])?;
-        Ok(Timestamp::new(uhlc::NTP64(time), bytes.into()))
+        let zint = self.read_zint()?;
+        if zint > (uhlc::ID::MAX_SIZE as ZInt) {
+            panic!(
+                "Reading a Timestamp's ID size that exceed {} bytes: {}",
+                uhlc::ID::MAX_SIZE,
+                zint
+            ); //@TODO: return error
+        }
+        let size = zint as usize;
+        let mut id = [0u8; PeerId::MAX_SIZE];
+        self.read_bytes(&mut id[..size])?;
+        Ok(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
     }
 
     fn read_peerid(&mut self) -> ZResult<PeerId> {
-        let id = self.read_bytes_array()?;
-        Ok(PeerId { id })
+        let zint = self.read_zint()?;
+        if zint > (PeerId::MAX_SIZE as ZInt) {
+            panic!("Reading a PeerId size that exceed 16 bytes: {}", zint); //@TODO: return error
+        }
+        let size = zint as usize;
+        let mut id = [0u8; PeerId::MAX_SIZE];
+        self.read_bytes(&mut id[..size])?;
+        Ok(PeerId::new(size, id))
     }
 }

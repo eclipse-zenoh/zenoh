@@ -12,13 +12,13 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use rand::*;
+use uhlc::Timestamp;
 use zenoh_protocol::core::*;
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::proto::*;
 
 const NUM_ITER: usize = 100;
 const PROPS_LENGTH: usize = 3;
-const PID_MAX_SIZE: usize = 128;
 const PROP_MAX_SIZE: usize = 64;
 const MAX_PAYLOAD_SIZE: usize = 256;
 
@@ -28,9 +28,13 @@ macro_rules! gen {
     };
 }
 
-macro_rules! gen_bool {
-    () => {
-        thread_rng().gen_bool(0.5)
+macro_rules! option_gen {
+    ($e:expr) => {
+        if thread_rng().gen_bool(0.5) {
+            Some($e)
+        } else {
+            None
+        }
     };
 }
 
@@ -43,9 +47,7 @@ fn gen_buffer(max_size: usize) -> Vec<u8> {
 }
 
 fn gen_pid() -> PeerId {
-    PeerId {
-        id: gen_buffer(PID_MAX_SIZE),
-    }
+    PeerId::from(uuid::Uuid::new_v4())
 }
 
 fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
@@ -56,24 +58,6 @@ fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
         props.push(Property { key, value });
     }
     props
-}
-
-fn gen_data_info() -> DataInfo {
-    let source_id = if gen_bool!() { Some(gen_pid()) } else { None };
-    let source_sn = if gen_bool!() { Some(gen!(ZInt)) } else { None };
-    let first_broker_id = if gen_bool!() { Some(gen_pid()) } else { None };
-    let first_broker_sn = if gen_bool!() { Some(gen!(ZInt)) } else { None };
-    let kind = if gen_bool!() { Some(gen!(ZInt)) } else { None };
-    let encoding = if gen_bool!() { Some(gen!(ZInt)) } else { None };
-    DataInfo {
-        source_id,
-        source_sn,
-        first_broker_id,
-        first_broker_sn,
-        timestamp: None,
-        kind,
-        encoding,
-    }
 }
 
 fn gen_reply_context(is_final: bool) -> ReplyContext {
@@ -176,6 +160,22 @@ fn gen_consolidation() -> QueryConsolidation {
         0 => QueryConsolidation::None,
         1 => QueryConsolidation::LastHop,
         _ => QueryConsolidation::Incremental,
+    }
+}
+
+fn gen_timestamp() -> Timestamp {
+    Timestamp::new(uhlc::NTP64(gen!(u64)), uhlc::ID::from(uuid::Uuid::new_v4()))
+}
+
+fn gen_data_info() -> DataInfo {
+    DataInfo {
+        source_id: option_gen!(gen_pid()),
+        source_sn: option_gen!(gen!(ZInt)),
+        first_broker_id: option_gen!(gen_pid()),
+        first_broker_sn: option_gen!(gen!(ZInt)),
+        timestamp: option_gen!(gen_timestamp()),
+        kind: option_gen!(gen!(ZInt)),
+        encoding: option_gen!(gen!(ZInt)),
     }
 }
 

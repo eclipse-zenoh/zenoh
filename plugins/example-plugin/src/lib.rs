@@ -63,13 +63,13 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     loop {
         select!(
-            sample = sub.next().fuse() => {
+            sample = sub.stream().next().fuse() => {
                 let sample = sample.unwrap();
                 info!("Received data ('{}': '{}')", sample.res_name, sample.payload);
                 stored.insert(sample.res_name.into(), (sample.payload, sample.data_info));
             },
 
-            query = queryable.next().fuse() => {
+            query = queryable.stream().next().fuse() => {
                 let query = query.unwrap();
                 info!("Handling query '{}{}'", query.res_name, query.predicate);
                 for (rname, (data, data_info)) in stored.iter() {

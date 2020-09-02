@@ -33,7 +33,7 @@ async fn main() {
         period: None,
     };
 
-    let mut sub = session
+    let mut subscriber = session
         .declare_subscriber(&selector.into(), &sub_info)
         .await
         .unwrap();
@@ -44,7 +44,7 @@ async fn main() {
     let mut input = [0u8];
     loop {
         select!(
-            sample = sub.next().fuse() => {
+            sample = subscriber.stream().next().fuse() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
                     sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
@@ -52,7 +52,7 @@ async fn main() {
 
             _ = stdin.read_exact(&mut input).fuse() => {
                 if input[0] != 'q' as u8 {
-                    sub.pull().await.unwrap();
+                    subscriber.pull().await.unwrap();
                 } else {
                     break
                 }
@@ -60,7 +60,7 @@ async fn main() {
         );
     }
 
-    session.undeclare_subscriber(sub).await.unwrap();
+    subscriber.undeclare().await.unwrap();
     session.close().await.unwrap();
 }
 
