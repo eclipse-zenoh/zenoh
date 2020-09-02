@@ -437,6 +437,7 @@ impl SessionOrchestrator {
     }
 
     #[allow(unreachable_patterns)]
+    #[allow(clippy::match_single_binding)]
     async fn get_local_locators(&self) -> Vec<Locator> {
         let mut result = vec![];
         for locator in self.manager.get_locators().await {
@@ -462,7 +463,7 @@ impl SessionOrchestrator {
                         result.push(locator)
                     }
                 }
-                loc => result.push(loc),
+                locator => result.push(locator),
             }
         }
         result
