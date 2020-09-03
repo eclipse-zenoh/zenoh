@@ -53,7 +53,9 @@ async fn main() {
                 print_stats(start);
                 nm += 1;
                 count = 0;
-                if nm >= m { std::process::exit(0) }
+                if nm >= m {
+                    std::process::exit(0)
+                }
             }
         })
         .await
@@ -88,7 +90,7 @@ fn parse_args() -> (Config, u32) {
         ))
         .arg(
             Arg::from_usage("-s, --samples=[number] 'Number of throughput measurements.'")
-                .default_value("10")
+                .default_value("10"),
         )
         .get_matches();
 
