@@ -230,6 +230,7 @@ pub enum Channel {
 pub enum Reliability {
     BestEffort,
     Reliable,
+    ReliableDroppable,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

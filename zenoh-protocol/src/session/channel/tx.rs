@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::{Arc, Mutex};
+use async_std::task;
 use std::collections::VecDeque;
 
 use super::SerializationBatch;
@@ -72,6 +73,44 @@ macro_rules! zgetbatch {
     };
 }
 
+macro_rules! zgetbatch_dropmsg {
+    ($batch:expr, $msg:expr) => {
+        // Try to get a pointer to the first batch
+        loop {
+            if let Some(batch) = $batch.inner.front_mut() {
+                break batch;
+            } else {
+                // Refill the batches
+                let mut empty_guard = zasynclock!($batch.state_empty);
+                if empty_guard.is_empty() {
+                    // Execute the dropping strategy if provided
+                    if $msg.is_droppable() {
+                        log::trace!(
+                            "Message dropped because the transmission queue is full: {:?}",
+                            $msg
+                        );
+                        // Drop the guard to allow the sending task to
+                        // refill the queue of empty batches
+                        drop(empty_guard);
+                        // Yield this task
+                        task::yield_now().await;
+                        return;
+                    }
+                    // Drop the guard and wait for the batches to be available
+                    $batch.not_full.wait(empty_guard).await;
+                    // We have been notified that there are batches available:
+                    // reacquire the lock on the state_empty
+                    empty_guard = zasynclock!($batch.state_empty);
+                }
+                // Drain all the empty batches
+                while let Some(batch) = empty_guard.pull() {
+                    $batch.inner.push_back(batch);
+                }
+            }
+        }
+    };
+}
+
 impl CircularBatchIn {
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -109,17 +148,12 @@ impl CircularBatchIn {
         }
     }
 
-    async fn try_serialize_session_message(&mut self, message: &SessionMessage) -> bool {
-        // Get the current serialization batch
-        let batch = zgetbatch!(self);
-        // Try to serialize the message on the current batch
-        batch.serialize_session_message(&message).await
-    }
-
     async fn serialize_session_message(&mut self, message: SessionMessage) {
         macro_rules! zserialize {
             ($message:expr) => {
-                if self.try_serialize_session_message($message).await {
+                // Get the current serialization batch
+                let batch = zgetbatch!(self);
+                if batch.serialize_session_message(&message).await {
                     // Notify if needed
                     if self.not_empty.has_waiting_list() {
                         let guard = zasynclock!(self.state_out);
@@ -129,6 +163,7 @@ impl CircularBatchIn {
                 }
             };
         }
+
         // Attempt the serialization on the current batch
         zserialize!(&message);
 
@@ -209,17 +244,13 @@ impl CircularBatchIn {
         }
     }
 
-    async fn try_serialize_zenoh_message(&mut self, message: &ZenohMessage) -> bool {
-        // Get the current serialization batch
-        let batch = zgetbatch!(self);
-        // Try to serialize the message on the current batch
-        batch.serialize_zenoh_message(&message).await
-    }
-
     async fn serialize_zenoh_message(&mut self, message: ZenohMessage) {
         macro_rules! zserialize {
             ($message:expr) => {
-                if self.try_serialize_zenoh_message(&message).await {
+                // Get the current serialization batch. Drop the message
+                // if no batches are available
+                let batch = zgetbatch_dropmsg!(self, message);
+                if batch.serialize_zenoh_message(&message).await {
                     // Notify if needed
                     if self.not_empty.has_waiting_list() {
                         let guard = zasynclock!(self.state_out);
@@ -439,12 +470,14 @@ impl TransmissionQueue {
         }
     }
 
+    #[inline]
     pub(super) async fn push_session_message(&self, message: SessionMessage, priority: usize) {
         zasynclock!(self.state_in[priority])
             .serialize_session_message(message)
             .await;
     }
 
+    #[inline]
     pub(super) async fn push_zenoh_message(&self, message: ZenohMessage, priority: usize) {
         zasynclock!(self.state_in[priority])
             .serialize_zenoh_message(message)

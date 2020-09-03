@@ -382,6 +382,7 @@ impl ZenohMessage {
         let kflag = if key.is_numerical() { zmsg::flag::K } else { 0 };
         let (dflag, rflag) = match reliability {
             Reliability::Reliable => (0, zmsg::flag::R),
+            Reliability::ReliableDroppable => (zmsg::flag::D, zmsg::flag::R),
             Reliability::BestEffort => (0, 0),
         }; // TODO: Handle Drop flag zmsgs::flag::D
         let header = zmsg::id::DATA | rflag | dflag | kflag;
@@ -402,7 +403,7 @@ impl ZenohMessage {
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         let rflag = match reliability {
-            Reliability::Reliable => zmsg::flag::R,
+            Reliability::Reliable | Reliability::ReliableDroppable => zmsg::flag::R,
             Reliability::BestEffort => 0,
         };
         let header = zmsg::id::UNIT | rflag;
@@ -480,8 +481,16 @@ impl ZenohMessage {
     #[inline]
     pub fn is_reliable(&self) -> bool {
         match self.reliability {
-            Reliability::Reliable => true,
+            Reliability::Reliable | Reliability::ReliableDroppable => true,
             Reliability::BestEffort => false,
+        }
+    }
+
+    #[inline]
+    pub fn is_droppable(&self) -> bool {
+        match self.reliability {
+            Reliability::ReliableDroppable | Reliability::BestEffort => true,
+            Reliability::Reliable => false,
         }
     }
 
