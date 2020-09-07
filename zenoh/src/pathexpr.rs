@@ -19,6 +19,14 @@ use std::fmt;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
+/// A zenoh Path Expression used to express a selection of [`Path`]s.
+///
+/// Similarly to a [`Path`], a Path is a set of strings separated by '/' , as in a filesystem path.
+/// But unlike a [`Path`] it can contain `'*'` characters:
+///  - a single `'*'` character matches any set of characters in a path, except `'/'`.
+///  - while `"**"` matches any set of characters in a path, including `'/'`.
+///
+/// A Path Expression can be absolute (i.e. starting with a `'/'`) or relative to a [`Workspace`](super::Workspace).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PathExpr {
     pub(crate) p: String,
@@ -29,6 +37,8 @@ impl PathExpr {
         !path.is_empty() && !path.contains(|c| c == '?' || c == '#' || c == '[' || c == ']')
     }
 
+    /// Creates a new PathExpr from a String, checking its validity.  
+    /// Returns `Err(`[`ZError`]`)` if not valid.
     pub fn new(p: String) -> ZResult<PathExpr> {
         if !Self::is_valid(&p) {
             zerror!(ZErrorKind::InvalidPathExpr { path: p })
@@ -39,18 +49,22 @@ impl PathExpr {
         }
     }
 
+    /// Returns the Path as a &str.
     pub fn as_str(&self) -> &str {
         self.p.as_str()
     }
 
+    /// Returns true is this PathExpr is relative (i.e. not starting with `'/'`).
     pub fn is_relative(&self) -> bool {
         !self.p.starts_with('/')
     }
 
+    /// Returns true is this PathExpr is a [`Path`] (i.e. not containing any `'*'`).
     pub fn is_a_path(&self) -> bool {
         !self.p.contains('*')
     }
 
+    /// Returns the concatenation of `prefix` with this PathExpr.
     pub fn with_prefix(&self, prefix: &Path) -> Self {
         if self.is_relative() {
             Self {
@@ -63,12 +77,15 @@ impl PathExpr {
         }
     }
 
+    /// If this PathExpr starts with `prefix` returns a copy of this PathExpr with the prefix removed.  
+    /// Otherwise, returns `None`.
     pub fn strip_prefix(&self, prefix: &Path) -> Option<Self> {
         self.p
             .strip_prefix(&prefix.p)
             .map(|p| PathExpr { p: p.to_string() })
     }
 
+    /// Returns true if `path` matches this PathExpr.
     pub fn matches(&self, path: &Path) -> bool {
         resource_name::intersect(&self.p, &path.p)
     }

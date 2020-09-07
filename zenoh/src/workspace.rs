@@ -28,6 +28,36 @@ use std::convert::TryInto;
 use zenoh_protocol::core::TimestampID;
 use zenoh_util::zerror;
 
+/// A Workspace to operate on zenoh.
+///
+/// A Workspace has an optional [Path] prefix from which relative [Path]s or [Selector]s can be used.async_std
+///
+/// # Examples
+///
+/// ```
+/// use zenoh::*;
+/// use std::convert::TryInto;
+///
+/// #[async_std::main]
+/// async fn main() {
+///     let zenoh = Zenoh::new(net::Config::default(), None).await.unwrap();
+///
+///     // Create a Workspace using prefix "/demo/example"
+///     let workspace = zenoh.workspace(Some("/demo/example".try_into().unwrap())).await.unwrap();
+///
+///     // Put using a relative path: "/demo/example/" + "hello"
+///     workspace.put(&"hello".try_into().unwrap(),
+///         "Hello World!".into()
+///     ).await.unwrap();
+///
+///     // Note that absolute paths and selectors can still be used:
+///     workspace.put(&"/demo/exmaple/hello2".try_into().unwrap(),
+///         "Hello World!".into()
+///     ).await.unwrap();
+///
+///     zenoh.close().await.unwrap();
+/// }
+/// ```
 pub struct Workspace<'a> {
     zenoh: &'a Zenoh,
     prefix: Path,
@@ -62,6 +92,24 @@ impl Workspace<'_> {
         }
     }
 
+    /// Put a [`Path`]/[`Value`] into zenoh.  
+    /// The corresponding [`Change`] will be received by all matching subscribers and all matching storages.
+    /// Note that the [`Path`] can be absolute or relative to this Workspace.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::*;
+    /// use std::convert::TryInto;
+    ///
+    /// let zenoh = Zenoh::new(net::Config::default(), None).await.unwrap();
+    /// let workspace = zenoh.workspace(None).await.unwrap();
+    /// workspace.put(
+    ///     &"/demo/example/hello".try_into().unwrap(),
+    ///     "Hello World!".into()
+    /// ).await.unwrap();
+    /// # })
+    /// ```
     pub async fn put(&self, path: &Path, value: Value) -> ZResult<()> {
         debug!("put on {:?}", path);
         let (encoding, payload) = value.encode();
@@ -76,6 +124,23 @@ impl Workspace<'_> {
             .await
     }
 
+    /// Delete a [`Path`] and its [`Value`] from zenoh.  
+    /// The corresponding [`Change`] will be received by all matching subscribers and all matching storages.
+    /// Note that the [`Path`] can be absolute or relative to this Workspace.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::*;
+    /// use std::convert::TryInto;
+    ///
+    /// let zenoh = Zenoh::new(net::Config::default(), None).await.unwrap();
+    /// let workspace = zenoh.workspace(None).await.unwrap();
+    /// workspace.delete(
+    ///     &"/demo/example/hello".try_into().unwrap()
+    /// ).await.unwrap();
+    /// # })
+    /// ```
     pub async fn delete(&self, path: &Path) -> ZResult<()> {
         debug!("delete on {:?}", path);
         self.session()
@@ -89,6 +154,27 @@ impl Workspace<'_> {
             .await
     }
 
+    /// Get a selection of [`Path`]/[`Value`] from zenoh.  
+    /// The selection is returned as a [`async_std::stream::Stream`] of [`Data`].
+    /// Note that the [`Selector`] can be absolute or relative to this Workspace.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::*;
+    /// use std::convert::TryInto;
+    /// use futures::prelude::*;
+    ///
+    /// let zenoh = Zenoh::new(net::Config::default(), None).await.unwrap();
+    /// let workspace = zenoh.workspace(None).await.unwrap();
+    /// let mut data_stream = workspace.get(&"/demo/example/**".try_into().unwrap()).await.unwrap();
+    /// while let Some(data) = data_stream.next().await {
+    ///     println!(">> {} : {:?} at {}",
+    ///         data.path, data.value, data.timestamp
+    ///     )
+    /// }
+    /// # })
+    /// ```
     pub async fn get(&self, selector: &Selector) -> ZResult<DataStream> {
         debug!("get on {}", selector);
         let reskey = self.pathexpr_to_reskey(&selector.path_expr);
@@ -108,11 +194,34 @@ impl Workspace<'_> {
             })
     }
 
+    /// Subscribe to changes for a selection of [`Path`]/[`Value`] (specified via a [`Selector`]) from zenoh.  
+    /// The changes are returned as [`async_std::stream::Stream`] of [`Change`].
+    /// This Stream will never end unless it's dropped or explicitly closed via [`ChangeStream::close()`].
+    /// Note that the [`Selector`] can be absolute or relative to this Workspace.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::*;
+    /// use std::convert::TryInto;
+    /// use futures::prelude::*;
+    ///
+    /// let zenoh = Zenoh::new(net::Config::default(), None).await.unwrap();
+    /// let workspace = zenoh.workspace(None).await.unwrap();
+    /// let mut change_stream =
+    ///     workspace.subscribe(&"/demo/example/**".try_into().unwrap()).await.unwrap();
+    /// while let Some(change) = change_stream.next().await {
+    ///     println!(">> {:?} for {} : {:?} at {}",
+    ///         change.kind, change.path, change.value, change.timestamp
+    ///     )
+    /// }
+    /// # })
+    /// ```
     pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream<'_>> {
         debug!("subscribe on {}", selector);
-        if selector.projection.is_some() {
+        if selector.filter.is_some() {
             return zerror!(ZErrorKind::Other {
-                descr: "Projection not supported in selector for subscribe()".into()
+                descr: "Filter not supported in selector for subscribe()".into()
             });
         }
         if selector.fragment.is_some() {
@@ -138,6 +247,28 @@ impl Workspace<'_> {
             })
     }
 
+    /// Subscribe to changes for a selection of [`Path`]/[`Value`] (specified via a [`Selector`]) from zenoh.  
+    /// For each change, the `callback` will be called.
+    /// A [`SubscriberHandle`] is returned, allowing to close the subscription via [`SubscriberHandle::close()`].
+    /// Note that the [`Selector`] can be absolute or relative to this Workspace.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::*;
+    /// use std::convert::TryInto;
+    ///
+    /// let zenoh = Zenoh::new(net::Config::default(), None).await.unwrap();
+    /// let workspace = zenoh.workspace(None).await.unwrap();
+    /// let mut change_stream = workspace.subscribe_with_callback(
+    ///     &"/demo/example/**".try_into().unwrap(),
+    ///     move |change| {
+    ///        println!(">> {:?} for {} : {:?} at {}",
+    ///            change.kind, change.path, change.value, change.timestamp
+    ///        )}
+    /// ).await.unwrap();
+    /// # })
+    /// ```
     pub async fn subscribe_with_callback<SubscribeCallback>(
         &self,
         selector: &Selector,
@@ -147,9 +278,9 @@ impl Workspace<'_> {
         SubscribeCallback: FnMut(Change) + Send + Sync + 'static,
     {
         debug!("subscribe_with_callback on {}", selector);
-        if selector.projection.is_some() {
+        if selector.filter.is_some() {
             return zerror!(ZErrorKind::Other {
-                descr: "Projection not supported in selector for subscribe()".into()
+                descr: "Filter not supported in selector for subscribe()".into()
             });
         }
         if selector.fragment.is_some() {
@@ -183,6 +314,35 @@ impl Workspace<'_> {
         Ok(SubscriberHandle { subscriber })
     }
 
+    /// Registers an evaluation function under the provided [`PathExpr`].  
+    /// A [`async_std::stream::Stream`] of [`GetRequest`] is returned.
+    /// All `get` requests matching the [`PathExpr`] will be added to this stream as a [`GetRequest`],
+    /// allowing the implementation to send a reply as a result of the evaluation function via [`GetRequest::reply()`].
+    /// This Stream will never end unless it's dropped or explicitly closed via [`GetRequestStream::close()`].
+    /// Note that the [`PathExpr`] can be absolute or relative to this Workspace.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::*;
+    /// use std::convert::TryInto;
+    /// use futures::prelude::*;
+    ///
+    /// let zenoh = Zenoh::new(net::Config::default(), None).await.unwrap();
+    /// let workspace = zenoh.workspace(None).await.unwrap();
+    /// let mut get_stream =
+    ///     workspace.register_eval(&"/demo/example/eval".try_into().unwrap()).await.unwrap();
+    /// while let Some(get_request) = get_stream.next().await {
+    ///    println!(
+    ///        ">> [Eval function] received get with selector: {}",
+    ///        get_request.selector
+    ///    );
+    ///    // return the Value as a result of this evaluation function :
+    ///    let v = Value::StringUTF8(format!("Result for get on {}", get_request.selector));
+    ///    get_request.reply("/demo/example/eval".try_into().unwrap(), v).await;
+    /// }
+    /// # })
+    /// ```
     pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream<'_>> {
         debug!("eval on {}", path_expr);
         let reskey = self.pathexpr_to_reskey(&path_expr);
@@ -194,6 +354,10 @@ impl Workspace<'_> {
     }
 }
 
+/// A Data returned as a result of a [`Workspace::get()`] operation.
+///
+/// It contains the [`Path`], its associated [`Value`] and a [`Timestamp`] which corresponds to the time
+/// at which the path/value has been put into zenoh.
 pub struct Data {
     pub path: Path,
     pub value: Value,
@@ -223,6 +387,9 @@ fn reply_to_data(reply: Reply, decode_value: bool) -> ZResult<Data> {
 }
 
 pin_project! {
+    /// A [`Stream`] of [`Data`] returned as a result of the [`Workspace::get()`] operation.
+    ///
+    /// [`Stream`]: async_std::stream::Stream
     pub struct DataStream {
         #[pin]
         receiver: Receiver<Reply>,
@@ -250,10 +417,14 @@ impl Stream for DataStream {
     }
 }
 
+/// The kind of a [`Change`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChangeKind {
+    /// if the [`Change`] was caused by a `put` operation.
     PUT = data_kind::PUT as isize,
+    /// if the [`Change`] was caused by a `patch` operation.
     PATCH = data_kind::PATCH as isize,
+    /// if the [`Change`] was caused by a `delete` operation.
     DELETE = data_kind::DELETE as isize,
 }
 
@@ -275,11 +446,18 @@ impl From<ZInt> for ChangeKind {
     }
 }
 
+/// The notification of a changed occured on a path/value and reported to a subscription.
+///
+/// See [`Workspace::subscribe()`] and [`Workspace::subscribe_with_callback()`].
 #[derive(Debug)]
 pub struct Change {
+    /// the [`Path`] related to this change.
     pub path: Path,
+    /// the new [`Value`] if the kind is `PUT`. `None` if the kind is `DELETE`.
     pub value: Option<Value>,
+    /// the [`Timestamp`] of the change
     pub timestamp: Timestamp,
+    /// the kind of change (`PUT` or `DELETE`).
     pub kind: ChangeKind,
 }
 
@@ -322,6 +500,9 @@ impl Change {
 }
 
 pin_project! {
+    /// A [`Stream`] of [`Change`] returned as a result of the [`Workspace::subscribe()`] operation.
+    ///
+    /// [`Stream`]: async_std::stream::Stream
     pub struct ChangeStream<'a> {
         #[pin]
         subscriber: Subscriber<'a>,
@@ -330,6 +511,7 @@ pin_project! {
 }
 
 impl ChangeStream<'_> {
+    // Closes the stream and the subscription.
     pub async fn close(self) -> ZResult<()> {
         self.subscriber.undeclare().await
     }
@@ -380,22 +562,26 @@ fn path_value_to_sample(path: Path, value: Value) -> Sample {
     }
 }
 
+/// A handle returned as result of [`Workspace::subscribe_with_callback()`] operation.
 pub struct SubscriberHandle<'a> {
     subscriber: CallbackSubscriber<'a>,
 }
 
 impl SubscriberHandle<'_> {
+    /// Closes the subscription.
     pub async fn close(self) -> ZResult<()> {
         self.subscriber.undeclare().await
     }
 }
 
+/// A `GET` request received by an evaluation function (see [`Workspace::register_eval()`]).
 pub struct GetRequest {
     pub selector: Selector,
     replies_sender: RepliesSender,
 }
 
 impl GetRequest {
+    /// Send a [`Path`]/[`Value`] as a reply to the requester.
     pub async fn reply(&self, path: Path, value: Value) {
         self.replies_sender
             .send(path_value_to_sample(path, value))
@@ -411,6 +597,9 @@ fn query_to_get(query: Query) -> ZResult<GetRequest> {
 }
 
 pin_project! {
+    /// A [`Stream`] of [`GetRequest`] returned as a result of the [`Workspace::register_eval()`] operation.
+    ///
+    /// [`Stream`]: async_std::stream::Stream
     pub struct GetRequestStream<'a> {
         #[pin]
         queryable: Queryable<'a>
@@ -418,6 +607,7 @@ pin_project! {
 }
 
 impl GetRequestStream<'_> {
+    /// Closes the stream and unregister the evaluation function.
     pub async fn close(self) -> ZResult<()> {
         self.queryable.undeclare().await
     }

@@ -18,6 +18,12 @@ use std::fmt;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
+/// A zenoh Path is a set of strings separated by `'/'` , as in a filesystem path.
+///
+/// A Path cannot contain any `'*'` character. Examples of paths:
+/// `"/demo/example/hello"` , `"/org/eclipse/building/be/floor/1/office/2"` ...
+///
+/// A path can be absolute (i.e. starting with a `'/'`) or relative to a [`Workspace`](super::Workspace).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Path {
     pub(crate) p: String,
@@ -41,6 +47,8 @@ impl Path {
         }
     }
 
+    /// Creates a new Path from a String, checking its validity.  
+    /// Returns `Err(`[`ZError`]`)` if not valid.
     pub fn new(p: String) -> ZResult<Path> {
         if !Self::is_valid(&p) {
             zerror!(ZErrorKind::InvalidPath { path: p })
@@ -51,14 +59,17 @@ impl Path {
         }
     }
 
+    /// Returns the Path as a &str.
     pub fn as_str(&self) -> &str {
         self.p.as_str()
     }
 
+    /// Returns true is this Path is relative (i.e. not starting with `'/'`).
     pub fn is_relative(&self) -> bool {
         !self.p.starts_with('/')
     }
 
+    /// Returns the concatenation of `prefix` with this Path.
     pub fn with_prefix(&self, prefix: &Path) -> Self {
         if self.is_relative() {
             Self {
@@ -71,6 +82,8 @@ impl Path {
         }
     }
 
+    /// If this Path starts with `prefix` returns a copy of this Path with the prefix removed.  
+    /// Otherwise, returns `None`.
     pub fn strip_prefix(&self, prefix: &Path) -> Option<Self> {
         self.p
             .strip_prefix(&prefix.p)
