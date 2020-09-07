@@ -20,8 +20,8 @@ use log::trace;
 use serde_json::json;
 use zenoh_protocol::{
     core::{
-        queryable::EVAL, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo,
-        ZInt,
+        queryable::EVAL, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability,
+        ResKey, SubInfo, ZInt,
     },
     io::RBuf,
     proto::{encoding, DataInfo, Primitives},
@@ -145,16 +145,18 @@ impl Primitives for AdminSpace {
     async fn data(
         &self,
         reskey: &ResKey,
-        reliability: Reliability,
-        info: Option<DataInfo>,
         payload: RBuf,
+        reliability: Reliability,
+        congestion_control: CongestionControl,
+        data_info: Option<DataInfo>,
     ) {
         trace!(
-            "recv Data {:?} {:?} {:?} {:?}",
+            "recv Data {:?} {:?} {:?} {:?} {:?}",
             reskey,
+            payload,
             reliability,
-            info,
-            payload
+            congestion_control,
+            data_info,
         );
     }
 

@@ -205,19 +205,23 @@ impl WBuf {
         if let Some(reply_context) = &msg.reply_context {
             check!(self.write_deco_reply_context(reply_context));
         }
-        if let Some(data_info) = &msg.data_info {
-            check!(self.write_deco_data_info(data_info));
-        }
 
         check!(self.write(msg.header));
         match &msg.body {
-            ZenohBody::Declare(Declare { declarations }) => {
-                check!(self.write_declarations(&declarations));
+            ZenohBody::Data(Data {
+                key,
+                data_info,
+                payload,
+            }) => {
+                check!(self.write_reskey(&key));
+                if let Some(data_info) = data_info {
+                    check!(self.write_data_info(data_info));
+                }
+                check!(self.write_rbuf(&payload));
             }
 
-            ZenohBody::Data(Data { key, payload }) => {
-                check!(self.write_reskey(&key));
-                check!(self.write_rbuf(&payload));
+            ZenohBody::Declare(Declare { declarations }) => {
+                check!(self.write_declarations(&declarations));
             }
 
             ZenohBody::Unit(Unit {}) => {}
@@ -280,33 +284,30 @@ impl WBuf {
         true
     }
 
-    pub fn write_deco_data_info(&mut self, info: &DataInfo) -> bool {
-        let header = zmsg::id::DATA_INFO;
-        check!(self.write(header));
-
-        let mut options = 0u8;
+    pub fn write_data_info(&mut self, info: &DataInfo) -> bool {
+        let mut options: ZInt = 0;
         if info.source_id.is_some() {
-            options |= zmsg::info_flag::SRCID
+            options |= zmsg::info_opt::SRCID
         }
         if info.source_sn.is_some() {
-            options |= zmsg::info_flag::SRCSN
+            options |= zmsg::info_opt::SRCSN
         }
         if info.first_router_id.is_some() {
-            options |= zmsg::info_flag::RTRID
+            options |= zmsg::info_opt::RTRID
         }
         if info.first_router_sn.is_some() {
-            options |= zmsg::info_flag::RTRSN
+            options |= zmsg::info_opt::RTRSN
         }
         if info.timestamp.is_some() {
-            options |= zmsg::info_flag::TS
+            options |= zmsg::info_opt::TS
         }
         if info.kind.is_some() {
-            options |= zmsg::info_flag::KIND
+            options |= zmsg::info_opt::KIND
         }
         if info.encoding.is_some() {
-            options |= zmsg::info_flag::ENC
+            options |= zmsg::info_opt::ENC
         }
-        check!(self.write(options));
+        check!(self.write_zint(options));
 
         if let Some(pid) = &info.source_id {
             check!(self.write_peerid(pid));

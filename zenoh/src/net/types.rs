@@ -45,6 +45,9 @@ pub use zenoh_protocol::core::QueryTarget;
 /// The kind of consolidation that should be applied on replies to a [query](Session::query).
 pub use zenoh_protocol::core::QueryConsolidation;
 
+/// The kind of congestion control.
+pub use zenoh_protocol::core::CongestionControl;
+
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;
 

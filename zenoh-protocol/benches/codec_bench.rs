@@ -17,7 +17,7 @@ extern crate rand;
 
 use criterion::{black_box, Criterion};
 
-use zenoh_protocol::core::{Channel, Reliability, ResKey, ZInt};
+use zenoh_protocol::core::{Channel, CongestionControl, Reliability, ResKey, ZInt};
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::proto::{Attachment, FramePayload, SessionMessage, ZenohMessage};
 use zenoh_util::core::ZResult;
@@ -65,6 +65,7 @@ fn bench_make_data(payload: RBuf) {
         ResKey::RId(10),
         payload,
         Reliability::Reliable,
+        CongestionControl::Block,
         None,
         None,
         None,
@@ -142,6 +143,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         ResKey::RId(10),
         payload.clone(),
         Reliability::BestEffort,
+        CongestionControl::Drop,
         None,
         None,
         None,

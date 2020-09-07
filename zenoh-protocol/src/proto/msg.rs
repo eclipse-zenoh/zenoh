@@ -92,48 +92,6 @@ impl ReplyContext {
     }
 }
 
-// -- DataInfo decorator
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
-///
-/// The **DataInfo** is a message decorator for **Data** messages.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |X|X|X| D_INFO  |
-/// +-+-+-+---------+
-/// |X|G|F|E|D|C|B|A|
-/// +---------------+
-/// ~   source_id   ~ if A==1
-/// +---------------+
-/// ~   source_sn   ~ if B==1
-/// +---------------+
-/// ~first_router_id~ if C==1
-/// +---------------+
-/// ~first_router_sn~ if D==1
-/// +---------------+
-/// ~   timestamp   ~ if E==1
-/// +---------------+
-/// ~      kind     ~ if F==1
-/// +---------------+
-/// ~   encoding    ~ if G==1
-/// +---------------+
-///
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct DataInfo {
-    pub source_id: Option<PeerId>,
-    pub source_sn: Option<ZInt>,
-    pub first_router_id: Option<PeerId>,
-    pub first_router_sn: Option<ZInt>,
-    pub timestamp: Option<Timestamp>,
-    pub kind: Option<ZInt>,
-    pub encoding: Option<ZInt>,
-}
-
 // Inner Message IDs
 mod imsg {
     pub(super) mod id {
@@ -157,7 +115,6 @@ mod imsg {
         pub(crate) const UNIT: u8 = 0x0f;
 
         // Message decorators
-        pub(crate) const DATA_INFO: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
     }
@@ -168,7 +125,7 @@ mod imsg {
 /*************************************/
 pub mod zmsg {
     use super::imsg;
-    use crate::core::Reliability;
+    use crate::core::{CongestionControl, Reliability, ZInt};
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -182,9 +139,35 @@ pub mod zmsg {
         pub const UNIT: u8 = imsg::id::UNIT;
 
         // Message decorators
-        pub const DATA_INFO: u8 = imsg::id::DATA_INFO;
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
+    }
+
+    // Zenoh message flags
+    pub mod flag {
+        pub const D: u8 = 1 << 5; // 0x20 Dropping     if D==1 then the message can be dropped
+        pub const F: u8 = 1 << 5; // 0x20 Final        if F==1 then this is the final message (e.g., ReplyContext, Pull)
+        pub const I: u8 = 1 << 6; // 0x40 Info         if I==1 then DataInfo is present
+        pub const K: u8 = 1 << 7; // 0x80 ResourceKey  if K==1 then only numerical ID
+        pub const N: u8 = 1 << 6; // 0x40 MaxSamples   if N==1 then the MaxSamples is indicated
+        pub const R: u8 = 1 << 5; // 0x20 Reliable     if R==1 then it concerns the reliable channel, best-effort otherwise
+        pub const S: u8 = 1 << 6; // 0x40 SubMode      if S==1 then the declaration SubMode is indicated
+        pub const T: u8 = 1 << 5; // 0x20 QueryTarget  if T==1 then the query target is present
+
+        pub const X: u8 = 0; // Unused flags are set to zero
+    }
+
+    // Options used for DataInfo
+    pub mod info_opt {
+        use super::ZInt;
+
+        pub const SRCID: ZInt = 1; // 0x01
+        pub const SRCSN: ZInt = 1 << 1; // 0x02
+        pub const RTRID: ZInt = 1 << 2; // 0x04
+        pub const RTRSN: ZInt = 1 << 3; // 0x08
+        pub const TS: ZInt = 1 << 4; // 0x10
+        pub const KIND: ZInt = 1 << 5; // 0x20
+        pub const ENC: ZInt = 1 << 6; // 0x40
     }
 
     // Default reliability for each Zenoh Message
@@ -195,32 +178,20 @@ pub mod zmsg {
         pub const DATA: Reliability = Reliability::BestEffort;
         pub const QUERY: Reliability = Reliability::Reliable;
         pub const PULL: Reliability = Reliability::Reliable;
+        pub const REPLY: Reliability = Reliability::Reliable;
         pub const UNIT: Reliability = Reliability::BestEffort;
     }
 
-    // Zenoh message flags
-    pub mod flag {
-        pub const D: u8 = 1 << 6; // 0x40 Dropping     if D==1 then the message can be dropped
-        pub const F: u8 = 1 << 5; // 0x20 Final        if F==1 then this is the final message (e.g., ReplyContext, Pull)
-        pub const I: u8 = 1 << 6; // 0x40 Info         if I==1 then Info is present
-        pub const K: u8 = 1 << 7; // 0x80 ResourceKey  if K==1 then only numerical ID
-        pub const N: u8 = 1 << 6; // 0x40 MaxSamples   if N==1 then the MaxSamples is indicated
-        pub const R: u8 = 1 << 5; // 0x20 Reliable     if R==1 then it concerns the reliable channel, best-effort otherwise
-        pub const S: u8 = 1 << 6; // 0x40 SubMode      if S==1 then the declaration SubMode is indicated
-        pub const T: u8 = 1 << 5; // 0x20 QueryTarget  if T==1 then the query target is present
+    // Default congestion control for each Zenoh Message
+    pub mod default_congestion_control {
+        use super::CongestionControl;
 
-        pub const X: u8 = 0; // Unused flags are set to zero
-    }
-
-    // Flags used for DataInfo
-    pub mod info_flag {
-        pub const SRCID: u8 = 1; // 0x01
-        pub const SRCSN: u8 = 1 << 1; // 0x02
-        pub const RTRID: u8 = 1 << 2; // 0x04
-        pub const RTRSN: u8 = 1 << 3; // 0x08
-        pub const TS: u8 = 1 << 4; // 0x10
-        pub const KIND: u8 = 1 << 5; // 0x20
-        pub const ENC: u8 = 1 << 6; // 0x40
+        pub const DECLARE: CongestionControl = CongestionControl::Block;
+        pub const DATA: CongestionControl = CongestionControl::Drop;
+        pub const QUERY: CongestionControl = CongestionControl::Block;
+        pub const PULL: CongestionControl = CongestionControl::Block;
+        pub const REPLY: CongestionControl = CongestionControl::Block;
+        pub const UNIT: CongestionControl = CongestionControl::Block;
     }
 
     // Header mask
@@ -229,62 +200,107 @@ pub mod zmsg {
     pub fn mid(header: u8) -> u8 {
         header & HEADER_MASK
     }
+
     pub fn flags(header: u8) -> u8 {
         header & !HEADER_MASK
     }
+
     pub fn has_flag(byte: u8, flag: u8) -> bool {
         byte & flag != 0
     }
+
+    pub fn has_option(options: ZInt, flag: ZInt) -> bool {
+        options & flag != 0
+    }
 }
 
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|X|X| DECLARE |
-// +-+-+-+---------+
-// ~ [Declaration] ~
-// +---------------+
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|X| DECLARE |
+/// +-+-+-+---------+
+/// ~ [Declaration] ~
+/// +---------------+
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Declare {
     pub declarations: Vec<Declaration>,
 }
 
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |K|D|R|  DATA   |
-// +-+-+-+---------+
-// ~    ResKey     ~ if K==1 -- Only numerical id
-// +---------------+
-// ~    Payload    ~
-// +---------------+
-//
-// - if R==1 then the message is sent on the reliable channel, best-effort otherwise.
-//
+/// -- DataInfo
+///
+/// DataInfo data structure is optionally included in Data messages
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+---------+
+/// ~X|G|F|E|D|C|B|A~ -- encoded as ZInt
+/// +---------------+
+/// ~   source_id   ~ if A==1
+/// +---------------+
+/// ~   source_sn   ~ if B==1
+/// +---------------+
+/// ~first_router_id~ if C==1
+/// +---------------+
+/// ~first_router_sn~ if D==1
+/// +---------------+
+/// ~   timestamp   ~ if E==1
+/// +---------------+
+/// ~      kind     ~ if F==1
+/// +---------------+
+/// ~   encoding    ~ if G==1
+/// +---------------+
+///
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataInfo {
+    pub source_id: Option<PeerId>,
+    pub source_sn: Option<ZInt>,
+    pub first_router_id: Option<PeerId>,
+    pub first_router_sn: Option<ZInt>,
+    pub timestamp: Option<Timestamp>,
+    pub kind: Option<ZInt>,
+    pub encoding: Option<ZInt>,
+}
+
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |K|I|D|  DATA   |
+/// +-+-+-+---------+
+/// ~    ResKey     ~ if K==1 -- Only numerical id
+/// +---------------+
+/// ~    DataInfo   ~ if I==1
+/// +---------------+
+/// ~    Payload    ~
+/// +---------------+
+///
+/// - if D==1 then the message can be dropped for congestion control reasons.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
     pub key: ResKey,
+    pub data_info: Option<DataInfo>,
     pub payload: RBuf,
 }
 
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|X|R|  UNIT   |
-// +-+-+-+---------+
-//
-// - if R==1 then the message is sent on the reliable channel, best-effort otherwise.
-//
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|D|  UNIT   |
+/// +-+-+-+---------+
+///
+/// - if D==1 then the message can be dropped for congestion control reasons.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {}
 
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |K|N|F|  PULL   |
-// +-+-+-+---------+
-// ~    ResKey     ~ if K==1 then only numerical id
-// +---------------+
-// ~    pullid     ~
-// +---------------+
-// ~  max_samples  ~ if N==1
-// +---------------+
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |K|N|F|  PULL   |
+/// +-+-+-+---------+
+/// ~    ResKey     ~ if K==1 then only numerical id
+/// +---------------+
+/// ~    pullid     ~
+/// +---------------+
+/// ~  max_samples  ~ if N==1
+/// +---------------+
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pull {
     pub key: ResKey,
@@ -293,20 +309,21 @@ pub struct Pull {
     pub is_final: bool,
 }
 
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |K|X|T|  QUERY  |
-// +-+-+-+---------+
-// ~    ResKey     ~ if K==1 then only numerical id
-// +---------------+
-// ~   predicate   ~
-// +---------------+
-// ~      qid      ~
-// +---------------+
-// ~     target    ~ if T==1
-// +---------------+
-// ~ consolidation ~
-// +---------------+
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |K|X|T|  QUERY  |
+/// +-+-+-+---------+
+/// ~    ResKey     ~ if K==1 then only numerical id
+/// +---------------+
+/// ~   predicate   ~
+/// +---------------+
+/// ~      qid      ~
+/// +---------------+
+/// ~     target    ~ if T==1
+/// +---------------+
+/// ~ consolidation ~
+/// +---------------+
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Query {
     pub key: ResKey,
@@ -332,7 +349,7 @@ pub struct ZenohMessage {
     pub header: u8,
     pub body: ZenohBody,
     pub reliability: Reliability,
-    pub data_info: Option<DataInfo>,
+    pub congestion_control: CongestionControl,
     pub reply_context: Option<ReplyContext>,
     pub attachment: Option<Attachment>,
 }
@@ -341,8 +358,12 @@ impl std::fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?} {:?}",
-            self.body, self.data_info, self.reply_context, self.attachment
+            "{:?} {:?} {:?} {:?} {:?}",
+            self.body,
+            self.reliability,
+            self.congestion_control,
+            self.reply_context,
+            self.attachment
         )
     }
 }
@@ -364,7 +385,7 @@ impl ZenohMessage {
             header,
             body: ZenohBody::Declare(Declare { declarations }),
             reliability: zmsg::default_reliability::DECLARE,
-            data_info: None,
+            congestion_control: zmsg::default_congestion_control::DECLARE,
             reply_context: None,
             attachment,
         }
@@ -375,23 +396,32 @@ impl ZenohMessage {
         key: ResKey,
         payload: RBuf,
         reliability: Reliability,
+        congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         let kflag = if key.is_numerical() { zmsg::flag::K } else { 0 };
-        let (dflag, rflag) = match reliability {
-            Reliability::Reliable => (0, zmsg::flag::R),
-            Reliability::ReliableDroppable => (zmsg::flag::D, zmsg::flag::R),
-            Reliability::BestEffort => (0, 0),
-        }; // TODO: Handle Drop flag zmsgs::flag::D
-        let header = zmsg::id::DATA | rflag | dflag | kflag;
+        let iflag = if data_info.is_some() {
+            zmsg::flag::I
+        } else {
+            0
+        };
+        let dflag = match congestion_control {
+            CongestionControl::Block => 0,
+            CongestionControl::Drop => zmsg::flag::D,
+        };
+        let header = zmsg::id::DATA | dflag | iflag | kflag;
 
         ZenohMessage {
             header,
-            body: ZenohBody::Data(Data { key, payload }),
+            body: ZenohBody::Data(Data {
+                key,
+                data_info,
+                payload,
+            }),
             reliability,
-            data_info,
+            congestion_control,
             reply_context,
             attachment,
         }
@@ -399,20 +429,21 @@ impl ZenohMessage {
 
     pub fn make_unit(
         reliability: Reliability,
+        congestion_control: CongestionControl,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
-        let rflag = match reliability {
-            Reliability::Reliable | Reliability::ReliableDroppable => zmsg::flag::R,
-            Reliability::BestEffort => 0,
+        let dflag = match congestion_control {
+            CongestionControl::Block => 0,
+            CongestionControl::Drop => zmsg::flag::D,
         };
-        let header = zmsg::id::UNIT | rflag;
+        let header = zmsg::id::UNIT | dflag;
 
         ZenohMessage {
             header,
             body: ZenohBody::Unit(Unit {}),
             reliability,
-            data_info: None,
+            congestion_control,
             reply_context,
             attachment,
         }
@@ -443,7 +474,7 @@ impl ZenohMessage {
                 is_final,
             }),
             reliability: zmsg::default_reliability::PULL,
-            data_info: None,
+            congestion_control: zmsg::default_congestion_control::PULL,
             reply_context: None,
             attachment,
         }
@@ -471,7 +502,7 @@ impl ZenohMessage {
                 consolidation,
             }),
             reliability: zmsg::default_reliability::QUERY,
-            data_info: None,
+            congestion_control: zmsg::default_congestion_control::QUERY,
             reply_context: None,
             attachment,
         }
@@ -481,16 +512,16 @@ impl ZenohMessage {
     #[inline]
     pub fn is_reliable(&self) -> bool {
         match self.reliability {
-            Reliability::Reliable | Reliability::ReliableDroppable => true,
+            Reliability::Reliable => true,
             Reliability::BestEffort => false,
         }
     }
 
     #[inline]
     pub fn is_droppable(&self) -> bool {
-        match self.reliability {
-            Reliability::ReliableDroppable | Reliability::BestEffort => true,
-            Reliability::Reliable => false,
+        match self.congestion_control {
+            CongestionControl::Block => false,
+            CongestionControl::Drop => true,
         }
     }
 
@@ -586,25 +617,24 @@ pub enum FramePayload {
     Messages { messages: Vec<ZenohMessage> },
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-// The SCOUT message can be sent at any point in time to solicit HELLO messages from matching parties.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |T|W|I|  SCOUT  |
-// +-+-+-+-+-------+
-// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Brokers
-// +---------------+
-//
-// - if I==1 then the sender is asking for hello replies that contain a peer_id.
-//
-// - if T==1 then the scouter is asking for forwarded hello messages.
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The SCOUT message can be sent at any point in time to solicit HELLO messages from matching parties.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |T|W|I|  SCOUT  |
+/// +-+-+-+-+-------+
+/// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Brokers
+/// +---------------+
+///
+/// - if I==1 then the sender is asking for hello replies that contain a peer_id.
+/// - if T==1 then the scouter is asking for forwarded hello messages.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scout {
     pub what: Option<WhatAmI>,
@@ -612,35 +642,35 @@ pub struct Scout {
     pub forwarding: bool,
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-// The HELLO message is sent in any of the following three cases:
-//     1) in response to a SCOUT message;
-//     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
-//     3) in a already established session to update the corresponding peer on the new capabilities
-//        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
-// Locators are expressed as:
-// <code>
-//  udp/192.168.0.2:1234
-//  tcp/192.168.0.2:1234
-//  udp/239.255.255.123:5555
-// <code>
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |L|W|I|  HELLO  |
-// +-+-+-+-+-------+
-// ~    peer-id    ~ if I==1
-// +---------------+
-// ~    whatmai    ~ if W==1 -- Otherwise it is from a Broker
-// +---------------+
-// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
-// +---------------+
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The HELLO message is sent in any of the following three cases:
+///     1) in response to a SCOUT message;
+///     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
+///     3) in a already established session to update the corresponding peer on the new capabilities
+///        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
+/// Locators are expressed as:
+/// <code>
+///  udp/192.168.0.2:1234
+///  tcp/192.168.0.2:1234
+///  udp/239.255.255.123:5555
+/// <code>
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |L|W|I|  HELLO  |
+/// +-+-+-+-+-------+
+/// ~    peer-id    ~ if I==1
+/// +---------------+
+/// ~    whatmai    ~ if W==1 -- Otherwise it is from a Broker
+/// +---------------+
+/// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
+/// +---------------+
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hello {
     pub pid: Option<PeerId>,
@@ -669,43 +699,43 @@ impl fmt::Display for Hello {
     }
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-// The OPEN message is sent on a specific Locator to initiate a session with the peer associated
-// with that Locator.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|X|O|   OPEN  |
-// +-+-+-+-+-------+
-// | v_maj | v_min | -- Protocol Version VMaj.VMin
-// +-------+-------+
-// ~    whatami    ~ -- E.g., client, router, peer or a combination of them
-// +---------------+
-// ~   o_peer_id   ~ -- PID of the sender of the OPEN
-// +---------------+
-// ~ lease_period  ~ -- Lease period of the session
-// +---------------+
-// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(*)
-// +-+-+-+-+-+-+-+-+
-// |L|S|X|X|X|X|X|X| if O==1
-// +-+-+-+-+-+-+-+-+
-// ~ sn_resolution ~ if S==1 -- Otherwise 2^28 is assumed(**)
-// +---------------+
-// ~    Locators   ~ if L==1 -- List of locators the sender of the OPEN is reachable at
-// +---------------+
-//
-// (*)  The Initial SN must be bound to the proposed SN Resolution. Otherwise the OPEN message is consmsg::idered
-//      invalid and it should be discarded by the recipient of the OPEN message.
-// (**) In case of the Accepter Peer negotiates a smaller SN Resolution (see ACCEPT message) and the proposed
-//      Initial SN results to be out-of-bound, the new Agreed Initial SN is calculated according to the
-//      following modulo operation:
-//         Agreed Initial SN := (Initial SN_Open) mod (SN Resolution_Accept)
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The OPEN message is sent on a specific Locator to initiate a session with the peer associated
+/// with that Locator.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|O|   OPEN  |
+/// +-+-+-+-+-------+
+/// | v_maj | v_min | -- Protocol Version VMaj.VMin
+/// +-------+-------+
+/// ~    whatami    ~ -- E.g., client, router, peer or a combination of them
+/// +---------------+
+/// ~   o_peer_id   ~ -- PID of the sender of the OPEN
+/// +---------------+
+/// ~ lease_period  ~ -- Lease period of the session
+/// +---------------+
+/// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(*)
+/// +-+-+-+-+-+-+-+-+
+/// |L|S|X|X|X|X|X|X| if O==1
+/// +-+-+-+-+-+-+-+-+
+/// ~ sn_resolution ~ if S==1 -- Otherwise 2^28 is assumed(**)
+/// +---------------+
+/// ~    Locators   ~ if L==1 -- List of locators the sender of the OPEN is reachable at
+/// +---------------+
+///
+/// (*)  The Initial SN must be bound to the proposed SN Resolution. Otherwise the OPEN message is consmsg::idered
+///      invalid and it should be discarded by the recipient of the OPEN message.
+/// (**) In case of the Accepter Peer negotiates a smaller SN Resolution (see ACCEPT message) and the proposed
+///      Initial SN results to be out-of-bound, the new Agreed Initial SN is calculated according to the
+///      following modulo operation:
+///         Agreed Initial SN := (Initial SN_Open) mod (SN Resolution_Accept)
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Open {
     pub version: u8,
@@ -717,54 +747,54 @@ pub struct Open {
     pub locators: Option<Vec<Locator>>,
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-// The ACCEPT message is sent in response of an OPEN message in case of accepting the new incoming session.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|X|O| ACCEPT  |
-// +-+-+-+-+-------+
-// ~    whatami    ~ -- Client, Broker, Router, Peer or a combination of them
-// +---------------+
-// ~   o_peer_id   ~ -- PID of the sender of the OPEN this ACCEPT is for
-// +---------------+
-// ~   a_peer_id   ~ -- PID of the sender of the ACCEPT
-// +---------------+
-// ~  initial_sn   ~ -- Initial SN proposed by the sender of the ACCEPT(*)
-// +-+-+-+-+-+-+-+-+
-// |L|S|D|X|X|X|X|X| if O==1
-// +-+-+-+-+-+-+---+
-// ~ sn_resolution + if S==1 -- Agreed SN Resolution(**)
-// +---------------+
-// ~ lease_period  ~ if D==1
-// +---------------+
-// ~    Locators   ~ if L==1
-// +---------------+
-//
-// - if S==0 then the agreed sequence number resolution is the one indicated in the OPEN message.
-// - if S==1 then the agreed sequence number resolution is the one indicated in this ACCEPT message.
-//           The resolution in the ACCEPT must be less or equal than the resolution in the OPEN,
-//           otherwise the ACCEPT message is consmsg::idered invalid and it should be treated as a
-//           CLOSE message with L==0 by the Opener Peer -- the recipient of the ACCEPT message.
-//
-// - if D==0 then the agreed lease period is the one indicated in the OPEN message.
-// - if D==1 then the agreed lease period is the one indicated in this ACCEPT message.
-//           The lease period in the ACCEPT must be less or equal than the lease period in the OPEN,
-//           otherwise the ACCEPT message is consmsg::idered invalid and it should be treated as a
-//           CLOSE message with L==0 by the Opener Peer -- the recipient of the ACCEPT message.
-//
-// (*)  The Initial SN is bound to the proposed SN Resolution.
-// (**) In case of the SN Resolution proposed in this ACCEPT message is smaller than the SN Resolution
-//      proposed in the OPEN message AND the Initial SN contained in the OPEN messages results to be
-//      out-of-bound, the new Agreed Initial SN for the Opener Peer is calculated according to the
-//      following modulo operation:
-//         Agreed Initial SN := (Initial SN_Open) mod (SN Resolution_Accept)
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The ACCEPT message is sent in response of an OPEN message in case of accepting the new incoming session.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|O| ACCEPT  |
+/// +-+-+-+-+-------+
+/// ~    whatami    ~ -- Client, Broker, Router, Peer or a combination of them
+/// +---------------+
+/// ~   o_peer_id   ~ -- PID of the sender of the OPEN this ACCEPT is for
+/// +---------------+
+/// ~   a_peer_id   ~ -- PID of the sender of the ACCEPT
+/// +---------------+
+/// ~  initial_sn   ~ -- Initial SN proposed by the sender of the ACCEPT(*)
+/// +-+-+-+-+-+-+-+-+
+/// |L|S|D|X|X|X|X|X| if O==1
+/// +-+-+-+-+-+-+---+
+/// ~ sn_resolution + if S==1 -- Agreed SN Resolution(**)
+/// +---------------+
+/// ~ lease_period  ~ if D==1
+/// +---------------+
+/// ~    Locators   ~ if L==1
+/// +---------------+
+///
+/// - if S==0 then the agreed sequence number resolution is the one indicated in the OPEN message.
+/// - if S==1 then the agreed sequence number resolution is the one indicated in this ACCEPT message.
+///           The resolution in the ACCEPT must be less or equal than the resolution in the OPEN,
+///           otherwise the ACCEPT message is consmsg::idered invalid and it should be treated as a
+///           CLOSE message with L==0 by the Opener Peer -- the recipient of the ACCEPT message.
+///
+/// - if D==0 then the agreed lease period is the one indicated in the OPEN message.
+/// - if D==1 then the agreed lease period is the one indicated in this ACCEPT message.
+///           The lease period in the ACCEPT must be less or equal than the lease period in the OPEN,
+///           otherwise the ACCEPT message is consmsg::idered invalid and it should be treated as a
+///           CLOSE message with L==0 by the Opener Peer -- the recipient of the ACCEPT message.
+///
+/// (*)  The Initial SN is bound to the proposed SN Resolution.
+/// (**) In case of the SN Resolution proposed in this ACCEPT message is smaller than the SN Resolution
+///      proposed in the OPEN message AND the Initial SN contained in the OPEN messages results to be
+///      out-of-bound, the new Agreed Initial SN for the Opener Peer is calculated according to the
+///      following modulo operation:
+///         Agreed Initial SN := (Initial SN_Open) mod (SN Resolution_Accept)
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Accept {
     pub whatami: WhatAmI,
@@ -776,30 +806,30 @@ pub struct Accept {
     pub locators: Option<Vec<Locator>>,
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-// The CLOSE message is sent in any of the following two cases:
-//     1) in response to an OPEN message which is not accepted;
-//     2) at any time to arbitrarly close the session with the corresponding peer.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|K|I|  CLOSE  |
-// +-+-+-+-+-------+
-// ~    peer_id    ~  if I==1 -- PID of the target peer.
-// +---------------+
-// |     reason    |
-// +---------------+
-//
-// - if K==0 then close the whole zenoh session.
-// - if K==1 then close the transport link the CLOSE message was sent on (e.g., TCP socket) but
-//           keep the whole session open. NOTE: the session will be automatically closed when
-//           the session's lease period expires.
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The CLOSE message is sent in any of the following two cases:
+///     1) in response to an OPEN message which is not accepted;
+///     2) at any time to arbitrarly close the session with the corresponding peer.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|K|I|  CLOSE  |
+/// +-+-+-+-+-------+
+/// ~    peer_id    ~  if I==1 -- PID of the target peer.
+/// +---------------+
+/// |     reason    |
+/// +---------------+
+///
+/// - if K==0 then close the whole zenoh session.
+/// - if K==1 then close the transport link the CLOSE message was sent on (e.g., TCP socket) but
+///           keep the whole session open. NOTE: the session will be automatically closed when
+///           the session's lease period expires.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Close {
     pub pid: Option<PeerId>,
@@ -807,28 +837,28 @@ pub struct Close {
     pub link_only: bool,
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-// The SYNC message allows to signal the corresponding peer the sequence number of the next message
-// to be transmitted on the reliable or best-effort channel. In the case of reliable channel, the
-// peer can optionally include the number of unacknowledged messages. A SYNC sent on the reliable
-// channel triggers the transmission of an ACKNACK message.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|C|R|  SYNC   |
-// +-+-+-+-+-------+
-// ~      sn       ~ -- Sequence number of the next message to be transmitted on this channel.
-// +---------------+
-// ~     count     ~ if R==1 && C==1 -- Number of unacknowledged messages.
-// +---------------+
-//
-// - if R==1 then the SYNC concerns the reliable channel, otherwise the best-effort channel.
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The SYNC message allows to signal the corresponding peer the sequence number of the next message
+/// to be transmitted on the reliable or best-effort channel. In the case of reliable channel, the
+/// peer can optionally include the number of unacknowledged messages. A SYNC sent on the reliable
+/// channel triggers the transmission of an ACKNACK message.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|C|R|  SYNC   |
+/// +-+-+-+-+-------+
+/// ~      sn       ~ -- Sequence number of the next message to be transmitted on this channel.
+/// +---------------+
+/// ~     count     ~ if R==1 && C==1 -- Number of unacknowledged messages.
+/// +---------------+
+///
+/// - if R==1 then the SYNC concerns the reliable channel, otherwise the best-effort channel.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sync {
     pub ch: Channel,
@@ -836,66 +866,66 @@ pub struct Sync {
     pub count: Option<ZInt>,
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-// The ACKNACK messages is used on the reliable channel to signal the corresponding peer the last
-// sequence number received and optionally a bitmask of the non-received messages.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|X|M| ACKNACK |
-// +-+-+-+-+-------+
-// ~      sn       ~
-// +---------------+
-// ~     mask      ~ if M==1
-// +---------------+
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The ACKNACK messages is used on the reliable channel to signal the corresponding peer the last
+/// sequence number received and optionally a bitmask of the non-received messages.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|M| ACKNACK |
+/// +-+-+-+-+-------+
+/// ~      sn       ~
+/// +---------------+
+/// ~     mask      ~ if M==1
+/// +---------------+
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct AckNack {
     pub sn: ZInt,
     pub mask: Option<ZInt>,
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-// The KEEP_ALIVE message can be sent periodically to avoid the expiration of the session lease
-// period in case there are no messages to be sent.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|X|I| K_ALIVE |
-// +-+-+-+-+-------+
-// ~    peer_id    ~ if I==1 -- Peer ID of the KEEP_ALIVE sender.
-// +---------------+
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The KEEP_ALIVE message can be sent periodically to avoid the expiration of the session lease
+/// period in case there are no messages to be sent.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|I| K_ALIVE |
+/// +-+-+-+-+-------+
+/// ~    peer_id    ~ if I==1 -- Peer ID of the KEEP_ALIVE sender.
+/// +---------------+
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeepAlive {
     pub pid: Option<PeerId>,
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |X|X|P|  P_PONG |
-// +-+-+-+-+-------+
-// ~     hash      ~
-// +---------------+
-//
-// - if P==1 then the message is Ping, otherwise is Pong.
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|P|  P_PONG |
+/// +-+-+-+-+-------+
+/// ~     hash      ~
+/// +---------------+
+///
+/// - if P==1 then the message is Ping, otherwise is Pong.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ping {
     pub hash: ZInt,
@@ -905,36 +935,36 @@ pub struct Pong {
     pub hash: ZInt,
 }
 
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-//       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the lenght of a message must not exceed 65_535 bytes.
-//
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// |E|F|R|  FRAME  |
-// +-+-+-+-+-------+
-// ~      SN       ~
-// +---------------+
-// ~  FramePayload ~ -- if F==1 then the payload is a fragment of a single Zenoh Message, a list of complete Zenoh Messages otherwise.
-// +---------------+
-//
-// - if R==1 then the FRAME is sent on the reliable channel, best-effort otherwise.
-// - if F==1 then the FRAME is a fragment.
-// - if E==1 then the FRAME is the last fragment. E==1 is valid iff F==1.
-//
-// NOTE: Only one bit would be sufficient to signal fragmentation in a IP-like fashion as follows:
-//         - if F==1 then this FRAME is a fragment and more fragment will follow;
-//         - if F==0 then the message is the last fragment if SN-1 had F==1,
-//           otherwise it's a non-fragmented message.
-//       However, this would require to always perform a two-steps de-serialization: first
-//       de-serialize the FRAME and then the Payload. This is due to the fact the F==0 is ambigous
-//       w.r.t. detecting if the FRAME is a fragment or not before SN re-ordering has occured.
-//       By using the F bit to only signal whether the FRAME is fragmented or not, it allows to
-//       de-serialize the payload in one single pass when F==0 since no re-ordering needs to take
-//       place at this stage. Then, the F bit is used to detect the last fragment during re-ordering.
-//
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |E|F|R|  FRAME  |
+/// +-+-+-+-+-------+
+/// ~      SN       ~
+/// +---------------+
+/// ~  FramePayload ~ -- if F==1 then the payload is a fragment of a single Zenoh Message, a list of complete Zenoh Messages otherwise.
+/// +---------------+
+///
+/// - if R==1 then the FRAME is sent on the reliable channel, best-effort otherwise.
+/// - if F==1 then the FRAME is a fragment.
+/// - if E==1 then the FRAME is the last fragment. E==1 is valid iff F==1.
+///
+/// NOTE: Only one bit would be sufficient to signal fragmentation in a IP-like fashion as follows:
+///         - if F==1 then this FRAME is a fragment and more fragment will follow;
+///         - if F==0 then the message is the last fragment if SN-1 had F==1,
+///           otherwise it's a non-fragmented message.
+///       However, this would require to always perform a two-steps de-serialization: first
+///       de-serialize the FRAME and then the Payload. This is due to the fact the F==0 is ambigous
+///       w.r.t. detecting if the FRAME is a fragment or not before SN re-ordering has occured.
+///       By using the F bit to only signal whether the FRAME is fragmented or not, it allows to
+///       de-serialize the payload in one single pass when F==0 since no re-ordering needs to take
+///       place at this stage. Then, the F bit is used to detect the last fragment during re-ordering.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
     pub ch: Channel,

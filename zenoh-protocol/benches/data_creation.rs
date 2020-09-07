@@ -17,7 +17,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh_protocol::core::{PeerId, Reliability, ResKey};
+use zenoh_protocol::core::{CongestionControl, PeerId, Reliability, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, ZenohMessage};
 
@@ -34,6 +34,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 1, 8, 64, 128, 1024,
     ];
     let reliability = Reliability::Reliable;
+    let congestion_control = CongestionControl::Block;
 
     for n in &iters {
         let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
@@ -58,6 +59,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         res_key.clone(),
                         payload.clone(),
                         reliability,
+                        congestion_control,
                         info.clone(),
                         None,
                         None,
@@ -86,6 +88,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         res_key.clone(),
         payload.clone(),
         reliability,
+        congestion_control,
         info.clone(),
         None,
         None,

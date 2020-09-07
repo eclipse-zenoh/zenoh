@@ -36,9 +36,9 @@ impl RBuf {
             match smsg::mid(header) {
                 // Frame as first for optimization reasons
                 FRAME => {
-                    let ch = match smsg::has_flag(header, smsg::flag::R) {
-                        true => Channel::Reliable,
-                        false => Channel::BestEffort,
+                    let (ch, reliability) = match smsg::has_flag(header, smsg::flag::R) {
+                        true => (Channel::Reliable, Reliability::Reliable),
+                        false => (Channel::BestEffort, Reliability::BestEffort),
                     };
                     let sn = self.read_zint()?;
 
@@ -55,7 +55,7 @@ impl RBuf {
                         let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
                         loop {
                             let pos = self.get_pos();
-                            if let Ok(msg) = self.read_zenoh_message() {
+                            if let Ok(msg) = self.read_zenoh_message(reliability) {
                                 messages.push(msg);
                             } else {
                                 self.set_pos(pos)?;
@@ -70,11 +70,13 @@ impl RBuf {
                     break (header, body);
                 }
 
+                // Decorator
                 ATTACHMENT => {
                     attachment = Some(self.read_deco_attachment(header)?);
                     continue;
                 }
 
+                // Messages
                 SCOUT => {
                     let pid_replies = smsg::has_flag(header, smsg::flag::I);
                     let what = if smsg::has_flag(header, smsg::flag::W) {
@@ -275,16 +277,15 @@ impl RBuf {
         })
     }
 
-    pub fn read_zenoh_message(&mut self) -> ZResult<ZenohMessage> {
+    pub fn read_zenoh_message(&mut self, reliability: Reliability) -> ZResult<ZenohMessage> {
         use super::zmsg::id::*;
 
         // Message decorators
-        let mut data_info = None;
         let mut reply_context = None;
         let mut attachment = None;
 
         // Read the message
-        let (header, body, reliability) = loop {
+        let (header, body, congestion_control) = loop {
             // Read the header
             let header = self.read()?;
 
@@ -292,26 +293,28 @@ impl RBuf {
             match zmsg::mid(header) {
                 // Message data as first for optimization reasons
                 DATA => {
-                    let reliable = zmsg::has_flag(header, zmsg::flag::R);
-                    let _dropping = zmsg::has_flag(header, zmsg::flag::D);
-                    let reliability = if reliable {
-                        Reliability::Reliable
+                    let congestion_control = if zmsg::has_flag(header, zmsg::flag::D) {
+                        CongestionControl::Drop
                     } else {
-                        Reliability::BestEffort
+                        CongestionControl::Block
                     };
                     let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
+                    let data_info = if zmsg::has_flag(header, zmsg::flag::I) {
+                        Some(self.read_data_info()?)
+                    } else {
+                        None
+                    };
                     let payload = self.read_rbuf()?;
 
-                    let body = ZenohBody::Data(Data { key, payload });
-                    break (header, body, reliability);
+                    let body = ZenohBody::Data(Data {
+                        key,
+                        data_info,
+                        payload,
+                    });
+                    break (header, body, congestion_control);
                 }
 
                 // Decorators
-                DATA_INFO => {
-                    data_info = Some(self.read_deco_data_info(header)?);
-                    continue;
-                }
-
                 REPLY_CONTEXT => {
                     reply_context = Some(self.read_deco_reply_context(header)?);
                     continue;
@@ -327,19 +330,18 @@ impl RBuf {
                     let declarations = self.read_declarations()?;
 
                     let body = ZenohBody::Declare(Declare { declarations });
-                    let reliability = zmsg::default_reliability::DECLARE;
-                    break (header, body, reliability);
+                    let congestion_control = zmsg::default_congestion_control::DECLARE;
+                    break (header, body, congestion_control);
                 }
 
                 UNIT => {
-                    let reliable = zmsg::has_flag(header, zmsg::flag::R);
-                    let reliability = if reliable {
-                        Reliability::Reliable
+                    let congestion_control = if zmsg::has_flag(header, zmsg::flag::D) {
+                        CongestionControl::Drop
                     } else {
-                        Reliability::BestEffort
+                        CongestionControl::Block
                     };
                     let body = ZenohBody::Unit(Unit {});
-                    break (header, body, reliability);
+                    break (header, body, congestion_control);
                 }
 
                 PULL => {
@@ -358,8 +360,8 @@ impl RBuf {
                         max_samples,
                         is_final,
                     });
-                    let reliability = zmsg::default_reliability::PULL;
-                    break (header, body, reliability);
+                    let congestion_control = zmsg::default_congestion_control::PULL;
+                    break (header, body, congestion_control);
                 }
 
                 QUERY => {
@@ -380,8 +382,8 @@ impl RBuf {
                         target,
                         consolidation,
                     });
-                    let reliability = zmsg::default_reliability::QUERY;
-                    break (header, body, reliability);
+                    let congestion_control = zmsg::default_congestion_control::QUERY;
+                    break (header, body, congestion_control);
                 }
 
                 unknown => {
@@ -396,7 +398,7 @@ impl RBuf {
             header,
             body,
             reliability,
-            data_info,
+            congestion_control,
             reply_context,
             attachment,
         })
@@ -426,39 +428,39 @@ impl RBuf {
         })
     }
 
-    pub fn read_deco_data_info(&mut self, _header: u8) -> ZResult<DataInfo> {
-        let options = self.read()?;
-        let source_id = if zmsg::has_flag(options, zmsg::info_flag::SRCID) {
+    pub fn read_data_info(&mut self) -> ZResult<DataInfo> {
+        let options = self.read_zint()?;
+        let source_id = if zmsg::has_option(options, zmsg::info_opt::SRCID) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let source_sn = if zmsg::has_flag(options, zmsg::info_flag::SRCSN) {
+        let source_sn = if zmsg::has_option(options, zmsg::info_opt::SRCSN) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let first_router_id = if zmsg::has_flag(options, zmsg::info_flag::RTRID) {
+        let first_router_id = if zmsg::has_option(options, zmsg::info_opt::RTRID) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let first_router_sn = if zmsg::has_flag(options, zmsg::info_flag::RTRSN) {
+        let first_router_sn = if zmsg::has_option(options, zmsg::info_opt::RTRSN) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let timestamp = if zmsg::has_flag(options, zmsg::info_flag::TS) {
+        let timestamp = if zmsg::has_option(options, zmsg::info_opt::TS) {
             Some(self.read_timestamp()?)
         } else {
             None
         };
-        let kind = if zmsg::has_flag(options, zmsg::info_flag::KIND) {
+        let kind = if zmsg::has_option(options, zmsg::info_opt::KIND) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let encoding = if zmsg::has_flag(options, zmsg::info_flag::ENC) {
+        let encoding = if zmsg::has_option(options, zmsg::info_opt::ENC) {
             Some(self.read_zint()?)
         } else {
             None

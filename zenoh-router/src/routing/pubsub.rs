@@ -15,7 +15,9 @@ use async_std::sync::Arc;
 use std::collections::HashMap;
 use uhlc::HLC;
 
-use zenoh_protocol::core::{whatami, Reliability, ResKey, SubInfo, SubMode, ZInt};
+use zenoh_protocol::core::{
+    whatami, CongestionControl, Reliability, ResKey, SubInfo, SubMode, ZInt,
+};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
 
@@ -184,7 +186,6 @@ pub async fn route_data_to_map(
     face: &Arc<FaceState>,
     rid: ZInt,
     suffix: &str,
-    _reliability: Reliability,
     info: &Option<DataInfo>,
     payload: &RBuf,
 ) -> Option<DataRoute> {
@@ -254,13 +255,11 @@ pub async fn route_data(
     face: &Arc<FaceState>,
     rid: u64,
     suffix: &str,
-    reliability: Reliability,
+    congestion_control: CongestionControl,
     info: Option<DataInfo>,
     payload: RBuf,
 ) {
-    if let Some(outfaces) =
-        route_data_to_map(tables, face, rid, suffix, reliability, &info, &payload).await
-    {
+    if let Some(outfaces) = route_data_to_map(tables, face, rid, suffix, &info, &payload).await {
         // if an HLC was configured (via Config.add_timestamp),
         // check DataInfo and add a timestamp if there isn't
         let data_info = match &tables.hlc {
@@ -292,9 +291,10 @@ pub async fn route_data(
                     primitives
                         .data(
                             &(rid, suffix).into(),
-                            reliability,
-                            data_info.clone(),
                             payload.clone(),
+                            Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                            congestion_control,
+                            data_info.clone(),
                         )
                         .await
                 }
@@ -353,7 +353,13 @@ pub async fn pull_data(
                                 let reskey: ResKey =
                                     Resource::get_best_key(&tables.root_res, name, face.id).into();
                                 face.primitives
-                                    .data(&reskey, subinfo.reliability, info.clone(), data.clone())
+                                    .data(
+                                        &reskey,
+                                        data.clone(),
+                                        subinfo.reliability,
+                                        CongestionControl::Drop, // TODO: Default value for the time being
+                                        info.clone(),
+                                    )
                                     .await;
                             }
                             Arc::get_mut_unchecked(&mut ctx).last_values.clear();

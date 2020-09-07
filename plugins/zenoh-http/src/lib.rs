@@ -265,7 +265,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                             bytes.into(),
                             enc_from_mime(req.content_type()),
                             data_kind::PUT,
-                            Reliability::Reliable,
+                            CongestionControl::Drop, // TODO: Define the right congestion control value for the put
                         )
                         .await
                     {
@@ -299,7 +299,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                             bytes.into(),
                             enc_from_mime(req.content_type()),
                             data_kind::PATCH,
-                            Reliability::Reliable,
+                            CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
                         )
                         .await
                     {
@@ -331,7 +331,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     RBuf::new(),
                     enc_from_mime(req.content_type()),
                     data_kind::DELETE,
-                    Reliability::Reliable,
+                    CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
                 )
                 .await
             {

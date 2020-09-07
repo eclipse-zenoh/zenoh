@@ -538,7 +538,7 @@ mod tests {
     use std::convert::TryFrom;
     use std::time::Duration;
 
-    use crate::core::{Reliability, ResKey, ZInt};
+    use crate::core::{CongestionControl, Reliability, ResKey, ZInt};
     use crate::io::RBuf;
     use crate::proto::{Frame, FramePayload, SeqNumGenerator, SessionBody, ZenohMessage};
     use crate::session::defaults::{
@@ -556,6 +556,7 @@ mod tests {
             let key = ResKey::RName("test".to_string());
             let payload = RBuf::from(vec![0u8; payload_size]);
             let reliability = Reliability::Reliable;
+            let congestion_control = CongestionControl::Block;
             let data_info = None;
             let reply_context = None;
             let attachment = None;
@@ -564,6 +565,7 @@ mod tests {
                 key,
                 payload,
                 reliability,
+                congestion_control,
                 data_info,
                 reply_context,
                 attachment,

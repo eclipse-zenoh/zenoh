@@ -22,7 +22,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use zenoh_protocol::{
-    core::{queryable, rname, AtomicZInt, QueryConsolidation, QueryTarget, ResKey, ResourceId},
+    core::{
+        queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget, ResKey,
+        ResourceId,
+    },
     io::RBuf,
     proto::Primitives,
 };
@@ -618,10 +621,15 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives
-            .data(resource, Reliability::Reliable, None, payload.clone())
+            .data(
+                resource,
+                payload.clone(),
+                Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+                CongestionControl::Drop, // Default congestion control when writing data
+                None,
+            )
             .await;
-        self.handle_data(true, resource, Reliability::Reliable, None, payload)
-            .await;
+        self.handle_data(true, resource, None, payload).await;
         Ok(())
     }
 
@@ -633,6 +641,7 @@ impl Session {
     /// * `payload` - The value to write
     /// * `encoding` - The encoding of the value
     /// * `kind` - The kind of value
+    /// * `congestion_control` - The value for the congestion control
     ///
     /// # Examples
     /// ```
@@ -640,7 +649,7 @@ impl Session {
     /// use zenoh::net::*;
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT, Reliability::Reliable).await.unwrap();
+    /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT, CongestionControl::Drop).await.unwrap();
     /// # })
     /// ```
     pub async fn write_ext(
@@ -649,7 +658,7 @@ impl Session {
         payload: RBuf,
         encoding: ZInt,
         kind: ZInt,
-        reliability: Reliability,
+        congestion_control: CongestionControl,
     ) -> ZResult<()> {
         trace!("write_ext({:?}, [...])", resource);
         let state = self.state.read().await;
@@ -666,9 +675,22 @@ impl Session {
         };
         let data_info = Some(info);
         primitives
-            .data(resource, reliability, data_info.clone(), payload.clone())
+            .data(
+                resource,
+                payload.clone(),
+                Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+                congestion_control,
+                data_info.clone(),
+            )
             .await;
-        self.data(resource, reliability, data_info, payload).await;
+        self.data(
+            resource,
+            payload,
+            Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+            congestion_control,
+            data_info.clone(),
+        )
+        .await;
         Ok(())
     }
 
@@ -676,7 +698,6 @@ impl Session {
         &self,
         local: bool,
         reskey: &ResKey,
-        _reliability: Reliability,
         info: Option<DataInfo>,
         payload: RBuf,
     ) {
@@ -927,19 +948,20 @@ impl Primitives for Session {
     async fn data(
         &self,
         reskey: &ResKey,
-        reliability: Reliability,
-        info: Option<DataInfo>,
         payload: RBuf,
+        reliability: Reliability,
+        congestion_control: CongestionControl,
+        info: Option<DataInfo>,
     ) {
         trace!(
-            "recv Data {:?} {:?} {:?} {:?}",
+            "recv Data {:?} {:?} {:?} {:?} {:?}",
             reskey,
+            payload,
             reliability,
+            congestion_control,
             info,
-            payload
         );
-        self.handle_data(false, reskey, reliability, info, payload)
-            .await
+        self.handle_data(false, reskey, info, payload).await
     }
 
     async fn query(

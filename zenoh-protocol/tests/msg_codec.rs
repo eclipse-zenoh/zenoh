@@ -180,7 +180,6 @@ fn gen_data_info() -> DataInfo {
 }
 
 fn test_write_read_session_message(msg: SessionMessage) {
-    // let mut buf = WBuf::new(1024, true);
     let mut buf = WBuf::new(164, false);
     println!("\nWrite message: {:?}", msg);
     buf.write_session_message(&msg);
@@ -196,12 +195,13 @@ fn test_write_read_session_message(msg: SessionMessage) {
 }
 
 fn test_write_read_zenoh_message(msg: ZenohMessage) {
-    // let mut buf = WBuf::new(1024, true);
     let mut buf = WBuf::new(164, false);
-    println!("Write message: {:?}", msg);
+    println!("\nWrite message: {:?}", msg);
     buf.write_zenoh_message(&msg);
     println!("Read message from: {:?}", buf);
-    let mut result = RBuf::from(&buf).read_zenoh_message().unwrap();
+    let mut result = RBuf::from(&buf)
+        .read_zenoh_message(msg.reliability)
+        .unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = &mut result.attachment {
         let properties = attachment.buffer.read_properties();
@@ -424,8 +424,9 @@ fn frame_tests() {
     let msg_payload_count = 4;
 
     for _ in 0..NUM_ITER {
-        let reliability = [Reliability::Reliable, Reliability::BestEffort];
         let ch = [Channel::Reliable, Channel::BestEffort];
+        let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
+        let data_info = [None, Some(gen_data_info())];
         let reply_context = [
             None,
             Some(gen_reply_context(false)),
@@ -442,22 +443,44 @@ fn frame_tests() {
             buffer: RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
             is_final: true,
         });
-        for rl in reliability.iter() {
-            for rc in reply_context.iter() {
-                for a in attachment.iter() {
-                    payload.push(FramePayload::Messages {
-                        messages: vec![
-                            ZenohMessage::make_unit(*rl, rc.clone(), a.clone());
-                            msg_payload_count
-                        ],
-                    });
+        for cc in congestion_control.iter() {
+            for di in data_info.iter() {
+                for rc in reply_context.iter() {
+                    for a in attachment.iter() {
+                        payload.push(FramePayload::Messages {
+                            messages: vec![
+                                ZenohMessage::make_data(
+                                    gen_key(),
+                                    RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                    Reliability::BestEffort,
+                                    *cc,
+                                    di.clone(),
+                                    rc.clone(),
+                                    a.clone(),
+                                );
+                                msg_payload_count
+                            ],
+                        });
+                    }
                 }
             }
         }
 
         for c in ch.iter() {
-            for p in payload.iter() {
+            for mut p in payload.drain(..) {
                 for a in attachment.iter() {
+                    // Put in accordance ZenohMessage reliability and Session channel
+                    match p {
+                        FramePayload::Fragment { .. } => {}
+                        FramePayload::Messages { ref mut messages } => {
+                            for m in messages.iter_mut() {
+                                match c {
+                                    Channel::Reliable => m.reliability = Reliability::Reliable,
+                                    Channel::BestEffort => m.reliability = Reliability::BestEffort,
+                                }
+                            }
+                        }
+                    }
                     let msg = SessionMessage::make_frame(*c, gen!(ZInt), p.clone(), a.clone());
                     test_write_read_session_message(msg);
                 }
@@ -488,6 +511,7 @@ fn frame_batching_tests() {
         let key = ResKey::RName("test".to_string());
         let payload = RBuf::from(vec![0u8; 1]);
         let reliability = Reliability::Reliable;
+        let congestion_control = CongestionControl::Block;
         let data_info = None;
         let reply_context = None;
         let zattachment = None;
@@ -495,6 +519,7 @@ fn frame_batching_tests() {
             key,
             payload,
             reliability,
+            congestion_control,
             data_info,
             reply_context,
             zattachment,
@@ -572,6 +597,7 @@ fn declare_tests() {
 fn data_tests() {
     for _ in 0..NUM_ITER {
         let reliability = [Reliability::Reliable, Reliability::BestEffort];
+        let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
         let reply_context = [
             None,
@@ -581,18 +607,21 @@ fn data_tests() {
         let attachment = [None, Some(gen_attachment())];
 
         for rl in reliability.iter() {
-            for di in data_info.iter() {
-                for rc in reply_context.iter() {
-                    for a in attachment.iter() {
-                        let msg = ZenohMessage::make_data(
-                            gen_key(),
-                            RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                            *rl,
-                            di.clone(),
-                            rc.clone(),
-                            a.clone(),
-                        );
-                        test_write_read_zenoh_message(msg);
+            for cc in congestion_control.iter() {
+                for di in data_info.iter() {
+                    for rc in reply_context.iter() {
+                        for a in attachment.iter() {
+                            let msg = ZenohMessage::make_data(
+                                gen_key(),
+                                RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                *rl,
+                                *cc,
+                                di.clone(),
+                                rc.clone(),
+                                a.clone(),
+                            );
+                            test_write_read_zenoh_message(msg);
+                        }
                     }
                 }
             }
@@ -604,6 +633,7 @@ fn data_tests() {
 fn unit_tests() {
     for _ in 0..NUM_ITER {
         let reliability = [Reliability::Reliable, Reliability::BestEffort];
+        let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let reply_context = [
             None,
             Some(gen_reply_context(false)),
@@ -612,10 +642,12 @@ fn unit_tests() {
         let attachment = [None, Some(gen_attachment())];
 
         for rl in reliability.iter() {
-            for rc in reply_context.iter() {
-                for a in attachment.iter() {
-                    let msg = ZenohMessage::make_unit(*rl, rc.clone(), a.clone());
-                    test_write_read_zenoh_message(msg);
+            for cc in congestion_control.iter() {
+                for rc in reply_context.iter() {
+                    for a in attachment.iter() {
+                        let msg = ZenohMessage::make_unit(*rl, *cc, rc.clone(), a.clone());
+                        test_write_read_zenoh_message(msg);
+                    }
                 }
             }
         }

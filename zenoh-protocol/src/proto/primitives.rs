@@ -11,7 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::{PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, ZInt};
+use crate::core::{
+    CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, ZInt,
+};
 use crate::io::RBuf;
 use crate::proto::DataInfo;
 use async_trait::async_trait;
@@ -33,10 +35,12 @@ pub trait Primitives {
     async fn data(
         &self,
         reskey: &ResKey,
-        reliability: Reliability,
-        info: Option<DataInfo>,
         payload: RBuf,
+        reliability: Reliability,
+        congestion_control: CongestionControl,
+        data_info: Option<DataInfo>,
     );
+
     async fn query(
         &self,
         reskey: &ResKey,
@@ -45,6 +49,7 @@ pub trait Primitives {
         target: QueryTarget,
         consolidation: QueryConsolidation,
     );
+
     async fn reply_data(
         &self,
         qid: ZInt,
@@ -54,7 +59,9 @@ pub trait Primitives {
         info: Option<DataInfo>,
         payload: RBuf,
     );
+
     async fn reply_final(&self, qid: ZInt);
+
     async fn pull(
         &self,
         is_final: bool,

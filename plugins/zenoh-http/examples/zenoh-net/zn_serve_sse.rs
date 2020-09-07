@@ -78,7 +78,7 @@ async fn main() {
                 value.as_bytes().into(),
                 encoding::TEXT_PLAIN,
                 data_kind::PUT,
-                Reliability::Reliable,
+                CongestionControl::Block,
             )
             .await
             .unwrap();

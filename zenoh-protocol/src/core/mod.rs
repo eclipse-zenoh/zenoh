@@ -227,10 +227,15 @@ pub enum Channel {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+pub enum CongestionControl {
+    Block,
+    Drop,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Reliability {
     BestEffort,
     Reliable,
-    ReliableDroppable,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

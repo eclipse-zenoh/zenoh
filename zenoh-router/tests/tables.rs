@@ -18,7 +18,8 @@ use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh_protocol::core::rname::intersect;
 use zenoh_protocol::core::{
-    whatami, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, SubMode, ZInt,
+    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
+    SubInfo, SubMode, ZInt,
 };
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, Mux, Primitives};
@@ -464,9 +465,10 @@ impl Primitives for ClientPrimitives {
     async fn data(
         &self,
         reskey: &ResKey,
-        _reliability: Reliability,
-        _info: Option<DataInfo>,
         _payload: RBuf,
+        _reliability: Reliability,
+        _congestion_control: CongestionControl,
+        _info: Option<DataInfo>,
     ) {
         *self.data.lock().unwrap() = Some(reskey.clone());
     }
@@ -608,7 +610,7 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             0,
             "/test/client/z1_wr1",
-            Reliability::Reliable,
+            CongestionControl::Block,
             None,
             RBuf::new(),
         )
@@ -634,7 +636,7 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             11,
             "/z1_wr2",
-            Reliability::Reliable,
+            CongestionControl::Block,
             None,
             RBuf::new(),
         )
@@ -660,7 +662,7 @@ fn client_test() {
             &mut face1.upgrade().unwrap(),
             0,
             "/test/client/**",
-            Reliability::Reliable,
+            CongestionControl::Block,
             None,
             RBuf::new(),
         )
@@ -686,7 +688,7 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             12,
             "",
-            Reliability::Reliable,
+            CongestionControl::Block,
             None,
             RBuf::new(),
         )
@@ -712,7 +714,7 @@ fn client_test() {
             &mut face1.upgrade().unwrap(),
             22,
             "",
-            Reliability::Reliable,
+            CongestionControl::Block,
             None,
             RBuf::new(),
         )

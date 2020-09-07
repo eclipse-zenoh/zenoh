@@ -15,7 +15,7 @@ use async_trait::async_trait;
 
 use super::{Channel, DefragBuffer};
 
-use crate::core::{Channel as ChPr, PeerId, ZInt};
+use crate::core::{Channel as ChPr, PeerId, Reliability, ZInt};
 use crate::link::Link;
 use crate::proto::{Close, Frame, FramePayload, KeepAlive, SeqNum, SessionBody, SessionMessage};
 use crate::session::{Action, TransportTrait};
@@ -43,7 +43,7 @@ impl ChannelRxReliable {
 
         ChannelRxReliable {
             sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution),
+            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::Reliable),
         }
     }
 }
@@ -65,7 +65,7 @@ impl ChannelRxBestEffort {
 
         ChannelRxBestEffort {
             sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution),
+            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::BestEffort),
         }
     }
 }

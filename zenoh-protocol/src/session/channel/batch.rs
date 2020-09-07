@@ -314,7 +314,7 @@ mod tests {
 
     use super::*;
 
-    use crate::core::{Reliability, ResKey};
+    use crate::core::{CongestionControl, Reliability, ResKey};
     use crate::io::{RBuf, WBuf};
     use crate::proto::{
         Frame, FramePayload, SeqNumGenerator, SessionBody, SessionMessage, ZenohMessage,
@@ -350,6 +350,7 @@ mod tests {
             let mut smsgs_in: Vec<SessionMessage> = Vec::new();
             let mut zmsgs_in: Vec<ZenohMessage> = Vec::new();
             let mut reliable = true;
+            let mut dropping = true;
             loop {
                 // Insert a session message every 3 ZenohMessage
                 if zmsgs_in.len() % 3 == 0 {
@@ -369,8 +370,12 @@ mod tests {
 
                 // Create a ZenohMessage
                 if zmsgs_in.len() % 4 == 0 {
-                    // Change channel (reliable/best effort) every four messages
+                    // Change reliability every four messages
                     reliable = !reliable;
+                }
+                if zmsgs_in.len() % 3 == 0 {
+                    // Change dropping strategy every three messages
+                    dropping = !dropping;
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
                 let payload = RBuf::from(vec![0u8; payload_size]);
@@ -379,6 +384,11 @@ mod tests {
                 } else {
                     Reliability::BestEffort
                 };
+                let congestion_control = if dropping {
+                    CongestionControl::Drop
+                } else {
+                    CongestionControl::Block
+                };
                 let data_info = None;
                 let reply_context = None;
                 let attachment = None;
@@ -386,6 +396,7 @@ mod tests {
                     key,
                     payload,
                     reliability,
+                    congestion_control,
                     data_info,
                     reply_context,
                     attachment,
@@ -442,98 +453,102 @@ mod tests {
             )));
 
             for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
-                // Create the ZenohMessage
-                let key = ResKey::RName("test".to_string());
-                let payload = RBuf::from(vec![0u8; payload_size]);
-                let data_info = None;
-                let reply_context = None;
-                let attachment = None;
-                let msg_in = ZenohMessage::make_data(
-                    key,
-                    payload,
-                    *reliability,
-                    data_info,
-                    reply_context,
-                    attachment,
-                );
-
-                // Acquire the lock on the sn generators to ensure that we have
-                // sequential sequence numbers for all the fragments
-                let mut guard = if msg_in.is_reliable() {
-                    zasynclock!(sn_reliable)
-                } else {
-                    zasynclock!(sn_best_effort)
-                };
-
-                // Serialize the message
-                let mut wbuf = WBuf::new(batch_size, false);
-                wbuf.write_zenoh_message(&msg_in);
-
-                print!(
-                    "Streamed: {}\t\tBatch: {}\t\tPload: {}",
-                    is_streamed, batch_size, payload_size
-                );
-
-                // Store all the batches
-                let mut batches: Vec<SerializationBatch> = Vec::new();
-                // Fragment the message
-                let mut to_write = wbuf.len();
-                while to_write > 0 {
-                    // Create the serialization batch
-                    let mut batch = SerializationBatch::new(
-                        batch_size,
-                        *is_streamed,
-                        sn_reliable.clone(),
-                        sn_best_effort.clone(),
+                for congestion_control in [CongestionControl::Drop, CongestionControl::Block].iter()
+                {
+                    // Create the ZenohMessage
+                    let key = ResKey::RName("test".to_string());
+                    let payload = RBuf::from(vec![0u8; payload_size]);
+                    let data_info = None;
+                    let reply_context = None;
+                    let attachment = None;
+                    let msg_in = ZenohMessage::make_data(
+                        key,
+                        payload,
+                        *reliability,
+                        *congestion_control,
+                        data_info,
+                        reply_context,
+                        attachment,
                     );
-                    let ch = if msg_in.is_reliable() {
-                        Channel::Reliable
+
+                    // Acquire the lock on the sn generators to ensure that we have
+                    // sequential sequence numbers for all the fragments
+                    let mut guard = if msg_in.is_reliable() {
+                        zasynclock!(sn_reliable)
                     } else {
-                        Channel::BestEffort
+                        zasynclock!(sn_best_effort)
                     };
-                    let written = batch
-                        .serialize_zenoh_fragment(ch, guard.get(), &mut wbuf, to_write)
-                        .await;
-                    assert_ne!(written, 0);
-                    // Keep serializing
-                    to_write -= written;
-                    batches.push(batch);
-                }
 
-                assert!(!batches.is_empty());
+                    // Serialize the message
+                    let mut wbuf = WBuf::new(batch_size, false);
+                    wbuf.write_zenoh_message(&msg_in);
 
-                let mut fragments = RBuf::new();
-                for batch in batches.iter() {
-                    // Convert the buffer into an RBuf
-                    let mut rbuf: RBuf = batch.get_serialized_messages().into();
-                    // Deserialize the messages
-                    let msg = rbuf.read_session_message().unwrap();
+                    print!(
+                        "Streamed: {}\t\tBatch: {}\t\tPload: {}",
+                        is_streamed, batch_size, payload_size
+                    );
 
-                    match msg.body {
-                        SessionBody::Frame(Frame { payload, .. }) => match payload {
-                            FramePayload::Fragment { buffer, is_final } => {
-                                assert!(!buffer.is_empty());
-                                for s in buffer.drain_slices().drain(..) {
-                                    fragments.add_slice(s)
-                                }
-                                if is_final {
-                                    break;
-                                }
-                            }
-                            _ => assert!(false),
-                        },
-                        _ => assert!(false),
+                    // Store all the batches
+                    let mut batches: Vec<SerializationBatch> = Vec::new();
+                    // Fragment the message
+                    let mut to_write = wbuf.len();
+                    while to_write > 0 {
+                        // Create the serialization batch
+                        let mut batch = SerializationBatch::new(
+                            batch_size,
+                            *is_streamed,
+                            sn_reliable.clone(),
+                            sn_best_effort.clone(),
+                        );
+                        let ch = if msg_in.is_reliable() {
+                            Channel::Reliable
+                        } else {
+                            Channel::BestEffort
+                        };
+                        let written = batch
+                            .serialize_zenoh_fragment(ch, guard.get(), &mut wbuf, to_write)
+                            .await;
+                        assert_ne!(written, 0);
+                        // Keep serializing
+                        to_write -= written;
+                        batches.push(batch);
                     }
+
+                    assert!(!batches.is_empty());
+
+                    let mut fragments = RBuf::new();
+                    for batch in batches.iter() {
+                        // Convert the buffer into an RBuf
+                        let mut rbuf: RBuf = batch.get_serialized_messages().into();
+                        // Deserialize the messages
+                        let msg = rbuf.read_session_message().unwrap();
+
+                        match msg.body {
+                            SessionBody::Frame(Frame { payload, .. }) => match payload {
+                                FramePayload::Fragment { buffer, is_final } => {
+                                    assert!(!buffer.is_empty());
+                                    for s in buffer.drain_slices().drain(..) {
+                                        fragments.add_slice(s)
+                                    }
+                                    if is_final {
+                                        break;
+                                    }
+                                }
+                                _ => assert!(false),
+                            },
+                            _ => assert!(false),
+                        }
+                    }
+
+                    assert!(!fragments.is_empty());
+
+                    // Deserialize the message
+                    let msg_out = fragments.read_zenoh_message(*reliability);
+                    assert!(msg_out.is_ok());
+                    assert_eq!(msg_in, msg_out.unwrap());
+
+                    println!("\t\tFragments: {}", batches.len());
                 }
-
-                assert!(!fragments.is_empty());
-
-                // Deserialize the message
-                let msg_out = fragments.read_zenoh_message();
-                assert!(msg_out.is_ok());
-                assert_eq!(msg_in, msg_out.unwrap());
-
-                println!("\t\tFragments: {}", batches.len());
             }
         }
     }

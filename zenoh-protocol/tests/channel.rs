@@ -17,7 +17,7 @@ use async_std::task;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh_protocol::core::{whatami, PeerId, Reliability, ResKey};
+use zenoh_protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::{Link, Locator};
 use zenoh_protocol::proto::ZenohMessage;
@@ -168,6 +168,7 @@ async fn channel_reliable(locators: Vec<Locator>) {
     let key = ResKey::RName("/test".to_string());
     let payload = RBuf::from(vec![0u8; MSG_SIZE]);
     let reliability = Reliability::Reliable;
+    let congestion_control = CongestionControl::Block;
     let data_info = None;
     let reply_context = None;
     let attachment = None;
@@ -175,6 +176,7 @@ async fn channel_reliable(locators: Vec<Locator>) {
         key,
         payload,
         reliability,
+        congestion_control,
         data_info,
         reply_context,
         attachment,
@@ -248,7 +250,8 @@ async fn channel_reliable_droppable(locators: Vec<Locator>) {
     // Create the message to send
     let key = ResKey::RName("/test".to_string());
     let payload = RBuf::from(vec![0u8; MSG_SIZE]);
-    let reliability = Reliability::ReliableDroppable;
+    let reliability = Reliability::Reliable;
+    let congestion_control = CongestionControl::Drop;
     let data_info = None;
     let reply_context = None;
     let attachment = None;
@@ -256,6 +259,7 @@ async fn channel_reliable_droppable(locators: Vec<Locator>) {
         key,
         payload,
         reliability,
+        congestion_control,
         data_info,
         reply_context,
         attachment,
@@ -334,6 +338,7 @@ async fn channel_best_effort(locators: Vec<Locator>) {
     let key = ResKey::RName("/test".to_string());
     let payload = RBuf::from(vec![0u8; MSG_SIZE]);
     let reliability = Reliability::BestEffort;
+    let congestion_control = CongestionControl::Block;
     let data_info = None;
     let reply_context = None;
     let attachment = None;
@@ -341,6 +346,94 @@ async fn channel_best_effort(locators: Vec<Locator>) {
         key,
         payload,
         reliability,
+        congestion_control,
+        data_info,
+        reply_context,
+        attachment,
+    );
+
+    /* [1] */
+    // Send unreliable messages by using schedule()
+    println!("Sending {} best effort messages...", MSG_COUNT);
+    for _ in 0..MSG_COUNT {
+        session.schedule(message.clone()).await.unwrap();
+    }
+
+    // Wait to receive something
+    let count = async {
+        while router_handler.get_count() == 0 {
+            task::yield_now().await;
+        }
+    };
+    let res = count.timeout(TIMEOUT).await;
+    assert!(res.is_ok());
+
+    // Check if at least one message has arrived to the other side
+    assert_ne!(router_handler.get_count(), 0);
+
+    let res = session.close().await;
+    assert!(res.is_ok());
+
+    for l in locators.iter() {
+        let res = router_manager.del_locator(l).await;
+        assert!(res.is_ok());
+    }
+
+    task::sleep(SLEEP).await;
+}
+
+async fn channel_best_effort_droppable(locators: Vec<Locator>) {
+    // Define client and router IDs
+    let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+
+    // Create the router session manager
+    let router_handler = Arc::new(SHRouter::new());
+    let config = SessionManagerConfig {
+        version: 0,
+        whatami: whatami::ROUTER,
+        id: router_id.clone(),
+        handler: router_handler.clone(),
+    };
+    let router_manager = SessionManager::new(config, None);
+
+    // Create the client session manager
+    let config = SessionManagerConfig {
+        version: 0,
+        whatami: whatami::CLIENT,
+        id: client_id,
+        handler: Arc::new(SHClient::new()),
+    };
+    let client_manager = SessionManager::new(config, None);
+
+    // Create the listener on the router
+    for l in locators.iter() {
+        let res = router_manager.add_locator(l).await;
+        assert!(res.is_ok());
+    }
+
+    // Create an empty session with the client
+    // Open session -> This should be accepted
+    let attachment = None;
+    for l in locators.iter() {
+        let res = client_manager.open_session(l, &attachment).await;
+        assert_eq!(res.is_ok(), true);
+    }
+    let session = client_manager.get_session(&router_id).await.unwrap();
+
+    // Create the message to send
+    let key = ResKey::RName("/test".to_string());
+    let payload = RBuf::from(vec![0u8; MSG_SIZE]);
+    let reliability = Reliability::BestEffort;
+    let congestion_control = CongestionControl::Drop;
+    let data_info = None;
+    let reply_context = None;
+    let attachment = None;
+    let message = ZenohMessage::make_data(
+        key,
+        payload,
+        reliability,
+        congestion_control,
         data_info,
         reply_context,
         attachment,
@@ -383,7 +476,8 @@ fn channel_tcp() {
     task::block_on(async {
         channel_reliable(locator.clone()).await;
         channel_reliable_droppable(locator.clone()).await;
-        channel_best_effort(locator).await;
+        channel_best_effort(locator.clone()).await;
+        channel_best_effort_droppable(locator).await;
     });
 }
 
@@ -393,7 +487,8 @@ fn channel_udp() {
     let locator: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
     task::block_on(async {
         channel_reliable_droppable(locator.clone()).await;
-        channel_best_effort(locator).await;
+        channel_best_effort(locator.clone()).await;
+        channel_best_effort_droppable(locator).await;
     });
 }
 
@@ -407,6 +502,7 @@ fn channel_tcp_udp() {
     task::block_on(async {
         channel_reliable(locator.clone()).await;
         channel_reliable_droppable(locator.clone()).await;
-        channel_best_effort(locator).await
+        channel_best_effort(locator.clone()).await;
+        channel_best_effort_droppable(locator).await;
     });
 }

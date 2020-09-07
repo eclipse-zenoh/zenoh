@@ -33,7 +33,7 @@ pub use crate::routing::resource::*;
 /// ```
 ///   use async_std::sync::Arc;
 ///   use uhlc::HLC;
-///   use zenoh_protocol::core::{PeerId, Reliability, whatami::PEER};
+///   use zenoh_protocol::core::{CongestionControl, PeerId, Reliability, whatami::PEER};
 ///   use zenoh_protocol::io::RBuf;
 ///   use zenoh_protocol::session::{SessionManager, SessionManagerConfig};
 ///   use zenoh_router::routing::broker::Broker;
@@ -63,7 +63,7 @@ pub use crate::routing::resource::*;
 ///     let primitives = broker.new_primitives(dummy_primitives).await;
 ///
 ///     // Use primitives
-///     primitives.data(&"/demo".to_string().into(), Reliability::Reliable, None, RBuf::from(vec![1, 2])).await;
+///     primitives.data(&"/demo".to_string().into(), RBuf::from(vec![1, 2]), Reliability::Reliable, CongestionControl::Block, None).await;
 ///
 ///     // Close primitives
 ///     primitives.close().await;

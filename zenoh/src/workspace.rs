@@ -13,9 +13,9 @@
 //
 use crate::net::queryable::EVAL;
 use crate::net::{
-    data_kind, encoding, CallbackSubscriber, DataInfo, Query, QueryConsolidation, QueryTarget,
-    Queryable, RBuf, Reliability, RepliesSender, Reply, ResKey, Sample, Session, SubInfo, SubMode,
-    Subscriber, ZInt,
+    data_kind, encoding, CallbackSubscriber, CongestionControl, DataInfo, Query,
+    QueryConsolidation, QueryTarget, Queryable, RBuf, Reliability, RepliesSender, Reply, ResKey,
+    Sample, Session, SubInfo, SubMode, Subscriber, ZInt,
 };
 use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
 use async_std::pin::Pin;
@@ -71,7 +71,7 @@ impl Workspace<'_> {
                 payload,
                 encoding,
                 data_kind::PUT,
-                Reliability::Reliable,
+                CongestionControl::Drop, // TODO: Define the right congestion control value for the put
             )
             .await
     }
@@ -84,7 +84,7 @@ impl Workspace<'_> {
                 RBuf::empty(),
                 encoding::NONE,
                 data_kind::DELETE,
-                Reliability::Reliable,
+                CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
             )
             .await
     }
