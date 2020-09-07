@@ -486,9 +486,9 @@ fn channel_udp() {
     // Define the locator
     let locator: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
     task::block_on(async {
-        channel_reliable_droppable(locator.clone()).await;
+        // channel_reliable_droppable(locator.clone()).await;
         channel_best_effort(locator.clone()).await;
-        channel_best_effort_droppable(locator).await;
+        // channel_best_effort_droppable(locator).await;
     });
 }
 
