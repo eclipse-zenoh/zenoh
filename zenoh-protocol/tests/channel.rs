@@ -28,6 +28,7 @@ use zenoh_util::core::ZResult;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
+
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: usize = 1_024;
 
@@ -125,7 +126,7 @@ impl SessionEventHandler for SCClient {
     async fn close(&self) {}
 }
 
-async fn channel_reliable(locators: Vec<Locator>) {
+async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>, Session) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -151,6 +152,7 @@ async fn channel_reliable(locators: Vec<Locator>) {
 
     // Create the listener on the router
     for l in locators.iter() {
+        println!("Add locator: {}", l);
         let res = router_manager.add_locator(l).await;
         assert!(res.is_ok());
     }
@@ -159,186 +161,50 @@ async fn channel_reliable(locators: Vec<Locator>) {
     // Open session -> This should be accepted
     let attachment = None;
     for l in locators.iter() {
+        println!("Opening session with {}", l);
         let res = client_manager.open_session(l, &attachment).await;
         assert_eq!(res.is_ok(), true);
     }
-    let session = client_manager.get_session(&router_id).await.unwrap();
+    let client_session = client_manager.get_session(&router_id).await.unwrap();
 
-    // Create the message to send
-    let key = ResKey::RName("/test".to_string());
-    let payload = RBuf::from(vec![0u8; MSG_SIZE]);
-    let reliability = Reliability::Reliable;
-    let congestion_control = CongestionControl::Block;
-    let data_info = None;
-    let reply_context = None;
-    let attachment = None;
-    let message = ZenohMessage::make_data(
-        key,
-        payload,
-        reliability,
-        congestion_control,
-        data_info,
-        reply_context,
-        attachment,
-    );
-
-    // Send reliable messages by using schedule()
-    println!("Sending {} reliable messages...", MSG_COUNT);
-    for _ in 0..MSG_COUNT {
-        session.schedule(message.clone()).await.unwrap();
-    }
-
-    // Wait for the messages to arrive to the other side
-    let count = async {
-        while router_handler.get_count() != MSG_COUNT {
-            task::yield_now().await;
-        }
-    };
-    let res = count.timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
-    let res = session.close().await;
-    assert!(res.is_ok());
-
-    for l in locators.iter() {
-        let res = router_manager.del_locator(l).await;
-        assert!(res.is_ok());
-    }
-
-    task::sleep(SLEEP).await;
+    // Return the handlers
+    (router_manager, router_handler, client_session)
 }
 
-async fn channel_reliable_droppable(locators: Vec<Locator>) {
-    // Define client and router IDs
-    let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-
-    // Create the router session manager
-    let router_handler = Arc::new(SHRouter::new());
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let router_manager = SessionManager::new(config, None);
-
-    // Create the client session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client_id,
-        handler: Arc::new(SHClient::new()),
-    };
-    let client_manager = SessionManager::new(config, None);
-
-    // Create the listener on the router
+async fn close_session(
+    router_manager: SessionManager,
+    client_session: Session,
+    locators: Vec<Locator>,
+) {
+    // Close the client session
+    let mut ll = "".to_string();
     for l in locators.iter() {
-        let res = router_manager.add_locator(l).await;
-        assert!(res.is_ok());
+        ll.push_str(&format!("{} ", l));
     }
-
-    // Create an empty session with the client
-    // Open session -> This should be accepted
-    let attachment = None;
-    for l in locators.iter() {
-        let res = client_manager.open_session(l, &attachment).await;
-        assert_eq!(res.is_ok(), true);
-    }
-    let session = client_manager.get_session(&router_id).await.unwrap();
-
-    // Create the message to send
-    let key = ResKey::RName("/test".to_string());
-    let payload = RBuf::from(vec![0u8; MSG_SIZE]);
-    let reliability = Reliability::Reliable;
-    let congestion_control = CongestionControl::Drop;
-    let data_info = None;
-    let reply_context = None;
-    let attachment = None;
-    let message = ZenohMessage::make_data(
-        key,
-        payload,
-        reliability,
-        congestion_control,
-        data_info,
-        reply_context,
-        attachment,
-    );
-
-    /* [1] */
-    // Send unreliable messages by using schedule()
-    println!("Sending {} reliable droppable messages...", MSG_COUNT);
-    for _ in 0..MSG_COUNT {
-        session.schedule(message.clone()).await.unwrap();
-    }
-
-    // Wait to receive something
-    let count = async {
-        while router_handler.get_count() == 0 {
-            task::yield_now().await;
-        }
-    };
-    let res = count.timeout(TIMEOUT).await;
+    println!("Closing session with {}", ll);
+    let res = client_session.close().await;
     assert!(res.is_ok());
 
-    // Check if at least one message has arrived to the other side
-    assert_ne!(router_handler.get_count(), 0);
+    // Wait a little bit
+    task::sleep(SLEEP).await;
 
-    let res = session.close().await;
-    assert!(res.is_ok());
-
+    // Stop the locators on the manager
     for l in locators.iter() {
+        println!("Del locator: {}", l);
         let res = router_manager.del_locator(l).await;
         assert!(res.is_ok());
     }
-
-    task::sleep(SLEEP).await;
 }
 
-async fn channel_best_effort(locators: Vec<Locator>) {
-    // Define client and router IDs
-    let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-
-    // Create the router session manager
-    let router_handler = Arc::new(SHRouter::new());
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let router_manager = SessionManager::new(config, None);
-
-    // Create the client session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client_id,
-        handler: Arc::new(SHClient::new()),
-    };
-    let client_manager = SessionManager::new(config, None);
-
-    // Create the listener on the router
-    for l in locators.iter() {
-        let res = router_manager.add_locator(l).await;
-        assert!(res.is_ok());
-    }
-
-    // Create an empty session with the client
-    // Open session -> This should be accepted
-    let attachment = None;
-    for l in locators.iter() {
-        let res = client_manager.open_session(l, &attachment).await;
-        assert_eq!(res.is_ok(), true);
-    }
-    let session = client_manager.get_session(&router_id).await.unwrap();
-
+async fn run(
+    router_handler: Arc<SHRouter>,
+    client_session: Session,
+    reliability: Reliability,
+    congestion_control: CongestionControl,
+) {
     // Create the message to send
     let key = ResKey::RName("/test".to_string());
     let payload = RBuf::from(vec![0u8; MSG_SIZE]);
-    let reliability = Reliability::BestEffort;
-    let congestion_control = CongestionControl::Block;
     let data_info = None;
     let reply_context = None;
     let attachment = None;
@@ -352,157 +218,111 @@ async fn channel_best_effort(locators: Vec<Locator>) {
         attachment,
     );
 
-    /* [1] */
-    // Send unreliable messages by using schedule()
-    println!("Sending {} best effort messages...", MSG_COUNT);
-    for _ in 0..MSG_COUNT {
-        session.schedule(message.clone()).await.unwrap();
-    }
-
-    // Wait to receive something
-    let count = async {
-        while router_handler.get_count() == 0 {
-            task::yield_now().await;
-        }
-    };
-    let res = count.timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
-    // Check if at least one message has arrived to the other side
-    assert_ne!(router_handler.get_count(), 0);
-
-    let res = session.close().await;
-    assert!(res.is_ok());
-
-    for l in locators.iter() {
-        let res = router_manager.del_locator(l).await;
-        assert!(res.is_ok());
-    }
-
-    task::sleep(SLEEP).await;
-}
-
-async fn channel_best_effort_droppable(locators: Vec<Locator>) {
-    // Define client and router IDs
-    let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-
-    // Create the router session manager
-    let router_handler = Arc::new(SHRouter::new());
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let router_manager = SessionManager::new(config, None);
-
-    // Create the client session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client_id,
-        handler: Arc::new(SHClient::new()),
-    };
-    let client_manager = SessionManager::new(config, None);
-
-    // Create the listener on the router
-    for l in locators.iter() {
-        let res = router_manager.add_locator(l).await;
-        assert!(res.is_ok());
-    }
-
-    // Create an empty session with the client
-    // Open session -> This should be accepted
-    let attachment = None;
-    for l in locators.iter() {
-        let res = client_manager.open_session(l, &attachment).await;
-        assert_eq!(res.is_ok(), true);
-    }
-    let session = client_manager.get_session(&router_id).await.unwrap();
-
-    // Create the message to send
-    let key = ResKey::RName("/test".to_string());
-    let payload = RBuf::from(vec![0u8; MSG_SIZE]);
-    let reliability = Reliability::BestEffort;
-    let congestion_control = CongestionControl::Drop;
-    let data_info = None;
-    let reply_context = None;
-    let attachment = None;
-    let message = ZenohMessage::make_data(
-        key,
-        payload,
-        reliability,
-        congestion_control,
-        data_info,
-        reply_context,
-        attachment,
+    println!(
+        "Sending {} messages... {:?} {:?}",
+        MSG_COUNT, reliability, congestion_control
     );
-
-    /* [1] */
-    // Send unreliable messages by using schedule()
-    println!("Sending {} best effort messages...", MSG_COUNT);
     for _ in 0..MSG_COUNT {
-        session.schedule(message.clone()).await.unwrap();
+        client_session.schedule(message.clone()).await.unwrap();
     }
 
-    // Wait to receive something
-    let count = async {
-        while router_handler.get_count() == 0 {
-            task::yield_now().await;
+    macro_rules! some {
+        () => {
+            // Wait to receive something
+            let count = async {
+                while router_handler.get_count() == 0 {
+                    task::yield_now().await;
+                }
+            };
+            let res = count.timeout(TIMEOUT).await;
+            assert!(res.is_ok());
+        };
+    }
+
+    macro_rules! all {
+        () => {
+            // Wait for the messages to arrive to the other side
+            let count = async {
+                while router_handler.get_count() != MSG_COUNT {
+                    task::yield_now().await;
+                }
+            };
+            let res = count.timeout(TIMEOUT).await;
+            assert!(res.is_ok());
+        };
+    }
+
+    match reliability {
+        Reliability::Reliable => match congestion_control {
+            CongestionControl::Block => {
+                all!();
+            }
+            CongestionControl::Drop => {
+                some!();
+            }
+        },
+        Reliability::BestEffort => {
+            some!();
         }
-    };
-    let res = count.timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
-    // Check if at least one message has arrived to the other side
-    assert_ne!(router_handler.get_count(), 0);
-
-    let res = session.close().await;
-    assert!(res.is_ok());
-
-    for l in locators.iter() {
-        let res = router_manager.del_locator(l).await;
-        assert!(res.is_ok());
     }
-
-    task::sleep(SLEEP).await;
 }
 
 #[test]
 fn channel_tcp() {
-    // Define the locator
-    let locator: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
+    // Define the locators
+    let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
+    // Define the reliability and congestgino control
+    let reliability = [Reliability::Reliable, Reliability::BestEffort];
+    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
+    // Run
     task::block_on(async {
-        channel_reliable(locator.clone()).await;
-        channel_reliable_droppable(locator.clone()).await;
-        channel_best_effort(locator.clone()).await;
-        channel_best_effort_droppable(locator).await;
+        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
+        for rl in reliability.iter() {
+            for cc in congestion_control.iter() {
+                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
+            }
+        }
+        close_session(router_manager, client_session, locators).await;
     });
 }
 
 #[test]
 fn channel_udp() {
     // Define the locator
-    let locator: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
+    let locators: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
+    // Define the reliability and congestgino control
+    let reliability = [Reliability::BestEffort];
+    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
+    // Run
     task::block_on(async {
-        // channel_reliable_droppable(locator.clone()).await;
-        channel_best_effort(locator.clone()).await;
-        // channel_best_effort_droppable(locator).await;
+        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
+        for rl in reliability.iter() {
+            for cc in congestion_control.iter() {
+                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
+            }
+        }
+        close_session(router_manager, client_session, locators).await;
     });
 }
 
 #[test]
 fn channel_tcp_udp() {
     // Define the locator
-    let locator: Vec<Locator> = vec![
+    let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:7448".parse().unwrap(),
         "udp/127.0.0.1:7448".parse().unwrap(),
     ];
+    // Define the reliability and congestgino control
+    let reliability = [Reliability::BestEffort];
+    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
+    // Run
     task::block_on(async {
-        channel_reliable(locator.clone()).await;
-        channel_reliable_droppable(locator.clone()).await;
-        channel_best_effort(locator.clone()).await;
-        channel_best_effort_droppable(locator).await;
+        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
+        for rl in reliability.iter() {
+            for cc in congestion_control.iter() {
+                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
+            }
+        }
+        close_session(router_manager, client_session, locators).await;
     });
 }

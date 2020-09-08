@@ -148,6 +148,7 @@ async fn run() {
     let value = counter.swap(0, Ordering::SeqCst);
     assert_eq!(value, amount);
 }
+
 #[test]
 fn timer() {
     task::block_on(run());
