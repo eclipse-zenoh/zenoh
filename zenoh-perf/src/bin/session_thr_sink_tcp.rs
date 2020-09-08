@@ -29,9 +29,9 @@ async fn handle_client(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let counter = Arc::new(AtomicUsize::new(0));
 
-    let mut apid = vec![0, 0, 0, 0];
+    let mut apid = [0u8; PeerId::MAX_SIZE];
     rand::thread_rng().fill_bytes(&mut apid);
-    let apid = PeerId { id: apid };
+    let apid = PeerId::new(1, pid);
 
     let mut buffer = vec![0u8; bs];
 

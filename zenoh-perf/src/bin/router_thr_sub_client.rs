@@ -127,8 +127,9 @@ fn main() {
     env_logger::init();
 
     // Initialize the Peer Id
-    let mut pid = vec![0, 0, 0, 0];
+    let mut pid = [0u8; PeerId::MAX_SIZE];
     rand::thread_rng().fill_bytes(&mut pid);
+    let pid = PeerId::new(1, pid);
 
     let mut args = std::env::args();
     // Get exe name
@@ -146,7 +147,7 @@ fn main() {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::CLIENT,
-        id: PeerId { id: pid },
+        id: pid,
         handler: broker.clone(),
     };
     let manager = SessionManager::new(config, None);
