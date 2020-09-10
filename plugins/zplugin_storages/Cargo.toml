@@ -14,11 +14,17 @@
 [package]
 name = "zplugin_storages"
 version = "0.5.0-beta.1"
+repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
+homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
            "Olivier Hécart <olivier.hecart@adlinktech.com",
 		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
+license = "Eclipse Public License v2 OR Apache-2.0"
+categories = ["networking", "edge-computing", "protocol", "iot", "pub/sub", "geo-distributed storages"]
+description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+
 
 [lib]
 name = "zplugin_storages"
