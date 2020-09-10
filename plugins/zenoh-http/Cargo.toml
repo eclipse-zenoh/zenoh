@@ -13,7 +13,7 @@
 #
 [package]
 name = "zplugin-http"
-version = "0.5.0"
+version = "0.5.0-beta.1"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
            "Olivier Hécart <olivier.hecart@adlinktech.com",
@@ -26,9 +26,9 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
-zenoh = { version = "0.5.0", path = "../../zenoh" }
-zenoh-router = { version = "0.5.0", path = "../../zenoh-router" }
-zenoh-protocol = { version = "0.5.0", path = "../../zenoh-protocol" }
+zenoh = { version = "0.5.0-beta.1", path = "../../zenoh" }
+zenoh-router = { version = "0.5.0-beta.1", path = "../../zenoh-router" }
+zenoh-protocol = { version = "0.5.0-beta.1", path = "../../zenoh-protocol" }
 futures = "0.3.5"
 clap = "2"
 log = "0.4"

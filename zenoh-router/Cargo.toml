@@ -13,8 +13,20 @@
 #
 [package]
 name = "zenoh-router"
-version = "0.5.0"
+version = "0.5.0-beta.1"
+authors = ["kydos <angelo@icorsaro.net>",
+           "Julien Enoch <julien@enoch.fr>",
+           "Olivier Hécart <olivier.hecart@adlinktech.com",
+		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
+license = "Eclipse Public License v2 OR Apache-2.0"
+categories = ["networking", "edge-computing", "protocol", "iot", "pub/sub", "geo-distributed storages"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[badges]
+travis-ci = { repository = "...", branch = "rust-master" }
+maintenance = { status = "actively-developed" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -31,8 +43,8 @@ clap = "2"
 serde_json = { version = "1.0", features = ["preserve_order"] }
 socket2 = "0.3.12"
 uhlc = "0.2"
-zenoh-protocol =  { version = "0.5.0", path = "../zenoh-protocol" }
-zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
+zenoh-protocol =  { version = "0.5.0-beta.1", path = "../zenoh-protocol" }
+zenoh-util =  { version = "0.5.0-beta.1", path = "../zenoh-util" }
 hex = "0.4"
 
 [dependencies.async-std]

@@ -13,14 +13,21 @@
 #
 [package]
 name = "zenoh-perf"
-version = "0.5.0"
+version = "0.5.0-beta.1"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
            "Olivier Hécart <olivier.hecart@adlinktech.com",
 		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
+license = "Eclipse Public License v2 OR Apache-2.0"
+categories = ["networking", "edge-computing", "protocol", "iot", "pub/sub", "geo-distributed storages"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[badges]
+travis-ci = { repository = "...", branch = "rust-master" }
+maintenance = { status = "actively-developed" }
+
 
 [dependencies]
 async-trait = "0.1.38"
@@ -31,10 +38,10 @@ rand = "0.7.3"
 slab = "0.4.2"
 time = "0.2.16"
 uuid = { version = "0.8.1", features = ["v4"] }
-zenoh =  { version = "0.5.0", path = "../zenoh" }
-zenoh-protocol =  { version = "0.5.0", path = "../zenoh-protocol" }
-zenoh-router =  { version = "0.5.0", path = "../zenoh-router" }
-zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
+zenoh =  { version = "0.5.0-beta.1", path = "../zenoh" }
+zenoh-protocol =  { version = "0.5.0-beta.1", path = "../zenoh-protocol" }
+zenoh-router =  { version = "0.5.0-beta.1", path = "../zenoh-router" }
+zenoh-util =  { version = "0.5.0-beta.1", path = "../zenoh-util" }
 
 [dependencies.async-std]
 version = "~1.6.2"
