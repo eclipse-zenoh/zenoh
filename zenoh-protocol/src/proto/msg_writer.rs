@@ -80,10 +80,10 @@ impl WBuf {
                 locators,
             }) => {
                 if let Some(pid) = pid {
-                    check!(self.write_bytes_array(&pid.id));
+                    check!(self.write_peerid(pid));
                 }
                 if let Some(w) = *whatami {
-                    if w != whatami::BROKER {
+                    if w != whatami::ROUTER {
                         check!(self.write_zint(w));
                     }
                 }
@@ -103,7 +103,7 @@ impl WBuf {
             }) => {
                 check!(self.write(*version));
                 check!(self.write_zint(*whatami));
-                check!(self.write_bytes_array(&pid.id));
+                check!(self.write_peerid(pid));
                 check!(self.write_zint(*lease));
                 check!(self.write_zint(*initial_sn));
                 // Compute the options byte flags
@@ -135,8 +135,8 @@ impl WBuf {
                 locators,
             }) => {
                 check!(self.write_zint(*whatami));
-                check!(self.write_bytes_array(&opid.id));
-                check!(self.write_bytes_array(&apid.id));
+                check!(self.write_peerid(opid));
+                check!(self.write_peerid(apid));
                 check!(self.write_zint(*initial_sn));
                 // Compute the options byte flags
                 let mut options: u8 = 0;
@@ -165,7 +165,7 @@ impl WBuf {
 
             SessionBody::Close(Close { pid, reason, .. }) => {
                 if let Some(p) = pid {
-                    check!(self.write_bytes_array(&p.id));
+                    check!(self.write_peerid(p));
                 }
                 check!(self.write(*reason));
             }
@@ -186,7 +186,7 @@ impl WBuf {
 
             SessionBody::KeepAlive(KeepAlive { pid }) => {
                 if let Some(p) = pid {
-                    check!(self.write_bytes_array(&p.id));
+                    check!(self.write_peerid(p));
                 }
             }
 
@@ -203,21 +203,25 @@ impl WBuf {
             check!(self.write_deco_attachment(attachment, false));
         }
         if let Some(reply_context) = &msg.reply_context {
-            check!(self.write_deco_reply(reply_context));
+            check!(self.write_deco_reply_context(reply_context));
         }
 
         check!(self.write(msg.header));
         match &msg.body {
-            ZenohBody::Declare(Declare { declarations }) => {
-                check!(self.write_declarations(&declarations));
-            }
-
-            ZenohBody::Data(Data { key, info, payload }) => {
+            ZenohBody::Data(Data {
+                key,
+                data_info,
+                payload,
+            }) => {
                 check!(self.write_reskey(&key));
-                if let Some(rbuf) = info {
-                    check!(self.write_rbuf(&rbuf));
+                if let Some(data_info) = data_info {
+                    check!(self.write_data_info(data_info));
                 }
                 check!(self.write_rbuf(&payload));
+            }
+
+            ZenohBody::Declare(Declare { declarations }) => {
+                check!(self.write_declarations(&declarations));
             }
 
             ZenohBody::Unit(Unit {}) => {}
@@ -255,41 +259,66 @@ impl WBuf {
         true
     }
 
-    pub fn write_datainfo(&mut self, info: &DataInfo) -> bool {
-        let mut header = 0u8;
-        if info.source_id.is_some() {
-            header |= zmsg::info_flag::SRCID
+    fn write_deco_attachment(&mut self, attachment: &Attachment, session: bool) -> bool {
+        if session {
+            check!(self.write(attachment.encoding | smsg::id::ATTACHMENT));
+        } else {
+            check!(self.write(attachment.encoding | zmsg::id::ATTACHMENT));
         }
-        if info.source_sn.is_some() {
-            header |= zmsg::info_flag::SRCSN
-        }
-        if info.first_broker_id.is_some() {
-            header |= zmsg::info_flag::BKRID
-        }
-        if info.first_broker_sn.is_some() {
-            header |= zmsg::info_flag::BKRSN
-        }
-        if info.timestamp.is_some() {
-            header |= zmsg::info_flag::TS
-        }
-        if info.kind.is_some() {
-            header |= zmsg::info_flag::KIND
-        }
-        if info.encoding.is_some() {
-            header |= zmsg::info_flag::ENC
+        self.write_rbuf(&attachment.buffer)
+    }
+
+    fn write_deco_reply_context(&mut self, reply_context: &ReplyContext) -> bool {
+        let fflag = if reply_context.is_final {
+            zmsg::flag::F
+        } else {
+            0
+        };
+        check!(self.write(zmsg::id::REPLY_CONTEXT | fflag));
+        check!(self.write_zint(reply_context.qid));
+        check!(self.write_zint(reply_context.source_kind));
+        if let Some(pid) = &reply_context.replier_id {
+            check!(self.write_peerid(pid));
         }
 
-        check!(self.write(header));
+        true
+    }
+
+    pub fn write_data_info(&mut self, info: &DataInfo) -> bool {
+        let mut options: ZInt = 0;
+        if info.source_id.is_some() {
+            options |= zmsg::info_opt::SRCID
+        }
+        if info.source_sn.is_some() {
+            options |= zmsg::info_opt::SRCSN
+        }
+        if info.first_router_id.is_some() {
+            options |= zmsg::info_opt::RTRID
+        }
+        if info.first_router_sn.is_some() {
+            options |= zmsg::info_opt::RTRSN
+        }
+        if info.timestamp.is_some() {
+            options |= zmsg::info_opt::TS
+        }
+        if info.kind.is_some() {
+            options |= zmsg::info_opt::KIND
+        }
+        if info.encoding.is_some() {
+            options |= zmsg::info_opt::ENC
+        }
+        check!(self.write_zint(options));
+
         if let Some(pid) = &info.source_id {
-            check!(self.write_bytes_array(&pid.id));
+            check!(self.write_peerid(pid));
         }
         if let Some(sn) = &info.source_sn {
             check!(self.write_zint(*sn));
         }
-        if let Some(pid) = &info.first_broker_id {
-            check!(self.write_bytes_array(&pid.id));
+        if let Some(pid) = &info.first_router_id {
+            check!(self.write_peerid(pid));
         }
-        if let Some(sn) = &info.first_broker_sn {
+        if let Some(sn) = &info.first_router_sn {
             check!(self.write_zint(*sn));
         }
         if let Some(ts) = &info.timestamp {
@@ -314,31 +343,6 @@ impl WBuf {
 
     fn write_property(&mut self, p: &Property) -> bool {
         self.write_zint(p.key) && self.write_bytes_array(&p.value)
-    }
-
-    fn write_deco_attachment(&mut self, attachment: &Attachment, session: bool) -> bool {
-        if session {
-            check!(self.write(attachment.encoding | smsg::id::ATTACHMENT));
-        } else {
-            check!(self.write(attachment.encoding | zmsg::id::ATTACHMENT));
-        }
-        self.write_rbuf(&attachment.buffer)
-    }
-
-    fn write_deco_reply(&mut self, reply_context: &ReplyContext) -> bool {
-        let fflag = if reply_context.is_final {
-            zmsg::flag::F
-        } else {
-            0
-        };
-        check!(self.write(zmsg::id::REPLY_CONTEXT | fflag));
-        check!(self.write_zint(reply_context.qid));
-        check!(self.write_zint(reply_context.source_kind));
-        if let Some(pid) = &reply_context.replier_id {
-            check!(self.write_bytes_array(&pid.id));
-        }
-
-        true
     }
 
     fn write_locators(&mut self, locators: &[Locator]) -> bool {
@@ -451,7 +455,12 @@ impl WBuf {
         }
     }
 
+    fn write_peerid(&mut self, pid: &PeerId) -> bool {
+        self.write_bytes_array(pid.as_slice())
+    }
+
     fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {
-        self.write_u64_as_zint(tstamp.get_time().as_u64()) && self.write_bytes(tstamp.get_id())
+        self.write_u64_as_zint(tstamp.get_time().as_u64())
+            && self.write_bytes_array(tstamp.get_id().as_slice())
     }
 }

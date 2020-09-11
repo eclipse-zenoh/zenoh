@@ -82,8 +82,8 @@ async fn main() {
     let mut data_stream = workspace.get(&selector.try_into().unwrap()).await.unwrap();
     while let Some(data) = data_stream.next().await {
         println!(
-            ">> [Reply handler] received reply data {} : {:?}",
-            data.path, data.value
+            ">> [Reply handler] received reply data {} : {:?} with timestamp {}",
+            data.path, data.value, data.timestamp
         )
     }
 

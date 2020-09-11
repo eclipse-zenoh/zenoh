@@ -12,10 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::{Arc, Mutex};
+use async_std::task;
 use std::collections::VecDeque;
 
 use super::SerializationBatch;
 
+use crate::core::Channel;
 use crate::io::WBuf;
 use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
 use crate::session::defaults::{
@@ -71,6 +73,44 @@ macro_rules! zgetbatch {
     };
 }
 
+macro_rules! zgetbatch_dropmsg {
+    ($batch:expr, $msg:expr) => {
+        // Try to get a pointer to the first batch
+        loop {
+            if let Some(batch) = $batch.inner.front_mut() {
+                break batch;
+            } else {
+                // Refill the batches
+                let mut empty_guard = zasynclock!($batch.state_empty);
+                if empty_guard.is_empty() {
+                    // Execute the dropping strategy if provided
+                    if $msg.is_droppable() {
+                        log::trace!(
+                            "Message dropped because the transmission queue is full: {:?}",
+                            $msg
+                        );
+                        // Drop the guard to allow the sending task to
+                        // refill the queue of empty batches
+                        drop(empty_guard);
+                        // Yield this task
+                        task::yield_now().await;
+                        return;
+                    }
+                    // Drop the guard and wait for the batches to be available
+                    $batch.not_full.wait(empty_guard).await;
+                    // We have been notified that there are batches available:
+                    // reacquire the lock on the state_empty
+                    empty_guard = zasynclock!($batch.state_empty);
+                }
+                // Drain all the empty batches
+                while let Some(batch) = empty_guard.pull() {
+                    $batch.inner.push_back(batch);
+                }
+            }
+        }
+    };
+}
+
 impl CircularBatchIn {
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -108,17 +148,12 @@ impl CircularBatchIn {
         }
     }
 
-    async fn try_serialize_session_message(&mut self, message: &SessionMessage) -> bool {
-        // Get the current serialization batch
-        let batch = zgetbatch!(self);
-        // Try to serialize the message on the current batch
-        batch.serialize_session_message(&message).await
-    }
-
     async fn serialize_session_message(&mut self, message: SessionMessage) {
         macro_rules! zserialize {
             ($message:expr) => {
-                if self.try_serialize_session_message($message).await {
+                // Get the current serialization batch
+                let batch = zgetbatch!(self);
+                if batch.serialize_session_message(&message).await {
                     // Notify if needed
                     if self.not_empty.has_waiting_list() {
                         let guard = zasynclock!(self.state_out);
@@ -128,6 +163,7 @@ impl CircularBatchIn {
                 }
             };
         }
+
         // Attempt the serialization on the current batch
         zserialize!(&message);
 
@@ -163,10 +199,10 @@ impl CircularBatchIn {
 
         // Acquire the lock on the SN generator to ensure that we have all
         // sequential sequence numbers for the fragments
-        let mut guard = if message.is_reliable() {
-            zasynclock!(self.sn_reliable)
+        let (ch, mut guard) = if message.is_reliable() {
+            (Channel::Reliable, zasynclock!(self.sn_reliable))
         } else {
-            zasynclock!(self.sn_best_effort)
+            (Channel::BestEffort, zasynclock!(self.sn_best_effort))
         };
 
         // Fragment the whole message
@@ -180,7 +216,7 @@ impl CircularBatchIn {
 
             // Serialize the message
             let written = batch
-                .serialize_zenoh_fragment(message.is_reliable(), sn, &mut wbuf, to_write)
+                .serialize_zenoh_fragment(ch, sn, &mut wbuf, to_write)
                 .await;
 
             // Update the amount of bytes left to write
@@ -208,17 +244,13 @@ impl CircularBatchIn {
         }
     }
 
-    async fn try_serialize_zenoh_message(&mut self, message: &ZenohMessage) -> bool {
-        // Get the current serialization batch
-        let batch = zgetbatch!(self);
-        // Try to serialize the message on the current batch
-        batch.serialize_zenoh_message(&message).await
-    }
-
     async fn serialize_zenoh_message(&mut self, message: ZenohMessage) {
         macro_rules! zserialize {
             ($message:expr) => {
-                if self.try_serialize_zenoh_message(&message).await {
+                // Get the current serialization batch. Drop the message
+                // if no batches are available
+                let batch = zgetbatch_dropmsg!(self, message);
+                if batch.serialize_zenoh_message(&message).await {
                     // Notify if needed
                     if self.not_empty.has_waiting_list() {
                         let guard = zasynclock!(self.state_out);
@@ -438,12 +470,14 @@ impl TransmissionQueue {
         }
     }
 
+    #[inline]
     pub(super) async fn push_session_message(&self, message: SessionMessage, priority: usize) {
         zasynclock!(self.state_in[priority])
             .serialize_session_message(message)
             .await;
     }
 
+    #[inline]
     pub(super) async fn push_zenoh_message(&self, message: ZenohMessage, priority: usize) {
         zasynclock!(self.state_in[priority])
             .serialize_zenoh_message(message)
@@ -504,7 +538,7 @@ mod tests {
     use std::convert::TryFrom;
     use std::time::Duration;
 
-    use crate::core::{ResKey, ZInt};
+    use crate::core::{CongestionControl, Reliability, ResKey, ZInt};
     use crate::io::RBuf;
     use crate::proto::{Frame, FramePayload, SeqNumGenerator, SessionBody, ZenohMessage};
     use crate::session::defaults::{
@@ -519,15 +553,23 @@ mod tests {
     fn tx_queue() {
         async fn schedule(queue: Arc<TransmissionQueue>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
-            let reliable = true;
             let key = ResKey::RName("test".to_string());
-            let info = None;
             let payload = RBuf::from(vec![0u8; payload_size]);
+            let reliability = Reliability::Reliable;
+            let congestion_control = CongestionControl::Block;
+            let data_info = None;
             let reply_context = None;
             let attachment = None;
 
-            let message =
-                ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
+            let message = ZenohMessage::make_data(
+                key,
+                payload,
+                reliability,
+                congestion_control,
+                data_info,
+                reply_context,
+                attachment,
+            );
 
             println!(
                 ">>> Sending {} messages with payload size: {}",

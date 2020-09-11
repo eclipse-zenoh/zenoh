@@ -100,15 +100,16 @@ fn main() {
     env_logger::init();
 
     // Initialize the Peer Id
-    let mut pid = vec![0, 0, 0, 0];
+    let mut pid = [0u8; PeerId::MAX_SIZE];
     rand::thread_rng().fill_bytes(&mut pid);
+    let pid = PeerId::new(1, pid);
 
     let count = Arc::new(AtomicUsize::new(0));
 
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::PEER,
-        id: PeerId { id: pid },
+        id: pid,
         handler: Arc::new(MySH::new(count)),
     };
     let manager = SessionManager::new(config, None);

@@ -65,6 +65,11 @@ fn main() {
                 "--plugin-nolookup \
              'When set, zenohd will not look for plugins nor try to load any plugin except the \
              ones explicitely configured with -P or --plugin.'",
+            ))
+            .arg(Arg::from_usage(
+                "--no-timestamp \
+             'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
+             This option desactivates this feature.'",
             ));
 
         let mut plugins_mgr = PluginsMgr::new();
@@ -88,13 +93,15 @@ fn main() {
             .map(|v| v.map(|l| l.parse().unwrap()).collect())
             .or_else(|| Some(vec![]))
             .unwrap();
+        let add_timestamp = !std::env::args().any(|arg| arg == "--no-timestamp");
 
         let config = Config {
-            whatami: whatami::BROKER,
+            whatami: whatami::ROUTER,
             peers,
             listeners,
             multicast_interface: "auto".to_string(),
             scouting_delay: std::time::Duration::new(0, 200_000_000),
+            add_timestamp,
         };
 
         let runtime = match Runtime::new(0, config, args.value_of("id")).await {

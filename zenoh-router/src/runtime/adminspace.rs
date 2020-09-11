@@ -19,8 +19,11 @@ use futures::future;
 use log::trace;
 use serde_json::json;
 use zenoh_protocol::{
-    core::{queryable::EVAL, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt},
-    io::{RBuf, WBuf},
+    core::{
+        queryable::EVAL, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability,
+        ResKey, SubInfo, ZInt,
+    },
+    io::RBuf,
     proto::{encoding, DataInfo, Primitives},
 };
 
@@ -139,13 +142,21 @@ impl Primitives for AdminSpace {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(&self, reskey: &ResKey, _reliable: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        payload: RBuf,
+        reliability: Reliability,
+        congestion_control: CongestionControl,
+        data_info: Option<DataInfo>,
+    ) {
         trace!(
-            "recv Data {:?} {:?} {:?} {:?}",
+            "recv Data {:?} {:?} {:?} {:?} {:?}",
             reskey,
-            _reliable,
-            info,
-            payload
+            payload,
+            reliability,
+            congestion_control,
+            data_info,
         );
     }
 
@@ -174,14 +185,12 @@ impl Primitives for AdminSpace {
         let data_info = DataInfo {
             source_id: None,
             source_sn: None,
-            first_broker_id: None,
-            first_broker_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
             timestamp: None,
             kind: None,
             encoding: Some(encoding::APP_JSON),
         };
-        let mut infobuf = WBuf::new(16, false);
-        infobuf.write_datainfo(&data_info);
         task::spawn(async move {
             // router is not re-entrant
             primitives
@@ -190,7 +199,7 @@ impl Primitives for AdminSpace {
                     EVAL,
                     replier_id.clone(),
                     reskey,
-                    Some(infobuf.into()),
+                    Some(data_info),
                     payload,
                 )
                 .await;
@@ -204,7 +213,7 @@ impl Primitives for AdminSpace {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        info: Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         trace!(

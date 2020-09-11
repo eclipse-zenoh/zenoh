@@ -13,12 +13,21 @@
 #
 [package]
 name = "zenoh-util"
-version = "0.5.0"
+version = "0.5.0-beta.1"
+repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
+homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
            "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming"]
+description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[badges]
+travis-ci = { repository = "...", branch = "rust-master" }
+maintenance = { status = "actively-developed" }
 
 [dependencies]
 async-trait = "0.1.38"
@@ -34,9 +43,9 @@ clap = "2"
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.76"
+libc = "0.2.77"
 pnet = "0.26.0"
 
 [dependencies.async-std]
-version = "1.6.2"
+version = "=1.6.2"
 features = ["unstable"]

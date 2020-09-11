@@ -13,12 +13,18 @@
 #
 [package]
 name = "zplugin_storages"
-version = "0.5.0"
+version = "0.5.0-beta.1"
+repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
+homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
            "Olivier Hécart <olivier.hecart@adlinktech.com>",
 		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming"]
+description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+
 
 [lib]
 name = "zplugin_storages"
@@ -26,10 +32,10 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
-zenoh = { version = "0.5.0", path = "../../zenoh" }
-zenoh-router = { version = "0.5.0", path = "../../zenoh-router" }
-zenoh-util = { version = "0.5.0", path = "../../zenoh-util" }
-zenoh_backend_core = { version = "0.5.0", path = "../../backends/core" }
+zenoh = { version = "0.5.0-beta.1", path = "../../zenoh" }
+zenoh-router = { version = "0.5.0-beta.1", path = "../../zenoh-router" }
+zenoh-util = { version = "0.5.0-beta.1", path = "../../zenoh-util" }
+zenoh_backend_core = { version = "0.5.0-beta.1", path = "../../backends/core" }
 async-trait = "0.1"
 futures = "0.3.5"
 clap = "2"
@@ -37,6 +43,6 @@ log = "0.4"
 env_logger = "0.7.1"
 
 [dependencies.async-std]
-version = "~1.6.0"
+version = "=1.6.2"
 features = ["unstable"]
 

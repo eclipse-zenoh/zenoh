@@ -26,7 +26,6 @@ async fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    println!("Opening session...");
     let session = open(config, None).await.unwrap();
 
     let reskey = RId(session
@@ -36,7 +35,16 @@ async fn main() {
     let _publ = session.declare_publisher(&reskey).await.unwrap();
 
     loop {
-        session.write(&reskey, data.clone()).await.unwrap();
+        session
+            .write_ext(
+                &reskey,
+                data.clone(),
+                encoding::DEFAULT,
+                data_kind::DEFAULT,
+                CongestionControl::Block, // Make sure to not drop messages because of congestion control
+            )
+            .await
+            .unwrap();
     }
 }
 

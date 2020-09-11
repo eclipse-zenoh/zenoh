@@ -17,10 +17,11 @@ use std::collections::HashMap;
 
 use crate::routing::broker::*;
 use zenoh_protocol::core::{
-    PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, WhatAmI, ZInt,
+    CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo,
+    WhatAmI, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::Primitives;
+use zenoh_protocol::proto::{DataInfo, Primitives};
 
 pub struct FaceState {
     pub(super) id: usize,
@@ -126,7 +127,14 @@ impl Primitives for Face {
         undeclare_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
     }
 
-    async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        payload: RBuf,
+        _reliability: Reliability,
+        congestion_control: CongestionControl,
+        data_info: Option<DataInfo>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         route_data(
@@ -134,8 +142,8 @@ impl Primitives for Face {
             &self.state,
             prefixid,
             suffix,
-            reliable,
-            info,
+            congestion_control,
+            data_info,
             payload,
         )
         .await;
@@ -170,7 +178,7 @@ impl Primitives for Face {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        info: Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         let mut tables = self.tables.write().await;

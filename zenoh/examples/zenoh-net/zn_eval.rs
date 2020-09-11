@@ -37,7 +37,7 @@ async fn main() {
     let mut input = [0u8];
     loop {
         select!(
-            query = queryable.next().fuse() => {
+            query = queryable.stream().next().fuse() => {
                 let query = query.unwrap();
                 println!(">> [Query handler] Handling '{}{}'", query.res_name, query.predicate);
                 query.reply(Sample{
@@ -53,7 +53,7 @@ async fn main() {
         );
     }
 
-    session.undeclare_queryable(queryable).await.unwrap();
+    queryable.undeclare().await.unwrap();
     session.close().await.unwrap();
 }
 

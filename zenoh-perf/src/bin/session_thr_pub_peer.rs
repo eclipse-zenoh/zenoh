@@ -16,7 +16,7 @@ use async_std::task;
 use async_trait::async_trait;
 use rand::RngCore;
 
-use zenoh_protocol::core::{whatami, PeerId, ResKey};
+use zenoh_protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::ZenohMessage;
@@ -59,8 +59,9 @@ fn main() {
     env_logger::init();
 
     // Initialize the Peer Id
-    let mut pid = vec![0, 0, 0, 0];
+    let mut pid = [0u8; PeerId::MAX_SIZE];
     rand::thread_rng().fill_bytes(&mut pid);
+    let pid = PeerId::new(1, pid);
 
     let mut args = std::env::args();
     // Get exe name
@@ -99,7 +100,7 @@ fn main() {
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::PEER,
-        id: PeerId { id: pid },
+        id: pid,
         handler: Arc::new(MySH::new()),
     };
     let manager = SessionManager::new(config, None);
@@ -120,14 +121,22 @@ fn main() {
         };
 
         // Send reliable messages
-        let reliable = true;
+        let reliability = Reliability::Reliable;
+        let congestion_control = CongestionControl::Block;
         let key = ResKey::RName("test".to_string());
         let info = None;
         let payload = RBuf::from(vec![0u8; payload]);
         let reply_context = None;
 
-        let message =
-            ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);
+        let message = ZenohMessage::make_data(
+            key,
+            payload,
+            reliability,
+            congestion_control,
+            info,
+            reply_context,
+            attachment,
+        );
 
         loop {
             let res = session.handle_message(message.clone()).await;

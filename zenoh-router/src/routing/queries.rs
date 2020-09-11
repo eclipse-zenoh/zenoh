@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 use zenoh_protocol::core::{whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt};
 use zenoh_protocol::io::RBuf;
+use zenoh_protocol::proto::DataInfo;
 
 use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
@@ -69,7 +70,7 @@ pub(crate) async fn declare_queryable(
             for (id, someface) in &mut tables.faces {
                 if face.id != *id
                     && (face.whatami != whatami::PEER || someface.whatami != whatami::PEER)
-                    && (face.whatami != whatami::BROKER || someface.whatami != whatami::BROKER)
+                    && (face.whatami != whatami::ROUTER || someface.whatami != whatami::ROUTER)
                 {
                     let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(&res);
                     match nonwild_prefix {
@@ -198,9 +199,9 @@ async fn route_query_to_map(
                     for (sid, context) in &mut Arc::get_mut_unchecked(&mut res).contexts {
                         if context.qabl
                             && !Arc::ptr_eq(&face, &context.face)
-                            && ((face.whatami != whatami::PEER && face.whatami != whatami::BROKER)
+                            && ((face.whatami != whatami::PEER && face.whatami != whatami::ROUTER)
                                 || (context.face.whatami != whatami::PEER
-                                    && context.face.whatami != whatami::BROKER))
+                                    && context.face.whatami != whatami::ROUTER))
                         {
                             faces.entry(*sid).or_insert_with(|| {
                                 let (rid, suffix) = Resource::get_best_key(prefix, suffix, *sid);
@@ -279,7 +280,7 @@ pub(crate) async fn route_reply_data(
     source_kind: ZInt,
     replier_id: PeerId,
     reskey: ResKey,
-    info: Option<RBuf>,
+    info: Option<DataInfo>,
     payload: RBuf,
 ) {
     match face.pending_queries.get(&qid) {

@@ -28,8 +28,6 @@ use zenoh_protocol::core::ZInt;
 use zenoh_util::to_zint;
 
 #[no_mangle]
-pub static BROKER: c_uint = whatami::BROKER as c_uint;
-#[no_mangle]
 pub static ROUTER: c_uint = whatami::ROUTER as c_uint;
 #[no_mangle]
 pub static PEER: c_uint = whatami::PEER as c_uint;
@@ -280,7 +278,7 @@ pub unsafe extern "C" fn zn_scout_whatami(si: *mut ZNScout, idx: c_uint) -> c_ui
 #[no_mangle]
 pub unsafe extern "C" fn zn_scout_peerid(si: *mut ZNScout, idx: c_uint) -> *const c_uchar {
     match &(*si).0[idx as usize].pid {
-        Some(v) => v.id.as_ptr() as *const c_uchar,
+        Some(v) => v.as_slice().as_ptr() as *const c_uchar,
         None => std::ptr::null(),
     }
 }
@@ -428,7 +426,7 @@ pub unsafe extern "C" fn zn_info(session: *mut ZNSession) -> *mut ZNProperties {
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_close(session: *mut ZNSession) {
-    task::block_on((*session).0.close()).unwrap();
+    task::block_on((*Box::from_raw(session)).0.close()).unwrap();
 }
 
 /// Declare a zenoh resource
@@ -572,7 +570,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
 
             loop {
                 select!(
-                    s = sub.next().fuse() => {
+                    s = sub.stream().next().fuse() => {
                         // This is a bit brutal but avoids an allocation and
                         // a copy that would be otherwise required to add the
                         // C string terminator. See the test_sub.c to find out how to deal
@@ -593,7 +591,7 @@ pub unsafe extern "C" fn zn_declare_subscriber(
                             },
 
                             Ok(ZnSubOps::Close) => {
-                                let _ = (s).0.undeclare_subscriber(sub).await;
+                                let _ = sub.undeclare().await;
                                 Box::into_raw(s);
                                 return ()
                             },
@@ -673,8 +671,8 @@ pub unsafe extern "C" fn zn_query(
 
             while let Some(reply) = q.next().await {
                 source_info.kind = reply.source_kind as c_uint;
-                source_info.id.val = reply.replier_id.id.as_ptr() as *const c_uchar;
-                source_info.id.len = reply.replier_id.id.len() as c_uint;
+                source_info.id.val = reply.replier_id.as_slice().as_ptr() as *const c_uchar;
+                source_info.id.len = reply.replier_id.as_slice().len() as c_uint;
                 sample.key.val = reply.data.res_name.as_ptr() as *const c_char;
                 sample.key.len = reply.data.res_name.len() as c_uint;
                 let data = reply.data.payload.to_vec();
@@ -712,17 +710,18 @@ pub unsafe extern "C" fn zn_declare_queryable(
     let (tx, rx) = channel::<bool>(1);
     let r = ZNQueryable(Some(Arc::new(tx)));
 
-    let mut queryable: zenoh::net::Queryable =
-        task::block_on(s.0.declare_queryable(&ResKey::RName(name.to_string()), kind as ZInt))
-            .unwrap();
     // Note: This is done to ensure that even if the call-back into C
     // does any blocking call we do not incour the risk of blocking
     // any of the task resolving futures.
     task::spawn_blocking(move || {
         task::block_on(async move {
+            let mut queryable: zenoh::net::Queryable =
+                s.0.declare_queryable(&ResKey::RName(name.to_string()), kind as ZInt)
+                    .await
+                    .unwrap();
             loop {
                 select!(
-                query = queryable.next().fuse() => {
+                query = queryable.stream().next().fuse() => {
                   // This is a bit brutal but avoids an allocation and
                   // a copy that would be otherwise required to add the
                   // C string terminator. See the test_sub.c to find out how to deal
@@ -733,7 +732,7 @@ pub unsafe extern "C" fn zn_declare_queryable(
                   Box::from_raw(rbquery);
                 },
                 _ = rx.recv().fuse() => {
-                    let _ = s.0.undeclare_queryable(queryable).await;
+                    let _ = queryable.undeclare().await;
                     Box::into_raw(s);
                     return ()
                 })

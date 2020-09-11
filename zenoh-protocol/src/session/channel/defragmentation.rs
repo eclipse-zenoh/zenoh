@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::ZInt;
+use crate::core::{Reliability, ZInt};
 use crate::io::RBuf;
 use crate::proto::{SeqNum, ZenohMessage};
 
@@ -21,13 +21,19 @@ pub(super) struct DefragBuffer {
     // Keep track of the next expected fragment
     sn: SeqNum,
     buffer: RBuf,
+    reliability: Reliability,
 }
 
 impl DefragBuffer {
-    pub(super) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> DefragBuffer {
+    pub(super) fn new(
+        initial_sn: ZInt,
+        sn_resolution: ZInt,
+        reliability: Reliability,
+    ) -> DefragBuffer {
         DefragBuffer {
             sn: SeqNum::new(initial_sn, sn_resolution),
             buffer: RBuf::new(),
+            reliability,
         }
     }
 
@@ -62,7 +68,7 @@ impl DefragBuffer {
 
     #[inline]
     pub(super) fn defragment(&mut self) -> ZResult<ZenohMessage> {
-        let res = self.buffer.read_zenoh_message();
+        let res = self.buffer.read_zenoh_message(self.reliability);
         self.clear();
         res
     }

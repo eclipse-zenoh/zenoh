@@ -13,10 +13,13 @@
 //
 use std::convert::From;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::AtomicU64;
-pub use uhlc::Timestamp;
 
 pub mod rname;
+
+pub use uhlc::Timestamp;
+pub type TimestampID = uhlc::ID;
 
 pub type ZInt = u64;
 pub type ZiInt = i64;
@@ -30,15 +33,13 @@ pub mod whatami {
 
     pub type Type = ZInt;
 
-    pub const BROKER: Type = 1; // 0x01
-    pub const ROUTER: Type = 1 << 1; // 0x02
-    pub const PEER: Type = 1 << 2; // 0x04
-    pub const CLIENT: Type = 1 << 3; // 0x08
+    pub const ROUTER: Type = 1; // 0x01
+    pub const PEER: Type = 1 << 1; // 0x02
+    pub const CLIENT: Type = 1 << 2; // 0x04
                                      // b4-b13: Reserved
 
     pub fn to_str(w: Type) -> String {
         match w {
-            BROKER => "Broker".to_string(),
             ROUTER => "Router".to_string(),
             PEER => "Peer".to_string(),
             CLIENT => "Client".to_string(),
@@ -153,14 +154,56 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq)]
 pub struct PeerId {
-    pub id: Vec<u8>,
+    size: usize,
+    id: [u8; PeerId::MAX_SIZE],
+}
+
+impl PeerId {
+    pub const MAX_SIZE: usize = 16;
+
+    pub fn new(size: usize, id: [u8; PeerId::MAX_SIZE]) -> PeerId {
+        PeerId { size, id }
+    }
+
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    #[inline]
+    pub fn as_slice(&self) -> &[u8] {
+        &self.id[..self.size]
+    }
+}
+
+impl From<uuid::Uuid> for PeerId {
+    #[inline]
+    fn from(uuid: uuid::Uuid) -> Self {
+        PeerId {
+            size: 16,
+            id: *uuid.as_bytes(),
+        }
+    }
+}
+
+impl PartialEq for PeerId {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.size == other.size && self.as_slice() == other.as_slice()
+    }
+}
+
+impl Hash for PeerId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_slice().hash(state);
+    }
 }
 
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", hex::encode_upper(&self.id))
+        write!(f, "{}", hex::encode_upper(self.as_slice()))
     }
 }
 
@@ -170,19 +213,38 @@ impl fmt::Display for PeerId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+// A PeerID can be converted into a Timestamp's ID
+impl From<&PeerId> for uhlc::ID {
+    fn from(pid: &PeerId) -> Self {
+        uhlc::ID::new(pid.size, pid.id)
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Channel {
+    BestEffort,
+    Reliable,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum CongestionControl {
+    Block,
+    Drop,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Reliability {
     BestEffort,
     Reliable,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SubMode {
     Push,
     Pull,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Period {
     pub origin: ZInt,
     pub period: ZInt,

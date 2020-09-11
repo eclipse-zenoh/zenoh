@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::{PeerId, ResKey, ZInt};
+use crate::core::{CongestionControl, PeerId, Reliability, ResKey, ZInt};
 use crate::core::{QueryConsolidation, QueryTarget, SubInfo};
 use crate::io::RBuf;
-use crate::proto::{channel, Declaration, Primitives, ReplyContext, ZenohMessage};
+use crate::proto::{zmsg, DataInfo, Declaration, Primitives, ReplyContext, ZenohMessage};
 use crate::session::SessionEventHandler;
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -112,13 +112,21 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn data(&self, reskey: &ResKey, reliability: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        payload: RBuf,
+        reliability: Reliability,
+        congestion_control: CongestionControl,
+        data_info: Option<DataInfo>,
+    ) {
         self.handler
             .handle_message(ZenohMessage::make_data(
-                reliability,
                 reskey.clone(),
-                info.clone(),
                 payload,
+                reliability,
+                congestion_control,
+                data_info,
                 None,
                 None,
             ))
@@ -156,15 +164,16 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        info: Option<RBuf>,
+        data_info: Option<DataInfo>,
         payload: RBuf,
     ) {
         self.handler
             .handle_message(ZenohMessage::make_data(
-                channel::RELIABLE,
                 reskey,
-                info,
                 payload,
+                zmsg::default_reliability::REPLY,
+                zmsg::default_congestion_control::REPLY,
+                data_info,
                 Some(ReplyContext::make(qid, source_kind, Some(replier_id))),
                 None,
             ))
@@ -174,7 +183,8 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
     async fn reply_final(&self, qid: ZInt) {
         self.handler
             .handle_message(ZenohMessage::make_unit(
-                channel::RELIABLE,
+                zmsg::default_reliability::REPLY,
+                zmsg::default_congestion_control::REPLY,
                 Some(ReplyContext::make(qid, 0, None)),
                 None,
             ))

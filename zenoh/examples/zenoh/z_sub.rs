@@ -15,6 +15,7 @@
 
 use clap::{App, Arg};
 use futures::prelude::*;
+use futures::select;
 use std::convert::TryInto;
 use zenoh::net::Config;
 use zenoh::*;
@@ -83,13 +84,28 @@ async fn main() {
         .subscribe(&selector.try_into().unwrap())
         .await
         .unwrap();
-    while let Some(change) = change_stream.next().await {
-        println!(
-            ">> [Subscription listener] received change {} : {:?}",
-            change.path,
-            change.value.unwrap()
-        )
+
+    let mut stdin = async_std::io::stdin();
+    let mut input = [0u8];
+    loop {
+        select!(
+            change = change_stream.next().fuse() => {
+                let change = change.unwrap();
+                println!(
+                    ">> [Subscription listener] received {:?} for {} : {:?} with timestamp {}",
+                    change.kind,
+                    change.path,
+                    change.value,
+                    change.timestamp
+                )
+            }
+
+            _ = stdin.read_exact(&mut input).fuse() => {
+                if input[0] == 'q' as u8 {break}
+            }
+        );
     }
 
+    change_stream.close().await.unwrap();
     zenoh.close().await.unwrap();
 }

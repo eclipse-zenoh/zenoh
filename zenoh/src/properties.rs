@@ -20,6 +20,10 @@ const PROP_SEP: char = ';';
 const KV_SEP: char = '=';
 
 #[derive(Clone, Debug, PartialEq)]
+/// A map of key/value (String,String) properties.
+///
+/// It can be parsed from a String, using `;` as separator between each properties
+/// and `=` as separator between a key and its value.
 pub struct Properties(pub(crate) HashMap<String, String>);
 
 impl Default for Properties {

@@ -22,7 +22,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use zenoh_protocol::{
-    core::{queryable, rname, AtomicZInt, QueryConsolidation, QueryTarget, ResKey, ResourceId},
+    core::{
+        queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget, ResKey,
+        ResourceId,
+    },
     io::RBuf,
     proto::Primitives,
 };
@@ -44,10 +47,10 @@ pub(crate) struct SessionState {
     decl_id_counter: AtomicUsize,
     local_resources: HashMap<ResourceId, String>,
     remote_resources: HashMap<ResourceId, String>,
-    publishers: HashMap<Id, Publisher>,
-    subscribers: HashMap<Id, Subscriber>,
-    callback_subscribers: HashMap<Id, CallbackSubscriber>,
-    queryables: HashMap<Id, Queryable>,
+    publishers: HashMap<Id, Arc<PublisherState>>,
+    subscribers: HashMap<Id, Arc<SubscriberState>>,
+    callback_subscribers: HashMap<Id, Arc<CallbackSubscriberState>>,
+    queryables: HashMap<Id, Arc<QueryableState>>,
     queries: HashMap<ZInt, (u8, Sender<Reply>)>,
 }
 
@@ -126,13 +129,22 @@ impl fmt::Debug for SessionState {
 }
 
 /// A zenoh-net session.
-#[derive(Clone)]
+///
 pub struct Session {
-    runtime: Runtime,
-    state: Arc<RwLock<SessionState>>,
+    pub(crate) runtime: Runtime,
+    pub(crate) state: Arc<RwLock<SessionState>>,
+    pub(crate) alive: bool,
 }
 
 impl Session {
+    pub(crate) fn clone(&self) -> Self {
+        Session {
+            runtime: self.runtime.clone(),
+            state: self.state.clone(),
+            alive: false,
+        }
+    }
+
     pub(super) async fn new(config: Config, _ps: Option<Properties>) -> ZResult<Session> {
         match Runtime::new(0, config, None).await {
             Ok(runtime) => {
@@ -154,25 +166,14 @@ impl Session {
         let session = Session {
             runtime,
             state: state.clone(),
+            alive: true,
         };
         let primitives = Some(broker.new_primitives(Arc::new(session.clone())).await);
         state.write().await.primitives = primitives;
         session
     }
 
-    /// Close the zenoh-net session.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.close();
-    /// # })
-    /// ```
-    pub async fn close(&self) -> ZResult<()> {
-        // @TODO: implement
+    async fn close_alive(&self) -> ZResult<()> {
         trace!("close()");
         self.runtime.close().await?;
 
@@ -189,6 +190,25 @@ impl Session {
         Ok(())
     }
 
+    /// Close the zenoh-net session.
+    ///
+    /// Sessions are automatically closed on destruction, but you may want to use this function to handle errors or
+    /// close the session synchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// session.close();
+    /// # })
+    /// ```
+    pub async fn close(mut self) -> ZResult<()> {
+        self.alive = false;
+        self.close_alive().await
+    }
+
     /// Get informations about the zenoh-net session.
     ///
     /// # Examples
@@ -201,28 +221,27 @@ impl Session {
     /// # })
     /// ```
     pub async fn info(&self) -> Properties {
-        // @TODO: implement
         trace!("info()");
         let mut info = Properties::new();
         let runtime = self.runtime.read().await;
-        info.push((ZN_INFO_PID_KEY, runtime.pid.id.clone()));
+        info.push((ZN_INFO_PID_KEY, runtime.pid.as_slice().to_vec()));
         for session in runtime.orchestrator.manager.get_sessions().await {
             if let Ok(what) = session.get_whatami() {
                 if what & whatami::PEER != 0 {
                     if let Ok(peer) = session.get_pid() {
-                        info.push((ZN_INFO_PEER_PID_KEY, peer.id));
+                        info.push((ZN_INFO_PEER_PID_KEY, peer.as_slice().to_vec()));
                     }
                 }
             }
         }
-        if runtime.orchestrator.whatami & whatami::BROKER != 0 {
-            info.push((ZN_INFO_ROUTER_PID_KEY, runtime.pid.id.clone()));
+        if runtime.orchestrator.whatami & whatami::ROUTER != 0 {
+            info.push((ZN_INFO_ROUTER_PID_KEY, runtime.pid.as_slice().to_vec()));
         }
         for session in runtime.orchestrator.manager.get_sessions().await {
             if let Ok(what) = session.get_whatami() {
-                if what & whatami::BROKER != 0 {
+                if what & whatami::ROUTER != 0 {
                     if let Ok(peer) = session.get_pid() {
-                        info.push((ZN_INFO_ROUTER_PID_KEY, peer.id));
+                        info.push((ZN_INFO_ROUTER_PID_KEY, peer.as_slice().to_vec()));
                     }
                 }
             }
@@ -309,55 +328,43 @@ impl Session {
     /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher> {
+    pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher<'_>> {
         trace!("declare_publisher({:?})", resource);
         let mut state = self.state.write().await;
 
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let publ = Publisher {
+        let pub_state = Arc::new(PublisherState {
             id,
             reskey: resource.clone(),
-        };
-        state.publishers.insert(id, publ.clone());
+        });
+        state.publishers.insert(id, pub_state.clone());
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.publisher(resource).await;
 
-        Ok(publ)
+        Ok(Publisher {
+            session: self,
+            state: pub_state,
+            alive: true,
+        })
     }
 
-    /// Undeclare a [Publisher](Publisher) previously declared with [declare_publisher](Session::declare_publisher).
-    ///
-    /// # Arguments
-    ///
-    /// * `resource` - The [Publisher](Publisher) to undeclare
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
-    /// session.undeclare_publisher(publisher).await;
-    /// # })
-    /// ```
-    pub async fn undeclare_publisher(&self, publisher: Publisher) -> ZResult<()> {
-        trace!("undeclare_publisher({:?})", publisher);
+    pub(crate) async fn undeclare_publisher(&self, pid: usize) -> ZResult<()> {
         let mut state = self.state.write().await;
-        state.publishers.remove(&publisher.id);
-
-        // Note: there might be several Publishers on the same ResKey.
-        // Before calling forget_publisher(reskey), check if this was the last one.
-        if !state
-            .publishers
-            .values()
-            .any(|p| p.reskey == publisher.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.forget_publisher(&publisher.reskey).await;
+        if let Some(pub_state) = state.publishers.remove(&pid) {
+            trace!("undeclare_publisher({:?})", pub_state);
+            // Note: there might be several Publishers on the same ResKey.
+            // Before calling forget_publisher(reskey), check if this was the last one.
+            if !state
+                .publishers
+                .values()
+                .any(|p| p.reskey == pub_state.reskey)
+            {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.forget_publisher(&pub_state.reskey).await;
+            }
         }
         Ok(())
     }
@@ -384,7 +391,7 @@ impl Session {
     ///     period: None
     /// };
     /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// while let Some(sample) = subscriber.next().await {
+    /// while let Some(sample) = subscriber.stream().next().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
@@ -393,27 +400,53 @@ impl Session {
         &self,
         resource: &ResKey,
         info: &SubInfo,
-    ) -> ZResult<Subscriber> {
+    ) -> ZResult<Subscriber<'_>> {
         trace!("declare_subscriber({:?})", resource);
         let mut state = self.state.write().await;
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = state.localkey_to_resname(resource)?;
         let (sender, receiver) = channel(*API_DATA_RECEPTION_CHANNEL_SIZE);
-        let sub = Subscriber {
+        let sub_state = Arc::new(SubscriberState {
             id,
             reskey: resource.clone(),
             resname,
-            session: self.clone(),
             sender,
-            receiver,
-        };
-        state.subscribers.insert(id, sub.clone());
+        });
+        state.subscribers.insert(id, sub_state.clone());
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.subscriber(resource, info).await;
 
-        Ok(sub)
+        Ok(Subscriber {
+            session: self,
+            state: sub_state,
+            alive: true,
+            receiver,
+        })
+    }
+
+    pub(crate) async fn undeclare_subscriber(&self, sid: usize) -> ZResult<()> {
+        let mut state = self.state.write().await;
+        if let Some(sub_state) = state.subscribers.remove(&sid) {
+            trace!("undeclare_subscriber({:?})", sub_state);
+            // Note: there might be several Subscribers on the same ResKey.
+            // Before calling forget_subscriber(reskey), check if this was the last one.
+            if !state
+                .callback_subscribers
+                .values()
+                .any(|s| s.reskey == sub_state.reskey)
+                && !state
+                    .subscribers
+                    .values()
+                    .any(|s| s.reskey == sub_state.reskey)
+            {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.forget_subscriber(&sub_state.reskey).await;
+            }
+        }
+        Ok(())
     }
 
     /// Declare a [CallbackSubscriber](CallbackSubscriber) for the given resource key.
@@ -445,7 +478,7 @@ impl Session {
         resource: &ResKey,
         info: &SubInfo,
         data_handler: DataHandler,
-    ) -> ZResult<CallbackSubscriber>
+    ) -> ZResult<CallbackSubscriber<'_>>
     where
         DataHandler: FnMut(Sample) + Send + Sync + 'static,
     {
@@ -454,110 +487,44 @@ impl Session {
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = state.localkey_to_resname(resource)?;
         let dhandler = Arc::new(RwLock::new(data_handler));
-        let sub = CallbackSubscriber {
+        let sub_state = Arc::new(CallbackSubscriberState {
             id,
             reskey: resource.clone(),
             resname,
-            session: self.clone(),
             dhandler,
-        };
-        state.callback_subscribers.insert(id, sub.clone());
+        });
+        state.callback_subscribers.insert(id, sub_state.clone());
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.subscriber(resource, info).await;
 
-        Ok(sub)
+        Ok(CallbackSubscriber {
+            session: self,
+            state: sub_state,
+            alive: true,
+        })
     }
 
-    /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
-    ///
-    /// # Arguments
-    ///
-    /// * `subscriber` - The [Subscriber](Subscriber) to undeclare
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Push,
-    /// #     period: None
-    /// # };
-    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// session.undeclare_subscriber(subscriber).await;
-    /// # })
-    /// ```
-    pub async fn undeclare_subscriber(&self, subscriber: Subscriber) -> ZResult<()> {
-        trace!("undeclare_subscriber({:?})", subscriber);
+    pub(crate) async fn undeclare_callback_subscriber(&self, sid: usize) -> ZResult<()> {
         let mut state = self.state.write().await;
-        state.subscribers.remove(&subscriber.id);
-
-        // Note: there might be several Subscribers on the same ResKey.
-        // Before calling forget_subscriber(reskey), check if this was the last one.
-        if !state
-            .callback_subscribers
-            .values()
-            .any(|s| s.reskey == subscriber.reskey)
-            && !state
-                .subscribers
+        if let Some(sub_state) = state.callback_subscribers.remove(&sid) {
+            trace!("undeclare_callback_subscriber({:?})", sub_state);
+            // Note: there might be several Subscribers on the same ResKey.
+            // Before calling forget_subscriber(reskey), check if this was the last one.
+            if !state
+                .callback_subscribers
                 .values()
-                .any(|s| s.reskey == subscriber.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.forget_subscriber(&subscriber.reskey).await;
-        }
-        Ok(())
-    }
-
-    /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
-    ///
-    /// # Arguments
-    ///
-    /// * `subscriber` - The [CallbackSubscriber](CallbackSubscriber) to undeclare
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Push,
-    /// #     period: None
-    /// # };
-    /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
-    /// session.undeclare_callback_subscriber(subscriber).await;
-    /// # })
-    /// ```
-    pub async fn undeclare_callback_subscriber(
-        &self,
-        subscriber: CallbackSubscriber,
-    ) -> ZResult<()> {
-        trace!("undeclare_callback_subscriber({:?})", subscriber);
-        let mut state = self.state.write().await;
-        state.callback_subscribers.remove(&subscriber.id);
-
-        // Note: there might be several Subscribers on the same ResKey.
-        // Before calling forget_subscriber(reskey), check if this was the last one.
-        if !state
-            .callback_subscribers
-            .values()
-            .any(|s| s.reskey == subscriber.reskey)
-            && !state
-                .subscribers
-                .values()
-                .any(|s| s.reskey == subscriber.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.forget_subscriber(&subscriber.reskey).await;
+                .any(|s| s.reskey == sub_state.reskey)
+                && !state
+                    .subscribers
+                    .values()
+                    .any(|s| s.reskey == sub_state.reskey)
+            {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.forget_subscriber(&sub_state.reskey).await;
+            }
         }
         Ok(())
     }
@@ -580,7 +547,7 @@ impl Session {
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
     /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
-    /// while let Some(query) = queryable.next().await {
+    /// while let Some(query) = queryable.stream().next().await {
     ///     query.reply(Sample{
     ///         res_name: "/resource/name".to_string(),
     ///         payload: "value".as_bytes().into(),
@@ -589,58 +556,45 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable> {
+    pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable<'_>> {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut state = self.state.write().await;
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let (req_sender, req_receiver) = channel(*API_QUERY_RECEPTION_CHANNEL_SIZE);
-        let qable = Queryable {
+        let (q_sender, q_receiver) = channel(*API_QUERY_RECEPTION_CHANNEL_SIZE);
+        let qable_state = Arc::new(QueryableState {
             id,
             reskey: resource.clone(),
             kind,
-            req_sender,
-            req_receiver,
-        };
-        state.queryables.insert(id, qable.clone());
+            q_sender,
+        });
+        state.queryables.insert(id, qable_state.clone());
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.queryable(resource).await;
 
-        Ok(qable)
+        Ok(Queryable {
+            session: self,
+            state: qable_state,
+            alive: true,
+            q_receiver,
+        })
     }
 
-    /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
-    ///
-    /// # Arguments
-    ///
-    /// * `queryable` - The [Queryable](Queryable) to undeclare
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    /// use zenoh::net::queryable::EVAL;
-    ///
-    /// let session = open(Config::peer(), None).await.unwrap();
-    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
-    /// session.undeclare_queryable(queryable).await;
-    /// # })
-    /// ```
-    pub async fn undeclare_queryable(&self, queryable: Queryable) -> ZResult<()> {
-        trace!("undeclare_queryable({:?})", queryable);
+    pub(crate) async fn undeclare_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = self.state.write().await;
-        state.queryables.remove(&queryable.id);
-
-        // Note: there might be several Queryables on the same ResKey.
-        // Before calling forget_eval(reskey), check if this was the last one.
-        if !state
-            .queryables
-            .values()
-            .any(|e| e.reskey == queryable.reskey)
-        {
-            let primitives = state.primitives.as_ref().unwrap();
-            primitives.forget_queryable(&queryable.reskey).await;
+        if let Some(qable_state) = state.queryables.remove(&qid) {
+            trace!("undeclare_queryable({:?})", qable_state);
+            // Note: there might be several Queryables on the same ResKey.
+            // Before calling forget_eval(reskey), check if this was the last one.
+            if !state
+                .queryables
+                .values()
+                .any(|e| e.reskey == qable_state.reskey)
+            {
+                let primitives = state.primitives.as_ref().unwrap();
+                primitives.forget_queryable(&qable_state.reskey).await;
+            }
         }
         Ok(())
     }
@@ -667,9 +621,15 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives
-            .data(resource, true, &None, payload.clone())
+            .data(
+                resource,
+                payload.clone(),
+                Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+                CongestionControl::Drop, // Default congestion control when writing data
+                None,
+            )
             .await;
-        self.handle_data(true, resource, true, &None, payload).await;
+        self.handle_data(true, resource, None, payload).await;
         Ok(())
     }
 
@@ -681,6 +641,7 @@ impl Session {
     /// * `payload` - The value to write
     /// * `encoding` - The encoding of the value
     /// * `kind` - The kind of value
+    /// * `congestion_control` - The value for the congestion control
     ///
     /// # Examples
     /// ```
@@ -688,7 +649,7 @@ impl Session {
     /// use zenoh::net::*;
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT).await.unwrap();
+    /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT, CongestionControl::Drop).await.unwrap();
     /// # })
     /// ```
     pub async fn write_ext(
@@ -697,6 +658,7 @@ impl Session {
         payload: RBuf,
         encoding: ZInt,
         kind: ZInt,
+        congestion_control: CongestionControl,
     ) -> ZResult<()> {
         trace!("write_ext({:?}, [...])", resource);
         let state = self.state.read().await;
@@ -705,24 +667,30 @@ impl Session {
         let info = zenoh_protocol::proto::DataInfo {
             source_id: None,
             source_sn: None,
-            first_broker_id: None,
-            first_broker_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
             timestamp: None,
             kind: Some(kind),
             encoding: Some(encoding),
         };
-        let mut infobuf = zenoh_protocol::io::WBuf::new(64, false);
-        infobuf.write_datainfo(&info);
+        let data_info = Some(info);
         primitives
             .data(
                 resource,
-                true,
-                &Some(infobuf.clone().into()),
                 payload.clone(),
+                Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+                congestion_control,
+                data_info.clone(),
             )
             .await;
-        self.data(resource, true, &Some(infobuf.into()), payload)
-            .await;
+        self.data(
+            resource,
+            payload,
+            Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+            congestion_control,
+            data_info.clone(),
+        )
+        .await;
         Ok(())
     }
 
@@ -730,8 +698,7 @@ impl Session {
         &self,
         local: bool,
         reskey: &ResKey,
-        _reliable: bool,
-        info: &Option<RBuf>,
+        info: Option<DataInfo>,
         payload: RBuf,
     ) {
         let (resname, senders) = {
@@ -881,7 +848,7 @@ impl Session {
                                 }
                             },
                         )
-                        .map(|qable| (qable.kind, qable.req_sender.clone()))
+                        .map(|qable| (qable.kind, qable.q_sender.clone()))
                         .collect::<Vec<(ZInt, Sender<Query>)>>();
                     (
                         if local {
@@ -978,16 +945,23 @@ impl Primitives for Session {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(&self, reskey: &ResKey, reliable: bool, info: &Option<RBuf>, payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        payload: RBuf,
+        reliability: Reliability,
+        congestion_control: CongestionControl,
+        info: Option<DataInfo>,
+    ) {
         trace!(
-            "recv Data {:?} {:?} {:?} {:?}",
+            "recv Data {:?} {:?} {:?} {:?} {:?}",
             reskey,
-            reliable,
+            payload,
+            reliability,
+            congestion_control,
             info,
-            payload
         );
-        self.handle_data(false, reskey, reliable, info, payload)
-            .await
+        self.handle_data(false, reskey, info, payload).await
     }
 
     async fn query(
@@ -1015,7 +989,7 @@ impl Primitives for Session {
         source_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
-        data_info: Option<RBuf>,
+        data_info: Option<DataInfo>,
         payload: RBuf,
     ) {
         trace!(
@@ -1093,6 +1067,15 @@ impl Primitives for Session {
 
     async fn close(&self) {
         trace!("recv Close");
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        if self.alive {
+            let this = self.clone();
+            task::spawn(async move { this.close_alive().await });
+        }
     }
 }
 

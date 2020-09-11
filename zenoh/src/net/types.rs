@@ -14,6 +14,7 @@
 use crate::net::Session;
 use async_std::stream::Stream;
 use async_std::sync::{Arc, Receiver, RwLock, Sender, TrySendError};
+use async_std::task;
 use pin_project_lite::pin_project;
 use std::fmt;
 
@@ -44,6 +45,9 @@ pub use zenoh_protocol::core::QueryTarget;
 /// The kind of consolidation that should be applied on replies to a [query](Session::query).
 pub use zenoh_protocol::core::QueryConsolidation;
 
+/// The kind of congestion control.
+pub use zenoh_protocol::core::CongestionControl;
+
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;
 
@@ -68,8 +72,11 @@ pub use zenoh_protocol::proto::Hello;
 /// # use zenoh_protocol::io::RBuf;
 /// # use zenoh_protocol::proto::DataInfo;
 /// # let sample = zenoh::net::Sample { res_name: "".to_string(), payload: RBuf::new(), data_info: None };
-/// if let Some(mut info) = sample.data_info {
-///     let info: DataInfo = info.read_datainfo().unwrap();
+/// if let Some(info) = sample.data_info {
+///     match info.timestamp {
+///         Some(ts) => println!("Sample's timestamp: {}", ts),
+///         None => println!("Sample has no timestamp"),
+///     }
 /// }
 /// ```
 pub use zenoh_protocol::proto::DataInfo;
@@ -116,7 +123,7 @@ impl Stream for HelloStream {
 pub struct Sample {
     pub res_name: String,
     pub payload: RBuf,
-    pub data_info: Option<RBuf>,
+    pub data_info: Option<DataInfo>,
 }
 
 /// The callback that will be called on each data for a [CallbackSubscriber](CallbackSubscriber).
@@ -150,41 +157,113 @@ pub struct Reply {
 
 pub(crate) type Id = usize;
 
-/// A publisher.
-#[derive(Clone)]
-pub struct Publisher {
+#[derive(Debug)]
+pub(crate) struct PublisherState {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
 }
 
-impl PartialEq for Publisher {
-    fn eq(&self, other: &Publisher) -> bool {
-        self.id == other.id
+/// A publisher.
+///
+/// Publishers are automatically undeclared on destruction in a spawned task.
+pub struct Publisher<'a> {
+    pub(crate) session: &'a Session,
+    pub(crate) state: Arc<PublisherState>,
+    pub(crate) alive: bool,
+}
+
+impl Publisher<'_> {
+    /// Undeclare a [Publisher](Publisher) previously declared with [declare_publisher](Session::declare_publisher).
+    ///
+    /// Publishers are automatically undeclared on destruction, but you may want to use this function to handle errors or
+    /// undeclare the Publisher synchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
+    /// publisher.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(mut self) -> ZResult<()> {
+        self.alive = false;
+        Session::undeclare_publisher(self.session, self.state.id).await
     }
 }
 
-impl fmt::Debug for Publisher {
+impl Drop for Publisher<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            let session = self.session.clone();
+            let id = self.state.id;
+            task::spawn(async move { Session::undeclare_publisher(&session, id).await });
+        }
+    }
+}
+
+impl fmt::Debug for Publisher<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Publisher{{ id:{} }}", self.id)
+        self.state.fmt(f)
     }
 }
 
-pin_project! {
-    /// A subscriber that provides data through a stream.
-    #[derive(Clone)]
-    pub struct Subscriber {
-        pub(crate) id: Id,
-        pub(crate) reskey: ResKey,
-        pub(crate) resname: String,
-        pub(crate) session: Session,
-        #[pin]
-        pub(crate) sender: Sender<Sample>,
-        #[pin]
-        pub(crate) receiver: Receiver<Sample>,
+pub struct SubscriberState {
+    pub(crate) id: Id,
+    pub(crate) reskey: ResKey,
+    pub(crate) resname: String,
+    pub(crate) sender: Sender<Sample>,
+}
+
+impl fmt::Debug for SubscriberState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Subscriber{{ id:{}, resname:{} }}",
+            self.id, self.resname
+        )
     }
 }
 
-impl Subscriber {
+/// A subscriber that provides data through a stream.
+///
+/// Subscribers are automatically undeclared on destruction in a spawned task.
+pub struct Subscriber<'a> {
+    pub(crate) session: &'a Session,
+    pub(crate) state: Arc<SubscriberState>,
+    pub(crate) alive: bool,
+    pub(crate) receiver: Receiver<Sample>,
+}
+
+impl Subscriber<'_> {
+    /// Get the stream from a [Subscriber](Subscriber).
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use futures::prelude::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #    reliability: Reliability::Reliable,
+    /// #    mode: SubMode::Push,
+    /// #    period: None,
+    /// # };
+    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// while let Some(sample) = subscriber.stream().next().await {
+    ///     println!("Received : {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    #[inline]
+    pub fn stream(&mut self) -> &mut Receiver<Sample> {
+        &mut self.receiver
+    }
+
     /// Pull available data for a pull-mode [Subscriber](Subscriber).
     ///
     /// # Examples
@@ -200,57 +279,87 @@ impl Subscriber {
     /// #     mode: SubMode::Pull,
     /// #     period: None
     /// # };
-    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// async_std::task::spawn(subscriber.clone().for_each(
+    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// async_std::task::spawn(subscriber.stream().clone().for_each(
     ///     async move |sample| { println!("Received : {:?}", sample); }
     /// ));
     /// subscriber.pull();
     /// # })
     /// ```
     pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.reskey).await
+        self.session.pull(&self.state.reskey).await
+    }
+
+    /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
+    ///
+    /// Subscribers are automatically undeclared on destruction, but you may want to use this function to handle errors or
+    /// undeclare the Subscriber synchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Push,
+    /// #     period: None
+    /// # };
+    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(mut self) -> ZResult<()> {
+        self.alive = false;
+        self.session.undeclare_subscriber(self.state.id).await
     }
 }
 
-impl Stream for Subscriber {
-    type Item = Sample;
-
-    #[inline(always)]
-    fn poll_next(
-        self: async_std::pin::Pin<&mut Self>,
-        cx: &mut async_std::task::Context,
-    ) -> async_std::task::Poll<Option<Self::Item>> {
-        self.project().receiver.poll_next(cx)
+impl Drop for Subscriber<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            let session = self.session.clone();
+            let id = self.state.id;
+            task::spawn(async move { Session::undeclare_subscriber(&session, id).await });
+        }
     }
 }
 
-impl PartialEq for Subscriber {
-    fn eq(&self, other: &Subscriber) -> bool {
-        self.id == other.id
+impl fmt::Debug for Subscriber<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.state.fmt(f)
     }
 }
 
-impl fmt::Debug for Subscriber {
+pub struct CallbackSubscriberState {
+    pub(crate) id: Id,
+    pub(crate) reskey: ResKey,
+    pub(crate) resname: String,
+    pub(crate) dhandler: Arc<RwLock<DataHandler>>,
+}
+
+impl fmt::Debug for CallbackSubscriberState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Subscriber{{ id:{}, resname:{} }}",
+            "CallbackSubscriber{{ id:{}, resname:{} }}",
             self.id, self.resname
         )
     }
 }
 
 /// A subscriber that provides data through a callback.
-#[derive(Clone)]
-pub struct CallbackSubscriber {
-    pub(crate) id: Id,
-    pub(crate) reskey: ResKey,
-    pub(crate) resname: String,
-    pub(crate) session: Session,
-    pub(crate) dhandler: Arc<RwLock<DataHandler>>,
+///
+/// Subscribers are automatically undeclared on destruction in a spawned task.
+pub struct CallbackSubscriber<'a> {
+    pub(crate) session: &'a Session,
+    pub(crate) state: Arc<CallbackSubscriberState>,
+    pub(crate) alive: bool,
 }
 
-impl CallbackSubscriber {
+impl CallbackSubscriber<'_> {
     /// Pull available data for a pull-mode [CallbackSubscriber](CallbackSubscriber).
     ///
     /// # Examples
@@ -271,61 +380,140 @@ impl CallbackSubscriber {
     /// # })
     /// ```
     pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.reskey).await
+        self.session.pull(&self.state.reskey).await
+    }
+
+    /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
+    ///
+    /// CallbackSubscribers are automatically undeclared on destruction, but you may want to use this function to handle errors or
+    /// undeclare the CallbackSubscriber synchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// # let sub_info = SubInfo {
+    /// #     reliability: Reliability::Reliable,
+    /// #     mode: SubMode::Push,
+    /// #     period: None
+    /// # };
+    /// # fn data_handler(_sample: Sample) { };
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(mut self) -> ZResult<()> {
+        self.alive = false;
+        self.session
+            .undeclare_callback_subscriber(self.state.id)
+            .await
     }
 }
 
-impl PartialEq for CallbackSubscriber {
-    fn eq(&self, other: &CallbackSubscriber) -> bool {
-        self.id == other.id
+impl Drop for CallbackSubscriber<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            let session = self.session.clone();
+            let id = self.state.id;
+            task::spawn(async move { Session::undeclare_callback_subscriber(&session, id).await });
+        }
     }
 }
 
-impl fmt::Debug for CallbackSubscriber {
+impl fmt::Debug for CallbackSubscriber<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "CallbackSubscriber{{ id:{}, resname:{} }}",
-            self.id, self.resname
-        )
+        self.state.fmt(f)
     }
 }
 
-pin_project! {
-    /// An entity able to reply to queries.
-    #[derive(Clone)]
-    pub struct Queryable {
-        pub(crate) id: Id,
-        pub(crate) reskey: ResKey,
-        pub(crate) kind: ZInt,
-        #[pin]
-        pub(crate) req_sender: Sender<Query>,
-        #[pin]
-        pub(crate) req_receiver: Receiver<Query>,
-    }
+pub struct QueryableState {
+    pub(crate) id: Id,
+    pub(crate) reskey: ResKey,
+    pub(crate) kind: ZInt,
+    pub(crate) q_sender: Sender<Query>,
 }
 
-impl Stream for Queryable {
-    type Item = Query;
-
-    #[inline(always)]
-    fn poll_next(
-        self: async_std::pin::Pin<&mut Self>,
-        cx: &mut async_std::task::Context,
-    ) -> async_std::task::Poll<Option<Self::Item>> {
-        self.project().req_receiver.poll_next(cx)
-    }
-}
-
-impl PartialEq for Queryable {
-    fn eq(&self, other: &Queryable) -> bool {
-        self.id == other.id
-    }
-}
-
-impl fmt::Debug for Queryable {
+impl fmt::Debug for QueryableState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Queryable{{ id:{} }}", self.id)
+        write!(f, "Queryable{{ id:{}, reskey:{} }}", self.id, self.reskey)
+    }
+}
+
+/// An entity able to reply to queries.
+///
+/// Queryables are automatically undeclared on destruction in a spawned task.
+pub struct Queryable<'a> {
+    pub(crate) session: &'a Session,
+    pub(crate) state: Arc<QueryableState>,
+    pub(crate) alive: bool,
+    pub(crate) q_receiver: Receiver<Query>,
+}
+
+impl Queryable<'_> {
+    /// Get the stream from a [Queryable](Queryable).
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use zenoh::net::queryable::EVAL;
+    /// use futures::prelude::*;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// while let Some(query) = queryable.stream().next().await {
+    ///     query.reply(Sample{
+    ///         res_name: "/resource/name".to_string(),
+    ///         payload: "value".as_bytes().into(),
+    ///         data_info: None,
+    ///     }).await;
+    /// }
+    /// # })
+    /// ```
+    #[inline]
+    pub fn stream(&mut self) -> &mut Receiver<Query> {
+        &mut self.q_receiver
+    }
+
+    /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
+    ///
+    /// Queryables are automatically undeclared on destruction, but you may want to use this function to handle errors or
+    /// undeclare the Queryable synchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::net::*;
+    /// use zenoh::net::queryable::EVAL;
+    ///
+    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// queryable.undeclare().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub async fn undeclare(mut self) -> ZResult<()> {
+        self.alive = false;
+        self.session.undeclare_queryable(self.state.id).await
+    }
+}
+
+impl Drop for Queryable<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            let session = self.session.clone();
+            let id = self.state.id;
+            task::spawn(async move { Session::undeclare_queryable(&session, id).await });
+        }
+    }
+}
+
+impl fmt::Debug for Queryable<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.state.fmt(f)
     }
 }
 

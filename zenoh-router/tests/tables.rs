@@ -18,17 +18,18 @@ use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh_protocol::core::rname::intersect;
 use zenoh_protocol::core::{
-    whatami, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, SubMode, ZInt,
+    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
+    SubInfo, SubMode, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{Mux, Primitives};
+use zenoh_protocol::proto::{DataInfo, Mux, Primitives};
 use zenoh_protocol::session::DummyHandler;
 use zenoh_router::routing::broker::*;
 
 #[test]
 fn base_test() {
     task::block_on(async {
-        let tables = Tables::new(HLC::default());
+        let tables = Tables::new(Some(HLC::default()));
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
         let face = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
         declare_resource(
@@ -124,7 +125,7 @@ fn match_test() {
             "/x/*e",
         ];
 
-        let tables = Tables::new(HLC::default());
+        let tables = Tables::new(Some(HLC::default()));
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
         let face = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
         for (i, rname) in rnames.iter().enumerate() {
@@ -158,7 +159,7 @@ fn match_test() {
 #[test]
 fn clean_test() {
     task::block_on(async {
-        let tables = Tables::new(HLC::default());
+        let tables = Tables::new(Some(HLC::default()));
 
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
         let face0 = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
@@ -461,7 +462,14 @@ impl Primitives for ClientPrimitives {
     async fn queryable(&self, _reskey: &ResKey) {}
     async fn forget_queryable(&self, _reskey: &ResKey) {}
 
-    async fn data(&self, reskey: &ResKey, _reliable: bool, _info: &Option<RBuf>, _payload: RBuf) {
+    async fn data(
+        &self,
+        reskey: &ResKey,
+        _payload: RBuf,
+        _reliability: Reliability,
+        _congestion_control: CongestionControl,
+        _info: Option<DataInfo>,
+    ) {
         *self.data.lock().unwrap() = Some(reskey.clone());
     }
     async fn query(
@@ -479,7 +487,7 @@ impl Primitives for ClientPrimitives {
         _source_kind: ZInt,
         _replier_id: PeerId,
         _reskey: ResKey,
-        _info: Option<RBuf>,
+        _info: Option<DataInfo>,
         _payload: RBuf,
     ) {
     }
@@ -499,7 +507,7 @@ impl Primitives for ClientPrimitives {
 #[test]
 fn client_test() {
     task::block_on(async {
-        let tables = Tables::new(HLC::default());
+        let tables = Tables::new(Some(HLC::default()));
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
@@ -602,8 +610,8 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             0,
             "/test/client/z1_wr1",
-            true,
-            &None,
+            CongestionControl::Block,
+            None,
             RBuf::new(),
         )
         .await;
@@ -628,8 +636,8 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             11,
             "/z1_wr2",
-            true,
-            &None,
+            CongestionControl::Block,
+            None,
             RBuf::new(),
         )
         .await;
@@ -654,8 +662,8 @@ fn client_test() {
             &mut face1.upgrade().unwrap(),
             0,
             "/test/client/**",
-            true,
-            &None,
+            CongestionControl::Block,
+            None,
             RBuf::new(),
         )
         .await;
@@ -680,8 +688,8 @@ fn client_test() {
             &mut face0.upgrade().unwrap(),
             12,
             "",
-            true,
-            &None,
+            CongestionControl::Block,
+            None,
             RBuf::new(),
         )
         .await;
@@ -706,8 +714,8 @@ fn client_test() {
             &mut face1.upgrade().unwrap(),
             22,
             "",
-            true,
-            &None,
+            CongestionControl::Block,
+            None,
             RBuf::new(),
         )
         .await;

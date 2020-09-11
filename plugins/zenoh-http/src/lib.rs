@@ -19,7 +19,6 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::*;
-use zenoh::utils;
 use zenoh_router::runtime::Runtime;
 
 const PORT_SEPARATOR: char = ':';
@@ -45,12 +44,8 @@ fn parse_http_port(arg: &str) -> String {
 }
 
 fn get_kind_str(sample: &Sample) -> String {
-    let info = sample.data_info.clone();
-    let kind = match info {
-        Some(mut buf) => match buf.read_datainfo() {
-            Ok(info) => info.kind.or(Some(data_kind::DEFAULT)).unwrap(),
-            _ => data_kind::DEFAULT,
-        },
+    let kind = match &sample.data_info {
+        Some(info) => info.kind.unwrap_or(data_kind::DEFAULT),
         None => data_kind::DEFAULT,
     };
     match data_kind::to_str(kind) {
@@ -64,7 +59,9 @@ fn sample_to_json(sample: Sample) -> String {
         "{{ \"key\": \"{}\", \"value\": \"{}\", \"time\": \"{}\" }}",
         sample.res_name,
         String::from_utf8_lossy(&sample.payload.to_vec()),
-        utils::get_data_info_timestamp(sample.data_info)
+        sample
+            .data_info
+            .and_then(|i| i.timestamp)
             .map(|ts| ts.to_string())
             .unwrap_or_else(|| "None".to_string())
     )
@@ -157,7 +154,6 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     req,
                     async move |req: Request<(Session, String)>, sender| {
                         let resource = path_to_resource(req.url().path(), &req.state().1);
-                        let session = req.state().0.clone();
                         async_std::task::spawn(async move {
                             log::debug!(
                                 "Subscribe to {} for SSE stream (task {})",
@@ -165,12 +161,14 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                 async_std::task::current().id()
                             );
                             let sender = &sender;
-                            let mut sub = session
+                            let mut sub = req
+                                .state()
+                                .0
                                 .declare_subscriber(&resource, &SSE_SUB_INFO)
                                 .await
                                 .unwrap();
                             loop {
-                                let sample = sub.next().await.unwrap();
+                                let sample = sub.stream().next().await.unwrap();
                                 let send = async {
                                     sender
                                         .send(&get_kind_str(&sample), sample_to_json(sample), None)
@@ -186,7 +184,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                                         "SSE timeout! Unsubscribe and terminate (task {})",
                                         async_std::task::current().id()
                                     );
-                                    if let Err(e) = session.undeclare_subscriber(sub).await {
+                                    if let Err(e) = sub.undeclare().await {
                                         log::error!("Error undeclaring subscriber: {}", e);
                                     }
                                     break;
@@ -267,6 +265,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                             bytes.into(),
                             enc_from_mime(req.content_type()),
                             data_kind::PUT,
+                            CongestionControl::Drop, // TODO: Define the right congestion control value for the put
                         )
                         .await
                     {
@@ -300,6 +299,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                             bytes.into(),
                             enc_from_mime(req.content_type()),
                             data_kind::PATCH,
+                            CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
                         )
                         .await
                     {
@@ -331,6 +331,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     RBuf::new(),
                     enc_from_mime(req.content_type()),
                     data_kind::DELETE,
+                    CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
                 )
                 .await
             {

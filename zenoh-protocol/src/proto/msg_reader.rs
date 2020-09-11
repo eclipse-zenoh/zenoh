@@ -36,7 +36,10 @@ impl RBuf {
             match smsg::mid(header) {
                 // Frame as first for optimization reasons
                 FRAME => {
-                    let ch = smsg::has_flag(header, smsg::flag::R);
+                    let (ch, reliability) = match smsg::has_flag(header, smsg::flag::R) {
+                        true => (Channel::Reliable, Reliability::Reliable),
+                        false => (Channel::BestEffort, Reliability::BestEffort),
+                    };
                     let sn = self.read_zint()?;
 
                     let payload = if smsg::has_flag(header, smsg::flag::F) {
@@ -52,7 +55,7 @@ impl RBuf {
                         let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
                         loop {
                             let pos = self.get_pos();
-                            if let Ok(msg) = self.read_zenoh_message() {
+                            if let Ok(msg) = self.read_zenoh_message(reliability) {
                                 messages.push(msg);
                             } else {
                                 self.set_pos(pos)?;
@@ -67,11 +70,13 @@ impl RBuf {
                     break (header, body);
                 }
 
+                // Decorator
                 ATTACHMENT => {
                     attachment = Some(self.read_deco_attachment(header)?);
                     continue;
                 }
 
+                // Messages
                 SCOUT => {
                     let pid_replies = smsg::has_flag(header, smsg::flag::I);
                     let what = if smsg::has_flag(header, smsg::flag::W) {
@@ -207,7 +212,10 @@ impl RBuf {
                 }
 
                 SYNC => {
-                    let ch = smsg::has_flag(header, smsg::flag::R);
+                    let ch = match smsg::has_flag(header, smsg::flag::R) {
+                        true => Channel::Reliable,
+                        false => Channel::BestEffort,
+                    };
                     let sn = self.read_zint()?;
                     let count = if smsg::has_flag(header, smsg::flag::C) {
                         Some(self.read_zint()?)
@@ -269,7 +277,7 @@ impl RBuf {
         })
     }
 
-    pub fn read_zenoh_message(&mut self) -> ZResult<ZenohMessage> {
+    pub fn read_zenoh_message(&mut self, reliability: Reliability) -> ZResult<ZenohMessage> {
         use super::zmsg::id::*;
 
         // Message decorators
@@ -277,7 +285,7 @@ impl RBuf {
         let mut attachment = None;
 
         // Read the message
-        let (header, body, channel) = loop {
+        let (header, body, congestion_control) = loop {
             // Read the header
             let header = self.read()?;
 
@@ -285,22 +293,30 @@ impl RBuf {
             match zmsg::mid(header) {
                 // Message data as first for optimization reasons
                 DATA => {
-                    let channel = zmsg::has_flag(header, zmsg::flag::R);
+                    let congestion_control = if zmsg::has_flag(header, zmsg::flag::D) {
+                        CongestionControl::Drop
+                    } else {
+                        CongestionControl::Block
+                    };
                     let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
-                    let info = if zmsg::has_flag(header, zmsg::flag::I) {
-                        Some(RBuf::from(self.read_bytes_array()?))
+                    let data_info = if zmsg::has_flag(header, zmsg::flag::I) {
+                        Some(self.read_data_info()?)
                     } else {
                         None
                     };
                     let payload = self.read_rbuf()?;
 
-                    let body = ZenohBody::Data(Data { key, info, payload });
-                    break (header, body, channel);
+                    let body = ZenohBody::Data(Data {
+                        key,
+                        data_info,
+                        payload,
+                    });
+                    break (header, body, congestion_control);
                 }
 
                 // Decorators
                 REPLY_CONTEXT => {
-                    reply_context = Some(self.read_deco_reply(header)?);
+                    reply_context = Some(self.read_deco_reply_context(header)?);
                     continue;
                 }
 
@@ -314,15 +330,18 @@ impl RBuf {
                     let declarations = self.read_declarations()?;
 
                     let body = ZenohBody::Declare(Declare { declarations });
-                    let channel = zmsg::default_channel::DECLARE;
-                    break (header, body, channel);
+                    let congestion_control = zmsg::default_congestion_control::DECLARE;
+                    break (header, body, congestion_control);
                 }
 
                 UNIT => {
-                    let channel = zmsg::has_flag(header, zmsg::flag::R);
-
+                    let congestion_control = if zmsg::has_flag(header, zmsg::flag::D) {
+                        CongestionControl::Drop
+                    } else {
+                        CongestionControl::Block
+                    };
                     let body = ZenohBody::Unit(Unit {});
-                    break (header, body, channel);
+                    break (header, body, congestion_control);
                 }
 
                 PULL => {
@@ -341,8 +360,8 @@ impl RBuf {
                         max_samples,
                         is_final,
                     });
-                    let channel = zmsg::default_channel::PULL;
-                    break (header, body, channel);
+                    let congestion_control = zmsg::default_congestion_control::PULL;
+                    break (header, body, congestion_control);
                 }
 
                 QUERY => {
@@ -363,8 +382,8 @@ impl RBuf {
                         target,
                         consolidation,
                     });
-                    let channel = zmsg::default_channel::QUERY;
-                    break (header, body, channel);
+                    let congestion_control = zmsg::default_congestion_control::QUERY;
+                    break (header, body, congestion_control);
                 }
 
                 unknown => {
@@ -378,7 +397,8 @@ impl RBuf {
         Ok(ZenohMessage {
             header,
             body,
-            channel,
+            reliability,
+            congestion_control,
             reply_context,
             attachment,
         })
@@ -391,7 +411,7 @@ impl RBuf {
     }
 
     // @TODO: Update the ReplyContext format
-    fn read_deco_reply(&mut self, header: u8) -> ZResult<ReplyContext> {
+    fn read_deco_reply_context(&mut self, header: u8) -> ZResult<ReplyContext> {
         let is_final = zmsg::has_flag(header, zmsg::flag::F);
         let qid = self.read_zint()?;
         let source_kind = self.read_zint()?;
@@ -408,39 +428,39 @@ impl RBuf {
         })
     }
 
-    pub fn read_datainfo(&mut self) -> ZResult<DataInfo> {
-        let header = self.read()?;
-        let source_id = if header & zmsg::info_flag::SRCID > 0 {
+    pub fn read_data_info(&mut self) -> ZResult<DataInfo> {
+        let options = self.read_zint()?;
+        let source_id = if zmsg::has_option(options, zmsg::info_opt::SRCID) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let source_sn = if header & zmsg::info_flag::SRCSN > 0 {
+        let source_sn = if zmsg::has_option(options, zmsg::info_opt::SRCSN) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let first_broker_id = if header & zmsg::info_flag::BKRID > 0 {
+        let first_router_id = if zmsg::has_option(options, zmsg::info_opt::RTRID) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let first_broker_sn = if header & zmsg::info_flag::BKRSN > 0 {
+        let first_router_sn = if zmsg::has_option(options, zmsg::info_opt::RTRSN) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let timestamp = if header & zmsg::info_flag::TS > 0 {
+        let timestamp = if zmsg::has_option(options, zmsg::info_opt::TS) {
             Some(self.read_timestamp()?)
         } else {
             None
         };
-        let kind = if header & zmsg::info_flag::KIND > 0 {
+        let kind = if zmsg::has_option(options, zmsg::info_opt::KIND) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let encoding = if header & zmsg::info_flag::ENC > 0 {
+        let encoding = if zmsg::has_option(options, zmsg::info_opt::ENC) {
             Some(self.read_zint()?)
         } else {
             None
@@ -449,33 +469,12 @@ impl RBuf {
         Ok(DataInfo {
             source_id,
             source_sn,
-            first_broker_id,
-            first_broker_sn,
+            first_router_id,
+            first_router_sn,
             timestamp,
             kind,
             encoding,
         })
-    }
-
-    pub fn read_datainfo_timestamp(&mut self) -> ZResult<Option<Timestamp>> {
-        let header = self.read()?;
-        if header & zmsg::info_flag::TS > 0 {
-            if header & zmsg::info_flag::SRCID > 0 {
-                let _ = self.read_peerid()?;
-            }
-            if header & zmsg::info_flag::SRCSN > 0 {
-                let _ = self.read_zint()?;
-            }
-            if header & zmsg::info_flag::BKRID > 0 {
-                let _ = self.read_peerid()?;
-            }
-            if header & zmsg::info_flag::BKRSN > 0 {
-                let _ = self.read_zint()?;
-            }
-            Ok(Some(self.read_timestamp()?))
-        } else {
-            Ok(None)
-        }
     }
 
     pub fn read_properties(&mut self) -> ZResult<Vec<Property>> {
@@ -632,13 +631,28 @@ impl RBuf {
 
     pub fn read_timestamp(&mut self) -> ZResult<Timestamp> {
         let time = self.read_zint_as_u64()?;
-        let mut bytes = [0u8; 16];
-        self.read_bytes(&mut bytes[..])?;
-        Ok(Timestamp::new(uhlc::NTP64(time), bytes.into()))
+        let zint = self.read_zint()?;
+        if zint > (uhlc::ID::MAX_SIZE as ZInt) {
+            panic!(
+                "Reading a Timestamp's ID size that exceed {} bytes: {}",
+                uhlc::ID::MAX_SIZE,
+                zint
+            ); //@TODO: return error
+        }
+        let size = zint as usize;
+        let mut id = [0u8; PeerId::MAX_SIZE];
+        self.read_bytes(&mut id[..size])?;
+        Ok(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
     }
 
     fn read_peerid(&mut self) -> ZResult<PeerId> {
-        let id = self.read_bytes_array()?;
-        Ok(PeerId { id })
+        let zint = self.read_zint()?;
+        if zint > (PeerId::MAX_SIZE as ZInt) {
+            panic!("Reading a PeerId size that exceed 16 bytes: {}", zint); //@TODO: return error
+        }
+        let size = zint as usize;
+        let mut id = [0u8; PeerId::MAX_SIZE];
+        self.read_bytes(&mut id[..size])?;
+        Ok(PeerId::new(size, id))
     }
 }

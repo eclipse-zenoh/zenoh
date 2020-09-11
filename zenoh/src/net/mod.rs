@@ -11,6 +11,61 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+
+//! The network level zenoh API.
+//!
+//! # Examples
+//!
+//! ### Publish
+//! ```
+//! use zenoh::net::*;
+//!
+//! #[async_std::main]
+//! async fn main() {
+//!     let session = open(Config::default(), None).await.unwrap();
+//!     session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
+//!     session.close().await.unwrap();
+//! }
+//! ```
+//!
+//! ### Subscribe
+//! ```no_run
+//! use zenoh::net::*;
+//! use futures::prelude::*;
+//!
+//! #[async_std::main]
+//! async fn main() {
+//!     let session = open(Config::default(), None).await.unwrap();
+//!     let sub_info = SubInfo {
+//!         reliability: Reliability::Reliable,
+//!         mode: SubMode::Push,
+//!         period: None
+//!     };
+//!     let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+//!     while let Some(sample) = subscriber.stream().next().await { println!("Received : {:?}", sample); };
+//! }
+//! ```
+//!
+//! ### Query
+//! ```
+//! use zenoh::net::*;
+//! use futures::prelude::*;
+//!
+//! #[async_std::main]
+//! async fn main() {
+//!     let session = open(Config::default(), None).await.unwrap();
+//!     let mut replies = session.query(
+//!         &"/resource/name".into(),
+//!         "predicate",
+//!         QueryTarget::default(),
+//!         QueryConsolidation::default()
+//!     ).await.unwrap();
+//!     while let Some(reply) = replies.next().await {
+//!         println!(">> Received {:?}", reply.data);
+//!     }
+//! }
+//! ```
+
 use async_std::sync::channel;
 use futures::prelude::*;
 use log::{debug, trace};
@@ -56,7 +111,7 @@ pub mod utils {
 /// use zenoh::net::*;
 /// use futures::prelude::*;
 ///
-/// let mut stream = scout(whatami::PEER | whatami::BROKER | whatami::ROUTER, "auto").await;
+/// let mut stream = scout(whatami::PEER | whatami::ROUTER, "auto").await;
 /// while let Some(hello) = stream.next().await {
 ///     println!("{}", hello);
 /// }
