@@ -16,7 +16,7 @@ name = "zenoh-ffi"
 version = "0.5.0"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
-           "Olivier Hécart <olivier.hecart@adlinktech.com",
+           "Olivier Hécart <olivier.hecart@adlinktech.com>",
 		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
 
@@ -40,7 +40,7 @@ env_logger = "0.7.1"
 version = "0.3.3"
 
 [dependencies.async-std]
-version = "~1.6.0"
+version = "1.6.2"
 features = ["unstable"]
 
 [lib]

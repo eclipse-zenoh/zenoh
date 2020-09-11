@@ -16,7 +16,7 @@ name = "zenoh_backend_core"
 version = "0.5.0"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
-           "Olivier Hécart <olivier.hecart@adlinktech.com",
+           "Olivier Hécart <olivier.hecart@adlinktech.com>",
 		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
 

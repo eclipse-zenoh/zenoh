@@ -16,7 +16,7 @@ name = "zenoh-perf"
 version = "0.5.0"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
-           "Olivier Hécart <olivier.hecart@adlinktech.com",
+           "Olivier Hécart <olivier.hecart@adlinktech.com>",
 		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
 
@@ -37,7 +37,7 @@ zenoh-router =  { version = "0.5.0", path = "../zenoh-router" }
 zenoh-util =  { version = "0.5.0", path = "../zenoh-util" }
 
 [dependencies.async-std]
-version = "~1.6.2"
+version = "1.6.2"
 features = ["unstable"]
 
 [profile.release]
