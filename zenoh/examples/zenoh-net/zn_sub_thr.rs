@@ -61,10 +61,6 @@ async fn main() {
 
     // Stop forever
     future::pending::<()>().await;
-
-    // @TODO: Uncomment these once the writer starvation has been solved on the RwLock
-    // session.undeclare_subscriber(sub).await.unwrap();
-    // session.close().await.unwrap();
 }
 
 fn print_stats(start: Instant, n: u128) {

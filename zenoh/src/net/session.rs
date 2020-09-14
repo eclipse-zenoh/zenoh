@@ -190,10 +190,10 @@ impl Session {
         Ok(())
     }
 
-    /// Close the zenoh-net session.
+    /// Close the zenoh-net [Session](Session).
     ///
-    /// Sessions are automatically closed on destruction, but you may want to use this function to handle errors or
-    /// close the session synchronously.
+    /// Sessions are automatically closed when dropped, but you may want to use this function to handle errors or
+    /// close the Session asynchronously.
     ///
     /// # Examples
     /// ```
@@ -201,7 +201,7 @@ impl Session {
     /// use zenoh::net::*;
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
-    /// session.close();
+    /// session.close().await.unwrap();
     /// # })
     /// ```
     pub async fn close(mut self) -> ZResult<()> {
@@ -209,7 +209,7 @@ impl Session {
         self.close_alive().await
     }
 
-    /// Get informations about the zenoh-net session.
+    /// Get informations about the zenoh-net [Session](Session).
     ///
     /// # Examples
     /// ```
@@ -371,8 +371,6 @@ impl Session {
 
     /// Declare a [Subscriber](Subscriber) for the given resource key.
     ///
-    /// The returned [Subscriber](Subscriber) implements the Stream trait.
-    ///
     /// # Arguments
     ///
     /// * `resource` - The resource key to subscribe
@@ -530,8 +528,6 @@ impl Session {
     }
 
     /// Declare a [Queryable](Queryable) for the given resource key.
-    ///
-    /// The returned [Queryable](Queryable) implements the Stream trait.
     ///
     /// # Arguments
     ///
@@ -1074,7 +1070,9 @@ impl Drop for Session {
     fn drop(&mut self) {
         if self.alive {
             let this = self.clone();
-            task::spawn(async move { this.close_alive().await });
+            let _ = task::block_on(async move {
+                task::spawn_blocking(move || task::block_on(this.close_alive())).await
+            });
         }
     }
 }

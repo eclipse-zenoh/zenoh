@@ -81,10 +81,6 @@ async fn main() {
             }
         );
     }
-
-    queryable.undeclare().await.unwrap();
-    subscriber.undeclare().await.unwrap();
-    session.close().await.unwrap();
 }
 
 fn parse_args() -> (Config, String) {

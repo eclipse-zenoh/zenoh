@@ -29,8 +29,6 @@ async fn main() {
         .write(&path.into(), value.as_bytes().into())
         .await
         .unwrap();
-
-    session.close().await.unwrap();
 }
 
 fn parse_args() -> (Config, String, String) {

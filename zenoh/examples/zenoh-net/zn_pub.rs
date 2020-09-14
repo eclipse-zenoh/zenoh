@@ -29,16 +29,13 @@ async fn main() {
     println!(" => RId {}", rid);
 
     println!("Declaring Publisher on {}", rid);
-    let publisher = session.declare_publisher(&rid.into()).await.unwrap();
+    let _publisher = session.declare_publisher(&rid.into()).await.unwrap();
 
     println!("Writing Data ('{}': '{}')...\n", rid, value);
     session
         .write(&rid.into(), value.as_bytes().into())
         .await
         .unwrap();
-
-    publisher.undeclare().await.unwrap();
-    session.close().await.unwrap();
 }
 
 fn parse_args() -> (Config, String, String) {

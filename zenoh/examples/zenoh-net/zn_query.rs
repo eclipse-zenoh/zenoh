@@ -44,8 +44,6 @@ async fn main() {
             String::from_utf8_lossy(&reply.data.payload.to_vec())
         )
     }
-
-    session.close().await.unwrap();
 }
 
 fn parse_args() -> (Config, String) {

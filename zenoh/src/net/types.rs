@@ -165,7 +165,7 @@ pub(crate) struct PublisherState {
 
 /// A publisher.
 ///
-/// Publishers are automatically undeclared on destruction in a spawned task.
+/// Publishers are automatically undeclared when dropped.
 pub struct Publisher<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<PublisherState>,
@@ -175,8 +175,8 @@ pub struct Publisher<'a> {
 impl Publisher<'_> {
     /// Undeclare a [Publisher](Publisher) previously declared with [declare_publisher](Session::declare_publisher).
     ///
-    /// Publishers are automatically undeclared on destruction, but you may want to use this function to handle errors or
-    /// undeclare the Publisher synchronously.
+    /// Publishers are automatically undeclared when dropped, but you may want to use this function to handle errors or
+    /// undeclare the Publisher asynchronously.
     ///
     /// # Examples
     /// ```
@@ -200,7 +200,12 @@ impl Drop for Publisher<'_> {
         if self.alive {
             let session = self.session.clone();
             let id = self.state.id;
-            task::spawn(async move { Session::undeclare_publisher(&session, id).await });
+            let _ = task::block_on(async move {
+                task::spawn_blocking(move || {
+                    task::block_on(Session::undeclare_publisher(&session, id))
+                })
+                .await
+            });
         }
     }
 }
@@ -230,7 +235,7 @@ impl fmt::Debug for SubscriberState {
 
 /// A subscriber that provides data through a stream.
 ///
-/// Subscribers are automatically undeclared on destruction in a spawned task.
+/// Subscribers are automatically undeclared when dropped.
 pub struct Subscriber<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<SubscriberState>,
@@ -292,8 +297,8 @@ impl Subscriber<'_> {
 
     /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
     ///
-    /// Subscribers are automatically undeclared on destruction, but you may want to use this function to handle errors or
-    /// undeclare the Subscriber synchronously.
+    /// Subscribers are automatically undeclared when dropped, but you may want to use this function to handle errors or
+    /// undeclare the Subscriber asynchronously.
     ///
     /// # Examples
     /// ```
@@ -322,7 +327,12 @@ impl Drop for Subscriber<'_> {
         if self.alive {
             let session = self.session.clone();
             let id = self.state.id;
-            task::spawn(async move { Session::undeclare_subscriber(&session, id).await });
+            let _ = task::block_on(async move {
+                task::spawn_blocking(move || {
+                    task::block_on(Session::undeclare_subscriber(&session, id))
+                })
+                .await
+            });
         }
     }
 }
@@ -352,7 +362,7 @@ impl fmt::Debug for CallbackSubscriberState {
 
 /// A subscriber that provides data through a callback.
 ///
-/// Subscribers are automatically undeclared on destruction in a spawned task.
+/// Subscribers are automatically undeclared when dropped.
 pub struct CallbackSubscriber<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<CallbackSubscriberState>,
@@ -385,8 +395,8 @@ impl CallbackSubscriber<'_> {
 
     /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
     ///
-    /// CallbackSubscribers are automatically undeclared on destruction, but you may want to use this function to handle errors or
-    /// undeclare the CallbackSubscriber synchronously.
+    /// CallbackSubscribers are automatically undeclared when dropped, but you may want to use this function to handle errors or
+    /// undeclare the CallbackSubscriber asynchronously.
     ///
     /// # Examples
     /// ```
@@ -418,7 +428,12 @@ impl Drop for CallbackSubscriber<'_> {
         if self.alive {
             let session = self.session.clone();
             let id = self.state.id;
-            task::spawn(async move { Session::undeclare_callback_subscriber(&session, id).await });
+            let _ = task::block_on(async move {
+                task::spawn_blocking(move || {
+                    task::block_on(Session::undeclare_callback_subscriber(&session, id))
+                })
+                .await
+            });
         }
     }
 }
@@ -444,7 +459,7 @@ impl fmt::Debug for QueryableState {
 
 /// An entity able to reply to queries.
 ///
-/// Queryables are automatically undeclared on destruction in a spawned task.
+/// Queryables are automatically undeclared when dropped.
 pub struct Queryable<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<QueryableState>,
@@ -480,8 +495,8 @@ impl Queryable<'_> {
 
     /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
     ///
-    /// Queryables are automatically undeclared on destruction, but you may want to use this function to handle errors or
-    /// undeclare the Queryable synchronously.
+    /// Queryables are automatically undeclared when dropped, but you may want to use this function to handle errors or
+    /// undeclare the Queryable asynchronously.
     ///
     /// # Examples
     /// ```
@@ -506,7 +521,12 @@ impl Drop for Queryable<'_> {
         if self.alive {
             let session = self.session.clone();
             let id = self.state.id;
-            task::spawn(async move { Session::undeclare_queryable(&session, id).await });
+            let _ = task::block_on(async move {
+                task::spawn_blocking(move || {
+                    task::block_on(Session::undeclare_queryable(&session, id))
+                })
+                .await
+            });
         }
     }
 }
