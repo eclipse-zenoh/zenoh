@@ -149,6 +149,7 @@ impl Query {
 }
 
 /// Structs returned by a [query](Session::query).
+#[derive(Clone)]
 pub struct Reply {
     pub data: Sample,
     pub source_kind: ZInt,
