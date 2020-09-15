@@ -14,7 +14,10 @@
 use std::convert::From;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
+use zenoh_util::core::{ZError, ZErrorKind};
+use zenoh_util::zerror;
 
 pub mod rname;
 
@@ -25,6 +28,10 @@ pub type ZInt = u64;
 pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
 pub const ZINT_MAX_BYTES: usize = 10;
+
+zconfigurable! {
+    static ref CONGESTION_CONTROL_DEFAULT: CongestionControl = CongestionControl::Drop;
+}
 
 // WhatAmI values
 pub type WhatAmI = whatami::Type;
@@ -230,6 +237,31 @@ pub enum Channel {
 pub enum CongestionControl {
     Block,
     Drop,
+}
+
+impl Default for CongestionControl {
+    fn default() -> CongestionControl {
+        *CONGESTION_CONTROL_DEFAULT
+    }
+}
+
+impl FromStr for CongestionControl {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "block" => Ok(CongestionControl::Block),
+            "drop" => Ok(CongestionControl::Drop),
+            _ => {
+                let e = format!(
+                    "Invalid CongestionControl: {}. Valid values are: 'block' | 'drop'",
+                    s
+                );
+                log::warn!("{}", e);
+                zerror!(ZErrorKind::Other { descr: e })
+            }
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

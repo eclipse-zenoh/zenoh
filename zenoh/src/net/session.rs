@@ -620,8 +620,8 @@ impl Session {
             .data(
                 resource,
                 payload.clone(),
-                Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
-                CongestionControl::Drop, // Default congestion control when writing data
+                Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+                CongestionControl::default(), // Default congestion control when writing data
                 None,
             )
             .await;
