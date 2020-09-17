@@ -24,7 +24,7 @@ const KV_SEP: char = '=';
 ///
 /// It can be parsed from a String, using `;` as separator between each properties
 /// and `=` as separator between a key and its value.
-pub struct Properties(pub(crate) HashMap<String, String>);
+pub struct Properties(pub HashMap<String, String>);
 
 impl Default for Properties {
     fn default() -> Self {
@@ -93,6 +93,12 @@ impl From<&str> for Properties {
 impl From<String> for Properties {
     fn from(s: String) -> Self {
         Self::from(s.as_str())
+    }
+}
+
+impl From<HashMap<String, String>> for Properties {
+    fn from(map: HashMap<String, String>) -> Self {
+        Self(map)
     }
 }
 

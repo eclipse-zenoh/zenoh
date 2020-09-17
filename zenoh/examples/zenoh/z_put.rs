@@ -86,5 +86,41 @@ async fn main() {
         .await
         .unwrap();
 
+    // --- Examples of put with other types:
+
+    // - Integer
+    // workspace.put(&"/demo/example/Integer".try_into().unwrap(), 3.into())
+    //     .await.unwrap();
+
+    // - Float
+    // workspace.put(&"/demo/example/Float".try_into().unwrap(), 3.14.into())
+    //     .await.unwrap();
+
+    // - Properties (as a Dictionary with str only)
+    // workspace.put(
+    //         &"/demo/example/Properties".try_into().unwrap(),
+    //         Properties::from("p1=v1;p2=v2").into()
+    //     ).await.unwrap();
+
+    // - Json (str format)
+    // workspace.put(
+    //         &"/demo/example/Json".try_into().unwrap(),
+    //         Value::Json(r#"{"kind"="memory"}"#.to_string()),
+    //     ).await.unwrap();
+
+    // - Raw ('application/octet-stream' encoding by default)
+    // workspace.put(
+    //         &"/demo/example/Raw".try_into().unwrap(),
+    //         vec![0x48u8, 0x69, 0x33].into(),
+    //     ).await.unwrap();
+
+    // - Custom
+    // workspace.put(
+    //         &"/demo/example/Custom".try_into().unwrap(),
+    //         Value::Custom {
+    //             encoding_descr: "my_encoding".to_string(),
+    //             data: vec![0x48u8, 0x69, 0x33].into(),
+    //     }).await.unwrap();
+
     zenoh.close().await.unwrap();
 }
