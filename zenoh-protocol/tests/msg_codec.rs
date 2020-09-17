@@ -219,12 +219,15 @@ fn test_write_read_zenoh_message(msg: ZenohMessage) {
 fn scout_tests() {
     for _ in 0..NUM_ITER {
         let wami = [None, Some(gen!(ZInt))];
+        let pid_req = [true, false];
         let attachment = [None, Some(gen_attachment())];
 
         for w in wami.iter() {
-            for a in attachment.iter() {
-                let msg = SessionMessage::make_scout(w.clone(), false, false, a.clone());
-                test_write_read_session_message(msg);
+            for p in pid_req.iter() {
+                for a in attachment.iter() {
+                    let msg = SessionMessage::make_scout(w.clone(), *p, a.clone());
+                    test_write_read_session_message(msg);
+                }
             }
         }
     }
@@ -233,21 +236,25 @@ fn scout_tests() {
 #[test]
 fn hello_tests() {
     for _ in 0..NUM_ITER {
+        let pid = [None, Some(gen_pid())];
         let wami = [None, Some(gen!(ZInt))];
         let locators = [
             None,
             Some(vec![
                 "tcp/1.2.3.4:1234".parse().unwrap(),
-                "tcp/4.5.6.7:4567".parse().unwrap(),
+                "tcp/5.6.7.8:5678".parse().unwrap(),
             ]),
         ];
         let attachment = [None, Some(gen_attachment())];
 
-        for w in wami.iter() {
-            for l in locators.iter() {
-                for a in attachment.iter() {
-                    let msg = SessionMessage::make_hello(None, w.clone(), l.clone(), a.clone());
-                    test_write_read_session_message(msg);
+        for p in pid.iter() {
+            for w in wami.iter() {
+                for l in locators.iter() {
+                    for a in attachment.iter() {
+                        let msg =
+                            SessionMessage::make_hello(p.clone(), w.clone(), l.clone(), a.clone());
+                        test_write_read_session_message(msg);
+                    }
                 }
             }
         }

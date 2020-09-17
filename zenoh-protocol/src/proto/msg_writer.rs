@@ -13,7 +13,6 @@
 //
 use std::convert::TryFrom;
 
-use super::decl::*;
 use super::msg::*;
 
 use crate::core::*;
@@ -287,25 +286,25 @@ impl WBuf {
     pub fn write_data_info(&mut self, info: &DataInfo) -> bool {
         let mut options: ZInt = 0;
         if info.source_id.is_some() {
-            options |= zmsg::info_opt::SRCID
+            options |= zmsg::data::info::SRCID
         }
         if info.source_sn.is_some() {
-            options |= zmsg::info_opt::SRCSN
+            options |= zmsg::data::info::SRCSN
         }
         if info.first_router_id.is_some() {
-            options |= zmsg::info_opt::RTRID
+            options |= zmsg::data::info::RTRID
         }
         if info.first_router_sn.is_some() {
-            options |= zmsg::info_opt::RTRSN
+            options |= zmsg::data::info::RTRSN
         }
         if info.timestamp.is_some() {
-            options |= zmsg::info_opt::TS
+            options |= zmsg::data::info::TS
         }
         if info.kind.is_some() {
-            options |= zmsg::info_opt::KIND
+            options |= zmsg::data::info::KIND
         }
         if info.encoding.is_some() {
-            options |= zmsg::info_opt::ENC
+            options |= zmsg::data::info::ENC
         }
         check!(self.write_zint(options));
 
@@ -363,7 +362,7 @@ impl WBuf {
     }
 
     fn write_declaration(&mut self, declaration: &Declaration) -> bool {
-        use super::decl::{id::*, Declaration::*};
+        use zmsg::declaration::id::*;
 
         macro_rules! write_key_decl {
             ($buf:ident, $flag:ident, $key:ident) => {{
@@ -379,14 +378,16 @@ impl WBuf {
         }
 
         match declaration {
-            Resource { rid, key } => {
+            Declaration::Resource { rid, key } => {
                 let kflag = if key.is_numerical() { zmsg::flag::K } else { 0 };
                 self.write(RESOURCE | kflag) && self.write_zint(*rid) && self.write_reskey(key)
             }
 
-            ForgetResource { rid } => self.write(FORGET_RESOURCE) && self.write_zint(*rid),
+            Declaration::ForgetResource { rid } => {
+                self.write(FORGET_RESOURCE) && self.write_zint(*rid)
+            }
 
-            Subscriber { key, info } => {
+            Declaration::Subscriber { key, info } => {
                 let kflag = if key.is_numerical() { zmsg::flag::K } else { 0 };
                 let sflag = if info.mode == SubMode::Push && info.period.is_none() {
                     0
@@ -403,19 +404,23 @@ impl WBuf {
                     && (sflag == 0 || self.write_submode(&info.mode, &info.period))
             }
 
-            ForgetSubscriber { key } => write_key_decl!(self, FORGET_SUBSCRIBER, key),
-            Publisher { key } => write_key_decl!(self, PUBLISHER, key),
-            ForgetPublisher { key } => write_key_decl!(self, FORGET_PUBLISHER, key),
-            Queryable { key } => write_key_decl!(self, QUERYABLE, key),
-            ForgetQueryable { key } => write_key_decl!(self, FORGET_QUERYABLE, key),
+            Declaration::ForgetSubscriber { key } => write_key_decl!(self, FORGET_SUBSCRIBER, key),
+            Declaration::Publisher { key } => write_key_decl!(self, PUBLISHER, key),
+            Declaration::ForgetPublisher { key } => write_key_decl!(self, FORGET_PUBLISHER, key),
+            Declaration::Queryable { key } => write_key_decl!(self, QUERYABLE, key),
+            Declaration::ForgetQueryable { key } => write_key_decl!(self, FORGET_QUERYABLE, key),
         }
     }
 
     fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool {
-        let period_mask: u8 = if period.is_some() { id::PERIOD } else { 0x00 };
+        let period_mask: u8 = if period.is_some() {
+            zmsg::declaration::flag::PERIOD
+        } else {
+            0
+        };
         check!(match mode {
-            SubMode::Push => self.write(id::MODE_PUSH | period_mask),
-            SubMode::Pull => self.write(id::MODE_PULL | period_mask),
+            SubMode::Push => self.write(zmsg::declaration::id::MODE_PUSH | period_mask),
+            SubMode::Pull => self.write(zmsg::declaration::id::MODE_PULL | period_mask),
         });
         if let Some(p) = period {
             self.write_zint(p.origin) && self.write_zint(p.period) && self.write_zint(p.duration)

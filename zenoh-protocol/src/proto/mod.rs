@@ -17,9 +17,6 @@ pub use constants::*;
 mod msg;
 pub use msg::*;
 
-mod decl;
-pub use decl::*;
-
 mod primitives;
 pub use primitives::*;
 

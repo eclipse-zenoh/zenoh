@@ -331,7 +331,7 @@ impl SessionOrchestrator {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-            wbuf.write_session_message(&SessionMessage::make_scout(Some(what), true, false, None));
+            wbuf.write_session_message(&SessionMessage::make_scout(Some(what), true, None));
             loop {
                 log::trace!("Send scout to {}:{}", MCAST_ADDR, MCAST_PORT);
                 if let Err(err) = socket
@@ -486,13 +486,13 @@ impl SessionOrchestrator {
             if let Ok(msg) = rbuf.read_session_message() {
                 log::trace!("Received {:?}", msg);
                 if let SessionBody::Scout(Scout {
-                    what, pid_replies, ..
+                    what, pid_request, ..
                 }) = msg.get_body()
                 {
                     let what = what.or(Some(whatami::ROUTER)).unwrap();
                     if what & self.whatami != 0 {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-                        let pid = if *pid_replies {
+                        let pid = if *pid_request {
                             Some(self.manager.pid())
                         } else {
                             None

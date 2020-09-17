@@ -15,7 +15,6 @@ use crate::core::*;
 use crate::io::RBuf;
 use crate::link::Locator;
 
-use super::decl::*;
 use super::msg::*;
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -78,19 +77,14 @@ impl RBuf {
 
                 // Messages
                 SCOUT => {
-                    let pid_replies = smsg::has_flag(header, smsg::flag::I);
+                    let pid_request = smsg::has_flag(header, smsg::flag::I);
                     let what = if smsg::has_flag(header, smsg::flag::W) {
                         Some(self.read_zint()?)
                     } else {
                         None
                     };
-                    let forwarding = smsg::has_flag(header, smsg::flag::T);
 
-                    let body = SessionBody::Scout(Scout {
-                        what,
-                        pid_replies,
-                        forwarding,
-                    });
+                    let body = SessionBody::Scout(Scout { what, pid_request });
                     break (header, body);
                 }
 
@@ -430,37 +424,37 @@ impl RBuf {
 
     pub fn read_data_info(&mut self) -> ZResult<DataInfo> {
         let options = self.read_zint()?;
-        let source_id = if zmsg::has_option(options, zmsg::info_opt::SRCID) {
+        let source_id = if zmsg::has_option(options, zmsg::data::info::SRCID) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let source_sn = if zmsg::has_option(options, zmsg::info_opt::SRCSN) {
+        let source_sn = if zmsg::has_option(options, zmsg::data::info::SRCSN) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let first_router_id = if zmsg::has_option(options, zmsg::info_opt::RTRID) {
+        let first_router_id = if zmsg::has_option(options, zmsg::data::info::RTRID) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let first_router_sn = if zmsg::has_option(options, zmsg::info_opt::RTRSN) {
+        let first_router_sn = if zmsg::has_option(options, zmsg::data::info::RTRSN) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let timestamp = if zmsg::has_option(options, zmsg::info_opt::TS) {
+        let timestamp = if zmsg::has_option(options, zmsg::data::info::TS) {
             Some(self.read_timestamp()?)
         } else {
             None
         };
-        let kind = if zmsg::has_option(options, zmsg::info_opt::KIND) {
+        let kind = if zmsg::has_option(options, zmsg::data::info::KIND) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let encoding = if zmsg::has_option(options, zmsg::info_opt::ENC) {
+        let encoding = if zmsg::has_option(options, zmsg::data::info::ENC) {
             Some(self.read_zint()?)
         } else {
             None
@@ -511,7 +505,8 @@ impl RBuf {
     }
 
     fn read_declaration(&mut self) -> ZResult<Declaration> {
-        use super::decl::{id::*, Declaration::*};
+        use super::zmsg::declaration::id::*;
+        use super::Declaration::*;
 
         macro_rules! read_key_delc {
             ($buf:ident, $header:ident, $type:ident) => {{
@@ -526,12 +521,12 @@ impl RBuf {
             RESOURCE => {
                 let rid = self.read_zint()?;
                 let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
-                Ok(Resource { rid, key })
+                Ok(Declaration::Resource { rid, key })
             }
 
             FORGET_RESOURCE => {
                 let rid = self.read_zint()?;
-                Ok(ForgetResource { rid })
+                Ok(Declaration::ForgetResource { rid })
             }
 
             SUBSCRIBER => {
@@ -546,7 +541,7 @@ impl RBuf {
                 } else {
                     (SubMode::Push, None)
                 };
-                Ok(Subscriber {
+                Ok(Declaration::Subscriber {
                     key,
                     info: SubInfo {
                         reliability,
@@ -567,14 +562,16 @@ impl RBuf {
     }
 
     fn read_submode(&mut self) -> ZResult<(SubMode, Option<Period>)> {
-        use super::decl::id::*;
+        use super::zmsg::declaration::flag::*;
+        use super::zmsg::declaration::id::*;
+
         let mode_flag = self.read()?;
         let mode = match mode_flag & !PERIOD {
-            id::MODE_PUSH => SubMode::Push,
-            id::MODE_PULL => SubMode::Pull,
+            MODE_PUSH => SubMode::Push,
+            MODE_PULL => SubMode::Pull,
             id => panic!("UNEXPECTED ID FOR SubMode: {}", id), //@TODO: return error
         };
-        let period = if mode_flag & PERIOD > 0 {
+        let period = if zmsg::has_flag(mode_flag, PERIOD) {
             Some(Period {
                 origin: self.read_zint()?,
                 period: self.read_zint()?,

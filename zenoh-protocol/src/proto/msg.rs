@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::decl::Declaration;
 use crate::core::*;
 use crate::io::RBuf;
 use crate::link::Locator;
@@ -147,7 +146,7 @@ pub mod zmsg {
     pub mod flag {
         pub const D: u8 = 1 << 5; // 0x20 Dropping     if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final        if F==1 then this is the final message (e.g., ReplyContext, Pull)
-        pub const I: u8 = 1 << 6; // 0x40 Info         if I==1 then DataInfo is present
+        pub const I: u8 = 1 << 6; // 0x40 DtaInfo      if I==1 then DataInfo is present
         pub const K: u8 = 1 << 7; // 0x80 ResourceKey  if K==1 then only numerical ID
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples   if N==1 then the MaxSamples is indicated
         pub const R: u8 = 1 << 5; // 0x20 Reliable     if R==1 then it concerns the reliable channel, best-effort otherwise
@@ -158,16 +157,43 @@ pub mod zmsg {
     }
 
     // Options used for DataInfo
-    pub mod info_opt {
+    pub mod data {
         use super::ZInt;
 
-        pub const SRCID: ZInt = 1; // 0x01
-        pub const SRCSN: ZInt = 1 << 1; // 0x02
-        pub const RTRID: ZInt = 1 << 2; // 0x04
-        pub const RTRSN: ZInt = 1 << 3; // 0x08
-        pub const TS: ZInt = 1 << 4; // 0x10
-        pub const KIND: ZInt = 1 << 5; // 0x20
-        pub const ENC: ZInt = 1 << 6; // 0x40
+        pub mod info {
+            use super::ZInt;
+
+            pub const SRCID: ZInt = 1; // 0x01
+            pub const SRCSN: ZInt = 1 << 1; // 0x02
+            pub const RTRID: ZInt = 1 << 2; // 0x04
+            pub const RTRSN: ZInt = 1 << 3; // 0x08
+            pub const TS: ZInt = 1 << 4; // 0x10
+            pub const KIND: ZInt = 1 << 5; // 0x20
+            pub const ENC: ZInt = 1 << 6; // 0x40
+        }
+    }
+
+    pub mod declaration {
+        pub mod id {
+            // Declarations
+            pub const RESOURCE: u8 = 0x01;
+            pub const PUBLISHER: u8 = 0x02;
+            pub const SUBSCRIBER: u8 = 0x03;
+            pub const QUERYABLE: u8 = 0x04;
+
+            pub const FORGET_RESOURCE: u8 = 0x11;
+            pub const FORGET_PUBLISHER: u8 = 0x12;
+            pub const FORGET_SUBSCRIBER: u8 = 0x13;
+            pub const FORGET_QUERYABLE: u8 = 0x14;
+
+            // SubModes
+            pub const MODE_PUSH: u8 = 0x00;
+            pub const MODE_PULL: u8 = 0x01;
+        }
+
+        pub mod flag {
+            pub const PERIOD: u8 = 0x80;
+        }
     }
 
     // Default reliability for each Zenoh Message
@@ -212,6 +238,85 @@ pub mod zmsg {
     pub fn has_option(options: ZInt, flag: ZInt) -> bool {
         options & flag != 0
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Declaration {
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |K|X|X| RESOURCE|
+    /// +---------------+
+    /// ~      RID      ~
+    /// +---------------+
+    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// +---------------+
+    ///
+    /// @Olivier, the idea would be to be able to declare a
+    /// resource using an ID to avoid sending the prefix.
+    /// If we do this however, we open the door to receiving declaration
+    /// that may try to redefine an Id... Which BTW may not be so bad, as
+    /// we could use this instead as the rebind. Thoughts?
+    Resource { rid: ZInt, key: ResKey },
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |X|X|X|  F_RES  |
+    /// +---------------+
+    /// ~      RID      ~
+    /// +---------------+
+    ForgetResource { rid: ZInt },
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |K|X|X|   PUB   |
+    /// +---------------+
+    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// +---------------+
+    Publisher { key: ResKey },
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |K|X|X|  F_PUB  |
+    /// +---------------+
+    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// +---------------+
+    ForgetPublisher { key: ResKey },
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |K|S|R|   SUB   |  R for Reliable
+    /// +---------------+
+    /// ~    ResKey     ~ if K==1 then only numerical id
+    /// +---------------+
+    /// |P|  SubMode    | if S==1. Otherwise: SubMode=Push
+    /// +---------------+
+    /// ~    Period     ~ if P==1. Otherwise: None
+    /// +---------------+
+    Subscriber { key: ResKey, info: SubInfo },
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |K|X|X|  F_SUB  |
+    /// +---------------+
+    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// +---------------+
+    ForgetSubscriber { key: ResKey },
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |K|X|X|  QABLE  |
+    /// +---------------+
+    /// ~     ResKey    ~ if  K==1 then only numerical id
+    /// +---------------+
+    Queryable { key: ResKey },
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |K|X|X| F_QABLE |
+    /// +---------------+
+    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// +---------------+
+    ForgetQueryable { key: ResKey },
 }
 
 ///  7 6 5 4 3 2 1 0
@@ -560,18 +665,17 @@ pub mod smsg {
     // Session message flags
     pub mod flag {
         pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
-        pub const D: u8 = 1 << 5; // 0x80 LeasePeriod   if D==1 then the lease period is present
+        pub const D: u8 = 1 << 5; // 0x20 LeasePeriod   if D==1 then the lease period is present
         pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
         pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
         pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is present
         pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
-        pub const L: u8 = 1 << 7; // 0x20 Locators      if L==1 then Locators are present
+        pub const L: u8 = 1 << 7; // 0x80 Locators      if L==1 then Locators are present
         pub const M: u8 = 1 << 5; // 0x20 Mask          if M==1 then a Mask is present
         pub const O: u8 = 1 << 5; // 0x20 Options       if O==1 then options are present
         pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
-        pub const T: u8 = 1 << 7; // 0x80 SN Resolution if T==1 then the scouter is asking for forwarded hello messages
         pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
 
         pub const X: u8 = 0; // Unused flags are set to zero
@@ -627,19 +731,15 @@ pub enum FramePayload {
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |T|W|I|  SCOUT  |
+/// |X|W|I|  SCOUT  |
 /// +-+-+-+-+-------+
 /// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Brokers
 /// +---------------+
 ///
-/// - if I==1 then the sender is asking for hello replies that contain a peer_id.
-/// - if T==1 then the scouter is asking for forwarded hello messages.
-///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scout {
     pub what: Option<WhatAmI>,
-    pub pid_replies: bool,
-    pub forwarding: bool,
+    pub pid_request: bool,
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
@@ -666,7 +766,7 @@ pub struct Scout {
 /// +-+-+-+-+-------+
 /// ~    peer-id    ~ if I==1
 /// +---------------+
-/// ~    whatmai    ~ if W==1 -- Otherwise it is from a Broker
+/// ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
 /// +---------------+
 /// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
 /// +---------------+
@@ -998,22 +1098,16 @@ pub struct SessionMessage {
 impl SessionMessage {
     pub fn make_scout(
         what: Option<WhatAmI>,
-        pid_replies: bool,
-        forwarding: bool,
+        pid_request: bool,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
-        let iflag = if pid_replies { smsg::flag::I } else { 0 };
+        let iflag = if pid_request { smsg::flag::I } else { 0 };
         let wflag = if what.is_some() { smsg::flag::W } else { 0 };
-        let tflag = if forwarding { smsg::flag::T } else { 0 };
-        let header = smsg::id::SCOUT | iflag | wflag | tflag;
+        let header = smsg::id::SCOUT | wflag | iflag;
 
         SessionMessage {
             header,
-            body: SessionBody::Scout(Scout {
-                what,
-                pid_replies,
-                forwarding,
-            }),
+            body: SessionBody::Scout(Scout { what, pid_request }),
             attachment,
         }
     }
@@ -1261,14 +1355,4 @@ impl SessionMessage {
     pub fn get_attachment_mut(&mut self) -> &mut Option<Attachment> {
         &mut self.attachment
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct MalformedMessage {
-    pub msg: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct InvalidMessage {
-    pub msg: String,
 }
