@@ -29,6 +29,36 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn encoding(&self) -> ZInt {
+        use Value::*;
+        match self {
+            Raw(encoding, _) => *encoding,
+            Custom {
+                encoding_descr: _,
+                data: _,
+            } => APP_CUSTOM,
+            StringUTF8(_) => STRING,
+            Properties(_) => APP_PROPERTIES,
+            Json(_) => APP_JSON,
+            Integer(_) => APP_INTEGER,
+            Float(_) => APP_FLOAT,
+        }
+    }
+
+    pub fn encoding_descr(&self) -> String {
+        use Value::*;
+        match self {
+            Custom {
+                encoding_descr,
+                data: _,
+            } => encoding_descr.clone(),
+            _ => {
+                let encoding = self.encoding();
+                to_str(encoding).unwrap_or_else(|_| format!("Unkown encoding flag:{}", encoding))
+            }
+        }
+    }
+
     pub fn encode(self) -> (ZInt, RBuf) {
         use Value::*;
         match self {
