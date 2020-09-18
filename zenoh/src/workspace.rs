@@ -449,7 +449,7 @@ impl From<ZInt> for ChangeKind {
 /// The notification of a changed occured on a path/value and reported to a subscription.
 ///
 /// See [`Workspace::subscribe()`] and [`Workspace::subscribe_with_callback()`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Change {
     /// the [`Path`] related to this change.
     pub path: Path,
@@ -575,6 +575,7 @@ impl SubscriberHandle<'_> {
 }
 
 /// A `GET` request received by an evaluation function (see [`Workspace::register_eval()`]).
+#[derive(Clone)]
 pub struct GetRequest {
     pub selector: Selector,
     replies_sender: RepliesSender,

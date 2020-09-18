@@ -539,6 +539,7 @@ impl fmt::Debug for Queryable<'_> {
 }
 
 /// Struct used by a [Queryable](Queryable) to send replies to queries.
+#[derive(Clone)]
 pub struct RepliesSender {
     pub(crate) kind: ZInt,
     pub(crate) sender: Sender<(ZInt, Sample)>,

@@ -37,7 +37,7 @@ fn parse_args() -> (Config, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[selector] 'The selection of resources to get'")
+            Arg::from_usage("-s, --selector=[selector] 'The selection of resources to subscribe'")
                 .default_value("/demo/example/**"),
         )
         .get_matches();
