@@ -47,5 +47,5 @@ libc = "0.2.77"
 pnet = "0.26.0"
 
 [dependencies.async-std]
-version = "=1.6.2"
+version = "=1.6.4"
 features = ["unstable"]

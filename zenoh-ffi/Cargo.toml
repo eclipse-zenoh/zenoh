@@ -51,7 +51,7 @@ env_logger = "0.7.1"
 version = "0.3.3"
 
 [dependencies.async-std]
-version = "=1.6.2"
+version = "=1.6.4"
 features = ["unstable"]
 
 [lib]

@@ -32,6 +32,6 @@ async-trait = "0.1"
 # serde_json = "1.0"
 
 # [dependencies.async-std]
-# version = "=1.6.2"
+# version = "=1.6.4"
 # features = ["unstable"]
 
