@@ -312,7 +312,7 @@ impl Session {
 
     /// Declare a [Publisher](Publisher) for the given resource key.
     ///
-    /// Resources written with the given key will only be sent on the network
+    /// Written resources that match the given key will only be sent on the network
     /// if matching subscribers exist in the system.
     ///
     /// # Arguments
@@ -326,6 +326,7 @@ impl Session {
     ///
     /// let session = open(Config::peer(), None).await.unwrap();
     /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
+    /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
     pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher<'_>> {
