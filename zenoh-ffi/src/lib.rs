@@ -240,7 +240,7 @@ pub extern "C" fn zn_subinfo_default() -> *mut ZNSubInfo {
 pub extern "C" fn zn_subinfo_pull() -> *mut ZNSubInfo {
     let si = SubInfo {
         reliability: Reliability::Reliable,
-        mode: SubMode::Push,
+        mode: SubMode::Pull,
         period: None,
     };
     Box::into_raw(Box::new(ZNSubInfo(si)))
@@ -605,17 +605,19 @@ pub unsafe extern "C" fn zn_declare_subscriber(
     Box::into_raw(Box::new(rsub))
 }
 
-// Un-declares a zenoh subscriber
+// Pulls data on a zenoh pull subscriber
 ///
 /// # Safety
 /// The main reason for this function to be unsafe is that it does casting of a pointer into a box.
 ///
 #[no_mangle]
 pub unsafe extern "C" fn zn_pull(sub: *mut ZNSubscriber) {
-    match *Box::from_raw(sub) {
-        ZNSubscriber(Some(tx)) => smol::block_on(tx.send(ZnSubOps::Pull)),
+    let sub = Box::from_raw(sub);
+    match *sub {
+        ZNSubscriber(Some(ref tx)) => smol::block_on(tx.send(ZnSubOps::Pull)),
         ZNSubscriber(None) => (),
     }
+    Box::into_raw(sub);
 }
 
 // Un-declares a zenoh subscriber
