@@ -48,3 +48,4 @@ pnet = "0.26.0"
 
 [dependencies.async-std]
 version = "=1.6.4"
+features = ["unstable"]

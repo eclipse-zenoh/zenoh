@@ -52,6 +52,7 @@ hex = "0.4"
 
 [dependencies.async-std]
 version = "=1.6.4"
+features = ["unstable"]
 
 [dev-dependencies]
 criterion = "0.3.3"
