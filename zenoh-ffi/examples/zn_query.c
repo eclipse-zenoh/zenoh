@@ -17,31 +17,34 @@
 #include <unistd.h>
 #include <string.h>
 
-void sub_callback(const zn_sample *sample) {
-    printf(">> Received:\n\t (%.*s, %.*s)\n",
+void reply_handler(const zn_source_info *info, const zn_sample *sample) {
+    printf(">> [Reply handler] received (%.*s, %.*s)\n",
         sample->key.len, sample->key.val,
         sample->value.len, sample->value.val);
 }
 
 int main(int argc, char** argv) {
-    char *key_expr = "/demo/example/**";
-    ZNSubscriber *sub = 0;
-
+    char *uri = "/demo/example/**";
     if (argc > 1) {
-        key_expr = argv[1];
+        uri = argv[1];
     }
-    printf("Subscription expression to %s\n", key_expr);
+    char *locator = 0;
+    if (argc > 2) {
+        locator = argv[2];
+    }
 
-    ZNSession *s = zn_open(PEER, 0, 0);
-
+    printf("Openning session...\n");
+    ZNSession *s = zn_open(PEER, locator, 0);
     if (s == 0) {
-        printf("Error creating session!\n");
+        printf("Unable to open session!\n");
         exit(-1);
     }
 
-    sub = zn_declare_subscriber(s, key_expr, zn_subinfo_default(), sub_callback);
+    printf("Sending Query '%s'...\n", uri);
+    zn_query(s, uri, "", zn_query_target_default(), zn_query_consolidation_default(), reply_handler);
 
-    sleep(5);
+    sleep(1);
 
-    zn_undeclare_subscriber(sub);
+    zn_close(s);
+    return 0;
 }

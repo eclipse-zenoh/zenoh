@@ -18,27 +18,28 @@
 #include <string.h>
 
 int main(int argc, char** argv) {
-  ZNSession *s = zn_open(PEER, 0, 0);
-  if (s == 0) {
-    printf("Error creating session!\n");
+  char *locator = 0;
+  if (argc < 2) {
+    printf("USAGE:\n\tzn_pub_thr <payload-size> [<zenoh-locator>]\n\n");
     exit(-1);
   }
-  ZNProperties *ps = zn_info(s);
-  int n = zn_properties_len(ps);
-  int id;
+  size_t len = atoi(argv[1]);  
+  printf("Running throughput test for payload of %zu bytes.\n", len);
+  if (argc > 2) {
+    locator = argv[2];
+  }  
 
-  for (int i = 0; i < n; ++i) {
-    id = zn_property_id(ps, i);
-    const zn_bytes *bs = zn_property_value(ps, i);
-    printf("> %d - ", id);
-    for (int j = 0; j < bs->len; j++) {
-      printf("%d", (int)bs->val[j]);
-    }
-    printf("\n");
+  ZNSession *s = zn_open(PEER, locator, 0);
+  if (s == 0) {
+    printf("Unable to open session!\n");
+    exit(-1);
   }
 
-  const char *data = "Hello from C";
-  const char *key = "/demo/example/quote";
-  zn_write(s, key, data, strlen(data));
-  zn_close(s);
+  char *data = (char*) malloc(len);
+  memset(data, 1, len);
+
+  size_t rid = zn_declare_resource(s, "/test/thr");
+  while (1) {
+    zn_write_wrid(s, rid, data, len);
+  }
 }
