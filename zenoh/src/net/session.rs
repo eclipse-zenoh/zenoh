@@ -758,7 +758,6 @@ impl Session {
     ///
     /// # Examples
     /// ```
-    /// #![feature(async_closure)]
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
