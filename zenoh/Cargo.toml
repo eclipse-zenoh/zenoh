@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh"
-version = "0.5.0-beta.1"
+version = "0.5.0-beta.2"
 repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -42,9 +42,9 @@ log = "0.4"
 lazy_static = "1.4.0"
 serde_json = "1.0"
 hex = "0.4.2"
-zenoh-protocol = { version = "0.5.0-beta.1", path = "../zenoh-protocol" }
-zenoh-router = { version = "0.5.0-beta.1", path = "../zenoh-router" }
-zenoh-util = { version = "0.5.0-beta.1", path = "../zenoh-util" }
+zenoh-protocol = { version = "0.5.0-beta.2", path = "../zenoh-protocol" }
+zenoh-router = { version = "0.5.0-beta.2", path = "../zenoh-router" }
+zenoh-util = { version = "0.5.0-beta.2", path = "../zenoh-util" }
 
 [dependencies.async-std]
 version = "=1.6.4"

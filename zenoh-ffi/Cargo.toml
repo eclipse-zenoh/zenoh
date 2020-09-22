@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-ffi"
-version = "0.5.0-beta.1"
+version = "0.5.0-beta.2"
 repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -35,9 +35,9 @@ maintenance = { status = "actively-developed" }
 
 
 [dependencies]
-zenoh = { version = "0.5.0-beta.1", path = "../zenoh" }
-zenoh-protocol = { version = "0.5.0-beta.1", path = "../zenoh-protocol" }
-zenoh-util = { version = "0.5.0-beta.1", path = "../zenoh-util" }
+zenoh = { version = "0.5.0-beta.2", path = "../zenoh" }
+zenoh-protocol = { version = "0.5.0-beta.2", path = "../zenoh-protocol" }
+zenoh-util = { version = "0.5.0-beta.2", path = "../zenoh-util" }
 futures = "0.3.5"
 async-trait = "0.1.38"
 spin = "0.5.2"
