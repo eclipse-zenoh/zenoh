@@ -358,6 +358,7 @@ impl Workspace<'_> {
 ///
 /// It contains the [`Path`], its associated [`Value`] and a [`Timestamp`] which corresponds to the time
 /// at which the path/value has been put into zenoh.
+#[derive(Debug)]
 pub struct Data {
     pub path: Path,
     pub value: Value,
