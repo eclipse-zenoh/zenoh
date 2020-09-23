@@ -283,6 +283,19 @@ pub unsafe extern "C" fn zn_scout_peerid(si: *mut ZNScout, idx: c_uint) -> *cons
     }
 }
 
+/// Get the length of the peer-id for the scouted entity at the given index
+///
+/// # Safety
+/// The main reason for this function to be unsafe is that it dereferences a pointer.
+///
+#[no_mangle]
+pub unsafe extern "C" fn zn_scout_peerid_len(si: *mut ZNScout, idx: c_uint) -> c_uint {
+    match &(*si).0[idx as usize].pid {
+        Some(v) => v.as_slice().len() as c_uint,
+        None => 0,
+    }
+}
+
 /// Get the locators for the scouted.
 ///
 /// # Safety

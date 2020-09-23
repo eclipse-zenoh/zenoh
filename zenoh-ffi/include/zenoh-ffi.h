@@ -329,6 +329,15 @@ unsigned int zn_scout_locators_len(ZNLocators *ls);
 const unsigned char *zn_scout_peerid(ZNScout *si, unsigned int idx);
 
 /**
+ * Get the length of the peer-id for the scouted entity at the given index
+ *
+ * # Safety
+ * The main reason for this function to be unsafe is that it dereferences a pointer.
+ *
+ */
+unsigned int zn_scout_peerid_len(ZNScout *si, unsigned int idx);
+
+/**
  * Get the whatami for the scouted entity at the given index
  *
  * # Safety
