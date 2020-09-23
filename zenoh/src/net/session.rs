@@ -52,10 +52,11 @@ pub(crate) struct SessionState {
     callback_subscribers: HashMap<Id, Arc<CallbackSubscriberState>>,
     queryables: HashMap<Id, Arc<QueryableState>>,
     queries: HashMap<ZInt, (u8, Sender<Reply>)>,
+    local_routing: bool,
 }
 
 impl SessionState {
-    pub(crate) fn new() -> SessionState {
+    pub(crate) fn new(local_routing: bool) -> SessionState {
         SessionState {
             primitives: None,
             rid_counter: AtomicUsize::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
@@ -68,6 +69,7 @@ impl SessionState {
             callback_subscribers: HashMap::new(),
             queryables: HashMap::new(),
             queries: HashMap::new(),
+            local_routing,
         }
     }
 }
@@ -146,9 +148,10 @@ impl Session {
     }
 
     pub(super) async fn new(config: Config, _ps: Option<Properties>) -> ZResult<Session> {
+        let local_routing = config.local_routing;
         match Runtime::new(0, config, None).await {
             Ok(runtime) => {
-                let session = Self::init(runtime).await;
+                let session = Self::init(runtime, local_routing).await;
                 // Workaround for the declare_and_shoot problem
                 task::sleep(std::time::Duration::from_millis(200)).await;
                 Ok(session)
@@ -160,9 +163,9 @@ impl Session {
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    pub async fn init(runtime: Runtime) -> Session {
+    pub async fn init(runtime: Runtime, local_routing: bool) -> Session {
         let broker = runtime.read().await.broker.clone();
-        let state = Arc::new(RwLock::new(SessionState::new()));
+        let state = Arc::new(RwLock::new(SessionState::new(local_routing)));
         let session = Session {
             runtime,
             state: state.clone(),
@@ -616,6 +619,7 @@ impl Session {
         trace!("write({:?}, [...])", resource);
         let state = self.state.read().await;
         let primitives = state.primitives.as_ref().unwrap().clone();
+        let local_routing = state.local_routing;
         drop(state);
         primitives
             .data(
@@ -626,7 +630,9 @@ impl Session {
                 None,
             )
             .await;
-        self.handle_data(true, resource, None, payload).await;
+        if local_routing {
+            self.handle_data(true, resource, None, payload).await;
+        }
         Ok(())
     }
 
@@ -660,6 +666,7 @@ impl Session {
         trace!("write_ext({:?}, [...])", resource);
         let state = self.state.read().await;
         let primitives = state.primitives.as_ref().unwrap().clone();
+        let local_routing = state.local_routing;
         drop(state);
         let info = zenoh_protocol::proto::DataInfo {
             source_id: None,
@@ -680,8 +687,10 @@ impl Session {
                 data_info.clone(),
             )
             .await;
-        self.handle_data(true, resource, data_info.clone(), payload)
-            .await;
+        if local_routing {
+            self.handle_data(true, resource, data_info.clone(), payload)
+                .await;
+        }
         Ok(())
     }
 
@@ -789,6 +798,7 @@ impl Session {
         state.queries.insert(qid, (2, rep_sender));
 
         let primitives = state.primitives.as_ref().unwrap().clone();
+        let local_routing = state.local_routing;
         drop(state);
         primitives
             .query(
@@ -799,8 +809,10 @@ impl Session {
                 consolidation.clone(),
             )
             .await;
-        self.handle_query(true, resource, predicate, qid, target, consolidation)
-            .await;
+        if local_routing {
+            self.handle_query(true, resource, predicate, qid, target, consolidation)
+                .await;
+        }
 
         Ok(rep_receiver)
     }

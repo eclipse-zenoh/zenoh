@@ -39,7 +39,7 @@ pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
 async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     env_logger::init();
 
-    let session = Session::init(runtime).await;
+    let session = Session::init(runtime, true).await;
 
     let mut stored: HashMap<String, (RBuf, Option<DataInfo>)> = HashMap::new();
 

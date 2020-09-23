@@ -102,6 +102,7 @@ fn main() {
             multicast_interface: "auto".to_string(),
             scouting_delay: std::time::Duration::new(0, 200_000_000),
             add_timestamp,
+            local_routing: true,
         };
 
         let runtime = match Runtime::new(0, config, args.value_of("id")).await {

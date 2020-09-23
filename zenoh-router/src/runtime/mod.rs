@@ -140,6 +140,7 @@ pub struct Config {
     pub multicast_interface: String,
     pub scouting_delay: Duration,
     pub add_timestamp: bool,
+    pub local_routing: bool,
 }
 
 impl Config {
@@ -151,6 +152,7 @@ impl Config {
             multicast_interface: "auto".to_string(),
             scouting_delay: Duration::new(0, 250_000_000),
             add_timestamp: false,
+            local_routing: true,
         }
     }
 
@@ -208,8 +210,13 @@ impl Config {
         }
     }
 
-    pub fn add_timestamp(mut self) -> Self {
-        self.add_timestamp = true;
+    pub fn add_timestamp(mut self, value: bool) -> Self {
+        self.add_timestamp = value;
+        self
+    }
+
+    pub fn local_routing(mut self, value: bool) -> Self {
+        self.local_routing = value;
         self
     }
 }

@@ -147,7 +147,7 @@ impl Zenoh {
     #[doc(hidden)]
     pub async fn init(runtime: Runtime) -> Zenoh {
         Zenoh {
-            session: Session::init(runtime).await,
+            session: Session::init(runtime, true).await,
         }
     }
 
