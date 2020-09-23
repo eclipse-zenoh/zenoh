@@ -680,14 +680,8 @@ impl Session {
                 data_info.clone(),
             )
             .await;
-        self.data(
-            resource,
-            payload,
-            Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
-            congestion_control,
-            data_info.clone(),
-        )
-        .await;
+        self.handle_data(true, resource, data_info.clone(), payload)
+            .await;
         Ok(())
     }
 
