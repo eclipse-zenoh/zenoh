@@ -5,5 +5,6 @@ zn_query
 zn_eval
 zn_pull
 zn_info
+zn_scout
 zn_sub_thr
 zn_pub_thr

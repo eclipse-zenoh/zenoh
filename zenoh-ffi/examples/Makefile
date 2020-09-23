@@ -20,6 +20,7 @@ debug:
 	clang -I ../include -L ../../target/debug/ -lzenoh_ffi zn_eval.c -o zn_eval
 	clang -I ../include -L ../../target/debug/ -lzenoh_ffi zn_pull.c -o zn_pull
 	clang -I ../include -L ../../target/debug/ -lzenoh_ffi zn_info.c -o zn_info
+	clang -I ../include -L ../../target/debug/ -lzenoh_ffi zn_scout.c -o zn_scout
 
 release:
 	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi zn_sub_thr.c -o zn_sub_thr
@@ -31,10 +32,11 @@ release:
 	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi zn_eval.c -o zn_eval
 	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi zn_pull.c -o zn_pull
 	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi zn_info.c -o zn_info
+	clang -O3 -I ../include -L ../../target/release/ -lzenoh_ffi zn_scout.c -o zn_scout
 
 all:
 	make debug
 	make release
 
 clean:
-	$(RM) zn_sub zn_pub zn_write zn_query zn_eval zn_pull zn_info zn_sub_thr zn_pub_thr
+	$(RM) zn_sub zn_pub zn_write zn_query zn_eval zn_pull zn_info zn_scout zn_sub_thr zn_pub_thr
