@@ -12,6 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
+use async_std::task::sleep;
+use std::time::Duration;
 use zenoh::net::*;
 
 #[async_std::main]
@@ -31,11 +33,15 @@ async fn main() {
     println!("Declaring Publisher on {}", rid);
     let _publisher = session.declare_publisher(&rid.into()).await.unwrap();
 
-    println!("Writing Data ('{}': '{}')...\n", rid, value);
-    session
-        .write(&rid.into(), value.as_bytes().into())
-        .await
-        .unwrap();
+    for idx in 0..std::u32::MAX {
+        sleep(Duration::from_secs(1)).await;
+        let buf = format!("[{:4}] {}", idx, value);
+        println!("Writing Data ('{}': '{}')...", rid, buf);
+        session
+            .write(&rid.into(), buf.as_bytes().into())
+            .await
+            .unwrap();
+    }
 }
 
 fn parse_args() -> (Config, String, String) {

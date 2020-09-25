@@ -24,7 +24,7 @@ async fn main() {
     println!("Opening session...");
     let session = open(config, None).await.unwrap();
 
-    println!("Writing Data ('{}': '{}')...\n", path, value);
+    println!("Writing Data ('{}': '{}')...", path, value);
     session
         .write(&path.into(), value.as_bytes().into())
         .await
