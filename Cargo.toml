@@ -15,7 +15,6 @@
 
 members = [
   "zenoh",
-  "zenoh-ffi",
   "zenoh-protocol",
   "zenoh-router",
   "zenoh-util",
