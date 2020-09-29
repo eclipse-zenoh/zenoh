@@ -148,8 +148,15 @@ impl Query {
     }
 }
 
+impl fmt::Debug for Query {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Query{{ res_name: '{}', predicate: '{}' }}", self.res_name, self.predicate)
+    }
+}
+
+
 /// Structs returned by a [query](Session::query).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Reply {
     pub data: Sample,
     pub source_kind: ZInt,

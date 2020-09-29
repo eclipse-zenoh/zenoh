@@ -30,7 +30,7 @@ use zenoh_util::zerror;
 
 /// A Workspace to operate on zenoh.
 ///
-/// A Workspace has an optional [Path] prefix from which relative [Path]s or [Selector]s can be used.async_std
+/// A Workspace has an optional [Path] prefix from which relative [Path]s or [Selector]s can be used.
 ///
 /// # Examples
 ///
@@ -447,7 +447,7 @@ impl From<ZInt> for ChangeKind {
     }
 }
 
-/// The notification of a changed occured on a path/value and reported to a subscription.
+/// The notification of a change occured on a path/value and reported to a subscription.
 ///
 /// See [`Workspace::subscribe()`] and [`Workspace::subscribe_with_callback()`].
 #[derive(Debug, Clone)]

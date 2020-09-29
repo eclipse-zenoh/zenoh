@@ -17,18 +17,34 @@ use crate::Properties;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zerror, zerror2};
 
+/// A user value that is associated with a [Path](super::Path) in zenoh.
 #[derive(Clone, Debug)]
 pub enum Value {
+    /// A value as a bytes buffer (_RBuf_) and an encoding flag.  
+    /// See [zenoh::net::enocding](crate::net::encoding) for available flags.
     Raw(ZInt, RBuf),
-    Custom { encoding_descr: String, data: RBuf }, // equivalent to Raw(APP_CUSTOM, encoding_descr+data)
-    StringUTF8(String),                            // equivalent to Raw(STRING, String)
-    Properties(Properties), // equivalent to Raw(APP_PROPERTIES, props.to_string())
-    Json(String),           // equivalent to Raw(APP_JSON, String)
-    Integer(i64),           // equivalent to Raw(APP_INTEGER, i64.to_string())
-    Float(f64),             // equivalent to Raw(APP_FLOAT, f64.to_string())
+    /// A value as a bytes buffer and an encoding description (free String).  
+    /// Note: this is equivalent to `Raw(APP_CUSTOM, buf)` where buf contains the encoding description and the data.
+    Custom { encoding_descr: String, data: RBuf },
+    /// A String value.  
+    /// Note: this is equivalent to `Raw(STRING, buf)` where buf contains the String
+    StringUTF8(String),
+    /// A Properties value.  
+    /// Note: this is equivalent to `Raw(APP_PROPERTIES, buf)` where buf contains the Properties encoded as a String
+    Properties(Properties),
+    /// A Json value (string format).  
+    /// Note: this is equivalent to `Raw(APP_JSON, buf)` where buf contains the Json string
+    Json(String),
+    /// An Integer value.  
+    /// Note: this is equivalent to `Raw(APP_INTEGER, buf)` where buf contains the integer encoded as a String
+    Integer(i64),
+    /// An Float value.  
+    /// Note: this is equivalent to `Raw(APP_FLOAT, buf)` where buf contains the float encoded as a String
+    Float(f64),
 }
 
 impl Value {
+    /// Returns the encoding flag of the Value.
     pub fn encoding(&self) -> ZInt {
         use Value::*;
         match self {
@@ -45,6 +61,7 @@ impl Value {
         }
     }
 
+    /// Returns the encoding description of the Value.
     pub fn encoding_descr(&self) -> String {
         use Value::*;
         match self {
@@ -59,6 +76,7 @@ impl Value {
         }
     }
 
+    /// Encodes the Value and return the resulting buffer and its encoding flag.
     pub fn encode(self) -> (ZInt, RBuf) {
         use Value::*;
         match self {
@@ -82,6 +100,7 @@ impl Value {
         }
     }
 
+    /// Decodes the payload according to the encoding flag.
     pub fn decode(encoding: ZInt, mut payload: RBuf) -> ZResult<Value> {
         use Value::*;
         match encoding {

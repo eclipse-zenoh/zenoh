@@ -19,7 +19,7 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
 #[derive(Clone, Debug, PartialEq)]
-/// A zenoh Selector is the conjunction of an [path expression](super::PathExpr) identifying a set
+/// A zenoh Selector is the conjunction of a [path expression](super::PathExpr) identifying a set
 /// of paths and some optional parts allowing to refine the set of paths and associated values.
 ///
 /// Structure of a selector:
@@ -35,14 +35,14 @@ use zenoh_util::zerror;
 ///      * _field_ is the name of a field in the value (is applicable and is existing. otherwise the predicate is false)
 ///      * _operator_ is one of a comparison operators: `<` , `>` , `<=` , `>=` , `=` , `!=`
 ///      * _value_ is the the value to compare the field’s value with
-///  * __fragment__: a list of fields names allowing to return a sub-part of each value.  
+///  * __fragment__: a list of fields names allowing to return a sub-part of each value.
 ///    This feature only applies to structured values using a “self-describing” encoding, such as JSON or XML.
 ///    It allows to select only some fields within the structure. A new structure with only the selected fields
 ///    will be used in place of the original value.
 ///
 /// _**NOTE**_: _the filters and fragments are not yet supported in current zenoh version._
 pub struct Selector {
-    /// the path expression part of this Selector (before `?`character).
+    /// the path expression part of this Selector (before `?` character).
     pub path_expr: PathExpr,
     /// the predicate part of this Selector, as used in zenoh-net.
     /// I.e. all characters after `?` (or an empty String if no such character).
@@ -56,7 +56,7 @@ pub struct Selector {
 }
 
 impl Selector {
-    /// Creates a new Selector from a String, checking its validity.  
+    /// Creates a new Selector from a String, checking its validity.
     /// Returns `Err(`[`ZError`]`)` if not valid.
     pub(crate) fn new(res_name: &str, predicate: &str) -> ZResult<Selector> {
         let path_expr: PathExpr = PathExpr::try_from(res_name)?;
