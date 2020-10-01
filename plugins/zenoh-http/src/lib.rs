@@ -13,10 +13,12 @@
 //
 #![feature(async_closure)]
 
+use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use std::str::FromStr;
 use tide::http::Mime;
+use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::*;
 use zenoh_router::runtime::Runtime;
@@ -131,10 +133,10 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     let pid = runtime.get_pid_str().await;
     let session = Session::init(runtime, true).await;
 
-    let mut app = Server::with_state((session, pid));
+    let mut app = Server::with_state((Arc::new(session), pid));
 
     app.at("*")
-        .get(async move |req: Request<(Session, String)>| {
+        .get(async move |req: Request<(Arc<Session>, String)>| {
             log::trace!("Http {:?}", req);
 
             let first_accept = match req.header("accept") {
@@ -152,7 +154,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             match &first_accept[..] {
                 "text/event-stream" => Ok(tide::sse::upgrade(
                     req,
-                    async move |req: Request<(Session, String)>, sender| {
+                    async move |req: Request<(Arc<Session>, String)>, sender: Sender| {
                         let resource = path_to_resource(req.url().path(), &req.state().1);
                         async_std::task::spawn(async move {
                             log::debug!(
@@ -170,9 +172,12 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                             loop {
                                 let sample = sub.stream().next().await.unwrap();
                                 let send = async {
-                                    sender
+                                    if let Err(e) = sender
                                         .send(&get_kind_str(&sample), sample_to_json(sample), None)
-                                        .await;
+                                        .await
+                                    {
+                                        log::warn!("Error sending data from the SSE stream: {}", e);
+                                    }
                                     true
                                 };
                                 let wait = async {
@@ -252,7 +257,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         });
 
     app.at("*")
-        .put(async move |mut req: Request<(Session, String)>| {
+        .put(async move |mut req: Request<(Arc<Session>, String)>| {
             log::trace!("Http {:?}", req);
             match req.body_bytes().await {
                 Ok(bytes) => {
@@ -286,7 +291,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         });
 
     app.at("*")
-        .patch(async move |mut req: Request<(Session, String)>| {
+        .patch(async move |mut req: Request<(Arc<Session>, String)>| {
             log::trace!("Http {:?}", req);
             match req.body_bytes().await {
                 Ok(bytes) => {
@@ -320,7 +325,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         });
 
     app.at("*")
-        .delete(async move |req: Request<(Session, String)>| {
+        .delete(async move |req: Request<(Arc<Session>, String)>| {
             log::trace!("Http {:?}", req);
             let resource = path_to_resource(req.url().path(), &req.state().1);
             match req
