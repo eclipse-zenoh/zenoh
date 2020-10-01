@@ -155,7 +155,7 @@ impl SessionOrchestrator {
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
         for locator in listeners {
             match self.manager.add_locator(&locator).await {
-                Ok(locator) => log::info!("Listening on {}!", locator),
+                Ok(locator) => log::debug!("Locator {} added", locator),
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", locator, err);
                     return zerror!(
@@ -166,6 +166,9 @@ impl SessionOrchestrator {
                     );
                 }
             }
+        }
+        for locator in self.get_local_locators().await {
+            log::info!("zenohd can be reached on {}", locator);
         }
         Ok(())
     }
@@ -264,6 +267,11 @@ impl SessionOrchestrator {
                 );
             }
         }
+        log::info!(
+            "zenohd listening scout messages on {}:{}",
+            MCAST_ADDR,
+            MCAST_PORT
+        );
         Ok(socket.into_udp_socket().into())
     }
 
@@ -442,7 +450,6 @@ impl SessionOrchestrator {
         let mut result = vec![];
         for locator in self.manager.get_locators().await {
             match locator {
-                #[cfg(feature = "tcp")]
                 Locator::Tcp(addr) => {
                     if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
                         match zenoh_util::net::get_local_addresses() {
