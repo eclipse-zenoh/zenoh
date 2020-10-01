@@ -102,14 +102,20 @@ async fn run(locators: Vec<Locator>) {
 #[test]
 fn locator_tcp() {
     // Define the locators
-    let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7447".parse().unwrap(),
+        "tcp/localhost:7448".parse().unwrap(),
+    ];
     task::block_on(run(locators));
 }
 
 #[test]
 fn locator_udp() {
     // Define the locators
-    let locators: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
+    let locators: Vec<Locator> = vec![
+        "udp/127.0.0.1:7447".parse().unwrap(),
+        "udp/localhost:7448".parse().unwrap(),
+    ];
     task::block_on(run(locators));
 }
 
@@ -117,8 +123,8 @@ fn locator_udp() {
 fn locator_tcp_udp() {
     // Define the locators
     let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7448".parse().unwrap(),
-        "udp/127.0.0.1:7448".parse().unwrap(),
+        "tcp/127.0.0.1:7449".parse().unwrap(),
+        "udp/127.0.0.1:7449".parse().unwrap(),
     ];
     task::block_on(run(locators));
 }
