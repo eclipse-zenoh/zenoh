@@ -13,6 +13,11 @@
 //
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use async_std::net::SocketAddr;
+#[cfg(any(feature = "tcp", feature = "udp"))]
+use async_std::net::ToSocketAddrs;
+#[cfg(any(feature = "tcp", feature = "udp"))]
+use async_std::task;
+
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::Hash;
@@ -69,27 +74,47 @@ impl FromStr for Locator {
         match proto {
             #[cfg(feature = "tcp")]
             STR_TCP => {
-                let addr: SocketAddr = match addr.parse() {
-                    Ok(addr) => addr,
-                    Err(e) => {
-                        let e = format!("Invalid TCP locator: {}", e);
-                        log::warn!("{}", e);
-                        return zerror!(ZErrorKind::InvalidLocator { descr: e });
+                let addr = task::block_on(async {
+                    match addr.to_socket_addrs().await {
+                        Ok(mut addr_iter) => {
+                            if let Some(addr) = addr_iter.next() {
+                                Ok(addr)
+                            } else {
+                                let e = format!("Couldn't resolve TCP locator: {}", s.to_string());
+                                log::warn!("{}", e);
+                                zerror!(ZErrorKind::InvalidLocator { descr: e })
+                            }
+                        }
+                        Err(e) => {
+                            let e = format!("Invalid TCP locator: {}", e);
+                            log::warn!("{}", e);
+                            zerror!(ZErrorKind::InvalidLocator { descr: e })
+                        }
                     }
-                };
-                Ok(Locator::Tcp(addr))
+                });
+                addr.map(|a| Locator::Tcp(a))
             }
             #[cfg(feature = "udp")]
             STR_UDP => {
-                let addr: SocketAddr = match addr.parse() {
-                    Ok(addr) => addr,
-                    Err(e) => {
-                        let e = format!("Invalid UDP locator: {}", e);
-                        log::warn!("{}", e);
-                        return zerror!(ZErrorKind::InvalidLocator { descr: e });
+                let addr = task::block_on(async {
+                    match addr.to_socket_addrs().await {
+                        Ok(mut addr_iter) => {
+                            if let Some(addr) = addr_iter.next() {
+                                Ok(addr)
+                            } else {
+                                let e = format!("Couldn't resolve UDP locator: {}", s.to_string());
+                                log::warn!("{}", e);
+                                zerror!(ZErrorKind::InvalidLocator { descr: e })
+                            }
+                        }
+                        Err(e) => {
+                            let e = format!("Invalid UDP locator: {}", e);
+                            log::warn!("{}", e);
+                            zerror!(ZErrorKind::InvalidLocator { descr: e })
+                        }
                     }
-                };
-                Ok(Locator::Udp(addr))
+                });
+                addr.map(|a| Locator::Udp(a))
             }
             _ => {
                 let e = format!("Invalid protocol locator: {}", proto);
