@@ -41,8 +41,7 @@ zconfigurable! {
     // Default MTU (TCP PDU) in bytes.
     static ref TCP_DEFAULT_MTU: usize = TCP_MAX_MTU;
     // Size of buffer used to read from socket.
-    // static ref TCP_READ_BUFFER_SIZE: usize = 2*TCP_MAX_MTU;
-    static ref TCP_READ_BUFFER_SIZE: usize = 1_024;
+    static ref TCP_READ_BUFFER_SIZE: usize = 2*TCP_MAX_MTU;
 
     // Size of the vector used to deserialize the messages.
     static ref TCP_READ_MESSAGES_VEC_SIZE: usize = 32;
