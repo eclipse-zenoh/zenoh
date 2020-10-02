@@ -41,7 +41,9 @@ zconfigurable! {
     // Default MTU (TCP PDU) in bytes.
     static ref TCP_DEFAULT_MTU: usize = TCP_MAX_MTU;
     // Size of buffer used to read from socket.
-    static ref TCP_READ_BUFFER_SIZE: usize = 2*TCP_MAX_MTU;
+    // static ref TCP_READ_BUFFER_SIZE: usize = 2*TCP_MAX_MTU;
+    static ref TCP_READ_BUFFER_SIZE: usize = 1_024;
+
     // Size of the vector used to deserialize the messages.
     static ref TCP_READ_MESSAGES_VEC_SIZE: usize = 32;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
@@ -100,7 +102,7 @@ impl Tcp {
         transport: Transport,
         manager: Arc<ManagerTcpInner>,
     ) -> Tcp {
-        // Sett the TCP linger option
+        // Set the TCP linger option
         if let Err(err) = zenoh_util::net::set_linger(
             &socket,
             Some(Duration::from_secs(
@@ -419,6 +421,8 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                         // Decode the total amount of bytes that we are expected to read
                         let to_read = u16::from_le_bytes(length) as usize;
 
+                        println!("\n\nNEED TO READ {}\n\n", to_read);
+                        println!("\n\nBUFFER {:?}\n\n", buffer);
                         // Check if we have really something to read
                         if to_read == 0 {
                             // Keep reading from the socket

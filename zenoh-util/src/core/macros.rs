@@ -188,10 +188,12 @@ macro_rules! to_zerror {
 #[macro_export]
 macro_rules! to_zint {
     ($val:expr) => {
-        ZInt::try_from($val).expect(&format!(
-            "Can not encode {} as ZInt (max ZInt value: {})",
-            $val,
-            ZInt::MAX
-        ))
+        ZInt::try_from($val).unwrap_or_else(|_| {
+            panic!(
+                "Can not encode {} as ZInt (max ZInt value: {})",
+                $val,
+                ZInt::MAX
+            )
+        })
     };
 }
