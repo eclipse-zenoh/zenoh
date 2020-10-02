@@ -421,8 +421,6 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                         // Decode the total amount of bytes that we are expected to read
                         let to_read = u16::from_le_bytes(length) as usize;
 
-                        println!("\n\nNEED TO READ {}\n\n", to_read);
-                        println!("\n\nBUFFER {:?}\n\n", buffer);
                         // Check if we have really something to read
                         if to_read == 0 {
                             // Keep reading from the socket
