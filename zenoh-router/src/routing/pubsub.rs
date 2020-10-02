@@ -193,19 +193,16 @@ pub async fn route_data_to_map(
         Some(prefix) => unsafe {
             match Resource::get_resource(prefix, suffix) {
                 Some(res) => {
-                    let resname = res.name();
-                    for mres in Resource::get_matches_from(
-                        &[&prefix.name(), suffix].concat(),
-                        &tables.root_res,
-                    ) {
+                    for mres in &res.matches {
                         let mut mres = mres.upgrade().unwrap();
                         let mres = Arc::get_mut_unchecked(&mut mres);
                         for mut context in mres.contexts.values_mut() {
                             if let Some(subinfo) = &context.subs {
                                 if SubMode::Pull == subinfo.mode {
-                                    Arc::get_mut_unchecked(&mut context)
-                                        .last_values
-                                        .insert(resname.clone(), (info.clone(), payload.clone()));
+                                    Arc::get_mut_unchecked(&mut context).last_values.insert(
+                                        [&prefix.name(), suffix].concat(),
+                                        (info.clone(), payload.clone()),
+                                    );
                                 }
                             }
                         }

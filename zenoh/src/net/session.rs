@@ -45,8 +45,8 @@ pub(crate) struct SessionState {
     rid_counter: AtomicUsize,                              // @TODO: manage rollover and uniqueness
     qid_counter: AtomicZInt,
     decl_id_counter: AtomicUsize,
-    local_resources: HashMap<ResourceId, String>,
-    remote_resources: HashMap<ResourceId, String>,
+    local_resources: HashMap<ResourceId, Resource>,
+    remote_resources: HashMap<ResourceId, Resource>,
     publishers: HashMap<Id, Arc<PublisherState>>,
     subscribers: HashMap<Id, Arc<SubscriberState>>,
     callback_subscribers: HashMap<Id, Arc<CallbackSubscriberState>>,
@@ -76,9 +76,31 @@ impl SessionState {
 
 impl SessionState {
     #[inline]
+    fn get_local_res(&self, rid: &ResourceId) -> Option<&Resource> {
+        self.local_resources.get(rid)
+    }
+
+    #[inline]
+    fn get_remote_res(&self, rid: &ResourceId) -> Option<&Resource> {
+        match self.remote_resources.get(rid) {
+            None => self.local_resources.get(rid),
+            res => res,
+        }
+    }
+
+    #[inline]
+    fn get_res(&self, rid: &ResourceId, local: bool) -> Option<&Resource> {
+        if local {
+            self.get_local_res(rid)
+        } else {
+            self.get_remote_res(rid)
+        }
+    }
+
+    #[inline]
     fn localid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
         match self.local_resources.get(&rid) {
-            Some(name) => Ok(name.clone()),
+            Some(res) => Ok(res.name.clone()),
             None => zerror!(ZErrorKind::UnkownResourceId {
                 rid: format!("{}", rid)
             }),
@@ -88,7 +110,7 @@ impl SessionState {
     #[inline]
     fn rid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
         match self.remote_resources.get(&rid) {
-            Some(name) => Ok(name.clone()),
+            Some(res) => Ok(res.name.clone()),
             None => self.localid_to_resname(rid),
         }
     }
@@ -127,6 +149,22 @@ impl fmt::Debug for SessionState {
             "SessionState{{ subscribers: {} }}",
             self.subscribers.len()
         )
+    }
+}
+
+struct Resource {
+    pub(crate) name: String,
+    pub(crate) subscribers: Vec<Arc<SubscriberState>>,
+    pub(crate) callback_subscribers: Vec<Arc<CallbackSubscriberState>>,
+}
+
+impl Resource {
+    pub(crate) fn new(name: String) -> Self {
+        Resource {
+            name,
+            subscribers: vec![],
+            callback_subscribers: vec![],
+        }
     }
 }
 
@@ -274,8 +312,20 @@ impl Session {
         trace!("declare_resource({:?})", resource);
         let mut state = self.state.write().await;
         let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
-        let rname = state.localkey_to_resname(resource)?;
-        state.local_resources.insert(rid, rname);
+        let resname = state.localkey_to_resname(resource)?;
+        let mut res = Resource::new(resname.clone());
+        for sub in state.subscribers.values() {
+            if rname::intersect(&resname, &sub.resname) {
+                res.subscribers.push(sub.clone());
+            }
+        }
+        for cb_sub in state.callback_subscribers.values() {
+            if rname::intersect(&resname, &cb_sub.resname) {
+                res.callback_subscribers.push(cb_sub.clone());
+            }
+        }
+
+        state.local_resources.insert(rid, res);
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
@@ -411,10 +461,20 @@ impl Session {
         let sub_state = Arc::new(SubscriberState {
             id,
             reskey: resource.clone(),
-            resname,
+            resname: resname.clone(),
             sender,
         });
         state.subscribers.insert(id, sub_state.clone());
+        for res in state.local_resources.values_mut() {
+            if rname::intersect(&resname, &res.name) {
+                res.subscribers.push(sub_state.clone());
+            }
+        }
+        for res in state.remote_resources.values_mut() {
+            if rname::intersect(&resname, &res.name) {
+                res.subscribers.push(sub_state.clone());
+            }
+        }
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
@@ -432,6 +492,13 @@ impl Session {
         let mut state = self.state.write().await;
         if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
+            for res in state.local_resources.values_mut() {
+                res.subscribers.retain(|sub| sub.id != sub_state.id);
+            }
+            for res in state.remote_resources.values_mut() {
+                res.subscribers.retain(|sub| sub.id != sub_state.id);
+            }
+
             // Note: there might be several Subscribers on the same ResKey.
             // Before calling forget_subscriber(reskey), check if this was the last one.
             if !state
@@ -492,10 +559,20 @@ impl Session {
         let sub_state = Arc::new(CallbackSubscriberState {
             id,
             reskey: resource.clone(),
-            resname,
+            resname: resname.clone(),
             dhandler,
         });
         state.callback_subscribers.insert(id, sub_state.clone());
+        for res in state.local_resources.values_mut() {
+            if rname::intersect(&resname, &res.name) {
+                res.callback_subscribers.push(sub_state.clone());
+            }
+        }
+        for res in state.remote_resources.values_mut() {
+            if rname::intersect(&resname, &res.name) {
+                res.callback_subscribers.push(sub_state.clone());
+            }
+        }
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
@@ -512,6 +589,15 @@ impl Session {
         let mut state = self.state.write().await;
         if let Some(sub_state) = state.callback_subscribers.remove(&sid) {
             trace!("undeclare_callback_subscriber({:?})", sub_state);
+            for res in state.local_resources.values_mut() {
+                res.callback_subscribers
+                    .retain(|sub| sub.id != sub_state.id);
+            }
+            for res in state.remote_resources.values_mut() {
+                res.callback_subscribers
+                    .retain(|sub| sub.id != sub_state.id);
+            }
+
             // Note: there might be several Subscribers on the same ResKey.
             // Before calling forget_subscriber(reskey), check if this was the last one.
             if !state
@@ -703,31 +789,58 @@ impl Session {
     ) {
         let (resname, senders) = {
             let state = self.state.read().await;
-            match state.reskey_to_resname(reskey, local) {
-                Ok(resname) => {
-                    // Call matching callback_subscribers
-                    for sub in state.callback_subscribers.values() {
-                        if rname::intersect(&sub.resname, &resname) {
+            if let ResKey::RId(rid) = reskey {
+                match state.get_res(rid, local) {
+                    Some(res) => {
+                        // Call matching callback_subscribers
+                        for sub in &res.callback_subscribers {
                             let handler = &mut *sub.dhandler.write().await;
                             handler(Sample {
-                                res_name: resname.clone(),
+                                res_name: res.name.clone(),
                                 payload: payload.clone(),
                                 data_info: info.clone(),
                             });
                         }
+                        // Collect matching subscribers
+                        let subs = res
+                            .subscribers
+                            .iter()
+                            .map(|sub| sub.sender.clone())
+                            .collect::<Vec<Sender<Sample>>>();
+                        (res.name.clone(), subs)
                     }
-                    // Collect matching subscribers
-                    let subs = state
-                        .subscribers
-                        .values()
-                        .filter(|sub| rname::intersect(&sub.resname, &resname))
-                        .map(|sub| sub.sender.clone())
-                        .collect::<Vec<Sender<Sample>>>();
-                    (resname, subs)
+                    None => {
+                        error!("Received Data for unkown rid: {}", rid);
+                        return;
+                    }
                 }
-                Err(err) => {
-                    error!("Received Data for unkown reskey: {}", err);
-                    return;
+            } else {
+                match state.reskey_to_resname(reskey, local) {
+                    Ok(resname) => {
+                        // Call matching callback_subscribers
+                        for sub in state.callback_subscribers.values() {
+                            if rname::intersect(&sub.resname, &resname) {
+                                let handler = &mut *sub.dhandler.write().await;
+                                handler(Sample {
+                                    res_name: resname.clone(),
+                                    payload: payload.clone(),
+                                    data_info: info.clone(),
+                                });
+                            }
+                        }
+                        // Collect matching subscribers
+                        let subs = state
+                            .subscribers
+                            .values()
+                            .filter(|sub| rname::intersect(&sub.resname, &resname))
+                            .map(|sub| sub.sender.clone())
+                            .collect::<Vec<Sender<Sample>>>();
+                        (resname, subs)
+                    }
+                    Err(err) => {
+                        error!("Received Data for unkown reskey: {}", err);
+                        return;
+                    }
                 }
             }
         };
@@ -912,8 +1025,20 @@ impl Primitives for Session {
         trace!("recv Resource {} {:?}", rid, reskey);
         let state = &mut self.state.write().await;
         match state.remotekey_to_resname(reskey) {
-            Ok(name) => {
-                state.remote_resources.insert(rid, name);
+            Ok(resname) => {
+                let mut res = Resource::new(resname.clone());
+                for sub in state.subscribers.values() {
+                    if rname::intersect(&resname, &sub.resname) {
+                        res.subscribers.push(sub.clone());
+                    }
+                }
+                for cb_sub in state.callback_subscribers.values() {
+                    if rname::intersect(&resname, &cb_sub.resname) {
+                        res.callback_subscribers.push(cb_sub.clone());
+                    }
+                }
+
+                state.remote_resources.insert(rid, res);
             }
             Err(_) => error!("Received Resource for unkown reskey: {}", reskey),
         }
