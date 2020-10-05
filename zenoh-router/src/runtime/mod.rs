@@ -194,7 +194,7 @@ pub mod config {
     }
 
     /// Creates a default set of [Properties](Properties) for zenoh net Session configuration.
-    /// 
+    ///
     /// The returned properties contain :
     ///  - `(ZN_MODE_KEY, "peer")`
     pub fn default() -> Properties {
@@ -202,7 +202,7 @@ pub mod config {
     }
 
     /// Creates a default set of [Properties](Properties) for a `'peer'` mode zenoh net Session configuration.
-    /// 
+    ///
     /// The returned properties contain :
     ///  - `(ZN_MODE_KEY, "peer")`
     pub fn peer() -> Properties {
@@ -210,11 +210,11 @@ pub mod config {
     }
 
     /// Creates a default set of [Properties](Properties) for a `'client'` mode zenoh net Session configuration.
-    /// 
+    ///
     /// The returned properties contain :
     ///  - `(ZN_MODE_KEY, "client")`
-    /// 
-    /// If the given locator is not `None`, the created properties also contain : 
+    ///
+    /// If the given locator is not `None`, the created properties also contain :
     ///  - `(ZN_PEER_KEY, locator)`
     pub fn client(locator: Option<String>) -> Properties {
         let mut result = vec![(ZN_MODE_KEY, b"client".to_vec())];

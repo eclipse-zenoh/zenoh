@@ -171,7 +171,7 @@ pub async fn scout(what: WhatAmI, iface: &str) -> HelloStream {
 /// ```
 /// # async_std::task::block_on(async {
 /// use zenoh::net::*;
-/// 
+///
 /// let mut config = config::peer();
 /// config.push((config::ZN_LOCAL_ROUTING_KEY, b"false".to_vec()));
 /// config.push((config::ZN_PEER_KEY, b"tcp/10.10.10.10:7447".to_vec()));

@@ -143,7 +143,7 @@ impl Zenoh {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::*;
-    /// 
+    ///
     /// let mut config = config::peer();
     /// config.insert("local_routing".to_string(), "false".to_string());
     /// config.insert("peer".to_string(), "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());

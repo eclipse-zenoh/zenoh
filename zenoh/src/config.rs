@@ -14,54 +14,53 @@
 
 //! Constants and helpers to build the configuration [Properties](super::Properties)
 //! to pass to [Zenoh::new](super::Zenoh::new).
-//! 
+//!
 //! Configuration [Properties](Properties) are a map of string key/value pairs.
 //! Multiple values for a same key are coma separated.
-//! 
+//!
 //! Accepted configuration properties :
-//! 
+//!
 //! * `"mode"` - The library mode.
 //!     * Accepted values : `"peer"`, `"client"`.
 //!     * Default value : `"peer"`.
-//! 
+//!
 //! * `"peer"` - The locator of a peer to connect to.
 //!     * Accepted values : locators (ex: `"tcp/10.10.10.10:7447"`).
 //!     * Default value : None.
 //!     * Multiple coma separated values accepted (ex: `"tcp/10.10.10.10:7447,tcp/11.11.11.11:7447"`).
-//! 
+//!
 //! * `"listener"` - A locator to listen on.
 //!     * Accepted values : locators (ex: `"tcp/10.10.10.10:7447"`).
 //!     * Default value : None.
 //!     * Multiple coma separated values accepted (ex: `"tcp/10.10.10.10:7447,tcp/11.11.11.11:7447"`).
-//! 
+//!
 //! * `"user"` - The user name to use for authentication.
 //!     * Accepted values : string.
 //!     * Default value : None.
-//! 
+//!
 //! * `"password"` - The password to use for authentication.
 //!     * Accepted values : string.
 //!     * Default value : None.
-//! 
+//!
 //! * `"multicast_interface"` - The network interface to use for multicast discovery.
 //!     * Accepted values : `"auto"`, ip address, interface name.
 //!     * Default value : `"auto"`.
-//! 
+//!
 //! * `"scouting_delay"` - In peer mode, the period dedicated to scouting first remote peers before doing anything else.
 //!     * Accepted values : float in seconds.
 //!     * Default value : `"0.2"`.
-//! 
+//!
 //! * `"add_timestamp"` - Indicates if data messages should be timestamped.
 //!     * Accepted values : `"true"`, `"false"`.
 //!     * Default value : `"false"`.
-//! 
+//!
 //! * `"local_routing"` - Indicates if local writes/queries should reach local subscribers/queryables.
 //!     * Accepted values : `"true"`, `"false"`.
 //!     * Default value : `"true"`.
 
-use std::collections::HashMap;
-use crate::Properties;
 use crate::net::config::*;
-
+use crate::Properties;
+use std::collections::HashMap;
 
 pub fn empty() -> Properties {
     Properties(HashMap::new())
@@ -111,4 +110,3 @@ impl Into<crate::net::Properties> for Properties {
         zn_props
     }
 }
-

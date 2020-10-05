@@ -17,8 +17,8 @@ use clap::{App, Arg, Values};
 use futures::prelude::*;
 use futures::select;
 use std::collections::HashMap;
-use zenoh::net::utils::resource_name;
 use zenoh::net::queryable::STORAGE;
+use zenoh::net::utils::resource_name;
 use zenoh::net::*;
 
 #[async_std::main]

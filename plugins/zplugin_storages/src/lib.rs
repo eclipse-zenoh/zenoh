@@ -19,7 +19,7 @@ use futures::prelude::*;
 use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use zenoh::{ChangeKind, Path, Properties, Selector, Value, ZResult, Zenoh, config};
+use zenoh::{config, ChangeKind, Path, Properties, Selector, Value, ZResult, Zenoh};
 use zenoh_router::runtime::Runtime;
 
 mod backend;
