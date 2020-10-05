@@ -142,8 +142,8 @@ impl Resource {
         unsafe {
             if suffix.is_empty() {
                 from.clone()
-            } else if suffix.starts_with('/') {
-                let (chunk, rest) = match suffix[1..].find('/') {
+            } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
+                let (chunk, rest) = match stripped_suffix.find('/') {
                     Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
                     None => (suffix, ""),
                 };
@@ -196,8 +196,8 @@ impl Resource {
     pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
         if suffix.is_empty() {
             Some(from.clone())
-        } else if suffix.starts_with('/') {
-            let (chunk, rest) = match suffix[1..].find('/') {
+        } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
+            let (chunk, rest) = match stripped_suffix.find('/') {
                 Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
                 None => (suffix, ""),
             };
@@ -225,8 +225,8 @@ impl Resource {
     }
 
     fn fst_chunk(rname: &str) -> (&str, &str) {
-        if rname.starts_with('/') {
-            match rname[1..].find('/') {
+        if let Some(stripped_rname) = rname.strip_prefix('/') {
+            match stripped_rname.find('/') {
                 Some(idx) => (&rname[0..(idx + 1)], &rname[(idx + 1)..]),
                 None => (rname, ""),
             }

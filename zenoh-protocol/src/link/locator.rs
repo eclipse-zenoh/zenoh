@@ -97,7 +97,7 @@ impl FromStr for Locator {
                         }
                     }
                 });
-                addr.map(|a| Locator::Tcp(a))
+                addr.map(Locator::Tcp)
             }
             #[cfg(feature = "udp")]
             STR_UDP => {
@@ -119,7 +119,7 @@ impl FromStr for Locator {
                         }
                     }
                 });
-                addr.map(|a| Locator::Udp(a))
+                addr.map(Locator::Udp)
             }
             _ => {
                 let e = format!("Invalid protocol locator: {}", proto);

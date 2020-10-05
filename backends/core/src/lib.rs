@@ -18,14 +18,14 @@ use zenoh::{Properties, Value, ZResult};
 pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 
 #[async_trait]
-pub trait Backend: Drop + Send + Sync {
+pub trait Backend: Send + Sync {
     async fn get_admin_status(&self) -> Value;
 
     async fn create_storage(&mut self, props: Properties) -> ZResult<Box<dyn Storage>>;
 }
 
 #[async_trait]
-pub trait Storage: Drop + Send + Sync {
+pub trait Storage: Send + Sync {
     async fn get_admin_status(&self) -> Value;
 
     async fn on_sample(&mut self, sample: Sample) -> ZResult<()>;

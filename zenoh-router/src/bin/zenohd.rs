@@ -25,8 +25,8 @@ fn get_plugins_from_args() -> Vec<String> {
             if let Some(arg2) = iter.next() {
                 result.push(arg2);
             }
-        } else if arg.starts_with("--plugin=") {
-            result.push((&arg[9..]).to_string());
+        } else if let Some(name) = arg.strip_prefix("--plugin=") {
+            result.push(name.to_string());
         }
     }
     result

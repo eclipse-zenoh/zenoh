@@ -40,11 +40,8 @@ impl Path {
             static ref RE: Regex = Regex::new("/+").unwrap();
         }
         let p = RE.replace_all(path, "/");
-        if p.ends_with('/') {
-            p[..p.len() - 1].to_string()
-        } else {
-            p.to_string()
-        }
+        // remove last '/' if any and return as String
+        p.strip_suffix("/").unwrap_or(&p).to_string()
     }
 
     /// Creates a new Path from a String, checking its validity.  
