@@ -25,29 +25,41 @@
 //!     * Default value : `"peer"`.
 //!
 //! * `"peer"` - The locator of a peer to connect to.
-//!     * Accepted values : locators (ex: `"tcp/10.10.10.10:7447"`).
+//!     * Accepted values : `<locators>` (ex: `"tcp/10.10.10.10:7447"`).
 //!     * Default value : None.
 //!     * Multiple coma separated values accepted (ex: `"tcp/10.10.10.10:7447,tcp/11.11.11.11:7447"`).
 //!
 //! * `"listener"` - A locator to listen on.
-//!     * Accepted values : locators (ex: `"tcp/10.10.10.10:7447"`).
+//!     * Accepted values : `<locators>` (ex: `"tcp/10.10.10.10:7447"`).
 //!     * Default value : None.
 //!     * Multiple coma separated values accepted (ex: `"tcp/10.10.10.10:7447,tcp/11.11.11.11:7447"`).
 //!
 //! * `"user"` - The user name to use for authentication.
-//!     * Accepted values : string.
+//!     * Accepted values : `<string>`.
 //!     * Default value : None.
 //!
 //! * `"password"` - The password to use for authentication.
-//!     * Accepted values : string.
+//!     * Accepted values : `<string>`.
 //!     * Default value : None.
 //!
-//! * `"multicast_interface"` - The network interface to use for multicast discovery.
-//!     * Accepted values : `"auto"`, ip address, interface name.
+//! * `"multicast_scouting"` - Activates/Desactivates multicast scouting.
+//!     * Accepted values : `"true"`, `"false"`.
+//!     * Default value : `"true"`.
+//!
+//! * `"multicast_interface"` - The network interface to use for multicast scouting.
+//!     * Accepted values : `"auto"`, `<ip address>`, `<interface name>`.
 //!     * Default value : `"auto"`.
 //!
+//! * `"multicast_address"` - The multicast address and ports to use for multicast scouting.
+//!     * Accepted values : `<ip address>:<port>`.
+//!     * Default value : `"224.0.0.224:7447"`.
+//!
+//! * `"scouting_timeout"` - In client mode, the period dedicated to scouting a router before failing.
+//!     * Accepted values : <float in seconds>.
+//!     * Default value : `"3.0"`.
+//!
 //! * `"scouting_delay"` - In peer mode, the period dedicated to scouting first remote peers before doing anything else.
-//!     * Accepted values : float in seconds.
+//!     * Accepted values : <float in seconds>.
 //!     * Default value : `"0.2"`.
 //!
 //! * `"add_timestamp"` - Indicates if data messages should be timestamped.
@@ -89,7 +101,10 @@ fn str_key_to_zn_key(key: &str) -> Option<zenoh_protocol::core::ZInt> {
         "listener" => Some(ZN_LISTENER_KEY),
         "user" => Some(ZN_USER_KEY),
         "password" => Some(ZN_PASSWORD_KEY),
+        "multicast_scouting" => Some(ZN_MULTICAST_SCOUTING_KEY),
         "multicast_interface" => Some(ZN_MULTICAST_INTERFACE_KEY),
+        "multicast_address" => Some(ZN_MULTICAST_ADDRESS_KEY),
+        "scouting_timeout" => Some(ZN_SCOUTING_TIMEOUT_KEY),
         "scouting_delay" => Some(ZN_SCOUTING_DELAY_KEY),
         "add_timestamp" => Some(ZN_ADD_TIMESTAMP_KEY),
         "local_routing" => Some(ZN_LOCAL_ROUTING_KEY),

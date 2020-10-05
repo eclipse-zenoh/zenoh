@@ -56,6 +56,7 @@ pub enum ZErrorKind {
     Other {
         descr: String,
     },
+    Timeout {},
     UnkownResourceId {
         rid: String,
     },
@@ -98,6 +99,7 @@ impl fmt::Display for ZErrorKind {
             }
             ZErrorKind::IOError { descr } => write!(f, "IO error ({})", descr),
             ZErrorKind::Other { descr } => write!(f, "zenoh error: ({})", descr),
+            ZErrorKind::Timeout {} => write!(f, "Timeout"),
             ZErrorKind::UnkownResourceId { rid } => write!(f, "Unkown ResourceId ({})", rid),
             ZErrorKind::ValueDecodingFailed { descr } => {
                 write!(f, "Failed to decode Value ({})", descr)

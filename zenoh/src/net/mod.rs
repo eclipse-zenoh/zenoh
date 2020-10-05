@@ -70,8 +70,9 @@ use async_std::sync::channel;
 use futures::prelude::*;
 use log::{debug, trace};
 use zenoh_protocol::core::WhatAmI;
+use zenoh_router::runtime::config::*;
 use zenoh_router::runtime::orchestrator::{Loop, SessionOrchestrator};
-
+use zenoh_router::runtime::prelude::*;
 mod types;
 pub use types::*;
 
@@ -105,7 +106,7 @@ pub mod utils {
 /// # Arguments
 ///
 /// * `what` - The kind of zenoh process to scout for
-/// * `iface` - The network interface to use for multicast (or "auto")
+/// * `config` - The configuration [Properties](Properties) to use for scouting
 ///
 /// # Examples
 /// ```no_run
@@ -113,21 +114,27 @@ pub mod utils {
 /// use zenoh::net::*;
 /// use futures::prelude::*;
 ///
-/// let mut stream = scout(whatami::PEER | whatami::ROUTER, "auto").await;
+/// let mut stream = scout(whatami::PEER | whatami::ROUTER, config::default()).await;
 /// while let Some(hello) = stream.next().await {
 ///     println!("{}", hello);
 /// }
 /// # })
 /// ```
-pub async fn scout(what: WhatAmI, iface: &str) -> HelloStream {
-    debug!("scout({}, {})", what, iface);
+pub async fn scout(what: WhatAmI, config: Properties) -> HelloStream {
+    debug!("scout({}, {})", what, config::to_string(&config));
+    let addr = config
+        .last_or_str(ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+        .parse()
+        .unwrap();
+    let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+
     let (hello_sender, hello_receiver) = channel::<Hello>(1);
     let (stop_sender, mut stop_receiver) = channel::<()>(1);
     let iface = SessionOrchestrator::get_interface(iface).unwrap();
     let socket = SessionOrchestrator::bind_ucast_port(iface).await.unwrap();
     async_std::task::spawn(async move {
         let hello_sender = &hello_sender;
-        let scout = SessionOrchestrator::scout(&socket, what, async move |hello| {
+        let scout = SessionOrchestrator::scout(&socket, what, &addr, async move |hello| {
             hello_sender.send(hello).await;
             Loop::Continue
         });

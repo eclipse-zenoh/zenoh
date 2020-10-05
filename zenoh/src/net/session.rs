@@ -29,8 +29,6 @@ use zenoh_protocol::{
     io::RBuf,
     proto::Primitives,
 };
-use zenoh_router::runtime::config::*;
-use zenoh_router::runtime::prelude::*;
 use zenoh_router::runtime::Runtime;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zconfigurable, zerror};

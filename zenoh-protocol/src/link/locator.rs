@@ -70,6 +70,11 @@ impl FromStr for Locator {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let split: Vec<&str> = s.split(PROTO_SEPARATOR).collect();
+        if split.len() != 2 {
+            return zerror!(ZErrorKind::InvalidLocator {
+                descr: format!("Missing protocol: {}", s)
+            });
+        }
         let (proto, addr) = (split[0], split[1]);
         match proto {
             #[cfg(feature = "tcp")]
@@ -86,7 +91,7 @@ impl FromStr for Locator {
                             }
                         }
                         Err(e) => {
-                            let e = format!("Invalid TCP locator: {}", e);
+                            let e = format!("{}: {}", e, addr);
                             log::warn!("{}", e);
                             zerror!(ZErrorKind::InvalidLocator { descr: e })
                         }

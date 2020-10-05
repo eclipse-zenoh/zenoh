@@ -32,8 +32,6 @@ const SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
 const SCOUT_MAX_PERIOD: u64 = 8000; //ms
 const SCOUT_PERIOD_INCREASE_FACTOR: u64 = 2;
 const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
-const MCAST_ADDR: &str = "224.0.0.224";
-const MCAST_PORT: &str = "7447";
 
 pub enum Loop {
     Continue,
@@ -70,13 +68,33 @@ impl SessionOrchestrator {
             .get(ZN_PEER_KEY)
             .map(|l| String::from_utf8_lossy(l).parse().unwrap())
             .collect::<Vec<Locator>>();
+        let scouting = config
+            .last_or(ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .is_true();
+        let addr = config
+            .last_or_str(ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .parse()
+            .unwrap();
         let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+        let timeout = std::time::Duration::from_secs_f64(
+            config
+                .last_or_str(ZN_SCOUTING_TIMEOUT_KEY, ZN_SCOUTING_TIMEOUT_DEFAULT)
+                .parse()
+                .unwrap(),
+        );
         match peers.len() {
             0 => {
-                log::info!("Scouting for router ...");
-                let iface = SessionOrchestrator::get_interface(iface)?;
-                let socket = SessionOrchestrator::bind_ucast_port(iface).await?;
-                self.connect_first(&socket, whatami::ROUTER).await
+                if scouting {
+                    log::info!("Scouting for router ...");
+                    let iface = SessionOrchestrator::get_interface(iface)?;
+                    let socket = SessionOrchestrator::bind_ucast_port(iface).await?;
+                    self.connect_first(&socket, whatami::ROUTER, &addr, timeout)
+                        .await
+                } else {
+                    zerror!(ZErrorKind::Other {
+                        descr: "No peer specified and multicast scouting desactivated!".to_string()
+                    })
+                }
             }
             _ => {
                 for locator in &peers {
@@ -102,6 +120,13 @@ impl SessionOrchestrator {
             .get(ZN_PEER_KEY)
             .map(|l| String::from_utf8_lossy(l).parse().unwrap())
             .collect::<Vec<Locator>>();
+        let scouting = config
+            .last_or(ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .is_true();
+        let addr = config
+            .last_or_str(ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .parse()
+            .unwrap();
         let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
         let delay = std::time::Duration::from_secs_f64(
             config
@@ -118,17 +143,19 @@ impl SessionOrchestrator {
         let this = self.clone();
         async_std::task::spawn(async move { this.connector(peers).await });
 
-        let mcast_socket = SessionOrchestrator::bind_mcast_port().await?;
-        let iface = SessionOrchestrator::get_interface(iface)?;
-        let ucast_socket = SessionOrchestrator::bind_ucast_port(iface).await?;
-        let this = self.clone();
-        async_std::task::spawn(async move {
-            async_std::prelude::FutureExt::race(
-                this.responder(&mcast_socket, &ucast_socket),
-                this.connect_all(&ucast_socket, whatami::PEER | whatami::ROUTER),
-            )
-            .await;
-        });
+        if scouting {
+            let mcast_socket = SessionOrchestrator::bind_mcast_port(&addr).await?;
+            let iface = SessionOrchestrator::get_interface(iface)?;
+            let ucast_socket = SessionOrchestrator::bind_ucast_port(iface).await?;
+            let this = self.clone();
+            async_std::task::spawn(async move {
+                async_std::prelude::FutureExt::race(
+                    this.responder(&mcast_socket, &ucast_socket),
+                    this.connect_all(&ucast_socket, whatami::PEER | whatami::ROUTER, &addr),
+                )
+                .await;
+            });
+        }
         async_std::task::sleep(delay).await;
         Ok(())
     }
@@ -142,6 +169,10 @@ impl SessionOrchestrator {
             .get(ZN_PEER_KEY)
             .map(|l| String::from_utf8_lossy(l).parse().unwrap())
             .collect::<Vec<Locator>>();
+        let addr = config
+            .last_or_str(ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .parse()
+            .unwrap();
         let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
 
         self.bind_listeners(&listeners).await?;
@@ -149,7 +180,7 @@ impl SessionOrchestrator {
         let this = self.clone();
         async_std::task::spawn(async move { this.connector(peers).await });
 
-        let mcast_socket = SessionOrchestrator::bind_mcast_port().await?;
+        let mcast_socket = SessionOrchestrator::bind_mcast_port(&addr).await?;
         let iface = SessionOrchestrator::get_interface(iface)?;
         let ucast_socket = SessionOrchestrator::bind_ucast_port(iface).await?;
         let this = self.clone();
@@ -215,7 +246,7 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn bind_mcast_port() -> ZResult<UdpSocket> {
+    pub async fn bind_mcast_port(sockaddr: &SocketAddr) -> ZResult<UdpSocket> {
         let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
             Ok(socket) => socket,
             Err(err) => {
@@ -240,45 +271,42 @@ impl SessionOrchestrator {
         let addr = {
             #[cfg(unix)]
             {
-                MCAST_ADDR.parse().unwrap()
+                sockaddr.ip()
             } // See UNIX Network Programmping p.212
             #[cfg(windows)]
             {
                 IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
             }
         };
-        match socket.bind(&SocketAddr::new(addr, MCAST_PORT.parse().unwrap()).into()) {
-            Ok(()) => log::debug!("UDP port bound to {}:{}", addr, MCAST_PORT),
+        match socket.bind(&SocketAddr::new(addr, sockaddr.port()).into()) {
+            Ok(()) => log::debug!("UDP port bound to {}", sockaddr),
             Err(err) => {
-                log::error!("Unable to bind udp port {}:{} : {}", addr, MCAST_PORT, err);
+                log::error!("Unable to bind udp port {} : {}", sockaddr, err);
                 return zerror!(
                     ZErrorKind::IOError {
-                        descr: format!("Unable to bind udp port {}:{}", addr, MCAST_PORT)
+                        descr: format!("Unable to bind udp port {}", sockaddr)
                     },
                     err
                 );
             }
         }
-        match socket.join_multicast_v4(
-            &MCAST_ADDR.parse::<Ipv4Addr>().unwrap(),
-            &Ipv4Addr::new(0, 0, 0, 0),
-        ) {
-            Ok(()) => log::debug!("Joined multicast group {}", MCAST_ADDR),
+        let join_multicast = match sockaddr.ip() {
+            IpAddr::V4(addr) => socket.join_multicast_v4(&addr, &Ipv4Addr::new(0, 0, 0, 0)),
+            IpAddr::V6(addr) => socket.join_multicast_v6(&addr, 0),
+        };
+        match join_multicast {
+            Ok(()) => log::debug!("Joined multicast group {}", sockaddr.ip()),
             Err(err) => {
-                log::error!("Unable to join multicast group {} : {}", MCAST_ADDR, err);
+                log::error!("Unable to join multicast group {} : {}", sockaddr.ip(), err);
                 return zerror!(
                     ZErrorKind::IOError {
-                        descr: format!("Unable to join multicast group {}", MCAST_ADDR)
+                        descr: format!("Unable to join multicast group {}", sockaddr.ip())
                     },
                     err
                 );
             }
         }
-        log::info!(
-            "zenohd listening scout messages on {}:{}",
-            MCAST_ADDR,
-            MCAST_PORT
-        );
+        log::info!("zenohd listening scout messages on {}", sockaddr);
         Ok(socket.into_udp_socket().into())
     }
 
@@ -337,7 +365,7 @@ impl SessionOrchestrator {
         .await;
     }
 
-    pub async fn scout<Fut, F>(socket: &UdpSocket, what: WhatAmI, mut f: F)
+    pub async fn scout<Fut, F>(socket: &UdpSocket, what: WhatAmI, mcast_addr: &SocketAddr, mut f: F)
     where
         F: FnMut(Hello) -> Fut,
         Fut: Future<Output = Loop>,
@@ -348,20 +376,12 @@ impl SessionOrchestrator {
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
             wbuf.write_session_message(&SessionMessage::make_scout(Some(what), true, None));
             loop {
-                log::trace!("Send scout to {}:{}", MCAST_ADDR, MCAST_PORT);
+                log::trace!("Send scout to {}", mcast_addr);
                 if let Err(err) = socket
-                    .send_to(
-                        &RBuf::from(&wbuf).to_vec(),
-                        [MCAST_ADDR, MCAST_PORT].join(":"),
-                    )
+                    .send_to(&RBuf::from(&wbuf).to_vec(), mcast_addr.to_string())
                     .await
                 {
-                    log::error!(
-                        "Unable to send scout to {}:{} : {}",
-                        MCAST_ADDR,
-                        MCAST_PORT,
-                        err
-                    );
+                    log::error!("Unable to send scout to {} : {}", mcast_addr, err);
                 }
                 async_std::task::sleep(Duration::from_millis(delay)).await;
                 if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
@@ -393,28 +413,41 @@ impl SessionOrchestrator {
         async_std::prelude::FutureExt::race(send, recv).await;
     }
 
-    async fn connect_first(&self, socket: &UdpSocket, what: WhatAmI) -> ZResult<()> {
-        SessionOrchestrator::scout(socket, what, async move |hello| {
-            log::info!("Found {:?}", hello);
-            if let Some(locators) = &hello.locators {
-                for locator in locators {
-                    if self.manager.open_session(locator, &None).await.is_ok() {
-                        log::debug!("Successfully connected to newly scouted {:?}", hello);
-                        return Loop::Break;
+    async fn connect_first(
+        &self,
+        socket: &UdpSocket,
+        what: WhatAmI,
+        addr: &SocketAddr,
+        timeout: std::time::Duration,
+    ) -> ZResult<()> {
+        let scout = async {
+            SessionOrchestrator::scout(socket, what, addr, async move |hello| {
+                log::info!("Found {:?}", hello);
+                if let Some(locators) = &hello.locators {
+                    for locator in locators {
+                        if self.manager.open_session(locator, &None).await.is_ok() {
+                            log::debug!("Successfully connected to newly scouted {:?}", hello);
+                            return Loop::Break;
+                        }
                     }
+                    log::warn!("Unable to connect to scouted {:?}", hello);
+                } else {
+                    log::warn!("Received hello with no locators : {:?}", hello);
                 }
-                log::warn!("Unable to connect to scouted {:?}", hello);
-            } else {
-                log::warn!("Received hello with no locators : {:?}", hello);
-            }
-            Loop::Continue
-        })
-        .await;
-        Ok(())
+                Loop::Continue
+            })
+            .await;
+            Ok(())
+        };
+        let timeout = async {
+            async_std::task::sleep(timeout).await;
+            zerror!(ZErrorKind::Timeout {})
+        };
+        async_std::prelude::FutureExt::race(scout, timeout).await
     }
 
-    async fn connect_all(&self, ucast_socket: &UdpSocket, what: WhatAmI) {
-        SessionOrchestrator::scout(ucast_socket, what, async move |hello| {
+    async fn connect_all(&self, ucast_socket: &UdpSocket, what: WhatAmI, addr: &SocketAddr) {
+        SessionOrchestrator::scout(ucast_socket, what, addr, async move |hello| {
             match &hello.pid {
                 Some(pid) => {
                     if pid != &self.manager.pid() {

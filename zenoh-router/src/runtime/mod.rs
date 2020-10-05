@@ -100,12 +100,7 @@ impl Runtime {
                     orchestrator,
                 })),
             }),
-            Err(err) => zerror!(
-                ZErrorKind::Other {
-                    descr: "".to_string()
-                },
-                err
-            ),
+            Err(err) => Err(err),
         }
     }
 
@@ -131,61 +126,79 @@ impl Runtime {
 pub mod config {
     use zenoh_protocol::core::{Properties, ZInt};
 
-    /// "true"
+    /// `"true"`
     pub const ZN_TRUE: &[u8] = b"true";
-    /// "false"
+    /// `"false"`
     pub const ZN_FALSE: &[u8] = b"false";
 
     /// The library mode.
-    /// Accepted values : "peer", "client".
-    /// Default value : "peer".
+    /// Accepted values : `"peer"`, `"client"`.
+    /// Default value : `"peer"`.
     pub const ZN_MODE_KEY: ZInt = 0x50;
     pub const ZN_MODE_DEFAULT: &[u8] = b"peer";
 
     /// The locator of a peer to connect to.
-    /// Accepted values : locator (ex: "tcp/10.10.10.10:7447").
+    /// Accepted values : `<locator>` (ex: `"tcp/10.10.10.10:7447"`).
     /// Default value : None.
     /// Multiple values accepted.
     pub const ZN_PEER_KEY: ZInt = 0x51;
 
     /// A locator to listen on.
-    /// Accepted values : locator (ex: "tcp/10.10.10.10:7447").
+    /// Accepted values : `<locator>` (ex: `"tcp/10.10.10.10:7447"`).
     /// Default value : None.
     /// Multiple values accepted.
     pub const ZN_LISTENER_KEY: ZInt = 0x52;
 
     /// The user name to use for authentication.
-    /// Accepted values : string.
+    /// Accepted values : `<string>`.
     /// Default value : None.
     pub const ZN_USER_KEY: ZInt = 0x53;
 
     /// The password to use for authentication.
-    /// Accepted values : string.
+    /// Accepted values : `<string>`.
     /// Default value : None.
     pub const ZN_PASSWORD_KEY: ZInt = 0x54;
 
-    /// The network interface to use for multicast discovery.
-    /// Accepted values : "auto", ip address, interface name.
-    /// Default value : "auto".
-    pub const ZN_MULTICAST_INTERFACE_KEY: ZInt = 0x55;
+    /// Activates/Desactivates multicast scouting.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"true"`.
+    pub const ZN_MULTICAST_SCOUTING_KEY: ZInt = 0x55;
+    pub const ZN_MULTICAST_SCOUTING_DEFAULT: &[u8] = b"true";
+
+    /// The network interface to use for multicast scouting.
+    /// Accepted values : `"auto"`, `<ip address>`, `<interface name>`.
+    /// Default value : `"auto"`.
+    pub const ZN_MULTICAST_INTERFACE_KEY: ZInt = 0x56;
     pub const ZN_MULTICAST_INTERFACE_DEFAULT: &[u8] = b"auto";
 
+    /// The multicast address and ports to use for multicast scouting.
+    /// Accepted values : `<ip address>:<port>`.
+    /// Default value : `"224.0.0.224:7447"`.
+    pub const ZN_MULTICAST_ADDRESS_KEY: ZInt = 0x57;
+    pub const ZN_MULTICAST_ADDRESS_DEFAULT: &[u8] = b"224.0.0.224:7447";
+
+    /// In client mode, the period dedicated to scouting a router before failing.
+    /// Accepted values : `<float in seconds>`.
+    /// Default value : `"3.0"`.
+    pub const ZN_SCOUTING_TIMEOUT_KEY: ZInt = 0x58;
+    pub const ZN_SCOUTING_TIMEOUT_DEFAULT: &[u8] = b"3.0";
+
     /// In peer mode, the period dedicated to scouting first remote peers before doing anything else.
-    /// Accepted values : float in seconds.
-    /// Default value : "0.2".
-    pub const ZN_SCOUTING_DELAY_KEY: ZInt = 0x56;
+    /// Accepted values : `<float in seconds>`.
+    /// Default value : `"0.2"`.
+    pub const ZN_SCOUTING_DELAY_KEY: ZInt = 0x59;
     pub const ZN_SCOUTING_DELAY_DEFAULT: &[u8] = b"0.2";
 
     /// Indicates if data messages should be timestamped.
-    /// Accepted values : "true", "false".
-    /// Default value : "false".
-    pub const ZN_ADD_TIMESTAMP_KEY: ZInt = 0x57;
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"false"`.
+    pub const ZN_ADD_TIMESTAMP_KEY: ZInt = 0x5A;
     pub const ZN_ADD_TIMESTAMP_DEFAULT: &[u8] = b"false";
 
     /// Indicates if local writes/queries should reach local subscribers/queryables.
-    /// Accepted values : "true", "false".
-    /// Default value : "true".
-    pub const ZN_LOCAL_ROUTING_KEY: ZInt = 0x58;
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"true"`.
+    pub const ZN_LOCAL_ROUTING_KEY: ZInt = 0x5B;
     pub const ZN_LOCAL_ROUTING_DEFAULT: &[u8] = b"true";
 
     /// Creates an empty set of [Properties](Properties).
