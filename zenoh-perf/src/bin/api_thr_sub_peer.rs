@@ -39,7 +39,7 @@ async fn main() {
             .unwrap(),
     );
 
-    let session = open(config, None).await.unwrap();
+    let session = open(config).await.unwrap();
 
     let reskey = RId(session
         .declare_resource(&RName("/test/thr".to_string()))

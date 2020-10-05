@@ -11,13 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::runtime::Config;
+use crate::runtime::config::*;
+use crate::runtime::prelude::*;
 use async_std::net::UdpSocket;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
-use zenoh_protocol::core::{whatami, WhatAmI};
+use zenoh_protocol::core::{whatami, Properties, WhatAmI};
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
@@ -50,25 +51,11 @@ impl SessionOrchestrator {
         SessionOrchestrator { whatami, manager }
     }
 
-    pub async fn init(&mut self, config: Config) -> ZResult<()> {
+    pub async fn init(&mut self, config: Properties) -> ZResult<()> {
         match self.whatami {
-            whatami::CLIENT => {
-                self.init_client(config.peers, &config.multicast_interface)
-                    .await
-            }
-            whatami::PEER => {
-                self.init_peer(
-                    config.listeners,
-                    config.peers,
-                    &config.multicast_interface,
-                    config.scouting_delay,
-                )
-                .await
-            }
-            whatami::ROUTER => {
-                self.init_broker(config.listeners, config.peers, &config.multicast_interface)
-                    .await
-            }
+            whatami::CLIENT => self.init_client(config).await,
+            whatami::PEER => self.init_peer(config).await,
+            whatami::ROUTER => self.init_broker(config).await,
             _ => {
                 log::error!("Unknown mode");
                 zerror!(ZErrorKind::Other {
@@ -78,7 +65,12 @@ impl SessionOrchestrator {
         }
     }
 
-    async fn init_client(&mut self, peers: Vec<Locator>, iface: &str) -> ZResult<()> {
+    async fn init_client(&mut self, config: Properties) -> ZResult<()> {
+        let peers = config
+            .get(ZN_PEER_KEY)
+            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .collect::<Vec<Locator>>();
+        let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
         match peers.len() {
             0 => {
                 log::info!("Scouting for router ...");
@@ -101,13 +93,23 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn init_peer(
-        &mut self,
-        mut listeners: Vec<Locator>,
-        peers: Vec<Locator>,
-        iface: &str,
-        delay: Duration,
-    ) -> ZResult<()> {
+    pub async fn init_peer(&mut self, config: Properties) -> ZResult<()> {
+        let mut listeners = config
+            .get(ZN_LISTENER_KEY)
+            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .collect::<Vec<Locator>>();
+        let peers = config
+            .get(ZN_PEER_KEY)
+            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .collect::<Vec<Locator>>();
+        let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+        let delay = std::time::Duration::from_secs_f64(
+            config
+                .last_or_str(ZN_SCOUTING_DELAY_KEY, ZN_SCOUTING_DELAY_DEFAULT)
+                .parse()
+                .unwrap(),
+        );
+
         if listeners.is_empty() {
             listeners.push(DEFAULT_LISTENER.parse().unwrap());
         }
@@ -131,12 +133,17 @@ impl SessionOrchestrator {
         Ok(())
     }
 
-    pub async fn init_broker(
-        &mut self,
-        listeners: Vec<Locator>,
-        peers: Vec<Locator>,
-        iface: &str,
-    ) -> ZResult<()> {
+    pub async fn init_broker(&mut self, config: Properties) -> ZResult<()> {
+        let listeners = config
+            .get(ZN_LISTENER_KEY)
+            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .collect::<Vec<Locator>>();
+        let peers = config
+            .get(ZN_PEER_KEY)
+            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .collect::<Vec<Locator>>();
+        let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+
         self.bind_listeners(&listeners).await?;
 
         let this = self.clone();

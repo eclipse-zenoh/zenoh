@@ -13,10 +13,9 @@
 //
 use async_std::future;
 use async_std::task;
-use clap::{App, Arg};
-use zenoh_protocol::core::whatami;
+use clap::{App, Arg, Values};
 use zenoh_router::plugins::PluginsMgr;
-use zenoh_router::runtime::{AdminSpace, Config, Runtime};
+use zenoh_router::runtime::{config, AdminSpace, Runtime};
 
 fn get_plugins_from_args() -> Vec<String> {
     let mut result: Vec<String> = vec![];
@@ -83,27 +82,32 @@ fn main() {
         // Add plugins' expected args and parse command line
         let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
 
-        let listeners = args
-            .values_of("listener")
-            .map(|v| v.map(|l| l.parse().unwrap()).collect())
-            .or_else(|| Some(vec![]))
-            .unwrap();
-        let peers = args
+        let mut config = config::empty();
+        config.push((config::ZN_MODE_KEY, b"router".to_vec()));
+        for peer in args
             .values_of("peer")
-            .map(|v| v.map(|l| l.parse().unwrap()).collect())
-            .or_else(|| Some(vec![]))
-            .unwrap();
-        let add_timestamp = !std::env::args().any(|arg| arg == "--no-timestamp");
+            .or_else(|| Some(Values::default()))
+            .unwrap()
+        {
+            config.push((config::ZN_PEER_KEY, peer.as_bytes().to_vec()));
+        }
+        for listener in args
+            .values_of("listener")
+            .or_else(|| Some(Values::default()))
+            .unwrap()
+        {
+            config.push((config::ZN_LISTENER_KEY, listener.as_bytes().to_vec()));
+        }
+        config.push((
+            config::ZN_ADD_TIMESTAMP_KEY,
+            if std::env::args().any(|arg| arg == "--no-timestamp") {
+                config::ZN_FALSE.to_vec()
+            } else {
+                config::ZN_TRUE.to_vec()
+            },
+        ));
 
-        let config = Config {
-            whatami: whatami::ROUTER,
-            peers,
-            listeners,
-            multicast_interface: "auto".to_string(),
-            scouting_delay: std::time::Duration::new(0, 200_000_000),
-            add_timestamp,
-            local_routing: true,
-        };
+        log::debug!("Config: {}", config::to_string(&config));
 
         let runtime = match Runtime::new(0, config, args.value_of("id")).await {
             Ok(runtime) => runtime,

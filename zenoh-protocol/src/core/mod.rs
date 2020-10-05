@@ -227,6 +227,8 @@ impl From<&PeerId> for uhlc::ID {
     }
 }
 
+pub type Properties = Vec<(ZInt, Vec<u8>)>;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Channel {
     BestEffort,

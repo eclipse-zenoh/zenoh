@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::properties::*;
+use super::info::*;
 use super::*;
 use async_std::sync::RwLock;
 use async_std::sync::{channel, Arc, Receiver, Sender};
@@ -29,6 +29,8 @@ use zenoh_protocol::{
     io::RBuf,
     proto::Primitives,
 };
+use zenoh_router::runtime::config::*;
+use zenoh_router::runtime::prelude::*;
 use zenoh_router::runtime::Runtime;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zconfigurable, zerror};
@@ -185,8 +187,10 @@ impl Session {
         }
     }
 
-    pub(super) async fn new(config: Config, _ps: Option<Properties>) -> ZResult<Session> {
-        let local_routing = config.local_routing;
+    pub(super) async fn new(config: Properties) -> ZResult<Session> {
+        let local_routing = config
+            .last_or(ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
+            .is_true();
         match Runtime::new(0, config, None).await {
             Ok(runtime) => {
                 let session = Self::init(runtime, local_routing).await;
@@ -241,7 +245,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// session.close().await.unwrap();
     /// # })
     /// ```
@@ -257,7 +261,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let info = session.info();
     /// # })
     /// ```
@@ -304,7 +308,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let rid = session.declare_resource(&"/resource/name".into()).await.unwrap();
     /// # })
     /// ```
@@ -346,7 +350,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let rid = session.declare_resource(&"/resource/name".into()).await.unwrap();
     /// session.undeclare_resource(rid).await;
     /// # })
@@ -377,7 +381,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
@@ -436,7 +440,7 @@ impl Session {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let sub_info = SubInfo {
     ///     reliability: Reliability::Reliable,
     ///     mode: SubMode::Push,
@@ -531,7 +535,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let sub_info = SubInfo {
     ///     reliability: Reliability::Reliable,
     ///     mode: SubMode::Push,
@@ -631,7 +635,7 @@ impl Session {
     /// use zenoh::net::queryable::EVAL;
     /// use futures::prelude::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
     /// while let Some(query) = queryable.stream().next().await {
     ///     query.reply(Sample{
@@ -697,7 +701,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
@@ -737,7 +741,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT, CongestionControl::Drop).await.unwrap();
     /// # })
     /// ```
@@ -879,7 +883,7 @@ impl Session {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let mut replies = session.query(
     ///     &"/resource/name".into(),
     ///     "predicate",

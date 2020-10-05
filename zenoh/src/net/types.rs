@@ -90,11 +90,8 @@ pub use zenoh_util::core::ZErrorKind;
 /// A zenoh result.
 pub use zenoh_util::core::ZResult;
 
-/// Struct to pass to [open](fn.open.html) to configure the zenoh-net [Session](struct.Session.html).
-pub type Config = zenoh_router::runtime::Config;
-
 /// A list of key/value pairs.
-pub type Properties = Vec<(ZInt, Vec<u8>)>;
+pub use zenoh_protocol::core::Properties;
 
 pin_project! {
     /// A stream of [Hello](Hello) messages.
@@ -194,7 +191,7 @@ impl Publisher<'_> {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let publisher = session.declare_publisher(&"/resource/name".into()).await.unwrap();
     /// publisher.undeclare().await.unwrap();
     /// # })
@@ -263,7 +260,7 @@ impl Subscriber<'_> {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// # let sub_info = SubInfo {
     /// #    reliability: Reliability::Reliable,
     /// #    mode: SubMode::Push,
@@ -289,7 +286,7 @@ impl Subscriber<'_> {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// # let sub_info = SubInfo {
     /// #     reliability: Reliability::Reliable,
     /// #     mode: SubMode::Pull,
@@ -316,7 +313,7 @@ impl Subscriber<'_> {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// # let sub_info = SubInfo {
     /// #     reliability: Reliability::Reliable,
     /// #     mode: SubMode::Push,
@@ -388,7 +385,7 @@ impl CallbackSubscriber<'_> {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// # let sub_info = SubInfo {
     /// #     reliability: Reliability::Reliable,
     /// #     mode: SubMode::Pull,
@@ -414,7 +411,7 @@ impl CallbackSubscriber<'_> {
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// # let sub_info = SubInfo {
     /// #     reliability: Reliability::Reliable,
     /// #     mode: SubMode::Push,
@@ -488,7 +485,7 @@ impl Queryable<'_> {
     /// use zenoh::net::queryable::EVAL;
     /// use futures::prelude::*;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
     /// while let Some(query) = queryable.stream().next().await {
     ///     query.reply(Sample{
@@ -515,7 +512,7 @@ impl Queryable<'_> {
     /// use zenoh::net::*;
     /// use zenoh::net::queryable::EVAL;
     ///
-    /// let session = open(Config::peer(), None).await.unwrap();
+    /// let session = open(config::peer()).await.unwrap();
     /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
     /// queryable.undeclare().await.unwrap();
     /// # })

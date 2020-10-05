@@ -19,7 +19,7 @@ use futures::prelude::*;
 use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use zenoh::{ChangeKind, Path, Properties, Selector, Value, ZResult, Zenoh};
+use zenoh::{ChangeKind, Path, Properties, Selector, Value, ZResult, Zenoh, config};
 use zenoh_router::runtime::Runtime;
 
 mod backend;
@@ -71,7 +71,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     // Start Memory Backend and storages if configured via args
     if !args.is_present("no-backend") {
         debug!("Memory backend enabled");
-        let mem_backend = memory_backend::create_backend(Properties::default()).unwrap();
+        let mem_backend = memory_backend::create_backend(config::default()).unwrap();
         let mem_backend_path =
             Path::try_from(format!("{}/{}", backends_prefix, MEMORY_BACKEND_NAME)).unwrap();
         let handle = start_backend(mem_backend, mem_backend_path.clone(), zenoh.clone())
@@ -143,6 +143,6 @@ async fn load_and_start_backend(
     zenoh: Arc<Zenoh>,
 ) -> ZResult<Sender<bool>> {
     // TODO: find and load appropriate BACKEND depending to properties in "value"
-    let mem_backend = memory_backend::create_backend(Properties::default()).unwrap();
+    let mem_backend = memory_backend::create_backend(config::default()).unwrap();
     start_backend(mem_backend, path.clone(), zenoh).await
 }

@@ -15,7 +15,6 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use std::convert::TryFrom;
 use std::time::Instant;
-use zenoh::net::Config;
 use zenoh::*;
 
 const N: u64 = 100000;
@@ -28,7 +27,7 @@ fn print_stats(start: Instant) {
 //
 // Argument parsing -- look at the main for the zenoh-related code
 //
-fn parse_args() -> Config {
+fn parse_args() -> Properties {
     let args = App::new("zenoh throughput sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
@@ -43,25 +42,13 @@ fn parse_args() -> Config {
         ))
         .get_matches();
 
-    Config::default()
-        .mode(
-            args.value_of("mode")
-                .map(|m| Config::parse_mode(m))
-                .unwrap()
-                .unwrap(),
-        )
-        .add_peers(
-            args.values_of("peer")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        )
-        .add_listeners(
-            args.values_of("listener")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        )
+    let mut config = config::default();
+    for key in ["mode", "peer", "listener"].iter() {
+        if let Some(value) = args.values_of(key) {
+            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+        }
+    }
+    config
 }
 
 #[async_std::main]
@@ -72,7 +59,7 @@ async fn main() {
     let config = parse_args();
 
     println!("New zenoh...");
-    let zenoh = Zenoh::new(config, None).await.unwrap();
+    let zenoh = Zenoh::new(config).await.unwrap();
 
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();

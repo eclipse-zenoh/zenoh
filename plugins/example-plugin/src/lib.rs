@@ -18,8 +18,8 @@ use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
-use zenoh::net::queryable::STORAGE;
 use zenoh::net::utils::resource_name;
+use zenoh::net::queryable::STORAGE;
 use zenoh::net::*;
 use zenoh_router::runtime::Runtime;
 

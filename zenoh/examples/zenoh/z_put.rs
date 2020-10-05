@@ -13,13 +13,12 @@
 //
 use clap::{App, Arg};
 use std::convert::TryInto;
-use zenoh::net::Config;
 use zenoh::*;
 
 //
 // Argument parsing -- look at the main for the zenoh-related code
 //
-fn parse_args() -> (Config, String, String) {
+fn parse_args() -> (Properties, String, String) {
     let args = App::new("zenoh put example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
@@ -42,25 +41,12 @@ fn parse_args() -> (Config, String, String) {
         )
         .get_matches();
 
-    let config = Config::default()
-        .mode(
-            args.value_of("mode")
-                .map(|m| Config::parse_mode(m))
-                .unwrap()
-                .unwrap(),
-        )
-        .add_peers(
-            args.values_of("peer")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        )
-        .add_listeners(
-            args.values_of("listener")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        );
+    let mut config = config::default();
+    for key in ["mode", "peer", "listener"].iter() {
+        if let Some(value) = args.values_of(key) {
+            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+        }
+    }
     let path = args.value_of("path").unwrap().to_string();
     let value = args.value_of("value").unwrap().to_string();
 
@@ -75,7 +61,7 @@ async fn main() {
     let (config, path, value) = parse_args();
 
     println!("New zenoh...");
-    let zenoh = Zenoh::new(config, None).await.unwrap();
+    let zenoh = Zenoh::new(config).await.unwrap();
 
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();

@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::{App, Arg};
+use clap::{App, Arg, Values};
 use futures::prelude::*;
 use zenoh::net::*;
 
@@ -23,7 +23,7 @@ async fn main() {
     let (config, selector) = parse_args();
 
     println!("Opening session...");
-    let session = open(config, None).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Sending Query '{}'...", selector);
     let mut replies = session
@@ -44,7 +44,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String) {
+fn parse_args() -> (Properties, String) {
     let args = App::new("zenoh-net query example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
@@ -63,25 +63,25 @@ fn parse_args() -> (Config, String) {
         )
         .get_matches();
 
-    let config = Config::default()
-        .mode(
-            args.value_of("mode")
-                .map(|m| Config::parse_mode(m))
-                .unwrap()
-                .unwrap(),
-        )
-        .add_peers(
-            args.values_of("peer")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        )
-        .add_listeners(
-            args.values_of("listener")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        );
+    let mut config = config::empty();
+    config.push((
+        config::ZN_MODE_KEY,
+        args.value_of("mode").unwrap().as_bytes().to_vec(),
+    ));
+    for peer in args
+        .values_of("peer")
+        .or_else(|| Some(Values::default()))
+        .unwrap()
+    {
+        config.push((config::ZN_PEER_KEY, peer.as_bytes().to_vec()));
+    }
+    for listener in args
+        .values_of("listener")
+        .or_else(|| Some(Values::default()))
+        .unwrap()
+    {
+        config.push((config::ZN_LISTENER_KEY, listener.as_bytes().to_vec()));
+    }
 
     let selector = args.value_of("selector").unwrap().to_string();
 

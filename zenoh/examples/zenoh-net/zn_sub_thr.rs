@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::future;
-use clap::{App, Arg};
+use clap::{App, Arg, Values};
 use std::time::Instant;
 use zenoh::net::ResKey::*;
 use zenoh::net::*;
@@ -24,7 +24,7 @@ async fn main() {
 
     let (config, m, n) = parse_args();
 
-    let session = open(config, None).await.unwrap();
+    let session = open(config).await.unwrap();
 
     let reskey = RId(session
         .declare_resource(&RName("/test/thr".to_string()))
@@ -69,7 +69,7 @@ fn print_stats(start: Instant, n: u128) {
     println!("{} msg/s", thpt);
 }
 
-fn parse_args() -> (Config, u32, u128) {
+fn parse_args() -> (Properties, u32, u128) {
     let args = App::new("zenoh-net throughput sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
@@ -94,26 +94,28 @@ fn parse_args() -> (Config, u32, u128) {
         )
         .get_matches();
 
-    let s: u32 = args.value_of("samples").unwrap().parse().unwrap();
-    let n: u128 = args.value_of("number").unwrap().parse().unwrap();
-    let c = Config::default()
-        .mode(
-            args.value_of("mode")
-                .map(|m| Config::parse_mode(m))
-                .unwrap()
-                .unwrap(),
-        )
-        .add_peers(
-            args.values_of("peer")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        )
-        .add_listeners(
-            args.values_of("listener")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        );
-    (c, s, n)
+    let mut config = config::empty();
+    config.push((
+        config::ZN_MODE_KEY,
+        args.value_of("mode").unwrap().as_bytes().to_vec(),
+    ));
+    for peer in args
+        .values_of("peer")
+        .or_else(|| Some(Values::default()))
+        .unwrap()
+    {
+        config.push((config::ZN_PEER_KEY, peer.as_bytes().to_vec()));
+    }
+    for listener in args
+        .values_of("listener")
+        .or_else(|| Some(Values::default()))
+        .unwrap()
+    {
+        config.push((config::ZN_LISTENER_KEY, listener.as_bytes().to_vec()));
+    }
+
+    let samples: u32 = args.value_of("samples").unwrap().parse().unwrap();
+    let number: u128 = args.value_of("number").unwrap().parse().unwrap();
+
+    (config, samples, number)
 }

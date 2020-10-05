@@ -13,7 +13,7 @@
 //
 #![feature(async_closure)]
 
-use clap::{App, Arg};
+use clap::{App, Arg, Values};
 use futures::prelude::*;
 use zenoh::net::queryable::EVAL;
 use zenoh::net::*;
@@ -41,7 +41,7 @@ async fn main() {
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = open(config, None).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
     let mut queryable = session.declare_queryable(&path.into(), EVAL).await.unwrap();
@@ -86,7 +86,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> Config {
+fn parse_args() -> Properties {
     let args = App::new("zenoh-net ssl server example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
@@ -98,17 +98,17 @@ fn parse_args() -> Config {
         ))
         .get_matches();
 
-    Config::default()
-        .mode(
-            args.value_of("mode")
-                .map(|m| Config::parse_mode(m))
-                .unwrap()
-                .unwrap(),
-        )
-        .add_peers(
-            args.values_of("peer")
-                .map(|p| p.collect())
-                .or_else(|| Some(vec![]))
-                .unwrap(),
-        )
+    let mut config = config::empty();
+    config.push((
+        config::ZN_MODE_KEY,
+        args.value_of("mode").unwrap().as_bytes().to_vec(),
+    ));
+    for peer in args
+        .values_of("peer")
+        .or_else(|| Some(Values::default()))
+        .unwrap()
+    {
+        config.push((config::ZN_PEER_KEY, peer.as_bytes().to_vec()));
+    }
+    config
 }

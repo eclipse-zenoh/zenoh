@@ -14,11 +14,10 @@
 use crate::routing::broker::Broker;
 use crate::runtime::orchestrator::SessionOrchestrator;
 use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::fmt;
-use std::time::Duration;
+use config::*;
+use prelude::*;
 use uhlc::HLC;
-use zenoh_protocol::core::{whatami, PeerId, WhatAmI};
-use zenoh_protocol::link::Locator;
+use zenoh_protocol::core::{PeerId, Properties};
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zerror, zerror2};
@@ -40,7 +39,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, config: Config, id: Option<&str>) -> ZResult<Runtime> {
+    pub async fn new(version: u8, config: Properties, id: Option<&str>) -> ZResult<Runtime> {
         let pid = if let Some(s) = id {
             let vec = hex::decode(s).map_err(|e| {
                 zerror2!(ZErrorKind::Other {
@@ -62,7 +61,11 @@ impl Runtime {
 
         log::debug!("Using PID: {}", pid);
 
-        let hlc = if config.add_timestamp {
+        let whatami = parse_mode(config.last_or(ZN_MODE_KEY, ZN_MODE_DEFAULT)).unwrap();
+        let hlc = if config
+            .last_or(ZN_ADD_TIMESTAMP_KEY, ZN_ADD_TIMESTAMP_DEFAULT)
+            .is_true()
+        {
             Some(HLC::with_system_time(uhlc::ID::from(&pid)))
         } else {
             None
@@ -71,7 +74,7 @@ impl Runtime {
 
         let sm_config = SessionManagerConfig {
             version,
-            whatami: config.whatami,
+            whatami,
             id: pid.clone(),
             handler: broker.clone(),
         };
@@ -88,7 +91,7 @@ impl Runtime {
         };
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
-        let mut orchestrator = SessionOrchestrator::new(session_manager, config.whatami);
+        let mut orchestrator = SessionOrchestrator::new(session_manager, whatami);
         match orchestrator.init(config).await {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
@@ -123,111 +126,202 @@ impl Runtime {
     }
 }
 
-/// Struct to pass to [open](../../zenoh/net/fn.open.html) to configure the zenoh-net [Session](../../zenoh/net/struct.Session.html).
-///
-/// # Examples
-/// ```
-/// # use zenoh_router::runtime::Config;
-/// let config = Config::peer()
-///     .add_listener("tcp/0.0.0.0:7447")
-///     .add_peer("tcp/10.10.10.10:7447");
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct Config {
-    pub whatami: WhatAmI,
-    pub peers: Vec<Locator>,
-    pub listeners: Vec<Locator>,
-    pub multicast_interface: String,
-    pub scouting_delay: Duration,
-    pub add_timestamp: bool,
-    pub local_routing: bool,
-}
+/// Constants and helpers to build the configuration [Properties](Properties)
+/// to pass to [open](../fn.open.html).
+pub mod config {
+    use zenoh_protocol::core::{Properties, ZInt};
 
-impl Config {
-    fn default(whatami: WhatAmI) -> Config {
-        Config {
-            whatami,
-            peers: vec![],
-            listeners: vec![],
-            multicast_interface: "auto".to_string(),
-            scouting_delay: Duration::new(0, 250_000_000),
-            add_timestamp: false,
-            local_routing: true,
+    /// "true"
+    pub const ZN_TRUE: &[u8] = b"true";
+    /// "false"
+    pub const ZN_FALSE: &[u8] = b"false";
+
+    /// The library mode.
+    /// Accepted values : "peer", "client".
+    /// Default value : "peer".
+    pub const ZN_MODE_KEY: ZInt = 0x50;
+    pub const ZN_MODE_DEFAULT: &[u8] = b"peer";
+
+    /// The locator of a peer to connect to.
+    /// Accepted values : locator (ex: "tcp/10.10.10.10:7447").
+    /// Default value : None.
+    /// Multiple values accepted.
+    pub const ZN_PEER_KEY: ZInt = 0x51;
+
+    /// A locator to listen on.
+    /// Accepted values : locator (ex: "tcp/10.10.10.10:7447").
+    /// Default value : None.
+    /// Multiple values accepted.
+    pub const ZN_LISTENER_KEY: ZInt = 0x52;
+
+    /// The user name to use for authentication.
+    /// Accepted values : string.
+    /// Default value : None.
+    pub const ZN_USER_KEY: ZInt = 0x53;
+
+    /// The password to use for authentication.
+    /// Accepted values : string.
+    /// Default value : None.
+    pub const ZN_PASSWORD_KEY: ZInt = 0x54;
+
+    /// The network interface to use for multicast discovery.
+    /// Accepted values : "auto", ip address, interface name.
+    /// Default value : "auto".
+    pub const ZN_MULTICAST_INTERFACE_KEY: ZInt = 0x55;
+    pub const ZN_MULTICAST_INTERFACE_DEFAULT: &[u8] = b"auto";
+
+    /// In peer mode, the period dedicated to scouting first remote peers before doing anything else.
+    /// Accepted values : float in seconds.
+    /// Default value : "0.2".
+    pub const ZN_SCOUTING_DELAY_KEY: ZInt = 0x56;
+    pub const ZN_SCOUTING_DELAY_DEFAULT: &[u8] = b"0.2";
+
+    /// Indicates if data messages should be timestamped.
+    /// Accepted values : "true", "false".
+    /// Default value : "false".
+    pub const ZN_ADD_TIMESTAMP_KEY: ZInt = 0x57;
+    pub const ZN_ADD_TIMESTAMP_DEFAULT: &[u8] = b"false";
+
+    /// Indicates if local writes/queries should reach local subscribers/queryables.
+    /// Accepted values : "true", "false".
+    /// Default value : "true".
+    pub const ZN_LOCAL_ROUTING_KEY: ZInt = 0x58;
+    pub const ZN_LOCAL_ROUTING_DEFAULT: &[u8] = b"true";
+
+    /// Creates an empty set of [Properties](Properties).
+    pub fn empty() -> Properties {
+        vec![]
+    }
+
+    /// Creates a default set of [Properties](Properties) for zenoh net Session configuration.
+    /// 
+    /// The returned properties contain :
+    ///  - `(ZN_MODE_KEY, "peer")`
+    pub fn default() -> Properties {
+        peer()
+    }
+
+    /// Creates a default set of [Properties](Properties) for a `'peer'` mode zenoh net Session configuration.
+    /// 
+    /// The returned properties contain :
+    ///  - `(ZN_MODE_KEY, "peer")`
+    pub fn peer() -> Properties {
+        vec![(ZN_MODE_KEY, b"peer".to_vec())]
+    }
+
+    /// Creates a default set of [Properties](Properties) for a `'client'` mode zenoh net Session configuration.
+    /// 
+    /// The returned properties contain :
+    ///  - `(ZN_MODE_KEY, "client")`
+    /// 
+    /// If the given locator is not `None`, the created properties also contain : 
+    ///  - `(ZN_PEER_KEY, locator)`
+    pub fn client(locator: Option<String>) -> Properties {
+        let mut result = vec![(ZN_MODE_KEY, b"client".to_vec())];
+        if let Some(locator) = locator {
+            result.push((ZN_PEER_KEY, locator.as_bytes().to_vec()));
+        }
+        result
+    }
+
+    pub fn key_to_string(key: ZInt) -> String {
+        match key {
+            0x50 => "ZN_MODE_KEY".to_string(),
+            0x51 => "ZN_PEER_KEY".to_string(),
+            0x52 => "ZN_LISTENER_KEY".to_string(),
+            0x53 => "ZN_USER_KEY".to_string(),
+            0x54 => "ZN_PASSWORD_KEY".to_string(),
+            0x55 => "ZN_MULTICAST_INTERFACE_KEY".to_string(),
+            0x56 => "ZN_SCOUTING_DELAY_KEY".to_string(),
+            0x57 => "ZN_ADD_TIMESTAMP_KEY".to_string(),
+            0x58 => "ZN_LOCAL_ROUTING_KEY".to_string(),
+            key => key.to_string(),
         }
     }
 
-    pub fn mode(mut self, w: whatami::Type) -> Self {
-        self.whatami = w;
-        self
+    pub fn to_string(config: &[(u64, Vec<u8>)]) -> String {
+        format!(
+            "[{}]",
+            config
+                .iter()
+                .map(|(k, v)| {
+                    format!("({}, {})", key_to_string(*k), String::from_utf8_lossy(v))
+                })
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
     }
+}
 
-    pub fn peer() -> Config {
-        Config::default(whatami::PEER)
-    }
+pub mod prelude {
+    use zenoh_protocol::core::{whatami, Properties, ZInt};
 
-    pub fn client() -> Config {
-        Config::default(whatami::CLIENT)
-    }
-
-    pub fn add_peer(mut self, locator: &str) -> Self {
-        self.peers.push(locator.parse().unwrap());
-        self
-    }
-
-    pub fn add_peers(mut self, locators: Vec<&str>) -> Self {
-        self.peers
-            .extend(locators.iter().map(|l| l.parse().unwrap()));
-        self
-    }
-
-    pub fn add_listener(mut self, locator: &str) -> Self {
-        self.listeners.push(locator.parse().unwrap());
-        self
-    }
-
-    pub fn add_listeners(mut self, locators: Vec<&str>) -> Self {
-        self.listeners
-            .extend(locators.iter().map(|l| l.parse().unwrap()));
-        self
-    }
-
-    pub fn multicast_interface(mut self, name: String) -> Self {
-        self.multicast_interface = name;
-        self
-    }
-
-    pub fn scouting_delay(mut self, delay: Duration) -> Self {
-        self.scouting_delay = delay;
-        self
-    }
-
-    pub fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
+    pub fn parse_mode(m: &[u8]) -> Result<whatami::Type, ()> {
         match m {
-            "peer" => Ok(whatami::PEER),
-            "client" => Ok(whatami::CLIENT),
-            "router" => Ok(whatami::ROUTER),
+            b"peer" => Ok(whatami::PEER),
+            b"client" => Ok(whatami::CLIENT),
+            b"router" => Ok(whatami::ROUTER),
             _ => Err(()),
         }
     }
 
-    pub fn add_timestamp(mut self, value: bool) -> Self {
-        self.add_timestamp = value;
-        self
+    pub trait PropertyValue {
+        fn is_true(&self) -> bool;
     }
 
-    pub fn local_routing(mut self, value: bool) -> Self {
-        self.local_routing = value;
-        self
+    impl PropertyValue for [u8] {
+        #[inline]
+        fn is_true(&self) -> bool {
+            String::from_utf8_lossy(self).to_lowercase() == "true"
+        }
     }
-}
 
-impl Default for Config {
-    fn default() -> Config {
-        Config::default(whatami::PEER)
+    pub struct PropertiesFilter<'a> {
+        iter: std::slice::Iter<'a, (u64, Vec<u8>)>,
+        key: ZInt,
     }
-}
-impl fmt::Display for Config {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+
+    impl<'a> Iterator for PropertiesFilter<'a> {
+        type Item = &'a [u8];
+
+        fn next(&mut self) -> Option<&'a [u8]> {
+            loop {
+                match &self.iter.next() {
+                    Some((k, v)) => {
+                        if *k == self.key {
+                            return Some(&v[..]);
+                        } else {
+                            continue;
+                        }
+                    }
+                    _ => return None,
+                }
+            }
+        }
+    }
+
+    pub trait PropertiesUtils {
+        fn get(&self, key: ZInt) -> PropertiesFilter;
+        #[inline]
+        fn last(&self, key: ZInt) -> Option<&[u8]> {
+            self.get(key).last()
+        }
+        #[inline]
+        fn last_or<'a>(&'a self, key: ZInt, default: &'a [u8]) -> &'a [u8] {
+            self.last(key).or(Some(default)).unwrap()
+        }
+        fn last_or_str<'a>(&'a self, key: ZInt, default: &'a [u8]) -> &str {
+            std::str::from_utf8(self.last(key).or(Some(default)).unwrap()).unwrap()
+        }
+    }
+
+    impl PropertiesUtils for Properties {
+        #[inline]
+        fn get(&self, key: ZInt) -> PropertiesFilter {
+            PropertiesFilter {
+                iter: self.iter(),
+                key,
+            }
+        }
     }
 }

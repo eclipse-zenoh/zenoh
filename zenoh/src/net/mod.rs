@@ -22,7 +22,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = open(Config::default(), None).await.unwrap();
+//!     let session = open(config::default()).await.unwrap();
 //!     session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
 //!     session.close().await.unwrap();
 //! }
@@ -35,7 +35,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = open(Config::default(), None).await.unwrap();
+//!     let session = open(config::default()).await.unwrap();
 //!     let sub_info = SubInfo {
 //!         reliability: Reliability::Reliable,
 //!         mode: SubMode::Push,
@@ -53,7 +53,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = open(Config::default(), None).await.unwrap();
+//!     let session = open(config::default()).await.unwrap();
 //!     let mut replies = session.query(
 //!         &"/resource/name".into(),
 //!         "predicate",
@@ -75,8 +75,7 @@ use zenoh_router::runtime::orchestrator::{Loop, SessionOrchestrator};
 mod types;
 pub use types::*;
 
-mod consts;
-pub use consts::*;
+pub mod info;
 
 #[macro_use]
 mod session;
@@ -87,6 +86,9 @@ pub use zenoh_protocol::proto::{data_kind, encoding};
 pub mod queryable {
     pub use zenoh_protocol::core::queryable::*;
 }
+
+pub use zenoh_router::runtime::config;
+
 pub mod utils {
     pub mod resource_name {
         pub use zenoh_protocol::core::rname::intersect;
@@ -146,18 +148,39 @@ pub async fn scout(what: WhatAmI, iface: &str) -> HelloStream {
 ///
 /// # Arguments
 ///
-/// * `config` - The configuration of the zenoh-net session
-/// * `ps` - Optional properties
+/// * `config` - The configuration [Properties](Properties) for the zenoh-net session
 ///
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
 /// use zenoh::net::*;
 ///
-/// let session = open(Config::peer(), None).await.unwrap();
+/// let session = open(config::peer()).await.unwrap();
 /// # })
 /// ```
-pub async fn open(config: Config, ps: Option<Properties>) -> ZResult<Session> {
-    debug!("open(\"{}\", {:?})", config, ps);
-    Session::new(config, ps).await
+///
+/// # Configuration Properties
+///
+/// [Properties](Properties) are a list of key/value pairs where key is a
+/// [ZInt](ZInt) and value is a `Vec<u8>`.
+/// Constants for the accepted keys can be found in the [config](config) module.
+/// Multiple definition of the same key is allowed. If only one value is expected,
+/// the last occurence is used.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::net::*;
+/// 
+/// let mut config = config::peer();
+/// config.push((config::ZN_LOCAL_ROUTING_KEY, b"false".to_vec()));
+/// config.push((config::ZN_PEER_KEY, b"tcp/10.10.10.10:7447".to_vec()));
+/// config.push((config::ZN_PEER_KEY, b"tcp/11.11.11.11:7447".to_vec()));
+///
+/// let session = open(config).await.unwrap();
+/// # })
+/// ```
+pub async fn open(config: Properties) -> ZResult<Session> {
+    debug!("open({})", config::to_string(&config));
+    Session::new(config).await
 }
