@@ -99,7 +99,7 @@ pipeline {
             cargo build --release --all-targets --target-dir=target/manylinux2010-x64 && \
             cargo deb -p zenoh-router -o target/manylinux2010-x64 && \
             cargo deb -p zplugin-http -o target/manylinux2010-x64 && \
-            cargo deb -p zplugin_storages -o target/manylinux2010-x64 && \
+            cargo deb -p zplugin_storages -o target/manylinux2010-x64 \
             "
         '''
       }
@@ -127,7 +127,7 @@ pipeline {
             cargo build --release --all-targets --target-dir=target/manylinux2010-i686 && \
             cargo deb -p zenoh-router -o target/manylinux2010-i686 && \
             cargo deb -p zplugin-http -o target/manylinux2010-i686 && \
-            cargo deb -p zplugin_storages -o target/manylinux2010-i686 && \
+            cargo deb -p zplugin_storages -o target/manylinux2010-i686 \
             "
         '''
       }
