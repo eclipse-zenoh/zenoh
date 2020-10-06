@@ -55,11 +55,11 @@
 //!     * Default value : `"224.0.0.224:7447"`.
 //!
 //! * `"scouting_timeout"` - In client mode, the period dedicated to scouting a router before failing.
-//!     * Accepted values : <float in seconds>.
+//!     * Accepted values : `<float in seconds>`.
 //!     * Default value : `"3.0"`.
 //!
 //! * `"scouting_delay"` - In peer mode, the period dedicated to scouting first remote peers before doing anything else.
-//!     * Accepted values : <float in seconds>.
+//!     * Accepted values : `<float in seconds>`.
 //!     * Default value : `"0.2"`.
 //!
 //! * `"add_timestamp"` - Indicates if data messages should be timestamped.
