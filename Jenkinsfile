@@ -94,7 +94,7 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
-        docker run --init -it --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-x64-rust-nightly \
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-x64-rust-nightly \
             /bin/bash -c "\
             cargo build --release --all-targets --target-dir=target/manylinux2010-x64 && \
             cargo deb -p zenoh-router -o target/manylinux2010-x64 && \
@@ -122,7 +122,7 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
-        docker run --init -it --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-i686-rust-nightly \
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-i686-rust-nightly \
             /bin/bash -c "\
             cargo build --release --all-targets --target-dir=target/manylinux2010-i686 && \
             cargo deb -p zenoh-router -o target/manylinux2010-i686 && \
