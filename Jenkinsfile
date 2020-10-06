@@ -2,7 +2,7 @@ pipeline {
   agent { label 'UbuntuVM' }
   parameters {
     gitParameter(name: 'GIT_TAG',
-                 type: 'PT_TAG',
+                 type: 'PT_BRANCH_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'jenkins-tests')
     string(name: 'DOCKER_TAG',
@@ -90,13 +90,13 @@ pipeline {
     //   }
     // }
 
-    stage('[MacMini] manylinux x64 build') {
+    stage('[MacMini] manylinux2010 x64 build') {
       agent { label 'MacMini' }
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-x64-rust-nightly \
             /bin/bash -c "\
-            cargo build --release --all-targets --target-dir=target/manylinux2010-x64 && \
+            cargo build --release --examples --target-dir=target/manylinux2010-x64 && \
             cargo deb -p zenoh-router -o target/manylinux2010-x64 && \
             cargo deb -p zplugin-http -o target/manylinux2010-x64 && \
             cargo deb -p zplugin_storages -o target/manylinux2010-x64 \
@@ -124,7 +124,7 @@ pipeline {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-i686-rust-nightly \
             /bin/bash -c "\
-            cargo build --release --all-targets --target-dir=target/manylinux2010-i686 && \
+            cargo build --release --examples --target-dir=target/manylinux2010-i686 && \
             cargo deb -p zenoh-router -o target/manylinux2010-i686 && \
             cargo deb -p zplugin-http -o target/manylinux2010-i686 && \
             cargo deb -p zplugin_storages -o target/manylinux2010-i686 \
