@@ -28,6 +28,7 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
+        env
         rustup update
         '''
       }
