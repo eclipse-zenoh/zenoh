@@ -30,6 +30,7 @@ exclude = [
 
 [profile.release]
 debug=false
-lto = true
-codegen-units = 1
-opt-level = 3
+lto="fat"
+codegen-units=1
+opt-level=3
+panic="abort"
