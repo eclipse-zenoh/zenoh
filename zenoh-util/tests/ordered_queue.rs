@@ -148,7 +148,7 @@ fn ordered_queue_overflow() {
 #[test]
 fn ordered_queue_mask() {
     // Test the deterministic insertion of elements and mask
-    let size = 64;
+    let size = 8;
     let mut queue: OrderedQueue<usize> = OrderedQueue::new(size);
 
     let mut sn: usize = 0;
@@ -159,7 +159,7 @@ fn ordered_queue_mask() {
     }
 
     // Verify that the mask is correct
-    let mask = 0b0010101010101010101010101010101010101010101010101010101010101010;
+    let mask: usize = 0b00101010;
     assert_eq!(queue.get_mask(), mask);
 
     // Insert the missing elements
@@ -171,7 +171,7 @@ fn ordered_queue_mask() {
     }
 
     // Verify that the mask is correct
-    let mask = 0b0;
+    let mask: usize = 0b0;
     assert_eq!(queue.get_mask(), mask);
 
     // Drain the queue
@@ -183,7 +183,7 @@ fn ordered_queue_mask() {
 #[test]
 fn ordered_queue_random_mask() {
     // Test the random insertion of elements and the mask
-    let size = 64;
+    let size = 8;
     let mut queue: OrderedQueue<usize> = OrderedQueue::new(size);
 
     let mut sequence = Vec::<usize>::new();
