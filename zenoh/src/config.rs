@@ -74,20 +74,36 @@ use crate::net::config::*;
 use crate::Properties;
 use std::collections::HashMap;
 
+/// Creates an empty Zenoh configuration.
 pub fn empty() -> Properties {
     Properties(HashMap::new())
 }
 
+/// Creates a default Zenoh configuration.
+///
+/// The returned configuration contains :
+///  - `"mode": "peer"`
 pub fn default() -> Properties {
     peer()
 }
 
+/// Creates a default `'peer'` mode Zenoh configuration.
+///
+/// The returned configuration contains :
+///  - `"mode": "peer"`
 pub fn peer() -> Properties {
     let mut config = empty();
     config.insert("mode".to_string(), "peer".to_string());
     config
 }
 
+/// Creates a default `'client'` mode Zenoh configuration.
+///
+/// The returned configuration contains :
+///  - `"mode": "client"`
+///
+/// If the given peer locator is not `None`, the returned configuration also contains :
+///  - `"peer": <peer>`
 pub fn client(peer: Option<String>) -> Properties {
     let mut config = empty();
     config.insert("mode".to_string(), "client".to_string());

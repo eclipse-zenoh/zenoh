@@ -201,33 +201,33 @@ pub mod config {
     pub const ZN_LOCAL_ROUTING_KEY: ZInt = 0x5B;
     pub const ZN_LOCAL_ROUTING_DEFAULT: &[u8] = b"true";
 
-    /// Creates an empty set of [Properties](Properties).
+    /// Creates an empty zenoh net Session configuration.
     pub fn empty() -> Properties {
         vec![]
     }
 
-    /// Creates a default set of [Properties](Properties) for zenoh net Session configuration.
+    /// Creates a default zenoh net Session configuration.
     ///
-    /// The returned properties contain :
+    /// The returned configuration contains :
     ///  - `(ZN_MODE_KEY, "peer")`
     pub fn default() -> Properties {
         peer()
     }
 
-    /// Creates a default set of [Properties](Properties) for a `'peer'` mode zenoh net Session configuration.
+    /// Creates a default `'peer'` mode zenoh net Session configuration.
     ///
-    /// The returned properties contain :
+    /// The returned configuration contains :
     ///  - `(ZN_MODE_KEY, "peer")`
     pub fn peer() -> Properties {
         vec![(ZN_MODE_KEY, b"peer".to_vec())]
     }
 
-    /// Creates a default set of [Properties](Properties) for a `'client'` mode zenoh net Session configuration.
+    /// Creates a default `'client'` mode zenoh net Session configuration.
     ///
-    /// The returned properties contain :
+    /// The returned configuration contains :
     ///  - `(ZN_MODE_KEY, "client")`
     ///
-    /// If the given peer locator is not `None`, the created properties also contain :
+    /// If the given peer locator is not `None`, the returned configuration also contains :
     ///  - `(ZN_PEER_KEY, <peer>)`
     pub fn client(peer: Option<String>) -> Properties {
         let mut result = vec![(ZN_MODE_KEY, b"client".to_vec())];
