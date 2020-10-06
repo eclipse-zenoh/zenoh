@@ -2,18 +2,19 @@ pipeline {
   agent { label 'UbuntuVM' }
   parameters {
     gitParameter(name: 'GIT_TAG',
-                 type: 'PT_TAG',
+                 type: 'PT_BRANCH_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'jenkins-tests')
     string(name: 'DOCKER_TAG',
-           description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag')
+           description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
+           defaultValue: '')
   }
 
   stages {
     stage('[MacMini] Checkout Git TAG') {
       agent { label 'MacMini' }
       steps {
-        cleanWs()
+        // cleanWs()
         checkout([$class: 'GitSCM',
                   branches: [[name: "${params.GIT_TAG}"]],
                   doGenerateSubmoduleConfigurations: false,
@@ -37,7 +38,7 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
-        cargo build --all-targets
+        cargo build --release --all-targets
         '''
       }
     }
