@@ -13,8 +13,6 @@
 //
 pub mod data_kind {
     use crate::core::ZInt;
-    use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-    use zenoh_util::zerror;
 
     pub const PUT: ZInt = 0;
     pub const PATCH: ZInt = 1;
@@ -22,14 +20,12 @@ pub mod data_kind {
 
     pub const DEFAULT: ZInt = PUT;
 
-    pub fn to_string(i: ZInt) -> ZResult<String> {
+    pub fn to_string(i: ZInt) -> String {
         match i {
-            0 => Ok("PUT".to_string()),
-            1 => Ok("PATCH".to_string()),
-            2 => Ok("DELETE".to_string()),
-            _ => zerror!(ZErrorKind::Other {
-                descr: format!("Unknown kind id {}", i)
-            }),
+            0 => "PUT".to_string(),
+            1 => "PATCH".to_string(),
+            2 => "DELETE".to_string(),
+            i => i.to_string(),
         }
     }
 }
@@ -76,8 +72,11 @@ pub mod encoding {
         }
     }
 
-    pub fn to_string(i: ZInt) -> ZResult<String> {
-        Ok(to_mime(i)?.essence().to_string())
+    pub fn to_string(i: ZInt) -> String {
+        match to_mime(i) {
+            Ok(mime) => mime.essence().to_string(),
+            _ => i.to_string(),
+        }
     }
 
     pub fn from_str(string: &str) -> ZResult<ZInt> {

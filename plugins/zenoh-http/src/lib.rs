@@ -50,10 +50,7 @@ fn get_kind_str(sample: &Sample) -> String {
         Some(info) => info.kind.unwrap_or(data_kind::DEFAULT),
         None => data_kind::DEFAULT,
     };
-    match data_kind::to_string(kind) {
-        Ok(string) => string,
-        _ => "PUT".to_string(),
-    }
+    data_kind::to_string(kind)
 }
 
 fn sample_to_json(sample: Sample) -> String {
