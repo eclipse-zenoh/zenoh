@@ -69,9 +69,7 @@ impl Value {
                 encoding_descr,
                 data: _,
             } => encoding_descr.clone(),
-            _ => {
-                to_string(self.encoding())
-            }
+            _ => to_string(self.encoding()),
         }
     }
 
