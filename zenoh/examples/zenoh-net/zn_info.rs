@@ -28,7 +28,11 @@ async fn main() {
 
     let info = session.info().await;
     for (key, value) in info {
-        println!("{} : {}", info::to_str(key), hex::encode_upper(value));
+        println!(
+            "{} : {}",
+            info::key_to_string(key),
+            hex::encode_upper(value)
+        );
     }
 }
 

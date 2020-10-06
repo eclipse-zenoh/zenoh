@@ -781,8 +781,8 @@ pub struct Hello {
 impl fmt::Display for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let what = match self.whatami {
-            Some(what) => whatami::to_str(what),
-            None => whatami::to_str(whatami::ROUTER),
+            Some(what) => whatami::to_string(what),
+            None => whatami::to_string(whatami::ROUTER),
         };
         let locators = match &self.locators {
             Some(locators) => locators

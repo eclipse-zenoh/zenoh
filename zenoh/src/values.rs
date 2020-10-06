@@ -71,7 +71,7 @@ impl Value {
             } => encoding_descr.clone(),
             _ => {
                 let encoding = self.encoding();
-                to_str(encoding).unwrap_or_else(|_| format!("Unkown encoding flag:{}", encoding))
+                to_string(encoding).unwrap_or_else(|_| format!("Unkown encoding flag:{}", encoding))
             }
         }
     }

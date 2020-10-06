@@ -22,7 +22,7 @@ pub mod data_kind {
 
     pub const DEFAULT: ZInt = PUT;
 
-    pub fn to_str(i: ZInt) -> ZResult<String> {
+    pub fn to_string(i: ZInt) -> ZResult<String> {
         match i {
             0 => Ok("PUT".to_string()),
             1 => Ok("PATCH".to_string()),
@@ -76,7 +76,7 @@ pub mod encoding {
         }
     }
 
-    pub fn to_str(i: ZInt) -> ZResult<String> {
+    pub fn to_string(i: ZInt) -> ZResult<String> {
         Ok(to_mime(i)?.essence().to_string())
     }
 

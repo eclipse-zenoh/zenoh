@@ -45,7 +45,7 @@ pub mod whatami {
     pub const CLIENT: Type = 1 << 2; // 0x04
                                      // b4-b13: Reserved
 
-    pub fn to_str(w: Type) -> String {
+    pub fn to_string(w: Type) -> String {
         match w {
             ROUTER => "Router".to_string(),
             PEER => "Peer".to_string(),

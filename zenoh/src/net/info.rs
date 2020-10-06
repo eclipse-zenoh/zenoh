@@ -22,11 +22,22 @@ pub const ZN_INFO_PID_KEY: ZInt = 0x00;
 pub const ZN_INFO_PEER_PID_KEY: ZInt = 0x01;
 pub const ZN_INFO_ROUTER_PID_KEY: ZInt = 0x02;
 
-pub fn to_str(i: ZInt) -> String {
+pub fn key_to_string(i: ZInt) -> String {
     match i {
         0x00 => "ZN_INFO_PID_KEY".to_string(),
         0x01 => "ZN_INFO_PEER_PID_KEY".to_string(),
         0x02 => "ZN_INFO_ROUTER_PID_KEY".to_string(),
         i => i.to_string(),
     }
+}
+
+pub fn to_string(config: &[(u64, Vec<u8>)]) -> String {
+    format!(
+        "[{}]",
+        config
+            .iter()
+            .map(|(k, v)| { format!("({}, {})", key_to_string(*k), String::from_utf8_lossy(v)) })
+            .collect::<Vec<String>>()
+            .join(", ")
+    )
 }
