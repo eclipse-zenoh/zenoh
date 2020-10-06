@@ -2,7 +2,7 @@ pipeline {
   agent { label 'UbuntuVM' }
   parameters {
     gitParameter(name: 'GIT_TAG',
-                 type: 'PT_BRANCH_TAG',
+                 type: 'PT_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'jenkins-tests')
     string(name: 'DOCKER_TAG',
