@@ -2,7 +2,7 @@ pipeline {
   agent { label 'UbuntuVM' }
   parameters {
     gitParameter(name: 'GIT_TAG',
-                 type: 'PT_TAG',
+                 type: 'PT_BRANCH_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'jenkins-tests')
     string(name: 'DOCKER_TAG',
@@ -10,20 +10,20 @@ pipeline {
   }
 
   stages {
-    // stage('[MacMini] Checkout Git TAG') {
-    //   agent { label 'MacMini' }
-    //   steps {
-    //     cleanWs()
-    //     checkout([$class: 'GitSCM',
-    //               branches: [[name: "${params.GIT_TAG}"]],
-    //               doGenerateSubmoduleConfigurations: false,
-    //               extensions: [],
-    //               gitTool: 'Default',
-    //               submoduleCfg: [],
-    //               userRemoteConfigs: [[url: 'https://github.com/eclipse-zenoh/zenoh.git']]
-    //             ])
-    //   }
-    // }
+    stage('[MacMini] Checkout Git TAG') {
+      agent { label 'MacMini' }
+      steps {
+        cleanWs()
+        checkout([$class: 'GitSCM',
+                  branches: [[name: "${params.GIT_TAG}"]],
+                  doGenerateSubmoduleConfigurations: false,
+                  extensions: [],
+                  gitTool: 'Default',
+                  submoduleCfg: [],
+                  userRemoteConfigs: [[url: 'https://github.com/eclipse-zenoh/zenoh.git']]
+                ])
+      }
+    }
     stage('[MacMini] Update Rust env') {
       agent { label 'MacMini' }
       steps {
