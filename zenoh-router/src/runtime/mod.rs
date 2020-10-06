@@ -227,12 +227,12 @@ pub mod config {
     /// The returned properties contain :
     ///  - `(ZN_MODE_KEY, "client")`
     ///
-    /// If the given locator is not `None`, the created properties also contain :
-    ///  - `(ZN_PEER_KEY, locator)`
-    pub fn client(locator: Option<String>) -> Properties {
+    /// If the given peer locator is not `None`, the created properties also contain :
+    ///  - `(ZN_PEER_KEY, <peer>)`
+    pub fn client(peer: Option<String>) -> Properties {
         let mut result = vec![(ZN_MODE_KEY, b"client".to_vec())];
-        if let Some(locator) = locator {
-            result.push((ZN_PEER_KEY, locator.as_bytes().to_vec()));
+        if let Some(peer) = peer {
+            result.push((ZN_PEER_KEY, peer.as_bytes().to_vec()));
         }
         result
     }

@@ -88,9 +88,12 @@ pub fn peer() -> Properties {
     config
 }
 
-pub fn client() -> Properties {
+pub fn client(peer: Option<String>) -> Properties {
     let mut config = empty();
-    config.insert("mode".to_string(), "peer".to_string());
+    config.insert("mode".to_string(), "client".to_string());
+    if let Some(peer) = peer {
+        config.insert("peer".to_string(), peer);
+    }
     config
 }
 
