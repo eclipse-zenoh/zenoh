@@ -5,7 +5,7 @@ pipeline {
     gitParameter(name: 'GIT_TAG',
                  type: 'PT_BRANCH_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
-                 defaultValue: 'jenkins-tests')
+                 defaultValue: 'master')
     string(name: 'DOCKER_TAG',
            description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
            defaultValue: '')
@@ -39,22 +39,17 @@ pipeline {
         '''
       }
     }
-    stage('[MacMini] Build') {
+
+    stage('[MacMini] Build and tests') {
       agent { label 'MacMini' }
       steps {
         sh '''
         cargo build --release --all-targets
+        cargo test --release
         '''
       }
     }
-    // stage('[MacMini] Tests') {
-    //   agent { label 'MacMini' }
-    //   steps {
-    //     sh '''
-    //     cargo test --verbose
-    //     '''
-    //   }
-    // }
+
     stage('[MacMini] MacOS Package') {
       agent { label 'MacMini' }
       steps {
@@ -78,20 +73,6 @@ pipeline {
         '''
       }
     }
-    // stage('[MacMini] Docker publish') {
-    //   agent { label 'MacMini' }
-    //   steps {
-    //     withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
-    //         passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
-    //     {
-    //       sh '''
-    //       docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
-    //       docker push eclipse/zenoh
-    //       docker logout
-    //       '''
-    //     }
-    //   }
-    // }
 
     stage('[MacMini] manylinux2010 x64 build') {
       agent { label 'MacMini' }
@@ -143,32 +124,39 @@ pipeline {
       }
     }
 
+    stage('[MacMini] Docker publish') {
+      agent { label 'MacMini' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
+            passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
+        {
+          sh '''
+          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+          docker push eclipse/zenoh
+          docker logout
+          '''
+        }
+      }
+    }
+
     stage('Deploy to to download.eclipse.org') {
       steps {
         // Unstash MacOS package to be deployed
         unstash 'zenohMacOS'
         unstash 'zenohManylinux-x64'
         unstash 'zenohManylinux-i686'
-        // sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
-        //   sh '''
-        //   ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-        //   ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-        //   scp eclipse-zenoh-${LABEL}-*.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
-        //   '''
-        // }
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+          sh '''
+          ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+          ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+          scp eclipse-zenoh-${LABEL}-*.tgz *.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          '''
+        }
       }
-    }
-  }
-
-  post {
-    success {
-        archiveArtifacts artifacts: 'eclipse-zenoh-${LABEL}-*.tgz, *.deb', fingerprint: true
     }
   }
 }
 
 def get_label() {
-    echo "xxxxx   In get_label()"
-    echo "xxxxx   GIT_TAG = ${env.GIT_TAG}"
     return env.GIT_TAG.startsWith('origin/') ? env.GIT_TAG.minus('origin/') : env.GIT_TAG
 }
