@@ -9,9 +9,9 @@ pipeline {
     string(name: 'DOCKER_TAG',
            description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
            defaultValue: '')
-    environment {
-        LABEL = get_label()
-    }
+  }
+  environment {
+      LABEL = get_label()
   }
 
   stages {
