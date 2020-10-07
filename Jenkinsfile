@@ -168,7 +168,7 @@ pipeline {
 }
 
 def get_label() {
-    node('master') {
+    node('UbuntuVM') {
         return env.GIT_TAG.startsWith('origin/') ? env.GIT_TAG.minus('origin/') : env.GIT_TAG
     }
 }
