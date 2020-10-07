@@ -18,6 +18,8 @@
 #   - Add in your ~/.cargo/config:
 #       [target.x86_64-unknown-linux-musl]
 #       linker = "x86_64-linux-musl-gcc"
+#   - Install the x86_64-unknown-linux-musl target:
+#       rustup target add x86_64-unknown-linux-musl
 #   - Build zenoh for musl:
 #       RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --target=x86_64-unknown-linux-musl
 #   - Build the Docker image:
