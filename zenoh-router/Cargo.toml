@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-router"
-version = "0.5.0-beta.2"
+version = "0.5.0-beta.3"
 repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -46,8 +46,8 @@ clap = "2"
 serde_json = { version = "1.0", features = ["preserve_order"] }
 socket2 = "0.3.12"
 uhlc = "0.2"
-zenoh-protocol =  { version = "0.5.0-beta.2", path = "../zenoh-protocol", features = ["tcp", "udp"] }
-zenoh-util =  { version = "0.5.0-beta.2", path = "../zenoh-util" }
+zenoh-protocol =  { version = "0.5.0-beta.3", path = "../zenoh-protocol", features = ["tcp", "udp"] }
+zenoh-util =  { version = "0.5.0-beta.3", path = "../zenoh-util" }
 hex = "0.4"
 
 [dependencies.async-std]
