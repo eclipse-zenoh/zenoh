@@ -124,21 +124,6 @@ pipeline {
       }
     }
 
-    stage('[MacMini] Docker publish') {
-      agent { label 'MacMini' }
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
-            passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
-        {
-          sh '''
-          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
-          docker push eclipse/zenoh
-          docker logout
-          '''
-        }
-      }
-    }
-
     stage('Deploy to to download.eclipse.org') {
       steps {
         // Unstash MacOS package to be deployed
@@ -150,6 +135,24 @@ pipeline {
           ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
           ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
           scp eclipse-zenoh-${LABEL}-*.tgz *.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          '''
+        }
+      }
+    }
+
+    stage('[MacMini] Docker publish') {
+      agent { label 'MacMini' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
+            passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
+        {
+          sh '''
+          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+          docker push eclipse/zenoh:${LABEL}
+          if [ -n "${DOCKER_TAG}" ]; then
+            docker push eclipse/zenoh:${DOCKER_TAG}
+          fi
+          docker logout
           '''
         }
       }
