@@ -168,7 +168,7 @@ pipeline {
 }
 
 def get_label() {
-    node('UbuntuVM') {
-        return env.GIT_TAG.startsWith('origin/') ? env.GIT_TAG.minus('origin/') : env.GIT_TAG
-    }
+    echo "xxxxx   In get_label()"
+    echo "xxxxx   GIT_TAG = ${env.GIT_TAG}"
+    return env.GIT_TAG.startsWith('origin/') ? env.GIT_TAG.minus('origin/') : env.GIT_TAG
 }
