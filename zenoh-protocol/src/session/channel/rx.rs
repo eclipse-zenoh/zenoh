@@ -78,7 +78,7 @@ macro_rules! zcallback {
                 let _ = callback.handle_message($msg).await;
             }
             None => {
-                log::debug!("No callback available, dropping message: {}", $msg);
+                log::trace!("No callback available, dropping message: {}", $msg);
             }
         }
     };
@@ -246,7 +246,7 @@ impl TransportTrait for Channel {
                 ChPr::BestEffort => self.process_best_effort_frame(sn, payload).await,
             },
             SessionBody::AckNack { .. } => {
-                log::debug!("Handling of AckNack Messages not yet implemented!");
+                log::trace!("Handling of AckNack Messages not yet implemented!");
                 self.delete().await;
                 Action::Close
             }
@@ -256,33 +256,33 @@ impl TransportTrait for Channel {
                 link_only,
             }) => self.process_close(link, pid, reason, link_only).await,
             SessionBody::Hello { .. } => {
-                log::debug!("Handling of Hello Messages not yet implemented!");
+                log::trace!("Handling of Hello Messages not yet implemented!");
                 self.delete().await;
                 Action::Close
             }
             SessionBody::KeepAlive(KeepAlive { pid }) => self.process_keep_alive(link, pid).await,
             SessionBody::Ping { .. } => {
-                log::debug!("Handling of Ping Messages not yet implemented!");
+                log::trace!("Handling of Ping Messages not yet implemented!");
                 self.delete().await;
                 Action::Close
             }
             SessionBody::Pong { .. } => {
-                log::debug!("Handling of Pong Messages not yet implemented!");
+                log::trace!("Handling of Pong Messages not yet implemented!");
                 self.delete().await;
                 Action::Close
             }
             SessionBody::Scout { .. } => {
-                log::debug!("Handling of Scout Messages not yet implemented!");
+                log::trace!("Handling of Scout Messages not yet implemented!");
                 self.delete().await;
                 Action::Close
             }
             SessionBody::Sync { .. } => {
-                log::debug!("Handling of Sync Messages not yet implemented!");
+                log::trace!("Handling of Sync Messages not yet implemented!");
                 self.delete().await;
                 Action::Close
             }
             SessionBody::Open { .. } | SessionBody::Accept { .. } => {
-                log::debug!(
+                log::trace!(
                     "Unexpected Open/Accept message received in an already established session\
                              Closing the link: {}",
                     link
