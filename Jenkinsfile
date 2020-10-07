@@ -1,8 +1,9 @@
 pipeline {
   agent { label 'UbuntuVM' }
+  options { skipDefaultCheckout() }
   parameters {
     gitParameter(name: 'GIT_TAG',
-                 type: 'PT_TAG',
+                 type: 'PT_BRANCH_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'jenkins-tests')
     string(name: 'DOCKER_TAG',
@@ -14,7 +15,7 @@ pipeline {
     stage('[MacMini] Checkout Git TAG') {
       agent { label 'MacMini' }
       steps {
-        // cleanWs()
+        cleanWs()
         checkout([$class: 'GitSCM',
                   branches: [[name: "${params.GIT_TAG}"]],
                   doGenerateSubmoduleConfigurations: false,
@@ -54,11 +55,8 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
-        mkdir -p eclipse-zenoh-macos/examples
-        cp target/release/zenohd target/release/*.dylib eclipse-zenoh-macos/
-        cp target/release/examples/* eclipse-zenoh-macos/examples
-        rm eclipse-zenoh-macos/examples/*.*
-        tar czvf eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz eclipse-zenoh-macos/*
+        tar -czvf eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz --strip-components 2 target/release/zenohd target/release/*.dylib
+        tar -czvf eclipse-zenoh-${GIT_TAG}-examples-macosx-x86-64.tgz --exclude 'target/release/examples/*.*' --strip-components 3 target/release/examples/*
         '''
         stash includes: 'eclipse-zenoh-*-macosx-x86-64.tgz', name: 'zenohMacOS'
       }
@@ -109,13 +107,10 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
-        mkdir -p eclipse-zenoh-manylinux2010-x64/examples
-        cp target/manylinux2010-x64/release/zenohd target/manylinux2010-x64/release/*.so eclipse-zenoh-manylinux2010-x64/
-        cp target/manylinux2010-x64/release/examples/* eclipse-zenoh-manylinux2010-x64/examples
-        rm eclipse-zenoh-manylinux2010-x64/examples/*.*
-        tar czvf eclipse-zenoh-${GIT_TAG}-manylinux2010-x64.tgz eclipse-zenoh-manylinux2010-x64/*
+        tar -czvf eclipse-zenoh-${GIT_TAG}-manylinux2010-x64.tgz --strip-components 3 target/manylinux2010-x64/release/zenohd target/manylinux2010-x64/release/*.so
+        tar -czvf eclipse-zenoh-${GIT_TAG}-examples-manylinux2010-x64.tgz --exclude 'target/manylinux2010-x64/release/examples/*.*' --exclude 'target/manylinux2010-x64/release/examples/*-*' --strip-components 4 target/manylinux2010-x64/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-manylinux2010-x64.tgz, *.deb', name: 'zenohManylinux-x64'
+        stash includes: 'eclipse-zenoh-*-manylinux2010-x64.tgz, target/manylinux2010-x64/*.deb', name: 'zenohManylinux-x64'
       }
     }
 
@@ -137,13 +132,10 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
-        mkdir -p eclipse-zenoh-manylinux2010-i686/examples
-        cp target/manylinux2010-i686/release/zenohd target/manylinux2010-i686/release/*.so eclipse-zenoh-manylinux2010-i686/
-        cp target/manylinux2010-i686/release/examples/* eclipse-zenoh-manylinux2010-i686/examples
-        rm eclipse-zenoh-manylinux2010-i686/examples/*.*
-        tar czvf eclipse-zenoh-${GIT_TAG}-manylinux2010-i686.tgz eclipse-zenoh-manylinux2010-i686/*
+        tar -czvf eclipse-zenoh-${GIT_TAG}-manylinux2010-i686.tgz --strip-components 3 target/manylinux2010-i686/release/zenohd target/manylinux2010-i686/release/*.so
+        tar -czvf eclipse-zenoh-${GIT_TAG}-examples-manylinux2010-i686.tgz --exclude 'target/manylinux2010-i686/release/examples/*.*' --exclude 'target/manylinux2010-i686/release/examples/*-*' --strip-components 4 target/manylinux2010-i686/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-manylinux2010-i686.tgz, *.deb', name: 'zenohManylinux-i686'
+        stash includes: 'eclipse-zenoh-*-manylinux2010-i686.tgz, target/manylinux2010-i686/*.deb', name: 'zenohManylinux-i686'
       }
     }
 
