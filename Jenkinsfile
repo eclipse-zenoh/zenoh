@@ -97,7 +97,7 @@ pipeline {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-x64-rust-nightly \
             /bin/bash -c "\
-            cargo build --release --examples --target-dir=target/manylinux2010-x64 && \
+            cargo build --release --bins --lib --examples --target-dir=target/manylinux2010-x64 && \
             cargo deb -p zenoh-router -o target/manylinux2010-x64 && \
             cargo deb -p zplugin-http -o target/manylinux2010-x64 && \
             cargo deb -p zplugin_storages -o target/manylinux2010-x64 \
@@ -115,7 +115,7 @@ pipeline {
         rm eclipse-zenoh-manylinux2010-x64/examples/*.*
         tar czvf eclipse-zenoh-${GIT_TAG}-manylinux2010-x64.tgz eclipse-zenoh-manylinux2010-x64/*
         '''
-        stash includes: 'eclipse-zenoh-*-manylinux2010-x64.tgz', name: 'zenohManylinux-x64'
+        stash includes: 'eclipse-zenoh-*-manylinux2010-x64.tgz, *.deb', name: 'zenohManylinux-x64'
       }
     }
 
@@ -125,7 +125,7 @@ pipeline {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-i686-rust-nightly \
             /bin/bash -c "\
-            cargo build --release --examples --target-dir=target/manylinux2010-i686 && \
+            cargo build --release --bins --lib --examples --target-dir=target/manylinux2010-i686 && \
             cargo deb -p zenoh-router -o target/manylinux2010-i686 && \
             cargo deb -p zplugin-http -o target/manylinux2010-i686 && \
             cargo deb -p zplugin_storages -o target/manylinux2010-i686 \
@@ -143,7 +143,7 @@ pipeline {
         rm eclipse-zenoh-manylinux2010-i686/examples/*.*
         tar czvf eclipse-zenoh-${GIT_TAG}-manylinux2010-i686.tgz eclipse-zenoh-manylinux2010-i686/*
         '''
-        stash includes: 'eclipse-zenoh-*-manylinux2010-i686.tgz', name: 'zenohManylinux-i686'
+        stash includes: 'eclipse-zenoh-*-manylinux2010-i686.tgz, *.deb', name: 'zenohManylinux-i686'
       }
     }
 
@@ -153,20 +153,20 @@ pipeline {
         unstash 'zenohMacOS'
         unstash 'zenohManylinux-x64'
         unstash 'zenohManylinux-i686'
-        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
-          sh '''
-          ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
-          ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
-          scp eclipse-zenoh-${GIT_TAG}-*.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}/
-          '''
-        }
+        // sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+        //   sh '''
+        //   ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
+        //   ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
+        //   scp eclipse-zenoh-${GIT_TAG}-*.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}/
+        //   '''
+        // }
       }
     }
   }
 
   post {
     success {
-        archiveArtifacts artifacts: 'eclipse-zenoh-${GIT_TAG}-*.tgz', fingerprint: true
+        archiveArtifacts artifacts: 'eclipse-zenoh-${GIT_TAG}-*.tgz, *.deb', fingerprint: true
     }
   }
 }
