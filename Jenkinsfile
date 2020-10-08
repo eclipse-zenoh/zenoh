@@ -9,6 +9,9 @@ pipeline {
     string(name: 'DOCKER_TAG',
            description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
            defaultValue: '')
+    booleanParam(name: 'PUBLISH_RESULTS',
+                 description: 'Publish the resulting artifacts (to download site, Crates.io, DockerHub...'),
+                 defaultValue: false)
   }
   environment {
       LABEL = get_label()
@@ -75,53 +78,53 @@ pipeline {
       }
     }
 
-    stage('[MacMini] manylinux2010 x64 build') {
+    stage('[MacMini] x86_64-unknown-linux-gnu build') {
       agent { label 'MacMini' }
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-x64-rust-nightly \
             /bin/bash -c "\
-            cargo build --release --bins --lib --examples --target-dir=target/manylinux2010-x64 && \
-            cargo deb -p zenoh-router -o target/manylinux2010-x64 && \
-            cargo deb -p zplugin-http -o target/manylinux2010-x64 && \
-            cargo deb -p zplugin_storages -o target/manylinux2010-x64 \
+            cargo build --release --bins --lib --examples --target=x86_64-unknown-linux-gnu && \
+            cargo deb --target=x86_64-unknown-linux-gnu -p zenoh-router && \
+            cargo deb --target=x86_64-unknown-linux-gnu -p zplugin-http && \
+            cargo deb --target=x86_64-unknown-linux-gnu -p zplugin_storages \
             "
         '''
       }
     }
-    stage('[MacMini] manylinux2010 x64 Package') {
+    stage('[MacMini] x86_64-unknown-linux-gnu Package') {
       agent { label 'MacMini' }
       steps {
         sh '''
-        tar -czvf eclipse-zenoh-${LABEL}-manylinux2010-x64.tgz --strip-components 3 target/manylinux2010-x64/release/zenohd target/manylinux2010-x64/release/*.so
-        tar -czvf eclipse-zenoh-${LABEL}-examples-manylinux2010-x64.tgz --exclude 'target/manylinux2010-x64/release/examples/*.*' --exclude 'target/manylinux2010-x64/release/examples/*-*' --strip-components 4 target/manylinux2010-x64/release/examples/*
+        tar -czvf eclipse-zenoh-${LABEL}-x86_64-unknown-linux-gnu.tgz --strip-components 3 target/x86_64-unknown-linux-gnu/release/zenohd target/x86_64-unknown-linux-gnu/release/*.so
+        tar -czvf eclipse-zenoh-${LABEL}-examples-x86_64-unknown-linux-gnu.tgz --exclude 'target/x86_64-unknown-linux-gnu/release/examples/*.*' --exclude 'target/x86_64-unknown-linux-gnu/release/examples/*-*' --strip-components 4 target/x86_64-unknown-linux-gnu/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-manylinux2010-x64.tgz, target/manylinux2010-x64/*.deb', name: 'zenohManylinux-x64'
+        stash includes: 'eclipse-zenoh-*-x86_64-unknown-linux-gnu.tgz, target/x86_64-unknown-linux-gnu/debian/*.deb', name: 'zenohLinux-x64'
       }
     }
 
-    stage('[MacMini] manylinux2010 i686 build') {
+    stage('[MacMini] i686-unknown-linux-gnu build') {
       agent { label 'MacMini' }
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-i686-rust-nightly \
             /bin/bash -c "\
-            cargo build --release --bins --lib --examples --target-dir=target/manylinux2010-i686 && \
-            cargo deb -p zenoh-router -o target/manylinux2010-i686 && \
-            cargo deb -p zplugin-http -o target/manylinux2010-i686 && \
-            cargo deb -p zplugin_storages -o target/manylinux2010-i686 \
+            cargo build --release --bins --lib --examples --target=i686-unknown-linux-gnu && \
+            cargo deb --target=i686-unknown-linux-gnu -p zenoh-router && \
+            cargo deb --target=i686-unknown-linux-gnu -p zplugin-http && \
+            cargo deb --target=i686-unknown-linux-gnu -p zplugin_storages \
             "
         '''
       }
     }
-    stage('[MacMini] manylinux2010 i686 Package') {
+    stage('[MacMini] i686-unknown-linux-gnu Package') {
       agent { label 'MacMini' }
       steps {
         sh '''
-        tar -czvf eclipse-zenoh-${LABEL}-manylinux2010-i686.tgz --strip-components 3 target/manylinux2010-i686/release/zenohd target/manylinux2010-i686/release/*.so
-        tar -czvf eclipse-zenoh-${LABEL}-examples-manylinux2010-i686.tgz --exclude 'target/manylinux2010-i686/release/examples/*.*' --exclude 'target/manylinux2010-i686/release/examples/*-*' --strip-components 4 target/manylinux2010-i686/release/examples/*
+        tar -czvf eclipse-zenoh-${LABEL}-i686-unknown-linux-gnu.tgz --strip-components 3 target/i686-unknown-linux-gnu/release/zenohd target/i686-unknown-linux-gnu/release/*.so
+        tar -czvf eclipse-zenoh-${LABEL}-examples-i686-unknown-linux-gnu.tgz --exclude 'target/i686-unknown-linux-gnu/release/examples/*.*' --exclude 'target/i686-unknown-linux-gnu/release/examples/*-*' --strip-components 4 target/x86_64-unknown-linux-gnu/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-manylinux2010-i686.tgz, target/manylinux2010-i686/*.deb', name: 'zenohManylinux-i686'
+        stash includes: 'eclipse-zenoh-*-i686-unknown-linux-gnu.tgz, target/i686-unknown-linux-gnu/debian/*.deb', name: 'zenohLinux-i686'
       }
     }
 
@@ -129,13 +132,17 @@ pipeline {
       steps {
         // Unstash MacOS package to be deployed
         unstash 'zenohMacOS'
-        unstash 'zenohManylinux-x64'
-        unstash 'zenohManylinux-i686'
+        unstash 'zenohLinux-x64'
+        unstash 'zenohLinux-i686'
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-          ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-          scp eclipse-zenoh-${LABEL}-*.tgz target/manylinux2010-x64/*.deb target/manylinux2010-i686/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          if [ "${PUBLISH_RESULTS}" = "true" ]; then
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+            ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+            scp eclipse-zenoh-${LABEL}-*.tgz target/x86_64-unknown-linux-gnu/debian/*.deb target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          else
+            echo "Publication to download.eclipse.org skipped"
+          fi
           '''
         }
       }
@@ -148,12 +155,16 @@ pipeline {
             passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
         {
           sh '''
-          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
-          docker push eclipse/zenoh:${LABEL}
-          if [ -n "${DOCKER_TAG}" ]; then
-            docker push eclipse/zenoh:${DOCKER_TAG}
+          if [ "${PUBLISH_RESULTS}" = "true" ]; then
+            docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+            docker push eclipse/zenoh:${LABEL}
+            if [ -n "${DOCKER_TAG}" ]; then
+              docker push eclipse/zenoh:${DOCKER_TAG}
+            fi
+            docker logout
+          else
+            echo "Publication to Docker Hub skipped"
           fi
-          docker logout
           '''
         }
       }
