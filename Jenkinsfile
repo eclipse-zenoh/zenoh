@@ -12,6 +12,7 @@ pipeline {
   }
   environment {
       LABEL = get_label()
+      MACOSX_DEPLOYMENT_TARGET=10.7
   }
 
   stages {
@@ -54,10 +55,10 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
-        tar -czvf eclipse-zenoh-${LABEL}-macosx-x86-64.tgz --strip-components 2 target/release/zenohd target/release/*.dylib
-        tar -czvf eclipse-zenoh-${LABEL}-examples-macosx-x86-64.tgz --exclude 'target/release/examples/*.*' --strip-components 3 target/release/examples/*
+        tar -czvf eclipse-zenoh-${LABEL}-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --strip-components 2 target/release/zenohd target/release/*.dylib
+        tar -czvf eclipse-zenoh-${LABEL}-examples-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --exclude 'target/release/examples/*.*' --strip-components 3 target/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-macosx-x86-64.tgz', name: 'zenohMacOS'
+        stash includes: 'eclipse-zenoh-*-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz', name: 'zenohMacOS'
       }
     }
 
@@ -134,7 +135,7 @@ pipeline {
           sh '''
           ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
           ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-          scp eclipse-zenoh-${LABEL}-*.tgz *.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          scp eclipse-zenoh-${LABEL}-*.tgz target/manylinux2010-x64/*.deb target/manylinux2010-i686/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
           '''
         }
       }
