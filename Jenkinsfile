@@ -58,7 +58,7 @@ pipeline {
         tar -czvf eclipse-zenoh-${LABEL}-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --strip-components 2 target/release/zenohd target/release/*.dylib
         tar -czvf eclipse-zenoh-${LABEL}-examples-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --exclude 'target/release/examples/*.*' --strip-components 3 target/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz', name: 'zenohMacOS'
+        stash includes: 'eclipse-zenoh-*-macosx*-x86-64.tgz', name: 'zenohMacOS'
       }
     }
 
