@@ -1,0 +1,132 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh"
+version = "0.5.0-beta.3"
+repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
+homepage = "http://zenoh.io"
+authors = ["kydos <angelo@icorsaro.net>",
+           "Julien Enoch <julien@enoch.fr>",
+           "Olivier Hécart <olivier.hecart@adlinktech.com>",
+		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
+edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming"]
+description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+readme = "../README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[badges]
+travis-ci = { repository = "...", branch = "rust-master" }
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+async-trait = "0.1.38"
+futures = "0.3.5"
+pin-project-lite = "0.1.7"
+rand = "0.7.3"
+regex = "1"
+log = "0.4"
+lazy_static = "1.4.0"
+serde_json = "1.0"
+hex = "0.4.2"
+zenoh-protocol = { version = "0.5.0-beta.3", path = "../zenoh-protocol" }
+zenoh-router = { version = "0.5.0-beta.3", path = "../zenoh-router" }
+zenoh-util = { version = "0.5.0-beta.3", path = "../zenoh-util" }
+
+[dependencies.async-std]
+version = "=1.6.4"
+features = ["unstable", "attributes"]
+
+[dev-dependencies]
+clap = "2.33"
+env_logger = "0.7.1"
+
+[[example]]
+name = "z_put"
+path = "examples/zenoh/z_put.rs"
+
+[[example]]
+name = "z_put_float"
+path = "examples/zenoh/z_put_float.rs"
+
+[[example]]
+name = "z_delete"
+path = "examples/zenoh/z_delete.rs"
+
+[[example]]
+name = "z_get"
+path = "examples/zenoh/z_get.rs"
+
+[[example]]
+name = "z_sub"
+path = "examples/zenoh/z_sub.rs"
+
+[[example]]
+name = "z_eval"
+path = "examples/zenoh/z_eval.rs"
+
+[[example]]
+name = "z_put_thr"
+path = "examples/zenoh/z_put_thr.rs"
+
+[[example]]
+name = "z_sub_thr"
+path = "examples/zenoh/z_sub_thr.rs"
+
+[[example]]
+name = "zn_scout"
+path = "examples/zenoh-net/zn_scout.rs"
+
+[[example]]
+name = "zn_info"
+path = "examples/zenoh-net/zn_info.rs"
+
+[[example]]
+name = "zn_write"
+path = "examples/zenoh-net/zn_write.rs"
+
+[[example]]
+name = "zn_pub"
+path = "examples/zenoh-net/zn_pub.rs"
+
+[[example]]
+name = "zn_sub"
+path = "examples/zenoh-net/zn_sub.rs"
+
+[[example]]
+name = "zn_pull"
+path = "examples/zenoh-net/zn_pull.rs"
+
+[[example]]
+name = "zn_eval"
+path = "examples/zenoh-net/zn_eval.rs"
+
+[[example]]
+name = "zn_storage"
+path = "examples/zenoh-net/zn_storage.rs"
+
+[[example]]
+name = "zn_query"
+path = "examples/zenoh-net/zn_query.rs"
+
+[[example]]
+name = "zn_pub_thr"
+path = "examples/zenoh-net/zn_pub_thr.rs"
+
+[[example]]
+name = "zn_sub_thr"
+path = "examples/zenoh-net/zn_sub_thr.rs"
+

@@ -1,16 +1,21 @@
 pipeline {
   agent { label 'UbuntuVM' }
+  options { skipDefaultCheckout() }
   parameters {
     gitParameter(name: 'GIT_TAG',
-                 type: 'PT_TAG',
+                 type: 'PT_BRANCH_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'master')
     string(name: 'DOCKER_TAG',
-           description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag')
+           description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
+           defaultValue: '')
+  }
+  environment {
+      LABEL = get_label()
+      MACOSX_DEPLOYMENT_TARGET=10.7
   }
 
   stages {
-  // Same build (without Docker) on MacMini
     stage('[MacMini] Checkout Git TAG') {
       agent { label 'MacMini' }
       steps {
@@ -25,113 +30,98 @@ pipeline {
                 ])
       }
     }
-    stage('[MacMini] Setup opam dependencies') {
+    stage('[MacMini] Update Rust env') {
       agent { label 'MacMini' }
       steps {
         sh '''
-        git log --graph --date=short --pretty=tformat:'%ad - %h - %cn -%d %s' -n 20 || true
-        OPAMJOBS=1 opam config report
-        OPAMJOBS=1 opam install depext conf-libev
-        OPAMJOBS=1 opam depext -yt
-        OPAMJOBS=1 opam install -t . --deps-only
-        '''
-      }
-    }
-    stage('[MacMini] Build') {
-      agent { label 'MacMini' }
-      steps {
-        sh '''
-        opam exec -- dune build @all
-        '''
-      }
-    }
-    stage('[MacMini] Tests') {
-      agent { label 'MacMini' }
-      steps {
-        sh '''
-        opam exec -- dune runtest
-        '''
-      }
-    }
-    stage('[MacMini] Package') {
-      agent { label 'MacMini' }
-      steps {
-        sh '''
-        cp -r _build/default/install eclipse-zenoh
-        tar czvf eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz eclipse-zenoh/*/*.*
-        '''
-        stash includes: 'eclipse-zenoh-*-macosx-x86-64.tgz', name: 'zenohMacOS'
-      }
-    }
-
-    stage('[Ubuntu] Checkout Git TAG') {
-      steps {
-        cleanWs()
-        checkout([$class: 'GitSCM',
-                  branches: [[name: "${params.GIT_TAG}"]],
-                  doGenerateSubmoduleConfigurations: false,
-                  extensions: [],
-                  gitTool: 'Default',
-                  submoduleCfg: [],
-                  userRemoteConfigs: [[url: 'https://github.com/eclipse-zenoh/zenoh.git']]
-                ])
-      }
-    }
-    stage('[Ubuntu] Setup opam dependencies') {
-      steps {
-        sh '''
-        git log --graph --date=short --pretty=tformat:'%ad - %h - %cn -%d %s' -n 20 || true
-        OPAMJOBS=1 opam config report
-        OPAMJOBS=1 opam install depext conf-libev
-        OPAMJOBS=1 opam depext -yt
-        OPAMJOBS=1 opam install -t . --deps-only
-        '''
-      }
-    }
-    stage('[Ubuntu] Build') {
-      steps {
-        sh '''
-        opam exec -- dune build @all
-        '''
-      }
-    }
-    stage('[Ubuntu] Tests') {
-      steps {
-        sh '''
-        opam exec -- dune runtest
-        '''
-      }
-    }
-    stage('[Ubuntu] Package') {
-      steps {
-        sh '''
-        cp -r _build/default/install eclipse-zenoh
-        tar czvf eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz eclipse-zenoh/*/*.*
+        env
+        echo "Building eclipse-zenoh-${LABEL}"
+        rustup update
         '''
       }
     }
 
-    stage('[Ubuntu] Docker build') {
+    stage('[MacMini] Build and tests') {
+      agent { label 'MacMini' }
       steps {
         sh '''
+        cargo build --release --all-targets
+        cargo test --release
+        '''
+      }
+    }
+
+    stage('[MacMini] MacOS Package') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        tar -czvf eclipse-zenoh-${LABEL}-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --strip-components 2 target/release/zenohd target/release/*.dylib
+        tar -czvf eclipse-zenoh-${LABEL}-examples-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --exclude 'target/release/examples/*.*' --strip-components 3 target/release/examples/*
+        '''
+        stash includes: 'eclipse-zenoh-*-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz', name: 'zenohMacOS'
+      }
+    }
+
+    stage('[MacMini] Docker build') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --target=x86_64-unknown-linux-musl
         if [ -n "${DOCKER_TAG}" ]; then
           export EXTRA_TAG="-t eclipse/zenoh:${DOCKER_TAG}"
         fi
-        docker build -t eclipse/zenoh:${GIT_TAG} ${EXTRA_TAG} .
+        docker build -t eclipse/zenoh:${LABEL} ${EXTRA_TAG} .
         '''
       }
     }
-    stage('[Ubuntu] Docker publish') {
+
+    stage('[MacMini] manylinux2010 x64 build') {
+      agent { label 'MacMini' }
       steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
-            passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
-        {
-          sh '''
-          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
-          docker push eclipse/zenoh
-          docker logout
-          '''
-        }
+        sh '''
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-x64-rust-nightly \
+            /bin/bash -c "\
+            cargo build --release --bins --lib --examples --target-dir=target/manylinux2010-x64 && \
+            cargo deb -p zenoh-router -o target/manylinux2010-x64 && \
+            cargo deb -p zplugin-http -o target/manylinux2010-x64 && \
+            cargo deb -p zplugin_storages -o target/manylinux2010-x64 \
+            "
+        '''
+      }
+    }
+    stage('[MacMini] manylinux2010 x64 Package') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        tar -czvf eclipse-zenoh-${LABEL}-manylinux2010-x64.tgz --strip-components 3 target/manylinux2010-x64/release/zenohd target/manylinux2010-x64/release/*.so
+        tar -czvf eclipse-zenoh-${LABEL}-examples-manylinux2010-x64.tgz --exclude 'target/manylinux2010-x64/release/examples/*.*' --exclude 'target/manylinux2010-x64/release/examples/*-*' --strip-components 4 target/manylinux2010-x64/release/examples/*
+        '''
+        stash includes: 'eclipse-zenoh-*-manylinux2010-x64.tgz, target/manylinux2010-x64/*.deb', name: 'zenohManylinux-x64'
+      }
+    }
+
+    stage('[MacMini] manylinux2010 i686 build') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-i686-rust-nightly \
+            /bin/bash -c "\
+            cargo build --release --bins --lib --examples --target-dir=target/manylinux2010-i686 && \
+            cargo deb -p zenoh-router -o target/manylinux2010-i686 && \
+            cargo deb -p zplugin-http -o target/manylinux2010-i686 && \
+            cargo deb -p zplugin_storages -o target/manylinux2010-i686 \
+            "
+        '''
+      }
+    }
+    stage('[MacMini] manylinux2010 i686 Package') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        tar -czvf eclipse-zenoh-${LABEL}-manylinux2010-i686.tgz --strip-components 3 target/manylinux2010-i686/release/zenohd target/manylinux2010-i686/release/*.so
+        tar -czvf eclipse-zenoh-${LABEL}-examples-manylinux2010-i686.tgz --exclude 'target/manylinux2010-i686/release/examples/*.*' --exclude 'target/manylinux2010-i686/release/examples/*-*' --strip-components 4 target/manylinux2010-i686/release/examples/*
+        '''
+        stash includes: 'eclipse-zenoh-*-manylinux2010-i686.tgz, target/manylinux2010-i686/*.deb', name: 'zenohManylinux-i686'
       }
     }
 
@@ -139,21 +129,38 @@ pipeline {
       steps {
         // Unstash MacOS package to be deployed
         unstash 'zenohMacOS'
+        unstash 'zenohManylinux-x64'
+        unstash 'zenohManylinux-i686'
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
-          ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}
-          scp eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz  eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz  genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${GIT_TAG}/
+          ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+          ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+          scp eclipse-zenoh-${LABEL}-*.tgz target/manylinux2010-x64/*.deb target/manylinux2010-i686/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
           '''
         }
       }
     }
 
-  }
-
-  post {
-    success {
-        archiveArtifacts artifacts: 'eclipse-zenoh-${GIT_TAG}-macosx-x86-64.tgz, eclipse-zenoh-${GIT_TAG}-Ubuntu-20.04-x64.tgz', fingerprint: true
+    stage('[MacMini] Docker publish') {
+      agent { label 'MacMini' }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
+            passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
+        {
+          sh '''
+          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+          docker push eclipse/zenoh:${LABEL}
+          if [ -n "${DOCKER_TAG}" ]; then
+            docker push eclipse/zenoh:${DOCKER_TAG}
+          fi
+          docker logout
+          '''
+        }
+      }
     }
   }
+}
+
+def get_label() {
+    return env.GIT_TAG.startsWith('origin/') ? env.GIT_TAG.minus('origin/') : env.GIT_TAG
 }
