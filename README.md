@@ -30,32 +30,66 @@ $ cargo build --release --all-targets
 -------------------------------
 ## How to test it
 
+For convenience, the zenoh router is pre-build and made available in a Docker image: https://hub.docker.com/r/eclipse/zenoh
+
+Thus, run it just doing:
+```bash
+docker pull eclipse/zenoh:latest
+docker run --init -p 7447:7447/tcp -p 7447:7447/udp -p 8000:8000/tcp eclipse/zenoh:latest
+```
+
+The ports used by zenoh are the following:
+
+  - **7447/tcp** : the zenoh protocol via TCP
+  - **7447/udp** : the zenoh scouting protocol using UDP multicast (for clients to automatically discover the router)
+  - **8000/tcp** : the zenoh REST API
+
+
 All the examples are compiled into the `target/release/examples` directory. They can all work in peer-to-peer, or interconnected via the zenoh router (`target/release/zenohd`).
 
-Example of usage with the throughput performance test:
+Then, you can test it using the zenoh API in your favorite language:
 
- * In peer-to-peer mode:
-     
-     * in a first shell start the subscriber:  
-       ```bash
-       ./target/release/examples/zn_sub_thr
-       ```
-     * in a second shell start the publisher, making it to publish 1024 bytes payloads:  
-       ```bash
-       ./target/release/examples/zn_pub_thr 1024
-       ```
+ - **Rust** using the [zenoh crate](https://crates.io/crates/zenoh) and the [examples in this repo](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples)
+ - **Python** using [zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
 
- * In routed mode:
+Or with the **REST** API:
 
-     * in a first shell start the zenoh router:  
-       ```bash
-       ./target/release/zenohd
-       ```
-     * in a second shell start the subscriber:  
-       ```bash
-       ./target/release/examples/zn_sub_thr
-       ```
-     * in a third shell start the publisher, making it to publish 1024 bytes payloads:  
-       ```bash
-       ./target/release/examples/zn_pub_thr 1024
-       ```
+## Examples of usage with the REST API
+
+The complete Eclipse zenoh's key/value space is accessible through the REST API, using regular HTTP GET, PUT and DELETE methods. In those examples, we use the **curl** command line tool.
+
+### Managing the admin space
+
+ * Get info of the local zenoh router:
+   ```
+   curl http://localhost:8000/@/router/local
+   ```
+ * Get the backends of the local router (only memory by default):
+   ```
+   curl 'http://localhost:8000/@/router/local/**/backend/*'
+   ```
+ * Get the storages of the local router (none by default):
+   ```
+   curl 'http://localhost:8000/@/router/local/**/storage/*'
+   ```
+ * Add a memory storage on `/demo/example/**`:
+   ```
+   curl -X PUT -H 'content-type:application/properties' -d 'path_expr=/demo/example/**' http://localhost:8000/@/router/local/plugin/storages/backend/memory/storage/my-storage
+
+   ```
+
+### Put/Get into zenoh
+Assuming the memory storage has been added, as described above, you can now:
+
+ * Put a key/value into zenoh:
+  ```
+  curl -X PUT -d 'Hello World!' http://localhost:8000/demo/example/test
+  ```
+ * Retrieve the key/value:
+  ```
+  curl http://localhost:8000/demo/example/test
+  ```
+ * Remove the key value
+  ```
+  curl -X DELETE http://localhost:8000/demo/example/test
+  ```
