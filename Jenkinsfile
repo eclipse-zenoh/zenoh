@@ -128,7 +128,7 @@ pipeline {
       }
     }
 
-    stage('Deploy to to download.eclipse.org') {
+    stage('Publish to download.eclipse.org') {
       steps {
         // Unstash MacOS package to be deployed
         unstash 'zenohMacOS'
@@ -148,7 +148,23 @@ pipeline {
       }
     }
 
-    stage('[MacMini] Docker publish') {
+    stage('[MacMini] Publish to crates.io') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        if [ "${PUBLISH_RESULTS}" = "true" ]; then
+          cd zenoh-util && cargo publish && cd -
+          cd zenoh-protocol && cargo publish && cd -
+          cd zenoh-router && cargo publish && cd -
+          cd zenoh && cargo publish && cd -
+        else
+          echo "Publication to crates.io skipped"
+        fi
+        '''
+      }
+    }
+
+    stage('[MacMini] Publish to Docker Hub') {
       agent { label 'MacMini' }
       steps {
         withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
