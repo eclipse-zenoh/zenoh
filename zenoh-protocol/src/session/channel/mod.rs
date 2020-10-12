@@ -183,7 +183,7 @@ impl Channel {
     async fn start_session_lease(&self) {
         // Lease event
         let event = SessionLeaseEvent::new(zasyncopt!(self.w_self).clone());
-        // Session lease interval is expressed in milliseconds
+        // Session lease interval is expressed in seconds
         let interval = Duration::from_millis(self.lease as u64);
         let event = TimedEvent::periodic(interval, event);
         let handle = event.get_handle();

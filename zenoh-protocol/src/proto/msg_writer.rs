@@ -105,22 +105,11 @@ impl WBuf {
                 check!(self.write_peerid(pid));
                 check!(self.write_zint(*lease));
                 check!(self.write_zint(*initial_sn));
-                // Compute the options byte flags
-                let mut options: u8 = 0;
-                if sn_resolution.is_some() {
-                    options |= smsg::flag::S;
+                if let Some(snr) = *sn_resolution {
+                    check!(self.write_zint(snr));
                 }
-                if locators.is_some() {
-                    options |= smsg::flag::L;
-                }
-                if options != 0 {
-                    check!(self.write(options));
-                    if let Some(snr) = *sn_resolution {
-                        check!(self.write_zint(snr));
-                    }
-                    if let Some(locs) = locators {
-                        check!(self.write_locators(locs.as_ref()));
-                    }
+                if let Some(locs) = locators {
+                    check!(self.write_locators(locs.as_ref()));
                 }
             }
 
@@ -128,37 +117,21 @@ impl WBuf {
                 whatami,
                 opid,
                 apid,
+                lease,
                 initial_sn,
                 sn_resolution,
-                lease,
                 locators,
             }) => {
                 check!(self.write_zint(*whatami));
                 check!(self.write_peerid(opid));
                 check!(self.write_peerid(apid));
+                check!(self.write_zint(*lease));
                 check!(self.write_zint(*initial_sn));
-                // Compute the options byte flags
-                let mut options: u8 = 0;
-                if sn_resolution.is_some() {
-                    options |= smsg::flag::S;
+                if let Some(snr) = *sn_resolution {
+                    check!(self.write_zint(snr));
                 }
-                if lease.is_some() {
-                    options |= smsg::flag::D;
-                }
-                if locators.is_some() {
-                    options |= smsg::flag::L;
-                }
-                if options != 0 {
-                    check!(self.write(options));
-                    if let Some(snr) = *sn_resolution {
-                        check!(self.write_zint(snr));
-                    }
-                    if let Some(l) = *lease {
-                        check!(self.write_zint(l));
-                    }
-                    if let Some(locs) = locators {
-                        check!(self.write_locators(locs.as_ref()));
-                    }
+                if let Some(locs) = locators {
+                    check!(self.write_locators(locs.as_ref()));
                 }
             }
 

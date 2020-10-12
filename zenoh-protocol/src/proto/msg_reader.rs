@@ -119,21 +119,15 @@ impl RBuf {
                     let pid = self.read_peerid()?;
                     let lease = self.read_zint()?;
                     let initial_sn = self.read_zint()?;
-                    let (sn_resolution, locators) = if smsg::has_flag(header, smsg::flag::O) {
-                        let options = self.read()?;
-                        let sn_resolution = if smsg::has_flag(options, smsg::flag::S) {
-                            Some(self.read_zint()?)
-                        } else {
-                            None
-                        };
-                        let locators = if smsg::has_flag(options, smsg::flag::L) {
-                            Some(self.read_locators()?)
-                        } else {
-                            None
-                        };
-                        (sn_resolution, locators)
+                    let sn_resolution = if smsg::has_flag(header, smsg::flag::S) {
+                        Some(self.read_zint()?)
                     } else {
-                        (None, None)
+                        None
+                    };
+                    let locators = if smsg::has_flag(header, smsg::flag::L) {
+                        Some(self.read_locators()?)
+                    } else {
+                        None
                     };
 
                     let body = SessionBody::Open(Open {
@@ -152,28 +146,17 @@ impl RBuf {
                     let whatami = self.read_zint()?;
                     let opid = self.read_peerid()?;
                     let apid = self.read_peerid()?;
+                    let lease = self.read_zint()?;
                     let initial_sn = self.read_zint()?;
-                    let (sn_resolution, lease, locators) = if smsg::has_flag(header, smsg::flag::O)
-                    {
-                        let options = self.read()?;
-                        let sn_resolution = if smsg::has_flag(options, smsg::flag::S) {
-                            Some(self.read_zint()?)
-                        } else {
-                            None
-                        };
-                        let lease = if smsg::has_flag(options, smsg::flag::D) {
-                            Some(self.read_zint()?)
-                        } else {
-                            None
-                        };
-                        let locators = if smsg::has_flag(options, smsg::flag::L) {
-                            Some(self.read_locators()?)
-                        } else {
-                            None
-                        };
-                        (sn_resolution, lease, locators)
+                    let sn_resolution = if smsg::has_flag(header, smsg::flag::S) {
+                        Some(self.read_zint()?)
                     } else {
-                        (None, None, None)
+                        None
+                    };
+                    let locators = if smsg::has_flag(header, smsg::flag::L) {
+                        Some(self.read_locators()?)
+                    } else {
+                        None
                     };
 
                     let body = SessionBody::Accept(Accept {
@@ -181,8 +164,8 @@ impl RBuf {
                         opid,
                         apid,
                         initial_sn,
-                        sn_resolution,
                         lease,
+                        sn_resolution,
                         locators,
                     });
                     break (header, body);

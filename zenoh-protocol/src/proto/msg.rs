@@ -18,7 +18,7 @@ use std::fmt;
 
 // -- Attachment decorator
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -665,14 +665,12 @@ pub mod smsg {
     // Session message flags
     pub mod flag {
         pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
-        pub const D: u8 = 1 << 5; // 0x20 LeasePeriod   if D==1 then the lease period is present
         pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
         pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
         pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is present
         pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
         pub const L: u8 = 1 << 7; // 0x80 Locators      if L==1 then Locators are present
         pub const M: u8 = 1 << 5; // 0x20 Mask          if M==1 then a Mask is present
-        pub const O: u8 = 1 << 5; // 0x20 Options       if O==1 then options are present
         pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
@@ -722,7 +720,7 @@ pub enum FramePayload {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -743,7 +741,7 @@ pub struct Scout {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -800,7 +798,7 @@ impl fmt::Display for Hello {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -810,26 +808,24 @@ impl fmt::Display for Hello {
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |X|X|O|   OPEN  |
+/// |L|S|X|   OPEN  |
 /// +-+-+-+-+-------+
 /// | v_maj | v_min | -- Protocol Version VMaj.VMin
 /// +-------+-------+
-/// ~    whatami    ~ -- E.g., client, router, peer or a combination of them
+/// ~    whatami    ~ -- Client, Router, Peer or a combination of them
 /// +---------------+
 /// ~   o_peer_id   ~ -- PID of the sender of the OPEN
 /// +---------------+
-/// ~ lease_period  ~ -- Lease period of the session
+/// ~ lease_period  ~ -- Lease period of the session opener
 /// +---------------+
 /// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(*)
-/// +-+-+-+-+-+-+-+-+
-/// |L|S|X|X|X|X|X|X| if O==1
-/// +-+-+-+-+-+-+-+-+
+/// +---------------+
 /// ~ sn_resolution ~ if S==1 -- Otherwise 2^28 is assumed(**)
 /// +---------------+
 /// ~    Locators   ~ if L==1 -- List of locators the sender of the OPEN is reachable at
 /// +---------------+
 ///
-/// (*)  The Initial SN must be bound to the proposed SN Resolution. Otherwise the OPEN message is consmsg::idered
+/// (*)  The Initial SN must be bound to the proposed SN Resolution. Otherwise the OPEN message is considered
 ///      invalid and it should be discarded by the recipient of the OPEN message.
 /// (**) In case of the Accepter Peer negotiates a smaller SN Resolution (see ACCEPT message) and the proposed
 ///      Initial SN results to be out-of-bound, the new Agreed Initial SN is calculated according to the
@@ -848,7 +844,7 @@ pub struct Open {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -857,21 +853,19 @@ pub struct Open {
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |X|X|O| ACCEPT  |
+/// |L|S|X| ACCEPT  |
 /// +-+-+-+-+-------+
-/// ~    whatami    ~ -- Client, Broker, Router, Peer or a combination of them
+/// ~    whatami    ~ -- Client, Router, Peer or a combination of them
 /// +---------------+
 /// ~   o_peer_id   ~ -- PID of the sender of the OPEN this ACCEPT is for
 /// +---------------+
 /// ~   a_peer_id   ~ -- PID of the sender of the ACCEPT
 /// +---------------+
-/// ~  initial_sn   ~ -- Initial SN proposed by the sender of the ACCEPT(*)
-/// +-+-+-+-+-+-+-+-+
-/// |L|S|D|X|X|X|X|X| if O==1
-/// +-+-+-+-+-+-+---+
-/// ~ sn_resolution + if S==1 -- Agreed SN Resolution(**)
+/// ~ lease_period  ~ -- Lease period of the session accepter
 /// +---------------+
-/// ~ lease_period  ~ if D==1
+/// ~  initial_sn   ~ -- Initial SN proposed by the sender of the ACCEPT(*)
+/// +---------------+
+/// ~ sn_resolution + if S==1 -- Agreed SN Resolution(**)
 /// +---------------+
 /// ~    Locators   ~ if L==1
 /// +---------------+
@@ -879,12 +873,6 @@ pub struct Open {
 /// - if S==0 then the agreed sequence number resolution is the one indicated in the OPEN message.
 /// - if S==1 then the agreed sequence number resolution is the one indicated in this ACCEPT message.
 ///           The resolution in the ACCEPT must be less or equal than the resolution in the OPEN,
-///           otherwise the ACCEPT message is consmsg::idered invalid and it should be treated as a
-///           CLOSE message with L==0 by the Opener Peer -- the recipient of the ACCEPT message.
-///
-/// - if D==0 then the agreed lease period is the one indicated in the OPEN message.
-/// - if D==1 then the agreed lease period is the one indicated in this ACCEPT message.
-///           The lease period in the ACCEPT must be less or equal than the lease period in the OPEN,
 ///           otherwise the ACCEPT message is consmsg::idered invalid and it should be treated as a
 ///           CLOSE message with L==0 by the Opener Peer -- the recipient of the ACCEPT message.
 ///
@@ -900,14 +888,14 @@ pub struct Accept {
     pub whatami: WhatAmI,
     pub opid: PeerId,
     pub apid: PeerId,
+    pub lease: ZInt,
     pub initial_sn: ZInt,
     pub sn_resolution: Option<ZInt>,
-    pub lease: Option<ZInt>,
     pub locators: Option<Vec<Locator>>,
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -938,7 +926,7 @@ pub struct Close {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -967,7 +955,7 @@ pub struct Sync {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -991,7 +979,7 @@ pub struct AckNack {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -1012,7 +1000,7 @@ pub struct KeepAlive {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -1036,7 +1024,7 @@ pub struct Pong {
 }
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_536 bytes.
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
@@ -1149,12 +1137,13 @@ impl SessionMessage {
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
-        let oflag = if sn_resolution.is_some() || locators.is_some() {
-            smsg::flag::O
+        let lflag = if locators.is_some() { smsg::flag::L } else { 0 };
+        let sflag = if sn_resolution.is_some() {
+            smsg::flag::S
         } else {
             0
         };
-        let header = smsg::id::OPEN | oflag;
+        let header = smsg::id::OPEN | sflag | lflag;
 
         SessionMessage {
             header,
@@ -1176,18 +1165,19 @@ impl SessionMessage {
         whatami: WhatAmI,
         opid: PeerId,
         apid: PeerId,
+        lease: ZInt,
         initial_sn: ZInt,
         sn_resolution: Option<ZInt>,
-        lease: Option<ZInt>,
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
-        let oflag = if sn_resolution.is_some() || lease.is_some() || locators.is_some() {
-            smsg::flag::O
+        let lflag = if locators.is_some() { smsg::flag::L } else { 0 };
+        let sflag = if sn_resolution.is_some() {
+            smsg::flag::S
         } else {
             0
         };
-        let header = smsg::id::ACCEPT | oflag;
+        let header = smsg::id::ACCEPT | sflag | lflag;
 
         SessionMessage {
             header,
@@ -1195,9 +1185,9 @@ impl SessionMessage {
                 whatami,
                 opid,
                 apid,
+                lease,
                 initial_sn,
                 sn_resolution,
-                lease,
                 locators,
             }),
             attachment,

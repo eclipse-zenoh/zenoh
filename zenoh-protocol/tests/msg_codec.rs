@@ -302,7 +302,6 @@ fn accept_tests() {
     for _ in 0..NUM_ITER {
         let wami = [whatami::ROUTER, whatami::CLIENT];
         let sn_resolution = [None, Some(gen!(ZInt))];
-        let lease = [None, Some(gen!(ZInt))];
         let locators = [
             None,
             Some(vec![
@@ -314,21 +313,19 @@ fn accept_tests() {
 
         for w in wami.iter() {
             for s in sn_resolution.iter() {
-                for d in lease.iter() {
-                    for l in locators.iter() {
-                        for a in attachment.iter() {
-                            let msg = SessionMessage::make_accept(
-                                *w,
-                                gen_pid(),
-                                gen_pid(),
-                                gen!(ZInt),
-                                s.clone(),
-                                d.clone(),
-                                l.clone(),
-                                a.clone(),
-                            );
-                            test_write_read_session_message(msg);
-                        }
+                for l in locators.iter() {
+                    for a in attachment.iter() {
+                        let msg = SessionMessage::make_accept(
+                            *w,
+                            gen_pid(),
+                            gen_pid(),
+                            gen!(ZInt),
+                            gen!(ZInt),
+                            s.clone(),
+                            l.clone(),
+                            a.clone(),
+                        );
+                        test_write_read_session_message(msg);
                     }
                 }
             }

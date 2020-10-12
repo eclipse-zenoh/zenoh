@@ -11,18 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, RwLock, Sender};
-use async_trait::async_trait;
-use rand::Rng;
-use std::collections::HashMap;
-
 use crate::core::{PeerId, WhatAmI, ZInt};
 use crate::io::WBuf;
 use crate::link::{Link, Locator};
 use crate::proto::{smsg, Accept, Attachment, Close, Open, SessionBody, SessionMessage};
 use crate::session::defaults::SESSION_SEQ_NUM_RESOLUTION;
 use crate::session::{Action, Session, SessionManagerInner, TransportTrait};
-
+use async_std::sync::{Arc, RwLock, Sender};
+use async_trait::async_trait;
+use rand::Rng;
+use std::collections::HashMap;
+use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasyncwrite, zerror};
 
@@ -187,7 +186,7 @@ impl InitialSession {
             *SESSION_SEQ_NUM_RESOLUTION
         };
 
-        let (session, agreed_lease, agreed_sn_resolution, agreed_initial_sn) = loop {
+        let (session, agreed_sn_resolution, agreed_initial_sn) = loop {
             // Check if this open is related to a totally new session (i.e. new peer) or to an exsiting one
             if let Ok(s) = self.manager.get_session(&pid).await {
                 // Check if we have reached maximum number of links for this session
@@ -290,12 +289,10 @@ impl InitialSession {
             } else {
                 initial_sn
             };
-            // Compute the minimum lease
-            let agreed_lease = self.manager.config.lease.min(lease);
 
             // Get the session associated to the peer
             if let Ok(s) = self.manager.get_session(&pid).await {
-                break (s, agreed_lease, agreed_sn_resolution, initial_sn_tx);
+                break (s, agreed_sn_resolution, initial_sn_tx);
             } else {
                 // Create a new session
                 let res = self
@@ -304,7 +301,7 @@ impl InitialSession {
                         &self.manager,
                         &pid,
                         &whatami,
-                        agreed_lease,
+                        lease,
                         agreed_sn_resolution,
                         initial_sn_tx,
                         initial_sn_rx,
@@ -312,7 +309,7 @@ impl InitialSession {
                     .await;
 
                 if let Ok(s) = res {
-                    break (s, agreed_lease, agreed_sn_resolution, initial_sn_tx);
+                    break (s, agreed_sn_resolution, initial_sn_tx);
                 }
 
                 // Concurrency just occured: multiple Open Messages have simultanesouly arrived from different links.
@@ -342,11 +339,6 @@ impl InitialSession {
         } else {
             None
         };
-        let lease = if agreed_lease != lease {
-            Some(agreed_lease)
-        } else {
-            None
-        };
         let locators = {
             let mut locs = self.manager.get_locators().await;
             // Get link source
@@ -368,9 +360,9 @@ impl InitialSession {
             self.manager.config.whatami,
             opid,
             apid,
+            self.manager.config.lease,
             initial_sn,
             sn_resolution,
-            lease,
             locators,
             attachment,
         );
@@ -427,7 +419,11 @@ impl InitialSession {
             }
         }
 
-        log::debug!("New session opened from: {}", pid);
+        log::debug!(
+            "New session opened from {} with lease {:?}",
+            pid,
+            Duration::from_millis(lease)
+        );
 
         // Return the target transport to use in the link
         match session.get_transport() {
@@ -443,9 +439,9 @@ impl InitialSession {
         whatami: WhatAmI,
         opid: PeerId,
         apid: PeerId,
+        lease: ZInt,
         initial_sn: ZInt,
         sn_resolution: Option<ZInt>,
-        lease: Option<ZInt>,
         _locators: Option<Vec<Locator>>,
     ) -> Action {
         // @TODO: Handle the locators
@@ -476,37 +472,6 @@ impl InitialSession {
                 pending.notify.send(err).await;
                 return Action::Close;
             }
-
-            // Get the agreed lease
-            let lease = if let Some(l) = lease {
-                if l <= pending.lease {
-                    l
-                } else {
-                    let e = format!(
-                        "Rejecting Accept with invalid Lease: {}. Expected to be at most: {}.",
-                        l, pending.lease
-                    );
-                    log::debug!("{}", e);
-
-                    // Invalid value, send a Close message
-                    let peer_id = Some(self.manager.config.pid.clone());
-                    let reason_id = smsg::close_reason::INVALID;
-                    let link_only = false; // This is should always be true for invalid lease
-                    let attachment = None; // No attachment here
-                    let message =
-                        SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-                    // Send the message on the link
-                    let _ = zlinksend!(message, link);
-
-                    // Notify
-                    let err = zerror!(ZErrorKind::InvalidMessage { descr: e });
-                    pending.notify.send(err).await;
-                    return Action::Close;
-                }
-            } else {
-                pending.lease
-            };
 
             // Get the agreed SN Resolution
             let sn_resolution = if let Some(r) = sn_resolution {
@@ -720,9 +685,9 @@ impl TransportTrait for InitialSession {
                 whatami,
                 opid,
                 apid,
+                lease,
                 initial_sn,
                 sn_resolution,
-                lease,
                 locators,
             }) => {
                 self.process_accept(
@@ -730,9 +695,9 @@ impl TransportTrait for InitialSession {
                     whatami,
                     opid,
                     apid,
+                    lease,
                     initial_sn,
                     sn_resolution,
-                    lease,
                     locators,
                 )
                 .await
