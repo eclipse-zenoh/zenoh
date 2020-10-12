@@ -74,6 +74,7 @@ use zenoh_router::runtime::config::*;
 use zenoh_router::runtime::orchestrator::{Loop, SessionOrchestrator};
 use zenoh_router::runtime::prelude::*;
 mod types;
+use git_version::git_version;
 pub use types::*;
 
 pub mod info;
@@ -95,6 +96,8 @@ pub mod utils {
         pub use zenoh_protocol::core::rname::intersect;
     }
 }
+
+const GIT_VERSION: &str = git_version!(prefix = "v");
 
 /// Scout for routers and/or peers.
 ///
@@ -188,6 +191,7 @@ pub async fn scout(what: WhatAmI, config: Properties) -> HelloStream {
 /// # })
 /// ```
 pub async fn open(config: Properties) -> ZResult<Session> {
+    debug!("Zenoh Rust API {}", GIT_VERSION);
     debug!("open({})", config::to_string(&config));
     Session::new(config).await
 }

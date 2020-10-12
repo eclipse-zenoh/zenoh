@@ -10,7 +10,7 @@ pipeline {
            description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
            defaultValue: '')
     booleanParam(name: 'PUBLISH_RESULTS',
-                 description: 'Publish the resulting artifacts (to download site, Crates.io, DockerHub...',
+                 description: 'Publish the resulting artifacts (to Eclipse download, crates.io, DockerHub...)',
                  defaultValue: false)
   }
   environment {

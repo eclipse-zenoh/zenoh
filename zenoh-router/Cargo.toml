@@ -45,10 +45,11 @@ env_logger = "0.7.1"
 clap = "2"
 serde_json = { version = "1.0", features = ["preserve_order"] }
 socket2 = "0.3.12"
+hex = "0.4"
+git-version = "0.3.4"
 uhlc = "0.2"
 zenoh-protocol =  { version = "0.5.0-beta.3", path = "../zenoh-protocol", features = ["tcp", "udp"] }
 zenoh-util =  { version = "0.5.0-beta.3", path = "../zenoh-util" }
-hex = "0.4"
 
 [dependencies.async-std]
 version = "=1.6.4"
