@@ -14,8 +14,11 @@
 use async_std::future;
 use async_std::task;
 use clap::{App, Arg, Values};
+use git_version::git_version;
 use zenoh_router::plugins::PluginsMgr;
 use zenoh_router::runtime::{config, AdminSpace, Runtime};
+
+const GIT_VERSION: &str = git_version!(prefix = "v");
 
 fn get_plugins_from_args() -> Vec<String> {
     let mut result: Vec<String> = vec![];
@@ -37,6 +40,7 @@ fn main() {
         env_logger::init();
 
         let app = App::new("The zenoh router")
+            .version(GIT_VERSION)
             .arg(
                 Arg::from_usage(
                     "-l, --listener=[LOCATOR]... \
