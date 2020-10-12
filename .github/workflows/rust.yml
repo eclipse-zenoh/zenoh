@@ -15,9 +15,9 @@ name: Rust
 
 on:
   push:
-    branches: [ rust-master ]
+    branches: [ master ]
   pull_request:
-    branches: [ rust-master ]
+    branches: [ master ]
 
 jobs:
   build:
