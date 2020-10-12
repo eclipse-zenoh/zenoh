@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, Mutex};
-
+use super::SeqNumGenerator;
 use crate::core::{Channel, ZInt};
 use crate::io::WBuf;
-use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
+use crate::proto::{SessionMessage, ZenohMessage};
+use async_std::sync::{Arc, Mutex};
 
 type LengthType = u16;
 const LENGTH_BYTES: [u8; 2] = [0u8, 0u8];
@@ -316,9 +316,7 @@ mod tests {
 
     use crate::core::{CongestionControl, Reliability, ResKey};
     use crate::io::{RBuf, WBuf};
-    use crate::proto::{
-        Frame, FramePayload, SeqNumGenerator, SessionBody, SessionMessage, ZenohMessage,
-    };
+    use crate::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
     use crate::session::defaults::SESSION_SEQ_NUM_RESOLUTION;
 
     use zenoh_util::zasynclock;

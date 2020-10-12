@@ -21,7 +21,8 @@ use zenoh_protocol::core::{
     WhatAmI, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{DataInfo, Primitives};
+use zenoh_protocol::proto::DataInfo;
+use zenoh_protocol::session::Primitives;
 
 pub struct FaceState {
     pub(super) id: usize,

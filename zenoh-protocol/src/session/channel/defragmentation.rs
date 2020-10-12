@@ -11,9 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::SeqNum;
 use crate::core::{Reliability, ZInt};
 use crate::io::RBuf;
-use crate::proto::{SeqNum, ZenohMessage};
+use crate::proto::ZenohMessage;
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 

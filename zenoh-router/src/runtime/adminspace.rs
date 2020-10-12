@@ -24,7 +24,8 @@ use zenoh_protocol::{
         ResKey, SubInfo, ZInt,
     },
     io::RBuf,
-    proto::{encoding, DataInfo, Primitives},
+    proto::{encoding, DataInfo},
+    session::Primitives,
 };
 
 pub struct AdminSpace {

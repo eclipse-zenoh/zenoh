@@ -11,15 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, Mutex};
-use async_std::task;
-use std::collections::VecDeque;
-
-use super::SerializationBatch;
-
+use super::{SeqNumGenerator, SerializationBatch};
 use crate::core::Channel;
 use crate::io::WBuf;
-use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
+use crate::proto::{SessionMessage, ZenohMessage};
 use crate::session::defaults::{
     QUEUE_CONCURRENCY,
     // Constants
@@ -32,7 +27,9 @@ use crate::session::defaults::{
     QUEUE_SIZE_DATA,
     QUEUE_SIZE_RETX,
 };
-
+use async_std::sync::{Arc, Mutex};
+use async_std::task;
+use std::collections::VecDeque;
 use zenoh_util::sync::Condition;
 use zenoh_util::zasynclock;
 
@@ -369,7 +366,7 @@ impl CircularBatchEmpty {
 }
 
 /// Link queue
-pub struct TransmissionQueue {
+pub(crate) struct TransmissionQueue {
     // Each priority queue has its own Mutex
     state_in: Vec<Arc<Mutex<CircularBatchIn>>>,
     // Each priority queue has its own Mutex
@@ -386,7 +383,7 @@ pub struct TransmissionQueue {
 
 impl TransmissionQueue {
     /// Create a new link queue.
-    pub fn new(
+    pub(crate) fn new(
         batch_size: usize,
         is_streamed: bool,
         sn_reliable: Arc<Mutex<SeqNumGenerator>>,
@@ -540,7 +537,7 @@ mod tests {
 
     use crate::core::{CongestionControl, Reliability, ResKey, ZInt};
     use crate::io::RBuf;
-    use crate::proto::{Frame, FramePayload, SeqNumGenerator, SessionBody, ZenohMessage};
+    use crate::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
     use crate::session::defaults::{
         QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION,
     };

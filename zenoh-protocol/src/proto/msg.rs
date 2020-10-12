@@ -73,10 +73,10 @@ impl Attachment {
 ///
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplyContext {
-    pub(super) is_final: bool,
-    pub(super) qid: ZInt,
-    pub(super) source_kind: ZInt,
-    pub(super) replier_id: Option<PeerId>,
+    pub is_final: bool,
+    pub qid: ZInt,
+    pub source_kind: ZInt,
+    pub replier_id: Option<PeerId>,
 }
 
 impl ReplyContext {

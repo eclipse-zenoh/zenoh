@@ -22,8 +22,8 @@ use zenoh_protocol::core::{
     SubInfo, SubMode, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::{DataInfo, Mux, Primitives};
-use zenoh_protocol::session::DummyHandler;
+use zenoh_protocol::proto::DataInfo;
+use zenoh_protocol::session::{DummyHandler, Mux, Primitives};
 use zenoh_router::routing::broker::*;
 
 #[test]

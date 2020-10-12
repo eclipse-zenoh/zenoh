@@ -20,10 +20,10 @@ use crate::session::defaults::QUEUE_PRIO_DATA;
 use async_trait::async_trait;
 use zenoh_util::zasyncread;
 
-pub(super) struct FirstMatch;
+pub(crate) struct FirstMatch;
 
 impl FirstMatch {
-    pub(super) fn new() -> FirstMatch {
+    pub(crate) fn new() -> FirstMatch {
         FirstMatch
     }
 }

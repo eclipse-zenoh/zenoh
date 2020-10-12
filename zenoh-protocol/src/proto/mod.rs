@@ -11,26 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+
 mod constants;
-pub use constants::*;
-
 mod msg;
-pub use msg::*;
-
-mod primitives;
-pub use primitives::*;
-
-mod mux;
-pub use mux::*;
-
-mod demux;
-pub use demux::*;
-
-mod msg_writer;
-pub use msg_writer::*;
-
 mod msg_reader;
-pub use msg_reader::*;
+mod msg_writer;
 
-mod seq_num;
-pub use seq_num::*;
+pub use constants::*;
+pub use msg::*;
+pub use msg_reader::*;
+pub use msg_writer::*;

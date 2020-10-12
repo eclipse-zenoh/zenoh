@@ -15,17 +15,15 @@ mod channel;
 mod defaults;
 mod initial;
 mod manager;
-
-pub use manager::*;
-
-use initial::*;
-
-use async_std::sync::{Arc, Weak};
-use async_trait::async_trait;
+mod primitives;
 
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
-
+use async_std::sync::{Arc, Weak};
+use async_trait::async_trait;
+use initial::*;
+pub use manager::*;
+pub use primitives::*;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zerror, zweak};
 

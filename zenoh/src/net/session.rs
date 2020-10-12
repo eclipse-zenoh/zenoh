@@ -27,7 +27,7 @@ use zenoh_protocol::{
         ResourceId,
     },
     io::RBuf,
-    proto::Primitives,
+    session::Primitives,
 };
 use zenoh_router::runtime::Runtime;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};

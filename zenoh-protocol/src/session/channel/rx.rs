@@ -11,28 +11,31 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_trait::async_trait;
-
-use super::{Channel, DefragBuffer};
-
+use super::{Channel, DefragBuffer, SeqNum};
 use crate::core::{Channel as ChPr, PeerId, Reliability, ZInt};
 use crate::link::Link;
-use crate::proto::{Close, Frame, FramePayload, KeepAlive, SeqNum, SessionBody, SessionMessage};
+use crate::proto::{Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage};
 use crate::session::{Action, TransportTrait};
-
+use async_trait::async_trait;
 use zenoh_util::{zasynclock, zasyncread};
+
+macro_rules! zlinkget {
+    ($guard:expr, $link:expr) => {
+        $guard.iter().find(|l| l.get_link() == $link)
+    };
+}
 
 /*************************************/
 /*         CHANNEL RX STRUCT         */
 /*************************************/
 
-pub(super) struct ChannelRxReliable {
+pub(crate) struct ChannelRxReliable {
     sn: SeqNum,
     defrag_buffer: DefragBuffer,
 }
 
 impl ChannelRxReliable {
-    pub(super) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> ChannelRxReliable {
+    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> ChannelRxReliable {
         // Set the sequence number in the state as it had
         // received a message with initial_sn - 1
         let last_initial_sn = if initial_sn == 0 {
@@ -48,13 +51,13 @@ impl ChannelRxReliable {
     }
 }
 
-pub(super) struct ChannelRxBestEffort {
+pub(crate) struct ChannelRxBestEffort {
     sn: SeqNum,
     defrag_buffer: DefragBuffer,
 }
 
 impl ChannelRxBestEffort {
-    pub(super) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> ChannelRxBestEffort {
+    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> ChannelRxBestEffort {
         // Set the sequence number in the state as it had
         // received a message with initial_sn - 1
         let last_initial_sn = if initial_sn == 0 {

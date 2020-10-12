@@ -11,18 +11,15 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::{Channel, KeepAliveEvent, LinkLeaseEvent, SeqNumGenerator, TransmissionQueue};
+use crate::core::ZInt;
+use crate::link::Link;
+use crate::proto::{SessionMessage, ZenohMessage};
 use async_std::prelude::*;
 use async_std::sync::{channel, Arc, Barrier, Mutex, Receiver, Sender, Weak};
 use async_std::task;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-
-use super::{Channel, KeepAliveEvent, LinkLeaseEvent, TransmissionQueue};
-
-use crate::core::ZInt;
-use crate::link::Link;
-use crate::proto::{SeqNumGenerator, SessionMessage, ZenohMessage};
-
 use zenoh_util::collections::{TimedEvent, TimedHandle, Timer};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
@@ -81,7 +78,7 @@ async fn consume_task(
     Ok(())
 }
 
-pub(super) struct LinkAlive {
+pub(crate) struct LinkAlive {
     inner: AtomicBool,
 }
 
@@ -93,18 +90,18 @@ impl LinkAlive {
     }
 
     #[inline]
-    pub(super) fn mark(&self) {
+    pub(crate) fn mark(&self) {
         self.inner.store(true, Ordering::Relaxed);
     }
 
     #[inline]
-    pub(super) fn reset(&self) -> bool {
+    pub(crate) fn reset(&self) -> bool {
         self.inner.swap(false, Ordering::Relaxed)
     }
 }
 
 #[derive(Clone)]
-pub(super) struct ChannelLink {
+pub(crate) struct ChannelLink {
     link: Link,
     queue: Arc<TransmissionQueue>,
     active: Arc<AtomicBool>,
@@ -116,7 +113,7 @@ pub(super) struct ChannelLink {
 
 impl ChannelLink {
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn new(
+    pub(crate) fn new(
         ch: Weak<Channel>,
         link: Link,
         batch_size: usize,
@@ -210,30 +207,30 @@ impl ChannelLink {
 
 impl ChannelLink {
     #[inline]
-    pub(super) fn get_link(&self) -> &Link {
+    pub(crate) fn get_link(&self) -> &Link {
         &self.link
     }
 
     #[inline]
-    pub(super) fn mark_alive(&self) {
+    pub(crate) fn mark_alive(&self) {
         self.alive.mark();
     }
 
     #[inline]
-    pub(super) async fn schedule_zenoh_message(&self, msg: ZenohMessage, priority: usize) {
+    pub(crate) async fn schedule_zenoh_message(&self, msg: ZenohMessage, priority: usize) {
         if self.active.load(Ordering::Acquire) {
             self.queue.push_zenoh_message(msg, priority).await;
         }
     }
 
     #[inline]
-    pub(super) async fn schedule_session_message(&self, msg: SessionMessage, priority: usize) {
+    pub(crate) async fn schedule_session_message(&self, msg: SessionMessage, priority: usize) {
         if self.active.load(Ordering::Acquire) {
             self.queue.push_session_message(msg, priority).await;
         }
     }
 
-    pub(super) async fn close(mut self) -> ZResult<()> {
+    pub(crate) async fn close(mut self) -> ZResult<()> {
         // Deactivate the consume task if active
         if self.active.swap(false, Ordering::AcqRel) {
             // Send the signal

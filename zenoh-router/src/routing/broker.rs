@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use uhlc::HLC;
 
 use zenoh_protocol::core::{whatami, Reliability, ResKey, SubInfo, SubMode, WhatAmI, ZInt};
-use zenoh_protocol::proto::{DeMux, Mux, Primitives};
+use zenoh_protocol::session::{DeMux, Mux, Primitives};
 use zenoh_protocol::session::{Session, SessionEventHandler, SessionHandler};
 
 use zenoh_util::core::ZResult;
@@ -40,8 +40,7 @@ pub use crate::routing::resource::*;
 ///
 ///   async{
 ///     // implement Primitives trait
-///     use zenoh_protocol::proto::Mux;
-///     use zenoh_protocol::session::DummyHandler;
+///     use zenoh_protocol::session::{DummyHandler, Mux};
 ///     let dummy_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
 ///
 ///     // UUID used for HLC and PeerId
