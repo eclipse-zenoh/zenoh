@@ -51,7 +51,7 @@ pub(crate) struct SessionState {
     subscribers: HashMap<Id, Arc<SubscriberState>>,
     callback_subscribers: HashMap<Id, Arc<CallbackSubscriberState>>,
     queryables: HashMap<Id, Arc<QueryableState>>,
-    queries: HashMap<ZInt, (u8, Sender<Reply>)>,
+    queries: HashMap<ZInt, QueryState>,
     local_routing: bool,
 }
 
@@ -910,7 +910,19 @@ impl Session {
         let mut state = self.state.write().await;
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = channel(*API_REPLY_RECEPTION_CHANNEL_SIZE);
-        state.queries.insert(qid, (2, rep_sender));
+        state.queries.insert(
+            qid,
+            QueryState {
+                nb_final: 2,
+                reception_mode: consolidation.reception,
+                replies: if consolidation.reception != ConsolidationMode::None {
+                    Some(HashMap::new())
+                } else {
+                    None
+                },
+                rep_sender,
+            },
+        );
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
@@ -1130,25 +1142,17 @@ impl Primitives for Session {
             data_info,
             payload
         );
-        let (rep_sender, reply) = {
-            let state = &mut self.state.write().await;
-            let rep_sender = match state.queries.get(&qid) {
-                Some(query) => query.1.clone(),
-                None => {
-                    warn!("Received ReplyData for unkown Query: {}", qid);
-                    return;
-                }
-            };
-            let res_name = match state.remotekey_to_resname(&reskey) {
-                Ok(name) => name,
-                Err(e) => {
-                    error!("Received ReplyData for unkown reskey: {}", e);
-                    return;
-                }
-            };
-            (
-                rep_sender,
-                Reply {
+        let state = &mut self.state.write().await;
+        let res_name = match state.remotekey_to_resname(&reskey) {
+            Ok(name) => name,
+            Err(e) => {
+                error!("Received ReplyData for unkown reskey: {}", e);
+                return;
+            }
+        };
+        match state.queries.get_mut(&qid) {
+            Some(query) => {
+                let new_reply = Reply {
                     data: Sample {
                         res_name,
                         payload,
@@ -1156,10 +1160,68 @@ impl Primitives for Session {
                     },
                     source_kind,
                     replier_id,
-                },
-            )
-        };
-        rep_sender.send(reply).await;
+                };
+                match query.reception_mode {
+                    ConsolidationMode::None => query.rep_sender.send(new_reply).await,
+                    ConsolidationMode::Lazy => {
+                        match query
+                            .replies
+                            .as_ref()
+                            .unwrap()
+                            .get(&new_reply.data.res_name)
+                        {
+                            Some(reply) => {
+                                if new_reply.data.data_info > reply.data.data_info {
+                                    query
+                                        .replies
+                                        .as_mut()
+                                        .unwrap()
+                                        .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                    query.rep_sender.send(new_reply).await;
+                                }
+                            }
+                            None => {
+                                query
+                                    .replies
+                                    .as_mut()
+                                    .unwrap()
+                                    .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                query.rep_sender.send(new_reply).await;
+                            }
+                        }
+                    }
+                    ConsolidationMode::Full => {
+                        match query
+                            .replies
+                            .as_ref()
+                            .unwrap()
+                            .get(&new_reply.data.res_name)
+                        {
+                            Some(reply) => {
+                                if new_reply.data.data_info > reply.data.data_info {
+                                    query
+                                        .replies
+                                        .as_mut()
+                                        .unwrap()
+                                        .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                }
+                            }
+                            None => {
+                                query
+                                    .replies
+                                    .as_mut()
+                                    .unwrap()
+                                    .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                            }
+                        };
+                    }
+                }
+            }
+            None => {
+                warn!("Received ReplyData for unkown Query: {}", qid);
+                return;
+            }
+        }
     }
 
     async fn reply_final(&self, qid: ZInt) {
@@ -1167,9 +1229,14 @@ impl Primitives for Session {
         let mut state = self.state.write().await;
         match state.queries.get_mut(&qid) {
             Some(mut query) => {
-                query.0 -= 1;
-                if query.0 == 0 {
-                    state.queries.remove(&qid);
+                query.nb_final -= 1;
+                if query.nb_final == 0 {
+                    let query = state.queries.remove(&qid).unwrap();
+                    if query.reception_mode == ConsolidationMode::Full {
+                        for (_, reply) in query.replies.unwrap().into_iter() {
+                            query.rep_sender.send(reply).await;
+                        }
+                    }
                 }
             }
             None => {

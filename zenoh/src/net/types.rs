@@ -16,6 +16,7 @@ use async_std::stream::Stream;
 use async_std::sync::{Arc, Receiver, RwLock, Sender, TrySendError};
 use async_std::task;
 use pin_project_lite::pin_project;
+use std::collections::HashMap;
 use std::fmt;
 
 /// A read-only bytes buffer.
@@ -42,7 +43,11 @@ pub use zenoh_protocol::core::Target;
 /// The [Queryable](Queryable)s that should be target of a [query](Session::query).
 pub use zenoh_protocol::core::QueryTarget;
 
-/// The kind of consolidation that should be applied on replies to a [query](Session::query).
+/// The kind of consolidation.
+pub use zenoh_protocol::core::ConsolidationMode;
+
+/// The kind of consolidation that should be applied on replies to a [query](Session::query)
+/// at different stages of the reply process.
 pub use zenoh_protocol::core::QueryConsolidation;
 
 /// The kind of congestion control.
@@ -161,6 +166,14 @@ pub struct Reply {
     pub data: Sample,
     pub source_kind: ZInt,
     pub replier_id: PeerId,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct QueryState {
+    pub(crate) nb_final: usize,
+    pub(crate) reception_mode: ConsolidationMode,
+    pub(crate) replies: Option<HashMap<String, Reply>>,
+    pub(crate) rep_sender: Sender<Reply>,
 }
 
 pub(crate) type Id = usize;

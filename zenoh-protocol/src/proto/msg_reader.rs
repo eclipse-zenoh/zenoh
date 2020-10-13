@@ -600,13 +600,24 @@ impl RBuf {
         }
     }
 
-    fn read_consolidation(&mut self) -> ZResult<QueryConsolidation> {
-        match self.read_zint()? {
-            0 => Ok(QueryConsolidation::None),
-            1 => Ok(QueryConsolidation::LastHop),
-            2 => Ok(QueryConsolidation::Incremental),
-            id => panic!("UNEXPECTED ID FOR QueryConsolidation: {}", id), //@TODO: return error
+    fn read_consolidation_mode(mode: ZInt) -> ZResult<ConsolidationMode> {
+        match mode {
+            0 => Ok(ConsolidationMode::None),
+            1 => Ok(ConsolidationMode::Lazy),
+            2 => Ok(ConsolidationMode::Full),
+            _ => zerror!(ZErrorKind::InvalidMessage {
+                descr: "Invalid consolidation mode".to_string()
+            }),
         }
+    }
+
+    fn read_consolidation(&mut self) -> ZResult<QueryConsolidation> {
+        let modes = self.read_zint()?;
+        Ok(QueryConsolidation {
+            first_routers: RBuf::read_consolidation_mode((modes >> 4) & 0x03)?,
+            last_router: RBuf::read_consolidation_mode((modes >> 2) & 0x03)?,
+            reception: RBuf::read_consolidation_mode(modes & 0x03)?,
+        })
     }
 
     pub fn read_timestamp(&mut self) -> ZResult<Timestamp> {

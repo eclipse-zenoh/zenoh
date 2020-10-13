@@ -155,11 +155,19 @@ fn gen_target() -> Target {
     }
 }
 
-fn gen_consolidation() -> QueryConsolidation {
+fn gen_consolidation_mode() -> ConsolidationMode {
     match thread_rng().gen_range::<u8, u8, u8>(0, 3) {
-        0 => QueryConsolidation::None,
-        1 => QueryConsolidation::LastHop,
-        _ => QueryConsolidation::Incremental,
+        0 => ConsolidationMode::None,
+        1 => ConsolidationMode::Lazy,
+        _ => ConsolidationMode::Full,
+    }
+}
+
+fn gen_consolidation() -> QueryConsolidation {
+    QueryConsolidation {
+        first_routers: gen_consolidation_mode(),
+        last_router: gen_consolidation_mode(),
+        reception: gen_consolidation_mode(),
     }
 }
 

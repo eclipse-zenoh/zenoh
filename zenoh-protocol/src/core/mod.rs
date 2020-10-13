@@ -308,20 +308,30 @@ pub mod queryable {
     pub const EVAL: crate::core::ZInt = 0x04;
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum QueryConsolidation {
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ConsolidationMode {
     None,
-    LastHop,
-    Incremental, // @TODO: add more if necessary
+    Lazy,
+    Full,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryConsolidation {
+    pub first_routers: ConsolidationMode,
+    pub last_router: ConsolidationMode,
+    pub reception: ConsolidationMode,
 }
 
 impl Default for QueryConsolidation {
     fn default() -> Self {
-        QueryConsolidation::Incremental
+        Self {
+            first_routers: ConsolidationMode::Lazy,
+            last_router: ConsolidationMode::Lazy,
+            reception: ConsolidationMode::Full,
+        }
     }
 }
 
-// @TODO: The query target is incomplete
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,

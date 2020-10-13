@@ -365,6 +365,12 @@ pub struct DataInfo {
     pub encoding: Option<ZInt>,
 }
 
+impl PartialOrd for DataInfo {
+    fn partial_cmp(&self, other: &DataInfo) -> Option<std::cmp::Ordering> {
+        self.timestamp.partial_cmp(&other.timestamp)
+    }
+}
+
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// |K|I|D|  DATA   |

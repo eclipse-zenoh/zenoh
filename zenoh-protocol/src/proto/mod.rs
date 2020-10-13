@@ -21,3 +21,35 @@ pub use constants::*;
 pub use msg::*;
 pub use msg_reader::*;
 pub use msg_writer::*;
+
+// pub fn compare_times(a: &Option<DataInfo>, b: &Option<DataInfo>) -> i8 {
+//     match (a, b) {
+//         (Some(a), Some(b)) => {
+//             match (a.timestamp, b.timestamp) {
+//                 (Some(a), Some(b)) => {
+//                     let ntp_diff = a.get_time().as_u64() - b.get_time().as_u64();
+//                     if ntp_diff > 0 {
+//                         1
+//                     } else if ntp_diff < 0 {
+//                         -1
+//                     } else {
+//                         let id_diff = a.get_id() - b.get_id();
+//                         if id_diff > 0 {
+//                             1
+//                         } else if id_diff < 0 {
+//                             -1
+//                         } else {
+//                             0
+//                         }
+//                     }
+//                 }
+//                 (Some(a), None) => 1,
+//                 (None, Some(b)) => -1,
+//                 (None, None) => 0,
+//             }
+//         }
+//         (Some(a), None) => 1,
+//         (None, Some(b)) => -1,
+//         (None, None) => 0,
+//     }
+// }

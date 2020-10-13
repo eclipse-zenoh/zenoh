@@ -425,12 +425,20 @@ impl WBuf {
         }
     }
 
-    fn write_consolidation(&mut self, consolidation: &QueryConsolidation) -> bool {
-        match consolidation {
-            QueryConsolidation::None => self.write_zint(0),
-            QueryConsolidation::LastHop => self.write_zint(1),
-            QueryConsolidation::Incremental => self.write_zint(2),
+    fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt {
+        match mode {
+            ConsolidationMode::None => 0,
+            ConsolidationMode::Lazy => 1,
+            ConsolidationMode::Full => 2,
         }
+    }
+
+    fn write_consolidation(&mut self, consolidation: &QueryConsolidation) -> bool {
+        self.write_zint(
+            (WBuf::write_consolidation_mode(consolidation.first_routers) << 4)
+                | (WBuf::write_consolidation_mode(consolidation.last_router) << 2)
+                | (WBuf::write_consolidation_mode(consolidation.reception)),
+        )
     }
 
     fn write_peerid(&mut self, pid: &PeerId) -> bool {
