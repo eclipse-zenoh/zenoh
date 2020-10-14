@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{channel, Arc, Sender};
+use async_std::sync::{channel, Arc, RwLock, Sender};
 use async_std::task;
 use futures::prelude::*;
 use futures::select;
@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use zenoh::net::{queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode};
 use zenoh::{ChangeKind, Path, PathExpr, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
+use zenoh_backend_core::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
 use zenoh_util::{zerror, zerror2};
 
 pub(crate) const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
@@ -62,6 +63,17 @@ pub(crate) async fn start_backend(
         // unblock the start_backend() operation below
         ready_tx.send(true).await;
 
+        let in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>> =
+            backend.incoming_data_interceptor().map(|i| {
+                debug!("Backend {} as an IncomingDataInterceptor", admin_path);
+                Arc::new(RwLock::new(i))
+            });
+        let out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>> =
+            backend.outgoing_data_interceptor().map(|i| {
+                debug!("Backend {} as an OutgoingDataInterceptor", admin_path);
+                Arc::new(RwLock::new(i))
+            });
+
         let mut backend = backend;
         // Map owning handles on alive storages for this backend.
         // Once dropped, a handle will release/stop the backend.
@@ -81,7 +93,7 @@ pub(crate) async fn start_backend(
                     match change.kind {
                         ChangeKind::PUT => {
                             if let Some(value) = change.value {
-                                match create_and_start_storage(change.path.clone(), value, &mut backend, zenoh.clone()).await {
+                                match create_and_start_storage(change.path.clone(), value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
                                     Ok(handle) => {
                                         let _ = storages_handles.insert(change.path, handle);
                                     }
@@ -117,6 +129,8 @@ async fn create_and_start_storage(
     admin_path: Path,
     value: Value,
     backend: &mut Box<dyn zenoh_backend_core::Backend>,
+    in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
+    out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
     zenoh: Arc<Zenoh>,
 ) -> ZResult<Sender<bool>> {
     trace!("Create storage {}", admin_path);
@@ -131,7 +145,15 @@ async fn create_and_start_storage(
         })?;
         let path_expr = PathExpr::try_from(path_expr_str.as_str())?;
         let storage = backend.create_storage(props).await?;
-        start_storage(storage, admin_path.clone(), path_expr, zenoh).await
+        start_storage(
+            storage,
+            admin_path.clone(),
+            path_expr,
+            in_interceptor,
+            out_interceptor,
+            zenoh,
+        )
+        .await
     } else {
         zerror!(ZErrorKind::Other {
             descr: format!(
@@ -146,6 +168,8 @@ async fn start_storage(
     mut storage: Box<dyn zenoh_backend_core::Storage>,
     admin_path: Path,
     path_expr: PathExpr,
+    in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
+    out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
     zenoh: Arc<Zenoh>,
 ) -> ZResult<Sender<bool>> {
     debug!("Start storage {} on {}", admin_path, path_expr);
@@ -201,7 +225,14 @@ async fn start_storage(
         };
         while let Some(reply) = replies.next().await {
             log::trace!("Storage {} aligns data {}", admin_path, reply.data.res_name);
-            if let Err(e) = storage.on_sample(reply.data).await {
+            // Call incoming data interceptor (if any)
+            let sample = if let Some(ref interceptor) = in_interceptor {
+                interceptor.read().await.on_sample(reply.data).await
+            } else {
+                reply.data
+            };
+            // Call storage
+            if let Err(e) = storage.on_sample(sample).await {
                 warn!(
                     "Storage {} raised an error aligning a sample: {}",
                     admin_path, e
@@ -231,14 +262,23 @@ async fn start_storage(
                 },
                 // on sample for path_expr
                 sample = storage_sub.stream().next().fuse() => {
-                    let sample = sample.unwrap();
+                    // Call incoming data interceptor (if any)
+                    let sample = if let Some(ref interceptor) = in_interceptor {
+                        interceptor.read().await.on_sample(sample.unwrap()).await
+                    } else {
+                        sample.unwrap()
+                    };
+                    // Call storage
                     if let Err(e) = storage.on_sample(sample).await {
                         warn!("Storage {} raised an error receiving a sample: {}", admin_path, e);
                     }
                 },
                 // on query on path_expr
                 query = storage_queryable.stream().next().fuse() => {
-                    let query = query.unwrap();
+                    let q = query.unwrap();
+                    // wrap zenoh::net::Query in zenoh_backend_core::Query
+                    // with outgoing interceptor
+                    let query = Query::new(q, out_interceptor.clone());
                     if let Err(e) = storage.on_query(query).await {
                         warn!("Storage {} raised an error receiving a query: {}", admin_path, e);
                     }

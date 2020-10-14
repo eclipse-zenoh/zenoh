@@ -18,9 +18,11 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use zenoh::net::utils::resource_name;
-use zenoh::net::{Query, Sample};
+use zenoh::net::Sample;
 use zenoh::{utils, ChangeKind, Properties, Timestamp, Value, ZResult};
-use zenoh_backend_core::{Backend, Storage};
+use zenoh_backend_core::{
+    Backend, IncomingDataInterceptor, OutgoingDataInterceptor, Query, Storage,
+};
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
 pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
@@ -42,6 +44,40 @@ impl Backend for MemoryBackend {
     async fn create_storage(&mut self, properties: Properties) -> ZResult<Box<dyn Storage>> {
         debug!("Create Memory Storage with properties: {}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))
+    }
+
+    fn incoming_data_interceptor(&self) -> Option<Box<dyn IncomingDataInterceptor>> {
+        // By default: no interception point
+        None
+        // To test interceptors, uncomment this line:
+        // Some(Box::new(InTestInterceptor {}))
+    }
+
+    fn outgoing_data_interceptor(&self) -> Option<Box<dyn OutgoingDataInterceptor>> {
+        // By default: no interception point
+        None
+        // To test interceptors, uncomment this line:
+        // Some(Box::new(OutTestInterceptor {}))
+    }
+}
+
+struct InTestInterceptor {}
+
+#[async_trait]
+impl IncomingDataInterceptor for InTestInterceptor {
+    async fn on_sample(&self, sample: Sample) -> Sample {
+        println!(">>>> IN INTERCEPTOR FOR {:?}", sample);
+        sample
+    }
+}
+
+struct OutTestInterceptor {}
+
+#[async_trait]
+impl OutgoingDataInterceptor for OutTestInterceptor {
+    async fn on_reply(&self, sample: Sample) -> Sample {
+        println!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
+        sample
     }
 }
 
@@ -197,15 +233,15 @@ impl Storage for MemoryStorage {
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-        trace!("on_query for {}", query.res_name);
-        if !query.res_name.contains('*') {
-            if let Some(Present { sample, ts: _ }) = self.map.read().await.get(&query.res_name) {
+        trace!("on_query for {}", query.res_name());
+        if !query.res_name().contains('*') {
+            if let Some(Present { sample, ts: _ }) = self.map.read().await.get(query.res_name()) {
                 query.reply(sample.clone()).await;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
-                    if resource_name::intersect(&query.res_name, &sample.res_name) {
+                    if resource_name::intersect(query.res_name(), &sample.res_name) {
                         let s: Sample = sample.clone();
                         query.reply(s).await;
                     }
