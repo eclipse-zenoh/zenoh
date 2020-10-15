@@ -25,7 +25,6 @@ use async_std::task::{Context, Poll};
 use log::{debug, warn};
 use pin_project_lite::pin_project;
 use std::convert::TryInto;
-use std::fmt;
 use zenoh_protocol::core::TimestampID;
 use zenoh_util::zerror;
 
@@ -61,17 +60,15 @@ use zenoh_util::zerror;
 /// ```
 pub struct Workspace<'a> {
     zenoh: &'a Zenoh,
-    prefix: Option<Path>,
+    prefix: Path,
 }
 
 impl Workspace<'_> {
     pub(crate) async fn new(zenoh: &Zenoh, prefix: Option<Path>) -> ZResult<Workspace<'_>> {
-        Ok(Workspace { zenoh, prefix })
-    }
-
-    /// Returns the prefix that was used to create this Workspace (calling [`Zenoh::workspace()`]).
-    pub fn prefix(&self) -> &Option<Path> {
-        &self.prefix
+        Ok(Workspace {
+            zenoh,
+            prefix: prefix.unwrap_or_else(|| "/".try_into().unwrap()),
+        })
     }
 
     #[doc(hidden)]
@@ -81,10 +78,7 @@ impl Workspace<'_> {
 
     fn path_to_reskey(&self, path: &Path) -> ResKey {
         if path.is_relative() {
-            match &self.prefix {
-                Some(prefix) => ResKey::from(path.with_prefix(prefix)),
-                None => ResKey::from(format!("/{}", path)),
-            }
+            ResKey::from(path.with_prefix(&self.prefix))
         } else {
             ResKey::from(path)
         }
@@ -92,10 +86,7 @@ impl Workspace<'_> {
 
     fn pathexpr_to_reskey(&self, path: &PathExpr) -> ResKey {
         if path.is_relative() {
-            match &self.prefix {
-                Some(prefix) => ResKey::from(path.with_prefix(prefix)),
-                None => ResKey::from(format!("/{}", path)),
-            }
+            ResKey::from(path.with_prefix(&self.prefix))
         } else {
             ResKey::from(path)
         }
@@ -306,20 +297,15 @@ impl Workspace<'_> {
             period: None,
         };
 
-        let subscriber = self
-            .session()
-            .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
-                match Change::new(
-                    &sample.res_name,
-                    sample.payload,
-                    sample.data_info,
-                    decode_value,
-                ) {
-                    Ok(change) => callback(change),
-                    Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
-                }
-            })
-            .await?;
+        let subscriber =
+            self.session()
+                .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
+                    match Change::from_sample(sample, decode_value) {
+                        Ok(change) => callback(change),
+                        Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
+                    }
+                })
+                .await?;
         Ok(SubscriberHandle { subscriber })
     }
 
@@ -360,12 +346,6 @@ impl Workspace<'_> {
             .declare_queryable(&reskey, EVAL)
             .await
             .map(|queryable| GetRequestStream { queryable })
-    }
-}
-
-impl fmt::Debug for Workspace<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Workspace{{ prefix:{:?} }}", self.prefix)
     }
 }
 
@@ -478,14 +458,11 @@ pub struct Change {
 }
 
 impl Change {
-    fn new(
-        res_name: &str,
-        payload: RBuf,
-        data_info: Option<DataInfo>,
-        decode_value: bool,
-    ) -> ZResult<Change> {
-        let path = res_name.try_into()?;
-        let (kind, encoding, timestamp) = if let Some(info) = data_info {
+    /// Convert a [`Sample`] into a [`Change`], possibly decoding it's payload as a typed [`Value`].
+    /// Otherwise, the payload is converted into a [`Value::Raw`].
+    pub fn from_sample(sample: Sample, decode_value: bool) -> ZResult<Change> {
+        let path = sample.res_name.try_into()?;
+        let (kind, encoding, timestamp) = if let Some(info) = sample.data_info {
             (
                 info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
                 info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
@@ -501,9 +478,9 @@ impl Change {
         let value = if kind == ChangeKind::DELETE {
             None
         } else if decode_value {
-            Some(Value::decode(encoding, payload)?)
+            Some(Value::decode(encoding, sample.payload)?)
         } else {
-            Some(Value::Raw(encoding, payload))
+            Some(Value::Raw(encoding, sample.payload))
         };
 
         Ok(Change {
@@ -512,6 +489,26 @@ impl Change {
             kind,
             timestamp,
         })
+    }
+
+    /// Convert this [`Change`] into a [`Sample`] to be sent via zenoh-net.
+    pub fn to_sample(Self) -> Sample {
+        let (encoding, payload) = value.encode();
+        let info = DataInfo {
+            source_id: None,
+            source_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
+            timestamp: None,
+            kind: None,
+            encoding: Some(encoding),
+        };
+        Sample {
+            res_name: path.to_string(),
+            payload,
+            data_info: Some(info),
+        }
+    
     }
 }
 
@@ -540,20 +537,13 @@ impl Stream for ChangeStream<'_> {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let decode_value = self.decode_value;
         match async_std::pin::Pin::new(self.project().subscriber.stream()).poll_next(cx) {
-            Poll::Ready(Some(sample)) => {
-                match Change::new(
-                    &sample.res_name,
-                    sample.payload,
-                    sample.data_info,
-                    decode_value,
-                ) {
-                    Ok(change) => Poll::Ready(Some(change)),
-                    Err(err) => {
-                        warn!("Received an invalid Sample (drop it): {}", err);
-                        Poll::Pending
-                    }
+            Poll::Ready(Some(sample)) => match Change::from_sample(sample, decode_value) {
+                Ok(change) => Poll::Ready(Some(change)),
+                Err(err) => {
+                    warn!("Received an invalid Sample (drop it): {}", err);
+                    Poll::Pending
                 }
-            }
+            },
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }

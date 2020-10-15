@@ -40,15 +40,21 @@ impl Path {
             static ref RE: Regex = Regex::new("/+").unwrap();
         }
         let p = RE.replace_all(path, "/");
-        // remove last '/' if any and return as String
-        p.strip_suffix("/").unwrap_or(&p).to_string()
+        if p.len() > 1 {
+            // remove last '/' if any and return as String
+            p.strip_suffix("/").unwrap_or(&p).to_string()
+        } else {
+            p.to_string()
+        }
     }
 
     /// Creates a new Path from a String, checking its validity.  
     /// Returns `Err(`[`ZError`]`)` if not valid.
-    pub fn new(p: String) -> ZResult<Path> {
+    pub fn new(p: &str) -> ZResult<Path> {
         if !Self::is_valid(&p) {
-            zerror!(ZErrorKind::InvalidPath { path: p })
+            zerror!(ZErrorKind::InvalidPath {
+                path: p.to_string()
+            })
         } else {
             Ok(Path {
                 p: Self::remove_useless_slashes(&p),
@@ -97,14 +103,14 @@ impl fmt::Display for Path {
 impl TryFrom<String> for Path {
     type Error = ZError;
     fn try_from(p: String) -> Result<Self, Self::Error> {
-        Path::new(p)
+        Path::new(&p)
     }
 }
 
 impl TryFrom<&str> for Path {
     type Error = ZError;
     fn try_from(p: &str) -> ZResult<Path> {
-        Self::try_from(p.to_string())
+        Path::new(p)
     }
 }
 
