@@ -71,6 +71,11 @@ impl Workspace<'_> {
         })
     }
 
+    /// Returns the prefix that was used to create this Workspace (calling [`Zenoh::workspace()`]).
+    pub fn prefix(&self) -> &Path {
+        &self.prefix
+    }
+
     #[doc(hidden)]
     pub fn session(&self) -> &Session {
         &self.zenoh.session
