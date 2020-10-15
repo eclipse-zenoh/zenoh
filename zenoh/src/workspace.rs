@@ -511,7 +511,10 @@ impl Change {
     /// Convert this [`Change`] into a [`Sample`] to be sent via zenoh-net.
     pub fn into_sample(self) -> Sample {
         let (encoding, payload) = match self.value {
-            Some(v) => { let (e,p) = v.encode(); (Some(e), p)},
+            Some(v) => {
+                let (e, p) = v.encode();
+                (Some(e), p)
+            }
             None => (None, RBuf::empty()),
         };
         let info = DataInfo {

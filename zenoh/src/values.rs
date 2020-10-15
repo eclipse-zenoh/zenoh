@@ -12,9 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::encoding::*;
-use crate::net::{RBuf, WBuf, ZInt, Sample};
-use crate::Properties;
+use crate::net::{RBuf, Sample, WBuf, ZInt};
 use crate::workspace::ChangeKind;
+use crate::Properties;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zerror, zerror2};
 
@@ -204,10 +204,7 @@ impl Value {
                 info.encoding.unwrap_or(APP_OCTET_STREAM),
             )
         } else {
-            (
-                ChangeKind::PUT,
-                APP_OCTET_STREAM,
-            )
+            (ChangeKind::PUT, APP_OCTET_STREAM)
         };
         if kind == ChangeKind::DELETE {
             Ok(None)
