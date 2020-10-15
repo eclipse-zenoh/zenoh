@@ -306,20 +306,15 @@ impl Workspace<'_> {
             period: None,
         };
 
-        let subscriber = self
-            .session()
-            .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
-                match Change::new(
-                    &sample.res_name,
-                    sample.payload,
-                    sample.data_info,
-                    decode_value,
-                ) {
-                    Ok(change) => callback(change),
-                    Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
-                }
-            })
-            .await?;
+        let subscriber =
+            self.session()
+                .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
+                    match Change::from_sample(sample, decode_value) {
+                        Ok(change) => callback(change),
+                        Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
+                    }
+                })
+                .await?;
         Ok(SubscriberHandle { subscriber })
     }
 
@@ -478,14 +473,13 @@ pub struct Change {
 }
 
 impl Change {
-    fn new(
-        res_name: &str,
-        payload: RBuf,
-        data_info: Option<DataInfo>,
-        decode_value: bool,
-    ) -> ZResult<Change> {
-        let path = res_name.try_into()?;
-        let (kind, encoding, timestamp) = if let Some(info) = data_info {
+    /// Convert a [`Sample`] into a [`Change`].
+    /// If the Sample's kind is DELETE, the Change's value is set to `None`.
+    /// Otherwise, if decode_value is `true` the payload is decoded as a typed [`Value`].
+    /// If decode_value is `false`, the payload is converted into a [`Value::Raw`].
+    pub fn from_sample(sample: Sample, decode_value: bool) -> ZResult<Change> {
+        let path = sample.res_name.try_into()?;
+        let (kind, encoding, timestamp) = if let Some(info) = sample.data_info {
             (
                 info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
                 info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
@@ -501,9 +495,9 @@ impl Change {
         let value = if kind == ChangeKind::DELETE {
             None
         } else if decode_value {
-            Some(Value::decode(encoding, payload)?)
+            Some(Value::decode(encoding, sample.payload)?)
         } else {
-            Some(Value::Raw(encoding, payload))
+            Some(Value::Raw(encoding, sample.payload))
         };
 
         Ok(Change {
@@ -512,6 +506,28 @@ impl Change {
             kind,
             timestamp,
         })
+    }
+
+    /// Convert this [`Change`] into a [`Sample`] to be sent via zenoh-net.
+    pub fn into_sample(self) -> Sample {
+        let (encoding, payload) = match self.value {
+            Some(v) => { let (e,p) = v.encode(); (Some(e), p)},
+            None => (None, RBuf::empty()),
+        };
+        let info = DataInfo {
+            source_id: None,
+            source_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
+            timestamp: Some(self.timestamp),
+            kind: Some(self.kind as u64),
+            encoding,
+        };
+        Sample {
+            res_name: self.path.to_string(),
+            payload,
+            data_info: Some(info),
+        }
     }
 }
 
@@ -540,20 +556,13 @@ impl Stream for ChangeStream<'_> {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let decode_value = self.decode_value;
         match async_std::pin::Pin::new(self.project().subscriber.stream()).poll_next(cx) {
-            Poll::Ready(Some(sample)) => {
-                match Change::new(
-                    &sample.res_name,
-                    sample.payload,
-                    sample.data_info,
-                    decode_value,
-                ) {
-                    Ok(change) => Poll::Ready(Some(change)),
-                    Err(err) => {
-                        warn!("Received an invalid Sample (drop it): {}", err);
-                        Poll::Pending
-                    }
+            Poll::Ready(Some(sample)) => match Change::from_sample(sample, decode_value) {
+                Ok(change) => Poll::Ready(Some(change)),
+                Err(err) => {
+                    warn!("Received an invalid Sample (drop it): {}", err);
+                    Poll::Pending
                 }
-            }
+            },
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }

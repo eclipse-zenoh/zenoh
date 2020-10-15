@@ -12,8 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::encoding::*;
-use crate::net::{RBuf, WBuf, ZInt};
+use crate::net::{RBuf, WBuf, ZInt, Sample};
 use crate::Properties;
+use crate::workspace::ChangeKind;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zerror, zerror2};
 
@@ -189,6 +190,31 @@ impl Value {
                 })
                 .map(Float),
             _ => Ok(Raw(encoding, payload)),
+        }
+    }
+
+    /// Convert the payload from a [`Sample`] into a [`Value`].
+    /// If the Sample's kind is DELETE, `Ok(None)` is returned.
+    /// Otherwise, if decode_value is `true` the payload is decoded as a typed [`Value`].
+    /// If decode_value is `false`, the payload is converted into a [`Value::Raw`].
+    pub fn from_sample(sample: &Sample, decode_value: bool) -> ZResult<Option<Value>> {
+        let (kind, encoding) = if let Some(info) = &sample.data_info {
+            (
+                info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+                info.encoding.unwrap_or(APP_OCTET_STREAM),
+            )
+        } else {
+            (
+                ChangeKind::PUT,
+                APP_OCTET_STREAM,
+            )
+        };
+        if kind == ChangeKind::DELETE {
+            Ok(None)
+        } else if decode_value {
+            Ok(Some(Value::decode(encoding, sample.payload.clone())?))
+        } else {
+            Ok(Some(Value::Raw(encoding, sample.payload.clone())))
         }
     }
 }
