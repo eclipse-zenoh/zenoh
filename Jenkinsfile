@@ -86,8 +86,9 @@ pipeline {
             /bin/bash -c "\
             cargo build --release --bins --lib --examples --target=x86_64-unknown-linux-gnu && \
             cargo deb --target=x86_64-unknown-linux-gnu -p zenoh-router && \
-            cargo deb --target=x86_64-unknown-linux-gnu -p zplugin-http && \
-            cargo deb --target=x86_64-unknown-linux-gnu -p zplugin_storages \
+            cargo deb --target=x86_64-unknown-linux-gnu -p zenoh-http && \
+            cargo deb --target=x86_64-unknown-linux-gnu -p zenoh-storages && \
+            ./gen_zenoh_deb.sh x86_64-unknown-linux-gnu amd64 \
             "
         '''
       }
@@ -111,8 +112,9 @@ pipeline {
             /bin/bash -c "\
             cargo build --release --bins --lib --examples --target=i686-unknown-linux-gnu && \
             cargo deb --target=i686-unknown-linux-gnu -p zenoh-router && \
-            cargo deb --target=i686-unknown-linux-gnu -p zplugin-http && \
-            cargo deb --target=i686-unknown-linux-gnu -p zplugin_storages \
+            cargo deb --target=i686-unknown-linux-gnu -p zenoh-http && \
+            cargo deb --target=i686-unknown-linux-gnu -p zenoh-storages && \
+            ./gen_zenoh_deb.sh i686-unknown-linux-gnu i386 \
             "
         '''
       }
