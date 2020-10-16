@@ -14,7 +14,7 @@
 [package]
 name = "zenoh-router"
 version = "0.5.0-beta.3"
-repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
+repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
@@ -23,12 +23,11 @@ authors = ["kydos <angelo@icorsaro.net>",
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+description = "The zenoh router"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [badges]
-travis-ci = { repository = "...", branch = "rust-master" }
 maintenance = { status = "actively-developed" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -69,3 +68,10 @@ harness = false
 name = "zenohd"
 test = false
 bench = false
+
+[package.metadata.deb]
+name = "zenohd"
+maintainer = "zenoh-dev@eclipse.org"
+copyright = "2017, 2020 ADLINK Technology Inc."
+section = "net"
+license-file = ["../LICENSE", "0"]

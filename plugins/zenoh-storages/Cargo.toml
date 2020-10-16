@@ -12,9 +12,9 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zplugin_storages"
+name = "zenoh-storages"
 version = "0.5.0-beta.3"
-repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
+repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
@@ -23,7 +23,7 @@ authors = ["kydos <angelo@icorsaro.net>",
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+description = "The zenoh storages plugin."
 
 
 [lib]
@@ -45,3 +45,11 @@ env_logger = "0.7.1"
 [dependencies.async-std]
 version = "=1.6.4"
 features = ["unstable"]
+
+[package.metadata.deb]
+name = "zenoh-storages"
+maintainer = "zenoh-dev@eclipse.org"
+copyright = "2017, 2020 ADLINK Technology Inc."
+section = "net"
+license-file = ["../../LICENSE", "0"]
+depends = "zenohd"

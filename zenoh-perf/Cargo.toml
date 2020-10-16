@@ -14,7 +14,7 @@
 [package]
 name = "zenoh-perf"
 version = "0.5.0-beta.3"
-repository = "https://github.com/eclipse-zenoh/zenoh/tree/rust-master"
+repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
@@ -28,7 +28,6 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [badges]
-travis-ci = { repository = "...", branch = "rust-master" }
 maintenance = { status = "actively-developed" }
 
 
