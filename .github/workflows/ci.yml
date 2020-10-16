@@ -11,7 +11,7 @@
 # Contributors:
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
-name: Rust
+name: CI
 
 on:
   push:
