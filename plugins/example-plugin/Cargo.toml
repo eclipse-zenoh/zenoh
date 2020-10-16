@@ -37,4 +37,4 @@ log = "0.4"
 env_logger = "0.7.1"
 
 [dependencies.async-std]
-version = "=1.6.4"
+version = "=1.6.5"

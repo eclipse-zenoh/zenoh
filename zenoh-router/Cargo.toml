@@ -52,7 +52,7 @@ zenoh-protocol =  { version = "0.5.0-beta.3", path = "../zenoh-protocol", featur
 zenoh-util =  { version = "0.5.0-beta.3", path = "../zenoh-util" }
 
 [dependencies.async-std]
-version = "=1.6.4"
+version = "=1.6.5"
 features = ["unstable"]
 
 [dev-dependencies]
