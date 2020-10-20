@@ -9,8 +9,14 @@ pipeline {
     string(name: 'DOCKER_TAG',
            description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
            defaultValue: '')
-    booleanParam(name: 'PUBLISH_RESULTS',
-                 description: 'Publish the resulting artifacts (to Eclipse download, crates.io, DockerHub...)',
+    booleanParam(name: 'PUBLISH_ECLIPSE_DOWNLOAD',
+                 description: 'Publish the resulting artifacts to Eclipse download.',
+                 defaultValue: false)
+    booleanParam(name: 'PUBLISH_CRATES_IO',
+                 description: 'Publish the resulting artifacts to crates.io.',
+                 defaultValue: false)
+    booleanParam(name: 'PUBLISH_DOCKER_HUB',
+                 description: 'Publish the resulting artifacts to DockerHub.',
                  defaultValue: false)
   }
   environment {
@@ -138,7 +144,7 @@ pipeline {
         unstash 'zenohLinux-i686'
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          if [ "${PUBLISH_RESULTS}" = "true" ]; then
+          if [ "${PUBLISH_ECLIPSE_DOWNLOAD}" = "true" ]; then
             ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
             ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
             scp eclipse-zenoh-${LABEL}-*.tgz target/x86_64-unknown-linux-gnu/debian/*.deb target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
@@ -154,7 +160,7 @@ pipeline {
       agent { label 'MacMini' }
       steps {
         sh '''
-        if [ "${PUBLISH_RESULTS}" = "true" ]; then
+        if [ "${PUBLISH_CRATES_IO}" = "true" ]; then
           cd zenoh-util && cargo publish && cd -
           cd zenoh-protocol && cargo publish && cd -
           cd zenoh-router && cargo publish && cd -
@@ -173,7 +179,7 @@ pipeline {
             passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
         {
           sh '''
-          if [ "${PUBLISH_RESULTS}" = "true" ]; then
+          if [ "${PUBLISH_DOCKER_HUB}" = "true" ]; then
             docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
             docker push eclipse/zenoh:${LABEL}
             if [ -n "${DOCKER_TAG}" ]; then
