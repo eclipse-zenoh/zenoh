@@ -244,10 +244,13 @@ pub mod config {
             0x52 => "ZN_LISTENER_KEY".to_string(),
             0x53 => "ZN_USER_KEY".to_string(),
             0x54 => "ZN_PASSWORD_KEY".to_string(),
-            0x55 => "ZN_MULTICAST_INTERFACE_KEY".to_string(),
-            0x56 => "ZN_SCOUTING_DELAY_KEY".to_string(),
-            0x57 => "ZN_ADD_TIMESTAMP_KEY".to_string(),
-            0x58 => "ZN_LOCAL_ROUTING_KEY".to_string(),
+            0x55 => "ZN_MULTICAST_SCOUTING_KEY".to_string(),
+            0x56 => "ZN_MULTICAST_INTERFACE_KEY".to_string(),
+            0x57 => "ZN_MULTICAST_ADDRESS_KEY".to_string(),
+            0x58 => "ZN_SCOUTING_TIMEOUT_KEY".to_string(),
+            0x59 => "ZN_SCOUTING_DELAY_KEY".to_string(),
+            0x5A => "ZN_ADD_TIMESTAMP_KEY".to_string(),
+            0x5B => "ZN_LOCAL_ROUTING_KEY".to_string(),
             key => key.to_string(),
         }
     }
