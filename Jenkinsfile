@@ -50,6 +50,15 @@ pipeline {
       }
     }
 
+    stage('[MacMini] Clean') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        cargo clean
+        '''
+      }
+    }
+
     stage('[MacMini] Build and tests') {
       agent { label 'MacMini' }
       steps {
