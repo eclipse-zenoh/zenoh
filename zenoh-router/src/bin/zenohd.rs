@@ -88,20 +88,23 @@ fn main() {
 
         let mut config = RuntimeProperties::default();
         config.insert(config::ZN_MODE_KEY, "router".to_string());
-        for peer in args
-            .values_of("peer")
-            .or_else(|| Some(Values::default()))
-            .unwrap()
-        {
-            config.insert(config::ZN_PEER_KEY, peer.to_string());
-        }
-        for listener in args
-            .values_of("listener")
-            .or_else(|| Some(Values::default()))
-            .unwrap()
-        {
-            config.insert(config::ZN_LISTENER_KEY, listener.to_string());
-        }
+        config.insert(
+            config::ZN_PEER_KEY,
+            args.values_of("peer")
+                .or_else(|| Some(Values::default()))
+                .unwrap()
+                .collect::<Vec<&str>>()
+                .join(","),
+        );
+        config.insert(
+            config::ZN_LISTENER_KEY,
+            args.values_of("listener")
+                .or_else(|| Some(Values::default()))
+                .unwrap()
+                .collect::<Vec<&str>>()
+                .join(","),
+        );
+
         config.insert(
             config::ZN_ADD_TIMESTAMP_KEY,
             if std::env::args().any(|arg| arg == "--no-timestamp") {
