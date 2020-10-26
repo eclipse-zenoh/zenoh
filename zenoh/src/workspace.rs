@@ -41,7 +41,7 @@ use zenoh_util::zerror;
 ///
 /// #[async_std::main]
 /// async fn main() {
-///     let zenoh = Zenoh::new(config::default()).await.unwrap();
+///     let zenoh = Zenoh::new(net::config::default()).await.unwrap();
 ///
 ///     // Create a Workspace using prefix "/demo/example"
 ///     let workspace = zenoh.workspace(Some("/demo/example".try_into().unwrap())).await.unwrap();
@@ -111,7 +111,7 @@ impl Workspace<'_> {
     /// use zenoh::*;
     /// use std::convert::TryInto;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// let workspace = zenoh.workspace(None).await.unwrap();
     /// workspace.put(
     ///     &"/demo/example/hello".try_into().unwrap(),
@@ -143,7 +143,7 @@ impl Workspace<'_> {
     /// use zenoh::*;
     /// use std::convert::TryInto;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// let workspace = zenoh.workspace(None).await.unwrap();
     /// workspace.delete(
     ///     &"/demo/example/hello".try_into().unwrap()
@@ -174,7 +174,7 @@ impl Workspace<'_> {
     /// use std::convert::TryInto;
     /// use futures::prelude::*;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// let workspace = zenoh.workspace(None).await.unwrap();
     /// let mut data_stream = workspace.get(&"/demo/example/**".try_into().unwrap()).await.unwrap();
     /// while let Some(data) = data_stream.next().await {
@@ -215,7 +215,7 @@ impl Workspace<'_> {
     /// use std::convert::TryInto;
     /// use futures::prelude::*;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// let workspace = zenoh.workspace(None).await.unwrap();
     /// let mut change_stream =
     ///     workspace.subscribe(&"/demo/example/**".try_into().unwrap()).await.unwrap();
@@ -267,7 +267,7 @@ impl Workspace<'_> {
     /// use zenoh::*;
     /// use std::convert::TryInto;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// let workspace = zenoh.workspace(None).await.unwrap();
     /// let mut change_stream = workspace.subscribe_with_callback(
     ///     &"/demo/example/**".try_into().unwrap(),
@@ -332,7 +332,7 @@ impl Workspace<'_> {
     /// use std::convert::TryInto;
     /// use futures::prelude::*;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// let workspace = zenoh.workspace(None).await.unwrap();
     /// let mut get_stream =
     ///     workspace.register_eval(&"/demo/example/eval".try_into().unwrap()).await.unwrap();

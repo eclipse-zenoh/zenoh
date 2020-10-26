@@ -72,7 +72,6 @@ use log::{debug, trace};
 use zenoh_protocol::core::WhatAmI;
 use zenoh_router::runtime::config::*;
 use zenoh_router::runtime::orchestrator::{Loop, SessionOrchestrator};
-use zenoh_router::runtime::prelude::*;
 mod types;
 use git_version::git_version;
 pub use types::*;
@@ -89,7 +88,8 @@ pub mod queryable {
     pub use zenoh_protocol::core::queryable::*;
 }
 
-pub use zenoh_router::runtime::config;
+pub mod config;
+use config::ConfigProperties;
 
 pub mod utils {
     pub mod resource_name {
@@ -109,7 +109,7 @@ const GIT_VERSION: &str = git_version!(prefix = "v");
 /// # Arguments
 ///
 /// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [Properties](Properties) to use for scouting
+/// * `config` - The configuration [Properties](super::Properties) to use for scouting
 ///
 /// # Examples
 /// ```no_run
@@ -123,13 +123,13 @@ const GIT_VERSION: &str = git_version!(prefix = "v");
 /// }
 /// # })
 /// ```
-pub async fn scout(what: WhatAmI, config: Properties) -> HelloStream {
-    debug!("scout({}, {})", what, config::to_string(&config));
+pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
+    trace!("scout({}, {})", what, &config);
     let addr = config
-        .last_or_str(ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+        .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
         .parse()
         .unwrap();
-    let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+    let iface = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
 
     let (hello_sender, hello_receiver) = channel::<Hello>(1);
     let (stop_sender, mut stop_receiver) = channel::<()>(1);
@@ -158,7 +158,7 @@ pub async fn scout(what: WhatAmI, config: Properties) -> HelloStream {
 ///
 /// # Arguments
 ///
-/// * `config` - The configuration [Properties](Properties) for the zenoh-net session
+/// * `config` - The [ConfigProperties](ConfigProperties) for the zenoh-net session
 ///
 /// # Examples
 /// ```
@@ -171,11 +171,9 @@ pub async fn scout(what: WhatAmI, config: Properties) -> HelloStream {
 ///
 /// # Configuration Properties
 ///
-/// [Properties](Properties) are a list of key/value pairs where key is a
-/// [ZInt](ZInt) and value is a `Vec<u8>`.
+/// [ConfigProperties](ConfigProperties) are a set of key/value (`u64`/`String`) pairs.
 /// Constants for the accepted keys can be found in the [config](config) module.
-/// Multiple definition of the same key is allowed. If only one value is expected,
-/// the last occurence is used.
+/// Multiple values are coma separated.
 ///
 /// # Examples
 /// ```
@@ -183,15 +181,32 @@ pub async fn scout(what: WhatAmI, config: Properties) -> HelloStream {
 /// use zenoh::net::*;
 ///
 /// let mut config = config::peer();
-/// config.push((config::ZN_LOCAL_ROUTING_KEY, b"false".to_vec()));
-/// config.push((config::ZN_PEER_KEY, b"tcp/10.10.10.10:7447".to_vec()));
-/// config.push((config::ZN_PEER_KEY, b"tcp/11.11.11.11:7447".to_vec()));
+/// config.insert(config::ZN_LOCAL_ROUTING_KEY, "false".to_string());
+/// config.insert(config::ZN_PEER_KEY, "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
 ///
 /// let session = open(config).await.unwrap();
 /// # })
 /// ```
-pub async fn open(config: Properties) -> ZResult<Session> {
+///
+/// [ConfigProperties](ConfigProperties) can be built set of key/value (`String`/`String`) set
+/// of [Properties](super::Properties).
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::Properties;
+/// use zenoh::net::*;
+///
+/// let mut config = Properties::default();
+/// config.insert("local_routing".to_string(), "false".to_string());
+/// config.insert("peer".to_string(), "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
+///
+/// let session = open(config.into()).await.unwrap();
+/// # })
+/// ```
+pub async fn open(config: ConfigProperties) -> ZResult<Session> {
+    trace!("open({})", &config);
     debug!("Zenoh Rust API {}", GIT_VERSION);
-    debug!("open({})", config::to_string(&config));
+    debug!("Config: {}", &config);
     Session::new(config).await
 }

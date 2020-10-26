@@ -37,7 +37,7 @@ fn parse_args() -> (Properties, usize) {
         ))
         .get_matches();
 
-    let mut config = config::default();
+    let mut config = Properties::default();
     for key in ["mode", "peer", "listener"].iter() {
         if let Some(value) = args.values_of(key) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
@@ -65,7 +65,7 @@ async fn main() {
         .into();
 
     println!("New zenoh...");
-    let zenoh = Zenoh::new(config).await.unwrap();
+    let zenoh = Zenoh::new(config.into()).await.unwrap();
 
     println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();

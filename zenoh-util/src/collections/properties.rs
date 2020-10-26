@@ -14,7 +14,110 @@
 use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+
+pub trait KeyTranscoder {
+    fn encode(key: &str) -> Option<u64>;
+    fn decode(key: u64) -> Option<String>;
+}
+
+#[derive(Debug, PartialEq)]
+pub struct IntKeyProperties<T>(pub HashMap<u64, String>, PhantomData<T>)
+where
+    T: KeyTranscoder;
+
+impl<T: KeyTranscoder> IntKeyProperties<T> {
+    #[inline]
+    pub fn get_or<'a>(&'a self, key: &u64, default: &'a str) -> &'a str {
+        self.get(key).map(|s| &s[..]).or(Some(default)).unwrap()
+    }
+}
+
+impl<T: KeyTranscoder> Clone for IntKeyProperties<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone(), PhantomData)
+    }
+}
+
+impl<T: KeyTranscoder> Default for IntKeyProperties<T> {
+    fn default() -> Self {
+        Self(HashMap::new(), PhantomData)
+    }
+}
+
+impl<T: KeyTranscoder> Deref for IntKeyProperties<T> {
+    type Target = HashMap<u64, String>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: KeyTranscoder> DerefMut for IntKeyProperties<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: KeyTranscoder> fmt::Display for IntKeyProperties<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&Properties::from(self.clone()).0, f)
+    }
+}
+
+impl<T: KeyTranscoder> From<HashMap<u64, String>> for IntKeyProperties<T> {
+    fn from(map: HashMap<u64, String>) -> Self {
+        Self(map, PhantomData)
+    }
+}
+
+impl<T: KeyTranscoder> From<HashMap<String, String>> for IntKeyProperties<T> {
+    fn from(map: HashMap<String, String>) -> Self {
+        Self(
+            map.into_iter()
+                .filter_map(|(k, v)| T::encode(&k).map(|k| (k, v)))
+                .collect(),
+            PhantomData,
+        )
+    }
+}
+
+impl<T: KeyTranscoder> From<Properties> for IntKeyProperties<T> {
+    fn from(props: Properties) -> Self {
+        props.0.into()
+    }
+}
+
+impl<T: KeyTranscoder> From<&str> for IntKeyProperties<T> {
+    fn from(s: &str) -> Self {
+        s.into()
+    }
+}
+
+impl<T: KeyTranscoder> From<String> for IntKeyProperties<T> {
+    fn from(s: String) -> Self {
+        s.into()
+    }
+}
+
+impl<T: KeyTranscoder> From<&[(&str, &str)]> for IntKeyProperties<T> {
+    fn from(kvs: &[(&str, &str)]) -> Self {
+        kvs.into()
+    }
+}
+
+impl<T: KeyTranscoder> From<&[(u64, &str)]> for IntKeyProperties<T> {
+    fn from(kvs: &[(u64, &str)]) -> Self {
+        Self(
+            kvs.iter()
+                .cloned()
+                .map(|(k, v)| (k, v.to_string()))
+                .collect(),
+            PhantomData,
+        )
+    }
+}
 
 const PROP_SEP: char = ';';
 const KV_SEP: char = '=';
@@ -69,7 +172,7 @@ impl fmt::Display for Properties {
 
 impl From<&str> for Properties {
     fn from(s: &str) -> Self {
-        let p: HashMap<String, String> = if !s.is_empty() {
+        Properties(
             s.split(PROP_SEP)
                 .filter_map(|prop| {
                     if prop.is_empty() {
@@ -82,11 +185,8 @@ impl From<&str> for Properties {
                         ))
                     }
                 })
-                .collect()
-        } else {
-            HashMap::new()
-        };
-        Properties(p)
+                .collect(),
+        )
     }
 }
 
@@ -102,14 +202,25 @@ impl From<HashMap<String, String>> for Properties {
     }
 }
 
+impl<T: KeyTranscoder> From<IntKeyProperties<T>> for Properties {
+    fn from(props: IntKeyProperties<T>) -> Self {
+        Self(
+            props
+                .0
+                .into_iter()
+                .filter_map(|(k, v)| T::decode(k).map(|k| (k, v)))
+                .collect(),
+        )
+    }
+}
+
 impl From<&[(&str, &str)]> for Properties {
-    fn from(kvs: &[(&str, &str)]) -> Properties {
-        let p: HashMap<String, String> = kvs
-            .iter()
-            .cloned()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
-        Properties(p)
+    fn from(kvs: &[(&str, &str)]) -> Self {
+        Properties(
+            kvs.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        )
     }
 }
 
@@ -147,5 +258,16 @@ mod tests {
             Properties::from("p1=x=y;p2=a==b"),
             Properties::from(&[("p1", "x=y"), ("p2", "a==b")][..])
         );
+    }
+}
+
+pub struct DummyTranscoder();
+impl KeyTranscoder for DummyTranscoder {
+    fn encode(_key: &str) -> Option<u64> {
+        None
+    }
+
+    fn decode(_key: u64) -> Option<String> {
+        None
     }
 }

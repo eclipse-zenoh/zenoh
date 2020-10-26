@@ -12,13 +12,13 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::runtime::config::*;
-use crate::runtime::prelude::*;
+use crate::runtime::RuntimeProperties;
 use async_std::net::UdpSocket;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
-use zenoh_protocol::core::{whatami, Properties, WhatAmI};
+use zenoh_protocol::core::{whatami, WhatAmI};
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
@@ -31,7 +31,8 @@ const SEND_BUF_INITIAL_SIZE: usize = 8;
 const SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
 const SCOUT_MAX_PERIOD: u64 = 8000; //ms
 const SCOUT_PERIOD_INCREASE_FACTOR: u64 = 2;
-const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
+const ROUTER_DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
+const PEER_DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
 
 pub enum Loop {
     Continue,
@@ -49,7 +50,7 @@ impl SessionOrchestrator {
         SessionOrchestrator { whatami, manager }
     }
 
-    pub async fn init(&mut self, config: Properties) -> ZResult<()> {
+    pub async fn init(&mut self, config: RuntimeProperties) -> ZResult<()> {
         match self.whatami {
             whatami::CLIENT => self.init_client(config).await,
             whatami::PEER => self.init_peer(config).await,
@@ -63,22 +64,27 @@ impl SessionOrchestrator {
         }
     }
 
-    async fn init_client(&mut self, config: Properties) -> ZResult<()> {
+    async fn init_client(&mut self, config: RuntimeProperties) -> ZResult<()> {
         let peers = config
-            .get(ZN_PEER_KEY)
-            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .get_or(&ZN_PEER_KEY, "")
+            .split(',')
+            .filter_map(|s| match s {
+                "" => None,
+                s => Some(s.parse().unwrap()),
+            })
             .collect::<Vec<Locator>>();
         let scouting = config
-            .last_or(ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
-            .is_true();
+            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
         let addr = config
-            .last_or_str(ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
             .parse()
             .unwrap();
-        let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+        let iface = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
         let timeout = std::time::Duration::from_secs_f64(
             config
-                .last_or_str(ZN_SCOUTING_TIMEOUT_KEY, ZN_SCOUTING_TIMEOUT_DEFAULT)
+                .get_or(&ZN_SCOUTING_TIMEOUT_KEY, ZN_SCOUTING_TIMEOUT_DEFAULT)
                 .parse()
                 .unwrap(),
         );
@@ -111,33 +117,39 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn init_peer(&mut self, config: Properties) -> ZResult<()> {
-        let mut listeners = config
-            .get(ZN_LISTENER_KEY)
-            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+    pub async fn init_peer(&mut self, config: RuntimeProperties) -> ZResult<()> {
+        let listeners = config
+            .get_or(&ZN_LISTENER_KEY, PEER_DEFAULT_LISTENER)
+            .split(',')
+            .filter_map(|s| match s {
+                "" => None,
+                s => Some(s.parse().unwrap()),
+            })
             .collect::<Vec<Locator>>();
         let peers = config
-            .get(ZN_PEER_KEY)
-            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .get_or(&ZN_PEER_KEY, "")
+            .split(',')
+            .filter_map(|s| match s {
+                "" => None,
+                s => Some(s.parse().unwrap()),
+            })
             .collect::<Vec<Locator>>();
         let scouting = config
-            .last_or(ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
-            .is_true();
+            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
         let addr = config
-            .last_or_str(ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
             .parse()
             .unwrap();
-        let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+        let iface = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
         let delay = std::time::Duration::from_secs_f64(
             config
-                .last_or_str(ZN_SCOUTING_DELAY_KEY, ZN_SCOUTING_DELAY_DEFAULT)
+                .get_or(&ZN_SCOUTING_DELAY_KEY, ZN_SCOUTING_DELAY_DEFAULT)
                 .parse()
                 .unwrap(),
         );
 
-        if listeners.is_empty() {
-            listeners.push(DEFAULT_LISTENER.parse().unwrap());
-        }
         self.bind_listeners(&listeners).await?;
 
         let this = self.clone();
@@ -160,20 +172,28 @@ impl SessionOrchestrator {
         Ok(())
     }
 
-    pub async fn init_broker(&mut self, config: Properties) -> ZResult<()> {
+    pub async fn init_broker(&mut self, config: RuntimeProperties) -> ZResult<()> {
         let listeners = config
-            .get(ZN_LISTENER_KEY)
-            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
+            .split(',')
+            .filter_map(|s| match s {
+                "" => None,
+                s => Some(s.parse().unwrap()),
+            })
             .collect::<Vec<Locator>>();
         let peers = config
-            .get(ZN_PEER_KEY)
-            .map(|l| String::from_utf8_lossy(l).parse().unwrap())
+            .get_or(&ZN_PEER_KEY, "")
+            .split(',')
+            .filter_map(|s| match s {
+                "" => None,
+                s => Some(s.parse().unwrap()),
+            })
             .collect::<Vec<Locator>>();
         let addr = config
-            .last_or_str(ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
             .parse()
             .unwrap();
-        let iface = config.last_or_str(ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+        let iface = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
 
         self.bind_listeners(&listeners).await?;
 

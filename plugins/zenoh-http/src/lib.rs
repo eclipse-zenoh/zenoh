@@ -225,6 +225,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 }
 
                 _ => {
+                    println!("QUERY");
                     let resource = path_to_resource(req.url().path(), &req.state().1);
                     let predicate = req.url().query().or(Some("")).unwrap();
                     match req

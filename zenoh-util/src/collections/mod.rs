@@ -23,6 +23,9 @@ pub use fifo_queue::*;
 pub mod ordered_queue;
 pub use ordered_queue::*;
 
+pub mod properties;
+pub use properties::*;
+
 pub mod priority_queue;
 pub use priority_queue::*;
 

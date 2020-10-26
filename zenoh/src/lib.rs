@@ -25,7 +25,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let zenoh = Zenoh::new(config::default()).await.unwrap();
+//!     let zenoh = Zenoh::new(net::config::default()).await.unwrap();
 //!     let workspace = zenoh.workspace(None).await.unwrap();
 //!     workspace.put(
 //!         &"/demo/example/hello".try_into().unwrap(),
@@ -43,7 +43,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let zenoh = Zenoh::new(config::default()).await.unwrap();
+//!     let zenoh = Zenoh::new(net::config::default()).await.unwrap();
 //!     let workspace = zenoh.workspace(None).await.unwrap();
 //!     let mut change_stream =
 //!         workspace.subscribe(&"/demo/example/**".try_into().unwrap()).await.unwrap();
@@ -65,7 +65,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let zenoh = Zenoh::new(config::default()).await.unwrap();
+//!     let zenoh = Zenoh::new(net::config::default()).await.unwrap();
 //!     let workspace = zenoh.workspace(None).await.unwrap();
 //!     let mut data_stream = workspace.get(&"/demo/example/**".try_into().unwrap()).await.unwrap();
 //!     while let Some(data) = data_stream.next().await {
@@ -97,8 +97,6 @@ use zenoh_router::runtime::Runtime;
 mod workspace;
 pub use workspace::*;
 
-mod properties;
-pub use properties::Properties;
 mod path;
 pub use path::Path;
 mod pathexpr;
@@ -108,10 +106,11 @@ pub use selector::Selector;
 mod values;
 pub use values::*;
 
-pub mod config;
+// pub mod config;
 pub mod utils;
 
 pub use zenoh_protocol::core::{Timestamp, TimestampID};
+pub use zenoh_util::collections::Properties;
 
 /// The zenoh client API.
 pub struct Zenoh {
@@ -123,37 +122,54 @@ impl Zenoh {
     ///
     /// # Arguments
     ///
-    /// * `config` - The configuration [Properties](Properties) for the zenoh session
+    /// * `config` - The [ConfigProperties](net::config::ConfigProperties) for the zenoh session
     ///
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::*;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// # })
     /// ```
     ///
     /// # Configuration Properties
     ///
-    /// [Properties](Properties) are a list of key/value pairs.
-    /// See [config](config) for accepted values.
+    /// [ConfigProperties](net::config::ConfigProperties) are a set of key/value (`u64`/`String`) pairs.
+    /// Constants for the accepted keys can be found in the [config](net::config) module.
+    /// Multiple values are coma separated.
     ///
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::*;
     ///
-    /// let mut config = config::peer();
-    /// config.insert("local_routing".to_string(), "false".to_string());
-    /// config.insert("peer".to_string(), "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
+    /// let mut config = net::config::peer();
+    /// config.insert(net::config::ZN_LOCAL_ROUTING_KEY, "false".to_string());
+    /// config.insert(net::config::ZN_PEER_KEY, "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
     ///
     /// let zenoh = Zenoh::new(config).await.unwrap();
     /// # })
     /// ```
-    pub async fn new(config: Properties) -> ZResult<Zenoh> {
+    ///
+    /// [ConfigProperties](net::config::ConfigProperties) can be built set of key/value (`String`/`String`) set
+    /// of [Properties](Properties).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::*;
+    ///
+    /// let mut config = Properties::default();
+    /// config.insert("local_routing".to_string(), "false".to_string());
+    /// config.insert("peer".to_string(), "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
+    ///
+    /// let zenoh = Zenoh::new(config.into()).await.unwrap();
+    /// # })
+    /// ```
+    pub async fn new(config: net::config::ConfigProperties) -> ZResult<Zenoh> {
         Ok(Zenoh {
-            session: net::open(config.into()).await?,
+            session: net::open(config).await?,
         })
     }
 
@@ -184,7 +200,7 @@ impl Zenoh {
     /// use zenoh::*;
     /// use std::convert::TryInto;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// let workspace = zenoh.workspace(Some("/demo/example".try_into().unwrap())).await.unwrap();
     /// // The following it equivalent to a PUT on "/demo/example/hello".
     /// workspace.put(
@@ -209,7 +225,7 @@ impl Zenoh {
     /// # async_std::task::block_on(async {
     /// use zenoh::*;
     ///
-    /// let zenoh = Zenoh::new(config::default()).await.unwrap();
+    /// let zenoh = Zenoh::new(net::config::default()).await.unwrap();
     /// zenoh.close();
     /// # })
     /// ```

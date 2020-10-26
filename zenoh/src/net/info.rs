@@ -12,32 +12,41 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-//! Constants and helpers to interpret the [Properties](super::Properties) returned by the
-//! [info](super::Session::info) function.
-
-use super::ZInt;
+//! Properties returned by the [info](super::Session::info) function and associated constants.
+use zenoh_util::collections::{IntKeyProperties, KeyTranscoder};
 
 // Properties returned by info()
-pub const ZN_INFO_PID_KEY: ZInt = 0x00;
-pub const ZN_INFO_PEER_PID_KEY: ZInt = 0x01;
-pub const ZN_INFO_ROUTER_PID_KEY: ZInt = 0x02;
+pub const ZN_INFO_PID_KEY: u64 = 0x00;
+pub const ZN_INFO_PEER_PID_KEY: u64 = 0x01;
+pub const ZN_INFO_ROUTER_PID_KEY: u64 = 0x02;
 
-pub fn key_to_string(i: ZInt) -> String {
-    match i {
-        0x00 => "ZN_INFO_PID_KEY".to_string(),
-        0x01 => "ZN_INFO_PEER_PID_KEY".to_string(),
-        0x02 => "ZN_INFO_ROUTER_PID_KEY".to_string(),
-        i => i.to_string(),
+/// A transcoder for [InfoProperties](InfoProperties)
+/// able to convert string keys to int keys and reverse.
+pub struct InfoTranscoder();
+impl KeyTranscoder for InfoTranscoder {
+    fn encode(key: &str) -> Option<u64> {
+        match &key[..] {
+            "info_pid" => Some(ZN_INFO_PID_KEY),
+            "info_peer_pid" => Some(ZN_INFO_PEER_PID_KEY),
+            "info_router_pid" => Some(ZN_INFO_ROUTER_PID_KEY),
+            _ => None,
+        }
+    }
+
+    fn decode(key: u64) -> Option<String> {
+        match key {
+            0x00 => Some("info_pid".to_string()),
+            0x01 => Some("info_peer_pid".to_string()),
+            0x02 => Some("info_router_pid".to_string()),
+            key => Some(key.to_string()),
+        }
     }
 }
 
-pub fn to_string(config: &[(u64, Vec<u8>)]) -> String {
-    format!(
-        "[{}]",
-        config
-            .iter()
-            .map(|(k, v)| { format!("({}, {})", key_to_string(*k), String::from_utf8_lossy(v)) })
-            .collect::<Vec<String>>()
-            .join(", ")
-    )
-}
+/// A set of Key/Value (`u64`/`String`) pairs returned by [info](super::Session::info).
+///
+/// Multiple values are coma separated.
+///
+/// The [IntKeyProperties](IntKeyProperties) can be converted to (`String`/`String`)
+/// [Properties](super::super::Properties) and reverse.
+pub type InfoProperties = IntKeyProperties<InfoTranscoder>;

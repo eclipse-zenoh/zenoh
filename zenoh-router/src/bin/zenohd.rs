@@ -16,7 +16,7 @@ use async_std::task;
 use clap::{App, Arg, Values};
 use git_version::git_version;
 use zenoh_router::plugins::PluginsMgr;
-use zenoh_router::runtime::{config, AdminSpace, Runtime};
+use zenoh_router::runtime::{config, AdminSpace, Runtime, RuntimeProperties};
 
 const GIT_VERSION: &str = git_version!(prefix = "v");
 
@@ -86,32 +86,32 @@ fn main() {
         // Add plugins' expected args and parse command line
         let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
 
-        let mut config = config::empty();
-        config.push((config::ZN_MODE_KEY, b"router".to_vec()));
+        let mut config = RuntimeProperties::default();
+        config.insert(config::ZN_MODE_KEY, "router".to_string());
         for peer in args
             .values_of("peer")
             .or_else(|| Some(Values::default()))
             .unwrap()
         {
-            config.push((config::ZN_PEER_KEY, peer.as_bytes().to_vec()));
+            config.insert(config::ZN_PEER_KEY, peer.to_string());
         }
         for listener in args
             .values_of("listener")
             .or_else(|| Some(Values::default()))
             .unwrap()
         {
-            config.push((config::ZN_LISTENER_KEY, listener.as_bytes().to_vec()));
+            config.insert(config::ZN_LISTENER_KEY, listener.to_string());
         }
-        config.push((
+        config.insert(
             config::ZN_ADD_TIMESTAMP_KEY,
             if std::env::args().any(|arg| arg == "--no-timestamp") {
-                config::ZN_FALSE.to_vec()
+                config::ZN_FALSE.to_string()
             } else {
-                config::ZN_TRUE.to_vec()
+                config::ZN_TRUE.to_string()
             },
-        ));
+        );
 
-        log::debug!("Config: {}", config::to_string(&config));
+        log::debug!("Config: {}", &config);
 
         let runtime = match Runtime::new(0, config, args.value_of("id")).await {
             Ok(runtime) => runtime,

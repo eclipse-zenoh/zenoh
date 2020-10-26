@@ -17,6 +17,7 @@ use async_std::sync::RwLock;
 use async_std::sync::{channel, Arc, Receiver, Sender};
 use async_std::task;
 use async_trait::async_trait;
+use config::*;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::fmt;
@@ -185,11 +186,12 @@ impl Session {
         }
     }
 
-    pub(super) async fn new(config: Properties) -> ZResult<Session> {
+    pub(super) async fn new(config: ConfigProperties) -> ZResult<Session> {
         let local_routing = config
-            .last_or(ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
-            .is_true();
-        match Runtime::new(0, config, None).await {
+            .get_or(&ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
+        match Runtime::new(0, config.0.into(), None).await {
             Ok(runtime) => {
                 let session = Self::init(runtime, local_routing).await;
                 // Workaround for the declare_and_shoot problem
@@ -263,32 +265,51 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub async fn info(&self) -> Properties {
+    pub async fn info(&self) -> InfoProperties {
         trace!("info()");
-        let mut info = Properties::new();
         let runtime = self.runtime.read().await;
-        info.push((ZN_INFO_PID_KEY, runtime.pid.as_slice().to_vec()));
-        for session in runtime.orchestrator.manager.get_sessions().await {
-            if let Ok(what) = session.get_whatami() {
-                if what & whatami::PEER != 0 {
-                    if let Ok(peer) = session.get_pid() {
-                        info.push((ZN_INFO_PEER_PID_KEY, peer.as_slice().to_vec()));
-                    }
-                }
-            }
-        }
+        let sessions = runtime.orchestrator.manager.get_sessions().await;
+        let peer_pids = sessions
+            .iter()
+            .filter(|s| {
+                s.get_whatami()
+                    .ok()
+                    .map(|what| what & whatami::PEER != 0)
+                    .or(Some(false))
+                    .unwrap()
+            })
+            .filter_map(|s| {
+                s.get_pid()
+                    .ok()
+                    .map(|pid| hex::encode_upper(pid.as_slice()))
+            })
+            .collect::<Vec<String>>();
+        let mut router_pids = vec![];
         if runtime.orchestrator.whatami & whatami::ROUTER != 0 {
-            info.push((ZN_INFO_ROUTER_PID_KEY, runtime.pid.as_slice().to_vec()));
+            router_pids.push(hex::encode_upper(runtime.pid.as_slice()));
         }
-        for session in runtime.orchestrator.manager.get_sessions().await {
-            if let Ok(what) = session.get_whatami() {
-                if what & whatami::ROUTER != 0 {
-                    if let Ok(peer) = session.get_pid() {
-                        info.push((ZN_INFO_ROUTER_PID_KEY, peer.as_slice().to_vec()));
-                    }
-                }
-            }
-        }
+        router_pids.extend(
+            sessions
+                .iter()
+                .filter(|s| {
+                    s.get_whatami()
+                        .ok()
+                        .map(|what| what & whatami::ROUTER != 0)
+                        .or(Some(false))
+                        .unwrap()
+                })
+                .filter_map(|s| {
+                    s.get_pid()
+                        .ok()
+                        .map(|pid| hex::encode_upper(pid.as_slice()))
+                })
+                .collect::<Vec<String>>(),
+        );
+
+        let mut info = InfoProperties::default();
+        info.insert(ZN_INFO_PEER_PID_KEY, peer_pids.join(","));
+        info.insert(ZN_INFO_ROUTER_PID_KEY, router_pids.join(","));
+        info.insert(ZN_INFO_PID_KEY, hex::encode_upper(runtime.pid.as_slice()));
         info
     }
 

@@ -11,8 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use clap::{App, Arg, Values};
+use clap::{App, Arg};
 use zenoh::net::*;
+use zenoh::Properties;
 
 #[async_std::main]
 async fn main() {
@@ -22,7 +23,7 @@ async fn main() {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = open(config.into()).await.unwrap();
 
     println!("Writing Data ('{}': '{}')...", path, value);
     session
@@ -54,26 +55,12 @@ fn parse_args() -> (Properties, String, String) {
         )
         .get_matches();
 
-    let mut config = config::empty();
-    config.push((
-        config::ZN_MODE_KEY,
-        args.value_of("mode").unwrap().as_bytes().to_vec(),
-    ));
-    for peer in args
-        .values_of("peer")
-        .or_else(|| Some(Values::default()))
-        .unwrap()
-    {
-        config.push((config::ZN_PEER_KEY, peer.as_bytes().to_vec()));
+    let mut config = Properties::default();
+    for key in ["mode", "peer", "listener"].iter() {
+        if let Some(value) = args.values_of(key) {
+            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+        }
     }
-    for listener in args
-        .values_of("listener")
-        .or_else(|| Some(Values::default()))
-        .unwrap()
-    {
-        config.push((config::ZN_LISTENER_KEY, listener.as_bytes().to_vec()));
-    }
-
     let path = args.value_of("path").unwrap();
     let value = args.value_of("value").unwrap();
 

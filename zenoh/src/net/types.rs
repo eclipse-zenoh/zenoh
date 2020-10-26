@@ -95,9 +95,6 @@ pub use zenoh_util::core::ZErrorKind;
 /// A zenoh result.
 pub use zenoh_util::core::ZResult;
 
-/// A list of key/value pairs.
-pub use zenoh_protocol::core::Properties;
-
 pin_project! {
     /// A stream of [Hello](Hello) messages.
     #[derive(Clone, Debug)]
