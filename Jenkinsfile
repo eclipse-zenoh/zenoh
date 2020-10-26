@@ -28,7 +28,7 @@ pipeline {
     stage('[MacMini] Checkout Git TAG') {
       agent { label 'MacMini' }
       steps {
-        cleanWs()
+        deleteDir()
         checkout([$class: 'GitSCM',
                   branches: [[name: "${params.GIT_TAG}"]],
                   doGenerateSubmoduleConfigurations: false,
@@ -46,15 +46,6 @@ pipeline {
         env
         echo "Building eclipse-zenoh-${LABEL}"
         rustup update
-        '''
-      }
-    }
-
-    stage('[MacMini] Clean') {
-      agent { label 'MacMini' }
-      steps {
-        sh '''
-        cargo clean
         '''
       }
     }
@@ -145,9 +136,10 @@ pipeline {
       }
     }
 
-    stage('Publish to download.eclipse.org') {
+    stage('[UbuntuVM] Publish to download.eclipse.org') {
       steps {
-        // Unstash MacOS package to be deployed
+        deleteDir()
+        // Unstash packages built on MacMini to be deployed
         unstash 'zenohMacOS'
         unstash 'zenohLinux-x64'
         unstash 'zenohLinux-i686'
