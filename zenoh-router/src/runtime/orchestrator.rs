@@ -68,7 +68,7 @@ impl SessionOrchestrator {
         let peers = config
             .get_or(&ZN_PEER_KEY, "")
             .split(',')
-            .filter_map(|s| match s {
+            .filter_map(|s| match s.trim() {
                 "" => None,
                 s => Some(s.parse().unwrap()),
             })
@@ -121,7 +121,7 @@ impl SessionOrchestrator {
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, PEER_DEFAULT_LISTENER)
             .split(',')
-            .filter_map(|s| match s {
+            .filter_map(|s| match s.trim() {
                 "" => None,
                 s => Some(s.parse().unwrap()),
             })
@@ -129,7 +129,7 @@ impl SessionOrchestrator {
         let peers = config
             .get_or(&ZN_PEER_KEY, "")
             .split(',')
-            .filter_map(|s| match s {
+            .filter_map(|s| match s.trim() {
                 "" => None,
                 s => Some(s.parse().unwrap()),
             })
@@ -176,7 +176,7 @@ impl SessionOrchestrator {
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
             .split(',')
-            .filter_map(|s| match s {
+            .filter_map(|s| match s.trim() {
                 "" => None,
                 s => Some(s.parse().unwrap()),
             })
@@ -184,7 +184,7 @@ impl SessionOrchestrator {
         let peers = config
             .get_or(&ZN_PEER_KEY, "")
             .split(',')
-            .filter_map(|s| match s {
+            .filter_map(|s| match s.trim() {
                 "" => None,
                 s => Some(s.parse().unwrap()),
             })

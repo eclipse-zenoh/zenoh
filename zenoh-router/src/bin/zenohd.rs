@@ -17,6 +17,7 @@ use clap::{App, Arg, Values};
 use git_version::git_version;
 use zenoh_router::plugins::PluginsMgr;
 use zenoh_router::runtime::{config, AdminSpace, Runtime, RuntimeProperties};
+use zenoh_util::collections::Properties;
 
 const GIT_VERSION: &str = git_version!(prefix = "v");
 
@@ -41,6 +42,10 @@ fn main() {
 
         let app = App::new("The zenoh router")
             .version(GIT_VERSION)
+            .arg(Arg::from_usage(
+                "-c, --config=[FILE] \
+            'The configuration file.'",
+            ))
             .arg(
                 Arg::from_usage(
                     "-l, --listener=[LOCATOR]... \
@@ -55,7 +60,7 @@ fn main() {
             Repeat this option to connect to several peers.'",
             ))
             .arg(Arg::from_usage(
-                "-i, --id=[hex_string]... \
+                "-i, --id=[hex_string] \
             'The identifier (as an hexadecimal string - e.g.: 0A0B23...) that zenohd must use. \
             WARNING: this identifier must be unique in the system! \
             If not set, a random UUIDv4 will be used.'",
@@ -86,24 +91,37 @@ fn main() {
         // Add plugins' expected args and parse command line
         let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
 
-        let mut config = RuntimeProperties::default();
+        let mut config = if let Some(conf_file) = args.value_of("config") {
+            Properties::from(std::fs::read_to_string(conf_file).unwrap()).into()
+        } else {
+            RuntimeProperties::default()
+        };
+
         config.insert(config::ZN_MODE_KEY, "router".to_string());
-        config.insert(
-            config::ZN_PEER_KEY,
-            args.values_of("peer")
-                .or_else(|| Some(Values::default()))
-                .unwrap()
-                .collect::<Vec<&str>>()
-                .join(","),
-        );
-        config.insert(
-            config::ZN_LISTENER_KEY,
-            args.values_of("listener")
-                .or_else(|| Some(Values::default()))
-                .unwrap()
-                .collect::<Vec<&str>>()
-                .join(","),
-        );
+
+        let mut peer = args
+            .values_of("peer")
+            .or_else(|| Some(Values::default()))
+            .unwrap()
+            .collect::<Vec<&str>>()
+            .join(",");
+        if let Some(val) = config.get(&config::ZN_PEER_KEY) {
+            peer.push(',');
+            peer.push_str(val);
+        }
+        config.insert(config::ZN_PEER_KEY, peer);
+
+        let mut listener = args
+            .values_of("listener")
+            .or_else(|| Some(Values::default()))
+            .unwrap()
+            .collect::<Vec<&str>>()
+            .join(",");
+        if let Some(val) = config.get(&config::ZN_LISTENER_KEY) {
+            listener.push(',');
+            listener.push_str(val);
+        }
+        config.insert(config::ZN_LISTENER_KEY, listener);
 
         config.insert(
             config::ZN_ADD_TIMESTAMP_KEY,

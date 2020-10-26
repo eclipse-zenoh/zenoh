@@ -119,14 +119,16 @@ impl<T: KeyTranscoder> From<&[(u64, &str)]> for IntKeyProperties<T> {
     }
 }
 
-const PROP_SEP: char = ';';
+static PROP_SEPS: &[&str] = &["\r\n", "\n", ";"];
+const DEFAULT_PROP_SEP: char = ';';
+
 const KV_SEP: char = '=';
 
 #[derive(Clone, Debug, PartialEq)]
 /// A map of key/value (String,String) properties.
 ///
-/// It can be parsed from a String, using `;` as separator between each properties
-/// and `=` as separator between a key and its value.
+/// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
+/// and `=` as separator between a key and its value. Keys and values are trimed.
 pub struct Properties(pub HashMap<String, String>);
 
 impl Default for Properties {
@@ -160,9 +162,9 @@ impl fmt::Display for Properties {
             }
             for (k, v) in it {
                 if v.is_empty() {
-                    write!(f, "{}{}", PROP_SEP, k)?
+                    write!(f, "{}{}", DEFAULT_PROP_SEP, k)?
                 } else {
-                    write!(f, "{}{}{}{}", PROP_SEP, k, KV_SEP, v)?
+                    write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP, v)?
                 }
             }
         }
@@ -172,16 +174,27 @@ impl fmt::Display for Properties {
 
 impl From<&str> for Properties {
     fn from(s: &str) -> Self {
+        let mut props = vec![s];
+        for sep in PROP_SEPS {
+            props = props
+                .into_iter()
+                .map(|s| s.split(sep))
+                .flatten()
+                .collect::<Vec<&str>>();
+        }
+        props = props.into_iter().map(|s| s.trim()).collect::<Vec<&str>>();
+
         Properties(
-            s.split(PROP_SEP)
+            props
+                .iter()
                 .filter_map(|prop| {
                     if prop.is_empty() {
                         None
                     } else {
                         let mut it = prop.splitn(2, KV_SEP);
                         Some((
-                            it.next().unwrap().to_string(),
-                            it.next().unwrap_or("").to_string(),
+                            it.next().unwrap().trim().to_string(),
+                            it.next().unwrap_or("").trim().to_string(),
                         ))
                     }
                 })
