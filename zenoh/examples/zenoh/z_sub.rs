@@ -17,39 +17,6 @@ use futures::select;
 use std::convert::TryInto;
 use zenoh::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
-fn parse_args() -> (Properties, String) {
-    let args = App::new("zenoh subscriber example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
-        )
-        .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
-        ))
-        .arg(
-            Arg::from_usage("-s, --selector=[selector] 'The selection of resources to subscribe'")
-                .default_value("/demo/example/**"),
-        )
-        .get_matches();
-
-    let mut config = Properties::default();
-    for key in ["mode", "peer", "listener"].iter() {
-        if let Some(value) = args.values_of(key) {
-            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
-        }
-    }
-    let selector = args.value_of("selector").unwrap().to_string();
-
-    (config, selector)
-}
-
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -92,4 +59,34 @@ async fn main() {
 
     change_stream.close().await.unwrap();
     zenoh.close().await.unwrap();
+}
+
+fn parse_args() -> (Properties, String) {
+    let args = App::new("zenoh subscriber example")
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(Arg::from_usage(
+            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
+        ))
+        .arg(
+            Arg::from_usage("-s, --selector=[selector] 'The selection of resources to subscribe'")
+                .default_value("/demo/example/**"),
+        )
+        .get_matches();
+
+    let mut config = Properties::default();
+    for key in ["mode", "peer", "listener"].iter() {
+        if let Some(value) = args.values_of(key) {
+            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+        }
+    }
+    let selector = args.value_of("selector").unwrap().to_string();
+
+    (config, selector)
 }

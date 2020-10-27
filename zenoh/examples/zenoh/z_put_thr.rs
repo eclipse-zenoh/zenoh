@@ -16,9 +16,30 @@ use std::convert::TryFrom;
 use zenoh::net::RBuf;
 use zenoh::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+    let (config, size) = parse_args();
+
+    let data: RBuf = (0usize..size)
+        .map(|i| (i % 10) as u8)
+        .collect::<Vec<u8>>()
+        .into();
+
+    println!("New zenoh...");
+    let zenoh = Zenoh::new(config.into()).await.unwrap();
+
+    println!("New workspace...");
+    let workspace = zenoh.workspace(None).await.unwrap();
+
+    let path: Path = Path::try_from("/test/thr").unwrap();
+    let value = Value::from(data);
+    loop {
+        workspace.put(&path, value.clone()).await.unwrap();
+    }
+}
+
 fn parse_args() -> (Properties, usize) {
     let args = App::new("zenoh throughput put example")
         .arg(
@@ -51,28 +72,4 @@ fn parse_args() -> (Properties, usize) {
         .unwrap();
 
     (config, size)
-}
-
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-    let (config, size) = parse_args();
-
-    let data: RBuf = (0usize..size)
-        .map(|i| (i % 10) as u8)
-        .collect::<Vec<u8>>()
-        .into();
-
-    println!("New zenoh...");
-    let zenoh = Zenoh::new(config.into()).await.unwrap();
-
-    println!("New workspace...");
-    let workspace = zenoh.workspace(None).await.unwrap();
-
-    let path: Path = Path::try_from("/test/thr").unwrap();
-    let value = Value::from(data);
-    loop {
-        workspace.put(&path, value.clone()).await.unwrap();
-    }
 }

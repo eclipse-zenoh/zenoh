@@ -16,9 +16,34 @@ use futures::prelude::*;
 use std::convert::TryInto;
 use zenoh::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let (config, selector) = parse_args();
+
+    println!("New zenoh...");
+    let zenoh = Zenoh::new(config.into()).await.unwrap();
+
+    println!("New workspace...");
+    let workspace = zenoh.workspace(None).await.unwrap();
+
+    println!("Get Data from {}'...\n", selector);
+    let mut data_stream = workspace.get(&selector.try_into().unwrap()).await.unwrap();
+    while let Some(data) = data_stream.next().await {
+        println!(
+            "  {} : {:?} (encoding: {} , timestamp: {})",
+            data.path,
+            data.value,
+            data.value.encoding_descr(),
+            data.timestamp
+        )
+    }
+
+    zenoh.close().await.unwrap();
+}
+
 fn parse_args() -> (Properties, String) {
     let args = App::new("zenoh get example")
         .arg(
@@ -47,32 +72,4 @@ fn parse_args() -> (Properties, String) {
     let selector = args.value_of("selector").unwrap().to_string();
 
     (config, selector)
-}
-
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
-    let (config, selector) = parse_args();
-
-    println!("New zenoh...");
-    let zenoh = Zenoh::new(config.into()).await.unwrap();
-
-    println!("New workspace...");
-    let workspace = zenoh.workspace(None).await.unwrap();
-
-    println!("Get Data from {}'...\n", selector);
-    let mut data_stream = workspace.get(&selector.try_into().unwrap()).await.unwrap();
-    while let Some(data) = data_stream.next().await {
-        println!(
-            "  {} : {:?} (encoding: {} , timestamp: {})",
-            data.path,
-            data.value,
-            data.value.encoding_descr(),
-            data.timestamp
-        )
-    }
-
-    zenoh.close().await.unwrap();
 }

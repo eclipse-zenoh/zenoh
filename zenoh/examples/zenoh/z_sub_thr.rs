@@ -19,38 +19,6 @@ use zenoh::*;
 
 const N: u64 = 100000;
 
-fn print_stats(start: Instant) {
-    let elapsed = start.elapsed().as_secs_f64();
-    let thpt = (N as f64) / elapsed;
-    println!("{} msg/s", thpt);
-}
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
-fn parse_args() -> Properties {
-    let args = App::new("zenoh throughput sub example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
-        )
-        .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
-        ))
-        .get_matches();
-
-    let mut config = Properties::default();
-    for key in ["mode", "peer", "listener"].iter() {
-        if let Some(value) = args.values_of(key) {
-            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
-        }
-    }
-    config
-}
-
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -89,4 +57,34 @@ async fn main() {
 
     subscriber.close().await.unwrap();
     zenoh.close().await.unwrap();
+}
+
+fn print_stats(start: Instant) {
+    let elapsed = start.elapsed().as_secs_f64();
+    let thpt = (N as f64) / elapsed;
+    println!("{} msg/s", thpt);
+}
+
+fn parse_args() -> Properties {
+    let args = App::new("zenoh throughput sub example")
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(Arg::from_usage(
+            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
+        ))
+        .get_matches();
+
+    let mut config = Properties::default();
+    for key in ["mode", "peer", "listener"].iter() {
+        if let Some(value) = args.values_of(key) {
+            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+        }
+    }
+    config
 }

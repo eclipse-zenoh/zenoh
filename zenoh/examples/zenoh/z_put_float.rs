@@ -15,6 +15,28 @@ use clap::{App, Arg};
 use std::convert::TryInto;
 use zenoh::*;
 
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let (config, path, value) = parse_args();
+
+    println!("New zenoh...");
+    let zenoh = Zenoh::new(config.into()).await.unwrap();
+
+    println!("New workspace...");
+    let workspace = zenoh.workspace(None).await.unwrap();
+
+    println!("Put Float ('{}': '{}')...\n", path, value);
+    workspace
+        .put(&path.try_into().unwrap(), value.into())
+        .await
+        .unwrap();
+
+    zenoh.close().await.unwrap();
+}
+
 //
 // Argument parsing -- look at the main for the zenoh-related code
 //
@@ -53,26 +75,4 @@ fn parse_args() -> (Properties, String, f64) {
     let value: f64 = args.value_of("value").unwrap().parse().unwrap();
 
     (config, path, value)
-}
-
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
-    let (config, path, value) = parse_args();
-
-    println!("New zenoh...");
-    let zenoh = Zenoh::new(config.into()).await.unwrap();
-
-    println!("New workspace...");
-    let workspace = zenoh.workspace(None).await.unwrap();
-
-    println!("Put Float ('{}': '{}')...\n", path, value);
-    workspace
-        .put(&path.try_into().unwrap(), value.into())
-        .await
-        .unwrap();
-
-    zenoh.close().await.unwrap();
 }

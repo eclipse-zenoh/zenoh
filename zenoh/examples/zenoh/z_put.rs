@@ -15,44 +15,6 @@ use clap::{App, Arg};
 use std::convert::TryInto;
 use zenoh::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
-fn parse_args() -> (Properties, String, String) {
-    let args = App::new("zenoh put example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
-        )
-        .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
-        ))
-        .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
-                .default_value("/demo/example/zenoh-rs-put"),
-        )
-        .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to put.'")
-                .default_value("Put from Rust!"),
-        )
-        .get_matches();
-
-    let mut config = Properties::default();
-    for key in ["mode", "peer", "listener"].iter() {
-        if let Some(value) = args.values_of(key) {
-            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
-        }
-    }
-    let path = args.value_of("path").unwrap().to_string();
-    let value = args.value_of("value").unwrap().to_string();
-
-    (config, path, value)
-}
-
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -109,4 +71,39 @@ async fn main() {
     //     }).await.unwrap();
 
     zenoh.close().await.unwrap();
+}
+
+fn parse_args() -> (Properties, String, String) {
+    let args = App::new("zenoh put example")
+        .arg(
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+                .possible_values(&["peer", "client"])
+                .default_value("peer"),
+        )
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(Arg::from_usage(
+            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
+        ))
+        .arg(
+            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
+                .default_value("/demo/example/zenoh-rs-put"),
+        )
+        .arg(
+            Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to put.'")
+                .default_value("Put from Rust!"),
+        )
+        .get_matches();
+
+    let mut config = Properties::default();
+    for key in ["mode", "peer", "listener"].iter() {
+        if let Some(value) = args.values_of(key) {
+            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+        }
+    }
+    let path = args.value_of("path").unwrap().to_string();
+    let value = args.value_of("value").unwrap().to_string();
+
+    (config, path, value)
 }

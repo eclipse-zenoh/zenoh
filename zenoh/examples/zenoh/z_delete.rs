@@ -15,9 +15,25 @@ use clap::{App, Arg};
 use std::convert::TryInto;
 use zenoh::*;
 
-//
-// Argument parsing -- look at the main for the zenoh-related code
-//
+#[async_std::main]
+async fn main() {
+    // initiate logging
+    env_logger::init();
+
+    let (config, path) = parse_args();
+
+    println!("New zenoh...");
+    let zenoh = Zenoh::new(config.into()).await.unwrap();
+
+    println!("New workspace...");
+    let workspace = zenoh.workspace(None).await.unwrap();
+
+    println!("Delete Path '{}'...\n", path);
+    workspace.delete(&path.try_into().unwrap()).await.unwrap();
+
+    zenoh.close().await.unwrap();
+}
+
 fn parse_args() -> (Properties, String) {
     let args = App::new("zenoh delete example")
         .arg(
@@ -46,23 +62,4 @@ fn parse_args() -> (Properties, String) {
     let path = args.value_of("path").unwrap().to_string();
 
     (config, path)
-}
-
-#[async_std::main]
-async fn main() {
-    // initiate logging
-    env_logger::init();
-
-    let (config, path) = parse_args();
-
-    println!("New zenoh...");
-    let zenoh = Zenoh::new(config.into()).await.unwrap();
-
-    println!("New workspace...");
-    let workspace = zenoh.workspace(None).await.unwrap();
-
-    println!("Delete Path '{}'...\n", path);
-    workspace.delete(&path.try_into().unwrap()).await.unwrap();
-
-    zenoh.close().await.unwrap();
 }
