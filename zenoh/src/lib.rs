@@ -184,7 +184,6 @@ impl Zenoh {
 
     /// Returns the zenoh-net [Session](net::Session) used by this zenoh session.
     /// This is for advanced use cases requiring fine usage of the zenoh-net API.
-    #[doc(hidden)]
     pub fn session(&self) -> &Session {
         &self.session
     }

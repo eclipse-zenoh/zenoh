@@ -74,7 +74,8 @@ impl Workspace<'_> {
         &self.prefix
     }
 
-    #[doc(hidden)]
+    /// Returns the zenoh-net [Session](net::Session) used by this workspace.
+    /// This is for advanced use cases requiring fine usage of the zenoh-net API.
     pub fn session(&self) -> &Session {
         &self.zenoh.session
     }
