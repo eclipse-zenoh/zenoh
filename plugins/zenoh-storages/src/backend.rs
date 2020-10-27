@@ -178,16 +178,6 @@ async fn start_storage(
     task::spawn(async move {
         let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
 
-        // admin_path is "/@/.../storage/<stid>"
-        // answer to GET on 'admin_path'
-        let mut storage_admin = match workspace.register_eval(&PathExpr::from(&admin_path)).await {
-            Ok(storages_admin) => storages_admin,
-            Err(e) => {
-                error!("Error starting storage {} : {}", admin_path, e);
-                return;
-            }
-        };
-
         // subscribe on path_expr
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
@@ -239,6 +229,16 @@ async fn start_storage(
                 );
             }
         }
+
+        // admin_path is "/@/.../storage/<stid>"
+        // answer to GET on 'admin_path'
+        let mut storage_admin = match workspace.register_eval(&PathExpr::from(&admin_path)).await {
+            Ok(storages_admin) => storages_admin,
+            Err(e) => {
+                error!("Error starting storage {} : {}", admin_path, e);
+                return;
+            }
+        };
 
         // answer to queries on path_expr
         let mut storage_queryable = match workspace
