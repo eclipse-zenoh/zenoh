@@ -20,6 +20,7 @@ use zenoh_router::runtime::{config, AdminSpace, Runtime, RuntimeProperties};
 use zenoh_util::collections::Properties;
 
 const GIT_VERSION: &str = git_version!(prefix = "v");
+const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
 
 fn get_plugins_from_args() -> Vec<String> {
     let mut result: Vec<String> = vec![];
@@ -52,7 +53,7 @@ fn main() {
             'A locator on which this router will listen for incoming sessions. \
             Repeat this option to open several listeners.'",
                 )
-                .default_value("tcp/0.0.0.0:7447"),
+                .default_value(DEFAULT_LISTENER),
             )
             .arg(Arg::from_usage(
                 "-e, --peer=[LOCATOR]... \
@@ -118,6 +119,9 @@ fn main() {
             .collect::<Vec<&str>>()
             .join(",");
         if let Some(val) = config.get(&config::ZN_LISTENER_KEY) {
+            if listener == DEFAULT_LISTENER {
+                listener.clear();
+            }
             listener.push(',');
             listener.push_str(val);
         }
