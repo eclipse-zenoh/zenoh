@@ -336,14 +336,14 @@ pub async fn declare_resource(
     prefixid: ZInt,
     suffix: &str,
 ) {
-    match face.remote_mappings.get(&rid) {
-        Some(_res) => {
-            // if _res.read().name() != rname {
-            //     // TODO : mapping change
-            // }
-        }
-        None => match tables.get_mapping(&face, &prefixid).cloned() {
-            Some(mut prefix) => unsafe {
+    match tables.get_mapping(&face, &prefixid).cloned() {
+        Some(mut prefix) => match face.remote_mappings.get(&rid) {
+            Some(res) => {
+                if res.name() != format!("{}{}", prefix.name(), suffix) {
+                    log::error!("Resource {} remapped. Remapping unsupported!", rid);
+                }
+            }
+            None => unsafe {
                 let mut res = Resource::make_resource(&mut prefix, suffix);
                 Resource::match_resource(&tables.root_res, &mut res);
                 let mut ctx = Arc::get_mut_unchecked(&mut res)
@@ -379,8 +379,8 @@ pub async fn declare_resource(
                     .insert(rid, res.clone());
                 Tables::build_matches_direct_tables(&mut res);
             },
-            None => log::error!("Declare resource with unknown prefix {}!", prefixid),
         },
+        None => log::error!("Declare resource with unknown prefix {}!", prefixid),
     }
 }
 
