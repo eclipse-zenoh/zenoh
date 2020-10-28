@@ -20,4 +20,7 @@ pub mod ffi;
 pub mod net;
 pub mod sync;
 
+mod lib_loader;
+pub use lib_loader::*;
+
 pub use crate::core::macros::*;

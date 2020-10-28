@@ -84,7 +84,7 @@ fn main() {
         let mut plugins_mgr = PluginsMgr::new();
         // Get specified plugins from command line
         let plugins = get_plugins_from_args();
-        plugins_mgr.load_plugins(plugins);
+        plugins_mgr.load_plugins(plugins).unwrap();
         if !std::env::args().any(|arg| arg == "--plugin-nolookup") {
             plugins_mgr.search_and_load_plugins().await;
         }
