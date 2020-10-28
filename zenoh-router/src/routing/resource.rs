@@ -269,43 +269,46 @@ impl Resource {
         get_best_key_(prefix, suffix, sid, true)
     }
 
-    pub fn get_matches_from(rname: &str, from: &Arc<Resource>) -> Vec<Weak<Resource>> {
-        let mut matches = Vec::new();
-        if from.parent.is_none() {
-            for child in from.childs.values() {
-                matches.append(&mut Resource::get_matches_from(rname, child));
-            }
-            return matches;
-        }
-        if rname.is_empty() {
-            if from.suffix == "/**" || from.suffix == "/" {
-                matches.push(Arc::downgrade(from));
+    pub fn get_matches(tables: &Tables, rname: &str) -> Vec<Weak<Resource>> {
+        fn get_matches_from(rname: &str, from: &Arc<Resource>) -> Vec<Weak<Resource>> {
+            let mut matches = Vec::new();
+            if from.parent.is_none() {
                 for child in from.childs.values() {
-                    matches.append(&mut Resource::get_matches_from(rname, child));
+                    matches.append(&mut get_matches_from(rname, child));
+                }
+                return matches;
+            }
+            if rname.is_empty() {
+                if from.suffix == "/**" || from.suffix == "/" {
+                    matches.push(Arc::downgrade(from));
+                    for child in from.childs.values() {
+                        matches.append(&mut get_matches_from(rname, child));
+                    }
+                }
+                return matches;
+            }
+            let (chunk, rest) = Resource::fst_chunk(rname);
+            if intersect(chunk, &from.suffix) {
+                if rest.is_empty() || rest == "/" || rest == "/**" {
+                    matches.push(Arc::downgrade(from));
+                } else if chunk == "/**" || from.suffix == "/**" {
+                    matches.append(&mut get_matches_from(rest, from));
+                }
+                for child in from.childs.values() {
+                    matches.append(&mut get_matches_from(rest, child));
+                    if chunk == "/**" || from.suffix == "/**" {
+                        matches.append(&mut get_matches_from(rname, child));
+                    }
                 }
             }
-            return matches;
-        }
-        let (chunk, rest) = Resource::fst_chunk(rname);
-        if intersect(chunk, &from.suffix) {
-            if rest.is_empty() || rest == "/" || rest == "/**" {
-                matches.push(Arc::downgrade(from));
-            } else if chunk == "/**" || from.suffix == "/**" {
-                matches.append(&mut Resource::get_matches_from(rest, from));
-            }
-            for child in from.childs.values() {
-                matches.append(&mut Resource::get_matches_from(rest, child));
-                if chunk == "/**" || from.suffix == "/**" {
-                    matches.append(&mut Resource::get_matches_from(rname, child));
-                }
-            }
-        }
-        matches
+            matches
+        };
+        get_matches_from(rname, &tables.root_res)
     }
 
-    pub fn match_resource(from: &Arc<Resource>, res: &mut Arc<Resource>) {
+    pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
         unsafe {
-            let mut matches = Resource::get_matches_from(&res.name(), from);
+            let mut matches = Resource::get_matches(tables, &res.name());
 
             fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
                 for match_ in matches {
@@ -345,7 +348,7 @@ pub async fn declare_resource(
             }
             None => unsafe {
                 let mut res = Resource::make_resource(&mut prefix, suffix);
-                Resource::match_resource(&tables.root_res, &mut res);
+                Resource::match_resource(&tables, &mut res);
                 let mut ctx = Arc::get_mut_unchecked(&mut res)
                     .contexts
                     .entry(face.id)

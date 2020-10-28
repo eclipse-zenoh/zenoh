@@ -44,7 +44,7 @@ pub(crate) async fn declare_queryable(
     match prefix {
         Some(mut prefix) => unsafe {
             let mut res = Resource::make_resource(&mut prefix, suffix);
-            Resource::match_resource(&tables.root_res, &mut res);
+            Resource::match_resource(&tables, &mut res);
             {
                 log::debug!("Register quaryable {} for face {}", res.name(), face.id);
                 match Arc::get_mut_unchecked(&mut res).contexts.get_mut(&face.id) {
@@ -192,7 +192,7 @@ async fn route_query_to_map(
             });
             let mut faces = HashMap::new();
             for res in
-                Resource::get_matches_from(&[&prefix.name(), suffix].concat(), &tables.root_res)
+                Resource::get_matches(&tables, &[&prefix.name(), suffix].concat())
             {
                 unsafe {
                     let mut res = res.upgrade().unwrap();

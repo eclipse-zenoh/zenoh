@@ -140,7 +140,7 @@ fn match_test() {
         }
 
         for rname1 in rnames.iter() {
-            let res_matches = Tables::get_matches(&tables, rname1).await;
+            let res_matches = Resource::get_matches(&(*tables.read().await), rname1);
             let matches: Vec<String> = res_matches
                 .iter()
                 .map(|m| m.upgrade().unwrap().name())

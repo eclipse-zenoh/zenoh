@@ -38,7 +38,7 @@ pub async fn declare_subscription(
         Some(mut prefix) => unsafe {
             // Register subscription
             let mut res = Resource::make_resource(&mut prefix, suffix);
-            Resource::match_resource(&tables.root_res, &mut res);
+            Resource::match_resource(&tables, &mut res);
             {
                 let res = Arc::get_mut_unchecked(&mut res);
                 log::debug!("Register subscription {} for face {}", res.name(), face.id);
@@ -213,7 +213,7 @@ pub async fn route_data_to_map(
                 None => {
                     let mut faces = HashMap::new();
                     let resname = [&prefix.name(), suffix].concat();
-                    for mres in Resource::get_matches_from(&resname, &tables.root_res) {
+                    for mres in Resource::get_matches(&tables, &resname) {
                         let mut mres = mres.upgrade().unwrap();
                         let mres = Arc::get_mut_unchecked(&mut mres);
                         for (sid, mut context) in &mut mres.contexts {

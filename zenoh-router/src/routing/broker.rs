@@ -316,9 +316,4 @@ impl Tables {
             }
         }
     }
-
-    pub async fn get_matches(tables: &Arc<RwLock<Tables>>, rname: &str) -> Vec<Weak<Resource>> {
-        let t = tables.read().await;
-        Resource::get_matches_from(rname, &t.root_res)
-    }
 }
