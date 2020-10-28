@@ -106,7 +106,7 @@ pub(crate) async fn declare_queryable(
                                         .await;
                                 }
                             } else {
-                                let rid = face.get_next_local_id();
+                                let rid = someface.get_next_local_id();
                                 Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.insert(
                                     *id,
                                     Arc::new(Context {
