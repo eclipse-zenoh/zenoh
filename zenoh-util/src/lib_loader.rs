@@ -88,11 +88,13 @@ impl LibLoader {
                 descr: format!("Library file '{}' is not a file", path.display())
             })
         } else {
-            Library::new(path.clone()).map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: e.to_string()
+            Library::new(path.clone())
+                .map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: e.to_string()
+                    })
                 })
-            }).map(|lib| (lib, path))
+                .map(|lib| (lib, path))
         }
     }
 
@@ -151,19 +153,19 @@ impl LibLoader {
 
     fn str_to_canonical_path(s: &str) -> ZResult<PathBuf> {
         shellexpand::full(s)
+            .map_err(|err| {
+                zerror2!(ZErrorKind::Other {
+                    descr: err.to_string()
+                })
+            })
+            .and_then(|cow_str| {
+                PathBuf::from(cow_str.into_owned())
+                    .canonicalize()
                     .map_err(|err| {
                         zerror2!(ZErrorKind::Other {
                             descr: err.to_string()
                         })
                     })
-                    .and_then(|cow_str| {
-                        PathBuf::from(cow_str.into_owned())
-                            .canonicalize()
-                            .map_err(|err| {
-                                zerror2!(ZErrorKind::Other {
-                                    descr: err.to_string()
-                                })
-                            })
-                    })
+            })
     }
 }
