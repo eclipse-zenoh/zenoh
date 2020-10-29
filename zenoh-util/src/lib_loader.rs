@@ -39,13 +39,11 @@ impl LibLoader {
         let mut search_paths: Vec<PathBuf> = vec![];
         for s in search_dirs {
             match shellexpand::full(s) {
-                Ok(cow_str) => {
-                    match PathBuf::from(&*cow_str).canonicalize() {
-                        Ok(path) => search_paths.push(path),
-                        Err(err) => debug!("Cannot search for libraries in {}: {}", cow_str, err)
-                    }
+                Ok(cow_str) => match PathBuf::from(&*cow_str).canonicalize() {
+                    Ok(path) => search_paths.push(path),
+                    Err(err) => debug!("Cannot search for libraries in {}: {}", cow_str, err),
                 },
-                Err(err) => warn!("Cannot search for libraries in '{}': {} ", s, err)
+                Err(err) => warn!("Cannot search for libraries in '{}': {} ", s, err),
             }
         }
 
