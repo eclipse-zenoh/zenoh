@@ -37,6 +37,9 @@ rand = "0.7.3"
 hex = "0.4.2"
 humantime = "2.0"
 clap = "2"
+libloading = "0.6.3"
+shellexpand = "2.0.0"
+home = "0.5.3"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
