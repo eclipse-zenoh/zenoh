@@ -191,9 +191,7 @@ async fn route_query_to_map(
                 src_qid: qid,
             });
             let mut faces = HashMap::new();
-            for res in
-                Resource::get_matches(&tables, &[&prefix.name(), suffix].concat())
-            {
+            for res in Resource::get_matches(&tables, &[&prefix.name(), suffix].concat()) {
                 unsafe {
                     let mut res = res.upgrade().unwrap();
                     for (sid, context) in &mut Arc::get_mut_unchecked(&mut res).contexts {

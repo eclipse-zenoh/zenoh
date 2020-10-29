@@ -108,3 +108,14 @@ DEFINE_INTERSECT!(res_intersect, end, wild, next, chunk_intersect);
 pub fn intersect(s1: &str, s2: &str) -> bool {
     res_intersect(s1, s2)
 }
+
+pub const ADMIN_PREFIX: &str = "/@/";
+
+#[inline(always)]
+pub fn matches(s1: &str, s2: &str) -> bool {
+    if s1.starts_with(ADMIN_PREFIX) == s2.starts_with(ADMIN_PREFIX) {
+        intersect(s1, s2)
+    } else {
+        false
+    }
+}

@@ -338,12 +338,12 @@ impl Session {
         let resname = state.localkey_to_resname(resource)?;
         let mut res = Resource::new(resname.clone());
         for sub in state.subscribers.values() {
-            if rname::intersect(&resname, &sub.resname) {
+            if rname::matches(&resname, &sub.resname) {
                 res.subscribers.push(sub.clone());
             }
         }
         for cb_sub in state.callback_subscribers.values() {
-            if rname::intersect(&resname, &cb_sub.resname) {
+            if rname::matches(&resname, &cb_sub.resname) {
                 res.callback_subscribers.push(cb_sub.clone());
             }
         }
@@ -489,12 +489,12 @@ impl Session {
         });
         state.subscribers.insert(id, sub_state.clone());
         for res in state.local_resources.values_mut() {
-            if rname::intersect(&resname, &res.name) {
+            if rname::matches(&resname, &res.name) {
                 res.subscribers.push(sub_state.clone());
             }
         }
         for res in state.remote_resources.values_mut() {
-            if rname::intersect(&resname, &res.name) {
+            if rname::matches(&resname, &res.name) {
                 res.subscribers.push(sub_state.clone());
             }
         }
@@ -587,12 +587,12 @@ impl Session {
         });
         state.callback_subscribers.insert(id, sub_state.clone());
         for res in state.local_resources.values_mut() {
-            if rname::intersect(&resname, &res.name) {
+            if rname::matches(&resname, &res.name) {
                 res.callback_subscribers.push(sub_state.clone());
             }
         }
         for res in state.remote_resources.values_mut() {
-            if rname::intersect(&resname, &res.name) {
+            if rname::matches(&resname, &res.name) {
                 res.callback_subscribers.push(sub_state.clone());
             }
         }
@@ -842,7 +842,7 @@ impl Session {
                     Ok(resname) => {
                         // Call matching callback_subscribers
                         for sub in state.callback_subscribers.values() {
-                            if rname::intersect(&sub.resname, &resname) {
+                            if rname::matches(&sub.resname, &resname) {
                                 let handler = &mut *sub.dhandler.write().await;
                                 handler(Sample {
                                     res_name: resname.clone(),
@@ -855,7 +855,7 @@ impl Session {
                         let subs = state
                             .subscribers
                             .values()
-                            .filter(|sub| rname::intersect(&sub.resname, &resname))
+                            .filter(|sub| rname::matches(&sub.resname, &resname))
                             .map(|sub| sub.sender.clone())
                             .collect::<Vec<Sender<Sample>>>();
                         (resname, subs)
@@ -984,7 +984,7 @@ impl Session {
                         .filter(
                             |queryable| match state.localkey_to_resname(&queryable.reskey) {
                                 Ok(qablname) => {
-                                    rname::intersect(&qablname, &resname)
+                                    rname::matches(&qablname, &resname)
                                         && ((queryable.kind == queryable::ALL_KINDS
                                             || target.kind == queryable::ALL_KINDS)
                                             || (queryable.kind & target.kind != 0))
@@ -1063,12 +1063,12 @@ impl Primitives for Session {
             Ok(resname) => {
                 let mut res = Resource::new(resname.clone());
                 for sub in state.subscribers.values() {
-                    if rname::intersect(&resname, &sub.resname) {
+                    if rname::matches(&resname, &sub.resname) {
                         res.subscribers.push(sub.clone());
                     }
                 }
                 for cb_sub in state.callback_subscribers.values() {
-                    if rname::intersect(&resname, &cb_sub.resname) {
+                    if rname::matches(&resname, &cb_sub.resname) {
                         res.callback_subscribers.push(cb_sub.clone());
                     }
                 }

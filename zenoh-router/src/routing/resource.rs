@@ -15,7 +15,7 @@ use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
 use async_std::sync::{Arc, Weak};
 use std::collections::HashMap;
-use zenoh_protocol::core::rname::intersect;
+use zenoh_protocol::core::rname;
 use zenoh_protocol::core::{SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
@@ -270,40 +270,52 @@ impl Resource {
     }
 
     pub fn get_matches(tables: &Tables, rname: &str) -> Vec<Weak<Resource>> {
-        fn get_matches_from(rname: &str, from: &Arc<Resource>) -> Vec<Weak<Resource>> {
+        fn get_matches_from(
+            rname: &str,
+            is_admin: bool,
+            from: &Arc<Resource>,
+        ) -> Vec<Weak<Resource>> {
             let mut matches = Vec::new();
             if from.parent.is_none() {
                 for child in from.childs.values() {
-                    matches.append(&mut get_matches_from(rname, child));
+                    matches.append(&mut get_matches_from(rname, is_admin, child));
                 }
                 return matches;
             }
             if rname.is_empty() {
                 if from.suffix == "/**" || from.suffix == "/" {
-                    matches.push(Arc::downgrade(from));
+                    if is_admin == from.name().starts_with(rname::ADMIN_PREFIX) {
+                        matches.push(Arc::downgrade(from));
+                    }
                     for child in from.childs.values() {
-                        matches.append(&mut get_matches_from(rname, child));
+                        matches.append(&mut get_matches_from(rname, is_admin, child));
                     }
                 }
                 return matches;
             }
             let (chunk, rest) = Resource::fst_chunk(rname);
-            if intersect(chunk, &from.suffix) {
+            if rname::intersect(chunk, &from.suffix) {
                 if rest.is_empty() || rest == "/" || rest == "/**" {
-                    matches.push(Arc::downgrade(from));
+                    if is_admin == from.name().starts_with(rname::ADMIN_PREFIX) {
+                        matches.push(Arc::downgrade(from));
+                    }
                 } else if chunk == "/**" || from.suffix == "/**" {
-                    matches.append(&mut get_matches_from(rest, from));
+                    matches.append(&mut get_matches_from(rest, is_admin, from));
                 }
                 for child in from.childs.values() {
-                    matches.append(&mut get_matches_from(rest, child));
+                    matches.append(&mut get_matches_from(rest, is_admin, child));
                     if chunk == "/**" || from.suffix == "/**" {
-                        matches.append(&mut get_matches_from(rname, child));
+                        matches.append(&mut get_matches_from(rname, is_admin, child));
                     }
                 }
             }
             matches
         };
-        get_matches_from(rname, &tables.root_res)
+        get_matches_from(
+            rname,
+            rname.starts_with(rname::ADMIN_PREFIX),
+            &tables.root_res,
+        )
     }
 
     pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
