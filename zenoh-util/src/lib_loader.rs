@@ -36,26 +36,18 @@ impl LibLoader {
     /// If `exe_parent_dir`is true, the parent directory of the current executable is also added
     /// to the set of paths for search.
     pub fn new(search_dirs: &[&str], exe_parent_dir: bool) -> ZResult<LibLoader> {
-        let mut search_paths: Vec<PathBuf> = search_dirs
-            .iter()
-            .map(|s| {
-                shellexpand::full(&s)
-                    .map_err(|err| {
-                        zerror2!(ZErrorKind::Other {
-                            descr: err.to_string()
-                        })
-                    })
-                    .and_then(|cow_str| {
-                        PathBuf::from(cow_str.into_owned())
-                            .canonicalize()
-                            .map_err(|err| {
-                                zerror2!(ZErrorKind::Other {
-                                    descr: err.to_string()
-                                })
-                            })
-                    })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut search_paths: Vec<PathBuf> = vec![];
+        for s in search_dirs {
+            match shellexpand::full(s) {
+                Ok(cow_str) => {
+                    match PathBuf::from(&*cow_str).canonicalize() {
+                        Ok(path) => search_paths.push(path),
+                        Err(err) => debug!("Cannot search for libraries in {}: {}", cow_str, err)
+                    }
+                },
+                Err(err) => warn!("Cannot search for libraries in '{}': {} ", s, err)
+            }
+        }
 
         if exe_parent_dir {
             match std::env::args().next() {
