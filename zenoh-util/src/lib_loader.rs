@@ -52,7 +52,9 @@ impl LibLoader {
         if exe_parent_dir {
             match std::env::args().next() {
                 Some(path) => match Path::new(&path).parent() {
-                    Some(p) => search_paths.push(p.canonicalize().unwrap()),
+                    Some(p) => if p.is_dir() {
+                        search_paths.push(p.canonicalize().unwrap())
+                    },
                     None => warn!("This executable ({}) has no parent !!. Can't search plugins in its parent directory.", path),
                 },
                 None => warn!("This executable name was not found in args. Can't find it's parent to search plugins."),
