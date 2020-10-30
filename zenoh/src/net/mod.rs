@@ -97,7 +97,7 @@ pub mod utils {
     }
 }
 
-const GIT_VERSION: &str = git_version!(prefix = "v");
+const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
 /// Scout for routers and/or peers.
 ///

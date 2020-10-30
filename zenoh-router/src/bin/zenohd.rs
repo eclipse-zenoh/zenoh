@@ -19,7 +19,7 @@ use zenoh_router::plugins::PluginsMgr;
 use zenoh_router::runtime::{config, AdminSpace, Runtime, RuntimeProperties};
 use zenoh_util::collections::Properties;
 
-const GIT_VERSION: &str = git_version!(prefix = "v");
+const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
 
 fn get_plugins_from_args() -> Vec<String> {
