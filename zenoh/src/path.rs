@@ -72,6 +72,15 @@ impl Path {
         !self.p.starts_with('/')
     }
 
+    /// Returns the last segment of this Path.  
+    /// I.e.: the part after the last '/', or the complete Path if there is no '/'.
+    pub fn last_segment(&self) -> &str {
+        match self.p.rfind('/') {
+            Some(i) => &self.p[i + 1..],
+            None => self.p.as_str(),
+        }
+    }
+
     /// Returns the concatenation of `prefix` with this Path.
     pub fn with_prefix(&self, prefix: &Path) -> Self {
         if self.is_relative() {
