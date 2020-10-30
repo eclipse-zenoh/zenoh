@@ -30,8 +30,7 @@ pub struct PluginsMgr {
 
 impl PluginsMgr {
     pub fn new() -> PluginsMgr {
-        let lib_loader =
-            LibLoader::new(&["/usr/local/lib", "/usr/lib", "~/.zenoh/lib", "."], true).unwrap();
+        let lib_loader = LibLoader::default();
 
         PluginsMgr {
             lib_loader,

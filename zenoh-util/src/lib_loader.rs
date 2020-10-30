@@ -14,8 +14,10 @@
 use crate::core::{ZError, ZErrorKind, ZResult};
 use crate::{zconfigurable, zerror, zerror2};
 use libloading::Library;
-use log::{debug, trace, warn};
+use log::{debug, warn};
 use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
+use std::ffi::OsString;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 zconfigurable! {
@@ -35,7 +37,7 @@ impl LibLoader {
     /// Creates a new [LibLoader] with a set of paths where the libraries will be searched for.
     /// If `exe_parent_dir`is true, the parent directory of the current executable is also added
     /// to the set of paths for search.
-    pub fn new(search_dirs: &[&str], exe_parent_dir: bool) -> ZResult<LibLoader> {
+    pub fn new(search_dirs: &[&str], exe_parent_dir: bool) -> LibLoader {
         let mut search_paths: Vec<PathBuf> = vec![];
         for s in search_dirs {
             match shellexpand::full(s) {
@@ -57,7 +59,7 @@ impl LibLoader {
             }
         }
 
-        Ok(LibLoader { search_paths })
+        LibLoader { search_paths }
     }
 
     /// Return the list of search paths used by this [LibLoader]
@@ -88,6 +90,47 @@ impl LibLoader {
         }
     }
 
+    /// Search for library with filename: [struct@LIB_PREFIX]+`name`+[struct@LIB_SUFFIX] and load it.
+    /// The result is a tuple with:
+    ///    * the [Library]
+    ///    * its full path
+    pub fn search_and_load(&self, name: &str) -> ZResult<(Library, PathBuf)> {
+        let filename = format!("{}{}{}", *LIB_PREFIX, name, *LIB_SUFFIX);
+        let filename_ostr = OsString::from(&filename);
+        log::debug!(
+            "Search for library {} to load in {:?}",
+            filename,
+            self.search_paths
+        );
+        for dir in &self.search_paths {
+            match dir.read_dir() {
+                Ok(read_dir) => {
+                    for entry in read_dir {
+                        if let Ok(entry) = entry {
+                            if entry.file_name() == filename_ostr {
+                                let path = entry.path();
+                                return Library::new(path.clone())
+                                    .map_err(|e| {
+                                        zerror2!(ZErrorKind::Other {
+                                            descr: e.to_string()
+                                        })
+                                    })
+                                    .map(|lib| (lib, path));
+                            }
+                        }
+                    }
+                }
+                Err(err) => debug!(
+                    "Failed to read in directory {:?} ({}). Can't use it to search for libraries.",
+                    dir, err
+                ),
+            }
+        }
+        zerror!(ZErrorKind::Other {
+            descr: format!("Library file '{}' not found", filename)
+        })
+    }
+
     /// Search and load all librairies with filename starting with [struct@LIB_PREFIX]+`prefix` and ending with [struct@LIB_SUFFIX].
     /// The result is a list of tuple with:
     ///    * the [Library]
@@ -104,7 +147,6 @@ impl LibLoader {
 
         let mut result = vec![];
         for dir in &self.search_paths {
-            trace!("Search plugins in dir {:?} ", dir);
             match dir.read_dir() {
                 Ok(read_dir) => {
                     for entry in read_dir {
@@ -149,13 +191,19 @@ impl LibLoader {
                 })
             })
             .and_then(|cow_str| {
-                PathBuf::from(cow_str.into_owned())
+                PathBuf::from(cow_str.deref())
                     .canonicalize()
                     .map_err(|err| {
                         zerror2!(ZErrorKind::Other {
-                            descr: err.to_string()
+                            descr: format!("{}: {}", cow_str, err)
                         })
                     })
             })
+    }
+}
+
+impl Default for LibLoader {
+    fn default() -> Self {
+        LibLoader::new(&["/usr/local/lib", "/usr/lib", "~/.zenoh/lib", "."], true)
     }
 }
