@@ -173,9 +173,9 @@ pipeline {
       steps {
         sh '''
         if [ "${PUBLISH_CRATES_IO}" = "true" ]; then
-          cd zenoh-util && cargo publish && cd -
-          cd zenoh-protocol && cargo publish && cd -
-          cd zenoh-router && cargo publish && cd -
+          cd zenoh-util && cargo publish && cd - && sleep 30
+          cd zenoh-protocol && cargo publish && cd - && sleep 30
+          cd zenoh-router && cargo publish && cd - && sleep 30
           cd zenoh && cargo publish && cd -
         else
           echo "Publication to crates.io skipped"
