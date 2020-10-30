@@ -40,6 +40,7 @@ fn get_plugins_from_args() -> Vec<String> {
 fn main() {
     task::block_on(async {
         env_logger::init();
+        log::debug!("zenohd {}", GIT_VERSION);
 
         let app = App::new("The zenoh router")
             .version(GIT_VERSION)
