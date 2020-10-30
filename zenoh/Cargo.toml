@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh"
-version = "0.5.0-beta.3"
+version = "0.5.0-beta.4"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -42,9 +42,9 @@ lazy_static = "1.4.0"
 serde_json = "1.0"
 hex = "0.4.2"
 git-version = "0.3.4"
-zenoh-protocol = { version = "0.5.0-beta.3", path = "../zenoh-protocol" }
-zenoh-router = { version = "0.5.0-beta.3", path = "../zenoh-router" }
-zenoh-util = { version = "0.5.0-beta.3", path = "../zenoh-util" }
+zenoh-protocol = { version = "0.5.0-beta.4", path = "../zenoh-protocol" }
+zenoh-router = { version = "0.5.0-beta.4", path = "../zenoh-router" }
+zenoh-util = { version = "0.5.0-beta.4", path = "../zenoh-util" }
 
 [dependencies.async-std]
 version = "=1.6.5"
