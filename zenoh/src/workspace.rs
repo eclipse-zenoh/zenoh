@@ -64,6 +64,8 @@ pub struct Workspace<'a> {
     prefix: Option<Path>,
 }
 
+const LOCAL_ROUTER_PREFIX: &str = "/@/router/local";
+
 impl Workspace<'_> {
     pub(crate) async fn new(zenoh: &Zenoh, prefix: Option<Path>) -> ZResult<Workspace<'_>> {
         Ok(Workspace { zenoh, prefix })
@@ -76,30 +78,42 @@ impl Workspace<'_> {
 
     /// Returns the zenoh-net [Session](net::Session) used by this workspace.
     /// This is for advanced use cases requiring fine usage of the zenoh-net API.
+    #[inline]
     pub fn session(&self) -> &Session {
         &self.zenoh.session
     }
 
-    fn path_to_reskey(&self, path: &Path) -> ResKey {
-        if path.is_relative() {
+    async fn canonicalize(&self, path: &str) -> ZResult<String> {
+        let abs_path = if path.starts_with('/') {
+            path.to_string()
+        } else {
             match &self.prefix {
-                Some(prefix) => ResKey::from(path.with_prefix(prefix)),
-                None => ResKey::from(format!("/{}", path)),
+                Some(prefix) => format!("{}/{}", prefix, path),
+                None => format!("/{}", path),
+            }
+        };
+        if abs_path.starts_with(LOCAL_ROUTER_PREFIX) {
+            match self.zenoh.router_pid().await {
+                Some(pid) => Ok(format!(
+                    "/@/router/{}{}",
+                    pid,
+                    abs_path.strip_prefix(LOCAL_ROUTER_PREFIX).unwrap()
+                )),
+                None => zerror!(ZErrorKind::Other {
+                    descr: "Not connected to a router; can't resolve '/@/router/local' path".into()
+                }),
             }
         } else {
-            ResKey::from(path)
+            Ok(abs_path)
         }
     }
 
-    fn pathexpr_to_reskey(&self, path: &PathExpr) -> ResKey {
-        if path.is_relative() {
-            match &self.prefix {
-                Some(prefix) => ResKey::from(path.with_prefix(prefix)),
-                None => ResKey::from(format!("/{}", path)),
-            }
-        } else {
-            ResKey::from(path)
-        }
+    async fn path_to_reskey(&self, path: &Path) -> ZResult<ResKey> {
+        self.canonicalize(path.as_str()).await.map(ResKey::from)
+    }
+
+    async fn pathexpr_to_reskey(&self, path: &PathExpr) -> ZResult<ResKey> {
+        self.canonicalize(path.as_str()).await.map(ResKey::from)
     }
 
     /// Put a [`Path`]/[`Value`] into zenoh.  
@@ -125,7 +139,7 @@ impl Workspace<'_> {
         let (encoding, payload) = value.encode();
         self.session()
             .write_ext(
-                &self.path_to_reskey(path),
+                &self.path_to_reskey(path).await?,
                 payload,
                 encoding,
                 data_kind::PUT,
@@ -155,7 +169,7 @@ impl Workspace<'_> {
         debug!("delete on {:?}", path);
         self.session()
             .write_ext(
-                &self.path_to_reskey(path),
+                &self.path_to_reskey(path).await?,
                 RBuf::empty(),
                 encoding::NONE,
                 data_kind::DELETE,
@@ -187,7 +201,7 @@ impl Workspace<'_> {
     /// ```
     pub async fn get(&self, selector: &Selector) -> ZResult<DataStream> {
         debug!("get on {}", selector);
-        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
+        let reskey = self.pathexpr_to_reskey(&selector.path_expr).await?;
         let decode_value = !selector.properties.contains_key("raw");
 
         self.session()
@@ -241,7 +255,7 @@ impl Workspace<'_> {
         }
         let decode_value = !selector.properties.contains_key("raw");
 
-        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
+        let reskey = self.pathexpr_to_reskey(&selector.path_expr).await?;
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
@@ -300,7 +314,7 @@ impl Workspace<'_> {
         }
         let decode_value = !selector.properties.contains_key("raw");
 
-        let reskey = self.pathexpr_to_reskey(&selector.path_expr);
+        let reskey = self.pathexpr_to_reskey(&selector.path_expr).await?;
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
@@ -350,7 +364,7 @@ impl Workspace<'_> {
     /// ```
     pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream<'_>> {
         debug!("eval on {}", path_expr);
-        let reskey = self.pathexpr_to_reskey(&path_expr);
+        let reskey = self.pathexpr_to_reskey(&path_expr).await?;
 
         self.session()
             .declare_queryable(&reskey, EVAL)

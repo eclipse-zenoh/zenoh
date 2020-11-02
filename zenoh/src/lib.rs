@@ -90,6 +90,7 @@ use log::debug;
 
 pub mod net;
 
+use net::info::ZN_INFO_ROUTER_PID_KEY;
 use net::Session;
 pub use net::{ZError, ZErrorKind, ZResult};
 use zenoh_router::runtime::Runtime;
@@ -184,8 +185,21 @@ impl Zenoh {
 
     /// Returns the zenoh-net [Session](net::Session) used by this zenoh session.
     /// This is for advanced use cases requiring fine usage of the zenoh-net API.
+    #[inline(always)]
     pub fn session(&self) -> &Session {
         &self.session
+    }
+
+    /// Returns the PeerId of the zenoh router this zenoh API is connected to (if any).  
+    /// This calls [Session::info()](net::Session::info) and returns the first router pid from
+    /// the ZN_INFO_ROUTER_PID_KEY property.
+    pub async fn router_pid(&self) -> Option<String> {
+        match self.session().info().await.remove(&ZN_INFO_ROUTER_PID_KEY) {
+            None => None,
+            Some(s) if s.is_empty() => None,
+            Some(s) if !s.contains(',') => Some(s),
+            Some(s) => Some(s.split(',').next().unwrap().to_string()),
+        }
     }
 
     /// Creates a [`Workspace`] with an optional [`Path`] as `prefix`.  
