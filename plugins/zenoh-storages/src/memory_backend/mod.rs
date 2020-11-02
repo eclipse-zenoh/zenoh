@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 use zenoh::net::utils::resource_name;
 use zenoh::net::Sample;
 use zenoh::{utils, ChangeKind, Properties, Timestamp, Value, ZResult};
-use zenoh_backend_core::{
+use zenoh_backend_traits::{
     Backend, IncomingDataInterceptor, OutgoingDataInterceptor, Query, Storage,
 };
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};

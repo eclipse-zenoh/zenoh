@@ -21,7 +21,7 @@ members = [
   "plugins/example-plugin",
   "plugins/zenoh-http",
   "plugins/zenoh-storages",
-  "backends/core",
+  "backends/traits",
 ]
 
 exclude = [

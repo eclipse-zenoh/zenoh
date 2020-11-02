@@ -18,6 +18,16 @@ use zenoh::{Properties, Value, ZResult};
 
 pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 
+/// Trait to be implemented by a Backend.  
+/// A library implementing the Backend and Storage traits must also declare such `create_backend()` operation
+/// as an entrypoint to be called for the Backend creation:
+/// ```rust
+/// #[no_mangle]
+/// pub fn create_backend(props: Properties) -> ZResult<Box<dyn Backend>> {
+///    let backend = ...
+///    Ok(Box::new(backend)
+/// }
+/// ```
 #[async_trait]
 pub trait Backend: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
