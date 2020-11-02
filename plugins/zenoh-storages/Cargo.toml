@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-storages"
-version = "0.5.0-beta.4"
+version = "0.5.0-beta.5"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -32,10 +32,10 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
-zenoh = { version = "0.5.0-beta.4", path = "../../zenoh" }
-zenoh-router = { version = "0.5.0-beta.4", path = "../../zenoh-router" }
-zenoh-util = { version = "0.5.0-beta.4", path = "../../zenoh-util" }
-zenoh_backend_core = { version = "0.5.0-beta.4", path = "../../backends/core" }
+zenoh = { version = "0.5.0-beta.5", path = "../../zenoh" }
+zenoh-router = { version = "0.5.0-beta.5", path = "../../zenoh-router" }
+zenoh-util = { version = "0.5.0-beta.5", path = "../../zenoh-util" }
+zenoh_backend_core = { version = "0.5.0-beta.5", path = "../../backends/core" }
 async-trait = "0.1"
 futures = "0.3.5"
 clap = "2"
