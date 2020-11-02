@@ -20,9 +20,7 @@ use std::time::{Duration, Instant};
 use zenoh::net::utils::resource_name;
 use zenoh::net::Sample;
 use zenoh::{utils, ChangeKind, Properties, Timestamp, Value, ZResult};
-use zenoh_backend_traits::{
-    Backend, IncomingDataInterceptor, OutgoingDataInterceptor, Query, Storage,
-};
+use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
 pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
@@ -271,15 +269,4 @@ impl Timed for TimedCleanup {
     async fn run(&mut self) {
         self.map.write().await.remove(&self.path);
     }
-}
-
-// generate a reception timestamp with id=0x00
-fn new_reception_timestamp() -> Timestamp {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    use zenoh::TimestampID;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(
-        now.into(),
-        TimestampID::new(1, [0u8; TimestampID::MAX_SIZE]),
-    )
 }
