@@ -146,7 +146,7 @@ pub mod zmsg {
     pub mod flag {
         pub const D: u8 = 1 << 5; // 0x20 Dropping     if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final        if F==1 then this is the final message (e.g., ReplyContext, Pull)
-        pub const I: u8 = 1 << 6; // 0x40 DtaInfo      if I==1 then DataInfo is present
+        pub const I: u8 = 1 << 6; // 0x40 DataInfo     if I==1 then DataInfo is present
         pub const K: u8 = 1 << 7; // 0x80 ResourceKey  if K==1 then only numerical ID
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples   if N==1 then the MaxSamples is indicated
         pub const R: u8 = 1 << 5; // 0x20 Reliable     if R==1 then it concerns the reliable channel, best-effort otherwise
