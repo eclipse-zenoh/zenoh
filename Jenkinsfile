@@ -9,6 +9,24 @@ pipeline {
     string(name: 'DOCKER_TAG',
            description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
            defaultValue: '')
+    booleanParam(name: 'BUILD_MACOSX',
+                 description: 'Build macosx target.',
+                 defaultValue: true)
+    booleanParam(name: 'BUILD_DOCKER',
+                 description: 'Build Docker image.',
+                 defaultValue: true)
+    booleanParam(name: 'BUILD_LINUX64',
+                 description: 'Build x86_64-unknown-linux-gnu target.',
+                 defaultValue: true)
+    booleanParam(name: 'BUILD_LINUX32',
+                 description: 'Build i686-unknown-linux-gnu target.',
+                 defaultValue: true)
+    booleanParam(name: 'BUILD_WIN64',
+                 description: 'Build x86_64-pc-windows-gnu target.',
+                 defaultValue: true)
+    booleanParam(name: 'BUILD_WIN32',
+                 description: 'Build i686-pc-windows-gnu target.',
+                 defaultValue: true)
     booleanParam(name: 'PUBLISH_ECLIPSE_DOWNLOAD',
                  description: 'Publish the resulting artifacts to Eclipse download.',
                  defaultValue: false)
@@ -52,6 +70,7 @@ pipeline {
 
     stage('[MacMini] Build and tests') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_MACOSX }}
       steps {
         sh '''
         cargo build --release --all-targets
@@ -62,6 +81,7 @@ pipeline {
 
     stage('[MacMini] MacOS Package') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_MACOSX }}
       steps {
         sh '''
         tar -czvf eclipse-zenoh-${LABEL}-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --strip-components 2 target/release/zenohd target/release/*.dylib
@@ -73,6 +93,7 @@ pipeline {
 
     stage('[MacMini] Docker build') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_DOCKER }}
       steps {
         sh '''
         RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --target=x86_64-unknown-linux-musl
@@ -86,6 +107,7 @@ pipeline {
 
     stage('[MacMini] x86_64-unknown-linux-gnu build') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_LINUX64 }}
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-x64-rust-nightly \
@@ -101,6 +123,7 @@ pipeline {
     }
     stage('[MacMini] x86_64-unknown-linux-gnu Package') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_LINUX64 }}
       steps {
         sh '''
         tar -czvf eclipse-zenoh-${LABEL}-x86_64-unknown-linux-gnu.tgz --strip-components 3 target/x86_64-unknown-linux-gnu/release/zenohd target/x86_64-unknown-linux-gnu/release/*.so
@@ -112,6 +135,7 @@ pipeline {
 
     stage('[MacMini] i686-unknown-linux-gnu build') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_LINUX32 }}
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-i686-rust-nightly \
@@ -127,6 +151,7 @@ pipeline {
     }
     stage('[MacMini] i686-unknown-linux-gnu Package') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_LINUX32 }}
       steps {
         sh '''
         tar -czvf eclipse-zenoh-${LABEL}-i686-unknown-linux-gnu.tgz --strip-components 3 target/i686-unknown-linux-gnu/release/zenohd target/i686-unknown-linux-gnu/release/*.so
@@ -138,6 +163,7 @@ pipeline {
 
     stage('[MacMini] x86_64-pc-windows-gnu build') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_WIN64 }}
       steps {
         sh '''
         cargo build --release --bins --lib --examples --target=x86_64-pc-windows-gnu
@@ -146,6 +172,7 @@ pipeline {
     }
     stage('[MacMini] x86_64-pc-windows-gnu Package') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_WIN64 }}
       steps {
         sh '''
         zip eclipse-zenoh-${LABEL}-x86_64-pc-windows-gnu.zip --junk-paths target/x86_64-pc-windows-gnu/release/zenohd.exe target/x86_64-pc-windows-gnu/release/*.dll
@@ -157,6 +184,7 @@ pipeline {
 
     stage('[MacMini] i686-pc-windows-gnu build') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_WIN32 }}
       steps {
         sh '''
         cargo build --release --bins --lib --examples --target=i686-pc-windows-gnu
@@ -165,6 +193,7 @@ pipeline {
     }
     stage('[MacMini] i686-pc-windows-gnu Package') {
       agent { label 'MacMini' }
+      when { expression { return params.BUILD_WIN32 }}
       steps {
         sh '''
         zip eclipse-zenoh-${LABEL}-i686-pc-windows-gnu.zip --junk-paths target/i686-pc-windows-gnu/release/zenohd.exe target/i686-pc-windows-gnu/release/*.dll
@@ -174,46 +203,90 @@ pipeline {
       }
     }
 
-    stage('[UbuntuVM] Publish to download.eclipse.org') {
+    stage('[UbuntuVM] Publish zenoh-macosx to download.eclipse.org') {
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && params.BUILD_MACOSX }}
       steps {
         deleteDir()
-        // Unstash packages built on MacMini to be deployed
         unstash 'zenoh-macosx'
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+          sh '''
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+            scp eclipse-zenoh-${LABEL}-*macosx*.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          '''
+        }
+      }
+    }
+
+    stage('[UbuntuVM] Publish zenoh-x86_64-unknown-linux-gnu to download.eclipse.org') {
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && params.BUILD_LINUX64 }}
+      steps {
+        deleteDir()
         unstash 'zenoh-x86_64-unknown-linux-gnu'
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+          sh '''
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+            scp eclipse-zenoh-${LABEL}-*x86_64-unknown-linux-gnu.tgz target/x86_64-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          '''
+        }
+      }
+    }
+
+    stage('[UbuntuVM] Publish zenoh-i686-unknown-linux-gnu to download.eclipse.org') {
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && params.BUILD_LINUX32 }}
+      steps {
+        deleteDir()
         unstash 'zenoh-i686-unknown-linux-gnu'
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+          sh '''
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+            scp eclipse-zenoh-${LABEL}-*i686-unknown-linux-gnu.tgz target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          '''
+        }
+      }
+    }
+
+    stage('[UbuntuVM] Publish zenoh-x86_64-pc-windows-gnu to download.eclipse.org') {
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && params.BUILD_WIN64 }}
+      steps {
+        deleteDir()
         unstash 'zenoh-x86_64-pc-windows-gnu'
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+          sh '''
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+            scp eclipse-zenoh-${LABEL}-*x86_64-pc-windows-gnu.zip genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          '''
+        }
+      }
+    }
+
+    stage('[UbuntuVM] Publish zenoh-i686-pc-windows-gnu to download.eclipse.org') {
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && params.BUILD_WIN32 }}
+      steps {
+        deleteDir()
         unstash 'zenoh-i686-pc-windows-gnu'
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          if [ "${PUBLISH_ECLIPSE_DOWNLOAD}" = "true" ]; then
             ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*.tgz eclipse-zenoh-${LABEL}-*.zip target/x86_64-unknown-linux-gnu/debian/*.deb target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
-          else
-            echo "Publication to download.eclipse.org skipped"
-          fi
+            scp eclipse-zenoh-${LABEL}-*i686-pc-windows-gnu.zip genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
           '''
         }
       }
     }
 
     stage('[UbuntuVM] Build Packages.gz for download.eclipse.org') {
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && (params.BUILD_LINUX64 || params.BUILD_LINUX32) }}
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          if [ "${PUBLISH_ECLIPSE_DOWNLOAD}" = "true" ]; then
-            mkdir packages
-            cd packages
-            scp genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/*.deb ./
-            dpkg-scanpackages --multiversion . > Packages
-            cat Packages
-            gzip -c9 < Packages > Packages.gz
-            scp Packages.gz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
-            cd -
-            rm -rf packages 
-          else
-            echo "Build of Packages.gz for download.eclipse.org skipped"
-          fi
+          mkdir packages
+          cd packages
+          scp genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/*.deb ./
+          dpkg-scanpackages --multiversion . > Packages
+          cat Packages
+          gzip -c9 < Packages > Packages.gz
+          scp Packages.gz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          cd -
+          rm -rf packages
           '''
         }
       }
@@ -221,37 +294,31 @@ pipeline {
 
     stage('[MacMini] Publish to crates.io') {
       agent { label 'MacMini' }
+      when { expression { return params.PUBLISH_CRATES_IO }}
       steps {
         sh '''
-        if [ "${PUBLISH_CRATES_IO}" = "true" ]; then
-          cd zenoh-util && cargo publish && cd - && sleep 30
-          cd zenoh-protocol && cargo publish && cd - && sleep 30
-          cd zenoh-router && cargo publish && cd - && sleep 30
-          cd zenoh && cargo publish && cd -
-        else
-          echo "Publication to crates.io skipped"
-        fi
+        cd zenoh-util && cargo publish && cd - && sleep 30
+        cd zenoh-protocol && cargo publish && cd - && sleep 30
+        cd zenoh-router && cargo publish && cd - && sleep 30
+        cd zenoh && cargo publish && cd -
         '''
       }
     }
 
     stage('[MacMini] Publish to Docker Hub') {
       agent { label 'MacMini' }
+      when { expression { return params.PUBLISH_DOCKER_HUB && params.BUILD_DOCKER}}
       steps {
         withCredentials([usernamePassword(credentialsId: 'dockerhub-bot',
             passwordVariable: 'DOCKER_HUB_CREDS_PSW', usernameVariable: 'DOCKER_HUB_CREDS_USR')])
         {
           sh '''
-          if [ "${PUBLISH_DOCKER_HUB}" = "true" ]; then
-            docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
-            docker push eclipse/zenoh:${LABEL}
-            if [ -n "${DOCKER_TAG}" ]; then
-              docker push eclipse/zenoh:${DOCKER_TAG}
-            fi
-            docker logout
-          else
-            echo "Publication to Docker Hub skipped"
+          docker login -u ${DOCKER_HUB_CREDS_USR} -p ${DOCKER_HUB_CREDS_PSW}
+          docker push eclipse/zenoh:${LABEL}
+          if [ -n "${DOCKER_TAG}" ]; then
+            docker push eclipse/zenoh:${DOCKER_TAG}
           fi
+          docker logout
           '''
         }
       }
