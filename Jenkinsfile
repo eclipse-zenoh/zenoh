@@ -67,7 +67,7 @@ pipeline {
         tar -czvf eclipse-zenoh-${LABEL}-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --strip-components 2 target/release/zenohd target/release/*.dylib
         tar -czvf eclipse-zenoh-${LABEL}-examples-macosx${MACOSX_DEPLOYMENT_TARGET}-x86-64.tgz --exclude 'target/release/examples/*.*' --strip-components 3 target/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-macosx*-x86-64.tgz', name: 'zenohMacOS'
+        stash includes: 'eclipse-zenoh-*-macosx*-x86-64.tgz', name: 'zenoh-macosx'
       }
     }
 
@@ -106,7 +106,7 @@ pipeline {
         tar -czvf eclipse-zenoh-${LABEL}-x86_64-unknown-linux-gnu.tgz --strip-components 3 target/x86_64-unknown-linux-gnu/release/zenohd target/x86_64-unknown-linux-gnu/release/*.so
         tar -czvf eclipse-zenoh-${LABEL}-examples-x86_64-unknown-linux-gnu.tgz --exclude 'target/x86_64-unknown-linux-gnu/release/examples/*.*' --exclude 'target/x86_64-unknown-linux-gnu/release/examples/*-*' --strip-components 4 target/x86_64-unknown-linux-gnu/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-x86_64-unknown-linux-gnu.tgz, target/x86_64-unknown-linux-gnu/debian/*.deb', name: 'zenohLinux-x64'
+        stash includes: 'eclipse-zenoh-*-x86_64-unknown-linux-gnu.tgz, target/x86_64-unknown-linux-gnu/debian/*.deb', name: 'zenoh-x86_64-unknown-linux-gnu'
       }
     }
 
@@ -132,7 +132,45 @@ pipeline {
         tar -czvf eclipse-zenoh-${LABEL}-i686-unknown-linux-gnu.tgz --strip-components 3 target/i686-unknown-linux-gnu/release/zenohd target/i686-unknown-linux-gnu/release/*.so
         tar -czvf eclipse-zenoh-${LABEL}-examples-i686-unknown-linux-gnu.tgz --exclude 'target/i686-unknown-linux-gnu/release/examples/*.*' --exclude 'target/i686-unknown-linux-gnu/release/examples/*-*' --strip-components 4 target/x86_64-unknown-linux-gnu/release/examples/*
         '''
-        stash includes: 'eclipse-zenoh-*-i686-unknown-linux-gnu.tgz, target/i686-unknown-linux-gnu/debian/*.deb', name: 'zenohLinux-i686'
+        stash includes: 'eclipse-zenoh-*-i686-unknown-linux-gnu.tgz, target/i686-unknown-linux-gnu/debian/*.deb', name: 'zenoh-i686-unknown-linux-gnu'
+      }
+    }
+
+    stage('[MacMini] x86_64-pc-windows-gnu build') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        cargo build --release --bins --lib --examples --target=x86_64-pc-windows-gnu
+        '''
+      }
+    }
+    stage('[MacMini] x86_64-pc-windows-gnu Package') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        zip eclipse-zenoh-${LABEL}-x86_64-pc-windows-gnu.zip --junk-paths target/x86_64-pc-windows-gnu/release/zenohd.exe target/x86_64-pc-windows-gnu/release/*.dll
+        zip eclipse-zenoh-${LABEL}-examples-x86_64-pc-windows-gnu.zip --exclude 'target/x86_64-pc-windows-gnu/release/examples/*-*' --junk-paths target/x86_64-pc-windows-gnu/release/examples/*.exe
+        '''
+        stash includes: 'eclipse-zenoh-*-x86_64-pc-windows-gnu.zip', name: 'zenoh-x86_64-pc-windows-gnu'
+      }
+    }
+
+    stage('[MacMini] i686-pc-windows-gnu build') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        cargo build --release --bins --lib --examples --target=i686-pc-windows-gnu
+        '''
+      }
+    }
+    stage('[MacMini] i686-pc-windows-gnu Package') {
+      agent { label 'MacMini' }
+      steps {
+        sh '''
+        zip eclipse-zenoh-${LABEL}-i686-pc-windows-gnu.zip --junk-paths target/i686-pc-windows-gnu/release/zenohd.exe target/i686-pc-windows-gnu/release/*.dll
+        zip eclipse-zenoh-${LABEL}-examples-i686-pc-windows-gnu.zip --exclude 'target/i686-pc-windows-gnu/release/examples/*-*' --junk-paths target/i686-pc-windows-gnu/release/examples/*.exe
+        '''
+        stash includes: 'eclipse-zenoh-*-i686-pc-windows-gnu.zip', name: 'zenoh-i686-pc-windows-gnu'
       }
     }
 
@@ -140,9 +178,11 @@ pipeline {
       steps {
         deleteDir()
         // Unstash packages built on MacMini to be deployed
-        unstash 'zenohMacOS'
-        unstash 'zenohLinux-x64'
-        unstash 'zenohLinux-i686'
+        unstash 'zenoh-macosx'
+        unstash 'zenoh-x86_64-unknown-linux-gnu'
+        unstash 'zenoh-i686-unknown-linux-gnu'
+        unstash 'zenoh-x86_64-pc-windows-gnu'
+        unstash 'zenoh-i686-pc-windows-gnu'
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
           > Packages
@@ -159,7 +199,7 @@ pipeline {
           if [ "${PUBLISH_ECLIPSE_DOWNLOAD}" = "true" ]; then
             ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
             ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*.tgz target/x86_64-unknown-linux-gnu/debian/*.deb target/i686-unknown-linux-gnu/debian/*.deb Packages.gz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            scp eclipse-zenoh-${LABEL}-*.tgz eclipse-zenoh-${LABEL}-*.zip target/x86_64-unknown-linux-gnu/debian/*.deb target/i686-unknown-linux-gnu/debian/*.deb Packages.gz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
           else
             echo "Publication to download.eclipse.org skipped"
           fi
