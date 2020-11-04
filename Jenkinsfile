@@ -185,23 +185,34 @@ pipeline {
         unstash 'zenoh-i686-pc-windows-gnu'
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          > Packages
-          cd target/x86_64-unknown-linux-gnu/debian/
-          dpkg-scanpackages --multiversion . >> ../../../Packages
-          cd -
-
-          cd target/i686-unknown-linux-gnu/debian/
-          dpkg-scanpackages --multiversion . >> ../../../Packages
-          cd -
-
-          gzip -c9 < Packages > Packages.gz
-
           if [ "${PUBLISH_ECLIPSE_DOWNLOAD}" = "true" ]; then
             ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
             ssh genie.zenoh@projects-storage.eclipse.org ls -al /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*.tgz eclipse-zenoh-${LABEL}-*.zip target/x86_64-unknown-linux-gnu/debian/*.deb target/i686-unknown-linux-gnu/debian/*.deb Packages.gz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            scp eclipse-zenoh-${LABEL}-*.tgz eclipse-zenoh-${LABEL}-*.zip target/x86_64-unknown-linux-gnu/debian/*.deb target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
           else
             echo "Publication to download.eclipse.org skipped"
+          fi
+          '''
+        }
+      }
+    }
+
+    stage('[UbuntuVM] Build Packages.gz for download.eclipse.org') {
+      steps {
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+          sh '''
+          if [ "${PUBLISH_ECLIPSE_DOWNLOAD}" = "true" ]; then
+            mkdir packages
+            cd packages
+            scp genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/*.deb ./
+            dpkg-scanpackages --multiversion . > Packages
+            cat Packages
+            gzip -c9 < Packages > Packages.gz
+            scp Packages.gz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            cd -
+            rm -rf packages 
+          else
+            echo "Build of Packages.gz for download.eclipse.org skipped"
           fi
           '''
         }
