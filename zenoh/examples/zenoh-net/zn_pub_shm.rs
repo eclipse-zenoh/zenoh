@@ -30,6 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(not(feature = "zero-copy"))]
 fn main() {
-    println!("Please, enable zero-copy feature by rebuilding as follows:\
-            \n\n\t$ cargo build --release --features \"tcp udp zero-copy\"\n");
+    println!(
+        "Please, enable zero-copy feature by rebuilding as follows:\
+            \n\n\t$ cargo build --release --features \"tcp udp zero-copy\"\n"
+    );
 }

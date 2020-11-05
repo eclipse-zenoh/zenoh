@@ -268,7 +268,7 @@ impl RBuf {
     pub fn into_shm(self, m: &mut SharedMemoryManager) -> Option<SharedMemoryBuf> {
         match bincode::deserialize::<SharedMemoryBufInfo>(&self.to_vec()) {
             Ok(info) => m.from_info(info),
-            Err(_) => None
+            Err(_) => None,
         }
     }
 }

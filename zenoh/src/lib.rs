@@ -190,10 +190,7 @@ impl Zenoh {
         &self.session
     }
 
-<<<<<<< HEAD
-    /// Creates a [`Workspace`] with an optional [`Path`] as `prefix`.
-=======
-    /// Returns the PeerId of the zenoh router this zenoh API is connected to (if any).  
+    /// Returns the PeerId of the zenoh router this zenoh API is connected to (if any).
     /// This calls [Session::info()](net::Session::info) and returns the first router pid from
     /// the ZN_INFO_ROUTER_PID_KEY property.
     pub async fn router_pid(&self) -> Option<String> {
@@ -205,8 +202,7 @@ impl Zenoh {
         }
     }
 
-    /// Creates a [`Workspace`] with an optional [`Path`] as `prefix`.  
->>>>>>> f91a04cc7f822ccc09d8db2326754de5cdfaec82
+    /// Creates a [`Workspace`] with an optional [`Path`] as `prefix`.
     /// All relative [`Path`] or [`Selector`] used with this Workspace will be relative to the
     /// specified prefix. Not specifying a prefix is equivalent to specifying "/" as prefix,
     /// meaning in this case that all relative paths/selectors will be prependend with "/".
