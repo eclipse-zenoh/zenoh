@@ -22,3 +22,8 @@ pub use wbuf::*;
 
 mod codec;
 pub use codec::*;
+
+#[cfg(feature = "zero-copy")]
+mod shm;
+#[cfg(feature = "zero-copy")]
+pub use shm::*;

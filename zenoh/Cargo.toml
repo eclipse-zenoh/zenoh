@@ -31,6 +31,12 @@ readme = "../README.md"
 [badges]
 maintenance = { status = "actively-developed" }
 
+[features]
+tcp = []
+udp = []
+zero-copy = []
+default = ["tcp", "udp", "zero-copy"]
+
 [dependencies]
 async-trait = "0.1.38"
 futures = "0.3.5"
@@ -103,8 +109,16 @@ name = "zn_pub"
 path = "examples/zenoh-net/zn_pub.rs"
 
 [[example]]
+name = "zn_pub_shm"
+path = "examples/zenoh-net/zn_pub_shm.rs"
+
+[[example]]
 name = "zn_sub"
 path = "examples/zenoh-net/zn_sub.rs"
+
+[[example]]
+name = "zn_sub_shm"
+path = "examples/zenoh-net/zn_sub_shm.rs"
 
 [[example]]
 name = "zn_pull"

@@ -72,6 +72,9 @@ use log::{debug, trace};
 use zenoh_protocol::core::WhatAmI;
 use zenoh_router::runtime::config::*;
 use zenoh_router::runtime::orchestrator::{Loop, SessionOrchestrator};
+// Shared memory and zero-copy
+pub use zenoh_protocol::io::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
+
 mod types;
 use git_version::git_version;
 pub use types::*;

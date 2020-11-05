@@ -25,6 +25,14 @@ pub use zenoh_protocol::io::RBuf;
 /// A writable bytes buffer.
 pub use zenoh_protocol::io::WBuf;
 
+// Shared memory with zero-copy support
+#[cfg(feature = "zero-copy")]
+pub use zenoh_protocol::io::SharedMemoryBuf;
+#[cfg(feature = "zero-copy")]
+pub use zenoh_protocol::io::SharedMemoryBufInfo;
+#[cfg(feature = "zero-copy")]
+pub use zenoh_protocol::io::SharedMemoryManager;
+
 /// A numerical Id mapped to a resource name with [declare_resource](Session::declare_resource).
 pub use zenoh_protocol::core::ResourceId;
 

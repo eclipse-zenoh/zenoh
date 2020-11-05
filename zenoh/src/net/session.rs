@@ -202,6 +202,11 @@ impl Session {
         }
     }
 
+    /// Returns the identifier for this session.
+    pub async fn id(&self) -> String {
+        self.runtime.get_pid_str().await
+    }
+
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]

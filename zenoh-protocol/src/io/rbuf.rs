@@ -16,6 +16,9 @@ use async_std::sync::Arc;
 use std::fmt;
 use std::io::IoSlice;
 
+#[cfg(feature = "zero-copy")]
+use super::shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
+
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
@@ -23,6 +26,8 @@ use zenoh_util::zerror;
 pub struct RBuf {
     slices: Vec<ArcSlice>,
     pos: (usize, usize),
+    #[cfg(feature = "zero-copy")]
+    shm_buf: Option<SharedMemoryBuf>,
 }
 
 impl RBuf {
@@ -31,6 +36,8 @@ impl RBuf {
         RBuf {
             slices,
             pos: (0, 0),
+            #[cfg(feature = "zero-copy")]
+            shm_buf: None,
         }
     }
 
@@ -39,6 +46,8 @@ impl RBuf {
         RBuf {
             slices,
             pos: (0, 0),
+            #[cfg(feature = "zero-copy")]
+            shm_buf: None,
         }
     }
 
@@ -254,6 +263,14 @@ impl RBuf {
     pub fn drain_into_rbuf(&mut self, dest: &mut RBuf) {
         self.read_into_rbuf_no_check(dest, self.readable());
     }
+
+    #[cfg(feature = "zero-copy")]
+    pub fn into_shm(self, m: &mut SharedMemoryManager) -> Option<SharedMemoryBuf> {
+        match bincode::deserialize::<SharedMemoryBufInfo>(&self.to_vec()) {
+            Ok(info) => m.from_info(info),
+            Err(_) => None
+        }
+    }
 }
 
 impl fmt::Display for RBuf {
@@ -287,6 +304,8 @@ impl From<ArcSlice> for RBuf {
         RBuf {
             slices: vec![slice],
             pos: (0, 0),
+            #[cfg(feature = "zero-copy")]
+            shm_buf: None,
         }
     }
 }
@@ -309,6 +328,8 @@ impl From<Vec<ArcSlice>> for RBuf {
         RBuf {
             slices,
             pos: (0, 0),
+            #[cfg(feature = "zero-copy")]
+            shm_buf: None,
         }
     }
 }
@@ -347,6 +368,21 @@ impl PartialEq for RBuf {
                 }
             }
             true
+        }
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<SharedMemoryBuf> for RBuf {
+    fn from(smb: SharedMemoryBuf) -> RBuf {
+        let bs = bincode::serialize(&smb.info).unwrap();
+        let len = bs.len();
+        let slice = ArcSlice::new(Arc::new(bs), 0, len);
+        RBuf {
+            slices: vec![slice],
+            pos: (0, 0),
+            #[cfg(feature = "zero-copy")]
+            shm_buf: Some(smb),
         }
     }
 }

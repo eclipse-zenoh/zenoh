@@ -188,7 +188,7 @@ impl Zenoh {
         &self.session
     }
 
-    /// Creates a [`Workspace`] with an optional [`Path`] as `prefix`.  
+    /// Creates a [`Workspace`] with an optional [`Path`] as `prefix`.
     /// All relative [`Path`] or [`Selector`] used with this Workspace will be relative to the
     /// specified prefix. Not specifying a prefix is equivalent to specifying "/" as prefix,
     /// meaning in this case that all relative paths/selectors will be prependend with "/".
