@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::storages_mgt::*;
 use async_std::sync::{channel, Arc, RwLock, Sender};
 use async_std::task;
 use futures::prelude::*;
@@ -18,15 +19,14 @@ use futures::select;
 use log::{debug, error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use zenoh::net::{queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode};
 use zenoh::{ChangeKind, Path, PathExpr, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
-use zenoh_backend_core::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
+use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor};
 use zenoh_util::{zerror, zerror2};
 
 pub(crate) const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 
 pub(crate) async fn start_backend(
-    backend: Box<dyn zenoh_backend_core::Backend>,
+    backend: Box<dyn zenoh_backend_traits::Backend>,
     admin_path: Path,
     zenoh: Arc<Zenoh>,
 ) -> ZResult<Sender<bool>> {
@@ -128,7 +128,7 @@ pub(crate) async fn start_backend(
 async fn create_and_start_storage(
     admin_path: Path,
     value: Value,
-    backend: &mut Box<dyn zenoh_backend_core::Backend>,
+    backend: &mut Box<dyn zenoh_backend_traits::Backend>,
     in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
     out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
     zenoh: Arc<Zenoh>,
@@ -162,135 +162,4 @@ async fn create_and_start_storage(
             )
         })
     }
-}
-
-async fn start_storage(
-    mut storage: Box<dyn zenoh_backend_core::Storage>,
-    admin_path: Path,
-    path_expr: PathExpr,
-    in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
-    out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
-    zenoh: Arc<Zenoh>,
-) -> ZResult<Sender<bool>> {
-    debug!("Start storage {} on {}", admin_path, path_expr);
-
-    let (tx, rx) = channel::<bool>(1);
-    task::spawn(async move {
-        let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
-
-        // subscribe on path_expr
-        let sub_info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        };
-        let mut storage_sub = match workspace
-            .session()
-            .declare_subscriber(&path_expr.to_string().into(), &sub_info)
-            .await
-        {
-            Ok(storage_sub) => storage_sub,
-            Err(e) => {
-                error!("Error starting storage {} : {}", admin_path, e);
-                return;
-            }
-        };
-
-        // align with other storages, querying them on path_expr
-        let mut replies = match workspace
-            .session()
-            .query(
-                &path_expr.to_string().into(),
-                "",
-                QueryTarget::default(),
-                QueryConsolidation::default(),
-            )
-            .await
-        {
-            Ok(replies) => replies,
-            Err(e) => {
-                error!("Error aligning storage {} : {}", admin_path, e);
-                return;
-            }
-        };
-        while let Some(reply) = replies.next().await {
-            log::trace!("Storage {} aligns data {}", admin_path, reply.data.res_name);
-            // Call incoming data interceptor (if any)
-            let sample = if let Some(ref interceptor) = in_interceptor {
-                interceptor.read().await.on_sample(reply.data).await
-            } else {
-                reply.data
-            };
-            // Call storage
-            if let Err(e) = storage.on_sample(sample).await {
-                warn!(
-                    "Storage {} raised an error aligning a sample: {}",
-                    admin_path, e
-                );
-            }
-        }
-
-        // admin_path is "/@/.../storage/<stid>"
-        // answer to GET on 'admin_path'
-        let mut storage_admin = match workspace.register_eval(&PathExpr::from(&admin_path)).await {
-            Ok(storages_admin) => storages_admin,
-            Err(e) => {
-                error!("Error starting storage {} : {}", admin_path, e);
-                return;
-            }
-        };
-
-        // answer to queries on path_expr
-        let mut storage_queryable = match workspace
-            .session()
-            .declare_queryable(&path_expr.to_string().into(), queryable::STORAGE)
-            .await
-        {
-            Ok(storage_queryable) => storage_queryable,
-            Err(e) => {
-                error!("Error starting storage {} : {}", admin_path, e);
-                return;
-            }
-        };
-
-        loop {
-            select!(
-                // on get request on storage_admin
-                get = storage_admin.next().fuse() => {
-                    let get = get.unwrap();
-                    get.reply(admin_path.clone(), storage.get_admin_status().await).await;
-                },
-                // on sample for path_expr
-                sample = storage_sub.stream().next().fuse() => {
-                    // Call incoming data interceptor (if any)
-                    let sample = if let Some(ref interceptor) = in_interceptor {
-                        interceptor.read().await.on_sample(sample.unwrap()).await
-                    } else {
-                        sample.unwrap()
-                    };
-                    // Call storage
-                    if let Err(e) = storage.on_sample(sample).await {
-                        warn!("Storage {} raised an error receiving a sample: {}", admin_path, e);
-                    }
-                },
-                // on query on path_expr
-                query = storage_queryable.stream().next().fuse() => {
-                    let q = query.unwrap();
-                    // wrap zenoh::net::Query in zenoh_backend_core::Query
-                    // with outgoing interceptor
-                    let query = Query::new(q, out_interceptor.clone());
-                    if let Err(e) = storage.on_query(query).await {
-                        warn!("Storage {} raised an error receiving a query: {}", admin_path, e);
-                    }
-                },
-                // on storage handle drop
-                _ = rx.recv().fuse() => {
-                    trace!("Dropping storage {}", admin_path);
-                    return ()
-                }
-            );
-        }
-    });
-
-    Ok(tx)
 }

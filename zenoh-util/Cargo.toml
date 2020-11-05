@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-util"
-version = "0.5.0-beta.4"
+version = "0.5.0-beta.5"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -37,7 +37,7 @@ rand = "0.7.3"
 hex = "0.4.2"
 humantime = "2.0"
 clap = "2"
-libloading = "0.6.3"
+libloading = "0.6.5"
 shellexpand = "2.0.0"
 home = "0.5.3"
 

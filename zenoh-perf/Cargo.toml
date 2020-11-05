@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-perf"
-version = "0.5.0-beta.4"
+version = "0.5.0-beta.5"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -40,10 +40,10 @@ rand = "0.7.3"
 slab = "0.4.2"
 time = "0.2.16"
 uuid = { version = "0.8.1", features = ["v4"] }
-zenoh =  { version = "0.5.0-beta.4", path = "../zenoh" }
-zenoh-protocol =  { version = "0.5.0-beta.4", path = "../zenoh-protocol" }
-zenoh-router =  { version = "0.5.0-beta.4", path = "../zenoh-router" }
-zenoh-util =  { version = "0.5.0-beta.4", path = "../zenoh-util" }
+zenoh =  { version = "0.5.0-beta.5", path = "../zenoh" }
+zenoh-protocol =  { version = "0.5.0-beta.5", path = "../zenoh-protocol" }
+zenoh-router =  { version = "0.5.0-beta.5", path = "../zenoh-router" }
+zenoh-util =  { version = "0.5.0-beta.5", path = "../zenoh-util" }
 
 [dependencies.async-std]
 version = "1.6.4"
