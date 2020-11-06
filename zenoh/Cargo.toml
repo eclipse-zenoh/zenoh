@@ -144,3 +144,11 @@ path = "examples/zenoh-net/zn_pub_thr.rs"
 name = "zn_sub_thr"
 path = "examples/zenoh-net/zn_sub_thr.rs"
 
+[[example]]
+name = "zn_pub_shm_thr"
+path = "examples/zenoh-net/zn_pub_shm_thr.rs"
+
+[[example]]
+name = "zn_sub_shm_thr"
+path = "examples/zenoh-net/zn_sub_shm_thr.rs"
+
