@@ -82,6 +82,7 @@
     html_root_url = "https://eclipse-zenoh.github.io/zenoh/zenoh/"
 )]
 #![feature(async_closure)]
+#![feature(bool_to_option)]
 
 #[macro_use]
 extern crate lazy_static;
@@ -179,7 +180,7 @@ impl Zenoh {
     #[doc(hidden)]
     pub async fn init(runtime: Runtime) -> Zenoh {
         Zenoh {
-            session: Session::init(runtime, true).await,
+            session: Session::init(runtime, true, vec![], vec![]).await,
         }
     }
 

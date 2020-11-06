@@ -128,7 +128,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     let http_port = parse_http_port(args.value_of("http-port").unwrap());
 
     let pid = runtime.get_pid_str().await;
-    let session = Session::init(runtime, true).await;
+    let session = Session::init(runtime, true, vec![], vec![]).await;
 
     let mut app = Server::with_state((Arc::new(session), pid));
 

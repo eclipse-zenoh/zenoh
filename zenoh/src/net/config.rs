@@ -26,6 +26,10 @@ use zenoh_util::collections::{IntKeyProperties, KeyTranscoder};
 pub const ZN_LOCAL_ROUTING_KEY: u64 = 0x60;
 pub const ZN_LOCAL_ROUTING_DEFAULT: &str = "true";
 
+pub const ZN_JOIN_SUBSCRIPTIONS_KEY: u64 = 0x61;
+
+pub const ZN_JOIN_PUBLICATIONS_KEY: u64 = 0x62;
+
 /// A transcoder for [ConfigProperties](ConfigProperties)
 /// able to convert string keys to int keys and reverse.
 pub struct ConfigTranscoder();
@@ -33,13 +37,17 @@ impl KeyTranscoder for ConfigTranscoder {
     fn encode(key: &str) -> Option<u64> {
         match &key.to_lowercase()[..] {
             "local_routing" => Some(ZN_LOCAL_ROUTING_KEY),
+            "join_subscriptions" => Some(ZN_JOIN_SUBSCRIPTIONS_KEY),
+            "join_publications" => Some(ZN_JOIN_PUBLICATIONS_KEY),
             key => RuntimeTranscoder::encode(key),
         }
     }
 
     fn decode(key: u64) -> Option<String> {
         match key {
-            0x60 => Some("local_routing".to_string()),
+            ZN_LOCAL_ROUTING_KEY => Some("local_routing".to_string()),
+            ZN_JOIN_SUBSCRIPTIONS_KEY => Some("join_subscriptions".to_string()),
+            ZN_JOIN_PUBLICATIONS_KEY => Some("join_publications".to_string()),
             key => RuntimeTranscoder::decode(key),
         }
     }

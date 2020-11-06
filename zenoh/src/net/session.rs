@@ -54,10 +54,16 @@ pub(crate) struct SessionState {
     queryables: HashMap<Id, Arc<QueryableState>>,
     queries: HashMap<ZInt, QueryState>,
     local_routing: bool,
+    join_subscriptions: Vec<String>,
+    join_publications: Vec<String>,
 }
 
 impl SessionState {
-    pub(crate) fn new(local_routing: bool) -> SessionState {
+    pub(crate) fn new(
+        local_routing: bool,
+        join_subscriptions: Vec<String>,
+        join_publications: Vec<String>,
+    ) -> SessionState {
         SessionState {
             primitives: None,
             rid_counter: AtomicUsize::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
@@ -71,6 +77,8 @@ impl SessionState {
             queryables: HashMap::new(),
             queries: HashMap::new(),
             local_routing,
+            join_subscriptions,
+            join_publications,
         }
     }
 }
@@ -191,9 +199,23 @@ impl Session {
             .get_or(&ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
             .to_lowercase()
             == ZN_TRUE;
+        let join_subscriptions = match config.get(&ZN_JOIN_SUBSCRIPTIONS_KEY) {
+            Some(s) => s.split(',').map(|s| s.to_string()).collect(),
+            None => vec![],
+        };
+        let join_publications = match config.get(&ZN_JOIN_PUBLICATIONS_KEY) {
+            Some(s) => s.split(',').map(|s| s.to_string()).collect(),
+            None => vec![],
+        };
         match Runtime::new(0, config.0.into(), None).await {
             Ok(runtime) => {
-                let session = Self::init(runtime, local_routing).await;
+                let session = Self::init(
+                    runtime,
+                    local_routing,
+                    join_subscriptions,
+                    join_publications,
+                )
+                .await;
                 // Workaround for the declare_and_shoot problem
                 task::sleep(std::time::Duration::from_millis(200)).await;
                 Ok(session)
@@ -210,9 +232,18 @@ impl Session {
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    pub async fn init(runtime: Runtime, local_routing: bool) -> Session {
+    pub async fn init(
+        runtime: Runtime,
+        local_routing: bool,
+        join_subscriptions: Vec<String>,
+        join_publications: Vec<String>,
+    ) -> Session {
         let broker = runtime.read().await.broker.clone();
-        let state = Arc::new(RwLock::new(SessionState::new(local_routing)));
+        let state = Arc::new(RwLock::new(SessionState::new(
+            local_routing,
+            join_subscriptions,
+            join_publications,
+        )));
         let session = Session {
             runtime,
             state: state.clone(),
@@ -424,21 +455,37 @@ impl Session {
         trace!("declare_publisher({:?})", resource);
         let mut state = self.state.write().await;
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let resname = state.localkey_to_resname(resource)?;
         let pub_state = Arc::new(PublisherState {
             id,
             reskey: resource.clone(),
         });
-        let twin_pub = state.publishers.values().any(|p| {
-            state.localkey_to_resname(&p.reskey).unwrap()
-                == state.localkey_to_resname(&pub_state.reskey).unwrap()
-        });
+        let declared_pub = match state
+            .join_publications
+            .iter()
+            .find(|s| rname::include(s, &resname))
+        {
+            Some(join_pub) => {
+                let joined_pub = state.publishers.values().any(|p| {
+                    rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
+                });
+                (!joined_pub).then_some(join_pub.clone().into())
+            }
+            None => {
+                let twin_pub = state.publishers.values().any(|p| {
+                    state.localkey_to_resname(&p.reskey).unwrap()
+                        == state.localkey_to_resname(&pub_state.reskey).unwrap()
+                });
+                (!twin_pub).then_some(resource.clone())
+            }
+        };
 
         state.publishers.insert(id, pub_state.clone());
 
-        if !twin_pub {
+        if let Some(res) = declared_pub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.publisher(resource).await;
+            primitives.publisher(&res).await;
         }
 
         Ok(Publisher {
@@ -454,15 +501,35 @@ impl Session {
             trace!("undeclare_publisher({:?})", pub_state);
             // Note: there might be several Publishers on the same ResKey.
             // Before calling forget_publisher(reskey), check if this was the last one.
-            let twin_pub = state.publishers.values().any(|p| {
-                state.localkey_to_resname(&p.reskey).unwrap()
-                    == state.localkey_to_resname(&pub_state.reskey).unwrap()
-            });
-            if !twin_pub {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                drop(state);
-                primitives.forget_publisher(&pub_state.reskey).await;
-            }
+            let resname = state.localkey_to_resname(&pub_state.reskey)?;
+            match state
+                .join_publications
+                .iter()
+                .find(|s| rname::include(s, &resname))
+            {
+                Some(join_pub) => {
+                    let joined_pub = state.publishers.values().any(|p| {
+                        rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
+                    });
+                    if !joined_pub {
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        let reskey = join_pub.clone().into();
+                        drop(state);
+                        primitives.forget_publisher(&reskey).await;
+                    }
+                }
+                None => {
+                    let twin_pub = state.publishers.values().any(|p| {
+                        state.localkey_to_resname(&p.reskey).unwrap()
+                            == state.localkey_to_resname(&pub_state.reskey).unwrap()
+                    });
+                    if !twin_pub {
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        drop(state);
+                        primitives.forget_publisher(&pub_state.reskey).await;
+                    }
+                }
+            };
         }
         Ok(())
     }
@@ -508,13 +575,31 @@ impl Session {
             resname: resname.clone(),
             sender,
         });
-        let twin_sub = state.callback_subscribers.values().any(|s| {
-            state.localkey_to_resname(&s.reskey).unwrap()
-                == state.localkey_to_resname(&sub_state.reskey).unwrap()
-        }) && !state.subscribers.values().any(|s| {
-            state.localkey_to_resname(&s.reskey).unwrap()
-                == state.localkey_to_resname(&sub_state.reskey).unwrap()
-        });
+        let declared_sub = match state
+            .join_subscriptions
+            .iter()
+            .find(|s| rname::include(s, &resname))
+        {
+            Some(join_sub) => {
+                let joined_sub = state.callback_subscribers.values().any(|s| {
+                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                }) || state.subscribers.values().any(|s| {
+                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                        && s.id != sub_state.id
+                });
+                (!joined_sub).then_some(join_sub.clone().into())
+            }
+            None => {
+                let twin_sub = state.callback_subscribers.values().any(|s| {
+                    state.localkey_to_resname(&s.reskey).unwrap()
+                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                }) || state.subscribers.values().any(|s| {
+                    state.localkey_to_resname(&s.reskey).unwrap()
+                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                });
+                (!twin_sub).then_some(resource.clone())
+            }
+        };
 
         state.subscribers.insert(id, sub_state.clone());
         for res in state.local_resources.values_mut() {
@@ -528,10 +613,10 @@ impl Session {
             }
         }
 
-        if !twin_sub {
+        if let Some(res) = declared_sub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.subscriber(resource, info).await;
+            primitives.subscriber(&res, info).await;
         }
 
         Ok(Subscriber {
@@ -555,18 +640,40 @@ impl Session {
 
             // Note: there might be several Subscribers on the same ResKey.
             // Before calling forget_subscriber(reskey), check if this was the last one.
-            let twin_sub = state.callback_subscribers.values().any(|s| {
-                state.localkey_to_resname(&s.reskey).unwrap()
-                    == state.localkey_to_resname(&sub_state.reskey).unwrap()
-            }) && !state.subscribers.values().any(|s| {
-                state.localkey_to_resname(&s.reskey).unwrap()
-                    == state.localkey_to_resname(&sub_state.reskey).unwrap()
-            });
-            if !twin_sub {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                drop(state);
-                primitives.forget_subscriber(&sub_state.reskey).await;
-            }
+            let resname = state.localkey_to_resname(&sub_state.reskey)?;
+            match state
+                .join_subscriptions
+                .iter()
+                .find(|s| rname::include(s, &resname))
+            {
+                Some(join_sub) => {
+                    let joined_sub = state.callback_subscribers.values().any(|s| {
+                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                    }) || state.subscribers.values().any(|s| {
+                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                    });
+                    if !joined_sub {
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        let reskey = join_sub.clone().into();
+                        drop(state);
+                        primitives.forget_subscriber(&reskey).await;
+                    }
+                }
+                None => {
+                    let twin_sub = state.callback_subscribers.values().any(|s| {
+                        state.localkey_to_resname(&s.reskey).unwrap()
+                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                    }) || state.subscribers.values().any(|s| {
+                        state.localkey_to_resname(&s.reskey).unwrap()
+                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                    });
+                    if !twin_sub {
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        drop(state);
+                        primitives.forget_subscriber(&sub_state.reskey).await;
+                    }
+                }
+            };
         }
         Ok(())
     }
@@ -615,13 +722,31 @@ impl Session {
             resname: resname.clone(),
             dhandler,
         });
-        let twin_sub = state.callback_subscribers.values().any(|s| {
-            state.localkey_to_resname(&s.reskey).unwrap()
-                == state.localkey_to_resname(&sub_state.reskey).unwrap()
-        }) && !state.subscribers.values().any(|s| {
-            state.localkey_to_resname(&s.reskey).unwrap()
-                == state.localkey_to_resname(&sub_state.reskey).unwrap()
-        });
+        let declared_sub = match state
+            .join_subscriptions
+            .iter()
+            .find(|s| rname::include(s, &resname))
+        {
+            Some(join_sub) => {
+                let joined_sub = state.callback_subscribers.values().any(|s| {
+                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                }) || state.subscribers.values().any(|s| {
+                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                        && s.id != sub_state.id
+                });
+                (!joined_sub).then_some(join_sub.clone().into())
+            }
+            None => {
+                let twin_sub = state.callback_subscribers.values().any(|s| {
+                    state.localkey_to_resname(&s.reskey).unwrap()
+                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                }) || state.subscribers.values().any(|s| {
+                    state.localkey_to_resname(&s.reskey).unwrap()
+                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                });
+                (!twin_sub).then_some(resource.clone())
+            }
+        };
 
         state.callback_subscribers.insert(id, sub_state.clone());
         for res in state.local_resources.values_mut() {
@@ -635,10 +760,10 @@ impl Session {
             }
         }
 
-        if !twin_sub {
+        if let Some(res) = declared_sub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.subscriber(resource, info).await;
+            primitives.subscriber(&res, info).await;
         }
 
         Ok(CallbackSubscriber {
@@ -663,18 +788,40 @@ impl Session {
 
             // Note: there might be several Subscribers on the same ResKey.
             // Before calling forget_subscriber(reskey), check if this was the last one.
-            let twin_sub = state.callback_subscribers.values().any(|s| {
-                state.localkey_to_resname(&s.reskey).unwrap()
-                    == state.localkey_to_resname(&sub_state.reskey).unwrap()
-            }) && !state.subscribers.values().any(|s| {
-                state.localkey_to_resname(&s.reskey).unwrap()
-                    == state.localkey_to_resname(&sub_state.reskey).unwrap()
-            });
-            if !twin_sub {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                drop(state);
-                primitives.forget_subscriber(&sub_state.reskey).await;
-            }
+            let resname = state.localkey_to_resname(&sub_state.reskey)?;
+            match state
+                .join_subscriptions
+                .iter()
+                .find(|s| rname::include(s, &resname))
+            {
+                Some(join_sub) => {
+                    let joined_sub = state.callback_subscribers.values().any(|s| {
+                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                    }) || state.subscribers.values().any(|s| {
+                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                    });
+                    if !joined_sub {
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        let reskey = join_sub.clone().into();
+                        drop(state);
+                        primitives.forget_subscriber(&reskey).await;
+                    }
+                }
+                None => {
+                    let twin_sub = state.callback_subscribers.values().any(|s| {
+                        state.localkey_to_resname(&s.reskey).unwrap()
+                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                    }) || state.subscribers.values().any(|s| {
+                        state.localkey_to_resname(&s.reskey).unwrap()
+                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                    });
+                    if !twin_sub {
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        drop(state);
+                        primitives.forget_subscriber(&sub_state.reskey).await;
+                    }
+                }
+            };
         }
         Ok(())
     }
