@@ -438,11 +438,10 @@ impl Session {
             trace!("undeclare_publisher({:?})", pub_state);
             // Note: there might be several Publishers on the same ResKey.
             // Before calling forget_publisher(reskey), check if this was the last one.
-            if !state
-                .publishers
-                .values()
-                .any(|p| p.reskey == pub_state.reskey)
-            {
+            if !state.publishers.values().any(|p| {
+                state.localkey_to_resname(&p.reskey).unwrap()
+                    == state.localkey_to_resname(&pub_state.reskey).unwrap()
+            }) {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.forget_publisher(&pub_state.reskey).await;
@@ -529,15 +528,13 @@ impl Session {
 
             // Note: there might be several Subscribers on the same ResKey.
             // Before calling forget_subscriber(reskey), check if this was the last one.
-            if !state
-                .callback_subscribers
-                .values()
-                .any(|s| s.reskey == sub_state.reskey)
-                && !state
-                    .subscribers
-                    .values()
-                    .any(|s| s.reskey == sub_state.reskey)
-            {
+            if !state.callback_subscribers.values().any(|s| {
+                state.localkey_to_resname(&s.reskey).unwrap()
+                    == state.localkey_to_resname(&sub_state.reskey).unwrap()
+            }) && !state.subscribers.values().any(|s| {
+                state.localkey_to_resname(&s.reskey).unwrap()
+                    == state.localkey_to_resname(&sub_state.reskey).unwrap()
+            }) {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.forget_subscriber(&sub_state.reskey).await;
@@ -628,15 +625,13 @@ impl Session {
 
             // Note: there might be several Subscribers on the same ResKey.
             // Before calling forget_subscriber(reskey), check if this was the last one.
-            if !state
-                .callback_subscribers
-                .values()
-                .any(|s| s.reskey == sub_state.reskey)
-                && !state
-                    .subscribers
-                    .values()
-                    .any(|s| s.reskey == sub_state.reskey)
-            {
+            if !state.callback_subscribers.values().any(|s| {
+                state.localkey_to_resname(&s.reskey).unwrap()
+                    == state.localkey_to_resname(&sub_state.reskey).unwrap()
+            }) && !state.subscribers.values().any(|s| {
+                state.localkey_to_resname(&s.reskey).unwrap()
+                    == state.localkey_to_resname(&sub_state.reskey).unwrap()
+            }) {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.forget_subscriber(&sub_state.reskey).await;
@@ -701,11 +696,10 @@ impl Session {
             trace!("undeclare_queryable({:?})", qable_state);
             // Note: there might be several Queryables on the same ResKey.
             // Before calling forget_eval(reskey), check if this was the last one.
-            if !state
-                .queryables
-                .values()
-                .any(|e| e.reskey == qable_state.reskey)
-            {
+            if !state.queryables.values().any(|e| {
+                state.localkey_to_resname(&e.reskey).unwrap()
+                    == state.localkey_to_resname(&qable_state.reskey).unwrap()
+            }) {
                 let primitives = state.primitives.as_ref().unwrap();
                 primitives.forget_queryable(&qable_state.reskey).await;
             }
