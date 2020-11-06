@@ -339,27 +339,37 @@ impl Session {
     pub async fn declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
         trace!("declare_resource({:?})", resource);
         let mut state = self.state.write().await;
-        let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
         let resname = state.localkey_to_resname(resource)?;
-        let mut res = Resource::new(resname.clone());
-        for sub in state.subscribers.values() {
-            if rname::matches(&resname, &sub.resname) {
-                res.subscribers.push(sub.clone());
+
+        match state
+            .local_resources
+            .iter()
+            .find(|(_rid, res)| res.name == resname)
+        {
+            Some((rid, _res)) => Ok(*rid),
+            None => {
+                let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
+                let mut res = Resource::new(resname.clone());
+                for sub in state.subscribers.values() {
+                    if rname::matches(&resname, &sub.resname) {
+                        res.subscribers.push(sub.clone());
+                    }
+                }
+                for cb_sub in state.callback_subscribers.values() {
+                    if rname::matches(&resname, &cb_sub.resname) {
+                        res.callback_subscribers.push(cb_sub.clone());
+                    }
+                }
+
+                state.local_resources.insert(rid, res);
+
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.resource(rid, resource).await;
+
+                Ok(rid)
             }
         }
-        for cb_sub in state.callback_subscribers.values() {
-            if rname::matches(&resname, &cb_sub.resname) {
-                res.callback_subscribers.push(cb_sub.clone());
-            }
-        }
-
-        state.local_resources.insert(rid, res);
-
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
-        primitives.resource(rid, resource).await;
-
-        Ok(rid)
     }
 
     /// Undeclare the *numerical Id/resource key* association previously declared
