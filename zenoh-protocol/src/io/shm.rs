@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 const MIN_CHUNK_SIZE: usize = 1024;
-const ZENOH_SHM_PATH: &str = "/tmp/zenoh_shm_pid";
+const ZENOH_SHM_PREFIX: &str = "zenoh_shm_pid";
 
 /// The ChunkHeader is used to contain information about the chunk of shared memory.
 /// The same header is used for both free and used chunk, two different lists maintain
@@ -44,8 +44,8 @@ impl ChunkHeader {
 }
 #[repr(C)]
 struct ChunkList {
-    head: *mut ChunkHeader,
-    tail: *mut ChunkHeader,
+    hd: AtomicPtr<ChunkHeader>,
+    tl: AtomicPtr<ChunkHeader>,
     elems: usize,
 }
 
@@ -55,17 +55,30 @@ struct ChunkList {
 impl ChunkList {
     fn empty() -> ChunkList {
         ChunkList {
-            head: std::ptr::null_mut(),
-            tail: std::ptr::null_mut(),
+            hd: AtomicPtr::new(std::ptr::null_mut()),
+            tl: AtomicPtr::new(std::ptr::null_mut()),
             elems: 0,
         }
     }
 
-    fn is_empty(&self) -> bool {
-        self.head.is_null()
+    fn set_head(&mut self, ptr: *mut ChunkHeader) {
+        self.hd.store(ptr, Ordering::SeqCst);
     }
+
+    fn set_tail(&mut self, ptr: *mut ChunkHeader) {
+        self.tl.store(ptr, Ordering::SeqCst);
+    }
+
     fn head(&self) -> *mut ChunkHeader {
-        self.head
+        self.hd.load(Ordering::SeqCst)
+    }
+
+    fn tail(&self) -> *mut ChunkHeader {
+        self.tl.load(Ordering::SeqCst)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.head().is_null()
     }
 
     fn prepend(&mut self, e: *mut ChunkHeader) {
@@ -74,12 +87,12 @@ impl ChunkList {
             (*e).prev = std::ptr::null_mut();
         }
         if self.is_empty() {
-            self.head = e;
-            self.tail = e;
+            self.set_head(e);
+            self.set_tail(e);
         } else {
             unsafe {
-                (*e).next = self.head;
-                self.head = e;
+                (*e).next = self.head();
+                self.set_head(e);
                 (*e).prev = std::ptr::null_mut();
             }
         }
@@ -89,27 +102,27 @@ impl ChunkList {
             (*e).next = std::ptr::null_mut();
             (*e).prev = std::ptr::null_mut();
             if self.is_empty() {
-                self.head = e;
-                self.tail = e;
+                self.set_head(e);
+                self.set_tail(e);
             } else {
-                (*e).prev = self.tail;
+                (*e).prev = self.tail();
                 (*e).next = std::ptr::null_mut();
-                (*self.tail).next = e;
-                self.tail = e;
+                (*self.tail()).next = e;
+                self.set_tail(e);
             }
             self.elems += 1;
         }
     }
     fn remove(&mut self, e: *mut ChunkHeader) {
-        let oh = self.head;
+        let oh = self.head();
         unsafe {
-            if e == self.head {
-                self.head = (*e).next;
-                if oh == self.tail {
-                    self.tail = self.head;
+            if e == self.head() {
+                self.set_head((*e).next);
+                if oh == self.tail() {
+                    self.set_tail(self.head());
                 }
-            } else if e == self.tail {
-                self.tail = (*e).prev;
+            } else if e == self.tail() {
+                self.set_tail((*e).prev);
             } else {
                 let next = (*e).next;
                 (*(*e).prev).next = next;
@@ -117,9 +130,6 @@ impl ChunkList {
         }
     }
 
-    fn tail(&self) -> *mut ChunkHeader {
-        self.head
-    }
     fn elems(&self) -> usize {
         self.elems
     }
@@ -150,10 +160,10 @@ impl ChunkList {
     }
 
     fn is_head(lst: *mut ChunkList, e: *mut ChunkHeader) -> bool {
-        unsafe { (*lst).head == e }
+        unsafe { (*lst).head() == e }
     }
     fn is_tail(lst: *mut ChunkList, e: *mut ChunkHeader) -> bool {
-        unsafe { (*lst).tail == e }
+        unsafe { (*lst).tail() == e }
     }
 
     fn find_first_fit(&self, len: usize) -> Option<*mut ChunkHeader> {
@@ -174,7 +184,7 @@ impl ChunkList {
 impl std::fmt::Debug for ChunkList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let _ = f.write_str("ChunkList [");
-        let mut current = self.head;
+        let mut current = self.head();
         loop {
             if current.is_null() {
                 return f.write_str("]");
@@ -340,11 +350,16 @@ pub struct SharedMemoryManager {
     header: SharedMemoryHeader,
 }
 
+unsafe impl Send for SharedMemoryManager {}
+
 impl SharedMemoryManager {
     /// Creates a new SharedMemoryManager managing allocatioins of a region of the
     /// given size.
     pub fn new(id: String, size: usize) -> Result<SharedMemoryManager, ShmemError> {
-        let path: String = format!("{}_{}", ZENOH_SHM_PATH, id);
+        let mut temp_dir = std::env::temp_dir();
+        let file_name: String = format!("{}_{}", ZENOH_SHM_PREFIX, id);
+        temp_dir.push(file_name);
+        let path: String = temp_dir.to_str().unwrap().to_string();
         debug!("Creating file at: {}", path);
         let shmem = match ShmemConf::new().size(size).flink(path.clone()).create() {
             Ok(m) => m,
