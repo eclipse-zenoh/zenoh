@@ -421,9 +421,15 @@ impl Session {
         });
         state.publishers.insert(id, pub_state.clone());
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
-        primitives.publisher(resource).await;
+        if !state.publishers.values().any(|p| {
+            state.localkey_to_resname(&p.reskey).unwrap()
+                == state.localkey_to_resname(&pub_state.reskey).unwrap()
+                && p.id != pub_state.id
+        }) {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.publisher(resource).await;
+        }
 
         Ok(Publisher {
             session: self,
@@ -503,9 +509,18 @@ impl Session {
             }
         }
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
-        primitives.subscriber(resource, info).await;
+        if !state.callback_subscribers.values().any(|s| {
+            state.localkey_to_resname(&s.reskey).unwrap()
+                == state.localkey_to_resname(&sub_state.reskey).unwrap()
+        }) && !state.subscribers.values().any(|s| {
+            state.localkey_to_resname(&s.reskey).unwrap()
+                == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                && s.id != sub_state.id
+        }) {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.subscriber(resource, info).await;
+        }
 
         Ok(Subscriber {
             session: self,
@@ -599,9 +614,18 @@ impl Session {
             }
         }
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
-        primitives.subscriber(resource, info).await;
+        if !state.callback_subscribers.values().any(|s| {
+            state.localkey_to_resname(&s.reskey).unwrap()
+                == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                && s.id != sub_state.id
+        }) && !state.subscribers.values().any(|s| {
+            state.localkey_to_resname(&s.reskey).unwrap()
+                == state.localkey_to_resname(&sub_state.reskey).unwrap()
+        }) {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.subscriber(resource, info).await;
+        }
 
         Ok(CallbackSubscriber {
             session: self,
@@ -678,9 +702,15 @@ impl Session {
         });
         state.queryables.insert(id, qable_state.clone());
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
-        primitives.queryable(resource).await;
+        if !state.queryables.values().any(|e| {
+            state.localkey_to_resname(&e.reskey).unwrap()
+                == state.localkey_to_resname(&qable_state.reskey).unwrap()
+                && e.id != qable_state.id
+        }) {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.queryable(resource).await;
+        }
 
         Ok(Queryable {
             session: self,
