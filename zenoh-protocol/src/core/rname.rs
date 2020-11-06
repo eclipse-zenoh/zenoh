@@ -74,6 +74,39 @@ macro_rules! DEFINE_INTERSECT {
     };
 }
 
+macro_rules! DEFINE_INCLUDE {
+    ($name:ident, $end:ident, $wild:ident, $next:ident, $elem_include:ident) => {
+        fn $name(this: &str, sub: &str) -> bool {
+            if ($end(this) && $end(sub)) {
+                return true;
+            }
+            if ($wild(this) && $end(sub)) {
+                return $name($next(this), sub);
+            }
+            if ($wild(this)) {
+                if ($end($next(this))) {
+                    return true;
+                }
+                if ($name($next(this), sub)) {
+                    return true;
+                } else {
+                    return $name(this, $next(sub));
+                }
+            }
+            if ($wild(sub)) {
+                return false;
+            }
+            if ($end(this) || $end(sub)) {
+                return false;
+            }
+            if ($elem_include(this, sub)) {
+                return $name($next(this), $next(sub));
+            }
+            return false;
+        }
+    };
+}
+
 DEFINE_INTERSECT!(sub_chunk_intersect, cend, cwild, cnext, cequal);
 
 #[inline(always)]
@@ -83,6 +116,8 @@ fn chunk_intersect(c1: &str, c2: &str) -> bool {
     }
     sub_chunk_intersect(c1, c2)
 }
+
+DEFINE_INCLUDE!(chunk_include, cend, cwild, cnext, cequal);
 
 #[inline(always)]
 fn end(s: &str) -> bool {
@@ -107,6 +142,13 @@ DEFINE_INTERSECT!(res_intersect, end, wild, next, chunk_intersect);
 #[inline(always)]
 pub fn intersect(s1: &str, s2: &str) -> bool {
     res_intersect(s1, s2)
+}
+
+DEFINE_INCLUDE!(res_include, end, wild, next, chunk_include);
+
+#[inline(always)]
+pub fn include(this: &str, sub: &str) -> bool {
+    res_include(this, sub)
 }
 
 pub const ADMIN_PREFIX: &str = "/@/";
