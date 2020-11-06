@@ -23,10 +23,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let sbuf = sample.payload.into_shm(&mut shm).unwrap();
         println!("{:?}", &shm);
         let bs = sbuf.as_slice();
+        println!("\n--- Shared Memory Buffer Dump");
         for b in bs {
             print!("{:},", b);
         }
-        println!(" - ");
+        println!("-----------------------------\n");
         drop(sbuf);
         println!("{:?}", &shm);
     }
