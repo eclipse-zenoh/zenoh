@@ -57,7 +57,7 @@ impl ChunkList {
         ChunkList {
             hd: AtomicPtr::new(std::ptr::null_mut()),
             tl: AtomicPtr::new(std::ptr::null_mut()),
-            elems: 0
+            elems: 0,
         }
     }
 
@@ -350,8 +350,7 @@ pub struct SharedMemoryManager {
     header: SharedMemoryHeader,
 }
 
-unsafe impl Send for SharedMemoryManager { }
-
+unsafe impl Send for SharedMemoryManager {}
 
 impl SharedMemoryManager {
     /// Creates a new SharedMemoryManager managing allocatioins of a region of the

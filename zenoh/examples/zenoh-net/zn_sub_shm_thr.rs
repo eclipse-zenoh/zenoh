@@ -13,12 +13,12 @@
 //
 use async_std::future;
 use clap::{App, Arg};
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Instant;
 use zenoh::net::ResKey::*;
 use zenoh::net::*;
 use zenoh::Properties;
-use std::sync::Mutex;
-use std::sync::Arc;
 
 #[async_std::main]
 async fn main() {
@@ -29,7 +29,7 @@ async fn main() {
 
     let z = open(config.into()).await.unwrap();
     let id = z.id().await;
-    let shm  = Arc::new(Mutex::new(SharedMemoryManager::new(id, 8192).unwrap()));
+    let shm = Arc::new(Mutex::new(SharedMemoryManager::new(id, 8192).unwrap()));
 
     let reskey = RId(z
         .declare_resource(&RName("/test/shm/thr".to_string()))
@@ -47,7 +47,7 @@ async fn main() {
     let mut nm = 0;
     let _sub = z
         .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
-            let _ = sample.payload.into_shm(&mut *shm.lock().unwrap());
+            let _shm_buf = sample.payload.into_shm(&mut *shm.lock().unwrap());
             if count == 0 {
                 start = Instant::now();
                 count += 1;
@@ -85,7 +85,7 @@ fn parse_args() -> (Properties, u32, u128) {
             Arg::from_usage(
                 "-n, --number=[number] 'Number of messages in each throughput measurements.'",
             )
-            .default_value("10000"),
+            .default_value("100000"),
         )
         .get_matches();
 

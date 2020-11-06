@@ -24,13 +24,12 @@ async fn main() {
 
     let z = open(config.into()).await.unwrap();
     let id = z.id().await;
-    let mut shm  = SharedMemoryManager::new(id, sm_size).unwrap();
+    let mut shm = SharedMemoryManager::new(id, sm_size).unwrap();
     let mut buf = shm.alloc(size).unwrap();
     let bs = unsafe { buf.as_mut_slice() };
     for b in bs {
         *b = rand::random::<u8>();
     }
-
 
     let reskey = RId(z
         .declare_resource(&RName("/test/shm/thr".to_string()))
@@ -39,27 +38,25 @@ async fn main() {
     let _publ = z.declare_publisher(&reskey).await.unwrap();
 
     loop {
-        z
-            .write_ext(
-                &reskey,
-                buf.clone().into(),
-                encoding::DEFAULT,
-                data_kind::DEFAULT,
-                CongestionControl::Block, // Make sure to not drop messages because of congestion control
-            )
-            .await
-            .unwrap();
+        z.write_ext(
+            &reskey,
+            buf.clone().into(),
+            encoding::DEFAULT,
+            data_kind::DEFAULT,
+            CongestionControl::Block, // Make sure to not drop messages because of congestion control
+        )
+        .await
+        .unwrap();
     }
 }
 
 fn parse_args() -> (Properties, usize, usize) {
     let args = App::new("zenoh-net zero-copy throughput pub example")
-    .arg(
-        Arg::from_usage("-s, --shared-memory=[MB]  'shared memory size in MBytes'")
-        .default_value("32"))
-    .arg(
-        Arg::from_usage("-p, --payload=[KB] 'payload in KBytes'")
-        .default_value("1"))
+        .arg(
+            Arg::from_usage("-s, --shared-memory=[MB]  'shared memory size in MBytes'")
+                .default_value("32"),
+        )
+        .arg(Arg::from_usage("-p, --payload=[KB] 'payload in KBytes'").default_value("1"))
         .get_matches();
 
     let config = Properties::default();
@@ -67,12 +64,15 @@ fn parse_args() -> (Properties, usize, usize) {
         .value_of("shared-memory")
         .unwrap()
         .parse::<usize>()
-        .unwrap() * 1024 * 1024;
+        .unwrap()
+        * 1024
+        * 1024;
 
     let size = args
         .value_of("shared-memory")
         .unwrap()
         .parse::<usize>()
-        .unwrap() * 1024;
+        .unwrap()
+        * 1024;
     (config, sm_size, size)
 }
