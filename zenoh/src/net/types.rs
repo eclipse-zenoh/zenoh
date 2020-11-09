@@ -242,7 +242,7 @@ impl fmt::Debug for Publisher<'_> {
     }
 }
 
-pub struct SubscriberState {
+pub(crate) struct SubscriberState {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) resname: String,
@@ -369,7 +369,7 @@ impl fmt::Debug for Subscriber<'_> {
     }
 }
 
-pub struct CallbackSubscriberState {
+pub(crate) struct CallbackSubscriberState {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) resname: String,
@@ -470,7 +470,7 @@ impl fmt::Debug for CallbackSubscriber<'_> {
     }
 }
 
-pub struct QueryableState {
+pub(crate) struct QueryableState {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) kind: ZInt,
