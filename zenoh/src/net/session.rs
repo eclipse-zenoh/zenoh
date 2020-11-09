@@ -50,7 +50,6 @@ pub(crate) struct SessionState {
     remote_resources: HashMap<ResourceId, Resource>,
     publishers: HashMap<Id, Arc<PublisherState>>,
     subscribers: HashMap<Id, Arc<SubscriberState>>,
-    callback_subscribers: HashMap<Id, Arc<CallbackSubscriberState>>,
     queryables: HashMap<Id, Arc<QueryableState>>,
     queries: HashMap<ZInt, QueryState>,
     local_routing: bool,
@@ -73,7 +72,6 @@ impl SessionState {
             remote_resources: HashMap::new(),
             publishers: HashMap::new(),
             subscribers: HashMap::new(),
-            callback_subscribers: HashMap::new(),
             queryables: HashMap::new(),
             queries: HashMap::new(),
             local_routing,
@@ -164,7 +162,6 @@ impl fmt::Debug for SessionState {
 struct Resource {
     pub(crate) name: String,
     pub(crate) subscribers: Vec<Arc<SubscriberState>>,
-    pub(crate) callback_subscribers: Vec<Arc<CallbackSubscriberState>>,
 }
 
 impl Resource {
@@ -172,7 +169,6 @@ impl Resource {
         Resource {
             name,
             subscribers: vec![],
-            callback_subscribers: vec![],
         }
     }
 }
@@ -386,11 +382,6 @@ impl Session {
                         res.subscribers.push(sub.clone());
                     }
                 }
-                for cb_sub in state.callback_subscribers.values() {
-                    if rname::matches(&resname, &cb_sub.resname) {
-                        res.callback_subscribers.push(cb_sub.clone());
-                    }
-                }
 
                 state.local_resources.insert(rid, res);
 
@@ -534,6 +525,62 @@ impl Session {
         Ok(())
     }
 
+    async fn declare_any_subscriber(
+        &self,
+        reskey: &ResKey,
+        invoker: SubscriberInvoker,
+        info: &SubInfo,
+    ) -> ZResult<Arc<SubscriberState>> {
+        let mut state = self.state.write().await;
+        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let resname = state.localkey_to_resname(reskey)?;
+        let sub_state = Arc::new(SubscriberState {
+            id,
+            reskey: reskey.clone(),
+            resname,
+            invoker,
+        });
+        let declared_sub = match state
+            .join_subscriptions
+            .iter()
+            .find(|s| rname::include(s, &sub_state.resname))
+        {
+            Some(join_sub) => {
+                let joined_sub = state.subscribers.values().any(|s| {
+                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                });
+                (!joined_sub).then_some(join_sub.clone().into())
+            }
+            None => {
+                let twin_sub = state.subscribers.values().any(|s| {
+                    state.localkey_to_resname(&s.reskey).unwrap()
+                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                });
+                (!twin_sub).then_some(sub_state.reskey.clone())
+            }
+        };
+
+        state.subscribers.insert(sub_state.id, sub_state.clone());
+        for res in state.local_resources.values_mut() {
+            if rname::matches(&sub_state.resname, &res.name) {
+                res.subscribers.push(sub_state.clone());
+            }
+        }
+        for res in state.remote_resources.values_mut() {
+            if rname::matches(&sub_state.resname, &res.name) {
+                res.subscribers.push(sub_state.clone());
+            }
+        }
+
+        if let Some(res) = declared_sub {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.subscriber(&res, info).await;
+        }
+
+        Ok(sub_state)
+    }
+
     /// Declare a [Subscriber](Subscriber) for the given resource key.
     ///
     /// # Arguments
@@ -561,63 +608,14 @@ impl Session {
     /// ```
     pub async fn declare_subscriber(
         &self,
-        resource: &ResKey,
+        reskey: &ResKey,
         info: &SubInfo,
     ) -> ZResult<Subscriber<'_>> {
-        trace!("declare_subscriber({:?})", resource);
-        let mut state = self.state.write().await;
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(resource)?;
+        trace!("declare_subscriber({:?})", reskey);
         let (sender, receiver) = channel(*API_DATA_RECEPTION_CHANNEL_SIZE);
-        let sub_state = Arc::new(SubscriberState {
-            id,
-            reskey: resource.clone(),
-            resname: resname.clone(),
-            sender,
-        });
-        let declared_sub = match state
-            .join_subscriptions
-            .iter()
-            .find(|s| rname::include(s, &resname))
-        {
-            Some(join_sub) => {
-                let joined_sub = state.callback_subscribers.values().any(|s| {
-                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                }) || state.subscribers.values().any(|s| {
-                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                        && s.id != sub_state.id
-                });
-                (!joined_sub).then_some(join_sub.clone().into())
-            }
-            None => {
-                let twin_sub = state.callback_subscribers.values().any(|s| {
-                    state.localkey_to_resname(&s.reskey).unwrap()
-                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                }) || state.subscribers.values().any(|s| {
-                    state.localkey_to_resname(&s.reskey).unwrap()
-                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                });
-                (!twin_sub).then_some(resource.clone())
-            }
-        };
-
-        state.subscribers.insert(id, sub_state.clone());
-        for res in state.local_resources.values_mut() {
-            if rname::matches(&resname, &res.name) {
-                res.subscribers.push(sub_state.clone());
-            }
-        }
-        for res in state.remote_resources.values_mut() {
-            if rname::matches(&resname, &res.name) {
-                res.subscribers.push(sub_state.clone());
-            }
-        }
-
-        if let Some(res) = declared_sub {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.subscriber(&res, info).await;
-        }
+        let sub_state = self
+            .declare_any_subscriber(reskey, SubscriberInvoker::Sender(sender), info)
+            .await?;
 
         Ok(Subscriber {
             session: self,
@@ -625,57 +623,6 @@ impl Session {
             alive: true,
             receiver,
         })
-    }
-
-    pub(crate) async fn undeclare_subscriber(&self, sid: usize) -> ZResult<()> {
-        let mut state = self.state.write().await;
-        if let Some(sub_state) = state.subscribers.remove(&sid) {
-            trace!("undeclare_subscriber({:?})", sub_state);
-            for res in state.local_resources.values_mut() {
-                res.subscribers.retain(|sub| sub.id != sub_state.id);
-            }
-            for res in state.remote_resources.values_mut() {
-                res.subscribers.retain(|sub| sub.id != sub_state.id);
-            }
-
-            // Note: there might be several Subscribers on the same ResKey.
-            // Before calling forget_subscriber(reskey), check if this was the last one.
-            let resname = state.localkey_to_resname(&sub_state.reskey)?;
-            match state
-                .join_subscriptions
-                .iter()
-                .find(|s| rname::include(s, &resname))
-            {
-                Some(join_sub) => {
-                    let joined_sub = state.callback_subscribers.values().any(|s| {
-                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                    }) || state.subscribers.values().any(|s| {
-                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                    });
-                    if !joined_sub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        let reskey = join_sub.clone().into();
-                        drop(state);
-                        primitives.forget_subscriber(&reskey).await;
-                    }
-                }
-                None => {
-                    let twin_sub = state.callback_subscribers.values().any(|s| {
-                        state.localkey_to_resname(&s.reskey).unwrap()
-                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                    }) || state.subscribers.values().any(|s| {
-                        state.localkey_to_resname(&s.reskey).unwrap()
-                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                    });
-                    if !twin_sub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.forget_subscriber(&sub_state.reskey).await;
-                    }
-                }
-            };
-        }
-        Ok(())
     }
 
     /// Declare a [CallbackSubscriber](CallbackSubscriber) for the given resource key.
@@ -704,67 +651,18 @@ impl Session {
     /// ```
     pub async fn declare_callback_subscriber<DataHandler>(
         &self,
-        resource: &ResKey,
+        reskey: &ResKey,
         info: &SubInfo,
         data_handler: DataHandler,
     ) -> ZResult<CallbackSubscriber<'_>>
     where
         DataHandler: FnMut(Sample) + Send + Sync + 'static,
     {
-        trace!("declare_callback_subscriber({:?})", resource);
-        let mut state = self.state.write().await;
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(resource)?;
+        trace!("declare_callback_subscriber({:?})", reskey);
         let dhandler = Arc::new(RwLock::new(data_handler));
-        let sub_state = Arc::new(CallbackSubscriberState {
-            id,
-            reskey: resource.clone(),
-            resname: resname.clone(),
-            dhandler,
-        });
-        let declared_sub = match state
-            .join_subscriptions
-            .iter()
-            .find(|s| rname::include(s, &resname))
-        {
-            Some(join_sub) => {
-                let joined_sub = state.callback_subscribers.values().any(|s| {
-                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                }) || state.subscribers.values().any(|s| {
-                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                        && s.id != sub_state.id
-                });
-                (!joined_sub).then_some(join_sub.clone().into())
-            }
-            None => {
-                let twin_sub = state.callback_subscribers.values().any(|s| {
-                    state.localkey_to_resname(&s.reskey).unwrap()
-                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                }) || state.subscribers.values().any(|s| {
-                    state.localkey_to_resname(&s.reskey).unwrap()
-                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                });
-                (!twin_sub).then_some(resource.clone())
-            }
-        };
-
-        state.callback_subscribers.insert(id, sub_state.clone());
-        for res in state.local_resources.values_mut() {
-            if rname::matches(&resname, &res.name) {
-                res.callback_subscribers.push(sub_state.clone());
-            }
-        }
-        for res in state.remote_resources.values_mut() {
-            if rname::matches(&resname, &res.name) {
-                res.callback_subscribers.push(sub_state.clone());
-            }
-        }
-
-        if let Some(res) = declared_sub {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.subscriber(&res, info).await;
-        }
+        let sub_state = self
+            .declare_any_subscriber(reskey, SubscriberInvoker::Handler(dhandler), info)
+            .await?;
 
         Ok(CallbackSubscriber {
             session: self,
@@ -773,17 +671,15 @@ impl Session {
         })
     }
 
-    pub(crate) async fn undeclare_callback_subscriber(&self, sid: usize) -> ZResult<()> {
+    pub(crate) async fn undeclare_subscriber(&self, sid: usize) -> ZResult<()> {
         let mut state = self.state.write().await;
-        if let Some(sub_state) = state.callback_subscribers.remove(&sid) {
-            trace!("undeclare_callback_subscriber({:?})", sub_state);
+        if let Some(sub_state) = state.subscribers.remove(&sid) {
+            trace!("undeclare_subscriber({:?})", sub_state);
             for res in state.local_resources.values_mut() {
-                res.callback_subscribers
-                    .retain(|sub| sub.id != sub_state.id);
+                res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
             for res in state.remote_resources.values_mut() {
-                res.callback_subscribers
-                    .retain(|sub| sub.id != sub_state.id);
+                res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
 
             // Note: there might be several Subscribers on the same ResKey.
@@ -795,9 +691,7 @@ impl Session {
                 .find(|s| rname::include(s, &resname))
             {
                 Some(join_sub) => {
-                    let joined_sub = state.callback_subscribers.values().any(|s| {
-                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                    }) || state.subscribers.values().any(|s| {
+                    let joined_sub = state.subscribers.values().any(|s| {
                         rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
                     });
                     if !joined_sub {
@@ -808,10 +702,7 @@ impl Session {
                     }
                 }
                 None => {
-                    let twin_sub = state.callback_subscribers.values().any(|s| {
-                        state.localkey_to_resname(&s.reskey).unwrap()
-                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                    }) || state.subscribers.values().any(|s| {
+                    let twin_sub = state.subscribers.values().any(|s| {
                         state.localkey_to_resname(&s.reskey).unwrap()
                             == state.localkey_to_resname(&sub_state.reskey).unwrap()
                     });
@@ -1007,24 +898,26 @@ impl Session {
         if let ResKey::RId(rid) = reskey {
             match state.get_res(rid, local) {
                 Some(res) => {
-                    // Call matching callback_subscribers
-                    for sub in &res.callback_subscribers {
-                        let handler = &mut *sub.dhandler.write().await;
-                        handler(Sample {
-                            res_name: res.name.clone(),
-                            payload: payload.clone(),
-                            data_info: info.clone(),
-                        });
-                    }
-                    // Call matching stream subscribers
                     for sub in &res.subscribers {
-                        sub.sender
-                            .send(Sample {
-                                res_name: res.name.clone(),
-                                payload: payload.clone(),
-                                data_info: info.clone(),
-                            })
-                            .await;
+                        match &sub.invoker {
+                            SubscriberInvoker::Handler(handler) => {
+                                let handler = &mut *handler.write().await;
+                                handler(Sample {
+                                    res_name: res.name.clone(),
+                                    payload: payload.clone(),
+                                    data_info: info.clone(),
+                                });
+                            }
+                            SubscriberInvoker::Sender(sender) => {
+                                sender
+                                    .send(Sample {
+                                        res_name: res.name.clone(),
+                                        payload: payload.clone(),
+                                        data_info: info.clone(),
+                                    })
+                                    .await;
+                            }
+                        }
                     }
                 }
                 None => {
@@ -1035,27 +928,27 @@ impl Session {
         } else {
             match state.reskey_to_resname(reskey, local) {
                 Ok(resname) => {
-                    // Call matching callback_subscribers
-                    for sub in state.callback_subscribers.values() {
-                        if rname::matches(&sub.resname, &resname) {
-                            let handler = &mut *sub.dhandler.write().await;
-                            handler(Sample {
-                                res_name: resname.clone(),
-                                payload: payload.clone(),
-                                data_info: info.clone(),
-                            });
-                        }
-                    }
-                    // Call matching stream subscribers
                     for sub in state.subscribers.values() {
                         if rname::matches(&sub.resname, &resname) {
-                            sub.sender
-                                .send(Sample {
-                                    res_name: resname.clone(),
-                                    payload: payload.clone(),
-                                    data_info: info.clone(),
-                                })
-                                .await;
+                            match &sub.invoker {
+                                SubscriberInvoker::Handler(handler) => {
+                                    let handler = &mut *handler.write().await;
+                                    handler(Sample {
+                                        res_name: resname.clone(),
+                                        payload: payload.clone(),
+                                        data_info: info.clone(),
+                                    });
+                                }
+                                SubscriberInvoker::Sender(sender) => {
+                                    sender
+                                        .send(Sample {
+                                            res_name: resname.clone(),
+                                            payload: payload.clone(),
+                                            data_info: info.clone(),
+                                        })
+                                        .await;
+                                }
+                            }
                         }
                     }
                 }
@@ -1254,11 +1147,6 @@ impl Primitives for Session {
                 for sub in state.subscribers.values() {
                     if rname::matches(&resname, &sub.resname) {
                         res.subscribers.push(sub.clone());
-                    }
-                }
-                for cb_sub in state.callback_subscribers.values() {
-                    if rname::matches(&resname, &cb_sub.resname) {
-                        res.callback_subscribers.push(cb_sub.clone());
                     }
                 }
 
