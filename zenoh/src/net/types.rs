@@ -242,11 +242,16 @@ impl fmt::Debug for Publisher<'_> {
     }
 }
 
+pub(crate) enum SubscriberInvoker {
+    Sender(Sender<Sample>),
+    Handler(Arc<RwLock<DataHandler>>),
+}
+
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) resname: String,
-    pub(crate) sender: Sender<Sample>,
+    pub(crate) invoker: SubscriberInvoker,
 }
 
 impl fmt::Debug for SubscriberState {
@@ -369,29 +374,12 @@ impl fmt::Debug for Subscriber<'_> {
     }
 }
 
-pub(crate) struct CallbackSubscriberState {
-    pub(crate) id: Id,
-    pub(crate) reskey: ResKey,
-    pub(crate) resname: String,
-    pub(crate) dhandler: Arc<RwLock<DataHandler>>,
-}
-
-impl fmt::Debug for CallbackSubscriberState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "CallbackSubscriber{{ id:{}, resname:{} }}",
-            self.id, self.resname
-        )
-    }
-}
-
 /// A subscriber that provides data through a callback.
 ///
 /// Subscribers are automatically undeclared when dropped.
 pub struct CallbackSubscriber<'a> {
     pub(crate) session: &'a Session,
-    pub(crate) state: Arc<CallbackSubscriberState>,
+    pub(crate) state: Arc<SubscriberState>,
     pub(crate) alive: bool,
 }
 
@@ -443,9 +431,7 @@ impl CallbackSubscriber<'_> {
     #[inline]
     pub async fn undeclare(mut self) -> ZResult<()> {
         self.alive = false;
-        self.session
-            .undeclare_callback_subscriber(self.state.id)
-            .await
+        self.session.undeclare_subscriber(self.state.id).await
     }
 }
 
@@ -456,7 +442,7 @@ impl Drop for CallbackSubscriber<'_> {
             let id = self.state.id;
             let _ = task::block_on(async move {
                 task::spawn_blocking(move || {
-                    task::block_on(Session::undeclare_callback_subscriber(&session, id))
+                    task::block_on(Session::undeclare_subscriber(&session, id))
                 })
                 .await
             });
