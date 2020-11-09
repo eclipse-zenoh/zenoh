@@ -572,10 +572,26 @@ impl Session {
             }
         }
 
-        if let Some(res) = declared_sub {
+        if let Some(reskey) = declared_sub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.subscriber(&res, info).await;
+
+            // If reskey is a pure RName, remap it to optimal Rid or RidWithSuffix
+            let reskey = match reskey {
+                ResKey::RName(name) => match name.find('*') {
+                    Some(pos) => {
+                        let id = self.declare_resource(&name[..pos].into()).await?;
+                        ResKey::RIdWithSuffix(id, name[pos..].into())
+                    }
+                    None => {
+                        let id = self.declare_resource(&name.into()).await?;
+                        ResKey::RId(id)
+                    }
+                },
+                reskey => reskey,
+            };
+
+            primitives.subscriber(&reskey, info).await;
         }
 
         Ok(sub_state)
