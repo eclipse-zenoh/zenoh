@@ -1003,71 +1003,67 @@ impl Session {
         info: Option<DataInfo>,
         payload: RBuf,
     ) {
-        let (resname, senders) = {
-            let state = self.state.read().await;
-            if let ResKey::RId(rid) = reskey {
-                match state.get_res(rid, local) {
-                    Some(res) => {
-                        // Call matching callback_subscribers
-                        for sub in &res.callback_subscribers {
+        let state = self.state.read().await;
+        if let ResKey::RId(rid) = reskey {
+            match state.get_res(rid, local) {
+                Some(res) => {
+                    // Call matching callback_subscribers
+                    for sub in &res.callback_subscribers {
+                        let handler = &mut *sub.dhandler.write().await;
+                        handler(Sample {
+                            res_name: res.name.clone(),
+                            payload: payload.clone(),
+                            data_info: info.clone(),
+                        });
+                    }
+                    // Call matching stream subscribers
+                    for sub in &res.subscribers {
+                        sub.sender
+                            .send(Sample {
+                                res_name: res.name.clone(),
+                                payload: payload.clone(),
+                                data_info: info.clone(),
+                            })
+                            .await;
+                    }
+                }
+                None => {
+                    error!("Received Data for unkown rid: {}", rid);
+                    return;
+                }
+            }
+        } else {
+            match state.reskey_to_resname(reskey, local) {
+                Ok(resname) => {
+                    // Call matching callback_subscribers
+                    for sub in state.callback_subscribers.values() {
+                        if rname::matches(&sub.resname, &resname) {
                             let handler = &mut *sub.dhandler.write().await;
                             handler(Sample {
-                                res_name: res.name.clone(),
+                                res_name: resname.clone(),
                                 payload: payload.clone(),
                                 data_info: info.clone(),
                             });
                         }
-                        // Collect matching subscribers
-                        let subs = res
-                            .subscribers
-                            .iter()
-                            .map(|sub| sub.sender.clone())
-                            .collect::<Vec<Sender<Sample>>>();
-                        (res.name.clone(), subs)
                     }
-                    None => {
-                        error!("Received Data for unkown rid: {}", rid);
-                        return;
-                    }
-                }
-            } else {
-                match state.reskey_to_resname(reskey, local) {
-                    Ok(resname) => {
-                        // Call matching callback_subscribers
-                        for sub in state.callback_subscribers.values() {
-                            if rname::matches(&sub.resname, &resname) {
-                                let handler = &mut *sub.dhandler.write().await;
-                                handler(Sample {
+                    // Call matching stream subscribers
+                    for sub in state.subscribers.values() {
+                        if rname::matches(&sub.resname, &resname) {
+                            sub.sender
+                                .send(Sample {
                                     res_name: resname.clone(),
                                     payload: payload.clone(),
                                     data_info: info.clone(),
-                                });
-                            }
+                                })
+                                .await;
                         }
-                        // Collect matching subscribers
-                        let subs = state
-                            .subscribers
-                            .values()
-                            .filter(|sub| rname::matches(&sub.resname, &resname))
-                            .map(|sub| sub.sender.clone())
-                            .collect::<Vec<Sender<Sample>>>();
-                        (resname, subs)
-                    }
-                    Err(err) => {
-                        error!("Received Data for unkown reskey: {}", err);
-                        return;
                     }
                 }
+                Err(err) => {
+                    error!("Received Data for unkown reskey: {}", err);
+                    return;
+                }
             }
-        };
-        for sender in senders {
-            sender
-                .send(Sample {
-                    res_name: resname.clone(),
-                    payload: payload.clone(),
-                    data_info: info.clone(),
-                })
-                .await;
         }
     }
 
