@@ -290,13 +290,11 @@ pub async fn route_data(
             if !Arc::ptr_eq(face, &outface)
                 && match tables.whatami {
                     whatami::ROUTER => {
-                        face.whatami != whatami::PEER || outface.whatami != whatami::PEER
+                        (face.whatami != whatami::PEER || outface.whatami != whatami::PEER)
+                            && (face.whatami != whatami::ROUTER
+                                || outface.whatami != whatami::ROUTER)
                     }
-                    _ => {
-                        (face.whatami != whatami::PEER && face.whatami != whatami::ROUTER)
-                            || (outface.whatami != whatami::PEER
-                                && outface.whatami != whatami::ROUTER)
-                    }
+                    _ => (face.whatami == whatami::CLIENT || outface.whatami == whatami::CLIENT),
                 }
             {
                 outface
