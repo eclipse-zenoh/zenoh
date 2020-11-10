@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use crate::net::Query;
 use crate::{Path, PathExpr, Properties};
 use regex::Regex;
 use std::convert::TryFrom;
@@ -149,6 +150,13 @@ impl TryFrom<String> for Selector {
     type Error = ZError;
     fn try_from(s: String) -> Result<Self, Self::Error> {
         Self::try_from(s.as_str())
+    }
+}
+
+impl TryFrom<&Query> for Selector {
+    type Error = ZError;
+    fn try_from(q: &Query) -> Result<Self, Self::Error> {
+        Self::new(&q.res_name, &q.predicate)
     }
 }
 
