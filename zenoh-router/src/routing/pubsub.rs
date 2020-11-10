@@ -292,12 +292,12 @@ pub async fn route_data(
                             }
                         }
                     }
-                    for (outface, rid, suffix) in faces.values() {
-                        if propagate_data(tables.whatami, face, outface) {
+                    for (outface, rid, suffix) in faces.into_values() {
+                        if propagate_data(tables.whatami, face, &outface) {
                             outface
                                 .primitives
                                 .data(
-                                    &(*rid, suffix.clone()).into(),
+                                    &(rid, suffix).into(),
                                     payload.clone(),
                                     Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
                                     congestion_control,
