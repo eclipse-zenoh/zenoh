@@ -193,6 +193,113 @@ impl Value {
         }
     }
 
+    /// Encodes the Value as an UTF-8 String, possibly converting it to base64 its content is not
+    /// UTF-8 compatible. Returns a tuple containing the encoding flag, a boolean indicating if the
+    /// content has been encoded to base64 and the resulting UTF-8 String.
+    ///
+    /// Note: for Custom Value, the resulting String will have the format:
+    /// `encoding_descr + ':' + data_as_a_string` (Therefore, the `encoding_descr` must not contain the ':' character)
+    pub fn encode_to_string(self) -> (ZInt, bool, String) {
+        use Value::*;
+        match self {
+            Raw(encoding, buf) => {
+                // try to directly convert buf to a String, encode into base64 if fails
+                match String::from_utf8(buf.to_vec()) {
+                    Ok(s) => (encoding, false, s),
+                    Err(err) => (encoding, true, base64::encode(err.into_bytes())),
+                }
+            }
+            Custom {
+                encoding_descr,
+                data,
+            } => {
+                // try to directly convert data to a String, encode into base64 if fails
+                match String::from_utf8(data.to_vec()) {
+                    Ok(s) => (APP_CUSTOM, false, format!("{}:{}", encoding_descr, s)),
+                    Err(err) => (
+                        APP_CUSTOM,
+                        true,
+                        format!("{}:{}", encoding_descr, base64::encode(err.into_bytes())),
+                    ),
+                }
+            }
+            StringUTF8(s) => (STRING, false, s),
+            Properties(props) => (APP_PROPERTIES, false, props.to_string()),
+            Json(s) => (APP_JSON, false, s),
+            Integer(i) => (APP_INTEGER, false, i.to_string()),
+            Float(f) => (APP_FLOAT, false, f.to_string()),
+        }
+    }
+
+    /// Decodes the payload from a string according to the encoding flag,
+    /// converting the string from base64 if the boolean is true (for UTF-8 compatible Values).
+    pub fn decode_from_string(encoding: ZInt, base64: bool, s: String) -> ZResult<Value> {
+        use Value::*;
+        match encoding {
+            APP_CUSTOM => {
+                if let Some(i) = s.find(':') {
+                    let (encoding_descr, rem) = s.split_at(i);
+                    if base64 {
+                        match base64::decode(&rem[1..]) {
+                            Ok(bytes) => Ok(Custom {
+                                encoding_descr: encoding_descr.into(),
+                                data: bytes.into(),
+                            }),
+                            Err(e) => zerror!(ZErrorKind::ValueDecodingFailed {
+                                descr: format!("Failed to decode base64 Custom Value: {}", e)
+                            }),
+                        }
+                    } else {
+                        Ok(Custom {
+                            encoding_descr: encoding_descr.into(),
+                            data: rem[1..].as_bytes().into(),
+                        })
+                    }
+                } else {
+                    zerror!(ZErrorKind::ValueDecodingFailed {
+                        descr: format!(
+                            "Failed to read 'encoding_decscr' decoding Custom Value from String: {}"
+                                , s)
+                    })
+                }
+            }
+            STRING => Ok(StringUTF8(s)),
+            APP_PROPERTIES => Ok(Properties(crate::Properties::from(s))),
+            APP_JSON | TEXT_JSON => Ok(Json(s)),
+            APP_INTEGER => s.parse::<i64>().map(Integer).map_err(|e| {
+                zerror2!(
+                    ZErrorKind::ValueDecodingFailed {
+                        descr: "Failed to decode an Integer Value".to_string()
+                    },
+                    e
+                )
+            }),
+            APP_FLOAT => s.parse::<f64>().map(Float).map_err(|e| {
+                zerror2!(
+                    ZErrorKind::ValueDecodingFailed {
+                        descr: "Failed to decode an Float Value".to_string()
+                    },
+                    e
+                )
+            }),
+            _ => {
+                if base64 {
+                    match base64::decode(s) {
+                        Ok(bytes) => Ok(Raw(encoding, bytes.into())),
+                        Err(e) => zerror!(ZErrorKind::ValueDecodingFailed {
+                            descr: format!(
+                                "Failed to decode base64 Value with encoding {} : {}",
+                                encoding, e
+                            )
+                        }),
+                    }
+                } else {
+                    Ok(Raw(encoding, s.as_bytes().into()))
+                }
+            }
+        }
+    }
+
     /// Convert the payload from a [`Sample`] into a [`Value`].
     /// If the Sample's kind is DELETE, `Ok(None)` is returned.
     /// Otherwise, if decode_value is `true` the payload is decoded as a typed [`Value`].
