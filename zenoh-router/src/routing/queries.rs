@@ -182,6 +182,22 @@ pub async fn undeclare_queryable(
     }
 }
 
+#[inline]
+fn propagate_query(
+    whatami: whatami::Type,
+    src_face: &Arc<FaceState>,
+    dst_face: &Arc<FaceState>,
+) -> bool {
+    src_face.id != dst_face.id
+        && match whatami {
+            whatami::ROUTER => {
+                (src_face.whatami != whatami::PEER || dst_face.whatami != whatami::PEER)
+                    && (src_face.whatami != whatami::ROUTER || dst_face.whatami != whatami::ROUTER)
+            }
+            _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
+        }
+}
+
 async fn route_query_to_map(
     tables: &mut Tables,
     face: &Arc<FaceState>,
@@ -208,12 +224,7 @@ async fn route_query_to_map(
                 unsafe {
                     let mut res = res.upgrade().unwrap();
                     for (sid, context) in &mut Arc::get_mut_unchecked(&mut res).contexts {
-                        if context.qabl
-                            && !Arc::ptr_eq(&face, &context.face)
-                            && ((face.whatami != whatami::PEER && face.whatami != whatami::ROUTER)
-                                || (context.face.whatami != whatami::PEER
-                                    && context.face.whatami != whatami::ROUTER))
-                        {
+                        if context.qabl && propagate_query(tables.whatami, face, &context.face) {
                             faces.entry(*sid).or_insert_with(|| {
                                 let (rid, suffix) = Resource::get_best_key(prefix, suffix, *sid);
                                 let face = Arc::get_mut_unchecked(
@@ -249,13 +260,6 @@ pub(crate) async fn route_query(
     consolidation: QueryConsolidation,
 ) {
     if let Some(outfaces) = route_query_to_map(tables, face, qid, rid, suffix).await {
-        let outfaces = outfaces
-            .into_iter()
-            .filter(|(_, (outface, _, _, _))| {
-                face.whatami != whatami::PEER || outface.whatami != whatami::PEER
-            })
-            .map(|(_, v)| v)
-            .collect::<Vec<(Arc<FaceState>, ZInt, String, ZInt)>>();
         match outfaces.len() {
             0 => {
                 log::debug!(
@@ -266,7 +270,7 @@ pub(crate) async fn route_query(
                 face.primitives.clone().reply_final(qid).await
             }
             _ => {
-                for (outface, rid, suffix, qid) in outfaces {
+                for (outface, rid, suffix, qid) in outfaces.into_values() {
                     outface
                         .primitives
                         .query(
