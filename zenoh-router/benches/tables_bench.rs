@@ -17,7 +17,7 @@ extern crate zenoh_router;
 use async_std::sync::Arc;
 use async_std::task;
 use criterion::{BenchmarkId, Criterion};
-use zenoh_protocol::core::{whatami, Reliability, SubInfo, SubMode};
+use zenoh_protocol::core::{whatami, CongestionControl, Reliability, SubInfo, SubMode};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::session::{DummyHandler, Mux};
 use zenoh_router::routing::broker::Tables;
@@ -83,7 +83,16 @@ fn tables_bench(c: &mut Criterion) {
                 b.iter(|| {
                     task::block_on(async {
                         let mut tables = tables.write().await;
-                        route_data_to_map(&mut tables, &face0, 2, "", &None, &payload).await;
+                        route_data(
+                            &mut tables,
+                            &face0,
+                            2 as u64,
+                            "",
+                            CongestionControl::Drop,
+                            None,
+                            payload.clone(),
+                        )
+                        .await;
                     })
                 })
             });
@@ -92,13 +101,14 @@ fn tables_bench(c: &mut Criterion) {
                 b.iter(|| {
                     task::block_on(async {
                         let mut tables = tables.write().await;
-                        route_data_to_map(
+                        route_data(
                             &mut tables,
                             &face0,
-                            0,
+                            0 as u64,
                             "/bench/tables/*",
-                            &None,
-                            &payload,
+                            CongestionControl::Drop,
+                            None,
+                            payload.clone(),
                         )
                         .await;
                     })
@@ -109,13 +119,14 @@ fn tables_bench(c: &mut Criterion) {
                 b.iter(|| {
                     task::block_on(async {
                         let mut tables = tables.write().await;
-                        route_data_to_map(
+                        route_data(
                             &mut tables,
                             &face0,
-                            0,
+                            0 as u64,
                             "/bench/tables/A*",
-                            &None,
-                            &payload,
+                            CongestionControl::Drop,
+                            None,
+                            payload.clone(),
                         )
                         .await;
                     })

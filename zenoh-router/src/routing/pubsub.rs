@@ -25,8 +25,6 @@ use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
 use crate::routing::resource::{Context, Resource};
 
-pub type DataRoute = HashMap<usize, (Arc<FaceState>, ZInt, String)>;
-
 pub(crate) fn propagate_subscription(
     whatami: whatami::Type,
     src_face: &Arc<FaceState>,
@@ -194,16 +192,49 @@ pub async fn undeclare_subscription(
     }
 }
 
-pub async fn route_data_to_map(
+#[inline]
+fn propagate_data(
+    whatami: whatami::Type,
+    src_face: &Arc<FaceState>,
+    dst_face: &Arc<FaceState>,
+) -> bool {
+    src_face.id != dst_face.id
+        && match whatami {
+            whatami::ROUTER => {
+                (src_face.whatami != whatami::PEER || dst_face.whatami != whatami::PEER)
+                    && (src_face.whatami != whatami::ROUTER || dst_face.whatami != whatami::ROUTER)
+            }
+            _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
+        }
+}
+
+pub async fn route_data(
     tables: &mut Tables,
     face: &Arc<FaceState>,
-    rid: ZInt,
+    rid: u64,
     suffix: &str,
-    info: &Option<DataInfo>,
-    payload: &RBuf,
-) -> Option<DataRoute> {
+    congestion_control: CongestionControl,
+    info: Option<DataInfo>,
+    payload: RBuf,
+) {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => unsafe {
+            // if an HLC was configured (via Config.add_timestamp),
+            // check DataInfo and add a timestamp if there isn't
+            let info = match &tables.hlc {
+                Some(hlc) => match treat_timestamp(hlc, info).await {
+                    Ok(info) => info,
+                    Err(e) => {
+                        log::error!(
+                            "Error treating timestamp for received Data ({}): drop it!",
+                            e
+                        );
+                        return;
+                    }
+                },
+                None => info,
+            };
+
             match Resource::get_resource(prefix, suffix) {
                 Some(res) => {
                     for mres in &res.matches {
@@ -220,8 +251,20 @@ pub async fn route_data_to_map(
                             }
                         }
                     }
-
-                    Some(res.route.clone())
+                    for (outface, rid, suffix) in res.route.values() {
+                        if propagate_data(tables.whatami, face, outface) {
+                            outface
+                                .primitives
+                                .data(
+                                    &(*rid, suffix.clone()).into(),
+                                    payload.clone(),
+                                    Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                                    congestion_control,
+                                    info.clone(),
+                                )
+                                .await
+                        }
+                    }
                 }
                 None => {
                     let mut faces = HashMap::new();
@@ -249,65 +292,25 @@ pub async fn route_data_to_map(
                             }
                         }
                     }
-                    Some(faces)
+                    for (outface, rid, suffix) in faces.values() {
+                        if propagate_data(tables.whatami, face, outface) {
+                            outface
+                                .primitives
+                                .data(
+                                    &(*rid, suffix.clone()).into(),
+                                    payload.clone(),
+                                    Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                                    congestion_control,
+                                    info.clone(),
+                                )
+                                .await
+                        }
+                    }
                 }
             }
         },
         None => {
             log::error!("Route data with unknown rid {}!", rid);
-            None
-        }
-    }
-}
-
-pub async fn route_data(
-    tables: &mut Tables,
-    face: &Arc<FaceState>,
-    rid: u64,
-    suffix: &str,
-    congestion_control: CongestionControl,
-    info: Option<DataInfo>,
-    payload: RBuf,
-) {
-    if let Some(outfaces) = route_data_to_map(tables, face, rid, suffix, &info, &payload).await {
-        // if an HLC was configured (via Config.add_timestamp),
-        // check DataInfo and add a timestamp if there isn't
-        let data_info = match &tables.hlc {
-            Some(hlc) => match treat_timestamp(hlc, info).await {
-                Ok(info) => info,
-                Err(e) => {
-                    log::error!(
-                        "Error treating timestamp for received Data ({}): drop it!",
-                        e
-                    );
-                    return;
-                }
-            },
-            None => info,
-        };
-
-        for (_id, (outface, rid, suffix)) in outfaces {
-            if !Arc::ptr_eq(face, &outface)
-                && match tables.whatami {
-                    whatami::ROUTER => {
-                        (face.whatami != whatami::PEER || outface.whatami != whatami::PEER)
-                            && (face.whatami != whatami::ROUTER
-                                || outface.whatami != whatami::ROUTER)
-                    }
-                    _ => (face.whatami == whatami::CLIENT || outface.whatami == whatami::CLIENT),
-                }
-            {
-                outface
-                    .primitives
-                    .data(
-                        &(rid, suffix).into(),
-                        payload.clone(),
-                        Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
-                        congestion_control,
-                        data_info.clone(),
-                    )
-                    .await
-            }
         }
     }
 }
