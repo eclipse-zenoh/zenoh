@@ -288,17 +288,14 @@ pub async fn route_data(
 
         for (_id, (outface, rid, suffix)) in outfaces {
             if !Arc::ptr_eq(face, &outface) {
-                let primitives = {
-                    if (face.whatami != whatami::PEER && face.whatami != whatami::ROUTER)
-                        || (outface.whatami != whatami::PEER && outface.whatami != whatami::ROUTER)
-                    {
-                        Some(outface.primitives.clone())
-                    } else {
-                        None
-                    }
-                };
-                if let Some(primitives) = primitives {
-                    primitives
+                if match tables.whatami {
+                    whatami::ROUTER => 
+                    face.whatami != whatami::PEER || outface.whatami != whatami::PEER,
+                    _ => 
+                    (face.whatami != whatami::PEER && face.whatami != whatami::ROUTER)
+                    || (outface.whatami != whatami::PEER && outface.whatami != whatami::ROUTER),}
+                {
+                    outface.primitives
                         .data(
                             &(rid, suffix).into(),
                             payload.clone(),
