@@ -287,24 +287,28 @@ pub async fn route_data(
         };
 
         for (_id, (outface, rid, suffix)) in outfaces {
-            if !Arc::ptr_eq(face, &outface) {
-                if match tables.whatami {
-                    whatami::ROUTER => 
-                    face.whatami != whatami::PEER || outface.whatami != whatami::PEER,
-                    _ => 
-                    (face.whatami != whatami::PEER && face.whatami != whatami::ROUTER)
-                    || (outface.whatami != whatami::PEER && outface.whatami != whatami::ROUTER),}
-                {
-                    outface.primitives
-                        .data(
-                            &(rid, suffix).into(),
-                            payload.clone(),
-                            Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
-                            congestion_control,
-                            data_info.clone(),
-                        )
-                        .await
+            if !Arc::ptr_eq(face, &outface)
+                && match tables.whatami {
+                    whatami::ROUTER => {
+                        face.whatami != whatami::PEER || outface.whatami != whatami::PEER
+                    }
+                    _ => {
+                        (face.whatami != whatami::PEER && face.whatami != whatami::ROUTER)
+                            || (outface.whatami != whatami::PEER
+                                && outface.whatami != whatami::ROUTER)
+                    }
                 }
+            {
+                outface
+                    .primitives
+                    .data(
+                        &(rid, suffix).into(),
+                        payload.clone(),
+                        Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                        congestion_control,
+                        data_info.clone(),
+                    )
+                    .await
             }
         }
     }
