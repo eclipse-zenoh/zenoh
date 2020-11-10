@@ -46,13 +46,16 @@ pub use crate::routing::resource::*;
 ///     // UUID used for HLC and PeerId
 ///     let id = uuid::Uuid::new_v4();
 ///
+///     // Whatami
+///     let whatami = PEER;
+///
 ///     // Instanciate broker
-///     let broker = Arc::new(Broker::new(Some(HLC::with_system_time(id.into()))));
+///     let broker = Arc::new(Broker::new(whatami, Some(HLC::with_system_time(id.into()))));
 ///
 ///     // Instanciate SessionManager and plug it to the broker
 ///     let config = SessionManagerConfig {
 ///         version: 0,
-///         whatami: PEER,
+///         whatami,
 ///         id: PeerId::from(id),
 ///         handler: broker.clone()
 ///     };
@@ -74,9 +77,9 @@ pub struct Broker {
 }
 
 impl Broker {
-    pub fn new(hlc: Option<HLC>) -> Broker {
+    pub fn new(whatami: whatami::Type, hlc: Option<HLC>) -> Broker {
         Broker {
-            tables: Tables::new(hlc),
+            tables: Tables::new(whatami, hlc),
         }
     }
 
@@ -113,6 +116,7 @@ impl SessionHandler for Broker {
 }
 
 pub struct Tables {
+    pub(crate) whatami: whatami::Type,
     face_counter: usize,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
@@ -120,8 +124,9 @@ pub struct Tables {
 }
 
 impl Tables {
-    pub fn new(hlc: Option<HLC>) -> Arc<RwLock<Tables>> {
+    pub fn new(whatami: whatami::Type, hlc: Option<HLC>) -> Arc<RwLock<Tables>> {
         Arc::new(RwLock::new(Tables {
+            whatami,
             face_counter: 0,
             root_res: Resource::root(),
             faces: HashMap::new(),
@@ -170,8 +175,8 @@ impl Tables {
             // if whatami != whatami::CLIENT {
             if true {
                 let mut local_id: ZInt = 0;
-                for (id, face) in t.faces.iter() {
-                    if *id != fid {
+                for face in t.faces.values() {
+                    if propagate_subscription(t.whatami, face, &newface) {
                         for sub in face.subs.iter() {
                             let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(sub);
                             match nonwild_prefix {
@@ -219,7 +224,9 @@ impl Tables {
                                 }
                             }
                         }
+                    }
 
+                    if propagate_queryable(t.whatami, face, &newface) {
                         for qabl in face.qabl.iter() {
                             let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(qabl);
                             match nonwild_prefix {

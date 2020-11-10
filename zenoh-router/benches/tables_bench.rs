@@ -26,7 +26,7 @@ use zenoh_router::routing::resource::*;
 
 fn tables_bench(c: &mut Criterion) {
     task::block_on(async {
-        let tables = Tables::new(None);
+        let tables = Tables::new(whatami::ROUTER, None);
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
 
         let face0 = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;

@@ -29,6 +29,21 @@ pub(crate) struct Query {
 
 type QueryRoute = HashMap<usize, (Arc<FaceState>, ZInt, String, ZInt)>;
 
+pub(crate) fn propagate_queryable(
+    whatami: whatami::Type,
+    src_face: &Arc<FaceState>,
+    dst_face: &Arc<FaceState>,
+) -> bool {
+    src_face.id != dst_face.id
+        && match whatami {
+            whatami::ROUTER => {
+                (src_face.whatami != whatami::PEER || dst_face.whatami != whatami::PEER)
+                    && (src_face.whatami != whatami::ROUTER || dst_face.whatami != whatami::ROUTER)
+            }
+            _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
+        }
+}
+
 pub(crate) async fn declare_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -67,11 +82,9 @@ pub(crate) async fn declare_queryable(
                 }
             }
 
+            let whatami = tables.whatami;
             for (id, someface) in &mut tables.faces {
-                if face.id != *id
-                    && (face.whatami != whatami::PEER || someface.whatami != whatami::PEER)
-                    && (face.whatami != whatami::ROUTER || someface.whatami != whatami::ROUTER)
-                {
+                if propagate_queryable(whatami, face, someface) {
                     let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(&res);
                     match nonwild_prefix {
                         Some(mut nonwild_prefix) => {

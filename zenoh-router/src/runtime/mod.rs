@@ -71,7 +71,7 @@ impl Runtime {
         } else {
             None
         };
-        let broker = Arc::new(Broker::new(hlc));
+        let broker = Arc::new(Broker::new(whatami, hlc));
 
         let sm_config = SessionManagerConfig {
             version,
