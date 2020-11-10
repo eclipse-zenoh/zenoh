@@ -16,7 +16,9 @@ use crate::io::RBuf;
 use crate::link::Locator;
 use std::fmt;
 
-// -- Attachment decorator
+/// # Attachment decorator
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -37,7 +39,7 @@ use std::fmt;
 ///
 /// ENC values:
 /// - 0x00 => Zenoh Properties
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attachment {
     pub encoding: u8,
@@ -50,8 +52,9 @@ impl Attachment {
     }
 }
 
-/// -- ReplyContext decorator
+/// # ReplyContext decorator
 ///
+/// ```text
 /// The **ReplyContext** is a message decorator for either:
 ///   - the **Data** messages that result from a query
 ///   - or a **Unit** message in case the message is a
@@ -70,7 +73,7 @@ impl Attachment {
 /// +---------------+
 ///
 /// - if F==1 then the message is a REPLY_FINAL
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplyContext {
     pub is_final: bool,
@@ -242,6 +245,7 @@ pub mod zmsg {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Declaration {
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X| RESOURCE|
@@ -250,38 +254,40 @@ pub enum Declaration {
     /// +---------------+
     /// ~    ResKey     ~ if  K==1 then only numerical id
     /// +---------------+
-    ///
-    /// @Olivier, the idea would be to be able to declare a
-    /// resource using an ID to avoid sending the prefix.
-    /// If we do this however, we open the door to receiving declaration
-    /// that may try to redefine an Id... Which BTW may not be so bad, as
-    /// we could use this instead as the rebind. Thoughts?
+    /// ```
     Resource { rid: ZInt, key: ResKey },
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |X|X|X|  F_RES  |
     /// +---------------+
     /// ~      RID      ~
     /// +---------------+
+    /// ```
     ForgetResource { rid: ZInt },
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|   PUB   |
     /// +---------------+
     /// ~    ResKey     ~ if  K==1 then only numerical id
     /// +---------------+
+    /// ```
     Publisher { key: ResKey },
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  F_PUB  |
     /// +---------------+
     /// ~    ResKey     ~ if  K==1 then only numerical id
     /// +---------------+
+    /// ```
     ForgetPublisher { key: ResKey },
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |K|S|R|   SUB   |  R for Reliable
@@ -292,49 +298,58 @@ pub enum Declaration {
     /// +---------------+
     /// ~    Period     ~ if P==1. Otherwise: None
     /// +---------------+
+    /// ```
     Subscriber { key: ResKey, info: SubInfo },
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  F_SUB  |
     /// +---------------+
     /// ~    ResKey     ~ if  K==1 then only numerical id
     /// +---------------+
+    /// ```
     ForgetSubscriber { key: ResKey },
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  QABLE  |
     /// +---------------+
     /// ~     ResKey    ~ if  K==1 then only numerical id
     /// +---------------+
+    /// ```
     Queryable { key: ResKey },
 
+    /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X| F_QABLE |
     /// +---------------+
     /// ~    ResKey     ~ if  K==1 then only numerical id
     /// +---------------+
+    /// ```
     ForgetQueryable { key: ResKey },
 }
 
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// |X|X|X| DECLARE |
 /// +-+-+-+---------+
 /// ~ [Declaration] ~
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Declare {
     pub declarations: Vec<Declaration>,
 }
 
-/// -- DataInfo
+/// # DataInfo
 ///
 /// DataInfo data structure is optionally included in Data messages
 ///
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+---------+
 /// ~X|G|F|E|D|C|B|A~ -- encoded as ZInt
@@ -353,7 +368,7 @@ pub struct Declare {
 /// +---------------+
 /// ~   encoding    ~ if G==1
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
     pub source_id: Option<PeerId>,
@@ -371,6 +386,9 @@ impl PartialOrd for DataInfo {
     }
 }
 
+/// # Data message
+///
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// |K|I|D|  DATA   |
@@ -383,7 +401,7 @@ impl PartialOrd for DataInfo {
 /// +---------------+
 ///
 /// - if D==1 then the message can be dropped for congestion control reasons.
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
     pub key: ResKey,
@@ -391,16 +409,22 @@ pub struct Data {
     pub payload: RBuf,
 }
 
+/// # Unit message
+///
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// |X|X|D|  UNIT   |
 /// +-+-+-+---------+
 ///
 /// - if D==1 then the message can be dropped for congestion control reasons.
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {}
 
+/// # Pull message
+///
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// |K|N|F|  PULL   |
@@ -411,7 +435,7 @@ pub struct Unit {}
 /// +---------------+
 /// ~  max_samples  ~ if N==1
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pull {
     pub key: ResKey,
@@ -420,6 +444,9 @@ pub struct Pull {
     pub is_final: bool,
 }
 
+/// # Query message
+///
+/// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|T|  QUERY  |
@@ -434,7 +461,7 @@ pub struct Pull {
 /// +---------------+
 /// ~ consolidation ~
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Query {
     pub key: ResKey,
@@ -725,6 +752,9 @@ pub enum FramePayload {
     Messages { messages: Vec<ZenohMessage> },
 }
 
+/// # Scout message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -739,13 +769,16 @@ pub enum FramePayload {
 /// +-+-+-+-+-------+
 /// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Brokers
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scout {
     pub what: Option<WhatAmI>,
     pub pid_request: bool,
 }
 
+/// # Hello message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -774,7 +807,7 @@ pub struct Scout {
 /// +---------------+
 /// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hello {
     pub pid: Option<PeerId>,
@@ -803,6 +836,9 @@ impl fmt::Display for Hello {
     }
 }
 
+/// # Open message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -837,7 +873,7 @@ impl fmt::Display for Hello {
 ///      Initial SN results to be out-of-bound, the new Agreed Initial SN is calculated according to the
 ///      following modulo operation:
 ///         Agreed Initial SN := (Initial SN_Open) mod (SN Resolution_Accept)
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Open {
     pub version: u8,
@@ -849,6 +885,9 @@ pub struct Open {
     pub locators: Option<Vec<Locator>>,
 }
 
+/// # Accept message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -888,7 +927,7 @@ pub struct Open {
 ///      out-of-bound, the new Agreed Initial SN for the Opener Peer is calculated according to the
 ///      following modulo operation:
 ///         Agreed Initial SN := (Initial SN_Open) mod (SN Resolution_Accept)
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Accept {
     pub whatami: WhatAmI,
@@ -900,6 +939,9 @@ pub struct Accept {
     pub locators: Option<Vec<Locator>>,
 }
 
+/// # Close message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -923,7 +965,7 @@ pub struct Accept {
 /// - if K==1 then close the transport link the CLOSE message was sent on (e.g., TCP socket) but
 ///           keep the whole session open. NOTE: the session will be automatically closed when
 ///           the session's lease period expires.
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Close {
     pub pid: Option<PeerId>,
@@ -931,6 +973,9 @@ pub struct Close {
     pub link_only: bool,
 }
 
+/// # Sync message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -952,7 +997,7 @@ pub struct Close {
 /// +---------------+
 ///
 /// - if R==1 then the SYNC concerns the reliable channel, otherwise the best-effort channel.
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sync {
     pub ch: Channel,
@@ -960,6 +1005,9 @@ pub struct Sync {
     pub count: Option<ZInt>,
 }
 
+/// # AckNack message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -977,13 +1025,16 @@ pub struct Sync {
 /// +---------------+
 /// ~     mask      ~ if M==1
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct AckNack {
     pub sn: ZInt,
     pub mask: Option<ZInt>,
 }
 
+/// # KeepAlive message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -999,12 +1050,15 @@ pub struct AckNack {
 /// +-+-+-+-+-------+
 /// ~    peer_id    ~ if I==1 -- Peer ID of the KEEP_ALIVE sender.
 /// +---------------+
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeepAlive {
     pub pid: Option<PeerId>,
 }
 
+/// # PingPong message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -1019,7 +1073,7 @@ pub struct KeepAlive {
 /// +---------------+
 ///
 /// - if P==1 then the message is Ping, otherwise is Pong.
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ping {
     pub hash: ZInt,
@@ -1029,6 +1083,9 @@ pub struct Pong {
     pub hash: ZInt,
 }
 
+/// # Frame message
+///
+/// ```text
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
 ///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -1058,7 +1115,7 @@ pub struct Pong {
 ///       By using the F bit to only signal whether the FRAME is fragmented or not, it allows to
 ///       de-serialize the payload in one single pass when F==0 since no re-ordering needs to take
 ///       place at this stage. Then, the F bit is used to detect the last fragment during re-ordering.
-///
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
     pub ch: Channel,
