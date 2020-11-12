@@ -16,11 +16,13 @@
 use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
+use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::*;
+use zenoh::Selector;
 use zenoh_router::runtime::Runtime;
 
 const PORT_SEPARATOR: char = ':';
@@ -135,6 +137,28 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     app.at("*")
         .get(async move |req: Request<(Arc<Session>, String)>| {
             log::trace!("Http {:?}", req);
+            // Reconstruct Selector from req.url() (no easier way...)
+            let url = req.url();
+            let mut s = String::with_capacity(url.as_str().len());
+            s.push_str(url.path());
+            if let Some(q) = url.query() {
+                s.push('?');
+                s.push_str(q);
+            }
+            if let Some(f) = url.fragment() {
+                s.push('#');
+                s.push_str(f);
+            }
+            let selector = match Selector::try_from(s) {
+                Ok(sel) => sel,
+                Err(e) => {
+                    return Ok(response(
+                        StatusCode::BadRequest,
+                        Mime::from_str("text/plain").unwrap(),
+                        &e.to_string(),
+                    ))
+                }
+            };
 
             let first_accept = match req.header("accept") {
                 Some(accept) => accept[0]
@@ -198,16 +222,20 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 )),
 
                 "text/html" => {
-                    let resource = path_to_resource(req.url().path(), &req.state().1);
-                    let predicate = req.url().query().or(Some("")).unwrap();
+                    let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
+                    let consolidation = if selector.has_time_range() {
+                        QueryConsolidation::none()
+                    } else {
+                        QueryConsolidation::default()
+                    };
                     match req
                         .state()
                         .0
                         .query(
                             &resource,
-                            &predicate,
+                            &selector.predicate,
                             QueryTarget::default(),
-                            QueryConsolidation::default(),
+                            consolidation,
                         )
                         .await
                     {
@@ -225,16 +253,26 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 }
 
                 _ => {
-                    let resource = path_to_resource(req.url().path(), &req.state().1);
-                    let predicate = req.url().query().or(Some("")).unwrap();
+                    println!("**** GET on {}", selector);
+                    let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
+                    let consolidation = if selector.has_time_range() {
+                        QueryConsolidation::none()
+                    } else {
+                        QueryConsolidation::default()
+                    };
+                    println!(
+                        "**** QUERY on {} {} with mode {:?}",
+                        resource, selector.predicate, consolidation
+                    );
+
                     match req
                         .state()
                         .0
                         .query(
                             &resource,
-                            &predicate,
+                            &selector.predicate,
                             QueryTarget::default(),
-                            QueryConsolidation::default(),
+                            consolidation,
                         )
                         .await
                     {

@@ -203,13 +203,18 @@ impl Workspace<'_> {
         debug!("get on {}", selector);
         let reskey = self.pathexpr_to_reskey(&selector.path_expr).await?;
         let decode_value = !selector.properties.contains_key("raw");
+        let consolidation = if selector.has_time_range() {
+            QueryConsolidation::none()
+        } else {
+            QueryConsolidation::default()
+        };
 
         self.session()
             .query(
                 &reskey,
                 &selector.predicate,
                 QueryTarget::default(),
-                QueryConsolidation::default(),
+                consolidation,
             )
             .await
             .map(|receiver| DataStream {

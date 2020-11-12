@@ -19,6 +19,11 @@ use std::fmt;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
+/// The "starttime" property key for time-range selection
+pub const PROP_STARTTIME: &str = "starttime";
+/// The "stoptime" property key for time-range selection
+pub const PROP_STOPTIME: &str = "stoptime";
+
 #[derive(Clone, Debug, PartialEq)]
 /// A zenoh Selector is the conjunction of a [path expression](super::PathExpr) identifying a set
 /// of paths and some optional parts allowing to refine the set of paths and associated values.
@@ -46,7 +51,7 @@ pub struct Selector {
     /// the path expression part of this Selector (before `?` character).
     pub path_expr: PathExpr,
     /// the predicate part of this Selector, as used in zenoh-net.
-    /// I.e. all characters after `?` (or an empty String if no such character).
+    /// I.e. all characters starting from `?` or '#' (or an empty String if no such character).
     pub predicate: String,
     /// the filter part of this Selector, if any (all characters after `?` and before `(` or `#`)
     pub filter: Option<String>,
@@ -125,6 +130,12 @@ impl Selector {
     /// Returns true if `path` matches this Selector's path expression.
     pub fn matches(&self, path: &Path) -> bool {
         self.path_expr.matches(path)
+    }
+
+    /// Returns true if the Selector specifies a time-range in its properties
+    /// (i.e. using `"starttime"` or `"stoptime"`)
+    pub fn has_time_range(&self) -> bool {
+        self.properties.contains_key(PROP_STARTTIME) || self.properties.contains_key(PROP_STOPTIME)
     }
 }
 

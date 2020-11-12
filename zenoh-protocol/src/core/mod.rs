@@ -320,6 +320,16 @@ pub struct QueryConsolidation {
     pub reception: ConsolidationMode,
 }
 
+impl QueryConsolidation {
+    pub fn none() -> Self {
+        Self {
+            first_routers: ConsolidationMode::None,
+            last_router: ConsolidationMode::None,
+            reception: ConsolidationMode::None,
+        }
+    }
+}
+
 impl Default for QueryConsolidation {
     fn default() -> Self {
         Self {
