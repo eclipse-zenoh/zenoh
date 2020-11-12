@@ -112,7 +112,7 @@ pub(crate) async fn start_backend(
                 },
                 _ = stop_rx.recv().fuse() => {
                     trace!("Dropping backend {}", admin_path);
-                    return ()
+                    return
                 }
             );
         }

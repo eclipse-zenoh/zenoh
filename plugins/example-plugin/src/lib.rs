@@ -66,7 +66,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             sample = sub.stream().next().fuse() => {
                 let sample = sample.unwrap();
                 info!("Received data ('{}': '{}')", sample.res_name, sample.payload);
-                stored.insert(sample.res_name.into(), (sample.payload, sample.data_info));
+                stored.insert(sample.res_name, (sample.payload, sample.data_info));
             },
 
             query = queryable.stream().next().fuse() => {

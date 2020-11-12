@@ -253,18 +253,12 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 }
 
                 _ => {
-                    println!("**** GET on {}", selector);
                     let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
                     let consolidation = if selector.has_time_range() {
                         QueryConsolidation::none()
                     } else {
                         QueryConsolidation::default()
                     };
-                    println!(
-                        "**** QUERY on {} {} with mode {:?}",
-                        resource, selector.predicate, consolidation
-                    );
-
                     match req
                         .state()
                         .0

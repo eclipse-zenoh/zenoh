@@ -183,23 +183,20 @@ async fn load_and_start_backend(
         debug!("Create backend {} using {}", name, lib_path.display());
         unsafe {
             match lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME) {
-                Ok(create_backend) => {
-                    println!("CALL CREATE_BACKEND");
-                    match create_backend(&props) {
-                        Ok(backend) => start_backend(backend, path.clone(), zenoh).await,
-                        Err(err) => zerror!(
-                            ZErrorKind::Other {
-                                descr: format!(
-                                    "Failed to create Backend {} from {}: {}",
-                                    name,
-                                    lib_path.display(),
-                                    err
-                                ),
-                            },
-                            err
-                        ),
-                    }
-                }
+                Ok(create_backend) => match create_backend(&props) {
+                    Ok(backend) => start_backend(backend, path.clone(), zenoh).await,
+                    Err(err) => zerror!(
+                        ZErrorKind::Other {
+                            descr: format!(
+                                "Failed to create Backend {} from {}: {}",
+                                name,
+                                lib_path.display(),
+                                err
+                            ),
+                        },
+                        err
+                    ),
+                },
                 Err(err) => zerror!(ZErrorKind::Other {
                     descr: format!(
                         "Failed to create Backend {} from {}: {}",

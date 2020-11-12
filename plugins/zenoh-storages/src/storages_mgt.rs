@@ -142,7 +142,7 @@ pub(crate) async fn start_storage(
                 // on storage handle drop
                 _ = rx.recv().fuse() => {
                     trace!("Dropping storage {}", admin_path);
-                    return ()
+                    return
                 }
             );
         }

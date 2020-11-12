@@ -13,14 +13,17 @@
 //
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
+use std::convert::TryFrom;
 use zenoh::net::Sample;
-use zenoh::{Properties, Timestamp, Value, ZResult};
+use zenoh::{Properties, Selector, Timestamp, Value, ZError, ZResult};
+
+pub mod utils;
 
 pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 
 /// Trait to be implemented by a Backend.  
-/// A library implementing the Backend and Storage traits must also declare such `create_backend()` operation
-/// as an entrypoint to be called for the Backend creation.
+/// A library implementing the Backend and Storage traits must also declare a [`create_backend()`] operation
+/// with the `#[no_mangle]` attribute as an entrypoint to be called for the Backend creation.
 ///
 /// # Example
 /// ```
@@ -207,6 +210,13 @@ impl Query {
         };
         // Send reply
         self.q.reply(sample).await
+    }
+}
+
+impl TryFrom<&Query> for Selector {
+    type Error = ZError;
+    fn try_from(q: &Query) -> Result<Self, Self::Error> {
+        Selector::try_from(&q.q)
     }
 }
 
