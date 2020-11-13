@@ -24,13 +24,18 @@ use serde::Deserialize;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 use zenoh::net::{DataInfo, Sample};
 use zenoh::{
     Change, ChangeKind, Properties, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult,
 };
 use zenoh_backend_traits::*;
+use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_util::{zerror, zerror2};
+
+// delay after deletion to drop a measurement
+const DROP_MEASUREMENT_TIMEOUT_MS: u64 = 5000;
 
 #[no_mangle]
 pub fn create_backend(props: &Properties) -> ZResult<Box<dyn Backend>> {
@@ -119,6 +124,7 @@ struct InfluxDbStorage {
     path_prefix: Option<String>,
     on_closure: OnClosure,
     client: Client,
+    timer: Timer,
 }
 
 impl InfluxDbStorage {
@@ -161,17 +167,18 @@ impl InfluxDbStorage {
             path_prefix,
             on_closure,
             client,
+            timer: Timer::new(),
         })
     }
 
-    async fn get_latest_timestamp(&self, measurement: &str) -> ZResult<Option<Timestamp>> {
+    async fn get_deletion_timestamp(&self, measurement: &str) -> ZResult<Option<Timestamp>> {
         #[derive(Deserialize, Debug, PartialEq)]
         struct QueryResult {
             timestamp: String,
         }
 
         let query = InfluxQuery::raw_read_query(format!(
-            r#"SELECT "timestamp" FROM {} ORDER BY time DESC LIMIT 1"#,
+            r#"SELECT "timestamp" FROM "{}" WHERE kind='DEL' ORDER BY time DESC LIMIT 1"#,
             measurement
         ));
         match self.client.json_query(query).await {
@@ -184,7 +191,7 @@ impl InfluxDbStorage {
                             .map_err(|err| {
                                 zerror2!(ZErrorKind::Other {
                                     descr: format!(
-                                "Failed to parse the latest timestamp for measurement {} : {}",
+                                "Failed to parse the latest timestamp for deletion of measurement {} : {}",
                                 measurement, err.cause)
                                 })
                             })?;
@@ -195,18 +202,31 @@ impl InfluxDbStorage {
                 }
                 Err(err) => zerror!(ZErrorKind::Other {
                     descr: format!(
-                        "Failed to get latest timestamp for measurement {} : {}",
+                        "Failed to get latest timestamp for deletion of measurement {} : {}",
                         measurement, err
                     )
                 }),
             },
             Err(err) => zerror!(ZErrorKind::Other {
                 descr: format!(
-                    "Failed to get latest timestamp for measurement {} : {}",
+                    "Failed to get latest timestamp for deletion of measurement {} : {}",
                     measurement, err
                 )
             }),
         }
+    }
+
+    async fn schedule_measurement_drop(&self, measurement: &str) -> TimedHandle {
+        let event = TimedEvent::once(
+            Instant::now() + Duration::from_millis(DROP_MEASUREMENT_TIMEOUT_MS),
+            TimedMeasurementDrop {
+                client: self.client.clone(),
+                measurement: measurement.to_string(),
+            },
+        );
+        let handle = event.get_handle();
+        self.timer.add(event).await;
+        handle
     }
 }
 
@@ -239,11 +259,21 @@ impl Storage for InfluxDbStorage {
         // Store or delete the sample depending the ChangeKind
         match change.kind {
             ChangeKind::PUT => {
+                // get timestamp of deletion of this measurement, if any
+                if let Some(del_time) = self.get_deletion_timestamp(measurement).await? {
+                    // ignore sample if oldest than the deletion
+                    if change.timestamp < del_time {
+                        debug!("Received a Sample for {} with timestamp older than its deletion; ignore it", change.path);
+                        return Ok(());
+                    }
+                }
+
                 let (encoding, base64, value) = change.value.unwrap().encode_to_string();
                 // Note: tags are stored as strings in InfluxDB, while fileds are typed.
                 // For simpler/faster deserialization, we store encoding, timestamp and base64 as fields.
                 let query =
                     InfluxWQuery::new(InfluxTimestamp::Nanoseconds(influx_time), measurement)
+                        .add_tag("kind", "PUT")
                         .add_field("timestamp", change.timestamp.to_string())
                         .add_field("encoding", encoding)
                         .add_field("base64", base64)
@@ -259,24 +289,40 @@ impl Storage for InfluxDbStorage {
                 }
             }
             ChangeKind::DELETE => {
-                // get more recent timestamp for the measurement and check if newer than the delete message
-                if let Some(ts) = self.get_latest_timestamp(measurement).await? {
-                    if ts > change.timestamp {
-                        debug!("DELETE message for measurement {} is older than the latest value. Ignore it", measurement);
-                        return Ok(());
-                    }
-                }
-                let query =
-                    InfluxQuery::raw_read_query(format!(r#"DROP MEASUREMENT "{}""#, measurement));
+                // delete all points from the measurement that are older than this DELETE message
+                // (in case more recent PUT have been recevived un-ordered)
+                let query = InfluxQuery::raw_read_query(format!(
+                    r#"DELETE FROM "{}" WHERE time < {}"#,
+                    measurement, influx_time
+                ));
                 debug!("Delete {} with Influx query: {:?}", change.path, query);
                 if let Err(e) = self.client.query(&query).await {
                     return zerror!(ZErrorKind::Other {
                         descr: format!(
-                            "Failed to delete measurement '{}' from InfluxDb database : {}",
+                            "Failed to delete points for measurement '{}' from InfluxDb storage : {}",
                             measurement, e
                         )
                     });
                 }
+                // store a point (with timestamp) with "delete" tag, thus we don't re-introduce an older point later
+                let query =
+                    InfluxWQuery::new(InfluxTimestamp::Nanoseconds(influx_time), measurement)
+                        .add_field("timestamp", change.timestamp.to_string())
+                        .add_tag("kind", "DEL");
+                debug!(
+                    "Mark measurement {} as deleted at time {}",
+                    measurement, influx_time
+                );
+                if let Err(e) = self.client.query(&query).await {
+                    return zerror!(ZErrorKind::Other {
+                        descr: format!(
+                            "Failed to mark measurement {} as deleted : {}",
+                            change.path, e
+                        )
+                    });
+                }
+                // schedule the drop of measurement later in the future, if it's empty
+                let _ = self.schedule_measurement_drop(measurement).await;
             }
             ChangeKind::PATCH => {
                 println!("Received PATCH for {}: not yet supported", change.path);
@@ -289,6 +335,7 @@ impl Storage for InfluxDbStorage {
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
         #[derive(Deserialize, Debug)]
         struct ZenohPoint {
+            kind: String,
             timestamp: String,
             encoding: zenoh::net::ZInt,
             base64: bool,
@@ -427,6 +474,65 @@ impl Drop for InfluxDbStorage {
     }
 }
 
+// Scheduled dropping of a measurement after a timeout, if it's empty
+struct TimedMeasurementDrop {
+    client: Client,
+    measurement: String,
+}
+
+#[async_trait]
+impl Timed for TimedMeasurementDrop {
+    async fn run(&mut self) {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct QueryResult {
+            kind: String,
+        }
+
+        // check if there is at least 1 point without "DEL" kind in the measurement
+        let query = InfluxQuery::raw_read_query(format!(
+            r#"SELECT "kind" FROM "{}" WHERE kind!='DEL' LIMIT 1"#,
+            self.measurement
+        ));
+        match self.client.json_query(query).await {
+            Ok(mut result) => match result.deserialize_next::<QueryResult>() {
+                Ok(qr) => {
+                    if !qr.series.is_empty() {
+                        debug!("Measurement {} contains new values inserted after deletion; don't drop it", self.measurement);
+                        return;
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to check if measurement '{}' is empty (can't drop it) : {}",
+                        self.measurement, e
+                    );
+                }
+            },
+            Err(e) => {
+                warn!(
+                    "Failed to check if measurement '{}' is empty (can't drop it) : {}",
+                    self.measurement, e
+                );
+                return;
+            }
+        }
+
+        // drop the measurement
+        let query =
+            InfluxQuery::raw_read_query(format!(r#"DROP MEASUREMENT "{}""#, self.measurement));
+        debug!(
+            "Drop measurement {} after timeout with Influx query: {:?}",
+            self.measurement, query
+        );
+        if let Err(e) = self.client.query(&query).await {
+            warn!(
+                "Failed to drop measurement '{}' from InfluxDb storage : {}",
+                self.measurement, e
+            );
+        }
+    }
+}
+
 fn generate_db_name() -> String {
     format!("zenoh_db_{}", Uuid::new_v4().to_simple())
 }
@@ -521,19 +627,29 @@ fn path_exprs_to_influx_regex(path_exprs: &[&str]) -> String {
 }
 
 fn clauses_from_selector(s: &Selector) -> String {
+    let mut result = String::with_capacity(256);
+    result.push_str("WHERE kind!='DEL'");
     match (s.properties.get("starttime"), s.properties.get("stoptime")) {
-        (Some(start), Some(stop)) => format!(
-            "WHERE time >= {} AND time <= {}",
-            normalize_rfc3339(start),
-            normalize_rfc3339(stop)
-        ),
-        (Some(start), None) => format!("WHERE time >= {}", normalize_rfc3339(start)),
-        (None, Some(stop)) => format!("WHERE time <= {}", normalize_rfc3339(stop)),
+        (Some(start), Some(stop)) => {
+            result.push_str(" AND time >= ");
+            result.push_str(&normalize_rfc3339(start));
+            result.push_str(" AND time <= ");
+            result.push_str(&normalize_rfc3339(stop));
+        }
+        (Some(start), None) => {
+            result.push_str(" AND time >= ");
+            result.push_str(&normalize_rfc3339(start));
+        }
+        (None, Some(stop)) => {
+            result.push_str(" AND time <= ");
+            result.push_str(&normalize_rfc3339(stop));
+        }
         _ => {
             //No time selection, return only latest values
-            "ORDER BY time DESC LIMIT 1".into()
+            result.push_str("ORDER BY time DESC LIMIT 1");
         }
     }
+    result
 }
 
 // Surrounds with `''` all parts of `time` matching a RFC3339 time representation
