@@ -46,7 +46,7 @@ log = "0.4.11"
 rand = "0.7.3"
 http-types = "2.4.0"
 uuid = { version = "0.8.1", features = ["v4"] }
-uhlc = "0.2"
+uhlc = "0.2.1"
 shared_memory = {git = "https://github.com/elast0ny/shared_memory-rs.git" }
 serde = "1.0.117"
 bincode = "1.3.1"
