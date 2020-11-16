@@ -21,7 +21,7 @@ use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use zenoh::{ChangeKind, Path, Properties, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
-use zenoh_backend_traits::Backend;
+use zenoh_backend_traits::{Backend, PROP_STORAGE_PATH_EXPR};
 use zenoh_router::runtime::Runtime;
 use zenoh_util::{zerror, LibLoader};
 
@@ -108,7 +108,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     mem_backend_path, MEMORY_STORAGE_NAME, i
                 ))
                 .unwrap();
-                let props = Properties::from([(STORAGE_PATH_EXPR_PROPERTY, path_expr)].as_ref());
+                let props = Properties::from([(PROP_STORAGE_PATH_EXPR, path_expr)].as_ref());
                 workspace
                     .put(&storage_admin_path, Value::Properties(props))
                     .await

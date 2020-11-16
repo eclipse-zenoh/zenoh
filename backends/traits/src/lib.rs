@@ -15,14 +15,27 @@ use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use std::convert::TryFrom;
 use zenoh::net::Sample;
-use zenoh::{Properties, Selector, Timestamp, Value, ZError, ZResult};
+use zenoh::{Properties, Selector, Value, ZError, ZResult};
 
 pub mod utils;
 
-pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
+/// The `"type"` property key to be used in admin status reported by Backends.
+pub const PROP_BACKEND_TYPE: &str = "type";
 
-/// Trait to be implemented by a Backend.  
-/// A library implementing the Backend and Storage traits must also declare a [`create_backend()`] operation
+/// The `"path_expr"` property key to be used for configuration of each storage.
+pub const PROP_STORAGE_PATH_EXPR: &str = "path_expr";
+
+/// The `"path_prefix"` property key that could be used to specify the common path prefix
+/// to be stripped from Paths before storing them as keys in the Storage.
+///
+/// Note that it shall be a prefix of the `"path_expr"`.
+/// If you use it, you should also adapt in [`Storage::on_query()`] implementation the incoming
+/// queries' path expression to the stored keys calling [`crate::utils::get_sub_path_exprs()`].
+pub const PROP_STORAGE_PATH_PREFIX: &str = "path_prefix";
+
+/// Trait to be implemented by a Backend.
+///
+/// A library implementing the Backend and Storage traits must also declare a `create_backend()` operation
 /// with the `#[no_mangle]` attribute as an entrypoint to be called for the Backend creation.
 ///
 /// # Example
@@ -33,18 +46,27 @@ pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 /// use zenoh_backend_traits::*;
 ///
 /// #[no_mangle]
-/// pub fn create_backend(_unused: &Properties) -> ZResult<Box<dyn Backend>> {
-///     Ok(Box::new(MyBackend {}))
+/// pub fn create_backend(properties: &Properties) -> ZResult<Box<dyn Backend>> {
+///     // The properties are the ones passed via a PUT in the admin space for Backend creation
+///     // Here we re-expose them in the admin space for GET operations, adding the PROP_BACKEND_TYPE entry.
+///     let mut p = properties.clone();
+///     p.insert(PROP_BACKEND_TYPE.into(), "my_backend_type".into());
+///     let admin_status = utils::properties_to_json_value(&p);
+///     Ok(Box::new(MyBackend { admin_status }))
 /// }
 ///
 /// // Your Backend implementation
-/// pub struct MyBackend {}
+/// struct MyBackend {
+///     admin_status: Value,
+/// }
 ///
 /// #[async_trait]
 /// impl Backend for MyBackend {
 ///     async fn get_admin_status(&self) -> Value {
-///         // TODO: possibly add more properties in returned Value for more information about this storage
-///         Value::Json(r#"{"kind"="some kind"}"#.to_string())
+///         // This operation is called on GET operation on the admin space for the Backend
+///         // Here we reply with a static status (containing the configuration properties).
+///         // But we could add dynamic properties for Backend monitoring.
+///         self.admin_status.clone()
 ///     }
 ///
 ///     async fn create_storage(&mut self, properties: Properties) -> ZResult<Box<dyn Storage>> {
@@ -67,6 +89,9 @@ pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 ///
 /// impl MyStorage {
 ///     async fn new(properties: Properties) -> ZResult<MyStorage> {
+///         // The properties are the ones passed via a PUT in the admin space for Storage creation.
+///         // They contain at least a PROP_STORAGE_PATH_EXPR entry (i.e. "path_expr").
+///         // Here we choose to re-expose them as they are in the admin space for GET operations.
 ///         let admin_status = utils::properties_to_json_value(&properties);
 ///         Ok(MyStorage { admin_status })
 ///     }
@@ -75,7 +100,9 @@ pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 /// #[async_trait]
 /// impl Storage for MyStorage {
 ///     async fn get_admin_status(&self) -> Value {
-///         // TODO: possibly add more properties in returned Value for more information about this storage
+///         // This operation is called on GET operation on the admin space for the Storage
+///         // Here we reply with a static status (containing the configuration properties).
+///         // But we could add dynamic properties for Storage monitoring.
 ///         self.admin_status.clone()
 ///     }
 ///
@@ -87,11 +114,11 @@ pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 ///                 info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
 ///                 match &info.timestamp {
 ///                     Some(ts) => ts.clone(),
-///                     None => new_reception_timestamp(),
+///                     None => zenoh::utils::new_reception_timestamp(),
 ///                 },
 ///             )
 ///         } else {
-///             (ChangeKind::PUT, new_reception_timestamp())
+///             (ChangeKind::PUT, zenoh::utils::new_reception_timestamp())
 ///         };
 ///         // Store or delete the sample depending the ChangeKind
 ///         match kind {
@@ -106,7 +133,7 @@ pub const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 ///                 let _key = sample.res_name;
 ///                 // TODO:
 ///                 //  - check if timestamp is newer than the stored one for the same key
-///                 //  - if yes: mark (key, sample) as deleted (possibly scheduling definitive removal for later)
+///                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
 ///                 //  - if not: drop the sample
 ///             }
 ///             ChangeKind::PATCH => {
@@ -218,15 +245,4 @@ impl TryFrom<&Query> for Selector {
     fn try_from(q: &Query) -> Result<Self, Self::Error> {
         Selector::try_from(&q.q)
     }
-}
-
-/// Generates a reception timestamp with id=0x00
-pub fn new_reception_timestamp() -> Timestamp {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    use zenoh::TimestampID;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(
-        now.into(),
-        TimestampID::new(1, [0u8; TimestampID::MAX_SIZE]),
-    )
 }

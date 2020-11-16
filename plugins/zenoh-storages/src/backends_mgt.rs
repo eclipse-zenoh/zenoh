@@ -20,10 +20,10 @@ use log::{debug, error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use zenoh::{ChangeKind, Path, PathExpr, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
-use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor};
+use zenoh_backend_traits::{
+    IncomingDataInterceptor, OutgoingDataInterceptor, PROP_STORAGE_PATH_EXPR,
+};
 use zenoh_util::{zerror, zerror2};
-
-pub(crate) const STORAGE_PATH_EXPR_PROPERTY: &str = "path_expr";
 
 pub(crate) async fn start_backend(
     backend: Box<dyn zenoh_backend_traits::Backend>,
@@ -135,11 +135,11 @@ async fn create_and_start_storage(
 ) -> ZResult<Sender<bool>> {
     trace!("Create storage {}", admin_path);
     if let Value::Properties(props) = value {
-        let path_expr_str = props.get(STORAGE_PATH_EXPR_PROPERTY).ok_or_else(|| {
+        let path_expr_str = props.get(PROP_STORAGE_PATH_EXPR).ok_or_else(|| {
             zerror2!(ZErrorKind::Other {
                 descr: format!(
                     "Can't create storage {}: no {} property",
-                    admin_path, STORAGE_PATH_EXPR_PROPERTY
+                    admin_path, PROP_STORAGE_PATH_EXPR
                 )
             })
         })?;

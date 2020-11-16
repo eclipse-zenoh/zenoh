@@ -17,6 +17,7 @@ use crate::net::{
     QueryConsolidation, QueryTarget, Queryable, RBuf, Reliability, RepliesSender, Reply, ResKey,
     Sample, Session, SubInfo, SubMode, Subscriber, ZInt,
 };
+use crate::utils::new_reception_timestamp;
 use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
 use async_std::pin::Pin;
 use async_std::stream::Stream;
@@ -26,7 +27,6 @@ use log::{debug, warn};
 use pin_project_lite::pin_project;
 use std::convert::TryInto;
 use std::fmt;
-use zenoh_protocol::core::TimestampID;
 use zenoh_util::zerror;
 
 /// A Workspace to operate on zenoh.
@@ -76,7 +76,7 @@ impl Workspace<'_> {
         &self.prefix
     }
 
-    /// Returns the zenoh-net [Session](net::Session) used by this workspace.
+    /// Returns the zenoh-net [`Session`] used by this workspace.
     /// This is for advanced use cases requiring fine usage of the zenoh-net API.
     #[inline]
     pub fn session(&self) -> &Session {
@@ -679,15 +679,4 @@ impl Stream for GetRequestStream<'_> {
             Poll::Pending => Poll::Pending,
         }
     }
-}
-
-// generate a reception timestamp with id=0x00
-fn new_reception_timestamp() -> Timestamp {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    Timestamp::new(
-        now.into(),
-        TimestampID::new(1, [0u8; TimestampID::MAX_SIZE]),
-    )
 }

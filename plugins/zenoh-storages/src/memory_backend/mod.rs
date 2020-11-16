@@ -24,8 +24,9 @@ use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
 pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
-    // For now admin status is static and only contains a "kind"
-    let admin_status = Value::Json(r#"{"kind"="memory"}"#.to_string());
+    // For now admin status is static and only contains a PROP_BACKEND_TYPE entry
+    let properties = Properties::from(&[(PROP_BACKEND_TYPE, "memory")][..]);
+    let admin_status = utils::properties_to_json_value(&properties);
     Ok(Box::new(MemoryBackend { admin_status }))
 }
 
@@ -157,11 +158,11 @@ impl Storage for MemoryStorage {
                 info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
                 match &info.timestamp {
                     Some(ts) => ts.clone(),
-                    None => new_reception_timestamp(),
+                    None => utils::new_reception_timestamp(),
                 },
             )
         } else {
-            (ChangeKind::PUT, new_reception_timestamp())
+            (ChangeKind::PUT, utils::new_reception_timestamp())
         };
         match kind {
             ChangeKind::PUT => match self.map.write().await.entry(sample.res_name.clone()) {

@@ -34,6 +34,14 @@ use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_util::{zerror, zerror2};
 
+// Properies used by the Backend
+pub const PROP_BACKEND_URL: &str = "url";
+
+// Properies used by the Storage
+pub const PROP_STORAGE_DB: &str = "db";
+pub const PROP_STORAGE_CREATE_DB: &str = "create_db";
+pub const PROP_STORAGE_ON_CLOSURE: &str = "on_closure";
+
 // delay after deletion to drop a measurement
 const DROP_MEASUREMENT_TIMEOUT_MS: u64 = 5000;
 
@@ -43,15 +51,15 @@ pub fn create_backend(props: &Properties) -> ZResult<Box<dyn Backend>> {
     // Try to activate it here, ignoring failures.
     let _ = env_logger::try_init();
 
-    match props.get("url") {
+    match props.get(PROP_BACKEND_URL) {
         Some(url) => {
             // Check connectivity to InfluxDB, no need for a database for this
             let client = Client::new(url, "UNUSED");
             match async_std::task::block_on(async move { client.ping().await }) {
                 Ok(_) => {
-                    let mut admin_status_props = props.clone();
-                    let _ = admin_status_props.insert("kind".into(), "time series".into());
-                    let admin_status = zenoh::utils::properties_to_json_value(&admin_status_props);
+                    let mut p = props.clone();
+                    p.insert(PROP_BACKEND_TYPE.into(), "InfluxDB".into());
+                    let admin_status = zenoh::utils::properties_to_json_value(&p);
                     Ok(Box::new(InfluxDbBackend {
                         url: url.clone(),
                         admin_status,
@@ -101,7 +109,7 @@ enum OnClosure {
 impl TryFrom<&Properties> for OnClosure {
     type Error = ZError;
     fn try_from(p: &Properties) -> ZResult<OnClosure> {
-        match p.get("on_closure") {
+        match p.get(PROP_STORAGE_ON_CLOSURE) {
             Some(s) => {
                 if s == "drop_db" {
                     Ok(OnClosure::DropDB)
@@ -129,14 +137,14 @@ struct InfluxDbStorage {
 
 impl InfluxDbStorage {
     async fn new(props: Properties, url: &str) -> ZResult<InfluxDbStorage> {
-        let path_expr = props.get("path_expr").unwrap();
-        let path_prefix = match props.get("path_prefix") {
+        let path_expr = props.get(PROP_STORAGE_PATH_EXPR).unwrap();
+        let path_prefix = match props.get(PROP_STORAGE_PATH_PREFIX) {
             Some(p) => {
                 if !path_expr.starts_with(p) {
                     return zerror!(ZErrorKind::Other {
                         descr: format!(
-                            "The specified path_prefix={} is not a prefix of pah_expr={}",
-                            p, path_expr
+                            "The specified {}={} is not a prefix of {}={}",
+                            PROP_STORAGE_PATH_PREFIX, p, PROP_STORAGE_PATH_EXPR, path_expr
                         )
                     });
                 }
@@ -145,9 +153,9 @@ impl InfluxDbStorage {
             None => None,
         };
         let on_closure = OnClosure::try_from(&props)?;
-        let createdb = props.contains_key("create_db");
+        let createdb = props.contains_key(PROP_STORAGE_CREATE_DB);
 
-        let client = match props.get("db") {
+        let client = match props.get(PROP_STORAGE_DB) {
             Some(db) => {
                 check_db_existence(url, db, createdb).await?;
                 Client::new(url, db)
@@ -160,7 +168,7 @@ impl InfluxDbStorage {
         };
 
         let mut admin_status_props = props.clone();
-        admin_status_props.insert("db".into(), client.database_name().into());
+        admin_status_props.insert(PROP_STORAGE_DB.into(), client.database_name().into());
         let admin_status = zenoh::utils::properties_to_json_value(&admin_status_props);
         Ok(InfluxDbStorage {
             admin_status,
@@ -268,9 +276,12 @@ impl Storage for InfluxDbStorage {
                     }
                 }
 
+                // encode the value as a string to be stored in InfluxDB
                 let (encoding, base64, value) = change.value.unwrap().encode_to_string();
+
                 // Note: tags are stored as strings in InfluxDB, while fileds are typed.
                 // For simpler/faster deserialization, we store encoding, timestamp and base64 as fields.
+                // while the kind is stored as a tag to be indexed by InfluxDB and have faster queries on it.
                 let query =
                     InfluxWQuery::new(InfluxTimestamp::Nanoseconds(influx_time), measurement)
                         .add_tag("kind", "PUT")
@@ -333,16 +344,10 @@ impl Storage for InfluxDbStorage {
 
     // When receiving a Query (i.e. on GET operations)
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-        #[derive(Deserialize, Debug)]
-        struct ZenohPoint {
-            kind: String,
-            timestamp: String,
-            encoding: zenoh::net::ZInt,
-            base64: bool,
-            value: String,
-        }
-
+        // get the query's Selector
         let selector = Selector::try_from(&query)?;
+
+        // if a path_prefix is used
         let regex = if let Some(prefix) = &self.path_prefix {
             // get the list of sub-path expressions that will match the same stored keys than
             // the selector, if those keys had the path_prefix.
@@ -351,14 +356,29 @@ impl Storage for InfluxDbStorage {
                 "Query on {} with path_expr={} => sub_path_exprs = {:?}",
                 selector.path_expr, prefix, path_exprs
             );
+            // convert the sub-path expressions into an Influx regex
             path_exprs_to_influx_regex(&path_exprs)
         } else {
+            // convert the Selector's path expression into an Influx regex
             path_exprs_to_influx_regex(&[selector.path_expr.as_str()])
         };
+
+        // construct the Influx query clauses from the Selector
         let clauses = clauses_from_selector(&selector);
+
+        // the Influx query
         let influx_query_str = format!("SELECT * FROM {} {}", regex, clauses);
         let influx_query = InfluxQuery::raw_read_query(&influx_query_str);
 
+        // the expected JSon type resulting from the query
+        #[derive(Deserialize, Debug)]
+        struct ZenohPoint {
+            kind: String,
+            timestamp: String,
+            encoding: zenoh::net::ZInt,
+            base64: bool,
+            value: String,
+        }
         debug!("Get {} with Influx query: {}", selector, influx_query_str);
         match self.client.json_query(influx_query).await {
             Ok(mut query_result) => {
@@ -366,6 +386,7 @@ impl Storage for InfluxDbStorage {
                     match query_result.deserialize_next::<ZenohPoint>() {
                         Ok(retn) => {
                             for serie in retn.series {
+                                // reconstruct the path from the measurement name (same as serie.name)
                                 let mut res_name = String::with_capacity(serie.name.len());
                                 if let Some(p) = &self.path_prefix {
                                     res_name.push_str(&p);
@@ -373,6 +394,7 @@ impl Storage for InfluxDbStorage {
                                 res_name.push_str(&serie.name);
                                 debug!("Replying {} values for {}", serie.values.len(), res_name);
                                 for zpoint in serie.values {
+                                    // decode the value and the timestamp
                                     match (
                                         Value::decode_from_string(
                                             zpoint.encoding,
