@@ -36,49 +36,93 @@ use zenoh_util::{zerror, zerror2};
 
 // Properies used by the Backend
 pub const PROP_BACKEND_URL: &str = "url";
+pub const PROP_BACKEND_USERNAME: &str = "username";
+pub const PROP_BACKEND_PASSWORD: &str = "password";
 
 // Properies used by the Storage
 pub const PROP_STORAGE_DB: &str = "db";
 pub const PROP_STORAGE_CREATE_DB: &str = "create_db";
 pub const PROP_STORAGE_ON_CLOSURE: &str = "on_closure";
+pub const PROP_STORAGE_USERNAME: &str = PROP_BACKEND_USERNAME;
+pub const PROP_STORAGE_PASSWORD: &str = PROP_BACKEND_PASSWORD;
 
 // delay after deletion to drop a measurement
 const DROP_MEASUREMENT_TIMEOUT_MS: u64 = 5000;
 
 #[no_mangle]
-pub fn create_backend(props: &Properties) -> ZResult<Box<dyn Backend>> {
+pub fn create_backend(properties: &Properties) -> ZResult<Box<dyn Backend>> {
     // For some reasons env_logger is sometime not active in a loaded library.
     // Try to activate it here, ignoring failures.
     let _ = env_logger::try_init();
 
-    match props.get(PROP_BACKEND_URL) {
-        Some(url) => {
-            // Check connectivity to InfluxDB, no need for a database for this
-            let client = Client::new(url, "UNUSED");
-            match async_std::task::block_on(async move { client.ping().await }) {
-                Ok(_) => {
-                    let mut p = props.clone();
-                    p.insert(PROP_BACKEND_TYPE.into(), "InfluxDB".into());
-                    let admin_status = zenoh::utils::properties_to_json_value(&p);
-                    Ok(Box::new(InfluxDbBackend {
-                        url: url.clone(),
-                        admin_status,
-                    }))
-                }
-                Err(err) => zerror!(ZErrorKind::Other {
-                    descr: format!("Failed to create InfluxDb Backend : {}", err)
-                }),
-            }
+    // work on a copy of properties to update them before re-use as admin_status.
+    let mut props = properties.clone();
+
+    let url = match props.get(PROP_BACKEND_URL) {
+        Some(url) => url.clone(),
+        None => {
+            return zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "Properties for InfluxDb Backend miss '{}'",
+                    PROP_BACKEND_URL
+                )
+            })
         }
-        None => zerror!(ZErrorKind::Other {
-            descr: "Properties for InfluxDb Backend miss 'url'".to_string()
+    };
+
+    // The InfluxDB client used for administration purposes (show/create/drop databases)
+    let mut admin_client = Client::new(&url, "");
+
+    // Note: remove username/password from properties to not re-expose them in admin_status
+    let credentials = match (
+        props.remove(PROP_BACKEND_USERNAME),
+        props.remove(PROP_BACKEND_PASSWORD),
+    ) {
+        (Some(username), Some(password)) => {
+            admin_client = admin_client.with_auth(&username, &password);
+            Some((username, password))
+        }
+        (None, None) => None,
+        (None, _) => {
+            return zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "Properties for InfluxDb Backend includes '{}' but not '{}",
+                    PROP_BACKEND_USERNAME, PROP_BACKEND_PASSWORD
+                )
+            })
+        }
+        (_, None) => {
+            return zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "Properties for InfluxDb Backend includes '{}' but not '{}",
+                    PROP_BACKEND_PASSWORD, PROP_BACKEND_USERNAME
+                )
+            })
+        }
+    };
+
+    // Check connectivity to InfluxDB, no need for a database for this
+    let admin_client_copy = admin_client.clone();
+    match async_std::task::block_on(async move { admin_client_copy.ping().await }) {
+        Ok(_) => {
+            props.insert(PROP_BACKEND_TYPE.into(), "InfluxDB".into());
+            let admin_status = zenoh::utils::properties_to_json_value(&props);
+            Ok(Box::new(InfluxDbBackend {
+                admin_status,
+                admin_client,
+                credentials,
+            }))
+        }
+        Err(err) => zerror!(ZErrorKind::Other {
+            descr: format!("Failed to create InfluxDb Backend : {}", err)
         }),
     }
 }
 
 pub struct InfluxDbBackend {
-    url: String,
     admin_status: Value,
+    admin_client: Client,
+    credentials: Option<(String, String)>,
 }
 
 #[async_trait]
@@ -88,7 +132,100 @@ impl Backend for InfluxDbBackend {
     }
 
     async fn create_storage(&mut self, properties: Properties) -> ZResult<Box<dyn Storage>> {
-        Ok(Box::new(InfluxDbStorage::new(properties, &self.url).await?))
+        // work on a copy of properties to update them before re-use as admin_status.
+        let mut props = properties.clone();
+
+        let path_expr = props.get(PROP_STORAGE_PATH_EXPR).unwrap();
+        let path_prefix = match props.get(PROP_STORAGE_PATH_PREFIX) {
+            Some(p) => {
+                if !path_expr.starts_with(p) {
+                    return zerror!(ZErrorKind::Other {
+                        descr: format!(
+                            "The specified {}={} is not a prefix of {}={}",
+                            PROP_STORAGE_PATH_PREFIX, p, PROP_STORAGE_PATH_EXPR, path_expr
+                        )
+                    });
+                }
+                Some(p.to_string())
+            }
+            None => None,
+        };
+        let on_closure = OnClosure::try_from(&props)?;
+        let (db, createdb) = match (
+            props.get(PROP_STORAGE_DB),
+            props.contains_key(PROP_STORAGE_CREATE_DB),
+        ) {
+            (Some(name), b) => (name.clone(), b),
+            (None, _) => {
+                let name = generate_db_name();
+                // insert generated name in props to be re-exposed in admin_status
+                props.insert(PROP_STORAGE_DB.to_string(), name.clone());
+                // force DB creation, even if not explicitly specified
+                (name, true)
+            }
+        };
+
+        // The Influx client on database used to write/query on this storage
+        // (using the same URL than backend's admin_client, but with storage credentials)
+        let mut client = Client::new(self.admin_client.database_url(), &db);
+        // Note: remove username/password from properties to not re-expose them in admin_status
+        let storage_username = match (
+            props.remove(PROP_STORAGE_USERNAME),
+            props.remove(PROP_STORAGE_PASSWORD),
+        ) {
+            (Some(username), Some(password)) => {
+                client = client.with_auth(&username, password);
+                Some(username)
+            }
+            (None, None) => None,
+            (None, _) => {
+                return zerror!(ZErrorKind::Other {
+                    descr: format!(
+                        "Properties for InfluxDb Storage includes '{}' but not '{}",
+                        PROP_BACKEND_USERNAME, PROP_BACKEND_PASSWORD
+                    )
+                })
+            }
+            (_, None) => {
+                return zerror!(ZErrorKind::Other {
+                    descr: format!(
+                        "Properties for InfluxDb Storage includes '{}' but not '{}",
+                        PROP_BACKEND_PASSWORD, PROP_BACKEND_USERNAME
+                    )
+                })
+            }
+        };
+
+        // Check if the database exists (using storages credentials)
+        if !is_db_existing(&client, &db).await? {
+            if createdb {
+                // create db using backend's credentials
+                create_db(&self.admin_client, &db, storage_username).await?;
+            } else {
+                return zerror!(ZErrorKind::Other {
+                    descr: format!("Database '{}' doesn't exist in InfluxDb", db)
+                });
+            }
+        }
+
+        // re-insert the actual name of database (in case it has been generated)
+        props.insert(PROP_STORAGE_DB.into(), client.database_name().into());
+        let admin_status = zenoh::utils::properties_to_json_value(&props);
+
+        // The Influx client on database with backend's credentials (admin), to drop measurements and database
+        let mut admin_client = Client::new(self.admin_client.database_url(), db);
+        if let Some((username, password)) = &self.credentials {
+            admin_client = admin_client.with_auth(username, password);
+        }
+
+        Ok(Box::new(InfluxDbStorage {
+            admin_status,
+            admin_client,
+            client,
+            path_prefix,
+            on_closure,
+            timer: Timer::new(),
+        }))
     }
 
     fn incoming_data_interceptor(&self) -> Option<Box<dyn IncomingDataInterceptor>> {
@@ -126,59 +263,97 @@ impl TryFrom<&Properties> for OnClosure {
     }
 }
 
-// Your Storage implementation
 struct InfluxDbStorage {
     admin_status: Value,
+    admin_client: Client,
+    client: Client,
     path_prefix: Option<String>,
     on_closure: OnClosure,
-    client: Client,
     timer: Timer,
 }
 
 impl InfluxDbStorage {
-    async fn new(props: Properties, url: &str) -> ZResult<InfluxDbStorage> {
-        let path_expr = props.get(PROP_STORAGE_PATH_EXPR).unwrap();
-        let path_prefix = match props.get(PROP_STORAGE_PATH_PREFIX) {
-            Some(p) => {
-                if !path_expr.starts_with(p) {
+    /*    async fn new(props: Properties, admin_client: Client) -> ZResult<InfluxDbStorage> {
+            // work on a copy of properties to update them before re-use as admin_status.
+            let mut props = props.clone();
+
+            let path_expr = props.get(PROP_STORAGE_PATH_EXPR).unwrap();
+            let path_prefix = match props.get(PROP_STORAGE_PATH_PREFIX) {
+                Some(p) => {
+                    if !path_expr.starts_with(p) {
+                        return zerror!(ZErrorKind::Other {
+                            descr: format!(
+                                "The specified {}={} is not a prefix of {}={}",
+                                PROP_STORAGE_PATH_PREFIX, p, PROP_STORAGE_PATH_EXPR, path_expr
+                            )
+                        });
+                    }
+                    Some(p.to_string())
+                }
+                None => None,
+            };
+            let on_closure = OnClosure::try_from(&props)?;
+            let createdb = props.contains_key(PROP_STORAGE_CREATE_DB);
+
+            // the Influx client use to write/query on this storage (using the same URL than admin_client)
+            let url = admin_client.database_url();
+            let mut client = match props.get(PROP_STORAGE_DB) {
+                Some(db) => {
+                    check_db_existence(
+                        &admin_client,
+                        db,
+                        createdb,
+                        props.get(PROP_STORAGE_USERNAME),
+                    )
+                    .await?;
+                    Client::new(url, db)
+                }
+                None => {
+                    let db = generate_db_name();
+                    create_db(&admin_client, &db, props.get(PROP_STORAGE_USERNAME)).await?;
+                    Client::new(url, db)
+                }
+            };
+            // Note: remove username/password from properties to not re-expose them in admin_status
+            match (
+                props.remove(PROP_STORAGE_USERNAME),
+                props.remove(PROP_STORAGE_PASSWORD),
+            ) {
+                (Some(username), Some(password)) => {
+                    client = client.with_auth(username, password);
+                }
+                (None, None) => (),
+                (None, _) => {
                     return zerror!(ZErrorKind::Other {
                         descr: format!(
-                            "The specified {}={} is not a prefix of {}={}",
-                            PROP_STORAGE_PATH_PREFIX, p, PROP_STORAGE_PATH_EXPR, path_expr
+                            "Properties for InfluxDb Storage includes '{}' but not '{}",
+                            PROP_BACKEND_USERNAME, PROP_BACKEND_PASSWORD
                         )
-                    });
+                    })
                 }
-                Some(p.to_string())
-            }
-            None => None,
-        };
-        let on_closure = OnClosure::try_from(&props)?;
-        let createdb = props.contains_key(PROP_STORAGE_CREATE_DB);
+                (_, None) => {
+                    return zerror!(ZErrorKind::Other {
+                        descr: format!(
+                            "Properties for InfluxDb Storage includes '{}' but not '{}",
+                            PROP_BACKEND_PASSWORD, PROP_BACKEND_USERNAME
+                        )
+                    })
+                }
+            };
 
-        let client = match props.get(PROP_STORAGE_DB) {
-            Some(db) => {
-                check_db_existence(url, db, createdb).await?;
-                Client::new(url, db)
-            }
-            None => {
-                let db = generate_db_name();
-                create_db(url, &db).await?;
-                Client::new(url, db)
-            }
-        };
-
-        let mut admin_status_props = props.clone();
-        admin_status_props.insert(PROP_STORAGE_DB.into(), client.database_name().into());
-        let admin_status = zenoh::utils::properties_to_json_value(&admin_status_props);
-        Ok(InfluxDbStorage {
-            admin_status,
-            path_prefix,
-            on_closure,
-            client,
-            timer: Timer::new(),
-        })
-    }
-
+            // re-insert the actual name of database (in case it has been generated)
+            props.insert(PROP_STORAGE_DB.into(), client.database_name().into());
+            let admin_status = zenoh::utils::properties_to_json_value(&props);
+            Ok(InfluxDbStorage {
+                admin_status,
+                path_prefix,
+                on_closure,
+                admin_client,
+                client,
+                timer: Timer::new(),
+            })
+        }
+    */
     async fn get_deletion_timestamp(&self, measurement: &str) -> ZResult<Option<Timestamp>> {
         #[derive(Deserialize, Debug, PartialEq)]
         struct QueryResult {
@@ -228,7 +403,7 @@ impl InfluxDbStorage {
         let event = TimedEvent::once(
             Instant::now() + Duration::from_millis(DROP_MEASUREMENT_TIMEOUT_MS),
             TimedMeasurementDrop {
-                client: self.client.clone(),
+                client: self.admin_client.clone(),
                 measurement: measurement.to_string(),
             },
         );
@@ -462,10 +637,10 @@ impl Drop for InfluxDbStorage {
         match self.on_closure {
             OnClosure::DropDB => {
                 let _ = task::block_on(async move {
-                    let db = self.client.database_name();
+                    let db = self.admin_client.database_name();
                     debug!("Close InfluxDB storage, dropping database {}", db);
                     let query = InfluxQuery::raw_read_query(format!("DROP DATABASE {}", db));
-                    if let Err(e) = self.client.query(&query).await {
+                    if let Err(e) = self.admin_client.query(&query).await {
                         error!("Failed to drop InfluxDb database '{}' : {}", db, e)
                     }
                 });
@@ -559,12 +734,11 @@ fn generate_db_name() -> String {
     format!("zenoh_db_{}", Uuid::new_v4().to_simple())
 }
 
-async fn check_db_existence(url: &str, db_name: &str, create: bool) -> ZResult<()> {
+async fn is_db_existing(client: &Client, db_name: &str) -> ZResult<bool> {
     #[derive(Deserialize)]
     struct Database {
         name: String,
     }
-    let client = Client::new(url, "UNUSED");
     let query = InfluxQuery::raw_read_query("SHOW DATABASES");
     debug!("List databases with Influx query: {:?}", query);
     match client.json_query(query).await {
@@ -573,18 +747,12 @@ async fn check_db_existence(url: &str, db_name: &str, create: bool) -> ZResult<(
                 for serie in dbs.series {
                     for db in serie.values {
                         if db_name == db.name {
-                            return Ok(());
+                            return Ok(true);
                         }
                     }
                 }
-                // not found; create it if specified
-                if create {
-                    create_db(url, db_name).await
-                } else {
-                    zerror!(ZErrorKind::Other {
-                        descr: format!("InfluxDb database '{}' not found", db_name)
-                    })
-                }
+                // not found
+                Ok(false)
             }
             Err(e) => zerror!(ZErrorKind::Other {
                 descr: format!(
@@ -599,20 +767,40 @@ async fn check_db_existence(url: &str, db_name: &str, create: bool) -> ZResult<(
     }
 }
 
-async fn create_db(url: &str, db_name: &str) -> ZResult<()> {
-    let client = Client::new(url, "UNUSED");
+async fn create_db(
+    client: &Client,
+    db_name: &str,
+    storage_username: Option<String>,
+) -> ZResult<()> {
     let query = InfluxQuery::raw_read_query(format!("CREATE DATABASE {}", db_name));
     debug!("Create Influx database: {}", db_name);
     if let Err(e) = client.query(&query).await {
-        zerror!(ZErrorKind::Other {
+        return zerror!(ZErrorKind::Other {
             descr: format!(
                 "Failed to create new InfluxDb database '{}' : {}",
                 db_name, e
             )
-        })
-    } else {
-        Ok(())
+        });
     }
+
+    // is a username is specified for storage access, grant him access to the database
+    if let Some(username) = storage_username {
+        let query =
+            InfluxQuery::raw_read_query(format!("GRANT ALL ON {} TO {}", db_name, username));
+        debug!(
+            "Grant access to {} on Influx database: {}",
+            username, db_name
+        );
+        if let Err(e) = client.query(&query).await {
+            return zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "Failed grant access to {} on Influx database '{}' : {}",
+                    username, db_name, e
+                )
+            });
+        }
+    }
+    Ok(())
 }
 
 // Returns an InfluxDB regex (see https://docs.influxdata.com/influxdb/v1.8/query_language/explore-data/#regular-expressions)
@@ -668,7 +856,7 @@ fn clauses_from_selector(s: &Selector) -> String {
         }
         _ => {
             //No time selection, return only latest values
-            result.push_str("ORDER BY time DESC LIMIT 1");
+            result.push_str(" ORDER BY time DESC LIMIT 1");
         }
     }
     result
