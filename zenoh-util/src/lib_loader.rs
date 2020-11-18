@@ -25,6 +25,8 @@ zconfigurable! {
     pub static ref LIB_PREFIX: String = DLL_PREFIX.to_string();
     /// The libraries suffix for the current platform (`".dll"` or `".so"` or `".dylib"`...)
     pub static ref LIB_SUFFIX: String = DLL_SUFFIX.to_string();
+    /// The default list of paths where to search for libraries to load
+    pub static ref LIB_DEFAULT_SEARCH_PATHS: String = "/usr/local/lib:/usr/lib:~/.zenoh/lib:.".to_string();
 }
 
 /// LibLoader allows search for librairies and to load them.
@@ -34,10 +36,18 @@ pub struct LibLoader {
 }
 
 impl LibLoader {
+    /// Returns the list of search paths used by `LibLoader::default()`
+    pub fn default_search_paths() -> &'static str {
+        &(*LIB_DEFAULT_SEARCH_PATHS)
+    }
+
     /// Creates a new [LibLoader] with a set of paths where the libraries will be searched for.
     /// If `exe_parent_dir`is true, the parent directory of the current executable is also added
     /// to the set of paths for search.
-    pub fn new(search_dirs: &[&str], exe_parent_dir: bool) -> LibLoader {
+    pub fn new<S>(search_dirs: &[S], exe_parent_dir: bool) -> LibLoader
+    where
+        S: AsRef<str>,
+    {
         let mut search_paths: Vec<PathBuf> = vec![];
         for s in search_dirs {
             match shellexpand::full(s) {
@@ -45,7 +55,7 @@ impl LibLoader {
                     Ok(path) => search_paths.push(path),
                     Err(err) => debug!("Cannot search for libraries in {}: {}", cow_str, err),
                 },
-                Err(err) => warn!("Cannot search for libraries in '{}': {} ", s, err),
+                Err(err) => warn!("Cannot search for libraries in '{}': {} ", s.as_ref(), err),
             }
         }
 
@@ -206,6 +216,7 @@ impl LibLoader {
 
 impl Default for LibLoader {
     fn default() -> Self {
-        LibLoader::new(&["/usr/local/lib", "/usr/lib", "~/.zenoh/lib", "."], true)
+        let paths: Vec<&str> = (*LIB_DEFAULT_SEARCH_PATHS).split(':').collect();
+        LibLoader::new(&paths, true)
     }
 }

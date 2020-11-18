@@ -29,9 +29,7 @@ pub struct PluginsMgr {
 }
 
 impl PluginsMgr {
-    pub fn new() -> PluginsMgr {
-        let lib_loader = LibLoader::default();
-
+    pub fn new(lib_loader: LibLoader) -> PluginsMgr {
         PluginsMgr {
             lib_loader,
             plugins: vec![],
@@ -96,7 +94,7 @@ impl PluginsMgr {
 impl Default for PluginsMgr {
     #[inline]
     fn default() -> PluginsMgr {
-        PluginsMgr::new()
+        PluginsMgr::new(LibLoader::default())
     }
 }
 

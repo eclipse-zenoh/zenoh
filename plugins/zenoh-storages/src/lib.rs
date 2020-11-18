@@ -32,24 +32,29 @@ mod storages_mgt;
 
 #[no_mangle]
 pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
+    lazy_static::lazy_static! {
+        static ref BACKEND_SEARCH_DIR_USAGE: String = format!(
+            "--backend-search-dir=[DIRECTORY]... \
+        'A directory where to search for backends libraries to load. \
+        Repeat this option to specify several search directories'. \
+        By default, the backends libraries will be searched in: '{}' .",
+            LibLoader::default_search_paths()
+        );
+    }
+
     vec![
         Arg::from_usage(
             "--no-backend \
             'If true, no backend (and thus no storage) are created at startup. \
-             If false (default) the Memory backend it present at startup.'"
+             If false (default) the Memory backend it present at startup.'",
         ),
         Arg::from_usage(
             "--mem-storage=[PATH_EXPR]... \
             'A memory storage to be created at start-up. \
-            Repeat this option to created several storages'"
+            Repeat this option to created several storages'",
         )
         .conflicts_with("no-backend"),
-        Arg::from_usage(
-            "--backend-search-dir=[DIRECTORY]... \
-            'A directory where to search for backends libraries to load. \
-            Repeat this option to specify several search directories'. \
-            By default, the backends libraries will be searched in: '/usr/local/lib:/usr/lib:~/.zenoh/lib:.' ."
-        ),
+        Arg::from_usage(&BACKEND_SEARCH_DIR_USAGE),
     ]
 }
 
