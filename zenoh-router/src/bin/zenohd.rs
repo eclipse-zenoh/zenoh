@@ -18,9 +18,25 @@ use git_version::git_version;
 use zenoh_router::plugins::PluginsMgr;
 use zenoh_router::runtime::{config, AdminSpace, Runtime, RuntimeProperties};
 use zenoh_util::collections::Properties;
+use zenoh_util::LibLoader;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
+
+fn get_plugin_search_dirs_from_args() -> Vec<String> {
+    let mut result: Vec<String> = vec![];
+    let mut iter = std::env::args();
+    while let Some(arg) = iter.next() {
+        if arg == "--plugin-search-dir" {
+            if let Some(arg2) = iter.next() {
+                result.push(arg2);
+            }
+        } else if let Some(name) = arg.strip_prefix("--plugin-search-dir=") {
+            result.push(name.to_string());
+        }
+    }
+    result
+}
 
 fn get_plugins_from_args() -> Vec<String> {
     let mut result: Vec<String> = vec![];
@@ -41,6 +57,14 @@ fn main() {
     task::block_on(async {
         env_logger::init();
         log::debug!("zenohd {}", GIT_VERSION);
+
+        let plugin_search_dir_usage = format!(
+            "--plugin-search-dir=[DIRECTORY]... \
+            'A directory where to search for plugins libraries to load. \
+            Repeat this option to specify several search directories'. \
+            By default, the plugins libraries will be searched in: '{}' .",
+            LibLoader::default_search_paths()
+        );
 
         let app = App::new("The zenoh router")
             .version(GIT_VERSION)
@@ -68,7 +92,7 @@ fn main() {
             If not set, a random UUIDv4 will be used.'",
             ))
             .arg(Arg::from_usage(
-                "-P, --plugin=[PATH_TO_PLUGIN]... \
+                "-P, --plugin=[PATH_TO_PLUGIN_LIB]... \
              'A plugin that must be loaded. Repeat this option to load several plugins.'",
             ))
             .arg(Arg::from_usage(
@@ -76,16 +100,27 @@ fn main() {
              'When set, zenohd will not look for plugins nor try to load any plugin except the \
              ones explicitely configured with -P or --plugin.'",
             ))
+            .arg(Arg::from_usage(&plugin_search_dir_usage
+            ).conflicts_with("plugin-nolookup"))
             .arg(Arg::from_usage(
                 "--no-timestamp \
              'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
              This option desactivates this feature.'",
             ));
 
-        let mut plugins_mgr = PluginsMgr::new();
+        // Get plugins search directories from the command line, and create LibLoader
+        let plugin_search_dirs = get_plugin_search_dirs_from_args();
+        let lib_loader = if !plugin_search_dirs.is_empty() {
+            LibLoader::new(plugin_search_dirs.as_slice(), false)
+        } else {
+            LibLoader::default()
+        };
+
+        let mut plugins_mgr = PluginsMgr::new(lib_loader);
+
         // Get specified plugins from command line
-        let plugins = get_plugins_from_args();
-        plugins_mgr.load_plugins(plugins).unwrap();
+        plugins_mgr.load_plugins(get_plugins_from_args()).unwrap();
+        // Also search for plugins if no "--plugin-nolookup" arg
         if !std::env::args().any(|arg| arg == "--plugin-nolookup") {
             plugins_mgr.search_and_load_plugins().await;
         }

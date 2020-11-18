@@ -11,6 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+
+//! Some useful functions for Backend/Storage implementations.
+
 use zenoh::net::utils::resource_name::*;
 
 /// Returns the longest prefix in a Path expressions that doesn't contain any '*' character.  
