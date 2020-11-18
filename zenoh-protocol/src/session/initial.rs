@@ -21,7 +21,6 @@ use async_std::sync::{Arc, RwLock, Sender};
 use async_trait::async_trait;
 use rand::Rng;
 use std::collections::HashMap;
-use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasyncwrite, zerror};
 
@@ -56,22 +55,9 @@ macro_rules! zlinksend {
 }
 
 struct PendingOpen {
-    lease: ZInt,
     initial_sn: ZInt,
     sn_resolution: ZInt,
     notify: Sender<ZResult<Session>>,
-}
-
-impl PendingOpen {
-    fn new(lease: ZInt, sn_resolution: ZInt, notify: Sender<ZResult<Session>>) -> PendingOpen {
-        let mut rng = rand::thread_rng();
-        PendingOpen {
-            lease,
-            initial_sn: rng.gen_range(0, sn_resolution),
-            sn_resolution,
-            notify,
-        }
-    }
 }
 
 pub(super) struct InitialSession {
@@ -96,22 +82,40 @@ impl InitialSession {
         attachment: &Option<Attachment>,
         notify: &Sender<ZResult<Session>>,
     ) -> ZResult<()> {
-        let pending = PendingOpen::new(
-            self.manager.config.lease,
-            self.manager.config.sn_resolution,
-            notify.clone(),
-        );
+        // Check if a pending open is already present for this link
+        let mut guard = zasyncwrite!(self.pending);
+        if guard.get(link).is_some() {
+            let e = format!("A session opening is already pending on link: {:?}", link);
+            log::warn!("{}", e);
+            let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
+            notify.send(err).await;
+            return zerror!(ZErrorKind::InvalidLink { descr: e });
+        }
+
+        let initial_sn = {
+            let mut rng = rand::thread_rng();
+            rng.gen_range(0, self.manager.config.sn_resolution)
+        };
+        let pending = PendingOpen {
+            initial_sn,
+            sn_resolution: self.manager.config.sn_resolution,
+            notify: notify.clone(),
+        };
+
+        // Store the pending  for the callback to be used in the process_message
+        let key = link.clone();
+        guard.insert(key, pending);
+        drop(guard);
 
         // Build the fields for the Open Message
         let version = self.manager.config.version;
         let whatami = self.manager.config.whatami;
         let pid = self.manager.config.pid.clone();
-        let lease = pending.lease;
-        let initial_sn = pending.initial_sn;
-        let sn_resolution = if pending.sn_resolution == *SESSION_SEQ_NUM_RESOLUTION {
+        let lease = self.manager.config.lease;
+        let sn_resolution = if self.manager.config.sn_resolution == *SESSION_SEQ_NUM_RESOLUTION {
             None
         } else {
-            Some(pending.sn_resolution)
+            Some(self.manager.config.sn_resolution)
         };
         let locators = self.manager.get_locators().await;
         let locators = match locators.len() {
@@ -123,7 +127,7 @@ impl InitialSession {
         let message = SessionMessage::make_open(
             version,
             whatami,
-            pid,
+            pid.clone(),
             lease,
             initial_sn,
             sn_resolution,
@@ -131,12 +135,19 @@ impl InitialSession {
             attachment.clone(),
         );
 
-        // Store the pending  for the callback to be used in the process_message
-        let key = link.clone();
-        zasyncwrite!(self.pending).insert(key, pending);
-
         // Send the message on the link
-        zlinksend!(message, link)?;
+        if let Err(e) = zlinksend!(message, link) {
+            zasyncwrite!(self.pending).remove(link);
+            let e = format!(
+                "Failed to send open message on link {:?}: {}",
+                link,
+                e.to_string()
+            );
+            log::warn!("{}", e);
+            let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
+            notify.send(err).await;
+            return zerror!(ZErrorKind::InvalidLink { descr: e });
+        }
 
         Ok(())
     }
@@ -209,6 +220,9 @@ impl InitialSession {
                             // Close the link
                             return Action::Close;
                         }
+                    } else {
+                        // Close the link
+                        return Action::Close;
                     }
                 }
 
@@ -230,6 +244,9 @@ impl InitialSession {
                         // Close the link
                         return Action::Close;
                     }
+                } else {
+                    // Close the link
+                    return Action::Close;
                 }
 
                 // Check if the sn_resolution is valid (i.e. the same of existing session)
@@ -251,7 +268,17 @@ impl InitialSession {
                         // Close the link
                         return Action::Close;
                     }
-                }
+
+                    snr
+                } else {
+                    // Close the link
+                    return Action::Close;
+                };
+
+                // Set the sequence number resolution to the one in the Open message in such a
+                // way it is not transmitted back in the Accept message
+                // Set to 0 the initial sn since it was ignored in any case in the Accept message
+                break (s, sn_resolution, 0);
             } else {
                 // Check if a limit for the maximum number of open sessions is set
                 if let Some(limit) = self.manager.config.max_sessions {
@@ -274,26 +301,22 @@ impl InitialSession {
                         return Action::Close;
                     }
                 }
-            }
 
-            // Compute the minimum SN Resolution
-            let agreed_sn_resolution = self.manager.config.sn_resolution.min(sn_resolution);
-            let initial_sn_tx = {
-                // @TODO: in case the session is already active, we should return the last SN
-                let mut rng = rand::thread_rng();
-                rng.gen_range(0, agreed_sn_resolution)
-            };
-            // Compute the Initial SN in reception
-            let initial_sn_rx = if agreed_sn_resolution < sn_resolution {
-                initial_sn % agreed_sn_resolution
-            } else {
-                initial_sn
-            };
+                // Compute the minimum SN Resolution
+                let agreed_sn_resolution = self.manager.config.sn_resolution.min(sn_resolution);
+                let initial_sn_tx = {
+                    // @TODO: in case the session is already active, we should return the last SN
+                    let mut rng = rand::thread_rng();
+                    rng.gen_range(0, agreed_sn_resolution)
+                };
 
-            // Get the session associated to the peer
-            if let Ok(s) = self.manager.get_session(&pid).await {
-                break (s, agreed_sn_resolution, initial_sn_tx);
-            } else {
+                // Compute the Initial SN in reception
+                let initial_sn_rx = if agreed_sn_resolution < sn_resolution {
+                    initial_sn % agreed_sn_resolution
+                } else {
+                    initial_sn
+                };
+
                 // Create a new session
                 let res = self
                     .manager
@@ -379,55 +402,55 @@ impl InitialSession {
         }
 
         // Assign a callback if the session is new
-        let callback = match session.get_callback().await {
-            Ok(callback) => callback,
+        match session.get_callback().await {
+            Ok(c) => {
+                if let Some(callback) = c {
+                    // Notify the session handler there is a new link on this session
+                    callback.new_link(link.clone()).await;
+                } else {
+                    // Notify the session handler that there is a new session and get back a callback
+                    // NOTE: the read loop of the link the open message was sent on remains blocked
+                    //       until the new_session() returns. The read_loop in the various links
+                    //       waits for any eventual transport to associate to. This transport is
+                    //       returned only by the process_open() -- this function.
+                    let callback = match self
+                        .manager
+                        .config
+                        .handler
+                        .new_session(session.clone())
+                        .await
+                    {
+                        Ok(callback) => callback,
+                        Err(e) => {
+                            log::warn!(
+                                "Unable to get session event handler for peer {}: {}",
+                                pid,
+                                e
+                            );
+                            return Action::Close;
+                        }
+                    };
+                    // Set the callback on the transport
+                    if let Err(e) = session.set_callback(callback).await {
+                        log::warn!("Unable to set callback for peer {}: {}", pid, e);
+                        return Action::Close;
+                    }
+                }
+            }
             Err(e) => {
                 log::warn!("Unable to get callback for peer {}: {}", pid, e);
                 return Action::Close;
             }
         };
 
-        if let Some(callback) = callback {
-            callback.new_link(link.clone()).await;
-        } else {
-            // Notify the session handler that there is a new session and get back a callback
-            // NOTE: the read loop of the link the open message was sent on remains blocked
-            //       until the new_session() returns. The read_loop in the various links
-            //       waits for any eventual transport to associate to. This transport is
-            //       returned only by the process_open() -- this function.
-            let callback = match self
-                .manager
-                .config
-                .handler
-                .new_session(session.clone())
-                .await
-            {
-                Ok(callback) => callback,
-                Err(e) => {
-                    log::warn!(
-                        "Unable to get session event handler for peer {}: {}",
-                        pid,
-                        e
-                    );
-                    return Action::Close;
-                }
-            };
-            // Set the callback on the transport
-            if let Err(e) = session.set_callback(callback).await {
-                log::warn!("Unable to set callback for peer {}: {}", pid, e);
-                return Action::Close;
-            }
-        }
-
-        log::debug!(
-            "New session opened from {} with lease {:?}",
-            pid,
-            Duration::from_millis(lease)
-        );
+        log::debug!("New session link established from {}: {}", pid, link);
 
         // Return the target transport to use in the link
         match session.get_transport() {
-            Ok(transport) => Action::ChangeTransport(transport),
+            Ok(transport) => {
+                // AA
+                Action::ChangeTransport(transport)
+            }
             Err(_) => Action::Close,
         }
     }
@@ -611,7 +634,7 @@ impl InitialSession {
             match session.get_transport() {
                 Ok(transport) => {
                     // Notify
-                    log::debug!("New session opened with: {}", apid);
+                    log::debug!("New session link established with {}: {}", apid, link);
                     pending.notify.send(Ok(session)).await;
                     Action::ChangeTransport(transport)
                 }

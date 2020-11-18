@@ -522,6 +522,17 @@ impl SessionManagerInner {
         // Add the session to the list of active sessions
         w_guard.insert(peer.clone(), a_ch);
 
+        log::debug!(
+            "New session opened with {}: whatami {}, lease {:?}, keep alive {}, sn resolution {}, initial sn tx {}, initial sn rx {}",
+            peer,
+            whatami,
+            Duration::from_millis(lease),
+            keep_alive,
+            sn_resolution,
+            initial_sn_tx,
+            initial_sn_rx
+        );
+
         Ok(session)
     }
 }

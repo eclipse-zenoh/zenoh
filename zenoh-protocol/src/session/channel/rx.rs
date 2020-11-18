@@ -106,9 +106,12 @@ macro_rules! zreceiveframe {
                 return Action::Close;
             }
         };
-
         if !precedes {
-            log::warn!("Frame with invalid SN dropped: {}", $sn);
+            log::warn!(
+                "Frame with invalid SN dropped: {}. Expected: {}",
+                $sn,
+                $guard.sn.get()
+            );
             // Drop the fragments if needed
             if !$guard.defrag_buffer.is_empty() {
                 $guard.defrag_buffer.clear();
