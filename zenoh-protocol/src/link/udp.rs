@@ -21,7 +21,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use super::{Link, LinkTrait, Locator, ManagerTrait, PROTO_SEPARATOR, STR_UDP};
+use super::{Link, LinkTrait, Locator, ManagerTrait};
 use crate::io::{ArcSlice, RBuf};
 use crate::session::{Action, SessionManagerInner, Transport};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -575,14 +575,7 @@ impl ManagerUdpInner {
                     return zerror!(ZErrorKind::InvalidLink { descr: e });
                 }
             };
-            return Ok([
-                STR_UDP.to_string(),
-                PROTO_SEPARATOR.to_string(),
-                local_addr.to_string(),
-            ]
-            .concat()
-            .parse()
-            .unwrap());
+            return Ok(Locator::Udp(local_addr));
         }
 
         // Bind the UDP socket
@@ -616,14 +609,7 @@ impl ManagerUdpInner {
             // Delete the listener from the manager
             zasyncwrite!(c_self.listeners).remove(&c_addr);
         });
-        Ok([
-            STR_UDP.to_string(),
-            PROTO_SEPARATOR.to_string(),
-            local_addr.to_string(),
-        ]
-        .concat()
-        .parse()
-        .unwrap())
+        Ok(Locator::Udp(local_addr))
     }
 
     async fn del_listener(&self, _a_self: &Arc<Self>, addr: &SocketAddr) -> ZResult<()> {

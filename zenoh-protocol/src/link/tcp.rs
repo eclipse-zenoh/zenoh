@@ -22,7 +22,7 @@ use std::fmt;
 use std::net::Shutdown;
 use std::time::Duration;
 
-use super::{Link, LinkTrait, Locator, ManagerTrait, PROTO_SEPARATOR, STR_TCP};
+use super::{Link, LinkTrait, Locator, ManagerTrait};
 use crate::io::{ArcSlice, RBuf};
 use crate::proto::SessionMessage;
 use crate::session::{Action, SessionManagerInner, Transport};
@@ -708,14 +708,7 @@ impl ManagerTcpInner {
             // Delete the listener from the manager
             zasyncwrite!(c_self.listener).remove(&c_addr);
         });
-        Ok([
-            STR_TCP.to_string(),
-            PROTO_SEPARATOR.to_string(),
-            local_addr.to_string(),
-        ]
-        .concat()
-        .parse()
-        .unwrap())
+        Ok(Locator::Tcp(local_addr))
     }
 
     async fn del_listener(&self, _a_self: &Arc<Self>, addr: &SocketAddr) -> ZResult<()> {
