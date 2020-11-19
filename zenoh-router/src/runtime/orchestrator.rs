@@ -211,11 +211,11 @@ impl SessionOrchestrator {
     }
 
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
-        for locator in listeners {
-            match self.manager.add_locator(&locator).await {
-                Ok(locator) => log::debug!("Locator {} added", locator),
+        for listener in listeners {
+            match self.manager.add_listener(&listener).await {
+                Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
-                    log::error!("Unable to open listener {} : {}", locator, err);
+                    log::error!("Unable to open listener {} : {}", listener, err);
                     return zerror!(
                         ZErrorKind::IOError {
                             descr: "".to_string()
@@ -508,7 +508,7 @@ impl SessionOrchestrator {
     #[allow(clippy::match_single_binding)]
     async fn get_local_locators(&self) -> Vec<Locator> {
         let mut result = vec![];
-        for locator in self.manager.get_locators().await {
+        for locator in self.manager.get_listeners().await {
             match locator {
                 Locator::Tcp(addr) => {
                     if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {

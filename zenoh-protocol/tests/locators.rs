@@ -82,7 +82,7 @@ async fn run(locators: Vec<Locator>) {
         // Create the listeners
         for l in locators.iter() {
             println!("Add {}", l);
-            let res = sm.add_locator(l).await;
+            let res = sm.add_listener(l).await;
             assert!(res.is_ok());
         }
 
@@ -91,7 +91,7 @@ async fn run(locators: Vec<Locator>) {
         // Delete the listeners
         for l in locators.iter() {
             println!("Del {}", l);
-            let res = sm.del_locator(l).await;
+            let res = sm.del_listener(l).await;
             assert!(res.is_ok());
         }
 

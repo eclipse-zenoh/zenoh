@@ -81,7 +81,7 @@ impl AdminSpace {
 
         // locators info
         let locators: Vec<serde_json::Value> = session_mgr
-            .get_locators()
+            .get_listeners()
             .await
             .iter()
             .map(|locator| json!(locator.to_string()))

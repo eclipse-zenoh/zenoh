@@ -153,7 +153,7 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
     // Create the listener on the router
     for l in locators.iter() {
         println!("Add locator: {}", l);
-        let res = router_manager.add_locator(l).await;
+        let res = router_manager.add_listener(l).await;
         assert!(res.is_ok());
     }
 
@@ -191,7 +191,7 @@ async fn close_session(
     // Stop the locators on the manager
     for l in locators.iter() {
         println!("Del locator: {}", l);
-        let res = router_manager.del_locator(l).await;
+        let res = router_manager.del_listener(l).await;
         assert!(res.is_ok());
     }
 }

@@ -272,7 +272,7 @@ impl SessionManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_locator(&self, locator: &Locator) -> ZResult<Locator> {
+    pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
         let manager = self
             .0
             .get_or_new_link_manager(&self.0, &locator.get_proto())
@@ -280,7 +280,7 @@ impl SessionManager {
         manager.new_listener(locator).await
     }
 
-    pub async fn del_locator(&self, locator: &Locator) -> ZResult<()> {
+    pub async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
         let manager = self.0.get_link_manager(&locator.get_proto()).await?;
         manager.del_listener(locator).await?;
         if manager.get_listeners().await.is_empty() {
@@ -289,8 +289,8 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn get_locators(&self) -> Vec<Locator> {
-        self.0.get_locators().await
+    pub async fn get_listeners(&self) -> Vec<Locator> {
+        self.0.get_listeners().await
     }
 }
 
@@ -393,7 +393,7 @@ impl SessionManagerInner {
         }
     }
 
-    pub(super) async fn get_locators(&self) -> Vec<Locator> {
+    pub(super) async fn get_listeners(&self) -> Vec<Locator> {
         let mut vec: Vec<Locator> = Vec::new();
         for p in zasyncread!(self.protocols).values() {
             vec.extend_from_slice(&p.get_listeners().await);

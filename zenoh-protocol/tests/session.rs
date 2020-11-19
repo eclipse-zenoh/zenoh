@@ -206,11 +206,11 @@ async fn session_lease(locator: Locator) {
     /* [1] */
     println!("\nSession Lease [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_locator(&locator).await;
+    let res = router_manager.add_listener(&locator).await;
     println!("Session Lease [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Lease [1a2]");
-    let locators = router_manager.get_locators().await;
+    let locators = router_manager.get_listeners().await;
     println!("Session Lease [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
@@ -298,7 +298,7 @@ async fn session_lease(locator: Locator) {
     /* [6] */
     // Perform clean up of the open locators
     println!("Session Open Close [6a1]");
-    let res = router_manager.del_locator(&locator).await;
+    let res = router_manager.del_listener(&locator).await;
     println!("Session Open Close [6a2]: {:?}", res);
     assert!(res.is_ok());
 
@@ -440,11 +440,11 @@ async fn session_open_close(locator: Locator) {
     /* [1] */
     println!("\nSession Open Close [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_locator(&locator).await;
+    let res = router_manager.add_listener(&locator).await;
     println!("Session Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Open Close [1a2]");
-    let locators = router_manager.get_locators().await;
+    let locators = router_manager.get_listeners().await;
     println!("Session Open Close [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
@@ -699,7 +699,7 @@ async fn session_open_close(locator: Locator) {
     /* [10] */
     // Perform clean up of the open locators
     println!("\nSession Open Close [10a1]");
-    let res = router_manager.del_locator(&locator).await;
+    let res = router_manager.del_listener(&locator).await;
     println!("Session Open Close [10a2]: {:?}", res);
     assert!(res.is_ok());
 
