@@ -52,7 +52,7 @@ async fn main() {
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] != 'q' as u8 {
+                if input[0] != b'q' {
                     subscriber.pull().await.unwrap();
                 } else {
                     break

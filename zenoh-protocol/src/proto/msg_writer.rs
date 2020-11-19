@@ -417,6 +417,8 @@ impl WBuf {
     }
 
     fn write_target(&mut self, target: &Target) -> bool {
+        // Note: desactivate Clippy check here because cast to ZInt can't be changed since ZInt size might change
+        #![allow(clippy::unnecessary_cast)]
         match target {
             Target::BestMatching => self.write_zint(0 as ZInt),
             Target::Complete { n } => self.write_zint(1 as ZInt) && self.write_zint(*n),

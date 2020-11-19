@@ -52,7 +52,7 @@ async fn main() {
             }
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == 'q' as u8 {break}
+                if input[0] == b'q' {break}
             }
         );
     }
