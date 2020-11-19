@@ -225,7 +225,7 @@ impl SessionOrchestrator {
                 }
             }
         }
-        for locator in self.get_local_locators().await {
+        for locator in self.manager.get_locators().await {
             log::info!("zenohd can be reached on {}", locator);
         }
         Ok(())
@@ -504,38 +504,6 @@ impl SessionOrchestrator {
         .await
     }
 
-    #[allow(unreachable_patterns)]
-    #[allow(clippy::match_single_binding)]
-    async fn get_local_locators(&self) -> Vec<Locator> {
-        let mut result = vec![];
-        for locator in self.manager.get_listeners().await {
-            match locator {
-                Locator::Tcp(addr) => {
-                    if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
-                        match zenoh_util::net::get_local_addresses() {
-                            Ok(ipaddrs) => {
-                                for ipaddr in ipaddrs {
-                                    if !ipaddr.is_loopback() && ipaddr.is_ipv4() {
-                                        result.push(
-                                            format!("tcp/{}:{}", ipaddr.to_string(), addr.port())
-                                                .parse()
-                                                .unwrap(),
-                                        );
-                                    }
-                                }
-                            }
-                            Err(err) => log::error!("Unable to get local addresses : {}", err),
-                        }
-                    } else {
-                        result.push(locator)
-                    }
-                }
-                locator => result.push(locator),
-            }
-        }
-        result
-    }
-
     async fn responder(&self, mcast_socket: &UdpSocket, ucast_socket: &UdpSocket) {
         let mut buf = vec![0; RCV_BUF_SIZE];
         log::debug!("Waiting for UDP datagram...");
@@ -567,7 +535,7 @@ impl SessionOrchestrator {
                         let hello = SessionMessage::make_hello(
                             pid,
                             Some(self.whatami),
-                            Some(self.get_local_locators().await.clone()),
+                            Some(self.manager.get_locators().await.clone()),
                             None,
                         );
                         log::trace!("Send {:?} to {}", hello, peer);

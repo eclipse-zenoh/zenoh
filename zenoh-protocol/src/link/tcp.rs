@@ -556,6 +556,10 @@ impl ManagerTrait for ManagerTcp {
     async fn get_listeners(&self) -> Vec<Locator> {
         self.0.get_listeners().await
     }
+
+    async fn get_locators(&self) -> Vec<Locator> {
+        self.0.get_locators().await
+    }
 }
 
 struct ListenerTcpInner {
@@ -738,11 +742,33 @@ impl ManagerTcpInner {
             }
         }
     }
+
     async fn get_listeners(&self) -> Vec<Locator> {
         zasyncread!(self.listener)
             .keys()
             .map(|x| Locator::Tcp(*x))
             .collect()
+    }
+
+    async fn get_locators(&self) -> Vec<Locator> {
+        let mut locators = vec![];
+        for addr in zasyncread!(self.listener).keys() {
+            if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
+                match zenoh_util::net::get_local_addresses() {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if !ipaddr.is_loopback() && ipaddr.is_ipv4() {
+                                locators.push(SocketAddr::new(ipaddr, addr.port()));
+                            }
+                        }
+                    }
+                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                }
+            } else {
+                locators.push(*addr)
+            }
+        }
+        locators.into_iter().map(Locator::Tcp).collect()
     }
 }
 

@@ -292,6 +292,10 @@ impl SessionManager {
     pub async fn get_listeners(&self) -> Vec<Locator> {
         self.0.get_listeners().await
     }
+
+    pub async fn get_locators(&self) -> Vec<Locator> {
+        self.0.get_locators().await
+    }
 }
 
 pub(crate) struct SessionManagerInnerConfig {
@@ -397,6 +401,14 @@ impl SessionManagerInner {
         let mut vec: Vec<Locator> = Vec::new();
         for p in zasyncread!(self.protocols).values() {
             vec.extend_from_slice(&p.get_listeners().await);
+        }
+        vec
+    }
+
+    pub(super) async fn get_locators(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = Vec::new();
+        for p in zasyncread!(self.protocols).values() {
+            vec.extend_from_slice(&p.get_locators().await);
         }
         vec
     }

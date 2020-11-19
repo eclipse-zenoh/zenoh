@@ -117,7 +117,7 @@ impl InitialSession {
         } else {
             Some(self.manager.config.sn_resolution)
         };
-        let locators = self.manager.get_listeners().await;
+        let locators = self.manager.get_locators().await;
         let locators = match locators.len() {
             0 => None,
             _ => Some(locators),
@@ -363,7 +363,7 @@ impl InitialSession {
             None
         };
         let locators = {
-            let mut locs = self.manager.get_listeners().await;
+            let mut locs = self.manager.get_locators().await;
             // Get link source
             let src = link.get_src();
             // Remove the source locator from the list of additional locators

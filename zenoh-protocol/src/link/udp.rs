@@ -386,6 +386,10 @@ impl ManagerTrait for ManagerUdp {
     async fn get_listeners(&self) -> Vec<Locator> {
         self.0.get_listeners().await
     }
+
+    async fn get_locators(&self) -> Vec<Locator> {
+        self.0.get_locators().await
+    }
 }
 
 struct ListenerUdpInner {
@@ -664,6 +668,11 @@ impl ManagerUdpInner {
             .keys()
             .map(|x| Locator::Udp(*x))
             .collect()
+    }
+
+    #[inline]
+    async fn get_locators(&self) -> Vec<Locator> {
+        self.get_listeners().await
     }
 }
 
