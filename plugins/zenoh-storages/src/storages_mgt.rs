@@ -16,7 +16,9 @@ use async_std::task;
 use futures::prelude::*;
 use futures::select;
 use log::{debug, error, trace, warn};
-use zenoh::net::{queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode};
+use zenoh::net::{
+    queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode, Target,
+};
 use zenoh::{Path, PathExpr, ZResult, Zenoh};
 use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
 
@@ -52,14 +54,19 @@ pub(crate) async fn start_storage(
             }
         };
 
-        // align with other storages, querying them on path_expr
+        // align with other storages, querying them on path_expr,
+        // with starttime to get historical data (in case of time-series)
+        let query_target = QueryTarget {
+            kind: queryable::STORAGE,
+            target: Target::All,
+        };
         let mut replies = match workspace
             .session()
             .query(
                 &path_expr.to_string().into(),
-                "",
-                QueryTarget::default(),
-                QueryConsolidation::default(),
+                "?(starttime=0)",
+                query_target,
+                QueryConsolidation::none(),
             )
             .await
         {
