@@ -169,8 +169,7 @@ impl ChunkList {
     fn find_first_fit(&self, len: usize) -> Option<*mut ChunkHeader> {
         let mut chunk = self.head();
         loop {
-            let delta = unsafe { (*chunk).len - len };
-            if delta >= 0 as usize {
+            if unsafe { (*chunk).len >= len } {
                 return Some(chunk);
             }
             chunk = unsafe { (*chunk).next };

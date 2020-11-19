@@ -60,7 +60,7 @@ async fn main() {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
                     sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
-                stored.insert(sample.res_name.into(), (sample.payload, sample.data_info));
+                stored.insert(sample.res_name, (sample.payload, sample.data_info));
             },
 
             query = queryable.stream().next().fuse() => {
@@ -78,7 +78,7 @@ async fn main() {
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == 'q' as u8 {break}
+                if input[0] == b'q' {break}
             }
         );
     }
