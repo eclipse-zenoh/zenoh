@@ -32,34 +32,34 @@ use crate::session::{Action, SessionManagerInner, Transport};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 
-// Default MTU (UNIX PDU) in bytes.
+// Default MTU (UNIXSOCKSTREAM PDU) in bytes.
 // NOTE: Since this Unix Domain Socket is a byte-stream oriented transport,
 //       theoretically it has no limit regarding the MTU.
 //       However, given the batching strategy adopted in Zenoh
 //       and the usage of 16 bits in Zenoh to encode the
-//       payload length in byte-streamed, the UNIX MTU is constrained to
+//       payload length in byte-streamed, the UNIXSOCKSTREAM MTU is constrained to
 //       2^16-1 bytes (i.e., 65535).
-const UNIX_MAX_MTU: usize = 65_535;
+const UNIXSOCKSTREAM_MAX_MTU: usize = 65_535;
 
 zconfigurable! {
-    // Default MTU (UNIX PDU) in bytes.
-    static ref UNIX_DEFAULT_MTU: usize = UNIX_MAX_MTU;
+    // Default MTU (UNIXSOCKSTREAM PDU) in bytes.
+    static ref UNIXSOCKSTREAM_DEFAULT_MTU: usize = UNIXSOCKSTREAM_MAX_MTU;
     // Size of buffer used to read from socket.
-    static ref UNIX_READ_BUFFER_SIZE: usize = 2*UNIX_MAX_MTU;
+    static ref UNIXSOCKSTREAM_READ_BUFFER_SIZE: usize = 2*UNIXSOCKSTREAM_MAX_MTU;
     // Size of the vector used to deserialize the messages.
-    static ref UNIX_READ_MESSAGES_VEC_SIZE: usize = 32;
+    static ref UNIXSOCKSTREAM_READ_MESSAGES_VEC_SIZE: usize = 32;
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
-    static ref UNIX_ACCEPT_THROTTLE_TIME: u64 = 100_000;
+    static ref UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
 #[macro_export]
 macro_rules! get_unix_path {
     ($locator:expr) => {
         match $locator {
-            Locator::Unix(path) => path,
+            Locator::UnixSockStream(path) => path,
             _ => {
-                let e = format!("Not a UNIX locator: {:?}", $locator);
+                let e = format!("Not a UnixSock-Stream locator: {:?}", $locator);
                 log::debug!("{}", e);
                 return zerror!(ZErrorKind::InvalidLocator { descr: e });
             }
@@ -71,16 +71,16 @@ macro_rules! get_unix_path {
 macro_rules! get_unix_path_as_string {
     ($locator:expr) => {
         match $locator {
-            Locator::Unix(path) => match path.to_str() {
+            Locator::UnixSockStream(path) => match path.to_str() {
                 Some(path_str) => path_str.to_string(),
                 None => {
-                    let e = format!("Not a UNIX locator: {:?}", $locator);
+                    let e = format!("Not a UnixSock-Stream locator: {:?}", $locator);
                     log::debug!("{}", e);
                     "None".to_string()
                 }
             },
             _ => {
-                let e = format!("Not a UNIX locator: {:?}", $locator);
+                let e = format!("Not a UnixSock-Stream locator: {:?}", $locator);
                 log::debug!("{}", e);
                 "None".to_string()
             }
@@ -91,7 +91,7 @@ macro_rules! get_unix_path_as_string {
 /*************************************/
 /*              LINK                 */
 /*************************************/
-pub struct Unix {
+pub struct UnixSockStream {
     // The underlying socket as returned from the async-std library
     socket: UnixStream,
     // The Unix domain socket source path
@@ -105,27 +105,27 @@ pub struct Unix {
     // The reference to the associated transport
     transport: Mutex<Transport>,
     // The reference to the associated link manager
-    manager: Arc<ManagerUnixInner>,
+    manager: Arc<ManagerUnixSockStreamInner>,
     // Channel for stopping the read task
     signal: Mutex<Option<Sender<()>>>,
     // Weak reference to self
     w_self: RwLock<Option<Weak<Self>>>,
 }
 
-impl Unix {
+impl UnixSockStream {
     fn new(
         socket: UnixStream,
         src_path: String,
         dst_path: String,
         transport: Transport,
-        manager: Arc<ManagerUnixInner>,
-    ) -> Unix {
+        manager: Arc<ManagerUnixSockStreamInner>,
+    ) -> UnixSockStream {
         // Build the Unix object
 
-        Unix {
+        UnixSockStream {
             socket,
-            src_locator: Locator::Unix(PathBuf::from(src_path.clone())),
-            dst_locator: Locator::Unix(PathBuf::from(dst_path.clone())),
+            src_locator: Locator::UnixSockStream(PathBuf::from(src_path.clone())),
+            dst_locator: Locator::UnixSockStream(PathBuf::from(dst_path.clone())),
             src_path,
             dst_path,
             transport: Mutex::new(transport),
@@ -149,16 +149,16 @@ impl Unix {
 }
 
 #[async_trait]
-impl LinkTrait for Unix {
+impl LinkTrait for UnixSockStream {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing UNIX link: {}", self);
+        log::trace!("Closing UnixSock-Stream link: {}", self);
 
         // Stop the read loop
         self.stop().await?;
 
-        // Close the underlying UNIX socket
+        // Close the underlying UnixSock-Stream socket
         let res = self.socket.shutdown(Shutdown::Both);
-        log::trace!("UNIX link shutdown {}: {:?}", self, res);
+        log::trace!("UnixSock-Stream link shutdown {}: {:?}", self, res);
 
         // Delete the link from the manager
         let _ = self
@@ -169,11 +169,15 @@ impl LinkTrait for Unix {
     }
 
     async fn send(&self, buffer: &[u8]) -> ZResult<()> {
-        log::trace!("Sending {} bytes on UNIX link: {}", buffer.len(), self);
+        log::trace!(
+            "Sending {} bytes on UnixSock-Stream link: {}",
+            buffer.len(),
+            self
+        );
 
         let res = (&self.socket).write_all(buffer).await;
         if let Err(e) = res {
-            log::trace!("Transmission error on UNIX link {}: {}", self, e);
+            log::trace!("Transmission error on UnixSock-Stream link {}: {}", self, e);
             return zerror!(ZErrorKind::IOError {
                 descr: format!("{}", e)
             });
@@ -183,19 +187,19 @@ impl LinkTrait for Unix {
     }
 
     async fn start(&self) -> ZResult<()> {
-        log::trace!("Starting read loop on UNIX link: {}", self);
+        log::trace!("Starting read loop on UnixSock-Stream link: {}", self);
         let mut guard = zasynclock!(self.signal);
         if guard.is_none() {
             let link = if let Some(link) = zasyncread!(self.w_self).as_ref() {
                 if let Some(link) = link.upgrade() {
                     link
                 } else {
-                    let e = format!("UNIX link does not longer exist: {}", self);
+                    let e = format!("UnixSock-Stream link does not longer exist: {}", self);
                     log::error!("{}", e);
                     return zerror!(ZErrorKind::Other { descr: e });
                 }
             } else {
-                let e = format!("UNIX link is unitialized: {}", self);
+                let e = format!("UnixSock-Stream link is unitialized: {}", self);
                 log::error!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });
             };
@@ -213,7 +217,7 @@ impl LinkTrait for Unix {
     }
 
     async fn stop(&self) -> ZResult<()> {
-        log::trace!("Stopping read loop on UNIX link: {}", self);
+        log::trace!("Stopping read loop on UnixSock-Stream link: {}", self);
         let mut guard = zasynclock!(self.signal);
         if let Some(signal) = guard.take() {
             let _ = signal.send(()).await;
@@ -231,7 +235,7 @@ impl LinkTrait for Unix {
     }
 
     fn get_mtu(&self) -> usize {
-        *UNIX_DEFAULT_MTU
+        *UNIXSOCKSTREAM_DEFAULT_MTU
     }
 
     fn is_reliable(&self) -> bool {
@@ -243,7 +247,7 @@ impl LinkTrait for Unix {
     }
 }
 
-async fn read_task(link: Arc<Unix>, stop: Receiver<()>) {
+async fn read_task(link: Arc<UnixSockStream>, stop: Receiver<()>) {
     let read_loop = async {
         // The link object to be passed to the transport
         let lobj: Link = Link::new(link.clone());
@@ -254,10 +258,11 @@ async fn read_task(link: Arc<Unix>, stop: Receiver<()>) {
         let mut rbuf = RBuf::new();
 
         // The buffer allocated to read from a single syscall
-        let mut buffer = vec![0u8; *UNIX_READ_BUFFER_SIZE];
+        let mut buffer = vec![0u8; *UNIXSOCKSTREAM_READ_BUFFER_SIZE];
 
         // The vector for storing the deserialized messages
-        let mut messages: Vec<SessionMessage> = Vec::with_capacity(*UNIX_READ_MESSAGES_VEC_SIZE);
+        let mut messages: Vec<SessionMessage> =
+            Vec::with_capacity(*UNIXSOCKSTREAM_READ_MESSAGES_VEC_SIZE);
 
         // An example of the received buffer and the correspoding indexes is:
         //
@@ -298,7 +303,7 @@ async fn read_task(link: Arc<Unix>, stop: Receiver<()>) {
         // Macro to handle a link error
         macro_rules! zlinkerror {
             ($notify:expr) => {
-                // Close the underlying UNIX socket
+                // Close the underlying UnixSock-Stream socket
                 let _ = link.socket.shutdown(Shutdown::Both);
                 // Delete the link from the manager
                 let _ = link
@@ -333,7 +338,7 @@ async fn read_task(link: Arc<Unix>, stop: Receiver<()>) {
                         Ok(msg) => messages.push(msg),
                         Err(e) => match e.get_kind() {
                             ZErrorKind::InvalidMessage { descr } => {
-                                log::warn!("Closing UNIX link {}: {}", link, descr);
+                                log::warn!("Closing UnixSock-Stream link {}: {}", link, descr);
                                 zlinkerror!(true);
                             }
                             _ => break,
@@ -348,30 +353,30 @@ async fn read_task(link: Arc<Unix>, stop: Receiver<()>) {
                         Ok(action) => match action {
                             Action::Read => {}
                             Action::ChangeTransport(transport) => {
-                                log::trace!("Change transport on UNIX link: {}", link);
+                                log::trace!("Change transport on UnixSock-Stream link: {}", link);
                                 *guard = transport
                             }
                             Action::Close => {
-                                log::trace!("Closing UNIX link: {}", link);
+                                log::trace!("Closing UnixSock-Stream link: {}", link);
                                 zlinkerror!(false);
                             }
                         },
                         Err(e) => {
-                            log::trace!("Closing UNIX link {}: {}", link, e);
+                            log::trace!("Closing UnixSock-Stream link {}: {}", link, e);
                             zlinkerror!(false);
                         }
                     }
                 }
             };
         }
-        log::trace!("Ready to read from UNIX link: {}", link);
+        log::trace!("Ready to read from UnixSock-Stream link: {}", link);
         loop {
-            // Async read from the UNIX socket
+            // Async read from the UnixSock-Stream socket
             match (&link.socket).read(&mut buffer[w_pos..]).await {
                 Ok(mut n) => {
                     if n == 0 {
                         // Reading 0 bytes means error
-                        log::debug!("Zero bytes reading on UNIX link: {}", link);
+                        log::debug!("Zero bytes reading on UnixSock-Stream link: {}", link);
                         zlinkerror!(true);
                     }
 
@@ -493,7 +498,7 @@ async fn read_task(link: Arc<Unix>, stop: Receiver<()>) {
                     }
                 }
                 Err(e) => {
-                    log::debug!("Reading error on UNIX link {}: {}", link, e);
+                    log::debug!("Reading error on UnixSock-Stream link {}: {}", link, e);
                     zlinkerror!(true);
                 }
             }
@@ -504,21 +509,21 @@ async fn read_task(link: Arc<Unix>, stop: Receiver<()>) {
     let _ = read_loop.race(stop.recv()).await;
 }
 
-impl Drop for Unix {
+impl Drop for UnixSockStream {
     fn drop(&mut self) {
-        // Close the underlying UNIX socket
+        // Close the underlying UnixSock-Stream socket
         let _ = self.socket.shutdown(Shutdown::Both);
     }
 }
 
-impl fmt::Display for Unix {
+impl fmt::Display for UnixSockStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?} => {:?}", self.src_path, self.dst_path)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for Unix {
+impl fmt::Debug for UnixSockStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Unix")
             .field("src", &self.src_path)
@@ -530,16 +535,16 @@ impl fmt::Debug for Unix {
 /*************************************/
 /*          LISTENER                 */
 /*************************************/
-pub struct ManagerUnix(Arc<ManagerUnixInner>);
+pub struct ManagerUnixSockStream(Arc<ManagerUnixSockStreamInner>);
 
-impl ManagerUnix {
+impl ManagerUnixSockStream {
     pub(crate) fn new(manager: Arc<SessionManagerInner>) -> Self {
-        Self(Arc::new(ManagerUnixInner::new(manager)))
+        Self(Arc::new(ManagerUnixSockStreamInner::new(manager)))
     }
 }
 
 #[async_trait]
-impl ManagerTrait for ManagerUnix {
+impl ManagerTrait for ManagerUnixSockStream {
     async fn new_link(&self, dst: &Locator, transport: &Transport) -> ZResult<Link> {
         let dst = get_unix_path!(dst);
         let link = self.0.new_link(&self.0, dst, transport).await?;
@@ -581,21 +586,21 @@ impl ManagerTrait for ManagerUnix {
     }
 }
 
-struct ListenerUnixInner {
+struct ListenerUnixSockStreamInner {
     socket: Arc<UnixListener>,
     sender: Sender<()>,
     receiver: Receiver<()>,
     barrier: Arc<Barrier>,
 }
 
-impl ListenerUnixInner {
-    fn new(socket: Arc<UnixListener>) -> ListenerUnixInner {
+impl ListenerUnixSockStreamInner {
+    fn new(socket: Arc<UnixListener>) -> ListenerUnixSockStreamInner {
         // Create the channel necessary to break the accept loop
         let (sender, receiver) = channel::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
         let barrier = Arc::new(Barrier::new(2));
         // Update the list of active listeners on the manager
-        ListenerUnixInner {
+        ListenerUnixSockStreamInner {
             socket,
             sender,
             receiver,
@@ -604,13 +609,13 @@ impl ListenerUnixInner {
     }
 }
 
-struct ManagerUnixInner {
+struct ManagerUnixSockStreamInner {
     inner: Arc<SessionManagerInner>,
-    listener: RwLock<HashMap<String, Arc<ListenerUnixInner>>>,
-    link: RwLock<HashMap<(String, String), Arc<Unix>>>,
+    listener: RwLock<HashMap<String, Arc<ListenerUnixSockStreamInner>>>,
+    link: RwLock<HashMap<(String, String), Arc<UnixSockStream>>>,
 }
 
-impl ManagerUnixInner {
+impl ManagerUnixSockStreamInner {
     pub fn new(inner: Arc<SessionManagerInner>) -> Self {
         Self {
             inner,
@@ -624,13 +629,13 @@ impl ManagerUnixInner {
         a_self: &Arc<Self>,
         dst_addr: &PathBuf,
         transport: &Transport,
-    ) -> ZResult<Arc<Unix>> {
+    ) -> ZResult<Arc<UnixSockStream>> {
         // Create the Unix connection
         let stream = match UnixStream::connect(dst_addr.as_path()).await {
             Ok(stream) => stream,
             Err(e) => {
                 let e = format!(
-                    "Can not create a new UNIX link bound to {:?}: {}",
+                    "Can not create a new UnixSock-Stream link bound to {:?}: {}",
                     dst_addr, e
                 );
                 log::warn!("{}", e);
@@ -642,7 +647,7 @@ impl ManagerUnixInner {
             Ok(addr) => addr,
             Err(e) => {
                 let e = format!(
-                    "Can not create a new UNIX link bound to {:?}: {}",
+                    "Can not create a new UnixSock-Stream link bound to {:?}: {}",
                     dst_addr, e
                 );
                 log::warn!("{}", e);
@@ -653,7 +658,10 @@ impl ManagerUnixInner {
         let local_path = match src_addr.as_pathname() {
             Some(path) => PathBuf::from(path),
             None => {
-                let e = format!("Can not create a new UNIX link bound to {:?}", dst_addr);
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    dst_addr
+                );
                 log::warn!("{}", e);
                 PathBuf::from(format!("{}", Uuid::new_v4()))
             }
@@ -661,7 +669,10 @@ impl ManagerUnixInner {
         let local_path_str = match local_path.to_str() {
             Some(path_str) => path_str.to_string(),
             None => {
-                let e = format!("Can not create a new UNIX link bound to {:?}", dst_addr);
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    dst_addr
+                );
                 log::warn!("{}", e);
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
@@ -670,7 +681,10 @@ impl ManagerUnixInner {
         let remote_path_str = match dst_addr.to_str() {
             Some(path_str) => path_str.to_string(),
             None => {
-                let e = format!("Can not create a new UNIX link bound to {:?}", dst_addr);
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    dst_addr
+                );
                 log::warn!("{}", e);
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
@@ -680,7 +694,7 @@ impl ManagerUnixInner {
             Ok(addr) => addr,
             Err(e) => {
                 let e = format!(
-                    "Can not create a new UNIX link bound to {:?}: {}",
+                    "Can not create a new UnixSock-Stream link bound to {:?}: {}",
                     dst_addr, e
                 );
                 log::warn!("{}", e);
@@ -688,7 +702,7 @@ impl ManagerUnixInner {
             }
         };
 
-        let link = Arc::new(Unix::new(
+        let link = Arc::new(UnixSockStream::new(
             stream,
             local_path_str,
             remote_path_str,
@@ -711,7 +725,7 @@ impl ManagerUnixInner {
             Some(_) => Ok(()),
             None => {
                 let e = format!(
-                    "Can not delete UNIX link because it has not been found: {} {}",
+                    "Can not delete UnixSock-Stream link because it has not been found: {} {}",
                     src, dst
                 );
                 log::trace!("{}", e);
@@ -720,13 +734,13 @@ impl ManagerUnixInner {
         }
     }
 
-    async fn get_link(&self, src: &str, dst: &str) -> ZResult<Arc<Unix>> {
+    async fn get_link(&self, src: &str, dst: &str) -> ZResult<Arc<UnixSockStream>> {
         // Get the link from the manager list
         match zasyncwrite!(self.link).get(&(src.to_string(), dst.to_string())) {
             Some(link) => Ok(link.clone()),
             None => {
                 let e = format!(
-                    "Can not delete UNIX link because it has not been found: {} {}",
+                    "Can not delete UnixSock-Stream link because it has not been found: {} {}",
                     src, dst
                 );
                 log::trace!("{}", e);
@@ -740,7 +754,10 @@ impl ManagerUnixInner {
         let socket = match UnixListener::bind(addr).await {
             Ok(socket) => Arc::new(socket),
             Err(e) => {
-                let e = format!("Can not create a new UNIX listener on {:?}: {}", addr, e);
+                let e = format!(
+                    "Can not create a new UnixSock-Stream listener on {:?}: {}",
+                    addr, e
+                );
                 log::warn!("{}", e);
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
@@ -749,7 +766,10 @@ impl ManagerUnixInner {
         let local_addr = match socket.local_addr() {
             Ok(addr) => addr,
             Err(e) => {
-                let e = format!("Can not create a new UNIX listener on {:?}: {}", addr, e);
+                let e = format!(
+                    "Can not create a new UnixSock-Stream listener on {:?}: {}",
+                    addr, e
+                );
                 log::warn!("{}", e);
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
@@ -758,7 +778,10 @@ impl ManagerUnixInner {
         let local_path = match local_addr.as_pathname() {
             Some(path) => PathBuf::from(path),
             None => {
-                let e = format!("Can not create a new UNIX listener on {:?}", addr);
+                let e = format!(
+                    "Can not create a new UnixSock-Stream listener on {:?}",
+                    addr
+                );
                 log::warn!("{}", e);
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
@@ -769,7 +792,7 @@ impl ManagerUnixInner {
             None => "None".to_string(),
         };
 
-        let listener = Arc::new(ListenerUnixInner::new(socket));
+        let listener = Arc::new(ListenerUnixSockStreamInner::new(socket));
         // Update the list of active listeners on the manager
         zasyncwrite!(self.listener).insert(local_path_str.clone(), listener.clone());
 
@@ -783,7 +806,7 @@ impl ManagerUnixInner {
             zasyncwrite!(c_self.listener).remove(&c_addr);
         });
 
-        Ok(Locator::Unix(local_path))
+        Ok(Locator::UnixSockStream(local_path))
     }
 
     async fn del_listener(&self, _a_self: &Arc<Self>, addr: &str) -> ZResult<()> {
@@ -796,12 +819,12 @@ impl ManagerUnixInner {
                 listener.barrier.wait().await;
                 // Remove the Unix Domain Socket file
                 let res = remove_file(addr);
-                log::trace!("UNIX Domain Socket removal result: {:?}", res);
+                log::trace!("UnixSock-Stream Domain Socket removal result: {:?}", res);
                 Ok(())
             }
             None => {
                 let e = format!(
-                    "Can not delete the UNIX listener because it has not been found: {}",
+                    "Can not delete the UnixSock-Stream listener because it has not been found: {}",
                     addr
                 );
                 log::trace!("{}", e);
@@ -812,7 +835,7 @@ impl ManagerUnixInner {
     async fn get_listeners(&self) -> Vec<Locator> {
         zasyncread!(self.listener)
             .keys()
-            .map(|x| Locator::Unix(PathBuf::from(x)))
+            .map(|x| Locator::UnixSockStream(PathBuf::from(x)))
             .collect()
     }
 
@@ -826,15 +849,18 @@ impl ManagerUnixInner {
                 locators.push(PathBuf::from(addr));
             }
         }
-        locators.into_iter().map(Locator::Unix).collect()
+        locators.into_iter().map(Locator::UnixSockStream).collect()
     }
 }
 
-async fn accept_task(a_self: &Arc<ManagerUnixInner>, listener: Arc<ListenerUnixInner>) {
+async fn accept_task(
+    a_self: &Arc<ManagerUnixSockStreamInner>,
+    listener: Arc<ListenerUnixSockStreamInner>,
+) {
     // The accept future
     let accept_loop = async {
         log::trace!(
-            "Ready to accept UNIX connections on: {:?}",
+            "Ready to accept UnixSock-Stream connections on: {:?}",
             listener.socket.local_addr()
         );
         loop {
@@ -852,7 +878,7 @@ async fn accept_task(a_self: &Arc<ManagerUnixInner>, listener: Arc<ListenerUnixI
                     //       Linux systems this limit can be changed by using the "ulimit" command line
                     //       tool. In case of systemd-based systems, this can be changed by using the
                     //       "sysctl" command line tool.
-                    task::sleep(Duration::from_micros(*UNIX_ACCEPT_THROTTLE_TIME)).await;
+                    task::sleep(Duration::from_micros(*UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME)).await;
                     continue;
                 }
             };
@@ -860,7 +886,7 @@ async fn accept_task(a_self: &Arc<ManagerUnixInner>, listener: Arc<ListenerUnixI
             let src_addr = match stream.local_addr() {
                 Ok(addr) => addr,
                 Err(e) => {
-                    let e = format!("Can not accept UNIX connection: {}", e);
+                    let e = format!("Can not accept UnixSock-Stream connection: {}", e);
                     log::warn!("{}", e);
                     continue;
                 }
@@ -868,7 +894,7 @@ async fn accept_task(a_self: &Arc<ManagerUnixInner>, listener: Arc<ListenerUnixI
             let _dst_addr = match stream.peer_addr() {
                 Ok(addr) => addr,
                 Err(e) => {
-                    let e = format!("Can not accept UNIX connection: {}", e);
+                    let e = format!("Can not accept UnixSock-Stream connection: {}", e);
                     log::warn!("{}", e);
                     continue;
                 }
@@ -879,7 +905,10 @@ async fn accept_task(a_self: &Arc<ManagerUnixInner>, listener: Arc<ListenerUnixI
             let local_path = match src_addr.as_pathname() {
                 Some(path) => PathBuf::from(path),
                 None => {
-                    let e = format!("Can not create a new UNIX link bound to {:?}", src_addr);
+                    let e = format!(
+                        "Can not create a new UnixSock-Stream link bound to {:?}",
+                        src_addr
+                    );
                     log::warn!("{}", e);
                     continue;
                 }
@@ -887,17 +916,20 @@ async fn accept_task(a_self: &Arc<ManagerUnixInner>, listener: Arc<ListenerUnixI
             let local_path_str = match local_path.to_str() {
                 Some(path_str) => path_str.to_string(),
                 None => {
-                    let e = format!("Can not create a new UNIX link bound to {:?}", src_addr);
+                    let e = format!(
+                        "Can not create a new UnixSock-Stream link bound to {:?}",
+                        src_addr
+                    );
                     log::warn!("{}", e);
                     continue;
                 }
             };
 
-            log::debug!("Accepted UNIX connection on {:?}", src_addr);
+            log::debug!("Accepted UnixSock-Stream connection on {:?}", src_addr);
             // Retrieve the initial temporary session
             let initial = a_self.inner.get_initial_transport().await;
             // Create the new link object
-            let link = Arc::new(Unix::new(
+            let link = Arc::new(UnixSockStream::new(
                 stream,
                 local_path_str,
                 dst_path,

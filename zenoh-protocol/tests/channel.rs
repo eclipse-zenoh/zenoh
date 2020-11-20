@@ -305,12 +305,14 @@ fn channel_udp() {
     });
 }
 
-#[cfg(all(feature = "unix", target_family = "unix"))]
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn channel_unix() {
-    let _ = std::fs::remove_file("/tmp/socket.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec!["unix//tmp/socket.sock".parse().unwrap()];
+    let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
+        .parse()
+        .unwrap()];
     // Define the reliability and congestgino control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
@@ -348,14 +350,16 @@ fn channel_tcp_udp() {
     });
 }
 
-#[cfg(all(feature = "unix", target_family = "unix"))]
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn channel_tcp_unix() {
-    let _ = std::fs::remove_file("/tmp/socket_1.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:7449".parse().unwrap(),
-        "unix//tmp/socket_1.sock".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-6.sock"
+            .parse()
+            .unwrap(),
     ];
     // Define the reliability and congestgino control
     let reliability = [Reliability::BestEffort];
@@ -372,14 +376,16 @@ fn channel_tcp_unix() {
     });
 }
 
-#[cfg(all(feature = "unix", target_family = "unix"))]
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn channel_udp_unix() {
-    let _ = std::fs::remove_file("/tmp/socket_2.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
         "udp/127.0.0.1:7449".parse().unwrap(),
-        "unix//tmp/socket_2.sock".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-7.sock"
+            .parse()
+            .unwrap(),
     ];
     // Define the reliability and congestgino control
     let reliability = [Reliability::BestEffort];
@@ -396,15 +402,17 @@ fn channel_udp_unix() {
     });
 }
 
-#[cfg(all(feature = "unix", target_family = "unix"))]
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn channel_tcp_udp_unix() {
-    let _ = std::fs::remove_file("/tmp/socket_2.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:7450".parse().unwrap(),
         "udp/127.0.0.1:7450".parse().unwrap(),
-        "unix//tmp/socket_2.sock".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-8.sock"
+            .parse()
+            .unwrap(),
     ];
     // Define the reliability and congestgino control
     let reliability = [Reliability::BestEffort];
