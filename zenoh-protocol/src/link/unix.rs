@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::os::unix::net::{UnixListener, UnixStream};
-use async_std::path::PathBuf;
+use async_std::path::{Path, PathBuf};
 use async_std::prelude::*;
 use async_std::sync::{channel, Arc, Barrier, Mutex, Receiver, RwLock, Sender, Weak};
 use async_std::task;
@@ -577,6 +577,10 @@ impl ManagerTrait for ManagerUnix {
     async fn get_listeners(&self) -> Vec<Locator> {
         self.0.get_listeners().await
     }
+
+    async fn get_locators(&self) -> Vec<Locator> {
+        self.0.get_locators().await
+    }
 }
 
 struct ListenerUnixInner {
@@ -809,6 +813,19 @@ impl ManagerUnixInner {
             .keys()
             .map(|x| Locator::Unix(PathBuf::from(x)))
             .collect()
+    }
+
+    async fn get_locators(&self) -> Vec<Locator> {
+        let mut locators = vec![];
+        for addr in zasyncread!(self.listener).keys() {
+            let path = Path::new(&addr);
+            if !path.exists().await {
+                log::error!("Unable to get local addresses : {}", addr);
+            } else {
+                locators.push(PathBuf::from(addr));
+            }
+        }
+        locators.into_iter().map(Locator::Unix).collect()
     }
 }
 
