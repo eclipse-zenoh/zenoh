@@ -577,10 +577,13 @@ impl ManagerTrait for ManagerUnix {
     async fn get_listeners(&self) -> Vec<Locator> {
         self.0.get_listeners().await
     }
+<<<<<<< HEAD
 
     async fn get_locators(&self) -> Vec<Locator> {
         self.0.get_locators().await
     }
+=======
+>>>>>>> fbf6b6157f9aa19e41a009a5fc722f0511ccb36d
 }
 
 struct ListenerUnixInner {
@@ -814,6 +817,7 @@ impl ManagerUnixInner {
             .map(|x| Locator::Unix(PathBuf::from(x)))
             .collect()
     }
+<<<<<<< HEAD
 
     async fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
@@ -827,6 +831,8 @@ impl ManagerUnixInner {
         }
         locators.into_iter().map(Locator::Unix).collect()
     }
+=======
+>>>>>>> fbf6b6157f9aa19e41a009a5fc722f0511ccb36d
 }
 
 async fn accept_task(a_self: &Arc<ManagerUnixInner>, listener: Arc<ListenerUnixInner>) {
