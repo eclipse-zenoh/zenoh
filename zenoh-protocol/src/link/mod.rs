@@ -22,7 +22,7 @@ pub use manager::*;
 mod tcp;
 #[cfg(feature = "udp")]
 mod udp;
-#[cfg(feature = "unix")]
+#[cfg(all(feature = "unix", target_family = "unix"))]
 mod unix;
 
 /* General imports */

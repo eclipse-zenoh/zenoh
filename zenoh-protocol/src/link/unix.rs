@@ -20,9 +20,9 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
+use std::fs::remove_file;
 use std::net::Shutdown;
 use std::time::Duration;
-//use std::fs::remove_file; //This should be used to remove the Unix Domain Socket
 use uuid::Uuid;
 
 use super::{Link, LinkTrait, Locator, ManagerTrait};
@@ -508,8 +508,6 @@ impl Drop for Unix {
     fn drop(&mut self) {
         // Close the underlying UNIX socket
         let _ = self.socket.shutdown(Shutdown::Both);
-        //let _ = remove_file(self.get_src_path());
-        //let _ = remove_file(self.get_dst_path());
     }
 }
 
@@ -796,6 +794,9 @@ impl ManagerUnixInner {
                 listener.sender.send(()).await;
                 // Wait for the accept loop to be stopped
                 listener.barrier.wait().await;
+                // Remove the Unix Domain Socket file
+                let res = remove_file(addr);
+                log::trace!("UNIX Domain Socket removal result: {:?}", res);
                 Ok(())
             }
             None => {

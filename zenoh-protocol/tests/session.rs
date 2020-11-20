@@ -723,3 +723,14 @@ fn session_udp() {
         session_lease(locator).await;
     });
 }
+
+#[cfg(all(feature = "unix", target_family = "unix"))]
+#[test]
+fn session_unix() {
+    let _ = std::fs::remove_file("/tmp/socket.sock");
+    let locator: Locator = "unix//tmp/socket.sock".parse().unwrap();
+    task::block_on(async {
+        session_open_close(locator.clone()).await;
+        session_lease(locator).await;
+    });
+}
