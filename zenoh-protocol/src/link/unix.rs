@@ -707,9 +707,9 @@ impl ManagerUnixInner {
         Ok(link)
     }
 
-    async fn del_link(&self, src: &String, dst: &String) -> ZResult<()> {
+    async fn del_link(&self, src: &str, dst: &str) -> ZResult<()> {
         // Remove the link from the manager list
-        match zasyncwrite!(self.link).remove(&(src.clone(), dst.clone())) {
+        match zasyncwrite!(self.link).remove(&(src.to_string(), dst.to_string())) {
             Some(_) => Ok(()),
             None => {
                 let e = format!(
@@ -722,9 +722,9 @@ impl ManagerUnixInner {
         }
     }
 
-    async fn get_link(&self, src: &String, dst: &String) -> ZResult<Arc<Unix>> {
-        // Remove the link from the manager list
-        match zasyncwrite!(self.link).get(&(src.clone(), dst.clone())) {
+    async fn get_link(&self, src: &str, dst: &str) -> ZResult<Arc<Unix>> {
+        // Get the link from the manager list
+        match zasyncwrite!(self.link).get(&(src.to_string(), dst.to_string())) {
             Some(link) => Ok(link.clone()),
             None => {
                 let e = format!(
@@ -737,7 +737,7 @@ impl ManagerUnixInner {
         }
     }
 
-    async fn new_listener(&self, a_self: &Arc<Self>, addr: &String) -> ZResult<Locator> {
+    async fn new_listener(&self, a_self: &Arc<Self>, addr: &str) -> ZResult<Locator> {
         // Bind the Unix socket
         let socket = match UnixListener::bind(addr).await {
             Ok(socket) => Arc::new(socket),
@@ -788,7 +788,7 @@ impl ManagerUnixInner {
         Ok(Locator::Unix(local_path))
     }
 
-    async fn del_listener(&self, _a_self: &Arc<Self>, addr: &String) -> ZResult<()> {
+    async fn del_listener(&self, _a_self: &Arc<Self>, addr: &str) -> ZResult<()> {
         // Stop the listener
         match zasyncwrite!(self.listener).remove(addr) {
             Some(listener) => {
