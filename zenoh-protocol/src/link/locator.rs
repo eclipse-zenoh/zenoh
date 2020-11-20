@@ -15,7 +15,7 @@
 use async_std::net::SocketAddr;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use async_std::net::ToSocketAddrs;
-#[cfg(feature = "unix")]
+#[cfg(all(feature = "unix", target_family = "unix"))]
 use async_std::path::PathBuf;
 #[cfg(any(feature = "tcp", feature = "udp", feat))]
 use async_std::task;
@@ -38,7 +38,7 @@ pub const PORT_SEPARATOR: char = ':';
 pub const STR_TCP: &str = "tcp";
 #[cfg(feature = "udp")]
 pub const STR_UDP: &str = "udp";
-#[cfg(feature = "unix")]
+#[cfg(all(feature = "unix", target_family = "unix"))]
 pub const STR_UNIX: &str = "unix";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -47,7 +47,7 @@ pub enum LocatorProtocol {
     Tcp,
     #[cfg(feature = "udp")]
     Udp,
-    #[cfg(feature = "unix")]
+    #[cfg(all(feature = "unix", target_family = "unix"))]
     Unix,
 }
 
@@ -58,7 +58,7 @@ impl fmt::Display for LocatorProtocol {
             LocatorProtocol::Tcp => write!(f, "{}", STR_TCP)?,
             #[cfg(feature = "udp")]
             LocatorProtocol::Udp => write!(f, "{}", STR_UDP)?,
-            #[cfg(feature = "unix")]
+            #[cfg(all(feature = "unix", target_family = "unix"))]
             LocatorProtocol::Unix => write!(f, "{}", STR_UNIX)?,
         }
         Ok(())
@@ -71,7 +71,7 @@ pub enum Locator {
     Tcp(SocketAddr),
     #[cfg(feature = "udp")]
     Udp(SocketAddr),
-    #[cfg(feature = "unix")]
+    #[cfg(all(feature = "unix", target_family = "unix"))]
     Unix(PathBuf),
 }
 
@@ -145,7 +145,7 @@ impl FromStr for Locator {
                 });
                 addr.map(Locator::Udp)
             }
-            #[cfg(feature = "unix")]
+            #[cfg(all(feature = "unix", target_family = "unix"))]
             STR_UNIX => {
                 let addr = task::block_on(async {
                     match PathBuf::from(addr).to_str() {
@@ -175,7 +175,7 @@ impl Locator {
             Locator::Tcp(..) => LocatorProtocol::Tcp,
             #[cfg(feature = "udp")]
             Locator::Udp(..) => LocatorProtocol::Udp,
-            #[cfg(feature = "unix")]
+            #[cfg(all(feature = "unix", target_family = "unix"))]
             Locator::Unix(..) => LocatorProtocol::Unix,
         }
     }
@@ -188,7 +188,7 @@ impl fmt::Display for Locator {
             Locator::Tcp(addr) => write!(f, "{}/{}", STR_TCP, addr)?,
             #[cfg(feature = "udp")]
             Locator::Udp(addr) => write!(f, "{}/{}", STR_UDP, addr)?,
-            #[cfg(feature = "unix")]
+            #[cfg(all(feature = "unix", target_family = "unix"))]
             Locator::Unix(addr) => {
                 let path = addr.to_str().unwrap_or("None");
                 write!(f, "{}/{}", STR_UNIX, path)?
@@ -205,7 +205,7 @@ impl fmt::Debug for Locator {
             Locator::Tcp(addr) => (STR_TCP, addr.to_string()),
             #[cfg(feature = "udp")]
             Locator::Udp(addr) => (STR_UDP, addr.to_string()),
-            #[cfg(feature = "unix")]
+            #[cfg(all(feature = "unix", target_family = "unix"))]
             Locator::Unix(addr) => {
                 let path = addr.to_str().unwrap_or("None");
                 (STR_UNIX, path.to_string())

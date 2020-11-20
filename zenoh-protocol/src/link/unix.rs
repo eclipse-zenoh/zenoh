@@ -22,7 +22,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
 use std::time::Duration;
-//use std::fs::remove_file;
+//use std::fs::remove_file; //This should be used to remove the Unix Domain Socket
 use uuid::Uuid;
 
 use super::{Link, LinkTrait, Locator, ManagerTrait};
@@ -653,8 +653,7 @@ impl ManagerUnixInner {
             None => {
                 let e = format!("Can not create a new UNIX link bound to {:?}", dst_addr);
                 log::warn!("{}", e);
-                PathBuf::from(format!("{}",Uuid::new_v4()))
-                //return zerror!(ZErrorKind::InvalidLink { descr: e });
+                PathBuf::from(format!("{}", Uuid::new_v4()))
             }
         };
         let local_path_str = match local_path.to_str() {
