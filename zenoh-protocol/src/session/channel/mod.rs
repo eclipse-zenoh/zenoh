@@ -202,14 +202,14 @@ impl Channel {
     /*************************************/
     pub(super) async fn delete(&self) {
         log::debug!("Closing the session with peer: {}", self.pid);
-        // Delete the session on the manager
-        let _ = self.manager.del_session(&self.pid).await;
-
         // Notify the callback
         let mut guard = zasyncwrite!(self.callback);
         if let Some(callback) = guard.take() {
             callback.close().await;
         }
+
+        // Delete the session on the manager
+        let _ = self.manager.del_session(&self.pid).await;
 
         // Close all the links
         let mut guard = zasyncwrite!(self.links);
