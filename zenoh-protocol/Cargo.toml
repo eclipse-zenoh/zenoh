@@ -35,7 +35,8 @@ maintenance = { status = "actively-developed" }
 tcp = []
 udp = []
 zero-copy = []
-default = ["tcp", "udp", "zero-copy"]
+unix = []
+default = ["tcp", "udp", "zero-copy", "unix"]
 
 [dependencies]
 async-trait = "0.1.38"

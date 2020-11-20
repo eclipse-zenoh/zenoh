@@ -22,6 +22,8 @@ pub use manager::*;
 mod tcp;
 #[cfg(feature = "udp")]
 mod udp;
+#[cfg(feature = "unix")]
+mod unix;
 
 /* General imports */
 use async_std::sync::{Arc, Weak};
