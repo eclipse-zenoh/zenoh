@@ -15,7 +15,9 @@
 use async_std::net::SocketAddr;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use async_std::net::ToSocketAddrs;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "unix")]
+use async_std::path::PathBuf;
+#[cfg(any(feature = "tcp", feature = "udp", feat))]
 use async_std::task;
 
 use std::cmp::PartialEq;
@@ -36,6 +38,8 @@ pub const PORT_SEPARATOR: char = ':';
 pub const STR_TCP: &str = "tcp";
 #[cfg(feature = "udp")]
 pub const STR_UDP: &str = "udp";
+#[cfg(feature = "unix")]
+pub const STR_UNIX: &str = "unix";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LocatorProtocol {
@@ -43,6 +47,8 @@ pub enum LocatorProtocol {
     Tcp,
     #[cfg(feature = "udp")]
     Udp,
+    #[cfg(feature = "unix")]
+    Unix,
 }
 
 impl fmt::Display for LocatorProtocol {
@@ -52,6 +58,8 @@ impl fmt::Display for LocatorProtocol {
             LocatorProtocol::Tcp => write!(f, "{}", STR_TCP)?,
             #[cfg(feature = "udp")]
             LocatorProtocol::Udp => write!(f, "{}", STR_UDP)?,
+            #[cfg(feature = "unix")]
+            LocatorProtocol::Unix => write!(f, "{}", STR_UNIX)?,
         }
         Ok(())
     }
@@ -63,19 +71,35 @@ pub enum Locator {
     Tcp(SocketAddr),
     #[cfg(feature = "udp")]
     Udp(SocketAddr),
+    #[cfg(feature = "unix")]
+    Unix(PathBuf),
 }
 
 impl FromStr for Locator {
     type Err = ZError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let split: Vec<&str> = s.split(PROTO_SEPARATOR).collect();
-        if split.len() != 2 {
-            return zerror!(ZErrorKind::InvalidLocator {
-                descr: format!("Missing protocol: {}", s)
-            });
-        }
-        let (proto, addr) = (split[0], split[1]);
+        let sep_index = s.find(PROTO_SEPARATOR);
+
+        let index = match sep_index {
+            Some(index) => index,
+            None => {
+                return zerror!(ZErrorKind::InvalidLocator {
+                    descr: format!("Invalid locator: {}", s)
+                });
+            }
+        };
+
+        let (proto, addr) = s.split_at(index);
+        let addr = match addr.strip_prefix(PROTO_SEPARATOR) {
+            Some(addr) => addr,
+            None => {
+                return zerror!(ZErrorKind::InvalidLocator {
+                    descr: format!("Invalid locator: {}", s)
+                });
+            }
+        };
+
         match proto {
             #[cfg(feature = "tcp")]
             STR_TCP => {
@@ -121,6 +145,20 @@ impl FromStr for Locator {
                 });
                 addr.map(Locator::Udp)
             }
+            #[cfg(feature = "unix")]
+            STR_UNIX => {
+                let addr = task::block_on(async {
+                    match PathBuf::from(addr).to_str() {
+                        Some(path) => Ok(PathBuf::from(path)),
+                        None => {
+                            let e = format!("Invalid Unix locator: {:?}", addr);
+                            log::warn!("{}", e);
+                            zerror!(ZErrorKind::InvalidLocator { descr: e })
+                        }
+                    }
+                });
+                addr.map(Locator::Unix)
+            }
             _ => {
                 let e = format!("Invalid protocol locator: {}", proto);
                 log::warn!("{}", e);
@@ -137,6 +175,8 @@ impl Locator {
             Locator::Tcp(..) => LocatorProtocol::Tcp,
             #[cfg(feature = "udp")]
             Locator::Udp(..) => LocatorProtocol::Udp,
+            #[cfg(feature = "unix")]
+            Locator::Unix(..) => LocatorProtocol::Unix,
         }
     }
 }
@@ -148,6 +188,11 @@ impl fmt::Display for Locator {
             Locator::Tcp(addr) => write!(f, "{}/{}", STR_TCP, addr)?,
             #[cfg(feature = "udp")]
             Locator::Udp(addr) => write!(f, "{}/{}", STR_UDP, addr)?,
+            #[cfg(feature = "unix")]
+            Locator::Unix(addr) => {
+                let path = addr.to_str().unwrap_or("None");
+                write!(f, "{}/{}", STR_UNIX, path)?
+            }
         }
         Ok(())
     }
@@ -160,6 +205,11 @@ impl fmt::Debug for Locator {
             Locator::Tcp(addr) => (STR_TCP, addr.to_string()),
             #[cfg(feature = "udp")]
             Locator::Udp(addr) => (STR_UDP, addr.to_string()),
+            #[cfg(feature = "unix")]
+            Locator::Unix(addr) => {
+                let path = addr.to_str().unwrap_or("None");
+                (STR_UNIX, path.to_string())
+            }
         };
 
         f.debug_struct("Locator")
