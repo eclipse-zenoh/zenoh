@@ -32,11 +32,11 @@ maintenance = { status = "actively-developed" }
 
 
 [features]
-tcp = []
-udp = []
 zero-copy = []
+transport_tcp = []
+transport_udp = []
 transport_unixsock-stream = []
-default = ["tcp", "udp", "zero-copy", "transport_unixsock-stream"]
+default = ["zero-copy", "transport_tcp", "transport_udp", "transport_unixsock-stream"]
 
 [dependencies]
 async-trait = "0.1.38"

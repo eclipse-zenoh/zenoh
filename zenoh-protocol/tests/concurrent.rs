@@ -73,7 +73,9 @@ impl SessionEventHandler for MHPeer {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {}
+    async fn closing(&self) {}
+
+    async fn closed(&self) {}
 }
 
 async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {

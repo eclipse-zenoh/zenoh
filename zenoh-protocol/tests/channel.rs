@@ -82,7 +82,9 @@ impl SessionEventHandler for SCRouter {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {}
+    async fn closing(&self) {}
+
+    async fn closed(&self) {}
 }
 
 // Session Handler for the client
@@ -123,7 +125,9 @@ impl SessionEventHandler for SCClient {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {}
+    async fn closing(&self) {}
+
+    async fn closed(&self) {}
 }
 
 async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>, Session) {

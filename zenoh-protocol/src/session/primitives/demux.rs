@@ -153,7 +153,9 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {
+    async fn closing(&self) {
         self.primitives.close().await;
     }
+
+    async fn closed(&self) {}
 }

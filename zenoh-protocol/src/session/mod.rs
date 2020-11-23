@@ -78,7 +78,9 @@ pub trait SessionEventHandler {
 
     async fn del_link(&self, link: Link);
 
-    async fn close(&self);
+    async fn closing(&self);
+
+    async fn closed(&self);
 }
 
 #[async_trait]
@@ -109,5 +111,7 @@ impl SessionEventHandler for DummyHandler {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {}
+    async fn closing(&self) {}
+
+    async fn closed(&self) {}
 }

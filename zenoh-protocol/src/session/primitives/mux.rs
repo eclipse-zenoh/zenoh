@@ -211,6 +211,6 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
     }
 
     async fn close(&self) {
-        self.handler.close().await;
+        self.handler.closing().await;
     }
 }

@@ -65,7 +65,9 @@ impl SessionEventHandler for SC {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {}
+    async fn closing(&self) {}
+
+    async fn closed(&self) {}
 }
 
 async fn run(locators: Vec<Locator>) {

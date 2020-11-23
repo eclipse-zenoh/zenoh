@@ -32,10 +32,10 @@ readme = "../README.md"
 maintenance = { status = "actively-developed" }
 
 [features]
-tcp = []
-udp = []
 zero-copy = []
-default = ["tcp", "udp", "zero-copy"]
+transport_tcp = []
+transport_udp = []
+default = ["transport_tcp", "transport_udp", "zero-copy"]
 
 [dependencies]
 async-trait = "0.1.38"

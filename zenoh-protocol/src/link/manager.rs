@@ -13,9 +13,9 @@
 //
 use async_std::sync::Arc;
 
-#[cfg(feature = "tcp")]
+#[cfg(feature = "transport_tcp")]
 use crate::link::tcp::ManagerTcp;
-#[cfg(feature = "udp")]
+#[cfg(feature = "transport_udp")]
 use crate::link::udp::ManagerUdp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use crate::link::unixsock_stream::ManagerUnixSockStream;
@@ -30,9 +30,9 @@ impl LinkManagerBuilder {
         protocol: &LocatorProtocol,
     ) -> LinkManager {
         match protocol {
-            #[cfg(feature = "tcp")]
+            #[cfg(feature = "transport_tcp")]
             LocatorProtocol::Tcp => Arc::new(ManagerTcp::new(manager)),
-            #[cfg(feature = "udp")]
+            #[cfg(feature = "transport_udp")]
             LocatorProtocol::Udp => Arc::new(ManagerUdp::new(manager)),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LocatorProtocol::UnixSockStream => Arc::new(ManagerUnixSockStream::new(manager)),

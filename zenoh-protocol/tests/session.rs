@@ -87,7 +87,9 @@ impl SessionEventHandler for MHRouterLease {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {
+    async fn closing(&self) {}
+
+    async fn closed(&self) {
         self.barrier.wait().await;
     }
 }
@@ -143,7 +145,9 @@ impl SessionEventHandler for MHCLientLease {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {
+    async fn closing(&self) {}
+
+    async fn closed(&self) {
         self.barrier.wait().await;
     }
 }
@@ -362,7 +366,9 @@ impl SessionEventHandler for MHRouterOpenClose {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn close(&self) {
+    async fn closing(&self) {}
+
+    async fn closed(&self) {
         self.barrier.wait().await;
     }
 }

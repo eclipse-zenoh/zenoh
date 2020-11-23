@@ -678,7 +678,10 @@ impl SessionEventHandler for Session {
     async fn del_link(&self, _link: Link) {}
 
     #[inline]
-    async fn close(&self) {}
+    async fn closing(&self) {}
+
+    #[inline]
+    async fn closed(&self) {}
 }
 
 impl Eq for Session {}
