@@ -735,4 +735,5 @@ fn session_unix() {
         session_open_close(locator.clone()).await;
         session_lease(locator).await;
     });
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
 }

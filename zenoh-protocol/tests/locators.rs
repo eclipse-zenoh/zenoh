@@ -135,6 +135,8 @@ fn locator_unix() {
             .unwrap(),
     ];
     task::block_on(run(locators));
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
 }
 
 #[test]
@@ -161,6 +163,7 @@ fn locator_tcp_udp_unix() {
             .unwrap(),
     ];
     task::block_on(run(locators));
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -176,6 +179,7 @@ fn locator_tcp_unix() {
             .unwrap(),
     ];
     task::block_on(run(locators));
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -191,4 +195,5 @@ fn locator_udp_unix() {
             .unwrap(),
     ];
     task::block_on(run(locators));
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
 }

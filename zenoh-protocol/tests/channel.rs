@@ -271,7 +271,7 @@ async fn run(
 fn channel_tcp() {
     // Define the locators
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
-    // Define the reliability and congestgino control
+    // Define the reliability and congestion control
     let reliability = [Reliability::Reliable, Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -290,7 +290,7 @@ fn channel_tcp() {
 fn channel_udp() {
     // Define the locator
     let locators: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
-    // Define the reliability and congestgino control
+    // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -313,7 +313,7 @@ fn channel_unix() {
     let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
         .parse()
         .unwrap()];
-    // Define the reliability and congestgino control
+    // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -326,6 +326,7 @@ fn channel_unix() {
         }
         close_session(router_manager, client_session, locators).await;
     });
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
 }
 
 #[test]
@@ -335,7 +336,7 @@ fn channel_tcp_udp() {
         "tcp/127.0.0.1:7448".parse().unwrap(),
         "udp/127.0.0.1:7448".parse().unwrap(),
     ];
-    // Define the reliability and congestgino control
+    // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -361,7 +362,7 @@ fn channel_tcp_unix() {
             .parse()
             .unwrap(),
     ];
-    // Define the reliability and congestgino control
+    // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -374,6 +375,7 @@ fn channel_tcp_unix() {
         }
         close_session(router_manager, client_session, locators).await;
     });
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -387,7 +389,7 @@ fn channel_udp_unix() {
             .parse()
             .unwrap(),
     ];
-    // Define the reliability and congestgino control
+    // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -400,6 +402,7 @@ fn channel_udp_unix() {
         }
         close_session(router_manager, client_session, locators).await;
     });
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -414,7 +417,7 @@ fn channel_tcp_udp_unix() {
             .parse()
             .unwrap(),
     ];
-    // Define the reliability and congestgino control
+    // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -427,4 +430,5 @@ fn channel_tcp_udp_unix() {
         }
         close_session(router_manager, client_session, locators).await;
     });
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
 }
