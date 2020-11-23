@@ -22,6 +22,8 @@ pub use manager::*;
 mod tcp;
 #[cfg(feature = "udp")]
 mod udp;
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+mod unixsock_stream;
 
 /* General imports */
 use async_std::sync::{Arc, Weak};

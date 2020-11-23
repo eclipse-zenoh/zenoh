@@ -1,0 +1,953 @@
+//
+// Copyright (c) 2017, 2020 ADLINK Technology Inc.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+//
+use async_std::os::unix::net::{UnixListener, UnixStream};
+use async_std::path::{Path, PathBuf};
+use async_std::prelude::*;
+use async_std::sync::{channel, Arc, Barrier, Mutex, Receiver, RwLock, Sender, Weak};
+use async_std::task;
+use async_trait::async_trait;
+use std::collections::HashMap;
+use std::convert::TryInto;
+use std::fmt;
+use std::fs::remove_file;
+use std::net::Shutdown;
+use std::time::Duration;
+use uuid::Uuid;
+
+use super::{Link, LinkTrait, Locator, ManagerTrait};
+use crate::io::{ArcSlice, RBuf};
+use crate::proto::SessionMessage;
+use crate::session::{Action, SessionManagerInner, Transport};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
+
+// Default MTU (UNIXSOCKSTREAM PDU) in bytes.
+// NOTE: Since this Unix Domain Socket is a byte-stream oriented transport,
+//       theoretically it has no limit regarding the MTU.
+//       However, given the batching strategy adopted in Zenoh
+//       and the usage of 16 bits in Zenoh to encode the
+//       payload length in byte-streamed, the UNIXSOCKSTREAM MTU is constrained to
+//       2^16-1 bytes (i.e., 65535).
+const UNIXSOCKSTREAM_MAX_MTU: usize = 65_535;
+
+zconfigurable! {
+    // Default MTU (UNIXSOCKSTREAM PDU) in bytes.
+    static ref UNIXSOCKSTREAM_DEFAULT_MTU: usize = UNIXSOCKSTREAM_MAX_MTU;
+    // Size of buffer used to read from socket.
+    static ref UNIXSOCKSTREAM_READ_BUFFER_SIZE: usize = 2*UNIXSOCKSTREAM_MAX_MTU;
+    // Size of the vector used to deserialize the messages.
+    static ref UNIXSOCKSTREAM_READ_MESSAGES_VEC_SIZE: usize = 32;
+    // Amount of time in microseconds to throttle the accept loop upon an error.
+    // Default set to 100 ms.
+    static ref UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME: u64 = 100_000;
+}
+
+#[macro_export]
+macro_rules! get_unix_path {
+    ($locator:expr) => {
+        match $locator {
+            Locator::UnixSockStream(path) => path,
+            _ => {
+                let e = format!("Not a UnixSock-Stream locator: {:?}", $locator);
+                log::debug!("{}", e);
+                return zerror!(ZErrorKind::InvalidLocator { descr: e });
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! get_unix_path_as_string {
+    ($locator:expr) => {
+        match $locator {
+            Locator::UnixSockStream(path) => match path.to_str() {
+                Some(path_str) => path_str.to_string(),
+                None => {
+                    let e = format!("Not a UnixSock-Stream locator: {:?}", $locator);
+                    log::debug!("{}", e);
+                    "None".to_string()
+                }
+            },
+            _ => {
+                let e = format!("Not a UnixSock-Stream locator: {:?}", $locator);
+                log::debug!("{}", e);
+                "None".to_string()
+            }
+        }
+    };
+}
+
+/*************************************/
+/*              LINK                 */
+/*************************************/
+pub struct UnixSockStream {
+    // The underlying socket as returned from the async-std library
+    socket: UnixStream,
+    // The Unix domain socket source path
+    src_path: String,
+    // The Unix domain socker destination path (random UUIDv4)
+    dst_path: String,
+    // The source Zenoh locator of this link (locator used on the server)
+    src_locator: Locator,
+    // The destination Zenoh locator of this link (locator used on the client)
+    dst_locator: Locator,
+    // The reference to the associated transport
+    transport: Mutex<Transport>,
+    // The reference to the associated link manager
+    manager: Arc<ManagerUnixSockStreamInner>,
+    // Channel for stopping the read task
+    signal: Mutex<Option<Sender<()>>>,
+    // Weak reference to self
+    w_self: RwLock<Option<Weak<Self>>>,
+}
+
+impl UnixSockStream {
+    fn new(
+        socket: UnixStream,
+        src_path: String,
+        dst_path: String,
+        transport: Transport,
+        manager: Arc<ManagerUnixSockStreamInner>,
+    ) -> UnixSockStream {
+        // Build the Unix object
+
+        UnixSockStream {
+            socket,
+            src_locator: Locator::UnixSockStream(PathBuf::from(src_path.clone())),
+            dst_locator: Locator::UnixSockStream(PathBuf::from(dst_path.clone())),
+            src_path,
+            dst_path,
+            transport: Mutex::new(transport),
+            manager,
+            signal: Mutex::new(None),
+            w_self: RwLock::new(None),
+        }
+    }
+
+    fn initizalize(&self, w_self: Weak<Self>) {
+        *self.w_self.try_write().unwrap() = Some(w_self);
+    }
+
+    fn get_src_path(&self) -> String {
+        self.src_path.clone()
+    }
+
+    fn get_dst_path(&self) -> String {
+        self.dst_path.clone()
+    }
+}
+
+#[async_trait]
+impl LinkTrait for UnixSockStream {
+    async fn close(&self) -> ZResult<()> {
+        log::trace!("Closing UnixSock-Stream link: {}", self);
+
+        // Stop the read loop
+        self.stop().await?;
+
+        // Close the underlying UnixSock-Stream socket
+        let res = self.socket.shutdown(Shutdown::Both);
+        log::trace!("UnixSock-Stream link shutdown {}: {:?}", self, res);
+
+        // Delete the link from the manager
+        let _ = self
+            .manager
+            .del_link(&self.get_src_path(), &self.get_dst_path())
+            .await;
+        Ok(())
+    }
+
+    async fn send(&self, buffer: &[u8]) -> ZResult<()> {
+        log::trace!(
+            "Sending {} bytes on UnixSock-Stream link: {}",
+            buffer.len(),
+            self
+        );
+
+        let res = (&self.socket).write_all(buffer).await;
+        if let Err(e) = res {
+            log::trace!("Transmission error on UnixSock-Stream link {}: {}", self, e);
+            return zerror!(ZErrorKind::IOError {
+                descr: format!("{}", e)
+            });
+        }
+
+        Ok(())
+    }
+
+    async fn start(&self) -> ZResult<()> {
+        log::trace!("Starting read loop on UnixSock-Stream link: {}", self);
+        let mut guard = zasynclock!(self.signal);
+        if guard.is_none() {
+            let link = if let Some(link) = zasyncread!(self.w_self).as_ref() {
+                if let Some(link) = link.upgrade() {
+                    link
+                } else {
+                    let e = format!("UnixSock-Stream link does not longer exist: {}", self);
+                    log::error!("{}", e);
+                    return zerror!(ZErrorKind::Other { descr: e });
+                }
+            } else {
+                let e = format!("UnixSock-Stream link is unitialized: {}", self);
+                log::error!("{}", e);
+                return zerror!(ZErrorKind::Other { descr: e });
+            };
+
+            // The channel for stopping the read task
+            let (sender, receiver) = channel::<()>(1);
+            // Store the sender
+            *guard = Some(sender);
+
+            // Spawn the read task
+            task::spawn(read_task(link, receiver));
+        }
+
+        Ok(())
+    }
+
+    async fn stop(&self) -> ZResult<()> {
+        log::trace!("Stopping read loop on UnixSock-Stream link: {}", self);
+        let mut guard = zasynclock!(self.signal);
+        if let Some(signal) = guard.take() {
+            let _ = signal.send(()).await;
+        }
+
+        Ok(())
+    }
+
+    fn get_src(&self) -> Locator {
+        self.src_locator.clone()
+    }
+
+    fn get_dst(&self) -> Locator {
+        self.dst_locator.clone()
+    }
+
+    fn get_mtu(&self) -> usize {
+        *UNIXSOCKSTREAM_DEFAULT_MTU
+    }
+
+    fn is_reliable(&self) -> bool {
+        true
+    }
+
+    fn is_streamed(&self) -> bool {
+        true
+    }
+}
+
+async fn read_task(link: Arc<UnixSockStream>, stop: Receiver<()>) {
+    let read_loop = async {
+        // The link object to be passed to the transport
+        let lobj: Link = Link::new(link.clone());
+        // Acquire the lock on the transport
+        let mut guard = zasynclock!(link.transport);
+
+        // // The RBuf to read a message batch onto
+        let mut rbuf = RBuf::new();
+
+        // The buffer allocated to read from a single syscall
+        let mut buffer = vec![0u8; *UNIXSOCKSTREAM_READ_BUFFER_SIZE];
+
+        // The vector for storing the deserialized messages
+        let mut messages: Vec<SessionMessage> =
+            Vec::with_capacity(*UNIXSOCKSTREAM_READ_MESSAGES_VEC_SIZE);
+
+        // An example of the received buffer and the correspoding indexes is:
+        //
+        //  0 1 2 3 4 5 6 7  ..  n 0 1 2 3 4 5 6 7      k 0 1 2 3 4 5 6 7      x
+        // +-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+
+        // | L | First batch      | L | Second batch     | L | Incomplete batch |
+        // +-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+
+        //
+        // - Decoding Iteration 0:
+        //      r_l_pos = 0; r_s_pos = 2; r_e_pos = n;
+        //
+        // - Decoding Iteration 1:
+        //      r_l_pos = n; r_s_pos = n+2; r_e_pos = n+k;
+        //
+        // - Decoding Iteration 2:
+        //      r_l_pos = n+k; r_s_pos = n+k+2; r_e_pos = n+k+x;
+        //
+        // In this example, Iteration 2 will fail since the batch is incomplete and
+        // fewer bytes than the ones indicated in the length are read. The incomplete
+        // batch is hence stored in a RBuf in order to read more bytes from the socket
+        // and deserialize a complete batch. In case it is not possible to read at once
+        // the 2 bytes indicating the message batch length (i.e., only the first byte is
+        // available), the first byte is copied at the beginning of the buffer and more
+        // bytes are read in the next iteration.
+
+        // The read position of the length bytes in the buffer
+        let mut r_l_pos: usize;
+        // The start read position of the message bytes in the buffer
+        let mut r_s_pos: usize;
+        // The end read position of the messages bytes in the buffer
+        let mut r_e_pos: usize;
+        // The write position in the buffer
+        let mut w_pos: usize = 0;
+
+        // Keep track of the number of bytes still to read for incomplete message batches
+        let mut left_to_read: usize = 0;
+
+        // Macro to handle a link error
+        macro_rules! zlinkerror {
+            ($notify:expr) => {
+                // Close the underlying UnixSock-Stream socket
+                let _ = link.socket.shutdown(Shutdown::Both);
+                // Delete the link from the manager
+                let _ = link
+                    .manager
+                    .del_link(&link.get_src_path(), &link.get_dst_path())
+                    .await;
+                if $notify {
+                    // Notify the transport
+                    let _ = guard.link_err(&lobj).await;
+                }
+                // Exit
+                return Ok(());
+            };
+        }
+
+        // Macro to add a slice to the RBuf
+        macro_rules! zaddslice {
+            ($start:expr, $end:expr) => {
+                let tot = $end - $start;
+                let mut slice = Vec::with_capacity(tot);
+                slice.extend_from_slice(&buffer[$start..$end]);
+                rbuf.add_slice(ArcSlice::new(Arc::new(slice), 0, tot));
+            };
+        }
+
+        // Macro for deserializing the messages
+        macro_rules! zdeserialize {
+            () => {
+                // Deserialize all the messages from the current RBuf
+                loop {
+                    match rbuf.read_session_message() {
+                        Ok(msg) => messages.push(msg),
+                        Err(e) => match e.get_kind() {
+                            ZErrorKind::InvalidMessage { descr } => {
+                                log::warn!("Closing UnixSock-Stream link {}: {}", link, descr);
+                                zlinkerror!(true);
+                            }
+                            _ => break,
+                        },
+                    }
+                }
+
+                for msg in messages.drain(..) {
+                    let res = guard.receive_message(&lobj, msg).await;
+                    // Enforce the action as instructed by the upper logic
+                    match res {
+                        Ok(action) => match action {
+                            Action::Read => {}
+                            Action::ChangeTransport(transport) => {
+                                log::trace!("Change transport on UnixSock-Stream link: {}", link);
+                                *guard = transport
+                            }
+                            Action::Close => {
+                                log::trace!("Closing UnixSock-Stream link: {}", link);
+                                zlinkerror!(false);
+                            }
+                        },
+                        Err(e) => {
+                            log::trace!("Closing UnixSock-Stream link {}: {}", link, e);
+                            zlinkerror!(false);
+                        }
+                    }
+                }
+            };
+        }
+        log::trace!("Ready to read from UnixSock-Stream link: {}", link);
+        loop {
+            // Async read from the UnixSock-Stream socket
+            match (&link.socket).read(&mut buffer[w_pos..]).await {
+                Ok(mut n) => {
+                    if n == 0 {
+                        // Reading 0 bytes means error
+                        log::debug!("Zero bytes reading on UnixSock-Stream link: {}", link);
+                        zlinkerror!(true);
+                    }
+
+                    // If we had a w_pos different from 0, it means we add an incomplete length reading
+                    // in the previous iteration: we have only read 1 byte instead of 2.
+                    if w_pos != 0 {
+                        // Update the number of read bytes by adding the bytes we have already read in
+                        // the previous iteration. "n" now is the index pointing to the last valid
+                        // position in the buffer.
+                        n += w_pos;
+                        // Reset the write index
+                        w_pos = 0;
+                    }
+
+                    // Reset the read length index
+                    r_l_pos = 0;
+
+                    // Check if we had an incomplete message batch
+                    if left_to_read > 0 {
+                        // Check if still we haven't read enough bytes
+                        if n < left_to_read {
+                            // Update the number of bytes still to read;
+                            left_to_read -= n;
+                            // Copy the relevant buffer slice in the RBuf
+                            zaddslice!(0, n);
+                            // Keep reading from the socket
+                            continue;
+                        }
+                        // We are ready to decode a complete message batch
+                        // Copy the relevant buffer slice in the RBuf
+                        zaddslice!(0, left_to_read);
+                        // Read the batch
+                        zdeserialize!();
+                        // Update the read length index
+                        r_l_pos = left_to_read;
+                        // Reset the remaining bytes to read
+                        left_to_read = 0;
+
+                        // Check if we have completely read the batch
+                        if buffer[r_l_pos..n].is_empty() {
+                            // Reset the RBuf
+                            rbuf.clear();
+                            // Keep reading from the socket
+                            continue;
+                        }
+                    }
+
+                    // Loop over all the buffer which may contain multiple message batches
+                    loop {
+                        // Compute the total number of bytes we have read
+                        let read = buffer[r_l_pos..n].len();
+                        // Check if we have read the 2 bytes necessary to decode the message length
+                        if read < 2 {
+                            // Copy the bytes at the beginning of the buffer
+                            buffer.copy_within(r_l_pos..n, 0);
+                            // Update the write index
+                            w_pos = read;
+                            // Keep reading from the socket
+                            break;
+                        }
+                        // We have read at least two bytes in the buffer, update the read start index
+                        r_s_pos = r_l_pos + 2;
+                        // Read the lenght as litlle endian from the buffer (array of 2 bytes)
+                        let length: [u8; 2] = buffer[r_l_pos..r_s_pos].try_into().unwrap();
+                        // Decode the total amount of bytes that we are expected to read
+                        let to_read = u16::from_le_bytes(length) as usize;
+
+                        // Check if we have really something to read
+                        if to_read == 0 {
+                            // Keep reading from the socket
+                            break;
+                        }
+                        // Compute the number of useful bytes we have actually read
+                        let read = buffer[r_s_pos..n].len();
+
+                        if read == 0 {
+                            // The buffer might be empty in case of having read only the two bytes
+                            // of the length and no additional bytes are left in the reading buffer
+                            left_to_read = to_read;
+                            // Keep reading from the socket
+                            break;
+                        } else if read < to_read {
+                            // We haven't read enough bytes for a complete batch, so
+                            // we need to store the bytes read so far and keep reading
+
+                            // Update the number of bytes we still have to read to
+                            // obtain a complete message batch for decoding
+                            left_to_read = to_read - read;
+
+                            // Copy the buffer in the RBuf if not empty
+                            zaddslice!(r_s_pos, n);
+
+                            // Keep reading from the socket
+                            break;
+                        }
+
+                        // We have at least one complete message batch we can deserialize
+                        // Compute the read end index of the message batch in the buffer
+                        r_e_pos = r_s_pos + to_read;
+
+                        // Copy the relevant buffer slice in the RBuf
+                        zaddslice!(r_s_pos, r_e_pos);
+                        // Deserialize the batch
+                        zdeserialize!();
+
+                        // Reset the current RBuf
+                        rbuf.clear();
+                        // Reset the remaining bytes to read
+                        left_to_read = 0;
+
+                        // Check if we are done with the current reading buffer
+                        if buffer[r_e_pos..n].is_empty() {
+                            // Keep reading from the socket
+                            break;
+                        }
+
+                        // Update the read length index to read the next message batch
+                        r_l_pos = r_e_pos;
+                    }
+                }
+                Err(e) => {
+                    log::debug!("Reading error on UnixSock-Stream link {}: {}", link, e);
+                    zlinkerror!(true);
+                }
+            }
+        }
+    };
+
+    // Execute the read loop
+    let _ = read_loop.race(stop.recv()).await;
+}
+
+impl Drop for UnixSockStream {
+    fn drop(&mut self) {
+        // Close the underlying UnixSock-Stream socket
+        let _ = self.socket.shutdown(Shutdown::Both);
+    }
+}
+
+impl fmt::Display for UnixSockStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} => {:?}", self.src_path, self.dst_path)?;
+        Ok(())
+    }
+}
+
+impl fmt::Debug for UnixSockStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Unix")
+            .field("src", &self.src_path)
+            .field("dst", &self.dst_path)
+            .finish()
+    }
+}
+
+/*************************************/
+/*          LISTENER                 */
+/*************************************/
+pub struct ManagerUnixSockStream(Arc<ManagerUnixSockStreamInner>);
+
+impl ManagerUnixSockStream {
+    pub(crate) fn new(manager: Arc<SessionManagerInner>) -> Self {
+        Self(Arc::new(ManagerUnixSockStreamInner::new(manager)))
+    }
+}
+
+#[async_trait]
+impl ManagerTrait for ManagerUnixSockStream {
+    async fn new_link(&self, dst: &Locator, transport: &Transport) -> ZResult<Link> {
+        let dst = get_unix_path!(dst);
+        let link = self.0.new_link(&self.0, dst, transport).await?;
+        let link = Link::new(link);
+        Ok(link)
+    }
+
+    async fn get_link(&self, src: &Locator, dst: &Locator) -> ZResult<Link> {
+        let src = get_unix_path_as_string!(src);
+        let dst = get_unix_path_as_string!(dst);
+        let link = self.0.get_link(&src, &dst).await?;
+        let link = Link::new(link);
+        Ok(link)
+    }
+
+    async fn del_link(&self, src: &Locator, dst: &Locator) -> ZResult<()> {
+        let src = get_unix_path_as_string!(src);
+        let dst = get_unix_path_as_string!(dst);
+        let _ = self.0.del_link(&src, &dst).await?;
+        Ok(())
+    }
+
+    async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
+        let addr = get_unix_path_as_string!(locator);
+        self.0.new_listener(&self.0, &addr).await
+    }
+
+    async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
+        let addr = get_unix_path_as_string!(locator);
+        self.0.del_listener(&self.0, &addr).await
+    }
+
+    async fn get_listeners(&self) -> Vec<Locator> {
+        self.0.get_listeners().await
+    }
+
+    async fn get_locators(&self) -> Vec<Locator> {
+        self.0.get_locators().await
+    }
+}
+
+struct ListenerUnixSockStreamInner {
+    socket: Arc<UnixListener>,
+    sender: Sender<()>,
+    receiver: Receiver<()>,
+    barrier: Arc<Barrier>,
+}
+
+impl ListenerUnixSockStreamInner {
+    fn new(socket: Arc<UnixListener>) -> ListenerUnixSockStreamInner {
+        // Create the channel necessary to break the accept loop
+        let (sender, receiver) = channel::<()>(1);
+        // Create the barrier necessary to detect the termination of the accept loop
+        let barrier = Arc::new(Barrier::new(2));
+        // Update the list of active listeners on the manager
+        ListenerUnixSockStreamInner {
+            socket,
+            sender,
+            receiver,
+            barrier,
+        }
+    }
+}
+
+struct ManagerUnixSockStreamInner {
+    inner: Arc<SessionManagerInner>,
+    listener: RwLock<HashMap<String, Arc<ListenerUnixSockStreamInner>>>,
+    link: RwLock<HashMap<(String, String), Arc<UnixSockStream>>>,
+}
+
+impl ManagerUnixSockStreamInner {
+    pub fn new(inner: Arc<SessionManagerInner>) -> Self {
+        Self {
+            inner,
+            listener: RwLock::new(HashMap::new()),
+            link: RwLock::new(HashMap::new()),
+        }
+    }
+
+    async fn new_link(
+        &self,
+        a_self: &Arc<Self>,
+        dst_addr: &PathBuf,
+        transport: &Transport,
+    ) -> ZResult<Arc<UnixSockStream>> {
+        // Create the Unix connection
+        let stream = match UnixStream::connect(dst_addr.as_path()).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}: {}",
+                    dst_addr, e
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::Other { descr: e });
+            }
+        };
+        // Create a new link object
+        let src_addr = match stream.local_addr() {
+            Ok(addr) => addr,
+            Err(e) => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}: {}",
+                    dst_addr, e
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        let local_path = match src_addr.as_pathname() {
+            Some(path) => PathBuf::from(path),
+            None => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    dst_addr
+                );
+                log::warn!("{}", e);
+                PathBuf::from(format!("{}", Uuid::new_v4()))
+            }
+        };
+        let local_path_str = match local_path.to_str() {
+            Some(path_str) => path_str.to_string(),
+            None => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    dst_addr
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        let remote_path_str = match dst_addr.to_str() {
+            Some(path_str) => path_str.to_string(),
+            None => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    dst_addr
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        let _dst_addr = match stream.peer_addr() {
+            Ok(addr) => addr,
+            Err(e) => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream link bound to {:?}: {}",
+                    dst_addr, e
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        let link = Arc::new(UnixSockStream::new(
+            stream,
+            local_path_str,
+            remote_path_str,
+            transport.clone(),
+            a_self.clone(),
+        ));
+        link.initizalize(Arc::downgrade(&link));
+
+        // Store the link object
+        zasyncwrite!(self.link).insert((link.get_src_path(), link.get_dst_path()), link.clone());
+        // Spawn the receive loop for the new link
+        let _ = link.start().await;
+
+        Ok(link)
+    }
+
+    async fn del_link(&self, src: &str, dst: &str) -> ZResult<()> {
+        // Remove the link from the manager list
+        match zasyncwrite!(self.link).remove(&(src.to_string(), dst.to_string())) {
+            Some(_) => Ok(()),
+            None => {
+                let e = format!(
+                    "Can not delete UnixSock-Stream link because it has not been found: {} {}",
+                    src, dst
+                );
+                log::trace!("{}", e);
+                zerror!(ZErrorKind::InvalidLink { descr: e })
+            }
+        }
+    }
+
+    async fn get_link(&self, src: &str, dst: &str) -> ZResult<Arc<UnixSockStream>> {
+        // Get the link from the manager list
+        match zasyncwrite!(self.link).get(&(src.to_string(), dst.to_string())) {
+            Some(link) => Ok(link.clone()),
+            None => {
+                let e = format!(
+                    "Can not delete UnixSock-Stream link because it has not been found: {} {}",
+                    src, dst
+                );
+                log::trace!("{}", e);
+                zerror!(ZErrorKind::InvalidLink { descr: e })
+            }
+        }
+    }
+
+    async fn new_listener(&self, a_self: &Arc<Self>, addr: &str) -> ZResult<Locator> {
+        // Bind the Unix socket
+        let socket = match UnixListener::bind(addr).await {
+            Ok(socket) => Arc::new(socket),
+            Err(e) => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream listener on {:?}: {}",
+                    addr, e
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        let local_addr = match socket.local_addr() {
+            Ok(addr) => addr,
+            Err(e) => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream listener on {:?}: {}",
+                    addr, e
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        let local_path = match local_addr.as_pathname() {
+            Some(path) => PathBuf::from(path),
+            None => {
+                let e = format!(
+                    "Can not create a new UnixSock-Stream listener on {:?}",
+                    addr
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        let local_path_str = match local_path.to_str() {
+            Some(path_str) => path_str.to_string(),
+            None => "None".to_string(),
+        };
+
+        let listener = Arc::new(ListenerUnixSockStreamInner::new(socket));
+        // Update the list of active listeners on the manager
+        zasyncwrite!(self.listener).insert(local_path_str.clone(), listener.clone());
+
+        // Spawn the accept loop for the listener
+        let c_self = a_self.clone();
+        let c_addr = local_path_str;
+        task::spawn(async move {
+            // Wait for the accept loop to terminate
+            accept_task(&c_self, listener).await;
+            // Delete the listener from the manager
+            zasyncwrite!(c_self.listener).remove(&c_addr);
+        });
+
+        Ok(Locator::UnixSockStream(local_path))
+    }
+
+    async fn del_listener(&self, _a_self: &Arc<Self>, addr: &str) -> ZResult<()> {
+        // Stop the listener
+        match zasyncwrite!(self.listener).remove(addr) {
+            Some(listener) => {
+                // Send the stop signal
+                listener.sender.send(()).await;
+                // Wait for the accept loop to be stopped
+                listener.barrier.wait().await;
+                // Remove the Unix Domain Socket file
+                let res = remove_file(addr);
+                log::trace!("UnixSock-Stream Domain Socket removal result: {:?}", res);
+                Ok(())
+            }
+            None => {
+                let e = format!(
+                    "Can not delete the UnixSock-Stream listener because it has not been found: {}",
+                    addr
+                );
+                log::trace!("{}", e);
+                zerror!(ZErrorKind::InvalidLink { descr: e })
+            }
+        }
+    }
+    async fn get_listeners(&self) -> Vec<Locator> {
+        zasyncread!(self.listener)
+            .keys()
+            .map(|x| Locator::UnixSockStream(PathBuf::from(x)))
+            .collect()
+    }
+
+    async fn get_locators(&self) -> Vec<Locator> {
+        let mut locators = vec![];
+        for addr in zasyncread!(self.listener).keys() {
+            let path = Path::new(&addr);
+            if !path.exists().await {
+                log::error!("Unable to get local addresses : {}", addr);
+            } else {
+                locators.push(PathBuf::from(addr));
+            }
+        }
+        locators.into_iter().map(Locator::UnixSockStream).collect()
+    }
+}
+
+async fn accept_task(
+    a_self: &Arc<ManagerUnixSockStreamInner>,
+    listener: Arc<ListenerUnixSockStreamInner>,
+) {
+    // The accept future
+    let accept_loop = async {
+        log::trace!(
+            "Ready to accept UnixSock-Stream connections on: {:?}",
+            listener.socket.local_addr()
+        );
+        loop {
+            // Wait for incoming connections
+            let stream = match listener.socket.accept().await {
+                Ok((stream, _)) => stream,
+                Err(e) => {
+                    log::warn!(
+                        "{}. Hint: you might want to increase the system open file limit",
+                        e
+                    );
+                    // Throttle the accept loop upon an error
+                    // NOTE: This might be due to various factors. However, the most common case is that
+                    //       the process has reached the maximum number of open files in the system. On
+                    //       Linux systems this limit can be changed by using the "ulimit" command line
+                    //       tool. In case of systemd-based systems, this can be changed by using the
+                    //       "sysctl" command line tool.
+                    task::sleep(Duration::from_micros(*UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME)).await;
+                    continue;
+                }
+            };
+            // Get the source and destination Unix addresses
+            let src_addr = match stream.local_addr() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    let e = format!("Can not accept UnixSock-Stream connection: {}", e);
+                    log::warn!("{}", e);
+                    continue;
+                }
+            };
+            let _dst_addr = match stream.peer_addr() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    let e = format!("Can not accept UnixSock-Stream connection: {}", e);
+                    log::warn!("{}", e);
+                    continue;
+                }
+            };
+
+            let dst_path = format!("{}", Uuid::new_v4());
+
+            let local_path = match src_addr.as_pathname() {
+                Some(path) => PathBuf::from(path),
+                None => {
+                    let e = format!(
+                        "Can not create a new UnixSock-Stream link bound to {:?}",
+                        src_addr
+                    );
+                    log::warn!("{}", e);
+                    continue;
+                }
+            };
+            let local_path_str = match local_path.to_str() {
+                Some(path_str) => path_str.to_string(),
+                None => {
+                    let e = format!(
+                        "Can not create a new UnixSock-Stream link bound to {:?}",
+                        src_addr
+                    );
+                    log::warn!("{}", e);
+                    continue;
+                }
+            };
+
+            log::debug!("Accepted UnixSock-Stream connection on {:?}", src_addr);
+            // Retrieve the initial temporary session
+            let initial = a_self.inner.get_initial_transport().await;
+            // Create the new link object
+            let link = Arc::new(UnixSockStream::new(
+                stream,
+                local_path_str,
+                dst_path,
+                initial,
+                a_self.clone(),
+            ));
+            link.initizalize(Arc::downgrade(&link));
+
+            // Store a reference to the link into the manager
+            zasyncwrite!(a_self.link)
+                .insert((link.get_src_path(), link.get_dst_path()), link.clone());
+
+            // Spawn the receive loop for the new link
+            let _ = link.start().await;
+        }
+    };
+
+    let stop = listener.receiver.recv();
+    let _ = accept_loop.race(stop).await;
+    listener.barrier.wait().await;
+}
