@@ -177,6 +177,7 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
             .unwrap();
         assert_eq!(res.is_ok(), true);
     }
+
     let client_session = client_manager
         .get_session(&router_id)
         .timeout(TIMEOUT)
@@ -202,9 +203,6 @@ async fn close_session(
     let res = client_session.close().timeout(TIMEOUT).await.unwrap();
     assert!(res.is_ok());
 
-    // Wait a little bit
-    task::sleep(SLEEP).await;
-
     // Stop the locators on the manager
     for l in locators.iter() {
         println!("Del locator: {}", l);
@@ -215,6 +213,9 @@ async fn close_session(
             .unwrap();
         assert!(res.is_ok());
     }
+
+    // Wait a little bit
+    task::sleep(SLEEP).await;
 }
 
 async fn run(
@@ -252,7 +253,7 @@ async fn run(
             // Wait to receive something
             let count = async {
                 while router_handler.get_count() == 0 {
-                    task::yield_now().await;
+                    task::sleep(SLEEP).await;
                 }
             };
             let res = count.timeout(TIMEOUT).await;
@@ -265,7 +266,7 @@ async fn run(
             // Wait for the messages to arrive to the other side
             let count = async {
                 while router_handler.get_count() != MSG_COUNT {
-                    task::yield_now().await;
+                    task::sleep(SLEEP).await;
                 }
             };
             let res = count.timeout(TIMEOUT).await;
@@ -286,6 +287,9 @@ async fn run(
             some!();
         }
     }
+
+    // Wait a little bit
+    task::sleep(SLEEP).await;
 }
 
 #[test]

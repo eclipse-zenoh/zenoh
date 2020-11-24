@@ -87,9 +87,12 @@ impl SessionEventHandler for MHRouterLease {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn closing(&self) {}
+    async fn closing(&self) {
+        println!("Session Lease [***]: session being closed on the router...");
+    }
 
     async fn closed(&self) {
+        println!("Session Lease [***]: session has been closed on the router...");
         self.barrier.wait().await;
     }
 }
@@ -366,9 +369,12 @@ impl SessionEventHandler for MHRouterOpenClose {
 
     async fn del_link(&self, _link: Link) {}
 
-    async fn closing(&self) {}
+    async fn closing(&self) {
+        println!("Session Open Close [***]: session is being closed on the router...");
+    }
 
     async fn closed(&self) {
+        println!("Session Open Close [***]: session has been closed on the router...");
         self.barrier.wait().await;
     }
 }
