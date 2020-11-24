@@ -157,7 +157,11 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
     // Create the listener on the router
     for l in locators.iter() {
         println!("Add locator: {}", l);
-        let res = router_manager.add_listener(l).await;
+        let res = router_manager
+            .add_listener(l)
+            .timeout(TIMEOUT)
+            .await
+            .unwrap();
         assert!(res.is_ok());
     }
 
@@ -166,10 +170,19 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
     let attachment = None;
     for l in locators.iter() {
         println!("Opening session with {}", l);
-        let res = client_manager.open_session(l, &attachment).await;
+        let res = client_manager
+            .open_session(l, &attachment)
+            .timeout(TIMEOUT)
+            .await
+            .unwrap();
         assert_eq!(res.is_ok(), true);
     }
-    let client_session = client_manager.get_session(&router_id).await.unwrap();
+    let client_session = client_manager
+        .get_session(&router_id)
+        .timeout(TIMEOUT)
+        .await
+        .unwrap()
+        .unwrap();
 
     // Return the handlers
     (router_manager, router_handler, client_session)
@@ -186,7 +199,7 @@ async fn close_session(
         ll.push_str(&format!("{} ", l));
     }
     println!("Closing session with {}", ll);
-    let res = client_session.close().await;
+    let res = client_session.close().timeout(TIMEOUT).await.unwrap();
     assert!(res.is_ok());
 
     // Wait a little bit
@@ -195,7 +208,11 @@ async fn close_session(
     // Stop the locators on the manager
     for l in locators.iter() {
         println!("Del locator: {}", l);
-        let res = router_manager.del_listener(l).await;
+        let res = router_manager
+            .del_listener(l)
+            .timeout(TIMEOUT)
+            .await
+            .unwrap();
         assert!(res.is_ok());
     }
 }
