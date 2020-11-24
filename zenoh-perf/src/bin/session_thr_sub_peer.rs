@@ -82,7 +82,8 @@ impl SessionEventHandler for MyMH {
 
     async fn new_link(&self, _link: Link) {}
     async fn del_link(&self, _link: Link) {}
-    async fn close(&self) {}
+    async fn closing(&self) {}
+    async fn closed(&self) {}
 }
 
 fn print_usage(bin: String) {
@@ -138,7 +139,7 @@ fn main() {
 
     // Connect to publisher
     task::block_on(async {
-        if manager.add_locator(&listen_on).await.is_ok() {
+        if manager.add_listener(&listen_on).await.is_ok() {
             println!("Listening on {}", listen_on);
         } else {
             println!("Failed to listen on {}", listen_on);
