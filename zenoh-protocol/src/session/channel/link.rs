@@ -65,11 +65,6 @@ async fn consume_task(
         }
     }
 
-    // Drain what remains in the queue before exiting
-    while let Some(batch) = queue.drain().await {
-        link.send(batch.get_buffer()).await?;
-    }
-
     Ok(())
 }
 
@@ -207,7 +202,12 @@ impl ChannelLink {
 
     pub(crate) async fn close(mut self) -> ZResult<()> {
         // Send the signal
-        let _ = self.signal.try_send(());
+        let _ = self.signal.send(()).await;
+
+        // Drain what remains in the queue before exiting
+        while let Some(batch) = self.queue.drain().await {
+            self.link.send(batch.get_buffer()).await?;
+        }
 
         // Defuse the timed events
         for h in self.handles.drain(..) {
