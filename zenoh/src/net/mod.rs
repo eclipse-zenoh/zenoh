@@ -97,6 +97,7 @@ use config::ConfigProperties;
 pub mod utils {
     pub mod resource_name {
         pub use zenoh_protocol::core::rname::intersect;
+        pub use zenoh_protocol::core::rname::include;
     }
 }
 
