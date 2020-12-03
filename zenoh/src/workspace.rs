@@ -459,6 +459,16 @@ pub enum ChangeKind {
     DELETE = data_kind::DELETE as isize,
 }
 
+impl fmt::Display for ChangeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ChangeKind::PUT => write!(f, "PUT"),
+            ChangeKind::PATCH => write!(f, "PATCH"),
+            ChangeKind::DELETE => write!(f, "DELETE"),
+        }
+    }
+}
+
 impl From<ZInt> for ChangeKind {
     fn from(kind: ZInt) -> Self {
         match kind {
