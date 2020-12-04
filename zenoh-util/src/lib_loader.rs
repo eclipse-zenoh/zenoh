@@ -18,7 +18,7 @@ use log::{debug, warn};
 use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use std::ffi::OsString;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 zconfigurable! {
     /// The libraries prefix for the current platform (usually: `"lib"`)
@@ -60,14 +60,14 @@ impl LibLoader {
         }
 
         if exe_parent_dir {
-            match std::env::args().next() {
-                Some(path) => match Path::new(&path).parent() {
+            match std::env::current_exe() {
+                Ok(path) => match path.parent() {
                     Some(p) => if p.is_dir() {
                         search_paths.push(p.canonicalize().unwrap())
                     },
-                    None => warn!("This executable ({}) has no parent !!. Can't search plugins in its parent directory.", path),
+                    None => warn!("Can't search for plugins in executable parent directory: no parent directory for {}.", path.to_string_lossy()),
                 },
-                None => warn!("This executable name was not found in args. Can't find it's parent to search plugins."),
+                Err(e) => warn!("Can't search for plugins in executable parent directory: {}.", e),
             }
         }
 
