@@ -59,7 +59,7 @@ impl Runtime {
             PeerId::from(uuid::Uuid::new_v4())
         };
 
-        log::debug!("Using PID: {}", pid);
+        log::info!("Using PID: {}", pid);
 
         let whatami = parse_mode(config.get_or(&ZN_MODE_KEY, ZN_MODE_DEFAULT)).unwrap();
         let hlc = if config
