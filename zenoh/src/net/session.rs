@@ -234,7 +234,7 @@ impl Session {
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
     ) -> Session {
-        let broker = runtime.read().await.broker.clone();
+        let router = runtime.read().await.router.clone();
         let state = Arc::new(RwLock::new(SessionState::new(
             local_routing,
             join_subscriptions,
@@ -245,7 +245,7 @@ impl Session {
             state: state.clone(),
             alive: true,
         };
-        let primitives = Some(broker.new_primitives(Arc::new(session.clone())).await);
+        let primitives = Some(router.new_primitives(Arc::new(session.clone())).await);
         state.write().await.primitives = primitives;
         session
     }

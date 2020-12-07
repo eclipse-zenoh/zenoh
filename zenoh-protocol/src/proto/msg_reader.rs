@@ -363,6 +363,17 @@ impl RBuf {
                     break (header, body, congestion_control);
                 }
 
+                LINK_STATE_LIST => {
+                    let len = self.read_zint()?;
+                    let mut link_states: Vec<LinkState> = Vec::new();
+                    for _ in 0..len {
+                        link_states.push(self.read_link_state()?);
+                    }
+                    let body = ZenohBody::LinkStateList(LinkStateList { link_states });
+                    let congestion_control = zmsg::default_congestion_control::LINK_STATE_LIST;
+                    break (header, body, congestion_control);
+                }
+
                 unknown => {
                     return zerror!(ZErrorKind::InvalidMessage {
                         descr: format!("Zenoh message with unknown ID: {}", unknown)
@@ -451,6 +462,40 @@ impl RBuf {
             timestamp,
             kind,
             encoding,
+        })
+    }
+
+    pub fn read_link_state(&mut self) -> ZResult<LinkState> {
+        let options = self.read_zint()?;
+        let psid = self.read_zint()?;
+        let sn = self.read_zint()?;
+        let pid = if zmsg::has_option(options, zmsg::link_state::PID) {
+            Some(self.read_peerid()?)
+        } else {
+            None
+        };
+        let whatami = if zmsg::has_option(options, zmsg::link_state::WAI) {
+            Some(self.read_zint()?)
+        } else {
+            None
+        };
+        let locators = if zmsg::has_option(options, zmsg::link_state::LOC) {
+            Some(self.read_locators()?)
+        } else {
+            None
+        };
+        let len = self.read_zint()?;
+        let mut links: Vec<ZInt> = Vec::new();
+        for _ in 0..len {
+            links.push(self.read_zint()?);
+        }
+        Ok(LinkState {
+            psid,
+            sn,
+            pid,
+            whatami,
+            locators,
+            links,
         })
     }
 

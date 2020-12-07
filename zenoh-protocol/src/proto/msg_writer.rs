@@ -226,6 +226,13 @@ impl WBuf {
                 }
                 check!(self.write_consolidation(consolidation));
             }
+
+            ZenohBody::LinkStateList(LinkStateList { link_states }) => {
+                check!(self.write_zint(to_zint!(link_states.len())));
+                for link_state in link_states {
+                    check!(self.write_link_state(link_state));
+                }
+            }
         }
 
         true
@@ -301,6 +308,38 @@ impl WBuf {
         }
         if let Some(enc) = &info.encoding {
             check!(self.write_zint(*enc));
+        }
+
+        true
+    }
+
+    pub fn write_link_state(&mut self, link_state: &LinkState) -> bool {
+        let mut options: ZInt = 0;
+        if link_state.pid.is_some() {
+            options |= zmsg::link_state::PID
+        }
+        if link_state.whatami.is_some() {
+            options |= zmsg::link_state::WAI
+        }
+        if link_state.locators.is_some() {
+            options |= zmsg::link_state::LOC
+        }
+        check!(self.write_zint(options));
+
+        check!(self.write_zint(link_state.psid));
+        check!(self.write_zint(link_state.sn));
+        if let Some(pid) = &link_state.pid {
+            check!(self.write_peerid(pid));
+        }
+        if let Some(whatami) = &link_state.whatami {
+            check!(self.write_zint(*whatami));
+        }
+        if let Some(locators) = &link_state.locators {
+            check!(self.write_locators(locators));
+        }
+        check!(self.write_zint(to_zint!(link_state.links.len())));
+        for link in &link_state.links {
+            check!(self.write_zint(*link));
         }
 
         true

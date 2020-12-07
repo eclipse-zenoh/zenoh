@@ -16,6 +16,7 @@ use async_std::sync::{channel, Arc, RwLock, Weak};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use super::channel::Channel;
@@ -402,7 +403,34 @@ impl SessionManagerInner {
         for p in zasyncread!(self.protocols).values() {
             vec.extend_from_slice(&p.get_listeners().await);
         }
-        vec
+
+        let mut result = vec![];
+        for locator in vec {
+            match locator {
+                Locator::Tcp(addr) => {
+                    if addr.ip() == Ipv4Addr::new(0, 0, 0, 0) {
+                        match zenoh_util::net::get_local_addresses() {
+                            Ok(ipaddrs) => {
+                                for ipaddr in ipaddrs {
+                                    if !ipaddr.is_loopback() && ipaddr.is_ipv4() {
+                                        result.push(
+                                            format!("tcp/{}:{}", ipaddr.to_string(), addr.port())
+                                                .parse()
+                                                .unwrap(),
+                                        );
+                                    }
+                                }
+                            }
+                            Err(err) => log::error!("Unable to get local addresses : {}", err),
+                        }
+                    } else {
+                        result.push(locator)
+                    }
+                }
+                locator => result.push(locator),
+            }
+        }
+        result
     }
 
     pub(super) async fn get_locators(&self) -> Vec<Locator> {

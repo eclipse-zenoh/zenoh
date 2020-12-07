@@ -18,11 +18,11 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
-use zenoh_protocol::core::{whatami, WhatAmI};
+use zenoh_protocol::core::{whatami, PeerId, WhatAmI};
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
-use zenoh_protocol::session::SessionManager;
+use zenoh_protocol::session::{Session, SessionManager};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
@@ -433,6 +433,33 @@ impl SessionOrchestrator {
         async_std::prelude::FutureExt::race(send, recv).await;
     }
 
+    async fn connect(&self, locators: &[Locator]) -> ZResult<Session> {
+        for locator in locators {
+            let session = self.manager.open_session(locator, &None).await;
+            if session.is_ok() {
+                return session;
+            }
+        }
+        zerror!(ZErrorKind::Other {
+            descr: format!("Unable to connect any of {:?}", locators)
+        })
+    }
+
+    pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
+        if pid != &self.manager.pid() {
+            if self.manager.get_session(pid).await.is_none() {
+                let session = self.connect(locators).await;
+                if session.is_ok() {
+                    log::debug!("Successfully connected to newly scouted {}", pid);
+                } else {
+                    log::warn!("Unable to connect to scouted {}", pid);
+                }
+            } else {
+                log::trace!("Scouted already connected peer : {}", pid);
+            }
+        }
+    }
+
     async fn connect_first(
         &self,
         socket: &UdpSocket,
@@ -444,11 +471,9 @@ impl SessionOrchestrator {
             SessionOrchestrator::scout(socket, what, addr, async move |hello| {
                 log::info!("Found {:?}", hello);
                 if let Some(locators) = &hello.locators {
-                    for locator in locators {
-                        if self.manager.open_session(locator, &None).await.is_ok() {
-                            log::debug!("Successfully connected to newly scouted {:?}", hello);
-                            return Loop::Break;
-                        }
+                    if self.connect(locators).await.is_ok() {
+                        log::debug!("Successfully connected to newly scouted {:?}", hello);
+                        return Loop::Break;
                     }
                     log::warn!("Unable to connect to scouted {:?}", hello);
                 } else {
@@ -470,29 +495,10 @@ impl SessionOrchestrator {
         SessionOrchestrator::scout(ucast_socket, what, addr, async move |hello| {
             match &hello.pid {
                 Some(pid) => {
-                    if pid != &self.manager.pid() {
-                        if self.manager.get_session(pid).await.is_none() {
-                            if let Some(locators) = &hello.locators {
-                                let mut success = false;
-                                for locator in locators {
-                                    if self.manager.open_session(locator, &None).await.is_ok() {
-                                        log::debug!(
-                                            "Successfully connected to newly scouted {:?}",
-                                            hello
-                                        );
-                                        success = true;
-                                        break;
-                                    }
-                                }
-                                if !success {
-                                    log::warn!("Unable to connect to scouted {:?}", hello);
-                                }
-                            } else {
-                                log::warn!("Received hello with no locators : {:?}", hello);
-                            }
-                        } else {
-                            log::trace!("Scouted already connected peer : {:?}", hello);
-                        }
+                    if let Some(locators) = &hello.locators {
+                        self.connect_peer(pid, locators).await
+                    } else {
+                        log::warn!("Received hello with no locators : {:?}", hello);
                     }
                 }
                 None => {

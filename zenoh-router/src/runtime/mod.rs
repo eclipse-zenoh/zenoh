@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::routing::broker::Broker;
+use crate::routing::router::Router;
 use crate::runtime::orchestrator::SessionOrchestrator;
 use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use config::*;
@@ -29,7 +29,7 @@ pub use adminspace::AdminSpace;
 
 pub struct RuntimeState {
     pub pid: PeerId,
-    pub broker: Arc<Broker>,
+    pub router: Arc<Router>,
     pub orchestrator: SessionOrchestrator,
 }
 
@@ -71,13 +71,13 @@ impl Runtime {
         } else {
             None
         };
-        let broker = Arc::new(Broker::new(whatami, hlc));
+        let mut router = Arc::new(Router::new(whatami, hlc));
 
         let sm_config = SessionManagerConfig {
             version,
             whatami,
             id: pid.clone(),
-            handler: broker.clone(),
+            handler: router.clone(),
         };
 
         let sm_opt_config = SessionManagerOptionalConfig {
@@ -93,11 +93,22 @@ impl Runtime {
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
         let mut orchestrator = SessionOrchestrator::new(session_manager, whatami);
+        if config
+            .get_or(&ZN_LINK_STATE_KEY, ZN_LINK_STATE_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE
+        {
+            unsafe {
+                Arc::get_mut_unchecked(&mut router)
+                    .init_link_state(pid.clone(), orchestrator.clone())
+                    .await;
+            }
+        }
         match orchestrator.init(config).await {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
                     pid,
-                    broker,
+                    router,
                     orchestrator,
                 })),
             }),
@@ -205,6 +216,13 @@ pub mod config {
     pub const ZN_ADD_TIMESTAMP_KEY: u64 = 0x4A;
     pub const ZN_ADD_TIMESTAMP_DEFAULT: &str = "false";
 
+    /// Indicates if the link state protocol should run.
+    /// String key : `"link_state"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"true"`.
+    pub const ZN_LINK_STATE_KEY: u64 = 0x4B;
+    pub const ZN_LINK_STATE_DEFAULT: &str = "true";
+
     pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
         match m {
             "peer" => Ok(whatami::PEER),
@@ -230,6 +248,7 @@ impl KeyTranscoder for RuntimeTranscoder {
             "scouting_timeout" => Some(ZN_SCOUTING_TIMEOUT_KEY),
             "scouting_delay" => Some(ZN_SCOUTING_DELAY_KEY),
             "add_timestamp" => Some(ZN_ADD_TIMESTAMP_KEY),
+            "link_state" => Some(ZN_LINK_STATE_KEY),
             _ => None,
         }
     }
@@ -247,6 +266,7 @@ impl KeyTranscoder for RuntimeTranscoder {
             0x48 => Some("scouting_timeout".to_string()),
             0x49 => Some("scouting_delay".to_string()),
             0x4A => Some("add_timestamp".to_string()),
+            0x4B => Some("link_state".to_string()),
             _ => None,
         }
     }

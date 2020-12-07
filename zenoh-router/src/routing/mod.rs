@@ -16,3 +16,4 @@ pub mod face;
 pub mod pubsub;
 pub mod queries;
 pub mod resource;
+pub mod router;

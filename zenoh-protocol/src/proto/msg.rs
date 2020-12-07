@@ -115,6 +115,7 @@ mod imsg {
         pub(crate) const QUERY: u8 = 0x0d;
         pub(crate) const PULL: u8 = 0x0e;
         pub(crate) const UNIT: u8 = 0x0f;
+        pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
         // Message decorators
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
@@ -139,6 +140,7 @@ pub mod zmsg {
         pub const QUERY: u8 = imsg::id::QUERY;
         pub const PULL: u8 = imsg::id::PULL;
         pub const UNIT: u8 = imsg::id::UNIT;
+        pub const LINK_STATE_LIST: u8 = imsg::id::LINK_STATE_LIST;
 
         // Message decorators
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
@@ -152,6 +154,7 @@ pub mod zmsg {
         pub const I: u8 = 1 << 6; // 0x40 DataInfo     if I==1 then DataInfo is present
         pub const K: u8 = 1 << 7; // 0x80 ResourceKey  if K==1 then only numerical ID
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples   if N==1 then the MaxSamples is indicated
+        pub const P: u8 = 1; // 0x01 Pid          if P==1 then the pid is present
         pub const R: u8 = 1 << 5; // 0x20 Reliable     if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SubMode      if S==1 then the declaration SubMode is indicated
         pub const T: u8 = 1 << 5; // 0x20 QueryTarget  if T==1 then the query target is present
@@ -199,6 +202,15 @@ pub mod zmsg {
         }
     }
 
+    // Options used for LinkState
+    pub mod link_state {
+        use super::ZInt;
+
+        pub const PID: ZInt = 1; // 0x01
+        pub const WAI: ZInt = 1 << 1; // 0x02
+        pub const LOC: ZInt = 1 << 2; // 0x04
+    }
+
     // Default reliability for each Zenoh Message
     pub mod default_reliability {
         use super::Reliability;
@@ -209,6 +221,7 @@ pub mod zmsg {
         pub const PULL: Reliability = Reliability::Reliable;
         pub const REPLY: Reliability = Reliability::Reliable;
         pub const UNIT: Reliability = Reliability::BestEffort;
+        pub const LINK_STATE_LIST: Reliability = Reliability::Reliable;
     }
 
     // Default congestion control for each Zenoh Message
@@ -221,6 +234,7 @@ pub mod zmsg {
         pub const PULL: CongestionControl = CongestionControl::Block;
         pub const REPLY: CongestionControl = CongestionControl::Block;
         pub const UNIT: CongestionControl = CongestionControl::Block;
+        pub const LINK_STATE_LIST: CongestionControl = CongestionControl::Block;
     }
 
     // Header mask
@@ -471,6 +485,41 @@ pub struct Query {
     pub consolidation: QueryConsolidation,
 }
 
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// |X|X|X|X|X|L|W|P|
+// +-+-+-+-+-+-+-+-+
+// ~     psid      ~
+// +---------------+
+// ~      sn       ~
+// +---------------+
+// ~      pid      ~ if P == 1
+// +---------------+
+// ~    whatami    ~ if W == 1
+// +---------------+
+// ~  [locators]   ~ if L == 1
+// +---------------+
+// ~    [links]    ~
+// +---------------+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkState {
+    pub psid: ZInt,
+    pub sn: ZInt,
+    pub pid: Option<PeerId>,
+    pub whatami: Option<WhatAmI>,
+    pub locators: Option<Vec<Locator>>,
+    pub links: Vec<ZInt>,
+}
+
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// |X|X|X|LK_ST_LS |
+// +-+-+-+---------+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkStateList {
+    pub link_states: Vec<LinkState>,
+}
+
 // Zenoh messages at zenoh level
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
@@ -480,6 +529,7 @@ pub enum ZenohBody {
     Query(Query),
     Pull(Pull),
     Unit(Unit),
+    LinkStateList(LinkStateList),
 }
 
 #[derive(Clone, PartialEq)]
@@ -641,6 +691,22 @@ impl ZenohMessage {
             }),
             reliability: zmsg::default_reliability::QUERY,
             congestion_control: zmsg::default_congestion_control::QUERY,
+            reply_context: None,
+            attachment,
+        }
+    }
+
+    pub fn make_link_state_list(
+        link_states: Vec<LinkState>,
+        attachment: Option<Attachment>,
+    ) -> ZenohMessage {
+        let header = zmsg::id::LINK_STATE_LIST;
+
+        ZenohMessage {
+            header,
+            body: ZenohBody::LinkStateList(LinkStateList { link_states }),
+            reliability: zmsg::default_reliability::LINK_STATE_LIST,
+            congestion_control: zmsg::default_congestion_control::LINK_STATE_LIST,
             reply_context: None,
             attachment,
         }

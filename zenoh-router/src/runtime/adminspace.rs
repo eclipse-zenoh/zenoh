@@ -52,7 +52,7 @@ impl AdminSpace {
         let primitives = runtime
             .read()
             .await
-            .broker
+            .router
             .new_primitives(admin.clone())
             .await;
         admin.primitives.lock().await.replace(primitives.clone());

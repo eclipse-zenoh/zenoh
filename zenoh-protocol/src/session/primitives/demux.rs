@@ -15,7 +15,9 @@ use async_trait::async_trait;
 
 use super::Primitives;
 use crate::link::Link;
-use crate::proto::{zmsg, Data, Declaration, Declare, Pull, Query, ZenohBody, ZenohMessage};
+use crate::proto::{
+    zmsg, Data, Declaration, Declare, LinkStateList, Pull, Query, ZenohBody, ZenohMessage,
+};
 use crate::session::SessionEventHandler;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
@@ -144,6 +146,8 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                     )
                     .await;
             }
+
+            ZenohBody::LinkStateList(LinkStateList { .. }) => {}
         }
 
         Ok(())
