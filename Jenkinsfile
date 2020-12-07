@@ -21,6 +21,9 @@ pipeline {
     booleanParam(name: 'BUILD_LINUX32',
                  description: 'Build i686-unknown-linux-gnu target.',
                  defaultValue: true)
+    booleanParam(name: 'BUILD_AARCH64',
+                 description: 'Build aarch64-unknown-linux-gnu target.',
+                 defaultValue: true)
     booleanParam(name: 'BUILD_WIN64',
                  description: 'Build x86_64-pc-windows-gnu target.',
                  defaultValue: true)
@@ -90,7 +93,7 @@ pipeline {
       when { expression { return params.BUILD_DOCKER }}
       steps {
         sh '''
-        RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --target=x86_64-unknown-linux-musl
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-x86_64-unknown-linux-musl cargo build --release --bins --lib
         if [ -n "${DOCKER_TAG}" ]; then
           export EXTRA_TAG="-t eclipse/zenoh:${DOCKER_TAG}"
         fi
@@ -103,12 +106,12 @@ pipeline {
       when { expression { return params.BUILD_LINUX64 }}
       steps {
         sh '''
-        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-x64-rust-nightly \
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-x86_64-gnu \
             /bin/bash -c "\
-            cargo build --release --bins --lib --examples --target=x86_64-unknown-linux-gnu && \
-            cargo deb --target=x86_64-unknown-linux-gnu -p zenoh-router && \
-            cargo deb --target=x86_64-unknown-linux-gnu -p zenoh-http && \
-            cargo deb --target=x86_64-unknown-linux-gnu -p zenoh-storages && \
+            cargo build --release --bins --lib --examples && \
+            cargo deb -p zenoh-router && \
+            cargo deb -p zenoh-http && \
+            cargo deb -p zenoh-storages && \
             ./gen_zenoh_deb.sh x86_64-unknown-linux-gnu amd64 \
             "
         '''
@@ -128,12 +131,12 @@ pipeline {
       when { expression { return params.BUILD_LINUX32 }}
       steps {
         sh '''
-        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/manylinux2010-i686-rust-nightly \
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-i686-gnu \
             /bin/bash -c "\
-            cargo build --release --bins --lib --examples --target=i686-unknown-linux-gnu && \
-            cargo deb --target=i686-unknown-linux-gnu -p zenoh-router && \
-            cargo deb --target=i686-unknown-linux-gnu -p zenoh-http && \
-            cargo deb --target=i686-unknown-linux-gnu -p zenoh-storages && \
+            cargo build --release --bins --lib --examples && \
+            cargo deb -p zenoh-router && \
+            cargo deb -p zenoh-http && \
+            cargo deb -p zenoh-storages && \
             ./gen_zenoh_deb.sh i686-unknown-linux-gnu i386 \
             "
         '''
@@ -145,6 +148,31 @@ pipeline {
         sh '''
         tar -czvf eclipse-zenoh-${LABEL}-i686-unknown-linux-gnu.tgz --strip-components 3 target/i686-unknown-linux-gnu/release/zenohd target/i686-unknown-linux-gnu/release/*.so
         tar -czvf eclipse-zenoh-${LABEL}-examples-i686-unknown-linux-gnu.tgz --exclude 'target/i686-unknown-linux-gnu/release/examples/*.*' --exclude 'target/i686-unknown-linux-gnu/release/examples/*-*' --strip-components 4 target/x86_64-unknown-linux-gnu/release/examples/*
+        '''
+      }
+    }
+
+    stage('[MacMini] aarch64-unknown-linux-gnu build') {
+      when { expression { return params.BUILD_AARCH64 }}
+      steps {
+        sh '''
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2014-aarch64-gnu \
+            /bin/bash -c "\
+            cargo build --release --bins --lib --examples && \
+            cargo deb -p zenoh-router && \
+            cargo deb -p zenoh-http && \
+            cargo deb -p zenoh-storages && \
+            ./gen_zenoh_deb.sh aarch64-unknown-linux-gnu aarch64 \
+            "
+        '''
+      }
+    }
+    stage('[MacMini] aarch64-unknown-linux-gnu Package') {
+      when { expression { return params.BUILD_AARCH64 }}
+      steps {
+        sh '''
+        tar -czvf eclipse-zenoh-${LABEL}-aarch64-unknown-linux-gnu.tgz --strip-components 3 target/aarch64-unknown-linux-gnu/release/zenohd target/aarch64-unknown-linux-gnu/release/*.so
+        tar -czvf eclipse-zenoh-${LABEL}-aarch64-unknown-linux-gnu.tgz --exclude 'target/aarch64-unknown-linux-gnu/release/examples/*.*' --exclude 'target/aarch64-unknown-linux-gnu/release/examples/*-*' --strip-components 4 target/aarch64-unknown-linux-gnu/release/examples/*
         '''
       }
     }
