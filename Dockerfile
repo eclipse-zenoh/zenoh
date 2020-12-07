@@ -14,20 +14,17 @@
 ### Dockerfile running the Eclipse zenoh router (zenohd)
 ###
 # To build this Docker image:
-#   - Install a musl-based GCC (on MacOS: `brew install musl-cross`)
-#   - Add in your ~/.cargo/config:
-#       [target.x86_64-unknown-linux-musl]
-#       linker = "x86_64-linux-musl-gcc"
-#   - Install the x86_64-unknown-linux-musl target:
-#       rustup target add x86_64-unknown-linux-musl
-#   - Build zenoh for musl:
-#       RUSTFLAGS='-C target-feature=-crt-static' cargo build --release --target=x86_64-unknown-linux-musl
-#   - Build the Docker image:
+#   - Build zenoh using the adlinktech/zenoh-dev-x86_64-unknown-linux-musl docker image:
+#       docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-x86_64-unknown-linux-musl cargo build --release --bins --lib --examples
+#   - Then build this Docker image:
 #       docker build -t eclipse/zenoh .
+#
+# To run this Docker image:
+#    docker run --init -p 7447:7447/tcp -p 7447:7447/udp -p 8000:8000/tcp eclipse/zenoh
 
 FROM alpine:latest
 
-RUN apk add --no-cache libgcc
+RUN apk add --no-cache libgcc libstdc++
 
 COPY target/x86_64-unknown-linux-musl/release/zenohd /
 COPY target/x86_64-unknown-linux-musl/release/*.so /

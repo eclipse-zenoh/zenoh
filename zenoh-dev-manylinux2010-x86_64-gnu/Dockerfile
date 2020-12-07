@@ -11,7 +11,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 
 ###
-### Dockerfile for a Linux 32 bits container with all required tools to build Eclipse zenoh and its APIs
+### Dockerfile for a Linux x86 64 bits container with all required tools to build Eclipse zenoh and its APIs
 ###
 
 # List of installed tools:
@@ -19,23 +19,33 @@
 #    - Rust with nightly toolchain
 #    - dpkg + cargo-deb for Debian packages
 #    - rpm-build + cargo-rpm for RedHat packages
+#  * for zbackend_influxdb:
+#    - openssl-devel
+#  * for zbackend-fs (because of rocksdb dependency)
+#    - clang-devel llvm-devel
 #  * for zenoh-python
 #    - maturin
 #  * for zenoh-c:
 #    - cbindgen
+#  * for zenoh-pico:
+#    - cmake3
 
-FROM quay.io/pypa/manylinux2010_i686:latest
+FROM quay.io/pypa/manylinux2010_x86_64:latest
 
-RUN yum install -y dpkg rpm-build
+ARG target=x86_64-unknown-linux-gnu
+
+# EPEL required for some extra packages
+RUN yum install -y epel-release
+RUN yum install -y dpkg rpm-build openssl-devel clang-devel llvm-devel cmake3
+RUN ln -s /usr/bin/cmake3 /usr/bin/cmake
 
 ENV PATH /root/.cargo/bin:$PATH
 # Add all supported python versions
 ENV PATH /opt/python/cp35-cp35m/bin/:/opt/python/cp36-cp36m/bin/:/opt/python/cp37-cp37m/bin/:/opt/python/cp38-cp38/bin/:$PATH
 # Otherwise `cargo new` errors
 ENV USER root
+ENV CARGO_BUILD_TARGET_DIR=target/${target}
 
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host i686-unknown-linux-gnu \
-    && rustup toolchain install nightly \
-    && rustup default nightly \
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host ${target} --default-toolchain nightly \
     && pip install maturin \
     && cargo install cbindgen cargo-deb cargo-rpm

@@ -11,7 +11,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 
 ###
-### Dockerfile for a Linux 64 bits container with all required tools to build Eclipse zenoh and its APIs
+### Dockerfile for a Linux ARM aarch64 container with all required tools to build Eclipse zenoh and its APIs
 ###
 
 # List of installed tools:
@@ -19,47 +19,40 @@
 #    - Rust with nightly toolchain
 #    - dpkg + cargo-deb for Debian packages
 #    - rpm-build + cargo-rpm for RedHat packages
+#  * for zbackend_influxdb:
+#    - openssl-devel
+#  * for zbackend-fs (because of rocksdb dependency)
+#    - clang-devel llvm-devel
 #  * for zenoh-python
 #    - maturin
 #  * for zenoh-c:
 #    - cbindgen
-
-
-###
-### Dockerfile for a Linux 32 bits container with all required tools to build Eclipse zenoh and its APIs
-###
-
-# List of installed tools:
-#  * for zenoh:
-#    - Rust with nightly toolchain
-#    - dpkg + cargo-deb for Debian packages
-#    - rpm-build + cargo-rpm for RedHat packages
-#  * for zenoh-python
-#    - maturin
-#  * for zenoh-c:
-#    - cbindgen
+#  * for zenoh-pico:
+#    - cmake3
 
 FROM quay.io/pypa/manylinux2014_aarch64:latest
 
-# NOTE: dkpg for aarch64 is provided by EPEL
-RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-RUN yum install -y dpkg rpm-build
+ARG target=aarch64-unknown-linux-gnu
+
+# EPEL required for some extra packages
+RUN yum install -y epel-release
+RUN yum install -y dpkg rpm-build openssl-devel clang-devel llvm-devel cmake3
+RUN ln -s /usr/bin/cmake3 /usr/bin/cmake
 
 ENV PATH /root/.cargo/bin:$PATH
 # Add all supported python versions
 ENV PATH /opt/python/cp35-cp35m/bin/:/opt/python/cp36-cp36m/bin/:/opt/python/cp37-cp37m/bin/:/opt/python/cp38-cp38/bin/:$PATH
 # Otherwise `cargo new` errors
 ENV USER root
+ENV CARGO_BUILD_TARGET_DIR=target/${target}
 
 ###### WARNING: issue installing maturin wheel via pip on quay.io/pypa/manylinux2014_aarch64:latest : https://github.com/PyO3/maturin/issues/369
 ### Probable cause similar to https://stackoverflow.com/questions/39744926/how-can-i-compile-a-rust-program-so-it-doesnt-use-cxa-thread-atexit-impl
 ### Workaround below: clone and build maturin
 
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y \
-    && rustup toolchain install nightly \
-    && rustup default nightly \
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host ${target} --default-toolchain nightly \
     && cargo install cbindgen cargo-deb cargo-rpm \
     && git clone -b v0.8.3 https://github.com/PyO3/maturin.git \
     && cd maturin \
     && cargo build --release \
-    && cp target/release/maturin /opt/python/cp35-cp35m/bin/
+    && cp target/${target}/release/maturin /opt/python/cp35-cp35m/bin/
