@@ -20,8 +20,9 @@
    Puts a path/value into Zenoh.  
    The path/value will be stored by all the storages with a selector that matches the path.
    It will also be received by all the matching subscribers (see [z_sub](#z_sub) below).  
-   Note that if no storage and no subscriber are matching the path, the path/value will be dropped.
-   Therefore, you probably start zenohd with a memory storage (--mem-storage option) and/or start [z_sub](#z_sub) before z_put.
+   
+   :warning:  **Note that if no storage and no subscriber are matching the path, the path/value will be dropped.**
+   Therefore, you probably want to start zenohd with at least a memory storage (--mem-storage option) and/or start [z_sub](#z_sub) before z_put.
 
    Typical usage:
    ```bash
@@ -37,8 +38,9 @@
    Puts a path/value into Zenoh where the value is a float.
    The path/value will be stored by all the storages with a selector that matches the path.
    It will also be received by all the matching subscribers (see [z_sub](#z_sub) below).
-   Note that if no storage and no subscriber are matching the path, the path/value will be dropped.
-   Therefore, you probably start zenohd with a memory storage (--mem-storage option) and/or start [z_sub](#z_sub) before z_put.
+   
+   :warning: **Note that if no storage and no subscriber are matching the path, the path/value will be dropped.**
+   Therefore, you probably want to start zenohd with at least a memory storage (--mem-storage option) and/or start [z_sub](#z_sub) before z_put.
 
    Typical usage:
    ```bash
