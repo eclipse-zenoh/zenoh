@@ -571,8 +571,9 @@ impl Network {
         self.graph[self.idx].links.retain(|link| *link != pid);
 
         let idx = self.get_idx(&pid).unwrap();
-        self.graph
-            .remove_edge(self.graph.find_edge_undirected(self.idx, idx).unwrap().0);
+        if let Some(edge) = self.graph.find_edge_undirected(self.idx, idx) {
+            self.graph.remove_edge(edge.0);
+        }
         self.remove_detached_nodes();
 
         self.graph[self.idx].sn += 1;
