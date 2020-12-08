@@ -20,7 +20,6 @@ use criterion::{black_box, Criterion};
 use zenoh_protocol::core::{Channel, CongestionControl, Reliability, ResKey, ZInt};
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::proto::{Attachment, FramePayload, SessionMessage, ZenohMessage};
-use zenoh_util::core::ZResult;
 
 fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
     buf.write_zint(v);
@@ -37,27 +36,27 @@ fn _bench_zint_write_three((v, buf): (&[ZInt; 3], &mut WBuf)) {
     buf.write_zint(v[2]);
 }
 
-fn bench_one_zint_codec((v, buf): (ZInt, &mut WBuf)) -> ZResult<()> {
+fn bench_one_zint_codec((v, buf): (ZInt, &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v);
-    RBuf::from(&*buf).read_zint().map(|_| ())
+    RBuf::from(&*buf).read_zint()
 }
 
-fn bench_two_zint_codec((v, buf): (&[ZInt; 2], &mut WBuf)) -> ZResult<()> {
+fn bench_two_zint_codec((v, buf): (&[ZInt; 2], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     let mut rbuf = RBuf::from(&*buf);
     let _ = rbuf.read_zint()?;
-    rbuf.read_zint().map(|_| ())
+    rbuf.read_zint()
 }
 
-fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> ZResult<()> {
+fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     buf.write_zint(v[2]);
     let mut rbuf = RBuf::from(&*buf);
     let _ = rbuf.read_zint()?;
     let _ = rbuf.read_zint()?;
-    rbuf.read_zint().map(|_| ())
+    rbuf.read_zint()
 }
 
 fn bench_make_data(payload: RBuf) {
@@ -132,12 +131,6 @@ fn criterion_benchmark(c: &mut Criterion) {
     ];
     let _ns: [ZInt; 4] = [0; 4];
     let len = String::from("u8");
-    // reliable: bool,
-    // key: ResKey,
-    // info: Option<RBuf>,
-    // payload: RBuf,
-    // reply_context: Option<ReplyContext>,
-    // attachment: Option<Attachment>>
     let payload = RBuf::from(vec![0u8, 32]);
     let data = ZenohMessage::make_data(
         ResKey::RId(10),

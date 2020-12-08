@@ -414,7 +414,7 @@ mod tests {
             // Convert the buffer into an RBuf
             let mut rbuf: RBuf = batch.get_serialized_messages().into();
             // Deserialize the messages
-            while let Ok(msg) = rbuf.read_session_message() {
+            while let Some(msg) = rbuf.read_session_message() {
                 deserialized.push(msg);
             }
             assert!(!deserialized.is_empty());
@@ -542,7 +542,7 @@ mod tests {
 
                     // Deserialize the message
                     let msg_out = fragments.read_zenoh_message(*reliability);
-                    assert!(msg_out.is_ok());
+                    assert!(msg_out.is_some());
                     assert_eq!(msg_in, msg_out.unwrap());
 
                     println!("\t\tFragments: {}", batches.len());

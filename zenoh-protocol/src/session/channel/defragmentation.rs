@@ -68,7 +68,7 @@ impl DefragBuffer {
     }
 
     #[inline]
-    pub(super) fn defragment(&mut self) -> ZResult<ZenohMessage> {
+    pub(super) fn defragment(&mut self) -> Option<ZenohMessage> {
         let res = self.buffer.read_zenoh_message(self.reliability);
         self.clear();
         res

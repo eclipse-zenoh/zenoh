@@ -415,7 +415,7 @@ impl SessionOrchestrator {
                 let (n, _peer) = socket.recv_from(&mut buf).await.unwrap();
                 let mut rbuf = RBuf::from(&buf[..n]);
                 log::trace!("Received UDP datagram {}", rbuf);
-                if let Ok(msg) = rbuf.read_session_message() {
+                if let Some(msg) = rbuf.read_session_message() {
                     log::trace!("Received {:?}", msg);
                     if let SessionBody::Hello(hello) = msg.get_body() {
                         let whatami = hello.whatami.or(Some(whatami::ROUTER)).unwrap();
@@ -524,7 +524,7 @@ impl SessionOrchestrator {
 
             let mut rbuf = RBuf::from(&buf[..n]);
             log::trace!("Received UDP datagram {}", rbuf);
-            if let Ok(msg) = rbuf.read_session_message() {
+            if let Some(msg) = rbuf.read_session_message() {
                 log::trace!("Received {:?}", msg);
                 if let SessionBody::Scout(Scout {
                     what, pid_request, ..

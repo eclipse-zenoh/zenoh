@@ -103,7 +103,7 @@ impl Value {
         use Value::*;
         match encoding {
             APP_CUSTOM => {
-                if let Ok(encoding_descr) = payload.read_string() {
+                if let Some(encoding_descr) = payload.read_string() {
                     let mut data = RBuf::empty();
                     payload.drain_into_rbuf(&mut data);
                     Ok(Custom {

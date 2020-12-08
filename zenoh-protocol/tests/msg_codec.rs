@@ -270,35 +270,32 @@ fn hello_tests() {
 }
 
 #[test]
-fn open_tests() {
+fn init_tests() {
     for _ in 0..NUM_ITER {
         let wami = [whatami::ROUTER, whatami::CLIENT];
         let sn_resolution = [None, Some(gen!(ZInt))];
-        let locators = [
-            None,
-            Some(vec![
-                "tcp/1.2.3.4:1234".parse().unwrap(),
-                "tcp/4.5.6.7:4567".parse().unwrap(),
-            ]),
-        ];
         let attachment = [None, Some(gen_attachment())];
 
         for w in wami.iter() {
             for s in sn_resolution.iter() {
-                for l in locators.iter() {
-                    for a in attachment.iter() {
-                        let msg = SessionMessage::make_open(
-                            gen!(u8),
-                            *w,
-                            gen_pid(),
-                            gen!(ZInt),
-                            gen!(ZInt),
-                            s.clone(),
-                            l.clone(),
-                            a.clone(),
-                        );
-                        test_write_read_session_message(msg);
-                    }
+                for a in attachment.iter() {
+                    let msg = SessionMessage::make_init_syn(gen!(u8), *w, gen_pid(), *s, a.clone());
+                    test_write_read_session_message(msg);
+                }
+            }
+        }
+
+        for w in wami.iter() {
+            for s in sn_resolution.iter() {
+                for a in attachment.iter() {
+                    let msg = SessionMessage::make_init_ack(
+                        *w,
+                        gen_pid(),
+                        *s,
+                        RBuf::from(gen_buffer(64)),
+                        a.clone(),
+                    );
+                    test_write_read_session_message(msg);
                 }
             }
         }
@@ -306,37 +303,23 @@ fn open_tests() {
 }
 
 #[test]
-fn accept_tests() {
+fn open_tests() {
     for _ in 0..NUM_ITER {
-        let wami = [whatami::ROUTER, whatami::CLIENT];
-        let sn_resolution = [None, Some(gen!(ZInt))];
-        let locators = [
-            None,
-            Some(vec![
-                "tcp/1.2.3.4:1234".parse().unwrap(),
-                "tcp/4.5.6.7:4567".parse().unwrap(),
-            ]),
-        ];
         let attachment = [None, Some(gen_attachment())];
 
-        for w in wami.iter() {
-            for s in sn_resolution.iter() {
-                for l in locators.iter() {
-                    for a in attachment.iter() {
-                        let msg = SessionMessage::make_accept(
-                            *w,
-                            gen_pid(),
-                            gen_pid(),
-                            gen!(ZInt),
-                            gen!(ZInt),
-                            s.clone(),
-                            l.clone(),
-                            a.clone(),
-                        );
-                        test_write_read_session_message(msg);
-                    }
-                }
-            }
+        for a in attachment.iter() {
+            let msg = SessionMessage::make_open_syn(
+                gen!(ZInt),
+                gen!(ZInt),
+                RBuf::from(gen_buffer(64)),
+                a.clone(),
+            );
+            test_write_read_session_message(msg);
+        }
+
+        for a in attachment.iter() {
+            let msg = SessionMessage::make_open_ack(gen!(ZInt), gen!(ZInt), a.clone());
+            test_write_read_session_message(msg);
         }
     }
 }
@@ -577,9 +560,9 @@ fn frame_batching_tests() {
         loop {
             let pos = rbuf.get_pos();
             match rbuf.read_session_message() {
-                Ok(msg) => read.push(msg),
-                Err(_) => {
-                    assert!(rbuf.set_pos(pos).is_ok());
+                Some(msg) => read.push(msg),
+                None => {
+                    assert!(rbuf.set_pos(pos));
                     break;
                 }
             }

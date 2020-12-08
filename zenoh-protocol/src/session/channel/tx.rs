@@ -592,7 +592,7 @@ mod tests {
                 // Create a RBuf for deserialization starting from the batch
                 let mut rbuf: RBuf = batch.get_serialized_messages().into();
                 // Deserialize the messages
-                while let Ok(msg) = rbuf.read_session_message() {
+                while let Some(msg) = rbuf.read_session_message() {
                     match msg.body {
                         SessionBody::Frame(Frame { payload, .. }) => match payload {
                             FramePayload::Messages { messages } => {

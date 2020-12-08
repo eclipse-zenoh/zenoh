@@ -19,9 +19,6 @@ use std::io::IoSlice;
 #[cfg(feature = "zero-copy")]
 use super::shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
-
 #[derive(Clone, Default)]
 pub struct RBuf {
     slices: Vec<ArcSlice>,
@@ -103,20 +100,17 @@ impl RBuf {
         }
     }
 
-    pub fn skip_bytes(&mut self, n: usize) -> ZResult<()> {
+    pub fn skip_bytes(&mut self, n: usize) -> bool {
         let remaining = self.readable();
         if n <= remaining {
             self.skip_bytes_no_check(n);
-            Ok(())
-        } else {
-            zerror!(ZErrorKind::BufferUnderflow {
-                missing: n - remaining
-            })
+            return true;
         }
+        false
     }
 
     #[inline]
-    pub fn set_pos(&mut self, index: usize) -> ZResult<()> {
+    pub fn set_pos(&mut self, index: usize) -> bool {
         self.reset_pos();
         self.skip_bytes(index)
     }
@@ -160,30 +154,31 @@ impl RBuf {
         }
     }
 
-    pub fn read(&mut self) -> ZResult<u8> {
+    pub fn read(&mut self) -> Option<u8> {
         if self.can_read() {
             let b = self.current_slice()[self.pos.1];
             self.skip_bytes_no_check(1);
-            Ok(b)
-        } else {
-            zerror!(ZErrorKind::BufferUnderflow { missing: 1 })
+            return Some(b);
         }
+        None
     }
 
     // same than read() but not moving read position (allow not mutable self)
-    pub fn get(&self) -> ZResult<u8> {
+    pub fn get(&self) -> Option<u8> {
         if self.can_read() {
             let b = self.current_slice()[self.pos.1];
-            Ok(b)
+            Some(b)
         } else {
-            zerror!(ZErrorKind::BufferUnderflow { missing: 1 })
+            None
         }
     }
 
-    pub fn read_bytes(&mut self, bs: &mut [u8]) -> ZResult<()> {
-        self.get_bytes(bs)?;
+    pub fn read_bytes(&mut self, bs: &mut [u8]) -> bool {
+        if !self.get_bytes(bs) {
+            return false;
+        };
         self.skip_bytes_no_check(bs.len());
-        Ok(())
+        true
     }
 
     fn get_bytes_no_check(&self, slicepos: (usize, usize), bs: &mut [u8]) {
@@ -199,16 +194,14 @@ impl RBuf {
     }
 
     // same than read_bytes() but not moving read position (allow not mutable self)
-    pub fn get_bytes(&self, bs: &mut [u8]) -> ZResult<()> {
+    pub fn get_bytes(&self, bs: &mut [u8]) -> bool {
         let len = bs.len();
         let remaining = self.readable();
         if len > remaining {
-            return zerror!(ZErrorKind::BufferUnderflow {
-                missing: len - remaining
-            });
+            return false;
         }
         self.get_bytes_no_check(self.pos, bs);
-        Ok(())
+        true
     }
 
     pub fn read_vec(&mut self) -> Vec<u8> {
@@ -250,13 +243,12 @@ impl RBuf {
     }
 
     // Read 'len' bytes from 'self' and add those to 'dest'
-    pub fn read_into_rbuf(&mut self, dest: &mut RBuf, len: usize) -> ZResult<()> {
+    pub fn read_into_rbuf(&mut self, dest: &mut RBuf, len: usize) -> bool {
         if self.readable() >= len {
             self.read_into_rbuf_no_check(dest, len);
-            Ok(())
-        } else {
-            zerror!(ZErrorKind::BufferUnderflow { missing: 1 })
+            return true;
         }
+        false
     }
 
     // Read all the bytes from 'self' and add those to 'dest'
@@ -465,7 +457,7 @@ mod tests {
 
         // test set_pos / get_pos
         for i in 0..buf1.len() - 1 {
-            buf1.set_pos(i).unwrap();
+            assert!(buf1.set_pos(i));
             assert_eq!(i, buf1.get_pos());
             assert_eq!(i as u8, buf1.read().unwrap());
         }
@@ -474,7 +466,7 @@ mod tests {
         buf1.reset_pos();
         let mut bytes = [0u8; 3];
         for i in 0..10 {
-            buf1.read_bytes(&mut bytes).unwrap();
+            assert!(buf1.read_bytes(&mut bytes));
             assert_eq!([i * 3 as u8, i * 3 + 1, i * 3 + 2], bytes);
         }
 
@@ -506,7 +498,7 @@ mod tests {
         buf1.reset_pos();
         let _ = buf1.read();
         let mut dest = RBuf::new();
-        assert!(buf1.read_into_rbuf(&mut dest, 24).is_ok());
+        assert!(buf1.read_into_rbuf(&mut dest, 24));
         let dest_slices = dest.as_ioslices();
         assert_eq!(3, dest_slices.len());
         assert_eq!(

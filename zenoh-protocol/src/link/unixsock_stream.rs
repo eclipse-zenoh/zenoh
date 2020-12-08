@@ -333,16 +333,13 @@ async fn read_task(link: Arc<UnixSockStream>, stop: Receiver<()>) {
         macro_rules! zdeserialize {
             () => {
                 // Deserialize all the messages from the current RBuf
-                loop {
+                while rbuf.can_read() {
                     match rbuf.read_session_message() {
-                        Ok(msg) => messages.push(msg),
-                        Err(e) => match e.get_kind() {
-                            ZErrorKind::InvalidMessage { descr } => {
-                                log::warn!("Closing UnixSock-Stream link {}: {}", link, descr);
-                                zlinkerror!(true);
-                            }
-                            _ => break,
-                        },
+                        Some(msg) => messages.push(msg),
+                        None => {
+                            log::warn!("Closing UnixSock-Stream link: {}", link);
+                            zlinkerror!(true);
+                        }
                     }
                 }
 

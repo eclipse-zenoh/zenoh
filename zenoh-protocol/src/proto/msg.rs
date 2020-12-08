@@ -100,8 +100,8 @@ mod imsg {
         // Session Messages
         pub(crate) const SCOUT: u8 = 0x01;
         pub(crate) const HELLO: u8 = 0x02;
-        pub(crate) const OPEN: u8 = 0x03;
-        pub(crate) const ACCEPT: u8 = 0x04;
+        pub(crate) const INIT: u8 = 0x03;
+        pub(crate) const OPEN: u8 = 0x04;
         pub(crate) const CLOSE: u8 = 0x05;
         pub(crate) const SYNC: u8 = 0x06;
         pub(crate) const ACK_NACK: u8 = 0x07;
@@ -748,8 +748,8 @@ pub mod smsg {
         // Messages
         pub const SCOUT: u8 = imsg::id::SCOUT;
         pub const HELLO: u8 = imsg::id::HELLO;
+        pub const INIT: u8 = imsg::id::INIT;
         pub const OPEN: u8 = imsg::id::OPEN;
-        pub const ACCEPT: u8 = imsg::id::ACCEPT;
         pub const CLOSE: u8 = imsg::id::CLOSE;
         pub const SYNC: u8 = imsg::id::SYNC;
         pub const ACK_NACK: u8 = imsg::id::ACK_NACK;
@@ -763,6 +763,7 @@ pub mod smsg {
 
     // Session message flags
     pub mod flag {
+        pub const A: u8 = 1 << 5; // 0x20 Ack           if A==1 then the message is an acknowledgment
         pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
         pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
         pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
@@ -773,6 +774,7 @@ pub mod smsg {
         pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
+        pub const T: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
         pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
 
         pub const X: u8 = 0; // Unused flags are set to zero
@@ -902,6 +904,53 @@ impl fmt::Display for Hello {
     }
 }
 
+/// # Init message
+///
+/// ```text
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
+///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///
+/// The INIT message is sent on a specific Locator to initiate a session with the peer associated
+/// with that Locator. The initiator MUST send an INIT message with the A flag set to 0.  If the
+/// corresponding peer deems appropriate to initialize a session with the initiator, the corresponding
+/// peer MUST reply with an INIT message with the A flag set to 1.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|S|A|   INIT  |
+/// +-+-+-+-+-------+
+/// | v_maj | v_min | if A==0 -- Protocol Version VMaj.VMin
+/// +-------+-------+
+/// ~    whatami    ~ -- Client, Router, Peer or a combination of them
+/// +---------------+
+/// ~    peer_id    ~ -- PID of the sender of the INIT message
+/// +---------------+
+/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
+/// +---------------+
+/// ~     cookie    ~ if A==1
+/// +---------------+
+///
+/// (*) if A==0 and S==0 then 2^28 is assumed.
+///     if A==1 and S==0 then the agreed resolution is the one communicated by the initiator.
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct InitSyn {
+    pub version: u8,
+    pub whatami: WhatAmI,
+    pub pid: PeerId,
+    pub sn_resolution: Option<ZInt>,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct InitAck {
+    pub whatami: WhatAmI,
+    pub pid: PeerId,
+    pub sn_resolution: Option<ZInt>,
+    pub cookie: RBuf,
+}
+
 /// # Open message
 ///
 /// ```text
@@ -911,98 +960,32 @@ impl fmt::Display for Hello {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the lenght of a message must not exceed 65_535 bytes.
 ///
-/// The OPEN message is sent on a specific Locator to initiate a session with the peer associated
-/// with that Locator.
+/// The OPEN message is sent on a link to finally open an initialized session with the peer.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |L|S|X|   OPEN  |
+/// |X|T|A|   OPEN  |
 /// +-+-+-+-+-------+
-/// | v_maj | v_min | -- Protocol Version VMaj.VMin
-/// +-------+-------+
-/// ~    whatami    ~ -- Client, Router, Peer or a combination of them
+/// ~ lease_period  ~ -- Lease period of the sender of the OPEN message(*)
 /// +---------------+
-/// ~   o_peer_id   ~ -- PID of the sender of the OPEN
+/// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(**)
 /// +---------------+
-/// ~ lease_period  ~ -- Lease period of the session opener
-/// +---------------+
-/// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(*)
-/// +---------------+
-/// ~ sn_resolution ~ if S==1 -- Otherwise 2^28 is assumed(**)
-/// +---------------+
-/// ~    Locators   ~ if L==1 -- List of locators the sender of the OPEN is reachable at
+/// ~    cookie     ~ if A==0(*)
 /// +---------------+
 ///
-/// (*)  The Initial SN must be bound to the proposed SN Resolution. Otherwise the OPEN message is considered
-///      invalid and it should be discarded by the recipient of the OPEN message.
-/// (**) In case of the Accepter Peer negotiates a smaller SN Resolution (see ACCEPT message) and the proposed
-///      Initial SN results to be out-of-bound, the new Agreed Initial SN is calculated according to the
-///      following modulo operation:
-///         Agreed Initial SN := (Initial SN_Open) mod (SN Resolution_Accept)
+/// (*) if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
+/// (**) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct Open {
-    pub version: u8,
-    pub whatami: WhatAmI,
-    pub pid: PeerId,
+pub struct OpenSyn {
     pub lease: ZInt,
     pub initial_sn: ZInt,
-    pub sn_resolution: Option<ZInt>,
-    pub locators: Option<Vec<Locator>>,
+    pub cookie: RBuf,
 }
-
-/// # Accept message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
-///
-/// The ACCEPT message is sent in response of an OPEN message in case of accepting the new incoming session.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |L|S|X| ACCEPT  |
-/// +-+-+-+-+-------+
-/// ~    whatami    ~ -- Client, Router, Peer or a combination of them
-/// +---------------+
-/// ~   o_peer_id   ~ -- PID of the sender of the OPEN this ACCEPT is for
-/// +---------------+
-/// ~   a_peer_id   ~ -- PID of the sender of the ACCEPT
-/// +---------------+
-/// ~ lease_period  ~ -- Lease period of the session accepter
-/// +---------------+
-/// ~  initial_sn   ~ -- Initial SN proposed by the sender of the ACCEPT(*)
-/// +---------------+
-/// ~ sn_resolution + if S==1 -- Agreed SN Resolution(**)
-/// +---------------+
-/// ~    Locators   ~ if L==1
-/// +---------------+
-///
-/// - if S==0 then the agreed sequence number resolution is the one indicated in the OPEN message.
-/// - if S==1 then the agreed sequence number resolution is the one indicated in this ACCEPT message.
-///           The resolution in the ACCEPT must be less or equal than the resolution in the OPEN,
-///           otherwise the ACCEPT message is consmsg::idered invalid and it should be treated as a
-///           CLOSE message with L==0 by the Opener Peer -- the recipient of the ACCEPT message.
-///
-/// (*)  The Initial SN is bound to the proposed SN Resolution.
-/// (**) In case of the SN Resolution proposed in this ACCEPT message is smaller than the SN Resolution
-///      proposed in the OPEN message AND the Initial SN contained in the OPEN messages results to be
-///      out-of-bound, the new Agreed Initial SN for the Opener Peer is calculated according to the
-///      following modulo operation:
-///         Agreed Initial SN := (Initial SN_Open) mod (SN Resolution_Accept)
-/// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct Accept {
-    pub whatami: WhatAmI,
-    pub opid: PeerId,
-    pub apid: PeerId,
+pub struct OpenAck {
     pub lease: ZInt,
     pub initial_sn: ZInt,
-    pub sn_resolution: Option<ZInt>,
-    pub locators: Option<Vec<Locator>>,
 }
 
 /// # Close message
@@ -1194,8 +1177,10 @@ pub struct Frame {
 pub enum SessionBody {
     Scout(Scout),
     Hello(Hello),
-    Open(Open),
-    Accept(Accept),
+    InitSyn(InitSyn),
+    InitAck(InitAck),
+    OpenSyn(OpenSyn),
+    OpenAck(OpenAck),
     Close(Close),
     Sync(Sync),
     AckNack(AckNack),
@@ -1255,70 +1240,89 @@ impl SessionMessage {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn make_open(
+    pub fn make_init_syn(
         version: u8,
         whatami: WhatAmI,
         pid: PeerId,
-        lease: ZInt,
-        initial_sn: ZInt,
         sn_resolution: Option<ZInt>,
-        locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
-        let lflag = if locators.is_some() { smsg::flag::L } else { 0 };
         let sflag = if sn_resolution.is_some() {
             smsg::flag::S
         } else {
             0
         };
-        let header = smsg::id::OPEN | sflag | lflag;
+        let header = smsg::id::INIT | sflag;
 
         SessionMessage {
             header,
-            body: SessionBody::Open(Open {
+            body: SessionBody::InitSyn(InitSyn {
                 version,
                 whatami,
                 pid,
-                lease,
-                initial_sn,
                 sn_resolution,
-                locators,
             }),
             attachment,
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn make_accept(
+    pub fn make_init_ack(
         whatami: WhatAmI,
-        opid: PeerId,
-        apid: PeerId,
-        lease: ZInt,
-        initial_sn: ZInt,
+        pid: PeerId,
         sn_resolution: Option<ZInt>,
-        locators: Option<Vec<Locator>>,
+        cookie: RBuf,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
-        let lflag = if locators.is_some() { smsg::flag::L } else { 0 };
         let sflag = if sn_resolution.is_some() {
             smsg::flag::S
         } else {
             0
         };
-        let header = smsg::id::ACCEPT | sflag | lflag;
+        let header = smsg::id::INIT | smsg::flag::A | sflag;
 
         SessionMessage {
             header,
-            body: SessionBody::Accept(Accept {
+            body: SessionBody::InitAck(InitAck {
                 whatami,
-                opid,
-                apid,
+                pid,
+                sn_resolution,
+                cookie,
+            }),
+            attachment,
+        }
+    }
+
+    pub fn make_open_syn(
+        lease: ZInt,
+        initial_sn: ZInt,
+        cookie: RBuf,
+        attachment: Option<Attachment>,
+    ) -> SessionMessage {
+        let tflag = if lease % 1_000 == 0 { smsg::flag::T } else { 0 };
+        let header = smsg::id::OPEN | tflag;
+
+        SessionMessage {
+            header,
+            body: SessionBody::OpenSyn(OpenSyn {
                 lease,
                 initial_sn,
-                sn_resolution,
-                locators,
+                cookie,
             }),
+            attachment,
+        }
+    }
+
+    pub fn make_open_ack(
+        lease: ZInt,
+        initial_sn: ZInt,
+        attachment: Option<Attachment>,
+    ) -> SessionMessage {
+        let tflag = if lease % 1_000 == 0 { smsg::flag::T } else { 0 };
+        let header = smsg::id::OPEN | smsg::flag::A | tflag;
+
+        SessionMessage {
+            header,
+            body: SessionBody::OpenAck(OpenAck { lease, initial_sn }),
             attachment,
         }
     }

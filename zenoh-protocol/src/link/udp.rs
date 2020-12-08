@@ -275,16 +275,12 @@ async fn read_task(link: Arc<Udp>, stop: Receiver<()>) {
 
                     // Deserialize all the messages from the current RBuf
                     msgs.clear();
-                    loop {
+                    while rbuf.can_read() {
                         match rbuf.read_session_message() {
-                            Ok(msg) => msgs.push(msg),
-                            Err(e) => match e.get_kind() {
-                                ZErrorKind::InvalidMessage { descr } => {
-                                    log::warn!("Closing UDP link {}: {}", link.dst_addr, descr);
-                                    zlinkerror!(true);
-                                }
-                                _ => break,
-                            },
+                            Some(msg) => msgs.push(msg),
+                            None => {
+                                zlinkerror!(true);
+                            }
                         }
                     }
 
@@ -754,19 +750,15 @@ async fn accept_read_task(a_self: &Arc<ManagerUdpInner>, listener: Arc<ListenerU
             // Deserialize all the messages from the current RBuf
             msgs.clear();
             let mut error = false;
-            loop {
+            while rbuf.can_read() {
                 let res = rbuf.read_session_message();
                 log::trace!("UDP deserialization from {}: {:?}", dst_addr, res);
                 match res {
-                    Ok(msg) => msgs.push(msg),
-                    Err(e) => match e.get_kind() {
-                        ZErrorKind::InvalidMessage { descr } => {
-                            log::warn!("Closing UDP link {}: {}", dst_addr, descr);
-                            error = true;
-                            break;
-                        }
-                        _ => break,
-                    },
+                    Some(msg) => msgs.push(msg),
+                    None => {
+                        log::warn!("Closing UDP link: {}", dst_addr);
+                        error = true;
+                    }
                 }
             }
 

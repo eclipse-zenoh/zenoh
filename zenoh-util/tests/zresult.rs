@@ -41,7 +41,7 @@ fn error_simple() {
         println!("{}", e);
         println!("{:?}", e);
         match e.get_kind() {
-            ZErrorKind::BufferOverflow { missing: x } => assert_eq!(3 as usize, *x),
+            ZErrorKind::BufferOverflow { missing: x } => assert_eq!(3usize, *x),
             _ => assert!(false),
         }
         assert!(s.contains(file!()));

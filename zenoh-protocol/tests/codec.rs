@@ -14,27 +14,23 @@
 use zenoh_protocol::core::{ZInt, ZINT_MAX_BYTES};
 use zenoh_protocol::io::{RBuf, WBuf};
 
-use zenoh_util::core::ZResult;
-
-fn test_zint(v: ZInt) -> ZResult<()> {
+fn test_zint(v: ZInt) {
     let mut buf = WBuf::new(32, true);
     buf.write_zint(v);
-    assert_eq!(v, RBuf::from(&buf).read_zint()?);
-    Ok(())
+    assert_eq!(v, RBuf::from(&buf).read_zint().unwrap());
 }
 
 #[test]
-fn test_zint_codec_limits() -> ZResult<()> {
-    test_zint(0)?;
+fn test_zint_codec_limits() {
+    test_zint(0);
     for i in 1..ZINT_MAX_BYTES {
         let res = (1 as ZInt).checked_shl(7 * i as u32);
         if let Some(v) = res {
-            test_zint(v - 1)?;
-            test_zint(v)?;
+            test_zint(v - 1);
+            test_zint(v);
         } else {
             break;
         }
     }
-    test_zint(ZInt::MAX)?;
-    Ok(())
+    test_zint(ZInt::MAX);
 }

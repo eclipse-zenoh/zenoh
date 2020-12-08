@@ -75,3 +75,7 @@ harness = false
 [[bench]]
 name = "data_creation"
 harness = false
+
+[[bench]]
+name = "frame_decoding"
+harness = false

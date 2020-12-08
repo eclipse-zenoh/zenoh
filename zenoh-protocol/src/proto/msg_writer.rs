@@ -11,23 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use std::convert::TryFrom;
-
 use super::msg::*;
 
 use crate::core::*;
 use crate::io::WBuf;
-use crate::link::Locator;
 
-use zenoh_util::to_zint;
-
-macro_rules! check {
-    ($op:expr) => {
-        if !$op {
-            return false;
-        }
-    };
-}
+use zenoh_util::zcheck;
 
 impl WBuf {
     pub fn write_frame_header(
@@ -38,7 +27,7 @@ impl WBuf {
         attachment: Option<Attachment>,
     ) -> bool {
         if let Some(attachment) = attachment {
-            check!(self.write_deco_attachment(&attachment, true));
+            zcheck!(self.write_deco_attachment(&attachment, true));
         }
 
         let header = SessionMessage::make_frame_header(ch, is_fragment);
@@ -48,20 +37,20 @@ impl WBuf {
 
     pub fn write_session_message(&mut self, msg: &SessionMessage) -> bool {
         if let Some(attachment) = msg.get_attachment() {
-            check!(self.write_deco_attachment(attachment, true));
+            zcheck!(self.write_deco_attachment(attachment, true));
         };
 
-        check!(self.write(msg.header));
+        zcheck!(self.write(msg.header));
         match msg.get_body() {
             SessionBody::Frame(Frame { sn, payload, .. }) => {
-                check!(self.write_zint(*sn));
+                zcheck!(self.write_zint(*sn));
                 match payload {
                     FramePayload::Fragment { buffer, .. } => {
-                        check!(self.write_rbuf_slices(&buffer));
+                        zcheck!(self.write_rbuf_slices(&buffer));
                     }
                     FramePayload::Messages { messages } => {
                         for m in messages {
-                            check!(self.write_zenoh_message(m));
+                            zcheck!(self.write_zenoh_message(m));
                         }
                     }
                 }
@@ -69,7 +58,7 @@ impl WBuf {
 
             SessionBody::Scout(Scout { what, .. }) => {
                 if let Some(w) = *what {
-                    check!(self.write_zint(w));
+                    zcheck!(self.write_zint(w));
                 }
             }
 
@@ -79,91 +68,98 @@ impl WBuf {
                 locators,
             }) => {
                 if let Some(pid) = pid {
-                    check!(self.write_peerid(pid));
+                    zcheck!(self.write_peerid(pid));
                 }
                 if let Some(w) = *whatami {
                     if w != whatami::ROUTER {
-                        check!(self.write_zint(w));
+                        zcheck!(self.write_zint(w));
                     }
                 }
                 if let Some(locs) = locators {
-                    check!(self.write_locators(locs.as_ref()));
+                    zcheck!(self.write_locators(locs.as_ref()));
                 }
             }
 
-            SessionBody::Open(Open {
+            SessionBody::InitSyn(InitSyn {
                 version,
                 whatami,
                 pid,
-                lease,
-                initial_sn,
                 sn_resolution,
-                locators,
             }) => {
-                check!(self.write(*version));
-                check!(self.write_zint(*whatami));
-                check!(self.write_peerid(pid));
-                check!(self.write_zint(*lease));
-                check!(self.write_zint(*initial_sn));
+                zcheck!(self.write(*version));
+                zcheck!(self.write_zint(*whatami));
+                zcheck!(self.write_peerid(pid));
                 if let Some(snr) = *sn_resolution {
-                    check!(self.write_zint(snr));
-                }
-                if let Some(locs) = locators {
-                    check!(self.write_locators(locs.as_ref()));
+                    zcheck!(self.write_zint(snr));
                 }
             }
 
-            SessionBody::Accept(Accept {
+            SessionBody::InitAck(InitAck {
                 whatami,
-                opid,
-                apid,
+                pid,
+                sn_resolution,
+                cookie,
+            }) => {
+                zcheck!(self.write_zint(*whatami));
+                zcheck!(self.write_peerid(pid));
+                if let Some(snr) = *sn_resolution {
+                    zcheck!(self.write_zint(snr));
+                }
+                zcheck!(self.write_rbuf(cookie));
+            }
+
+            SessionBody::OpenSyn(OpenSyn {
                 lease,
                 initial_sn,
-                sn_resolution,
-                locators,
+                cookie,
             }) => {
-                check!(self.write_zint(*whatami));
-                check!(self.write_peerid(opid));
-                check!(self.write_peerid(apid));
-                check!(self.write_zint(*lease));
-                check!(self.write_zint(*initial_sn));
-                if let Some(snr) = *sn_resolution {
-                    check!(self.write_zint(snr));
+                if smsg::has_flag(msg.header, smsg::flag::T) {
+                    zcheck!(self.write_zint(*lease / 1_000));
+                } else {
+                    zcheck!(self.write_zint(*lease));
                 }
-                if let Some(locs) = locators {
-                    check!(self.write_locators(locs.as_ref()));
+                zcheck!(self.write_zint(*initial_sn));
+                zcheck!(self.write_rbuf(cookie));
+            }
+
+            SessionBody::OpenAck(OpenAck { lease, initial_sn }) => {
+                if smsg::has_flag(msg.header, smsg::flag::T) {
+                    zcheck!(self.write_zint(*lease / 1_000));
+                } else {
+                    zcheck!(self.write_zint(*lease));
                 }
+                zcheck!(self.write_zint(*initial_sn));
             }
 
             SessionBody::Close(Close { pid, reason, .. }) => {
                 if let Some(p) = pid {
-                    check!(self.write_peerid(p));
+                    zcheck!(self.write_peerid(p));
                 }
-                check!(self.write(*reason));
+                zcheck!(self.write(*reason));
             }
 
             SessionBody::Sync(Sync { sn, count, .. }) => {
-                check!(self.write_zint(*sn));
+                zcheck!(self.write_zint(*sn));
                 if let Some(c) = *count {
-                    check!(self.write_zint(c));
+                    zcheck!(self.write_zint(c));
                 }
             }
 
             SessionBody::AckNack(AckNack { sn, mask }) => {
-                check!(self.write_zint(*sn));
+                zcheck!(self.write_zint(*sn));
                 if let Some(m) = *mask {
-                    check!(self.write_zint(m));
+                    zcheck!(self.write_zint(m));
                 }
             }
 
             SessionBody::KeepAlive(KeepAlive { pid }) => {
                 if let Some(p) = pid {
-                    check!(self.write_peerid(p));
+                    zcheck!(self.write_peerid(p));
                 }
             }
 
             SessionBody::Ping(Ping { hash }) | SessionBody::Pong(Pong { hash }) => {
-                check!(self.write_zint(*hash));
+                zcheck!(self.write_zint(*hash));
             }
         }
 
@@ -172,28 +168,28 @@ impl WBuf {
 
     pub fn write_zenoh_message(&mut self, msg: &ZenohMessage) -> bool {
         if let Some(attachment) = &msg.attachment {
-            check!(self.write_deco_attachment(attachment, false));
+            zcheck!(self.write_deco_attachment(attachment, false));
         }
         if let Some(reply_context) = &msg.reply_context {
-            check!(self.write_deco_reply_context(reply_context));
+            zcheck!(self.write_deco_reply_context(reply_context));
         }
 
-        check!(self.write(msg.header));
+        zcheck!(self.write(msg.header));
         match &msg.body {
             ZenohBody::Data(Data {
                 key,
                 data_info,
                 payload,
             }) => {
-                check!(self.write_reskey(&key));
+                zcheck!(self.write_reskey(&key));
                 if let Some(data_info) = data_info {
-                    check!(self.write_data_info(data_info));
+                    zcheck!(self.write_data_info(data_info));
                 }
-                check!(self.write_rbuf(&payload));
+                zcheck!(self.write_rbuf(&payload));
             }
 
             ZenohBody::Declare(Declare { declarations }) => {
-                check!(self.write_declarations(&declarations));
+                zcheck!(self.write_declarations(&declarations));
             }
 
             ZenohBody::Unit(Unit {}) => {}
@@ -204,10 +200,10 @@ impl WBuf {
                 max_samples,
                 ..
             }) => {
-                check!(self.write_reskey(&key));
-                check!(self.write_zint(*pull_id));
+                zcheck!(self.write_reskey(&key));
+                zcheck!(self.write_zint(*pull_id));
                 if let Some(n) = max_samples {
-                    check!(self.write_zint(*n));
+                    zcheck!(self.write_zint(*n));
                 }
             }
 
@@ -218,19 +214,19 @@ impl WBuf {
                 target,
                 consolidation,
             }) => {
-                check!(self.write_reskey(&key));
-                check!(self.write_string(predicate));
-                check!(self.write_zint(*qid));
+                zcheck!(self.write_reskey(&key));
+                zcheck!(self.write_string(predicate));
+                zcheck!(self.write_zint(*qid));
                 if let Some(t) = target {
-                    check!(self.write_query_target(t));
+                    zcheck!(self.write_query_target(t));
                 }
-                check!(self.write_consolidation(consolidation));
+                zcheck!(self.write_consolidation(consolidation));
             }
 
             ZenohBody::LinkStateList(LinkStateList { link_states }) => {
-                check!(self.write_zint(to_zint!(link_states.len())));
+                zcheck!(self.write_usize_as_zint(link_states.len()));
                 for link_state in link_states {
-                    check!(self.write_link_state(link_state));
+                    zcheck!(self.write_link_state(link_state));
                 }
             }
         }
@@ -240,9 +236,9 @@ impl WBuf {
 
     fn write_deco_attachment(&mut self, attachment: &Attachment, session: bool) -> bool {
         if session {
-            check!(self.write(attachment.encoding | smsg::id::ATTACHMENT));
+            zcheck!(self.write(attachment.encoding | smsg::id::ATTACHMENT));
         } else {
-            check!(self.write(attachment.encoding | zmsg::id::ATTACHMENT));
+            zcheck!(self.write(attachment.encoding | zmsg::id::ATTACHMENT));
         }
         self.write_rbuf(&attachment.buffer)
     }
@@ -253,11 +249,11 @@ impl WBuf {
         } else {
             0
         };
-        check!(self.write(zmsg::id::REPLY_CONTEXT | fflag));
-        check!(self.write_zint(reply_context.qid));
-        check!(self.write_zint(reply_context.source_kind));
+        zcheck!(self.write(zmsg::id::REPLY_CONTEXT | fflag));
+        zcheck!(self.write_zint(reply_context.qid));
+        zcheck!(self.write_zint(reply_context.source_kind));
         if let Some(pid) = &reply_context.replier_id {
-            check!(self.write_peerid(pid));
+            zcheck!(self.write_peerid(pid));
         }
 
         true
@@ -286,28 +282,28 @@ impl WBuf {
         if info.encoding.is_some() {
             options |= zmsg::data::info::ENC
         }
-        check!(self.write_zint(options));
+        zcheck!(self.write_zint(options));
 
         if let Some(pid) = &info.source_id {
-            check!(self.write_peerid(pid));
+            zcheck!(self.write_peerid(pid));
         }
         if let Some(sn) = &info.source_sn {
-            check!(self.write_zint(*sn));
+            zcheck!(self.write_zint(*sn));
         }
         if let Some(pid) = &info.first_router_id {
-            check!(self.write_peerid(pid));
+            zcheck!(self.write_peerid(pid));
         }
         if let Some(sn) = &info.first_router_sn {
-            check!(self.write_zint(*sn));
+            zcheck!(self.write_zint(*sn));
         }
         if let Some(ts) = &info.timestamp {
-            check!(self.write_timestamp(&ts));
+            zcheck!(self.write_timestamp(&ts));
         }
         if let Some(kind) = &info.kind {
-            check!(self.write_zint(*kind));
+            zcheck!(self.write_zint(*kind));
         }
         if let Some(enc) = &info.encoding {
-            check!(self.write_zint(*enc));
+            zcheck!(self.write_zint(*enc));
         }
 
         true
@@ -324,29 +320,29 @@ impl WBuf {
         if link_state.locators.is_some() {
             options |= zmsg::link_state::LOC
         }
-        check!(self.write_zint(options));
+        zcheck!(self.write_zint(options));
 
-        check!(self.write_zint(link_state.psid));
-        check!(self.write_zint(link_state.sn));
+        zcheck!(self.write_zint(link_state.psid));
+        zcheck!(self.write_zint(link_state.sn));
         if let Some(pid) = &link_state.pid {
-            check!(self.write_peerid(pid));
+            zcheck!(self.write_peerid(pid));
         }
         if let Some(whatami) = &link_state.whatami {
-            check!(self.write_zint(*whatami));
+            zcheck!(self.write_zint(*whatami));
         }
         if let Some(locators) = &link_state.locators {
-            check!(self.write_locators(locators));
+            zcheck!(self.write_locators(locators));
         }
-        check!(self.write_zint(to_zint!(link_state.links.len())));
+        zcheck!(self.write_usize_as_zint(link_state.links.len()));
         for link in &link_state.links {
-            check!(self.write_zint(*link));
+            zcheck!(self.write_zint(*link));
         }
 
         true
     }
 
     pub fn write_properties(&mut self, props: &[Property]) {
-        self.write_zint(to_zint!(props.len()));
+        self.write_usize_as_zint(props.len());
         for p in props {
             self.write_property(p);
         }
@@ -356,19 +352,10 @@ impl WBuf {
         self.write_zint(p.key) && self.write_bytes_array(&p.value)
     }
 
-    fn write_locators(&mut self, locators: &[Locator]) -> bool {
-        check!(self.write_zint(to_zint!(locators.len())));
-        for l in locators {
-            check!(self.write_string(&l.to_string()));
-        }
-
-        true
-    }
-
     fn write_declarations(&mut self, declarations: &[Declaration]) -> bool {
-        check!(self.write_zint(to_zint!(declarations.len())));
+        zcheck!(self.write_usize_as_zint(declarations.len()));
         for l in declarations {
-            check!(self.write_declaration(l));
+            zcheck!(self.write_declaration(l));
         }
         true
     }
@@ -430,7 +417,7 @@ impl WBuf {
         } else {
             0
         };
-        check!(match mode {
+        zcheck!(match mode {
             SubMode::Push => self.write(zmsg::declaration::id::MODE_PUSH | period_mask),
             SubMode::Pull => self.write(zmsg::declaration::id::MODE_PULL | period_mask),
         });
@@ -480,10 +467,6 @@ impl WBuf {
                 | (WBuf::write_consolidation_mode(consolidation.last_router) << 2)
                 | (WBuf::write_consolidation_mode(consolidation.reception)),
         )
-    }
-
-    fn write_peerid(&mut self, pid: &PeerId) -> bool {
-        self.write_bytes_array(pid.as_slice())
     }
 
     fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {

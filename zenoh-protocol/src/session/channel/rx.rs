@@ -137,13 +137,9 @@ macro_rules! zreceiveframe {
 
                 if is_final {
                     let msg = match $guard.defrag_buffer.defragment() {
-                        Ok(msg) => msg,
-                        Err(e) => {
-                            log::trace!(
-                                "Session: {}. Defragmentation error: {:?}",
-                                $ch.get_pid(),
-                                e
-                            );
+                        Some(msg) => msg,
+                        None => {
+                            log::trace!("Session: {}. Defragmentation error.", $ch.get_pid());
                             return Action::Read;
                         }
                     };
@@ -287,9 +283,12 @@ impl TransportTrait for Channel {
                 self.delete().await;
                 Action::Close
             }
-            SessionBody::Open { .. } | SessionBody::Accept { .. } => {
+            SessionBody::InitSyn { .. }
+            | SessionBody::InitAck { .. }
+            | SessionBody::OpenSyn { .. }
+            | SessionBody::OpenAck { .. } => {
                 log::trace!(
-                    "Unexpected Open/Accept message received in an already established session\
+                    "Unexpected Init/Open message received in an already established session\
                              Closing the link: {}",
                     link
                 );

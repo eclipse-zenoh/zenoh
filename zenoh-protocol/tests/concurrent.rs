@@ -29,17 +29,25 @@ use zenoh_protocol::session::{
 
 use zenoh_util::core::ZResult;
 
-const MSG_COUNT: usize = 10;
+const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: usize = 1_024;
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 // Session Handler for the router
-struct SHPeer(Arc<AtomicUsize>);
+struct SHPeer {
+    count: Arc<AtomicUsize>,
+}
 
-impl Default for SHPeer {
-    fn default() -> Self {
-        Self(Arc::new(AtomicUsize::new(0)))
+impl SHPeer {
+    fn new() -> Self {
+        Self {
+            count: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn get_count(&self) -> usize {
+        self.count.load(Ordering::SeqCst)
     }
 }
 
@@ -49,23 +57,25 @@ impl SessionHandler for SHPeer {
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        let mh = Arc::new(MHPeer::new(self.0.clone()));
+        let mh = Arc::new(MHPeer::new(self.count.clone()));
         Ok(mh)
     }
 }
 
-struct MHPeer(Arc<AtomicUsize>);
+struct MHPeer {
+    count: Arc<AtomicUsize>,
+}
 
 impl MHPeer {
-    fn new(counter: Arc<AtomicUsize>) -> Self {
-        Self(counter)
+    fn new(count: Arc<AtomicUsize>) -> Self {
+        Self { count }
     }
 }
 
 #[async_trait]
 impl SessionEventHandler for MHPeer {
     async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-        self.0.fetch_add(1, Ordering::AcqRel);
+        self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
@@ -89,7 +99,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
     // let router_handler = Arc::new(SHPeer::new(router_new_barrier.clone()));
 
     // Create the peer01 session manager
-    let peer_sh01 = Arc::new(SHPeer::default());
+    let peer_sh01 = Arc::new(SHPeer::new());
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::PEER,
@@ -109,7 +119,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
     let peer01_manager = SessionManager::new(config, Some(opt_config));
 
     // Create the peer01 session manager
-    let peer_sh02 = Arc::new(SHPeer::default());
+    let peer_sh02 = Arc::new(SHPeer::new());
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::PEER,
@@ -212,15 +222,20 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         for _ in 0..MSG_COUNT {
             s02.schedule(message.clone()).await.unwrap();
         }
+
+        // Wait for the messages to arrive to the other side
+        let count = async {
+            while peer_sh02.get_count() != MSG_COUNT {
+                task::sleep(SLEEP).await;
+            }
+        };
+        let res = count.timeout(TIMEOUT).await;
+        assert!(res.is_ok());
+
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
 
-        task::sleep(SLEEP).await;
-
-        // @TODO: verify that we have received all the messages
-
-        let res = s02.close().await;
-        assert!(res.is_ok());
+        let _ = s02.close().await;
     });
 
     // Peer02
@@ -306,15 +321,20 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         for _ in 0..MSG_COUNT {
             s01.schedule(message.clone()).await.unwrap();
         }
+
+        // Wait for the messages to arrive to the other side
+        let count = async {
+            while peer_sh01.get_count() != MSG_COUNT {
+                task::sleep(SLEEP).await;
+            }
+        };
+        let res = count.timeout(TIMEOUT).await;
+        assert!(res.is_ok());
+
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
 
-        task::sleep(SLEEP).await;
-
-        // @TODO: verify that we have received all the messages
-
-        let res = s01.close().await;
-        assert!(res.is_ok());
+        let _ = s01.close().await;
     });
 
     peer01_task.join(peer02_task).await;
