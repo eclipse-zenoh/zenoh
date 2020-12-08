@@ -16,37 +16,57 @@ use async_std::sync::{Arc, Mutex};
 use async_std::task;
 use async_trait::async_trait;
 use futures::future;
-use log::trace;
+use futures::future::{BoxFuture, FutureExt};
+use log::{error, trace};
 use serde_json::json;
+use std::collections::HashMap;
 use zenoh_protocol::{
     core::{
-        queryable::EVAL, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability,
-        ResKey, SubInfo, ZInt,
+        queryable::EVAL, rname, CongestionControl, PeerId, QueryConsolidation, QueryTarget,
+        Reliability, ResKey, SubInfo, ZInt,
     },
     io::RBuf,
     proto::{encoding, DataInfo},
     session::Primitives,
 };
 
+type Handler = Box<dyn Fn(&AdminSpace) -> BoxFuture<'_, (RBuf, ZInt)> + Send + Sync>;
+
 pub struct AdminSpace {
     runtime: Runtime,
     plugins_mgr: PluginsMgr,
     primitives: Mutex<Option<Arc<dyn Primitives + Send + Sync>>>,
+    mappings: Mutex<HashMap<ZInt, String>>,
     pid_str: String,
-    router_path: String,
+    handlers: HashMap<String, Handler>,
 }
 
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr) {
         let pid_str = runtime.get_pid_str().await;
-        let router_path = format!("/@/router/{}", pid_str);
+        let root_path = format!("/@/router/{}", pid_str);
+
+        let mut handlers: HashMap<String, Handler> = HashMap::new();
+        handlers.insert(
+            root_path.clone(),
+            Box::new(|admin| AdminSpace::router_data(admin).boxed()),
+        );
+        handlers.insert(
+            [&root_path, "/linkstate/routers"].concat(),
+            Box::new(|admin| AdminSpace::linkstate_routers_data(admin).boxed()),
+        );
+        handlers.insert(
+            [&root_path, "/linkstate/peers"].concat(),
+            Box::new(|admin| AdminSpace::linkstate_peers_data(admin).boxed()),
+        );
 
         let admin = Arc::new(AdminSpace {
             runtime: runtime.clone(),
             plugins_mgr,
             primitives: Mutex::new(None),
+            mappings: Mutex::new(HashMap::new()),
             pid_str,
-            router_path,
+            handlers,
         });
 
         let primitives = runtime
@@ -57,13 +77,25 @@ impl AdminSpace {
             .await;
         admin.primitives.lock().await.replace(primitives.clone());
 
-        // declare queryable on router_path
         primitives
-            .queryable(&admin.router_path.clone().into())
+            .queryable(&[&root_path, "/**"].concat().into())
             .await;
     }
 
-    pub async fn create_reply_payload(&self) -> RBuf {
+    pub async fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
+        match key {
+            ResKey::RId(id) => self.mappings.lock().await.get(&id).cloned(),
+            ResKey::RIdWithSuffix(id, suffix) => self
+                .mappings
+                .lock()
+                .await
+                .get(&id)
+                .map(|prefix| format!("{}{}", prefix, suffix)),
+            ResKey::RName(name) => Some(name.clone()),
+        }
+    }
+
+    pub async fn router_data(&self) -> (RBuf, ZInt) {
         let session_mgr = &self.runtime.read().await.orchestrator.manager;
 
         // plugins info
@@ -104,8 +136,46 @@ impl AdminSpace {
             "sessions": sessions,
             "plugins": plugins,
         });
-        log::debug!("JSON: {:?}", json);
-        RBuf::from(json.to_string().as_bytes())
+        log::trace!("AdminSpace router_data: {:?}", json);
+        (RBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
+    }
+
+    pub async fn linkstate_routers_data(&self) -> (RBuf, ZInt) {
+        (
+            RBuf::from(
+                self.runtime
+                    .read()
+                    .await
+                    .router
+                    .routers_net
+                    .as_ref()
+                    .unwrap()
+                    .read()
+                    .await
+                    .dot()
+                    .as_bytes(),
+            ),
+            encoding::TEXT_PLAIN,
+        )
+    }
+
+    pub async fn linkstate_peers_data(&self) -> (RBuf, ZInt) {
+        (
+            RBuf::from(
+                self.runtime
+                    .read()
+                    .await
+                    .router
+                    .peers_net
+                    .as_ref()
+                    .unwrap()
+                    .read()
+                    .await
+                    .dot()
+                    .as_bytes(),
+            ),
+            encoding::TEXT_PLAIN,
+        )
     }
 }
 
@@ -113,6 +183,12 @@ impl AdminSpace {
 impl Primitives for AdminSpace {
     async fn resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
+        match self.reskey_to_string(reskey).await {
+            Some(s) => {
+                self.mappings.lock().await.insert(rid, s);
+            }
+            None => error!("Unknown rid {}!", rid),
+        }
     }
 
     async fn forget_resource(&self, _rid: ZInt) {
@@ -176,34 +252,42 @@ impl Primitives for AdminSpace {
             target,
             _consolidation
         );
-        let payload = self.create_reply_payload().await;
 
-        // The following are cloned to be moved in the task below
-        // (could be removed if the lock used in router (face::tables) is re-entrant)
         let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
-        let reskey = ResKey::RName(self.router_path.clone());
         let replier_id = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
-        let data_info = DataInfo {
-            source_id: None,
-            source_sn: None,
-            first_router_id: None,
-            first_router_sn: None,
-            timestamp: None,
-            kind: None,
-            encoding: Some(encoding::APP_JSON),
-        };
+
+        let mut replies = vec![];
+        match self.reskey_to_string(reskey).await {
+            Some(name) => {
+                for (path, handler) in &self.handlers {
+                    if rname::intersect(&name, path) {
+                        let (payload, encoding) = handler(self).await;
+                        replies.push((
+                            ResKey::RName(path.clone()),
+                            payload,
+                            Some(DataInfo {
+                                source_id: None,
+                                source_sn: None,
+                                first_router_id: None,
+                                first_router_sn: None,
+                                timestamp: None,
+                                kind: None,
+                                encoding: Some(encoding),
+                            }),
+                        ));
+                    }
+                }
+            }
+            None => error!("Unknown ResKey!!"),
+        }
+
+        // router is not re-entrant
         task::spawn(async move {
-            // router is not re-entrant
-            primitives
-                .reply_data(
-                    qid,
-                    EVAL,
-                    replier_id.clone(),
-                    reskey,
-                    Some(data_info),
-                    payload,
-                )
-                .await;
+            for (reskey, payload, data_info) in replies {
+                primitives
+                    .reply_data(qid, EVAL, replier_id.clone(), reskey, data_info, payload)
+                    .await;
+            }
             primitives.reply_final(qid).await;
         });
     }
