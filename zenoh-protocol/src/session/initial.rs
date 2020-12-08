@@ -416,7 +416,7 @@ impl InitialSession {
             Opened {
                 whatami: ack_whatami,
                 pid: ack_pid,
-                sn_resolution: sn_resolution,
+                sn_resolution,
                 initial_sn,
                 notify: pending.notify,
             },
