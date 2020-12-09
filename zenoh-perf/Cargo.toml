@@ -99,6 +99,17 @@ name = "session_thr_router"
 test = false
 bench = false
 
+[[bin]]
+name = "session_ping_peer"
+test = false
+bench = false
+
+[[bin]]
+name = "session_pong_peer"
+test = false
+bench = false
+
+
 
 [[bin]]
 name = "router_thr_sub_peer"
