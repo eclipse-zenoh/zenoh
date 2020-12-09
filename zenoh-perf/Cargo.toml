@@ -109,6 +109,16 @@ name = "session_pong_peer"
 test = false
 bench = false
 
+[[bin]]
+name = "session_delay_sub_peer"
+test = false
+bench = false
+
+[[bin]]
+name = "session_delay_pub_peer"
+test = false
+bench = false
+
 
 
 [[bin]]
