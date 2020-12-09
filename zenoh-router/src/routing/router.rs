@@ -472,6 +472,11 @@ impl Network {
                         let pid = node.pid.clone();
                         let locators = locators.clone();
                         async_std::task::spawn(async move {
+                            // random backoff
+                            async_std::task::sleep(std::time::Duration::from_millis(
+                                rand::random::<u64>() % 100,
+                            ))
+                            .await;
                             orchestrator.connect_peer(&pid, &locators).await;
                         });
                     }
