@@ -51,6 +51,9 @@ fn parse_args() -> (Properties, String) {
             Arg::from_usage("-p, --path=[PATH]        'The name of the resource to delete.'")
                 .default_value("/demo/example/zenoh-rs-put"),
         )
+        .arg(Arg::from_usage(
+            "--no-scouting 'Disable the scouting mechanism.'",
+        ))
         .get_matches();
 
     let mut config = Properties::default();
@@ -59,6 +62,10 @@ fn parse_args() -> (Properties, String) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
+    if args.is_present("no-scouting") {
+        config.insert("multicast_scouting".to_string(), "false".to_string());
+    }
+
     let path = args.value_of("path").unwrap().to_string();
 
     (config, path)

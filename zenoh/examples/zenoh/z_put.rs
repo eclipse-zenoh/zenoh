@@ -94,6 +94,9 @@ fn parse_args() -> (Properties, String, String) {
             Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to put.'")
                 .default_value("Put from Rust!"),
         )
+        .arg(Arg::from_usage(
+            "--no-scouting 'Disable the scouting mechanism.'",
+        ))
         .get_matches();
 
     let mut config = Properties::default();
@@ -102,6 +105,10 @@ fn parse_args() -> (Properties, String, String) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
+    if args.is_present("no-scouting") {
+        config.insert("multicast_scouting".to_string(), "false".to_string());
+    }
+
     let path = args.value_of("path").unwrap().to_string();
     let value = args.value_of("value").unwrap().to_string();
 

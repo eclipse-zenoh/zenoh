@@ -70,15 +70,13 @@ fn main() {
             .version(GIT_VERSION)
             .arg(Arg::from_usage(
                 "-c, --config=[FILE] \
-            'The configuration file.'",
+             'The configuration file.'",
             ))
-            .arg(
-                Arg::from_usage(
-                    "-l, --listener=[LOCATOR]... \
-            'A locator on which this router will listen for incoming sessions. \
-            Repeat this option to open several listeners.'",
-                )
-                .default_value(DEFAULT_LISTENER),
+            .arg(Arg::from_usage(
+                "-l, --listener=[LOCATOR]... \
+             'A locator on which this router will listen for incoming sessions. \
+             Repeat this option to open several listeners.'",
+                ).default_value(DEFAULT_LISTENER),
             )
             .arg(Arg::from_usage(
                 "-e, --peer=[LOCATOR]... \
@@ -100,13 +98,16 @@ fn main() {
              'When set, zenohd will not look for plugins nor try to load any plugin except the \
              ones explicitely configured with -P or --plugin.'",
             ))
-            .arg(Arg::from_usage(&plugin_search_dir_usage
-            ).conflicts_with("plugin-nolookup"))
+            .arg(Arg::from_usage(&plugin_search_dir_usage).conflicts_with("plugin-nolookup"))
             .arg(Arg::from_usage(
                 "--no-timestamp \
              'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
-             This option desactivates this feature.'",
-            ));
+             This option disables this feature.'",
+            )).arg(Arg::from_usage(
+                "--no-scouting \
+             'By default zenohd performs scouting to automatically connects to neighboring routers. 
+              This option disables this feature.'",
+        ));
 
         // Get plugins search directories from the command line, and create LibLoader
         let plugin_search_dirs = get_plugin_search_dirs_from_args();
@@ -165,7 +166,16 @@ fn main() {
 
         config.insert(
             config::ZN_ADD_TIMESTAMP_KEY,
-            if std::env::args().any(|arg| arg == "--no-timestamp") {
+            if args.is_present("no-timestamp") {
+                config::ZN_FALSE.to_string()
+            } else {
+                config::ZN_TRUE.to_string()
+            },
+        );
+
+        config.insert(
+            config::ZN_MULTICAST_SCOUTING_KEY,
+            if args.is_present("no-scouting") {
                 config::ZN_FALSE.to_string()
             } else {
                 config::ZN_TRUE.to_string()

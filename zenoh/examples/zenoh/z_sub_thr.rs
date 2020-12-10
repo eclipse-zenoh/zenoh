@@ -78,6 +78,9 @@ fn parse_args() -> Properties {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
+        .arg(Arg::from_usage(
+            "--no-scouting 'Disable the scouting mechanism.'",
+        ))
         .get_matches();
 
     let mut config = Properties::default();
@@ -86,5 +89,9 @@ fn parse_args() -> Properties {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
+    if args.is_present("no-scouting") {
+        config.insert("multicast_scouting".to_string(), "false".to_string());
+    }
+
     config
 }

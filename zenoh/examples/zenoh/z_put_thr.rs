@@ -54,6 +54,9 @@ fn parse_args() -> (Properties, usize) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(Arg::from_usage(
+            "--no-scouting 'Disable the scouting mechanism.'",
+        ))
+        .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to put'",
         ))
         .get_matches();
@@ -63,6 +66,9 @@ fn parse_args() -> (Properties, usize) {
         if let Some(value) = args.values_of(key) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
+    }
+    if args.is_present("no-scouting") {
+        config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
     let size = args
