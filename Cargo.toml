@@ -19,7 +19,7 @@ members = [
   "zenoh-router",
   "zenoh-util",
   "plugins/example-plugin",
-  "plugins/zenoh-http",
+  "plugins/zenoh-rest",
   "plugins/zenoh-storages",
   "backends/traits",
 ]

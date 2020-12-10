@@ -12,7 +12,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh-http"
+name = "zenoh-rest"
 version = "0.5.0-beta.5"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -23,11 +23,11 @@ authors = ["kydos <angelo@icorsaro.net>",
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "The zenoh HTTP plugin"
+description = "The zenoh REST plugin"
 
 
 [lib]
-name = "zplugin_http"
+name = "zplugin_rest"
 crate-type = ["cdylib"]
 
 
@@ -50,7 +50,7 @@ name = "zn_serve_sse"
 path = "examples/zenoh-net/zn_serve_sse.rs"
 
 [package.metadata.deb]
-name = "zenoh-http"
+name = "zenoh-rest"
 maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2020 ADLINK Technology Inc."
 section = "net"
