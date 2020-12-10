@@ -110,7 +110,7 @@ pipeline {
             /bin/bash -c "\
             cargo build --release --bins --lib --examples && \
             cargo deb -p zenoh-router && \
-            cargo deb -p zenoh-http && \
+            cargo deb -p zenoh-rest && \
             cargo deb -p zenoh-storages && \
             ./gen_zenoh_deb.sh x86_64-unknown-linux-gnu amd64 \
             "
@@ -135,7 +135,7 @@ pipeline {
             /bin/bash -c "\
             cargo build --release --bins --lib --examples && \
             cargo deb -p zenoh-router && \
-            cargo deb -p zenoh-http && \
+            cargo deb -p zenoh-rest && \
             cargo deb -p zenoh-storages && \
             ./gen_zenoh_deb.sh i686-unknown-linux-gnu i386 \
             "
@@ -160,7 +160,7 @@ pipeline {
             /bin/bash -c "\
             cargo build --release --bins --lib --examples && \
             cargo deb -p zenoh-router && \
-            cargo deb -p zenoh-http && \
+            cargo deb -p zenoh-rest && \
             cargo deb -p zenoh-storages && \
             ./gen_zenoh_deb.sh aarch64-unknown-linux-gnu aarch64 \
             "
