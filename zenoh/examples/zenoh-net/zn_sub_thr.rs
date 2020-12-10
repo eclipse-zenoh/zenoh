@@ -94,7 +94,7 @@ fn parse_args() -> (Properties, u32, u128) {
             .default_value("100000"),
         )
         .arg(Arg::from_usage(
-            "--no-scouting 'Disable the scouting mechanism.'",
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .get_matches();
 
@@ -104,7 +104,7 @@ fn parse_args() -> (Properties, u32, u128) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
-    if args.is_present("no-scouting") {
+    if args.is_present("no-multicast-scouting") {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 

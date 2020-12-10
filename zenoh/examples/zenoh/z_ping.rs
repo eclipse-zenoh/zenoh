@@ -107,7 +107,7 @@ fn parse_args() -> (Properties, usize, f64) {
                 .default_value("1"),
         )
         .arg(Arg::from_usage(
-            "--no-scouting 'Disable the scouting mechanism.'",
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
@@ -120,7 +120,7 @@ fn parse_args() -> (Properties, usize, f64) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
-    if args.is_present("no-scouting") {
+    if args.is_present("no-multicast-scouting") {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 

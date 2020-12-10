@@ -98,7 +98,7 @@ fn parse_args() -> Properties {
             "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
         ))
         .arg(Arg::from_usage(
-            "--no-scouting 'Disable the scouting mechanism.'",
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .get_matches();
 
@@ -108,7 +108,7 @@ fn parse_args() -> Properties {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
-    if args.is_present("no-scouting") {
+    if args.is_present("no-multicast-scouting") {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 

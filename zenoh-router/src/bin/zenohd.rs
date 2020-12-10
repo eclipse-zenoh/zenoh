@@ -104,8 +104,8 @@ fn main() {
              'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
              This option disables this feature.'",
             )).arg(Arg::from_usage(
-                "--no-scouting \
-             'By default zenohd performs scouting to automatically connects to neighboring routers. 
+                "--no-multicast-scouting \
+             'By default zenohd replies to multicast scouting messages for being discovered by peers and clients. 
               This option disables this feature.'",
         ));
 
@@ -175,7 +175,7 @@ fn main() {
 
         config.insert(
             config::ZN_MULTICAST_SCOUTING_KEY,
-            if args.is_present("no-scouting") {
+            if args.is_present("no-multicast-scouting") {
                 config::ZN_FALSE.to_string()
             } else {
                 config::ZN_TRUE.to_string()

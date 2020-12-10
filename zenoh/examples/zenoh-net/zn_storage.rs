@@ -98,7 +98,7 @@ fn parse_args() -> (Properties, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(Arg::from_usage(
-            "--no-scouting 'Disable the scouting mechanism.'",
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .arg(
             Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to store'")
@@ -112,7 +112,7 @@ fn parse_args() -> (Properties, String) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
-    if args.is_present("no-scouting") {
+    if args.is_present("no-multicast-scouting") {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
