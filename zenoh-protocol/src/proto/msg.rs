@@ -19,11 +19,11 @@ use std::fmt;
 /// # Attachment decorator
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The Attachment can decorate any message (i.e., SessionMessage and ZenohMessage) and it allows to
 /// append to the message any additional information. Since the information contained in the
@@ -755,11 +755,11 @@ pub enum FramePayload {
 /// # Scout message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The SCOUT message can be sent at any point in time to solicit HELLO messages from matching parties.
 ///
@@ -779,11 +779,11 @@ pub struct Scout {
 /// # Hello message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The HELLO message is sent in any of the following three cases:
 ///     1) in response to a SCOUT message;
@@ -839,11 +839,11 @@ impl fmt::Display for Hello {
 /// # Open message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The OPEN message is sent on a specific Locator to initiate a session with the peer associated
 /// with that Locator.
@@ -888,11 +888,11 @@ pub struct Open {
 /// # Accept message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The ACCEPT message is sent in response of an OPEN message in case of accepting the new incoming session.
 ///
@@ -942,11 +942,11 @@ pub struct Accept {
 /// # Close message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The CLOSE message is sent in any of the following two cases:
 ///     1) in response to an OPEN message which is not accepted;
@@ -976,11 +976,11 @@ pub struct Close {
 /// # Sync message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The SYNC message allows to signal the corresponding peer the sequence number of the next message
 /// to be transmitted on the reliable or best-effort channel. In the case of reliable channel, the
@@ -1008,11 +1008,11 @@ pub struct Sync {
 /// # AckNack message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The ACKNACK messages is used on the reliable channel to signal the corresponding peer the last
 /// sequence number received and optionally a bitmask of the non-received messages.
@@ -1035,11 +1035,11 @@ pub struct AckNack {
 /// # KeepAlive message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 /// The KEEP_ALIVE message can be sent periodically to avoid the expiration of the session lease
 /// period in case there are no messages to be sent.
@@ -1059,11 +1059,11 @@ pub struct KeepAlive {
 /// # PingPong message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -1086,11 +1086,11 @@ pub struct Pong {
 /// # Frame message
 ///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total lenght
-///       in bytes of the message, resulting in the maximum lenght of a message being 65_535 bytes.
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the lenght of a message must not exceed 65_535 bytes.
+///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+

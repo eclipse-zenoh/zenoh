@@ -34,7 +34,16 @@ zconfigurable! {
     pub(crate) static ref SESSION_SEQ_NUM_RESOLUTION: ZInt = 268_435_456;
 
     // The default batch size in bytes for the transport
-    pub(crate) static ref SESSION_BATCH_SIZE: usize = 16_384;
+    // NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+    //       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
+    //       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+    //       the boundary of the serialized messages. The length is encoded as little-endian.
+    //       In any case, the length of a message must not exceed 65_535 bytes.
+    //
+    // This results in a maximum batch size of (2 + 65_535) 65_537 bytes. In case a transport link has
+    // an MTU smaller than the SESSION_BATCH_SIZE, the batch size will be automatically set to the
+    // transport link MTU to avoid any transmission problems on the network.
+    pub(crate) static ref SESSION_BATCH_SIZE: usize = 65_537;
 
     // Default timeout when opening a session in milliseconds
     pub(crate) static ref SESSION_OPEN_TIMEOUT: u64 = 10_000;
@@ -43,8 +52,12 @@ zconfigurable! {
     pub(crate) static ref SESSION_OPEN_RETRIES: usize = 3;
 
     // Parameters of the link transmission queue
+    // - The size of each queue relates to the number of batches a given queue can contain.
+    // - The amount of memory being allocated for each queue is then QUEUE_SIZE_XXX * SESSION_BATCH_SIZE.
+    //   In case the transport link MTU is smaller than the SESSION_BATCH_SIZE, then amount of memory being
+    //   allocated for each queue is QUEUE_SIZE_XXX * LINK_MTU.
     pub(crate) static ref QUEUE_SIZE_CTRL: usize = 1;
     pub(crate) static ref QUEUE_SIZE_RETX: usize = 1;
-    pub(crate) static ref QUEUE_SIZE_DATA: usize = 16;
-    pub(crate) static ref QUEUE_CONCURRENCY: usize = 16;
+    pub(crate) static ref QUEUE_SIZE_DATA: usize = 4;
+    pub(crate) static ref QUEUE_CONCURRENCY: usize = 4;
 }
