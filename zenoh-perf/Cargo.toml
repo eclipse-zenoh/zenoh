@@ -32,7 +32,7 @@ maintenance = { status = "actively-developed" }
 
 
 [dependencies]
-async-std = "=1.8.0"
+async-std = { version = "=1.8.0", features = ["unstable"] }
 async-trait = "0.1.38"
 clap = "2.33.3"
 env_logger = "0.7.1"

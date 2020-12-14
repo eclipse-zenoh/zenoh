@@ -33,7 +33,7 @@ maintenance = { status = "actively-developed" }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = "=1.8.0"
+async-std = { version = "=1.8.0", features = ["unstable"] }
 async-trait = "0.1.38"
 futures = "0.3.5"
 rand = "0.7.3"

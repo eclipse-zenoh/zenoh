@@ -39,7 +39,7 @@ transport_unixsock-stream = []
 default = ["zero-copy", "transport_tcp", "transport_udp", "transport_unixsock-stream"]
 
 [dependencies]
-async-std = "=1.8.0"
+async-std = { version = "=1.8.0", features = ["unstable"] }
 async-trait = "0.1.38"
 env_logger = "0.7.1"
 hex = "0.4.2"

@@ -29,7 +29,7 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-std = "=1.8.0"
+async-std = { version = "=1.8.0", features = ["unstable"] }
 async-trait = "0.1.38"
 event-listener = "2.5.1"
 futures = "0.3.5"
