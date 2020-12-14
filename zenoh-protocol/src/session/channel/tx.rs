@@ -636,6 +636,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn thr_queue() {
         // Queue
         let batch_size = *SESSION_BATCH_SIZE;
