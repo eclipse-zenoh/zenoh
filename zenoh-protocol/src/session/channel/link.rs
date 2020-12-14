@@ -11,12 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Channel, KeepAliveEvent, LinkLeaseEvent, SeqNumGenerator, TransmissionQueue};
+use super::{Channel, KeepAliveEvent, LinkLeaseEvent, SeqNumGenerator, TransmissionPipeline};
 use crate::core::ZInt;
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
-use async_std::sync::{channel, Arc, Mutex, Receiver, Sender, Weak};
+use async_std::sync::{Arc, Mutex, Weak};
 use async_std::task;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -26,7 +27,7 @@ use zenoh_util::zerror;
 
 // Consume task
 async fn consume_task(
-    queue: Arc<TransmissionQueue>,
+    queue: Arc<TransmissionPipeline>,
     link: Link,
     receiver: Receiver<()>,
 ) -> ZResult<()> {
@@ -35,13 +36,13 @@ async fn consume_task(
         Stop,
     }
 
-    async fn consume(queue: &Arc<TransmissionQueue>, link: &Link) -> ZResult<Action> {
+    async fn consume(queue: &Arc<TransmissionPipeline>, link: &Link) -> ZResult<Action> {
         // Pull a serialized batch from the queue
         let (batch, index) = queue.pull().await;
         // Send the buffer on the link
         link.send(batch.get_buffer()).await?;
         // Reinsert the batch into the queue
-        queue.push_serialization_batch(batch, index).await;
+        queue.refill(batch, index).await;
 
         Ok(Action::Continue)
     }
@@ -93,7 +94,7 @@ impl LinkAlive {
 #[derive(Clone)]
 pub(crate) struct ChannelLink {
     link: Link,
-    queue: Arc<TransmissionQueue>,
+    queue: Arc<TransmissionPipeline>,
     alive: Arc<LinkAlive>,
     handles: Vec<TimedHandle>,
     signal: Sender<()>,
@@ -112,7 +113,7 @@ impl ChannelLink {
         timer: Timer,
     ) -> ChannelLink {
         // The queue
-        let queue = Arc::new(TransmissionQueue::new(
+        let queue = Arc::new(TransmissionPipeline::new(
             batch_size.min(link.get_mtu()),
             link.is_streamed(),
             sn_reliable,
@@ -142,7 +143,7 @@ impl ChannelLink {
         let handles = vec![ka_handle, ll_handle];
 
         // Channel for signal the termination of consume task
-        let (sender, receiver) = channel::<()>(1);
+        let (sender, receiver) = bounded::<()>(1);
 
         // Spawn the timed events and the consume task
         let c_queue = queue.clone();

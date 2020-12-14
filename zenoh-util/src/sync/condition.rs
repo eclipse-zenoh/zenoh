@@ -11,9 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{channel, MutexGuard};
-use async_std::sync::{Receiver, Sender};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::zasynclock;
+use async_std::sync::MutexGuard;
+use event_listener::Event;
 
 /// This is a Condition Variable similar to that provided by POSIX.
 /// As for POSIX condition variables, this assumes that a mutex is
@@ -21,53 +21,45 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// not be race condition on [notify](Condition::notify).
 ///
 pub struct Condition {
-    wait_rx: Receiver<bool>,
-    wait_tx: Sender<bool>,
-    waiters: AtomicUsize,
+    event: Event,
+}
+
+impl Default for Condition {
+    fn default() -> Condition {
+        Condition {
+            event: Event::new(),
+        }
+    }
 }
 
 impl Condition {
     /// Creates a new condition variable with a given capacity.
     /// The capacity indicates the maximum number of tasks that
     /// may be waiting on the condition.
-    pub fn new(capacity: usize) -> Condition {
-        let (wait_tx, wait_rx) = channel(capacity);
-        Condition {
-            wait_tx,
-            wait_rx,
-            waiters: AtomicUsize::new(0),
-        }
+    pub fn new() -> Condition {
+        Condition::default()
     }
 
     /// Waits for the condition to be notified
     #[inline]
-    pub async fn wait<T>(&self, guard: MutexGuard<'_, T>) {
-        self.waiters.fetch_add(1, Ordering::AcqRel);
+    #[allow(clippy::needless_lifetimes)]
+    pub async fn wait<'a, T>(&self, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
+        let mutex = MutexGuard::source(&guard);
+        let listener = self.event.listen();
         drop(guard);
-        let _ = self.wait_rx.recv().await;
+
+        listener.await;
+
+        zasynclock!(mutex)
     }
 
     #[inline]
-    pub fn has_waiting_list(&self) -> bool {
-        self.waiters.load(Ordering::Acquire) > 0
+    pub fn notify_one(&self) {
+        self.event.notify_additional(1);
     }
 
-    /// Notify one task on the waiting list. The waiting list is
-    /// managed as a FIFO queue.
     #[inline]
-    pub async fn notify<T>(&self, guard: MutexGuard<'_, T>) {
-        if self.has_waiting_list() {
-            self.waiters.fetch_sub(1, Ordering::AcqRel);
-            drop(guard);
-            self.wait_tx.send(true).await;
-        }
-    }
-
-    pub async fn notify_all<T>(&self, guard: MutexGuard<'_, T>) {
-        let w = self.waiters.swap(0, Ordering::AcqRel);
-        drop(guard);
-        for _ in 0..w {
-            self.wait_tx.send(true).await;
-        }
+    pub fn notify_all(&self) {
+        self.event.notify_additional(usize::MAX);
     }
 }

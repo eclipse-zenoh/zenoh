@@ -13,8 +13,9 @@
 //
 use super::info::*;
 use super::*;
+use async_std::channel::{bounded, Receiver, Sender};
+use async_std::sync::Arc;
 use async_std::sync::RwLock;
-use async_std::sync::{channel, Arc, Receiver, Sender};
 use async_std::task;
 use async_trait::async_trait;
 use config::*;
@@ -628,7 +629,7 @@ impl Session {
         info: &SubInfo,
     ) -> ZResult<Subscriber<'_>> {
         trace!("declare_subscriber({:?})", reskey);
-        let (sender, receiver) = channel(*API_DATA_RECEPTION_CHANNEL_SIZE);
+        let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
         let sub_state = self
             .declare_any_subscriber(reskey, SubscriberInvoker::Sender(sender), info)
             .await?;
@@ -762,7 +763,7 @@ impl Session {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut state = self.state.write().await;
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let (q_sender, q_receiver) = channel(*API_QUERY_RECEPTION_CHANNEL_SIZE);
+        let (q_sender, q_receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {
             id,
             reskey: resource.clone(),
@@ -925,13 +926,17 @@ impl Session {
                                 });
                             }
                             SubscriberInvoker::Sender(sender) => {
-                                sender
+                                if let Err(e) = sender
                                     .send(Sample {
                                         res_name: res.name.clone(),
                                         payload: payload.clone(),
                                         data_info: info.clone(),
                                     })
-                                    .await;
+                                    .await
+                                {
+                                    error!("SubscriberInvoker error: {}", e);
+                                    return;
+                                }
                             }
                         }
                     }
@@ -956,13 +961,17 @@ impl Session {
                                     });
                                 }
                                 SubscriberInvoker::Sender(sender) => {
-                                    sender
+                                    if let Err(e) = sender
                                         .send(Sample {
                                             res_name: resname.clone(),
                                             payload: payload.clone(),
                                             data_info: info.clone(),
                                         })
-                                        .await;
+                                        .await
+                                    {
+                                        error!("SubscriberInvoker error: {}", e);
+                                        return;
+                                    }
                                 }
                             }
                         }
@@ -1028,7 +1037,7 @@ impl Session {
         );
         let mut state = self.state.write().await;
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
-        let (rep_sender, rep_receiver) = channel(*API_REPLY_RECEPTION_CHANNEL_SIZE);
+        let (rep_sender, rep_receiver) = bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE);
         state.queries.insert(
             qid,
             QueryState {
@@ -1116,11 +1125,11 @@ impl Session {
         };
 
         let predicate = predicate.to_string();
-        let (rep_sender, mut rep_receiver) = channel(*API_REPLY_EMISSION_CHANNEL_SIZE);
+        let (rep_sender, mut rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
         let pid = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
-            req_sender
+            let _ = req_sender
                 .send(Query {
                     res_name: resname.clone(),
                     predicate: predicate.clone(),
@@ -1276,7 +1285,9 @@ impl Primitives for Session {
                     replier_id,
                 };
                 match query.reception_mode {
-                    ConsolidationMode::None => query.rep_sender.send(new_reply).await,
+                    ConsolidationMode::None => {
+                        let _ = query.rep_sender.send(new_reply).await;
+                    }
                     ConsolidationMode::Lazy => {
                         match query
                             .replies
@@ -1291,7 +1302,7 @@ impl Primitives for Session {
                                         .as_mut()
                                         .unwrap()
                                         .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                                    query.rep_sender.send(new_reply).await;
+                                    let _ = query.rep_sender.send(new_reply).await;
                                 }
                             }
                             None => {
@@ -1300,7 +1311,7 @@ impl Primitives for Session {
                                     .as_mut()
                                     .unwrap()
                                     .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                                query.rep_sender.send(new_reply).await;
+                                let _ = query.rep_sender.send(new_reply).await;
                             }
                         }
                     }
@@ -1348,7 +1359,7 @@ impl Primitives for Session {
                     let query = state.queries.remove(&qid).unwrap();
                     if query.reception_mode == ConsolidationMode::Full {
                         for (_, reply) in query.replies.unwrap().into_iter() {
-                            query.rep_sender.send(reply).await;
+                            let _ = query.rep_sender.send(reply).await;
                         }
                     }
                 }

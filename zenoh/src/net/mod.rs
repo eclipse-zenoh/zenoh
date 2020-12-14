@@ -66,7 +66,7 @@
 //! }
 //! ```
 
-use async_std::sync::channel;
+use async_std::channel::bounded;
 use futures::prelude::*;
 use log::{debug, trace};
 use zenoh_protocol::core::WhatAmI;
@@ -135,14 +135,14 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
         .unwrap();
     let iface = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
 
-    let (hello_sender, hello_receiver) = channel::<Hello>(1);
-    let (stop_sender, mut stop_receiver) = channel::<()>(1);
+    let (hello_sender, hello_receiver) = bounded::<Hello>(1);
+    let (stop_sender, mut stop_receiver) = bounded::<()>(1);
     let iface = SessionOrchestrator::get_interface(iface).unwrap();
     let socket = SessionOrchestrator::bind_ucast_port(iface).await.unwrap();
     async_std::task::spawn(async move {
         let hello_sender = &hello_sender;
         let scout = SessionOrchestrator::scout(&socket, what, &addr, async move |hello| {
-            hello_sender.send(hello).await;
+            let _ = hello_sender.send(hello).await;
             Loop::Continue
         });
         let stop = async move {

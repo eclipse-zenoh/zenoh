@@ -12,7 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::storages_mgt::*;
-use async_std::sync::{channel, Arc, RwLock, Sender};
+use async_std::channel::{bounded, Sender};
+use async_std::sync::{Arc, RwLock};
 use async_std::task;
 use futures::prelude::*;
 use futures::select;
@@ -34,9 +35,9 @@ pub(crate) async fn start_backend(
     trace!("Starting backend {}", backend_name);
 
     // Channel for the task to advertise when ready to receive requests
-    let (ready_tx, ready_rx) = channel::<bool>(1);
+    let (ready_tx, ready_rx) = bounded::<bool>(1);
     // Channel to stop the task
-    let (stop_tx, stop_rx) = channel::<bool>(1);
+    let (stop_tx, stop_rx) = bounded::<bool>(1);
 
     task::spawn(async move {
         let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
@@ -61,7 +62,10 @@ pub(crate) async fn start_backend(
 
         // now that the backend is ready to receive GET/PUT/DELETE,
         // unblock the start_backend() operation below
-        ready_tx.send(true).await;
+        if let Err(e) = ready_tx.send(true).await {
+            error!("Error starting backend {} : {}", admin_path, e);
+            return;
+        }
 
         let in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>> =
             backend.incoming_data_interceptor().map(|i| {

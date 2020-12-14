@@ -13,6 +13,7 @@
 //
 #![feature(async_closure)]
 
+use async_std::channel::Receiver;
 use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
@@ -68,7 +69,7 @@ fn sample_to_json(sample: Sample) -> String {
     )
 }
 
-async fn to_json(results: async_std::sync::Receiver<Reply>) -> String {
+async fn to_json(results: Receiver<Reply>) -> String {
     let values = results
         .filter_map(async move |reply| Some(sample_to_json(reply.data)))
         .collect::<Vec<String>>()
@@ -85,7 +86,7 @@ fn sample_to_html(sample: Sample) -> String {
     )
 }
 
-async fn to_html(results: async_std::sync::Receiver<Reply>) -> String {
+async fn to_html(results: Receiver<Reply>) -> String {
     let values = results
         .filter_map(async move |reply| Some(sample_to_html(reply.data)))
         .collect::<Vec<String>>()

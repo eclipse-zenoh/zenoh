@@ -11,8 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::channel::bounded;
 use async_std::prelude::*;
-use async_std::sync::{channel, Arc, RwLock, Weak};
+use async_std::sync::{Arc, RwLock, Weak};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
@@ -206,7 +207,7 @@ impl SessionManager {
             }
         };
         // Create a channel for knowing when a session is open
-        let (sender, receiver) = channel::<ZResult<Session>>(1);
+        let (sender, receiver) = bounded::<ZResult<Session>>(1);
 
         // Try a maximum number of times to open a session
         let retries = self.0.config.retries;

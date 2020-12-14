@@ -11,10 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::{Path, PathBuf};
 use async_std::prelude::*;
-use async_std::sync::{channel, Arc, Barrier, Mutex, Receiver, RwLock, Sender, Weak};
+use async_std::sync::{Arc, Barrier, Mutex, RwLock, Weak};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -205,7 +206,7 @@ impl LinkTrait for UnixSockStream {
             };
 
             // The channel for stopping the read task
-            let (sender, receiver) = channel::<()>(1);
+            let (sender, receiver) = bounded::<()>(1);
             // Store the sender
             *guard = Some(sender);
 
@@ -593,7 +594,7 @@ struct ListenerUnixSockStreamInner {
 impl ListenerUnixSockStreamInner {
     fn new(socket: Arc<UnixListener>) -> ListenerUnixSockStreamInner {
         // Create the channel necessary to break the accept loop
-        let (sender, receiver) = channel::<()>(1);
+        let (sender, receiver) = bounded::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
         let barrier = Arc::new(Barrier::new(2));
         // Update the list of active listeners on the manager
@@ -811,9 +812,10 @@ impl ManagerUnixSockStreamInner {
         match zasyncwrite!(self.listener).remove(addr) {
             Some(listener) => {
                 // Send the stop signal
-                listener.sender.send(()).await;
-                // Wait for the accept loop to be stopped
-                listener.barrier.wait().await;
+                if listener.sender.send(()).await.is_ok() {
+                    // Wait for the accept loop to be stopped
+                    listener.barrier.wait().await;
+                }
                 // Remove the Unix Domain Socket file
                 let res = remove_file(addr);
                 log::trace!("UnixSock-Stream Domain Socket removal result: {:?}", res);

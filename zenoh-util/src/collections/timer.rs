@@ -11,8 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::channel::{bounded, Receiver, RecvError, Sender};
 use async_std::prelude::*;
-use async_std::sync::{channel, Arc, Mutex, Receiver, RecvError, Sender, Weak};
+use async_std::sync::{Arc, Mutex, Weak};
 use async_std::task;
 use async_trait::async_trait;
 
@@ -188,8 +189,8 @@ pub struct Timer {
 impl Timer {
     pub fn new() -> Timer {
         // Create the channels
-        let (ev_sender, ev_receiver) = channel::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
-        let (sl_sender, sl_receiver) = channel::<()>(1);
+        let (ev_sender, ev_receiver) = bounded::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
+        let (sl_sender, sl_receiver) = bounded::<()>(1);
 
         // Create the timer object
         let timer = Timer {
@@ -213,8 +214,8 @@ impl Timer {
         if self.sl_sender.is_none() {
             // Create the channels
             let (ev_sender, ev_receiver) =
-                channel::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
-            let (sl_sender, sl_receiver) = channel::<()>(1);
+                bounded::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
+            let (sl_sender, sl_receiver) = bounded::<()>(1);
 
             // Store the channels handlers
             self.sl_sender = Some(sl_sender);
@@ -232,7 +233,7 @@ impl Timer {
     pub async fn stop(&mut self) {
         if let Some(sl_sender) = &self.sl_sender {
             // Stop the timer task
-            sl_sender.send(()).await;
+            let _ = sl_sender.send(()).await;
 
             log::trace!("Stopping timer...");
             // Remove the channels handlers
@@ -243,7 +244,7 @@ impl Timer {
 
     pub async fn add(&self, event: TimedEvent) {
         if let Some(ev_sender) = &self.ev_sender {
-            ev_sender.send((true, event)).await;
+            let _ = ev_sender.send((true, event)).await;
         }
     }
 }

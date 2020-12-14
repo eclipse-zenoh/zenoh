@@ -11,9 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
-use async_std::sync::{channel, Arc, Barrier, Mutex, Receiver, RwLock, Sender, Weak};
+use async_std::sync::{Arc, Barrier, Mutex, RwLock, Weak};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -185,7 +186,7 @@ impl LinkTrait for Tcp {
             };
 
             // The channel for stopping the read task
-            let (sender, receiver) = channel::<()>(1);
+            let (sender, receiver) = bounded::<()>(1);
             // Store the sender
             *guard = Some(sender);
 
@@ -568,7 +569,7 @@ struct ListenerTcpInner {
 impl ListenerTcpInner {
     fn new(socket: Arc<TcpListener>) -> ListenerTcpInner {
         // Create the channel necessary to break the accept loop
-        let (sender, receiver) = channel::<()>(1);
+        let (sender, receiver) = bounded::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
         let barrier = Arc::new(Barrier::new(2));
         // Update the list of active listeners on the manager
@@ -716,9 +717,10 @@ impl ManagerTcpInner {
         match zasyncwrite!(self.listener).remove(&addr) {
             Some(listener) => {
                 // Send the stop signal
-                listener.sender.send(()).await;
-                // Wait for the accept loop to be stopped
-                listener.barrier.wait().await;
+                if listener.sender.send(()).await.is_ok() {
+                    // Wait for the accept loop to be stopped
+                    listener.barrier.wait().await;
+                }
                 Ok(())
             }
             None => {
