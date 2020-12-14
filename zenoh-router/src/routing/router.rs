@@ -376,7 +376,7 @@ impl Network {
         }
 
         // Add nodes to graph & filter out up to date states
-        let link_states = link_states
+        let mut link_states = link_states
             .into_iter()
             .filter_map(
                 |(pid, whatami, locators, sn, links)| match self.get_idx(&pid) {
@@ -415,6 +415,7 @@ impl Network {
             .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
 
         // Add/remove edges from graph
+        let mut reintroduced_nodes = vec![];
         for (links, idx1, _) in &link_states {
             for link in links {
                 if let Some(idx2) = self.get_idx(&link) {
@@ -428,11 +429,16 @@ impl Network {
                         self.graph.update_edge(*idx1, idx2, 1.0);
                     }
                 } else {
-                    log::error!(
-                        "{} Internal error handling link state: cannot get index of {}",
-                        self.name,
-                        &link
-                    );
+                    let node = Node {
+                        pid: link.clone(),
+                        whatami: 0,
+                        locators: None,
+                        sn: 0,
+                        links: vec![],
+                    };
+                    log::debug!("{} Add node (reintroduced) {}", self.name, link.clone());
+                    let idx = self.graph.add_node(node);
+                    reintroduced_nodes.push((vec![], idx, true));
                 }
             }
             let mut neighbors = self.graph.neighbors_undirected(*idx1).detach();
@@ -448,6 +454,7 @@ impl Network {
                 }
             }
         }
+        link_states.extend(reintroduced_nodes);
 
         let removed = self.remove_detached_nodes();
         let link_states = link_states
@@ -465,12 +472,11 @@ impl Network {
                         let pid = node.pid.clone();
                         let locators = locators.clone();
                         async_std::task::spawn(async move {
-                            // Workaround for concurrent session estaglishment problem
+                            // random backoff
                             async_std::task::sleep(std::time::Duration::from_millis(
-                                rand::random::<u64>() % 500,
+                                rand::random::<u64>() % 100,
                             ))
                             .await;
-                            // /Workaround
                             orchestrator.connect_peer(&pid, &locators).await;
                         });
                     }
@@ -571,8 +577,9 @@ impl Network {
         self.graph[self.idx].links.retain(|link| *link != pid);
 
         let idx = self.get_idx(&pid).unwrap();
-        self.graph
-            .remove_edge(self.graph.find_edge_undirected(self.idx, idx).unwrap().0);
+        if let Some(edge) = self.graph.find_edge_undirected(self.idx, idx) {
+            self.graph.remove_edge(edge.0);
+        }
         self.remove_detached_nodes();
 
         self.graph[self.idx].sn += 1;
