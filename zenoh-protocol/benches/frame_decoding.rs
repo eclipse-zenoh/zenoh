@@ -52,6 +52,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             info,
             None,
             None,
+            None,
         );
 
         let mut wbuf = WBuf::new(batch_size, true);

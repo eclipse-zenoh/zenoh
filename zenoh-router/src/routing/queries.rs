@@ -95,12 +95,12 @@ pub(crate) async fn declare_queryable(
                                 if let Some(rid) = ctx.local_rid {
                                     someface
                                         .primitives
-                                        .queryable(&(rid, wildsuffix).into())
+                                        .queryable(&(rid, wildsuffix).into(), None)
                                         .await;
                                 } else if let Some(rid) = ctx.remote_rid {
                                     someface
                                         .primitives
-                                        .queryable(&(rid, wildsuffix).into())
+                                        .queryable(&(rid, wildsuffix).into(), None)
                                         .await;
                                 } else {
                                     let rid = someface.get_next_local_id();
@@ -115,7 +115,7 @@ pub(crate) async fn declare_queryable(
                                         .await;
                                     someface
                                         .primitives
-                                        .queryable(&(rid, wildsuffix).into())
+                                        .queryable(&(rid, wildsuffix).into(), None)
                                         .await;
                                 }
                             } else {
@@ -141,12 +141,15 @@ pub(crate) async fn declare_queryable(
                                     .await;
                                 someface
                                     .primitives
-                                    .queryable(&(rid, wildsuffix).into())
+                                    .queryable(&(rid, wildsuffix).into(), None)
                                     .await;
                             }
                         }
                         None => {
-                            someface.primitives.queryable(&wildsuffix.into()).await;
+                            someface
+                                .primitives
+                                .queryable(&wildsuffix.into(), None)
+                                .await;
                         }
                     }
                 }
@@ -279,6 +282,7 @@ pub(crate) async fn route_query(
                             qid,
                             target.clone(),
                             consolidation.clone(),
+                            None,
                         )
                         .await;
                 }

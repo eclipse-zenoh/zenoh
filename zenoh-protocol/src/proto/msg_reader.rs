@@ -245,6 +245,7 @@ impl RBuf {
         use super::zmsg::id::*;
 
         // Message decorators
+        let mut routing_context = None;
         let mut reply_context = None;
         let mut attachment = None;
 
@@ -279,6 +280,11 @@ impl RBuf {
                 }
 
                 // Decorators
+                ROUTING_CONTEXT => {
+                    routing_context = Some(self.read_deco_routing_context(header)?);
+                    continue;
+                }
+
                 REPLY_CONTEXT => {
                     reply_context = Some(self.read_deco_reply_context(header)?);
                     continue;
@@ -373,9 +379,14 @@ impl RBuf {
             body,
             reliability,
             congestion_control,
+            routing_context,
             reply_context,
             attachment,
         })
+    }
+
+    fn read_deco_routing_context(&mut self, _header: u8) -> Option<RoutingContext> {
+        self.read_zint()
     }
 
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
@@ -530,7 +541,6 @@ impl RBuf {
                 let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::Resource { rid, key })
             }
-
             FORGET_RESOURCE => {
                 let rid = self.read_zint()?;
                 Some(Declaration::ForgetResource { rid })

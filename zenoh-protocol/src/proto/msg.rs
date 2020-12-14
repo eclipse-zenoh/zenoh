@@ -94,6 +94,20 @@ impl ReplyContext {
     }
 }
 
+/// -- RoutingContext decorator
+///
+/// The **RoutingContext** is a message decorator containing
+/// informations for routing the concerned message.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|X| RT_CTX  |
+/// +-+-+-+---------+
+/// ~      tid      ~
+/// +---------------+
+///
+pub type RoutingContext = ZInt;
+
 // Inner Message IDs
 mod imsg {
     pub(super) mod id {
@@ -118,6 +132,7 @@ mod imsg {
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
         // Message decorators
+        pub(crate) const ROUTING_CONTEXT: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
     }
@@ -145,6 +160,7 @@ pub mod zmsg {
         // Message decorators
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
+        pub const ROUTING_CONTEXT: u8 = imsg::id::ROUTING_CONTEXT;
     }
 
     // Zenoh message flags
@@ -515,6 +531,8 @@ pub struct LinkState {
 // +-+-+-+-+-+-+-+-+
 // |X|X|X|LK_ST_LS |
 // +-+-+-+---------+
+// ~ [link_states] ~
+// +---------------+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinkStateList {
     pub link_states: Vec<LinkState>,
@@ -538,6 +556,7 @@ pub struct ZenohMessage {
     pub body: ZenohBody,
     pub reliability: Reliability,
     pub congestion_control: CongestionControl,
+    pub routing_context: Option<RoutingContext>,
     pub reply_context: Option<ReplyContext>,
     pub attachment: Option<Attachment>,
 }
@@ -546,10 +565,11 @@ impl std::fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?} {:?} {:?}",
+            "{:?} {:?} {:?} {:?} {:?} {:?}",
             self.body,
             self.reliability,
             self.congestion_control,
+            self.routing_context,
             self.reply_context,
             self.attachment
         )
@@ -565,6 +585,7 @@ impl std::fmt::Display for ZenohMessage {
 impl ZenohMessage {
     pub fn make_declare(
         declarations: Vec<Declaration>,
+        routing_context: Option<RoutingContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         let header = zmsg::id::DECLARE;
@@ -574,6 +595,7 @@ impl ZenohMessage {
             body: ZenohBody::Declare(Declare { declarations }),
             reliability: zmsg::default_reliability::DECLARE,
             congestion_control: zmsg::default_congestion_control::DECLARE,
+            routing_context,
             reply_context: None,
             attachment,
         }
@@ -586,6 +608,7 @@ impl ZenohMessage {
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
+        routing_context: Option<RoutingContext>,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
@@ -610,6 +633,7 @@ impl ZenohMessage {
             }),
             reliability,
             congestion_control,
+            routing_context,
             reply_context,
             attachment,
         }
@@ -632,6 +656,7 @@ impl ZenohMessage {
             body: ZenohBody::Unit(Unit {}),
             reliability,
             congestion_control,
+            routing_context: None,
             reply_context,
             attachment,
         }
@@ -663,6 +688,7 @@ impl ZenohMessage {
             }),
             reliability: zmsg::default_reliability::PULL,
             congestion_control: zmsg::default_congestion_control::PULL,
+            routing_context: None,
             reply_context: None,
             attachment,
         }
@@ -674,6 +700,7 @@ impl ZenohMessage {
         qid: ZInt,
         target: Option<QueryTarget>,
         consolidation: QueryConsolidation,
+        routing_context: Option<RoutingContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         let kflag = if key.is_numerical() { zmsg::flag::K } else { 0 };
@@ -691,6 +718,7 @@ impl ZenohMessage {
             }),
             reliability: zmsg::default_reliability::QUERY,
             congestion_control: zmsg::default_congestion_control::QUERY,
+            routing_context,
             reply_context: None,
             attachment,
         }
@@ -707,6 +735,7 @@ impl ZenohMessage {
             body: ZenohBody::LinkStateList(LinkStateList { link_states }),
             reliability: zmsg::default_reliability::LINK_STATE_LIST,
             congestion_control: zmsg::default_congestion_control::LINK_STATE_LIST,
+            routing_context: None,
             reply_context: None,
             attachment,
         }

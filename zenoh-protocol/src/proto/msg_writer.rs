@@ -167,6 +167,9 @@ impl WBuf {
     }
 
     pub fn write_zenoh_message(&mut self, msg: &ZenohMessage) -> bool {
+        if let Some(routing_context) = &msg.routing_context {
+            zcheck!(self.write_deco_routing_context(*routing_context));
+        }
         if let Some(attachment) = &msg.attachment {
             zcheck!(self.write_deco_attachment(attachment, false));
         }
@@ -231,6 +234,12 @@ impl WBuf {
             }
         }
 
+        true
+    }
+
+    fn write_deco_routing_context(&mut self, routing_context: RoutingContext) -> bool {
+        zcheck!(self.write(zmsg::id::ROUTING_CONTEXT));
+        zcheck!(self.write_zint(routing_context));
         true
     }
 

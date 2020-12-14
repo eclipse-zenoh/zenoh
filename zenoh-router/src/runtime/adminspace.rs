@@ -26,7 +26,7 @@ use zenoh_protocol::{
         Reliability, ResKey, SubInfo, ZInt,
     },
     io::RBuf,
-    proto::{encoding, DataInfo},
+    proto::{encoding, DataInfo, RoutingContext},
     session::Primitives,
 };
 
@@ -78,7 +78,7 @@ impl AdminSpace {
         admin.primitives.lock().await.replace(primitives.clone());
 
         primitives
-            .queryable(&[&root_path, "/**"].concat().into())
+            .queryable(&[&root_path, "/**"].concat().into(), None)
             .await;
     }
 
@@ -195,27 +195,32 @@ impl Primitives for AdminSpace {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    async fn publisher(&self, _reskey: &ResKey) {
+    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Publisher {:?}", _reskey);
     }
 
-    async fn forget_publisher(&self, _reskey: &ResKey) {
+    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    async fn subscriber(&self, _reskey: &ResKey, _sub_info: &SubInfo) {
+    async fn subscriber(
+        &self,
+        _reskey: &ResKey,
+        _sub_info: &SubInfo,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    async fn forget_subscriber(&self, _reskey: &ResKey) {
+    async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    async fn queryable(&self, _reskey: &ResKey) {
+    async fn queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    async fn forget_queryable(&self, _reskey: &ResKey) {
+    async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
@@ -226,6 +231,7 @@ impl Primitives for AdminSpace {
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
+        _routing_context: Option<RoutingContext>,
     ) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?} {:?}",
@@ -244,6 +250,7 @@ impl Primitives for AdminSpace {
         qid: ZInt,
         target: QueryTarget,
         _consolidation: QueryConsolidation,
+        _routing_context: Option<RoutingContext>,
     ) {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",

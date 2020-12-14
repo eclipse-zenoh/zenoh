@@ -21,7 +21,7 @@ use zenoh_protocol::core::{
     WhatAmI, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::DataInfo;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol::session::Primitives;
 
 pub struct FaceState {
@@ -93,7 +93,12 @@ impl Primitives for Face {
         undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
     }
 
-    async fn subscriber(&self, reskey: &ResKey, sub_info: &SubInfo) {
+    async fn subscriber(
+        &self,
+        reskey: &ResKey,
+        sub_info: &SubInfo,
+        _routing_context: Option<RoutingContext>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         declare_subscription(
@@ -106,23 +111,23 @@ impl Primitives for Face {
         .await;
     }
 
-    async fn forget_subscriber(&self, reskey: &ResKey) {
+    async fn forget_subscriber(&self, reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         undeclare_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
     }
 
-    async fn publisher(&self, _reskey: &ResKey) {}
+    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn forget_publisher(&self, _reskey: &ResKey) {}
+    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn queryable(&self, reskey: &ResKey) {
+    async fn queryable(&self, reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         declare_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
     }
 
-    async fn forget_queryable(&self, reskey: &ResKey) {
+    async fn forget_queryable(&self, reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         undeclare_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
@@ -135,6 +140,7 @@ impl Primitives for Face {
         _reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
+        _routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
@@ -157,6 +163,7 @@ impl Primitives for Face {
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        _routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;

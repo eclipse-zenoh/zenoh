@@ -28,6 +28,7 @@ use zenoh_protocol::{
         ResourceId,
     },
     io::RBuf,
+    proto::RoutingContext,
     session::Primitives,
 };
 use zenoh_router::runtime::Runtime;
@@ -476,7 +477,7 @@ impl Session {
         if let Some(res) = declared_pub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.publisher(&res).await;
+            primitives.publisher(&res, None).await;
         }
 
         Ok(Publisher {
@@ -506,7 +507,7 @@ impl Session {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         let reskey = join_pub.clone().into();
                         drop(state);
-                        primitives.forget_publisher(&reskey).await;
+                        primitives.forget_publisher(&reskey, None).await;
                     }
                 }
                 None => {
@@ -517,7 +518,7 @@ impl Session {
                     if !twin_pub {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         drop(state);
-                        primitives.forget_publisher(&pub_state.reskey).await;
+                        primitives.forget_publisher(&pub_state.reskey, None).await;
                     }
                 }
             };
@@ -591,7 +592,7 @@ impl Session {
                 reskey => reskey,
             };
 
-            primitives.subscriber(&reskey, info).await;
+            primitives.subscriber(&reskey, info, None).await;
         }
 
         Ok(sub_state)
@@ -714,7 +715,7 @@ impl Session {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         let reskey = join_sub.clone().into();
                         drop(state);
-                        primitives.forget_subscriber(&reskey).await;
+                        primitives.forget_subscriber(&reskey, None).await;
                     }
                 }
                 None => {
@@ -725,7 +726,7 @@ impl Session {
                     if !twin_sub {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         drop(state);
-                        primitives.forget_subscriber(&sub_state.reskey).await;
+                        primitives.forget_subscriber(&sub_state.reskey, None).await;
                     }
                 }
             };
@@ -779,7 +780,7 @@ impl Session {
         if !twin_qable {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.queryable(resource).await;
+            primitives.queryable(resource, None).await;
         }
 
         Ok(Queryable {
@@ -802,7 +803,7 @@ impl Session {
             });
             if !twin_qable {
                 let primitives = state.primitives.as_ref().unwrap();
-                primitives.forget_queryable(&qable_state.reskey).await;
+                primitives.forget_queryable(&qable_state.reskey, None).await;
             }
         }
         Ok(())
@@ -836,6 +837,7 @@ impl Session {
                 payload.clone(),
                 Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
                 CongestionControl::default(), // Default congestion control when writing data
+                None,
                 None,
             )
             .await;
@@ -894,6 +896,7 @@ impl Session {
                 Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
                 congestion_control,
                 data_info.clone(),
+                None,
             )
             .await;
         if local_routing {
@@ -1053,6 +1056,7 @@ impl Session {
                 qid,
                 target.clone(),
                 consolidation.clone(),
+                None,
             )
             .await;
         if local_routing {
@@ -1176,27 +1180,32 @@ impl Primitives for Session {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    async fn publisher(&self, _reskey: &ResKey) {
+    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Publisher {:?}", _reskey);
     }
 
-    async fn forget_publisher(&self, _reskey: &ResKey) {
+    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    async fn subscriber(&self, _reskey: &ResKey, _sub_info: &SubInfo) {
+    async fn subscriber(
+        &self,
+        _reskey: &ResKey,
+        _sub_info: &SubInfo,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    async fn forget_subscriber(&self, _reskey: &ResKey) {
+    async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    async fn queryable(&self, _reskey: &ResKey) {
+    async fn queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    async fn forget_queryable(&self, _reskey: &ResKey) {
+    async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
@@ -1207,6 +1216,7 @@ impl Primitives for Session {
         reliability: Reliability,
         congestion_control: CongestionControl,
         info: Option<DataInfo>,
+        _routing_context: Option<RoutingContext>,
     ) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?} {:?}",
@@ -1226,6 +1236,7 @@ impl Primitives for Session {
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        _routing_context: Option<RoutingContext>,
     ) {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",

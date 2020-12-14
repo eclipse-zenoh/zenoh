@@ -15,7 +15,7 @@ use super::Primitives;
 use crate::core::{CongestionControl, PeerId, Reliability, ResKey, ZInt};
 use crate::core::{QueryConsolidation, QueryTarget, SubInfo};
 use crate::io::RBuf;
-use crate::proto::{zmsg, DataInfo, Declaration, ReplyContext, ZenohMessage};
+use crate::proto::{zmsg, DataInfo, Declaration, ReplyContext, RoutingContext, ZenohMessage};
 use crate::session::SessionEventHandler;
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -40,7 +40,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             key: reskey.clone(),
         });
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None))
+            .handle_message(ZenohMessage::make_declare(decls, None, None))
             .await;
     }
 
@@ -48,68 +48,73 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         let mut decls = Vec::new();
         decls.push(Declaration::ForgetResource { rid });
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None))
+            .handle_message(ZenohMessage::make_declare(decls, None, None))
             .await;
     }
 
-    async fn subscriber(&self, reskey: &ResKey, sub_info: &SubInfo) {
+    async fn subscriber(
+        &self,
+        reskey: &ResKey,
+        sub_info: &SubInfo,
+        routing_context: Option<RoutingContext>,
+    ) {
         let mut decls = Vec::new();
         decls.push(Declaration::Subscriber {
             key: reskey.clone(),
             info: sub_info.clone(),
         });
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None))
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
             .await;
     }
 
-    async fn forget_subscriber(&self, reskey: &ResKey) {
+    async fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let mut decls = Vec::new();
         decls.push(Declaration::ForgetSubscriber {
             key: reskey.clone(),
         });
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None))
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
             .await;
     }
 
-    async fn publisher(&self, reskey: &ResKey) {
+    async fn publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let mut decls = Vec::new();
         decls.push(Declaration::Publisher {
             key: reskey.clone(),
         });
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None))
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
             .await;
     }
 
-    async fn forget_publisher(&self, reskey: &ResKey) {
+    async fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let mut decls = Vec::new();
         decls.push(Declaration::ForgetPublisher {
             key: reskey.clone(),
         });
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None))
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
             .await;
     }
 
-    async fn queryable(&self, reskey: &ResKey) {
+    async fn queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let mut decls = Vec::new();
         decls.push(Declaration::Queryable {
             key: reskey.clone(),
         });
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None))
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
             .await;
     }
 
-    async fn forget_queryable(&self, reskey: &ResKey) {
+    async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let mut decls = Vec::new();
         decls.push(Declaration::ForgetQueryable {
             key: reskey.clone(),
         });
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None))
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
             .await;
     }
 
@@ -120,6 +125,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
+        routing_context: Option<RoutingContext>,
     ) {
         self.handler
             .handle_message(ZenohMessage::make_data(
@@ -128,6 +134,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
                 reliability,
                 congestion_control,
                 data_info,
+                routing_context,
                 None,
                 None,
             ))
@@ -141,6 +148,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        routing_context: Option<RoutingContext>,
     ) {
         let target_opt = if target == QueryTarget::default() {
             None
@@ -154,6 +162,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
                 qid,
                 target_opt,
                 consolidation.clone(),
+                routing_context,
                 None,
             ))
             .await;
@@ -175,6 +184,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
                 zmsg::default_reliability::REPLY,
                 zmsg::default_congestion_control::REPLY,
                 data_info,
+                None,
                 Some(ReplyContext::make(qid, source_kind, Some(replier_id))),
                 None,
             ))

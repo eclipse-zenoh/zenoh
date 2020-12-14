@@ -63,6 +63,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         info.clone(),
                         None,
                         None,
+                        None,
                     );
                     consume_message(msg);
                 }
@@ -90,6 +91,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         reliability,
         congestion_control,
         info.clone(),
+        None,
         None,
         None,
     ));

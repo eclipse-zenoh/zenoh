@@ -60,6 +60,10 @@ fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
     props
 }
 
+fn gen_routing_context() -> RoutingContext {
+    gen!(ZInt)
+}
+
 fn gen_reply_context(is_final: bool) -> ReplyContext {
     let qid = gen!(ZInt);
     let source_kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4);
@@ -422,6 +426,7 @@ fn frame_tests() {
         let ch = [Channel::Reliable, Channel::BestEffort];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
+        let routing_context = [None, Some(gen_routing_context())];
         let reply_context = [
             None,
             Some(gen_reply_context(false)),
@@ -440,22 +445,25 @@ fn frame_tests() {
         });
         for cc in congestion_control.iter() {
             for di in data_info.iter() {
-                for rc in reply_context.iter() {
-                    for a in attachment.iter() {
-                        payload.push(FramePayload::Messages {
-                            messages: vec![
-                                ZenohMessage::make_data(
-                                    gen_key(),
-                                    RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                                    Reliability::BestEffort,
-                                    *cc,
-                                    di.clone(),
-                                    rc.clone(),
-                                    a.clone(),
-                                );
-                                msg_payload_count
-                            ],
-                        });
+                for rec in reply_context.iter() {
+                    for roc in routing_context.iter() {
+                        for a in attachment.iter() {
+                            payload.push(FramePayload::Messages {
+                                messages: vec![
+                                    ZenohMessage::make_data(
+                                        gen_key(),
+                                        RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                        Reliability::BestEffort,
+                                        *cc,
+                                        di.clone(),
+                                        roc.clone(),
+                                        rec.clone(),
+                                        a.clone(),
+                                    );
+                                    msg_payload_count
+                                ],
+                            });
+                        }
                     }
                 }
             }
@@ -508,6 +516,7 @@ fn frame_batching_tests() {
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;
         let data_info = None;
+        let routing_context = None;
         let reply_context = None;
         let zattachment = None;
         let data = ZenohMessage::make_data(
@@ -516,6 +525,7 @@ fn frame_batching_tests() {
             reliability,
             congestion_control,
             data_info,
+            routing_context,
             reply_context,
             zattachment,
         );
@@ -579,11 +589,14 @@ fn frame_batching_tests() {
 #[test]
 fn declare_tests() {
     for _ in 0..NUM_ITER {
+        let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
 
-        for a in attachment.iter() {
-            let msg = ZenohMessage::make_declare(gen_declarations(), a.clone());
-            test_write_read_zenoh_message(msg);
+        for roc in routing_context.iter() {
+            for a in attachment.iter() {
+                let msg = ZenohMessage::make_declare(gen_declarations(), roc.clone(), a.clone());
+                test_write_read_zenoh_message(msg);
+            }
         }
     }
 }
@@ -594,6 +607,7 @@ fn data_tests() {
         let reliability = [Reliability::Reliable, Reliability::BestEffort];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
+        let routing_context = [None, Some(gen_routing_context())];
         let reply_context = [
             None,
             Some(gen_reply_context(false)),
@@ -604,18 +618,21 @@ fn data_tests() {
         for rl in reliability.iter() {
             for cc in congestion_control.iter() {
                 for di in data_info.iter() {
-                    for rc in reply_context.iter() {
-                        for a in attachment.iter() {
-                            let msg = ZenohMessage::make_data(
-                                gen_key(),
-                                RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                                *rl,
-                                *cc,
-                                di.clone(),
-                                rc.clone(),
-                                a.clone(),
-                            );
-                            test_write_read_zenoh_message(msg);
+                    for roc in routing_context.iter() {
+                        for rec in reply_context.iter() {
+                            for a in attachment.iter() {
+                                let msg = ZenohMessage::make_data(
+                                    gen_key(),
+                                    RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                    *rl,
+                                    *cc,
+                                    di.clone(),
+                                    roc.clone(),
+                                    rec.clone(),
+                                    a.clone(),
+                                );
+                                test_write_read_zenoh_message(msg);
+                            }
                         }
                     }
                 }
@@ -673,20 +690,24 @@ fn query_tests() {
     for _ in 0..NUM_ITER {
         let predicate = [String::default(), "my_predicate".to_string()];
         let target = [None, Some(gen_query_target())];
+        let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
 
         for p in predicate.iter() {
             for t in target.iter() {
-                for a in attachment.iter() {
-                    let msg = ZenohMessage::make_query(
-                        gen_key(),
-                        p.clone(),
-                        gen!(ZInt),
-                        t.clone(),
-                        gen_consolidation(),
-                        a.clone(),
-                    );
-                    test_write_read_zenoh_message(msg);
+                for roc in routing_context.iter() {
+                    for a in attachment.iter() {
+                        let msg = ZenohMessage::make_query(
+                            gen_key(),
+                            p.clone(),
+                            gen!(ZInt),
+                            t.clone(),
+                            gen_consolidation(),
+                            roc.clone(),
+                            a.clone(),
+                        );
+                        test_write_read_zenoh_message(msg);
+                    }
                 }
             }
         }

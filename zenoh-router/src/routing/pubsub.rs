@@ -98,12 +98,20 @@ pub async fn declare_subscription(
                                 if let Some(rid) = ctx.local_rid {
                                     someface
                                         .primitives
-                                        .subscriber(&(rid, wildsuffix).into(), &propa_sub_info)
+                                        .subscriber(
+                                            &(rid, wildsuffix).into(),
+                                            &propa_sub_info,
+                                            None,
+                                        )
                                         .await;
                                 } else if let Some(rid) = ctx.remote_rid {
                                     someface
                                         .primitives
-                                        .subscriber(&(rid, wildsuffix).into(), &propa_sub_info)
+                                        .subscriber(
+                                            &(rid, wildsuffix).into(),
+                                            &propa_sub_info,
+                                            None,
+                                        )
                                         .await;
                                 } else {
                                     let rid = someface.get_next_local_id();
@@ -118,7 +126,11 @@ pub async fn declare_subscription(
                                         .await;
                                     someface
                                         .primitives
-                                        .subscriber(&(rid, wildsuffix).into(), &propa_sub_info)
+                                        .subscriber(
+                                            &(rid, wildsuffix).into(),
+                                            &propa_sub_info,
+                                            None,
+                                        )
                                         .await;
                                 }
                             } else {
@@ -144,14 +156,14 @@ pub async fn declare_subscription(
                                     .await;
                                 someface
                                     .primitives
-                                    .subscriber(&(rid, wildsuffix).into(), &propa_sub_info)
+                                    .subscriber(&(rid, wildsuffix).into(), &propa_sub_info, None)
                                     .await;
                             }
                         }
                         None => {
                             someface
                                 .primitives
-                                .subscriber(&wildsuffix.into(), &propa_sub_info)
+                                .subscriber(&wildsuffix.into(), &propa_sub_info, None)
                                 .await;
                         }
                     }
@@ -261,6 +273,7 @@ pub async fn route_data(
                                     Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
                                     congestion_control,
                                     info.clone(),
+                                    None,
                                 )
                                 .await
                         }
@@ -302,6 +315,7 @@ pub async fn route_data(
                                     Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
                                     congestion_control,
                                     info.clone(),
+                                    None,
                                 )
                                 .await
                         }
@@ -371,6 +385,7 @@ pub async fn pull_data(
                                         subinfo.reliability,
                                         CongestionControl::Drop, // TODO: Default value for the time being
                                         info.clone(),
+                                        None,
                                     )
                                     .await;
                             }

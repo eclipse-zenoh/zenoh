@@ -22,7 +22,7 @@ use zenoh_protocol::core::{
     SubInfo, SubMode, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::DataInfo;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol::session::{DummyHandler, Mux, Primitives};
 use zenoh_router::routing::broker::*;
 
@@ -453,14 +453,20 @@ impl Primitives for ClientPrimitives {
         self.mapping.lock().unwrap().remove(&rid);
     }
 
-    async fn publisher(&self, _reskey: &ResKey) {}
-    async fn forget_publisher(&self, _reskey: &ResKey) {}
+    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn subscriber(&self, _reskey: &ResKey, _sub_info: &SubInfo) {}
-    async fn forget_subscriber(&self, _reskey: &ResKey) {}
+    async fn subscriber(
+        &self,
+        _reskey: &ResKey,
+        _sub_info: &SubInfo,
+        _routing_context: Option<RoutingContext>,
+    ) {
+    }
+    async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn queryable(&self, _reskey: &ResKey) {}
-    async fn forget_queryable(&self, _reskey: &ResKey) {}
+    async fn queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
     async fn data(
         &self,
@@ -469,6 +475,7 @@ impl Primitives for ClientPrimitives {
         _reliability: Reliability,
         _congestion_control: CongestionControl,
         _info: Option<DataInfo>,
+        _routing_context: Option<RoutingContext>,
     ) {
         *self.data.lock().unwrap() = Some(reskey.clone());
     }
@@ -479,6 +486,7 @@ impl Primitives for ClientPrimitives {
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: QueryConsolidation,
+        _routing_context: Option<RoutingContext>,
     ) {
     }
     async fn reply_data(

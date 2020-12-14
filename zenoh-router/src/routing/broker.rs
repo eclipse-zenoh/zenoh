@@ -65,7 +65,7 @@ pub use crate::routing::resource::*;
 ///     let primitives = broker.new_primitives(dummy_primitives).await;
 ///
 ///     // Use primitives
-///     primitives.data(&"/demo".to_string().into(), RBuf::from(vec![1, 2]), Reliability::Reliable, CongestionControl::Block, None).await;
+///     primitives.data(&"/demo".to_string().into(), RBuf::from(vec![1, 2]), Reliability::Reliable, CongestionControl::Block, None, None).await;
 ///
 ///     // Close primitives
 ///     primitives.close().await;
@@ -209,6 +209,7 @@ impl Tables {
                                         .subscriber(
                                             &ResKey::RIdWithSuffix(local_id, wildsuffix),
                                             &sub_info,
+                                            None,
                                         )
                                         .await;
                                 }
@@ -219,7 +220,7 @@ impl Tables {
                                         period: None,
                                     };
                                     primitives
-                                        .subscriber(&ResKey::RName(wildsuffix), &sub_info)
+                                        .subscriber(&ResKey::RName(wildsuffix), &sub_info, None)
                                         .await;
                                 }
                             }
@@ -251,11 +252,14 @@ impl Tables {
                                         .resource(local_id, &ResKey::RName(nonwild_prefix.name()))
                                         .await;
                                     primitives
-                                        .queryable(&ResKey::RIdWithSuffix(local_id, wildsuffix))
+                                        .queryable(
+                                            &ResKey::RIdWithSuffix(local_id, wildsuffix),
+                                            None,
+                                        )
                                         .await;
                                 }
                                 None => {
-                                    primitives.queryable(&ResKey::RName(wildsuffix)).await;
+                                    primitives.queryable(&ResKey::RName(wildsuffix), None).await;
                                 }
                             }
                         }
