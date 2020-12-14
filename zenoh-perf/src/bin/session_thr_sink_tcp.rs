@@ -72,7 +72,7 @@ async fn handle_client(
             );
 
             let mut wbuf = WBuf::new(32, false);
-            // Reserve 16 bits to write the lenght
+            // Reserve 16 bits to write the length
             if length {
                 wbuf.write_bytes(&[0u8, 0u8]);
             }

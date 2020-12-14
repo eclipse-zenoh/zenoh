@@ -35,8 +35,8 @@ use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 //       no limit regarding the MTU. However, given the batching strategy
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the TCP MTU is constrained to
-//       2^16-1 bytes (i.e., 65535).
-const TCP_MAX_MTU: usize = 65_535;
+//       2^16 + 1 bytes (i.e., 65537).
+const TCP_MAX_MTU: usize = 65_537;
 
 zconfigurable! {
     // Default MTU (TCP PDU) in bytes.
@@ -102,6 +102,16 @@ impl Tcp {
         transport: Transport,
         manager: Arc<ManagerTcpInner>,
     ) -> Tcp {
+        // Set the TCP nodelay option
+        if let Err(err) = socket.set_nodelay(true) {
+            log::warn!(
+                "Unable to set NODEALY option on TCP link {} => {} : {}",
+                src_addr,
+                dst_addr,
+                err
+            );
+        }
+        
         // Set the TCP linger option
         if let Err(err) = zenoh_util::net::set_linger(
             &socket,
@@ -412,7 +422,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                         }
                         // We have read at least two bytes in the buffer, update the read start index
                         r_s_pos = r_l_pos + 2;
-                        // Read the lenght as litlle endian from the buffer (array of 2 bytes)
+                        // Read the length as litlle endian from the buffer (array of 2 bytes)
                         let length: [u8; 2] = buffer[r_l_pos..r_s_pos].try_into().unwrap();
                         // Decode the total amount of bytes that we are expected to read
                         let to_read = u16::from_le_bytes(length) as usize;

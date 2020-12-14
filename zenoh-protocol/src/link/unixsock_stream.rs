@@ -437,7 +437,7 @@ async fn read_task(link: Arc<UnixSockStream>, stop: Receiver<()>) {
                         }
                         // We have read at least two bytes in the buffer, update the read start index
                         r_s_pos = r_l_pos + 2;
-                        // Read the lenght as litlle endian from the buffer (array of 2 bytes)
+                        // Read the length as litlle endian from the buffer (array of 2 bytes)
                         let length: [u8; 2] = buffer[r_l_pos..r_s_pos].try_into().unwrap();
                         // Decode the total amount of bytes that we are expected to read
                         let to_read = u16::from_le_bytes(length) as usize;
