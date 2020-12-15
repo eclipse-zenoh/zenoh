@@ -148,10 +148,6 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 s.push('?');
                 s.push_str(q);
             }
-            if let Some(f) = url.fragment() {
-                s.push('#');
-                s.push_str(f);
-            }
             let selector = match Selector::try_from(s) {
                 Ok(sel) => sel,
                 Err(e) => {
