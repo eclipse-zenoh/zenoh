@@ -74,5 +74,5 @@ name = "data_creation"
 harness = false
 
 [[bench]]
-name = "frame_decoding"
+name = "frame_codec"
 harness = false
