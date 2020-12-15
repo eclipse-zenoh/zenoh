@@ -667,7 +667,7 @@ mod tests {
                 for size in payload_sizes.iter() {
                     c_size.store(*size, Ordering::Release);
 
-                    let duration = Duration::from_secs(6);
+                    let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
                     while start.elapsed() < duration {
                         // Send reliable messages
@@ -714,10 +714,10 @@ mod tests {
                 let current: usize = size.load(Ordering::Acquire);
                 if current == prev_size {
                     let thr = (8.0 * received as f64) / 1_000_000_000.0;
-                    println!("{} bytes {:.6} Gbps", current, thr);
+                    println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
                 }
                 prev_size = current;
-                task::sleep(Duration::from_secs(1)).await;
+                task::sleep(Duration::from_millis(500)).await;
             }
         });
     }
