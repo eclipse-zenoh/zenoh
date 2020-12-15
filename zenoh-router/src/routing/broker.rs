@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use uhlc::HLC;
 
-use zenoh_protocol::core::{whatami, Reliability, ResKey, SubInfo, SubMode, WhatAmI, ZInt};
+use zenoh_protocol::core::{whatami, Reliability, SubInfo, SubMode, WhatAmI, ZInt};
 use zenoh_protocol::session::{DeMux, Mux, Primitives};
 use zenoh_protocol::session::{Session, SessionEventHandler, SessionHandler};
 
@@ -174,94 +174,23 @@ impl Tables {
             // @TODO temporarily propagate to everybody (clients)
             // if whatami != whatami::CLIENT {
             if true {
-                let mut local_id: ZInt = 0;
                 for face in t.faces.values() {
                     if propagate_subscription(t.whatami, face, &newface) {
+                        let sub_info = SubInfo {
+                            reliability: Reliability::Reliable,
+                            mode: SubMode::Push,
+                            period: None,
+                        };
                         for sub in face.subs.iter() {
-                            let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(sub);
-                            match nonwild_prefix {
-                                Some(mut nonwild_prefix) => {
-                                    local_id += 1;
-                                    Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.insert(
-                                        fid,
-                                        Arc::new(Context {
-                                            face: newface.clone(),
-                                            local_rid: Some(local_id),
-                                            remote_rid: None,
-                                            subs: None,
-                                            qabl: false,
-                                            last_values: HashMap::new(),
-                                        }),
-                                    );
-                                    Arc::get_mut_unchecked(&mut newface)
-                                        .local_mappings
-                                        .insert(local_id, nonwild_prefix.clone());
-
-                                    let sub_info = SubInfo {
-                                        reliability: Reliability::Reliable,
-                                        mode: SubMode::Push,
-                                        period: None,
-                                    };
-                                    primitives
-                                        .resource(local_id, &ResKey::RName(nonwild_prefix.name()))
-                                        .await;
-                                    primitives
-                                        .subscriber(
-                                            &ResKey::RIdWithSuffix(local_id, wildsuffix),
-                                            &sub_info,
-                                            None,
-                                        )
-                                        .await;
-                                }
-                                None => {
-                                    let sub_info = SubInfo {
-                                        reliability: Reliability::Reliable,
-                                        mode: SubMode::Push,
-                                        period: None,
-                                    };
-                                    primitives
-                                        .subscriber(&ResKey::RName(wildsuffix), &sub_info, None)
-                                        .await;
-                                }
-                            }
+                            let reskey = Resource::decl_key(&sub, &mut newface).await;
+                            primitives.subscriber(&reskey, &sub_info, None).await;
                         }
                     }
 
                     if propagate_queryable(t.whatami, face, &newface) {
                         for qabl in face.qabl.iter() {
-                            let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(qabl);
-                            match nonwild_prefix {
-                                Some(mut nonwild_prefix) => {
-                                    local_id += 1;
-                                    Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.insert(
-                                        fid,
-                                        Arc::new(Context {
-                                            face: newface.clone(),
-                                            local_rid: Some(local_id),
-                                            remote_rid: None,
-                                            subs: None,
-                                            qabl: false,
-                                            last_values: HashMap::new(),
-                                        }),
-                                    );
-                                    Arc::get_mut_unchecked(&mut newface)
-                                        .local_mappings
-                                        .insert(local_id, nonwild_prefix.clone());
-
-                                    primitives
-                                        .resource(local_id, &ResKey::RName(nonwild_prefix.name()))
-                                        .await;
-                                    primitives
-                                        .queryable(
-                                            &ResKey::RIdWithSuffix(local_id, wildsuffix),
-                                            None,
-                                        )
-                                        .await;
-                                }
-                                None => {
-                                    primitives.queryable(&ResKey::RName(wildsuffix), None).await;
-                                }
-                            }
+                            let reskey = Resource::decl_key(&qabl, &mut newface).await;
+                            primitives.queryable(&reskey, None).await;
                         }
                     }
                 }

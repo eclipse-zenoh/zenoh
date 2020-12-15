@@ -16,7 +16,7 @@ use crate::routing::face::FaceState;
 use async_std::sync::{Arc, Weak};
 use std::collections::HashMap;
 use zenoh_protocol::core::rname;
-use zenoh_protocol::core::{SubInfo, ZInt};
+use zenoh_protocol::core::{ResKey, SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
 
@@ -235,6 +235,45 @@ impl Resource {
                 Some(idx) => (&rname[0..(idx)], &rname[(idx)..]),
                 None => (rname, ""),
             }
+        }
+    }
+
+    #[inline]
+    pub async fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey {
+        let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
+        match nonwild_prefix {
+            Some(mut nonwild_prefix) => unsafe {
+                let mut ctx = Arc::get_mut_unchecked(&mut nonwild_prefix)
+                    .contexts
+                    .entry(face.id)
+                    .or_insert_with(|| {
+                        Arc::new(Context {
+                            face: face.clone(),
+                            local_rid: None,
+                            remote_rid: None,
+                            subs: None,
+                            qabl: false,
+                            last_values: HashMap::new(),
+                        })
+                    });
+
+                let rid = match ctx.local_rid.or(ctx.remote_rid) {
+                    Some(rid) => rid,
+                    None => {
+                        let rid = face.get_next_local_id();
+                        Arc::get_mut_unchecked(&mut ctx).local_rid = Some(rid);
+                        Arc::get_mut_unchecked(face)
+                            .local_mappings
+                            .insert(rid, nonwild_prefix.clone());
+                        face.primitives
+                            .resource(rid, &nonwild_prefix.name().into())
+                            .await;
+                        rid
+                    }
+                };
+                (rid, wildsuffix).into()
+            },
+            None => wildsuffix.into(),
         }
     }
 

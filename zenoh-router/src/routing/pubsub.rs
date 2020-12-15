@@ -86,87 +86,13 @@ pub async fn declare_subscription(
             let mut propa_sub_info = sub_info.clone();
             propa_sub_info.mode = SubMode::Push;
             let whatami = tables.whatami;
-            for (id, someface) in &mut tables.faces {
+            for someface in &mut tables.faces.values_mut() {
                 if propagate_subscription(whatami, face, someface) {
-                    let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(&res);
-                    match nonwild_prefix {
-                        Some(mut nonwild_prefix) => {
-                            if let Some(mut ctx) = Arc::get_mut_unchecked(&mut nonwild_prefix)
-                                .contexts
-                                .get_mut(id)
-                            {
-                                if let Some(rid) = ctx.local_rid {
-                                    someface
-                                        .primitives
-                                        .subscriber(
-                                            &(rid, wildsuffix).into(),
-                                            &propa_sub_info,
-                                            None,
-                                        )
-                                        .await;
-                                } else if let Some(rid) = ctx.remote_rid {
-                                    someface
-                                        .primitives
-                                        .subscriber(
-                                            &(rid, wildsuffix).into(),
-                                            &propa_sub_info,
-                                            None,
-                                        )
-                                        .await;
-                                } else {
-                                    let rid = someface.get_next_local_id();
-                                    Arc::get_mut_unchecked(&mut ctx).local_rid = Some(rid);
-                                    Arc::get_mut_unchecked(someface)
-                                        .local_mappings
-                                        .insert(rid, nonwild_prefix.clone());
-
-                                    someface
-                                        .primitives
-                                        .resource(rid, &nonwild_prefix.name().into())
-                                        .await;
-                                    someface
-                                        .primitives
-                                        .subscriber(
-                                            &(rid, wildsuffix).into(),
-                                            &propa_sub_info,
-                                            None,
-                                        )
-                                        .await;
-                                }
-                            } else {
-                                let rid = someface.get_next_local_id();
-                                Arc::get_mut_unchecked(&mut nonwild_prefix).contexts.insert(
-                                    *id,
-                                    Arc::new(Context {
-                                        face: someface.clone(),
-                                        local_rid: Some(rid),
-                                        remote_rid: None,
-                                        subs: None,
-                                        qabl: false,
-                                        last_values: HashMap::new(),
-                                    }),
-                                );
-                                Arc::get_mut_unchecked(someface)
-                                    .local_mappings
-                                    .insert(rid, nonwild_prefix.clone());
-
-                                someface
-                                    .primitives
-                                    .resource(rid, &nonwild_prefix.name().into())
-                                    .await;
-                                someface
-                                    .primitives
-                                    .subscriber(&(rid, wildsuffix).into(), &propa_sub_info, None)
-                                    .await;
-                            }
-                        }
-                        None => {
-                            someface
-                                .primitives
-                                .subscriber(&wildsuffix.into(), &propa_sub_info, None)
-                                .await;
-                        }
-                    }
+                    let reskey = Resource::decl_key(&res, someface).await;
+                    someface
+                        .primitives
+                        .subscriber(&reskey, &propa_sub_info, None)
+                        .await;
                 }
             }
             Tables::build_matches_direct_tables(&mut res);
