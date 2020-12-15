@@ -27,7 +27,7 @@ pub(crate) struct Query {
     src_qid: ZInt,
 }
 
-type QueryRoute = HashMap<usize, (Arc<FaceState>, ZInt, String, ZInt)>;
+type QueryRoute = HashMap<usize, (Arc<FaceState>, ResKey, ZInt)>;
 
 pub(crate) fn propagate_queryable(
     whatami: whatami::Type,
@@ -164,14 +164,14 @@ async fn route_query_to_map(
                     for (sid, context) in &mut Arc::get_mut_unchecked(&mut res).contexts {
                         if context.qabl && propagate_query(tables.whatami, face, &context.face) {
                             faces.entry(*sid).or_insert_with(|| {
-                                let (rid, suffix) = Resource::get_best_key(prefix, suffix, *sid);
+                                let reskey = Resource::get_best_key(prefix, suffix, *sid);
                                 let face = Arc::get_mut_unchecked(
                                     &mut Arc::get_mut_unchecked(context).face,
                                 );
                                 face.next_qid += 1;
                                 let qid = face.next_qid;
                                 face.pending_queries.insert(qid, query.clone());
-                                (context.face.clone(), rid, suffix, qid)
+                                (context.face.clone(), reskey, qid)
                             });
                         }
                     }
@@ -208,11 +208,11 @@ pub(crate) async fn route_query(
                 face.primitives.clone().reply_final(qid).await
             }
             _ => {
-                for (outface, rid, suffix, qid) in outfaces.into_values() {
+                for (outface, reskey, qid) in outfaces.into_values() {
                     outface
                         .primitives
                         .query(
-                            &(rid, suffix).into(),
+                            &reskey,
                             predicate,
                             qid,
                             target.clone(),

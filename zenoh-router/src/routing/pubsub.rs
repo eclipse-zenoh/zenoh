@@ -15,9 +15,7 @@ use async_std::sync::Arc;
 use std::collections::HashMap;
 use uhlc::HLC;
 
-use zenoh_protocol::core::{
-    whatami, CongestionControl, Reliability, ResKey, SubInfo, SubMode, ZInt,
-};
+use zenoh_protocol::core::{whatami, CongestionControl, Reliability, SubInfo, SubMode, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
 
@@ -189,12 +187,12 @@ pub async fn route_data(
                             }
                         }
                     }
-                    for (outface, rid, suffix) in res.route.values() {
+                    for (outface, reskey) in res.route.values() {
                         if propagate_data(tables.whatami, face, outface) {
                             outface
                                 .primitives
                                 .data(
-                                    &(*rid, suffix.clone()).into(),
+                                    reskey,
                                     payload.clone(),
                                     Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
                                     congestion_control,
@@ -222,21 +220,21 @@ pub async fn route_data(
                                     }
                                     SubMode::Push => {
                                         faces.entry(*sid).or_insert_with(|| {
-                                            let (rid, suffix) =
+                                            let reskey =
                                                 Resource::get_best_key(prefix, suffix, *sid);
-                                            (context.face.clone(), rid, suffix)
+                                            (context.face.clone(), reskey)
                                         });
                                     }
                                 }
                             }
                         }
                     }
-                    for (outface, rid, suffix) in faces.into_values() {
+                    for (outface, reskey) in faces.into_values() {
                         if propagate_data(tables.whatami, face, &outface) {
                             outface
                                 .primitives
                                 .data(
-                                    &(rid, suffix).into(),
+                                    &reskey,
                                     payload.clone(),
                                     Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
                                     congestion_control,
@@ -302,8 +300,8 @@ pub async fn pull_data(
                     Some(mut ctx) => match &ctx.subs {
                         Some(subinfo) => {
                             for (name, (info, data)) in &ctx.last_values {
-                                let reskey: ResKey =
-                                    Resource::get_best_key(&tables.root_res, name, face.id).into();
+                                let reskey =
+                                    Resource::get_best_key(&tables.root_res, name, face.id);
                                 face.primitives
                                     .data(
                                         &reskey,

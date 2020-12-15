@@ -37,7 +37,7 @@ pub struct Resource {
     pub(super) childs: HashMap<String, Arc<Resource>>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) route: HashMap<usize, (Arc<FaceState>, ZInt, String)>,
+    pub(super) route: HashMap<usize, (Arc<FaceState>, ResKey)>,
 }
 
 impl Resource {
@@ -278,13 +278,13 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key(prefix: &Arc<Resource>, suffix: &str, sid: usize) -> (ZInt, String) {
+    pub fn get_best_key(prefix: &Arc<Resource>, suffix: &str, sid: usize) -> ResKey {
         fn get_best_key_(
             prefix: &Arc<Resource>,
             suffix: &str,
             sid: usize,
             checkchilds: bool,
-        ) -> (ZInt, String) {
+        ) -> ResKey {
             if checkchilds && !suffix.is_empty() {
                 let (chunk, rest) = Resource::fst_chunk(suffix);
                 if let Some(child) = prefix.childs.get(chunk) {
@@ -293,16 +293,16 @@ impl Resource {
             }
             if let Some(ctx) = prefix.contexts.get(&sid) {
                 if let Some(rid) = ctx.local_rid {
-                    return (rid, suffix.to_string());
+                    return (rid, suffix).into();
                 } else if let Some(rid) = ctx.remote_rid {
-                    return (rid, suffix.to_string());
+                    return (rid, suffix).into();
                 }
             }
             match &prefix.parent {
                 Some(parent) => {
                     get_best_key_(&parent, &[&prefix.suffix, suffix].concat(), sid, false)
                 }
-                None => (0, suffix.to_string()),
+                None => (0, suffix).into(),
             }
         }
         get_best_key_(prefix, suffix, sid, true)

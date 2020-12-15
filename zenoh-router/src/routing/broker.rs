@@ -237,8 +237,8 @@ impl Tables {
             for (fid, context) in &match_.upgrade().unwrap().contexts {
                 if let Some(subinfo) = &context.subs {
                     if SubMode::Push == subinfo.mode {
-                        let (rid, suffix) = Resource::get_best_key(res, "", *fid);
-                        dests.insert(*fid, (context.face.clone(), rid, suffix));
+                        let reskey = Resource::get_best_key(res, "", *fid);
+                        dests.insert(*fid, (context.face.clone(), reskey));
                     }
                 }
             }
