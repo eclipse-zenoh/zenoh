@@ -493,26 +493,24 @@ impl TransmissionPipeline {
 
 #[cfg(test)]
 mod tests {
-    use async_std::prelude::*;
-    use async_std::sync::{Arc, Mutex};
-    use async_std::task;
-    use std::convert::TryFrom;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::time::Duration;
-
+    use super::*;
     use crate::core::{CongestionControl, Reliability, ResKey, ZInt};
     use crate::io::RBuf;
     use crate::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
     use crate::session::defaults::{
         QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION,
     };
-
-    use super::*;
+    use async_std::prelude::*;
+    use async_std::sync::{Arc, Mutex};
+    use async_std::task;
+    use std::convert::TryFrom;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
 
     #[test]
-    fn tx_queue() {
+    fn tx_pipeline() {
         async fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
@@ -637,9 +635,9 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn thr_queue() {
+    fn tx_pipeline_thr() {
         // Queue
-        let batch_size = *SESSION_BATCH_SIZE;
+        let batch_size = 65_537;
         let is_streamed = true;
         let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
             0,
@@ -660,34 +658,46 @@ mod tests {
         let c_pipeline = pipeline.clone();
         task::spawn(async move {
             loop {
-                let payload_size = 1_024;
-                // Send reliable messages
-                let key = ResKey::RName("test".to_string());
-                let payload = RBuf::from(vec![0u8; payload_size]);
-                let reliability = Reliability::Reliable;
-                let congestion_control = CongestionControl::Block;
-                let data_info = None;
-                let reply_context = None;
-                let attachment = None;
+                let payload_sizes: [usize; 9] = [
+                    8, 1_024, 4_096, 8_192, 16_384, 32_768, 65_500, 262_144, 1_048_576,
+                ];
+                for size in payload_sizes.iter() {
+                    println!(">>> Throughput with {} bytes", *size);
+                    let iterations: usize = 10;
+                    let duration = Duration::from_secs(1);
+                    for _ in 0..iterations {
+                        let start = Instant::now();
+                        while start.elapsed() < duration {
+                            // Send reliable messages
+                            let key = ResKey::RName("test".to_string());
+                            let payload = RBuf::from(vec![0u8; *size]);
+                            let reliability = Reliability::Reliable;
+                            let congestion_control = CongestionControl::Block;
+                            let data_info = None;
+                            let reply_context = None;
+                            let attachment = None;
 
-                let message = ZenohMessage::make_data(
-                    key,
-                    payload,
-                    reliability,
-                    congestion_control,
-                    data_info,
-                    reply_context,
-                    attachment,
-                );
+                            let message = ZenohMessage::make_data(
+                                key,
+                                payload,
+                                reliability,
+                                congestion_control,
+                                data_info,
+                                reply_context,
+                                attachment,
+                            );
 
-                c_pipeline
-                    .push_zenoh_message(message, QUEUE_PRIO_DATA)
-                    .await;
+                            c_pipeline
+                                .push_zenoh_message(message, QUEUE_PRIO_DATA)
+                                .await;
+                        }
+                    }
+                }
             }
         });
 
-        let c_count = count.clone();
         let c_pipeline = pipeline.clone();
+        let c_count = count.clone();
         task::spawn(async move {
             loop {
                 let (batch, priority) = c_pipeline.pull().await;
@@ -699,8 +709,9 @@ mod tests {
         task::block_on(async {
             loop {
                 task::sleep(Duration::from_secs(1)).await;
-                let c = count.swap(0, Ordering::AcqRel);
-                println!("{} bits/s", 8 * c);
+                let received = count.swap(0, Ordering::AcqRel);
+                let thr = (8.0 * received as f64) / 1_000_000_000.0;
+                println!("{:.6} Gbps", thr);
             }
         });
     }
