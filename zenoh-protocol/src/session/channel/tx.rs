@@ -654,43 +654,44 @@ mod tests {
             sn_best_effort,
         ));
         let count = Arc::new(AtomicUsize::new(0));
+        let size = Arc::new(AtomicUsize::new(0));
 
         let c_pipeline = pipeline.clone();
+        let c_size = size.clone();
         task::spawn(async move {
             loop {
-                let payload_sizes: [usize; 9] = [
-                    8, 1_024, 4_096, 8_192, 16_384, 32_768, 65_500, 262_144, 1_048_576,
+                let payload_sizes: [usize; 16] = [
+                    8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
+                    65_536, 262_144, 1_048_576,
                 ];
                 for size in payload_sizes.iter() {
-                    println!(">>> Throughput with {} bytes", *size);
-                    let iterations: usize = 10;
-                    let duration = Duration::from_secs(1);
-                    for _ in 0..iterations {
-                        let start = Instant::now();
-                        while start.elapsed() < duration {
-                            // Send reliable messages
-                            let key = ResKey::RName("test".to_string());
-                            let payload = RBuf::from(vec![0u8; *size]);
-                            let reliability = Reliability::Reliable;
-                            let congestion_control = CongestionControl::Block;
-                            let data_info = None;
-                            let reply_context = None;
-                            let attachment = None;
+                    c_size.store(*size, Ordering::Release);
 
-                            let message = ZenohMessage::make_data(
-                                key,
-                                payload,
-                                reliability,
-                                congestion_control,
-                                data_info,
-                                reply_context,
-                                attachment,
-                            );
+                    let duration = Duration::from_secs(6);
+                    let start = Instant::now();
+                    while start.elapsed() < duration {
+                        // Send reliable messages
+                        let key = ResKey::RName("/pipeline/thr".to_string());
+                        let payload = RBuf::from(vec![0u8; *size]);
+                        let reliability = Reliability::Reliable;
+                        let congestion_control = CongestionControl::Block;
+                        let data_info = None;
+                        let reply_context = None;
+                        let attachment = None;
 
-                            c_pipeline
-                                .push_zenoh_message(message, QUEUE_PRIO_DATA)
-                                .await;
-                        }
+                        let message = ZenohMessage::make_data(
+                            key,
+                            payload,
+                            reliability,
+                            congestion_control,
+                            data_info,
+                            reply_context,
+                            attachment,
+                        );
+
+                        c_pipeline
+                            .push_zenoh_message(message, QUEUE_PRIO_DATA)
+                            .await;
                     }
                 }
             }
@@ -707,11 +708,16 @@ mod tests {
         });
 
         task::block_on(async {
+            let mut prev_size: usize = usize::MAX;
             loop {
-                task::sleep(Duration::from_secs(1)).await;
                 let received = count.swap(0, Ordering::AcqRel);
-                let thr = (8.0 * received as f64) / 1_000_000_000.0;
-                println!("{:.6} Gbps", thr);
+                let current: usize = size.load(Ordering::Acquire);
+                if current == prev_size {
+                    let thr = (8.0 * received as f64) / 1_000_000_000.0;
+                    println!("{} bytes {:.6} Gbps", current, thr);
+                }
+                prev_size = current;
+                task::sleep(Duration::from_secs(1)).await;
             }
         });
     }

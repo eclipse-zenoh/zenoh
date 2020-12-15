@@ -50,19 +50,19 @@ fn criterion_benchmark(c: &mut Criterion) {
         );
 
         let mut wbuf = WBuf::new(batch_size, true);
-        let mut nums = 0;
+        let mut num = 0;
         while wbuf.write_zenoh_message(&msg) {
-            nums += 1;
+            num += 1;
         }
         drop(wbuf);
 
         c.bench_function(
-            format!("frame creation {} {} {}", batch_size, p, nums).as_str(),
+            format!("frame_creation {} {} {}", batch_size, p, num).as_str(),
             |b| {
                 let mut wbuf = WBuf::new(batch_size, true);
                 b.iter(|| {
                     wbuf.write_frame_header(channel, 1, None, None);
-                    for _ in 0..nums {
+                    for _ in 0..num {
                         let reliability = Reliability::Reliable;
                         let congestion_control = CongestionControl::Block;
                         let res_key = ResKey::RIdWithSuffix(18, String::from("/frame/bench"));
@@ -86,12 +86,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         );
 
         c.bench_function(
-            format!("frame encoding contigous {} {} {}", batch_size, p, nums).as_str(),
+            format!("frame_encoding_yes_contigous {} {} {}", batch_size, p, num).as_str(),
             |b| {
                 let mut wbuf = WBuf::new(batch_size, true);
                 b.iter(|| {
                     wbuf.write_frame_header(channel, 1, None, None);
-                    for _ in 0..nums {
+                    for _ in 0..num {
                         wbuf.write_zenoh_message(&msg);
                     }
                 })
@@ -99,12 +99,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         );
 
         c.bench_function(
-            format!("frame encoding non-contigous {} {} {}", batch_size, p, nums).as_str(),
+            format!("frame_encoding_no_contigous {} {} {}", batch_size, p, num).as_str(),
             |b| {
                 let mut wbuf = WBuf::new(*p, false);
                 b.iter(|| {
                     wbuf.write_frame_header(channel, 1, None, None);
-                    for _ in 0..nums {
+                    for _ in 0..num {
                         wbuf.write_zenoh_message(&msg);
                     }
                 })
@@ -112,12 +112,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         );
 
         c.bench_function(
-            format!("frame decoding contigous {} {} {}", batch_size, p, nums).as_str(),
+            format!("frame_decoding_yes_contigous {} {} {}", batch_size, p, num).as_str(),
             |b| {
                 let mut wbuf = WBuf::new(batch_size, true);
                 wbuf.write_frame_header(channel, 1, None, None);
 
-                for _ in 0..nums {
+                for _ in 0..num {
                     wbuf.write_zenoh_message(&msg);
                 }
 
@@ -130,12 +130,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         );
 
         c.bench_function(
-            format!("frame decoding non-contigous {} {} {}", batch_size, p, nums).as_str(),
+            format!("frame_decoding_no_contigous {} {} {}", batch_size, p, num).as_str(),
             |b| {
                 let mut wbuf = WBuf::new(*p, false);
                 wbuf.write_frame_header(channel, 1, None, None);
 
-                for _ in 0..nums {
+                for _ in 0..num {
                     wbuf.write_zenoh_message(&msg);
                 }
 
