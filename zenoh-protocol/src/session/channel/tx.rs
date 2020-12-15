@@ -637,7 +637,7 @@ mod tests {
     #[ignore]
     fn tx_pipeline_thr() {
         // Queue
-        let batch_size = 65_537;
+        let batch_size = *SESSION_BATCH_SIZE;
         let is_streamed = true;
         let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
             0,
