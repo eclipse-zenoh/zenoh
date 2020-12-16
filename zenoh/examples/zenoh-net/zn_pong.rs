@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::future;
 use async_std::stream::StreamExt;
 use clap::{App, Arg};
 use zenoh::net::ResKey::*;
@@ -27,6 +26,12 @@ async fn main() {
 
     let session = open(config.into()).await.unwrap();
 
+    // The resource to read the data from
+    let reskey_ping = RId(session
+        .declare_resource(&RName("/test/ping".to_string()))
+        .await
+        .unwrap());
+
     // The resource to echo the data back
     let reskey_pong = RId(session
         .declare_resource(&RName("/test/pong".to_string()))
@@ -34,21 +39,16 @@ async fn main() {
         .unwrap());
     let _publ = session.declare_publisher(&reskey_pong).await.unwrap();
 
-    // The resource to read the data from
-    let reskey_ping = RId(session
-        .declare_resource(&RName("/test/ping".to_string()))
-        .await
-        .unwrap());
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
         period: None,
     };
-
     let mut sub = session
         .declare_subscriber(&reskey_ping, &sub_info)
         .await
         .unwrap();
+
     while let Some(sample) = sub.stream().next().await {
         session
             .write_ext(
@@ -61,9 +61,6 @@ async fn main() {
             .await
             .unwrap();
     }
-
-    // Stop forever
-    future::pending::<()>().await;
 }
 
 fn parse_args() -> Properties {

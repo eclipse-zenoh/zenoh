@@ -11,12 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::stream::StreamExt;
-use async_std::sync::{Arc, Barrier, Mutex};
-use async_std::task;
 use clap::{App, Arg};
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use futures::prelude::*;
+use std::time::Instant;
 use zenoh::net::ResKey::*;
 use zenoh::net::*;
 use zenoh::Properties;
@@ -26,73 +23,40 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, size, interval) = parse_args();
-
+    let (config, size) = parse_args();
     let session = open(config.into()).await.unwrap();
-    let session = Arc::new(session);
-
-    // The hashmap with the pings
-    let pending = Arc::new(Mutex::new(HashMap::<u64, Instant>::new()));
-    let barrier = Arc::new(Barrier::new(2));
-
-    let c_pending = pending.clone();
-    let c_barrier = barrier.clone();
-    let c_session = session.clone();
-    task::spawn(async move {
-        // The resource to wait the response back
-        let reskey_pong = RId(c_session
-            .declare_resource(&RName("/test/pong".to_string()))
-            .await
-            .unwrap());
-
-        let sub_info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        };
-        let mut sub = c_session
-            .declare_subscriber(&reskey_pong, &sub_info)
-            .await
-            .unwrap();
-
-        // Wait for the both publishers and subscribers to be declared
-        c_barrier.wait().await;
-
-        while let Some(mut sample) = sub.stream().next().await {
-            let mut count_bytes = [0u8; 8];
-            sample.payload.read_bytes(&mut count_bytes).unwrap();
-            let count = u64::from_le_bytes(count_bytes);
-            let instant = c_pending.lock().await.remove(&count).unwrap();
-            println!(
-                "{} bytes: seq={} time={:?}",
-                sample.payload.len(),
-                count,
-                instant.elapsed()
-            );
-        }
-    });
 
     // The resource to publish data on
     let reskey_ping = RId(session
         .declare_resource(&RName("/test/ping".to_string()))
         .await
         .unwrap());
-    let _publ = session.declare_publisher(&reskey_ping).await.unwrap();
 
-    // Wait for the both publishers and subscribers to be declared
-    barrier.wait().await;
+    // The resource to wait the response back
+    let reskey_pong = RId(session
+        .declare_resource(&RName("/test/pong".to_string()))
+        .await
+        .unwrap());
 
-    let payload = vec![0u8; size - 8];
+    let sub_info = SubInfo {
+        reliability: Reliability::Reliable,
+        mode: SubMode::Push,
+        period: None,
+    };
+    let mut sub = session
+        .declare_subscriber(&reskey_pong, &sub_info)
+        .await
+        .unwrap();
+
+    let data: RBuf = (0usize..size)
+        .map(|i| (i % 10) as u8)
+        .collect::<Vec<u8>>()
+        .into();
+
     let mut count: u64 = 0;
     loop {
-        let mut data: WBuf = WBuf::new(size, true);
-        let count_bytes: [u8; 8] = count.to_le_bytes();
-        data.write_bytes(&count_bytes);
-        data.write_bytes(&payload);
-
-        let data: RBuf = data.into();
-
-        pending.lock().await.insert(count, Instant::now());
+        let data = data.clone();
+        let write_time = Instant::now();
         session
             .write_ext(
                 &reskey_ping,
@@ -104,12 +68,20 @@ async fn main() {
             .await
             .unwrap();
 
-        task::sleep(Duration::from_secs_f64(interval)).await;
+        if let Some(sample) = sub.stream().next().await {
+            println!(
+                "{} bytes: seq={} time={:?}µs",
+                sample.payload.len(),
+                count,
+                write_time.elapsed().as_micros(),
+            );
+        }
+
         count += 1;
     }
 }
 
-fn parse_args() -> (Properties, usize, f64) {
+fn parse_args() -> (Properties, usize) {
     let args = App::new("zenoh-net throughput sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
@@ -122,10 +94,6 @@ fn parse_args() -> (Properties, usize, f64) {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
-        .arg(
-            Arg::from_usage("-i, --interval=[number] 'Interval in seconds between data messages.'")
-                .default_value("1"),
-        )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
@@ -144,8 +112,7 @@ fn parse_args() -> (Properties, usize, f64) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let interval: f64 = args.value_of("interval").unwrap().parse().unwrap();
     let size: usize = args.value_of("PAYLOAD_SIZE").unwrap().parse().unwrap();
 
-    (config, size, interval)
+    (config, size)
 }
