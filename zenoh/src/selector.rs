@@ -30,7 +30,7 @@ pub const PROP_STOPTIME: &str = "stoptime";
 ///
 /// Structure of a selector:
 /// ```text
-/// /s1/s2/.../sn?x>1&y<2&...&z=4(p1=v1;p2=v2;...;pn=vn)#a;b;x;y;...;z
+/// /s1/s2/.../sn?x>1&y<2&...&z=4(p1=v1;p2=v2;...;pn=vn)[a;b;x;y;...;z]
 /// |           | |             | |                   |  |           |
 /// |-- expr ---| |--- filter --| |---- properties ---|  |--fragment-|
 /// ```
@@ -51,13 +51,13 @@ pub struct Selector {
     /// the path expression part of this Selector (before `?` character).
     pub path_expr: PathExpr,
     /// the predicate part of this Selector, as used in zenoh-net.
-    /// I.e. all characters starting from `?` or '#' (or an empty String if no such character).
+    /// I.e. all characters starting from `?`.
     pub predicate: String,
-    /// the filter part of this Selector, if any (all characters after `?` and before `(` or `#`)
+    /// the filter part of this Selector, if any (all characters after `?` and before `(` or `[`)
     pub filter: Option<String>,
-    /// the properties part of this Selector (all characters between parenthesis and after `?`)
+    /// the properties part of this Selector (all characters between ``( )`` and after `?`)
     pub properties: Properties,
-    /// the fragment part of this Selector, if any (all characters after `#`)
+    /// the fragment part of this Selector, if any (all characters between ``[ ]`` and after `?`)
     pub fragment: Option<String>,
 }
 
@@ -67,13 +67,13 @@ impl Selector {
     pub(crate) fn new(res_name: &str, predicate: &str) -> ZResult<Selector> {
         let path_expr: PathExpr = PathExpr::try_from(res_name)?;
 
-        const REGEX_PROJECTION: &str = r"[^\[\]\(\)#]+";
+        const REGEX_PROJECTION: &str = r"[^\[\]\(\)\[\]]+";
         const REGEX_PROPERTIES: &str = ".*";
         const REGEX_FRAGMENT: &str = ".*";
 
         lazy_static! {
             static ref RE: Regex = Regex::new(&format!(
-                "(?:\\?(?P<proj>{})?(?:\\((?P<prop>{})\\))?)?(?:#(?P<frag>{}))?",
+                "(?:\\?(?P<proj>{})?(?:\\((?P<prop>{})\\))?)?(?:\\[(?P<frag>{})\\])?",
                 REGEX_PROJECTION, REGEX_PROPERTIES, REGEX_FRAGMENT
             ))
             .unwrap();
@@ -148,7 +148,7 @@ impl fmt::Display for Selector {
 impl TryFrom<&str> for Selector {
     type Error = ZError;
     fn try_from(s: &str) -> ZResult<Selector> {
-        let (path_expr, predicate) = if let Some(i) = s.find(|c| c == '?' || c == '#') {
+        let (path_expr, predicate) = if let Some(i) = s.find(|c| c == '?') {
             s.split_at(i)
         } else {
             (s, "")
@@ -212,10 +212,10 @@ mod tests {
         );
 
         assert_eq!(
-            Selector::try_from("/path/**#frag").unwrap(),
+            Selector::try_from("/path/**?[frag]").unwrap(),
             Selector {
                 path_expr: "/path/**".try_into().unwrap(),
-                predicate: "#frag".into(),
+                predicate: "?[frag]".into(),
                 filter: None,
                 properties: Properties::default(),
                 fragment: Some("frag".into()),
@@ -234,10 +234,10 @@ mod tests {
         );
 
         assert_eq!(
-            Selector::try_from("/path/**?proj#frag").unwrap(),
+            Selector::try_from("/path/**?proj[frag]").unwrap(),
             Selector {
                 path_expr: "/path/**".try_into().unwrap(),
-                predicate: "?proj#frag".into(),
+                predicate: "?proj[frag]".into(),
                 filter: Some("proj".into()),
                 properties: Properties::default(),
                 fragment: Some("frag".into()),
@@ -245,10 +245,10 @@ mod tests {
         );
 
         assert_eq!(
-            Selector::try_from("/path/**?(prop)#frag").unwrap(),
+            Selector::try_from("/path/**?(prop)[frag]").unwrap(),
             Selector {
                 path_expr: "/path/**".try_into().unwrap(),
-                predicate: "?(prop)#frag".into(),
+                predicate: "?(prop)[frag]".into(),
                 filter: None,
                 properties: Properties::from(&[("prop", "")][..]),
                 fragment: Some("frag".into()),
@@ -256,10 +256,10 @@ mod tests {
         );
 
         assert_eq!(
-            Selector::try_from("/path/**?proj(prop)#frag").unwrap(),
+            Selector::try_from("/path/**?proj(prop)[frag]").unwrap(),
             Selector {
                 path_expr: "/path/**".try_into().unwrap(),
-                predicate: "?proj(prop)#frag".into(),
+                predicate: "?proj(prop)[frag]".into(),
                 filter: Some("proj".into()),
                 properties: Properties::from(&[("prop", "")][..]),
                 fragment: Some("frag".into()),
