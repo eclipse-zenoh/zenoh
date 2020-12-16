@@ -272,6 +272,11 @@ impl StageIn {
     }
 }
 
+enum OptionPullStageOut {
+    None(bool),
+    Some(SerializationBatch),
+}
+
 struct StageOut {
     inner: VecDeque<SerializationBatch>,
     stage_in: Option<Arc<Mutex<StageIn>>>,
@@ -294,21 +299,24 @@ impl StageOut {
         self.inner.push_back(batch);
     }
 
-    fn try_pull(&mut self) -> Option<SerializationBatch> {
+    fn try_pull(&mut self) -> OptionPullStageOut {
         if let Some(mut batch) = self.inner.pop_front() {
             batch.write_len();
-            return Some(batch);
+            OptionPullStageOut::Some(batch)
         } else {
             // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
             if let Some(mut in_guard) = self.stage_in.as_ref().unwrap().try_lock() {
                 if let Some(mut batch) = in_guard.try_pull() {
                     batch.write_len();
                     // Send the incomplete batch
-                    return Some(batch);
+                    OptionPullStageOut::Some(batch)
+                } else {
+                    OptionPullStageOut::None(true)
                 }
+            } else {
+                OptionPullStageOut::None(false)
             }
         }
-        None
     }
 }
 
@@ -453,12 +461,23 @@ impl TransmissionPipeline {
     pub(super) async fn pull(&self) -> (SerializationBatch, usize) {
         let mut out_guard = zasynclock!(self.stage_out);
         loop {
+            let mut is_pipeline_really_empty = true;
             for priority in 0usize..out_guard.len() {
-                if let Some(batch) = out_guard[priority].try_pull() {
-                    return (batch, priority);
+                match out_guard[priority].try_pull() {
+                    OptionPullStageOut::Some(batch) => return (batch, priority),
+                    OptionPullStageOut::None(is_priority_really_empty) => {
+                        is_pipeline_really_empty =
+                            is_pipeline_really_empty && is_priority_really_empty;
+                    }
                 }
             }
-            out_guard = self.cond_canpull.wait(out_guard).await;
+            if is_pipeline_really_empty {
+                out_guard = self.cond_canpull.wait(out_guard).await;
+            } else {
+                drop(out_guard);
+                task::yield_now().await;
+                out_guard = zasynclock!(self.stage_out);
+            }
         }
     }
 
@@ -473,8 +492,9 @@ impl TransmissionPipeline {
         // First try to drain the state OUT pipeline
         let mut out_guard = zasynclock!(self.stage_out);
         for priority in 0usize..out_guard.len() {
-            if let Some(batch) = out_guard[priority].try_pull() {
-                return Some(batch);
+            match out_guard[priority].try_pull() {
+                OptionPullStageOut::Some(batch) => return Some(batch),
+                OptionPullStageOut::None(_) => {}
             }
         }
         drop(out_guard);
