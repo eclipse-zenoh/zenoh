@@ -297,6 +297,11 @@ impl CircularBatchIn {
     }
 }
 
+enum OptionPullBatchOut {
+    None(bool),
+    Some(SerializationBatch),
+}
+
 struct CircularBatchOut {
     inner: VecDeque<SerializationBatch>,
     state_in: Option<Arc<Mutex<CircularBatchIn>>>,
@@ -319,21 +324,24 @@ impl CircularBatchOut {
         self.inner.push_back(batch);
     }
 
-    fn pull(&mut self) -> Option<SerializationBatch> {
+    fn pull(&mut self) -> OptionPullBatchOut {
         if let Some(mut batch) = self.inner.pop_front() {
             batch.write_len();
-            return Some(batch);
+            OptionPullBatchOut::Some(batch)
         } else {
             // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
             if let Some(mut guard) = self.state_in.as_ref().unwrap().try_lock() {
                 if let Some(mut batch) = guard.pull() {
                     batch.write_len();
                     // Send the incomplete batch
-                    return Some(batch);
+                    OptionPullBatchOut::Some(batch)
+                } else {
+                    OptionPullBatchOut::None(true)
                 }
+            } else {
+                OptionPullBatchOut::None(false)
             }
         }
-        None
     }
 }
 
@@ -495,13 +503,22 @@ impl TransmissionQueue {
 
     pub(super) async fn pull(&self) -> (SerializationBatch, usize) {
         loop {
+            let mut is_queue_really_empty = true;
             let mut guard = zasynclock!(self.state_out);
             for priority in 0usize..guard.len() {
-                if let Some(batch) = guard[priority].pull() {
-                    return (batch, priority);
+                match guard[priority].pull() {
+                    OptionPullBatchOut::Some(batch) => return (batch, priority),
+                    OptionPullBatchOut::None(is_priority_really_empty) => {
+                        is_queue_really_empty = is_queue_really_empty && is_priority_really_empty;
+                    }
                 }
             }
-            self.not_empty.wait(guard).await;
+            if is_queue_really_empty {
+                self.not_empty.wait(guard).await;
+            } else {
+                drop(guard);
+                task::yield_now().await;
+            }
         }
     }
 
@@ -509,8 +526,9 @@ impl TransmissionQueue {
         // First try to drain the state OUT pipeline
         let mut guard = zasynclock!(self.state_out);
         for priority in 0usize..guard.len() {
-            if let Some(batch) = guard[priority].pull() {
-                return Some(batch);
+            match guard[priority].pull() {
+                OptionPullBatchOut::Some(batch) => return Some(batch),
+                OptionPullBatchOut::None(_) => {}
             }
         }
         drop(guard);
