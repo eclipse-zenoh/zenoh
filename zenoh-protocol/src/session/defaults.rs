@@ -59,4 +59,7 @@ zconfigurable! {
     pub static ref QUEUE_SIZE_CTRL: usize = 1;
     pub static ref QUEUE_SIZE_RETX: usize = 1;
     pub static ref QUEUE_SIZE_DATA: usize = 4;
+
+    // The default backoff time in microseconds to allow the
+    pub static ref QUEUE_PULL_BACKOFF: u64 = 1;
 }

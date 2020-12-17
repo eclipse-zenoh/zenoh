@@ -44,8 +44,6 @@ async fn consume_task(
             }
             // Reinsert the batch into the queue
             queue.refill(batch, index).await;
-            // Yield now to allow the queue to fill
-            task::yield_now().await;
         }
     };
     let _ = consume.race(receiver.recv()).await;

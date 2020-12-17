@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::zasynclock;
 use async_std::sync::MutexGuard;
 use event_listener::Event;
 
@@ -42,24 +41,21 @@ impl Condition {
 
     /// Waits for the condition to be notified
     #[inline]
-    #[allow(clippy::needless_lifetimes)]
-    pub async fn wait<'a, T>(&self, guard: MutexGuard<'a, T>) -> MutexGuard<'a, T> {
-        let mutex = MutexGuard::source(&guard);
+    pub async fn wait<T>(&self, guard: MutexGuard<'_, T>) {
         let listener = self.event.listen();
         drop(guard);
-
         listener.await;
-
-        zasynclock!(mutex)
     }
 
+    /// Notifies one pending listener
     #[inline]
     pub fn notify_one(&self) {
-        self.event.notify_additional(1);
+        self.event.notify_additional_relaxed(1);
     }
 
+    /// Notifies all pending listeners
     #[inline]
     pub fn notify_all(&self) {
-        self.event.notify_additional(usize::MAX);
+        self.event.notify_additional_relaxed(usize::MAX);
     }
 }
