@@ -19,9 +19,9 @@ use zenoh_protocol::core::{whatami, CongestionControl, Reliability, SubInfo, Sub
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
 
-use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
 use crate::routing::resource::{Context, Resource};
+use crate::routing::router::Tables;
 
 pub(crate) fn propagate_subscription(
     whatami: whatami::Type,

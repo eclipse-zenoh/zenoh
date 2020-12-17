@@ -18,9 +18,9 @@ use zenoh_protocol::core::{whatami, PeerId, QueryConsolidation, QueryTarget, Res
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
 
-use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
 use crate::routing::resource::{Context, Resource};
+use crate::routing::router::Tables;
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,

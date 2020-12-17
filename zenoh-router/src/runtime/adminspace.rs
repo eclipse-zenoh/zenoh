@@ -147,6 +147,9 @@ impl AdminSpace {
                     .read()
                     .await
                     .router
+                    .tables
+                    .read()
+                    .await
                     .routers_net
                     .as_ref()
                     .unwrap()
@@ -166,6 +169,9 @@ impl AdminSpace {
                     .read()
                     .await
                     .router
+                    .tables
+                    .read()
+                    .await
                     .peers_net
                     .as_ref()
                     .unwrap()

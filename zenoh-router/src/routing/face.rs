@@ -15,7 +15,7 @@ use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
-use crate::routing::broker::*;
+use crate::routing::router::*;
 use zenoh_protocol::core::{
     CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo,
     WhatAmI, ZInt,
@@ -230,6 +230,6 @@ impl Primitives for Face {
     }
 
     async fn close(&self) {
-        Tables::close_face(&self.tables, &Arc::downgrade(&self.state)).await;
+        self.tables.write().await.close_face(&Arc::downgrade(&self.state)).await;
     }
 }

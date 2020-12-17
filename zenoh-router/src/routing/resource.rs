@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
+use crate::routing::router::Tables;
 use async_std::sync::{Arc, Weak};
 use std::collections::HashMap;
 use zenoh_protocol::core::rname;

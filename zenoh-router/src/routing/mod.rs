@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod broker;
 pub mod face;
+pub mod network;
 pub mod pubsub;
 pub mod queries;
 pub mod resource;
