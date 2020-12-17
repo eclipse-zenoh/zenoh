@@ -171,3 +171,23 @@ bench = false
 name = "util_credit_queue_batching"
 test = false
 bench = false
+
+[[bin]]
+name = "zn_ping"
+test = false
+bench = false
+
+[[bin]]
+name = "zn_pong"
+test = false
+bench = false
+
+[[bin]]
+name = "z_ping"
+test = false
+bench = false
+
+[[bin]]
+name = "z_pong"
+test = false
+bench = false
