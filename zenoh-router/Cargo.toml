@@ -54,6 +54,9 @@ zenoh-util =  { version = "0.5.0-beta.5", path = "../zenoh-util" }
 version = "=1.6.5"
 features = ["unstable"]
 
+[build-dependencies]
+rustc_version = "0.3"
+
 [dev-dependencies]
 criterion = "0.3.3"
 

@@ -21,6 +21,11 @@ use zenoh_util::collections::Properties;
 use zenoh_util::LibLoader;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
+
+lazy_static::lazy_static!(
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
+);
+
 const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
 
 fn get_plugin_search_dirs_from_args() -> Vec<String> {
@@ -68,6 +73,7 @@ fn main() {
 
         let app = App::new("The zenoh router")
             .version(GIT_VERSION)
+            .long_version(LONG_VERSION.as_str())
             .arg(Arg::from_usage(
                 "-c, --config=[FILE] \
              'The configuration file.'",
@@ -194,7 +200,7 @@ fn main() {
 
         plugins_mgr.start_plugins(&runtime, &args).await;
 
-        AdminSpace::start(&runtime, plugins_mgr).await;
+        AdminSpace::start(&runtime, plugins_mgr, LONG_VERSION.clone()).await;
 
         future::pending::<()>().await;
     });
