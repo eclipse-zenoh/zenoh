@@ -213,7 +213,11 @@ impl Router {
     ) -> Arc<dyn Primitives + Send + Sync> {
         Arc::new(Face {
             tables: self.tables.clone(),
-            state: self.tables.write().await.open_face(whatami::CLIENT, primitives)
+            state: self
+                .tables
+                .write()
+                .await
+                .open_face(whatami::CLIENT, primitives)
                 .await
                 .upgrade()
                 .unwrap(),
@@ -242,13 +246,11 @@ impl SessionHandler for Router {
                 network.clone(),
                 DeMux::new(Face {
                     tables: self.tables.clone(),
-                    state: tables.open_face(
-                        whatami,
-                        Arc::new(Mux::new(Arc::new(session.clone()))),
-                    )
-                    .await
-                    .upgrade()
-                    .unwrap(),
+                    state: tables
+                        .open_face(whatami, Arc::new(Mux::new(Arc::new(session.clone()))))
+                        .await
+                        .upgrade()
+                        .unwrap(),
                 }),
             ));
             network.write().await.add_link(session.clone()).await;

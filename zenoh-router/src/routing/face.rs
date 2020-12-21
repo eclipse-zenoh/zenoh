@@ -230,6 +230,10 @@ impl Primitives for Face {
     }
 
     async fn close(&self) {
-        self.tables.write().await.close_face(&Arc::downgrade(&self.state)).await;
+        self.tables
+            .write()
+            .await
+            .close_face(&Arc::downgrade(&self.state))
+            .await;
     }
 }

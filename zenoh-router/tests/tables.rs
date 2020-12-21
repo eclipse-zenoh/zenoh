@@ -166,16 +166,9 @@ fn clean_test() {
         assert!(face0.upgrade().is_some());
 
         // --------------
-        declare_resource(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
-            1,
-            0,
-            "/todrop1",
-        )
-        .await;
-        let optres1 = Resource::get_resource(&tables._get_root(), "/todrop1")
-            .map(|res| Arc::downgrade(&res));
+        declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1").await;
+        let optres1 =
+            Resource::get_resource(&tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
         assert!(optres1.is_some());
         let res1 = optres1.unwrap();
         assert!(res1.upgrade().is_some());
@@ -194,16 +187,9 @@ fn clean_test() {
         let res2 = optres2.unwrap();
         assert!(res2.upgrade().is_some());
 
-        declare_resource(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
-            3,
-            0,
-            "/**",
-        )
-        .await;
-        let optres3 = Resource::get_resource(&tables._get_root(), "/**")
-            .map(|res| Arc::downgrade(&res));
+        declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/**").await;
+        let optres3 =
+            Resource::get_resource(&tables._get_root(), "/**").map(|res| Arc::downgrade(&res));
         assert!(optres3.is_some());
         let res3 = optres3.unwrap();
         assert!(res3.upgrade().is_some());
@@ -224,16 +210,9 @@ fn clean_test() {
         assert!(!res3.upgrade().is_some());
 
         // --------------
-        declare_resource(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
-            1,
-            0,
-            "/todrop1",
-        )
-        .await;
-        let optres1 = Resource::get_resource(&tables._get_root(), "/todrop1")
-            .map(|res| Arc::downgrade(&res));
+        declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1").await;
+        let optres1 =
+            Resource::get_resource(&tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
         assert!(optres1.is_some());
         let res1 = optres1.unwrap();
         assert!(res1.upgrade().is_some());
@@ -272,13 +251,7 @@ fn clean_test() {
         let res3 = optres3.unwrap();
         assert!(res3.upgrade().is_some());
 
-        undeclare_subscription(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
-            1,
-            "/todrop12",
-        )
-        .await;
+        undeclare_subscription(&mut tables, &mut face0.upgrade().unwrap(), 1, "/todrop12").await;
         assert!(res1.upgrade().is_some());
         assert!(res2.upgrade().is_some());
         assert!(!res3.upgrade().is_some());
@@ -300,14 +273,7 @@ fn clean_test() {
         assert!(!res3.upgrade().is_some());
 
         // --------------
-        declare_resource(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
-            2,
-            0,
-            "/todrop3",
-        )
-        .await;
+        declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 2, 0, "/todrop3").await;
         declare_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
@@ -316,41 +282,21 @@ fn clean_test() {
             &sub_info,
         )
         .await;
-        let optres1 = Resource::get_resource(&tables._get_root(), "/todrop3")
-            .map(|res| Arc::downgrade(&res));
+        let optres1 =
+            Resource::get_resource(&tables._get_root(), "/todrop3").map(|res| Arc::downgrade(&res));
         assert!(optres1.is_some());
         let res1 = optres1.unwrap();
         assert!(res1.upgrade().is_some());
 
-        undeclare_subscription(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
-            0,
-            "/todrop3",
-        )
-        .await;
+        undeclare_subscription(&mut tables, &mut face0.upgrade().unwrap(), 0, "/todrop3").await;
         assert!(res1.upgrade().is_some());
 
         undeclare_resource(&mut tables, &mut face0.upgrade().unwrap(), 2).await;
         assert!(!res1.upgrade().is_some());
 
         // --------------
-        declare_resource(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
-            3,
-            0,
-            "/todrop4",
-        )
-        .await;
-        declare_resource(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
-            4,
-            0,
-            "/todrop5",
-        )
-        .await;
+        declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/todrop4").await;
+        declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 4, 0, "/todrop5").await;
         declare_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
@@ -368,16 +314,16 @@ fn clean_test() {
         )
         .await;
 
-        let optres1 = Resource::get_resource(&tables._get_root(), "/todrop4")
-            .map(|res| Arc::downgrade(&res));
+        let optres1 =
+            Resource::get_resource(&tables._get_root(), "/todrop4").map(|res| Arc::downgrade(&res));
         assert!(optres1.is_some());
         let res1 = optres1.unwrap();
-        let optres2 = Resource::get_resource(&tables._get_root(), "/todrop5")
-            .map(|res| Arc::downgrade(&res));
+        let optres2 =
+            Resource::get_resource(&tables._get_root(), "/todrop5").map(|res| Arc::downgrade(&res));
         assert!(optres2.is_some());
         let res2 = optres2.unwrap();
-        let optres3 = Resource::get_resource(&tables._get_root(), "/todrop6")
-            .map(|res| Arc::downgrade(&res));
+        let optres3 =
+            Resource::get_resource(&tables._get_root(), "/todrop6").map(|res| Arc::downgrade(&res));
         assert!(optres3.is_some());
         let res3 = optres3.unwrap();
 

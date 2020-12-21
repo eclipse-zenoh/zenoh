@@ -66,14 +66,8 @@ fn tables_bench(c: &mut Criterion) {
                     &["/bench/tables/AA", &i.to_string()].concat(),
                 )
                 .await;
-                declare_subscription(
-                    &mut tables,
-                    &mut face1.upgrade().unwrap(),
-                    i,
-                    "",
-                    &sub_info,
-                )
-                .await;
+                declare_subscription(&mut tables, &mut face1.upgrade().unwrap(), i, "", &sub_info)
+                    .await;
             }
 
             let face0 = face0.upgrade().unwrap();
