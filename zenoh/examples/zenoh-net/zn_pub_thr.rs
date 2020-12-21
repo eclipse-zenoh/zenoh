@@ -80,6 +80,9 @@ fn parse_args() -> (Properties, usize) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
+    if args.is_present("no-multicast-scouting") {
+        config.insert("multicast_scouting".to_string(), "false".to_string());
+    }
 
     let size = args
         .value_of("PAYLOAD_SIZE")

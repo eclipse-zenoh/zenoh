@@ -52,6 +52,9 @@ uhlc = "0.2.1"
 zenoh-protocol =  { version = "0.5.0-beta.5", path = "../zenoh-protocol", features = ["transport_tcp", "transport_udp"] }
 zenoh-util =  { version = "0.5.0-beta.5", path = "../zenoh-util" }
 
+[build-dependencies]
+rustc_version = "0.3"
+
 [dev-dependencies]
 criterion = "0.3.3"
 

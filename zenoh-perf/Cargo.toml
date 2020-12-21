@@ -97,6 +97,27 @@ name = "session_thr_router"
 test = false
 bench = false
 
+[[bin]]
+name = "session_ping_peer"
+test = false
+bench = false
+
+[[bin]]
+name = "session_pong_peer"
+test = false
+bench = false
+
+[[bin]]
+name = "session_delay_sub_peer"
+test = false
+bench = false
+
+[[bin]]
+name = "session_delay_pub_peer"
+test = false
+bench = false
+
+
 
 [[bin]]
 name = "router_thr_sub_peer"
@@ -146,5 +167,25 @@ bench = false
 
 [[bin]]
 name = "util_credit_queue_batching"
+test = false
+bench = false
+
+[[bin]]
+name = "zn_ping"
+test = false
+bench = false
+
+[[bin]]
+name = "zn_pong"
+test = false
+bench = false
+
+[[bin]]
+name = "z_ping"
+test = false
+bench = false
+
+[[bin]]
+name = "z_pong"
 test = false
 bench = false

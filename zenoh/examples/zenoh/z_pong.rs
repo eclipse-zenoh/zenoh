@@ -11,8 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::future;
+use async_std::stream::StreamExt;
 use clap::{App, Arg};
-use futures::prelude::*;
 use std::convert::TryInto;
 use zenoh::*;
 
@@ -21,46 +22,44 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, selector) = parse_args();
+    let config = parse_args();
 
-    println!("New zenoh...");
     let zenoh = Zenoh::new(config.into()).await.unwrap();
-
-    println!("New workspace...");
     let workspace = zenoh.workspace(None).await.unwrap();
+    let mut sub = workspace
+        .subscribe(&"/test/ping/".to_string().try_into().unwrap())
+        .await
+        .unwrap();
 
-    println!("Get Data from {}'...\n", selector);
-    let mut data_stream = workspace.get(&selector.try_into().unwrap()).await.unwrap();
-    while let Some(data) = data_stream.next().await {
-        println!(
-            "  {} : {:?} (encoding: {} , timestamp: {})",
-            data.path,
-            data.value,
-            data.value.encoding_descr(),
-            data.timestamp
-        )
+    while let Some(change) = sub.next().await {
+        match change.value.unwrap() {
+            Value::Raw(_, payload) => {
+                workspace
+                    .put(&"/test/pong".try_into().unwrap(), payload.into())
+                    .await
+                    .unwrap();
+            }
+            _ => panic!("Invalid value"),
+        }
     }
 
-    zenoh.close().await.unwrap();
+    // Stop forever
+    future::pending::<()>().await;
 }
 
-fn parse_args() -> (Properties, String) {
-    let args = App::new("zenoh get example")
+fn parse_args() -> Properties {
+    let args = App::new("zenoh-net delay sub example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
                 .possible_values(&["peer", "client"])
                 .default_value("peer"),
         )
         .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
         ))
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
-        .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to get'")
-                .default_value("/demo/example/**"),
-        )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
@@ -76,7 +75,5 @@ fn parse_args() -> (Properties, String) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let selector = args.value_of("selector").unwrap().to_string();
-
-    (config, selector)
+    config
 }

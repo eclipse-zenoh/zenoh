@@ -111,7 +111,6 @@ impl Tcp {
                 err
             );
         }
-        
         // Set the TCP linger option
         if let Err(err) = zenoh_util::net::set_linger(
             &socket,

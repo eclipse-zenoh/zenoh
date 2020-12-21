@@ -41,7 +41,7 @@ use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 //       data) for a UDP datagram. However the actual limit for the data length, which is imposed by
 //       the underlying IPv4 protocol, is 65,507 bytes (65,535 − 8 byte UDP header − 20 byte IP header).
 //       Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via
-//       IPv6 Jumbograms, it's usage in Zenoh is discouraged unless the consequences are very well
+//       IPv6 Jumbograms, its usage in Zenoh is discouraged unless the consequences are very well
 //       understood.
 const UDP_MAX_MTU: usize = 65_507;
 

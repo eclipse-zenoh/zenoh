@@ -11,9 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::stream::StreamExt;
 use clap::{App, Arg};
-use futures::prelude::*;
-use futures::select;
+use zenoh::net::ResKey::*;
 use zenoh::net::*;
 use zenoh::Properties;
 
@@ -22,43 +22,49 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, selector) = parse_args();
+    let config = parse_args();
 
-    println!("Opening session...");
     let session = open(config.into()).await.unwrap();
 
-    println!("Declaring Subscriber on {}", selector);
+    // The resource to read the data from
+    let reskey_ping = RId(session
+        .declare_resource(&RName("/test/ping".to_string()))
+        .await
+        .unwrap());
+
+    // The resource to echo the data back
+    let reskey_pong = RId(session
+        .declare_resource(&RName("/test/pong".to_string()))
+        .await
+        .unwrap());
+    let _publ = session.declare_publisher(&reskey_pong).await.unwrap();
 
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
         period: None,
     };
-
-    let mut subscriber = session
-        .declare_subscriber(&selector.into(), &sub_info)
+    let mut sub = session
+        .declare_subscriber(&reskey_ping, &sub_info)
         .await
         .unwrap();
 
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0u8];
-    loop {
-        select!(
-            sample = subscriber.stream().next().fuse() => {
-                let sample = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
-            },
-
-            _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' {break}
-            }
-        );
+    while let Some(sample) = sub.stream().next().await {
+        session
+            .write_ext(
+                &reskey_pong,
+                sample.payload,
+                encoding::DEFAULT,
+                data_kind::DEFAULT,
+                CongestionControl::Block, // Make sure to not drop messages because of congestion control
+            )
+            .await
+            .unwrap();
     }
 }
 
-fn parse_args() -> (Properties, String) {
-    let args = App::new("zenoh-net sub example")
+fn parse_args() -> Properties {
+    let args = App::new("zenoh-net delay sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
                 .possible_values(&["peer", "client"])
@@ -70,20 +76,12 @@ fn parse_args() -> (Properties, String) {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
-        .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to subscribe'")
-                .default_value("/demo/example/**"),
-        )
         .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .get_matches();
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
-        Properties::from(std::fs::read_to_string(conf_file).unwrap())
-    } else {
-        Properties::default()
-    };
+    let mut config = Properties::default();
     for key in ["mode", "peer", "listener"].iter() {
         if let Some(value) = args.values_of(key) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
@@ -93,7 +91,5 @@ fn parse_args() -> (Properties, String) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let selector = args.value_of("selector").unwrap().to_string();
-
-    (config, selector)
+    config
 }

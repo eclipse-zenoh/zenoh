@@ -117,7 +117,10 @@ fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
 
 #[no_mangle]
 pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    vec![Arg::from_usage("--http-port 'The listening http port'").default_value(DEFAULT_HTTP_PORT)]
+    vec![
+        Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
+            .default_value(DEFAULT_HTTP_PORT),
+    ]
 }
 
 #[no_mangle]
@@ -128,7 +131,7 @@ pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
 async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     env_logger::init();
 
-    let http_port = parse_http_port(args.value_of("http-port").unwrap());
+    let http_port = parse_http_port(args.value_of("rest-http-port").unwrap());
 
     let pid = runtime.get_pid_str().await;
     let session = Session::init(runtime, true, vec![], vec![]).await;
@@ -137,7 +140,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     app.at("*")
         .get(async move |req: Request<(Arc<Session>, String)>| {
-            log::trace!("Http {:?}", req);
+            log::trace!("REST: {:?}", req);
             // Reconstruct Selector from req.url() (no easier way...)
             let url = req.url();
             let mut s = String::with_capacity(url.as_str().len());
@@ -145,10 +148,6 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             if let Some(q) = url.query() {
                 s.push('?');
                 s.push_str(q);
-            }
-            if let Some(f) = url.fragment() {
-                s.push('#');
-                s.push_str(f);
             }
             let selector = match Selector::try_from(s) {
                 Ok(sel) => sel,
@@ -288,7 +287,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     app.at("*")
         .put(async move |mut req: Request<(Arc<Session>, String)>| {
-            log::trace!("Http {:?}", req);
+            log::trace!("REST: {:?}", req);
             match req.body_bytes().await {
                 Ok(bytes) => {
                     let resource = path_to_resource(req.url().path(), &req.state().1);
@@ -322,7 +321,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     app.at("*")
         .patch(async move |mut req: Request<(Arc<Session>, String)>| {
-            log::trace!("Http {:?}", req);
+            log::trace!("REST: {:?}", req);
             match req.body_bytes().await {
                 Ok(bytes) => {
                     let resource = path_to_resource(req.url().path(), &req.state().1);
@@ -356,7 +355,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     app.at("*")
         .delete(async move |req: Request<(Arc<Session>, String)>| {
-            log::trace!("Http {:?}", req);
+            log::trace!("REST: {:?}", req);
             let resource = path_to_resource(req.url().path(), &req.state().1);
             match req
                 .state()
@@ -380,7 +379,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         });
 
     if let Err(e) = app.listen(http_port).await {
-        log::error!("Unable to start http server : {:?}", e);
+        log::error!("Unable to start http server for REST : {:?}", e);
     }
 }
 

@@ -92,6 +92,14 @@ name = "z_sub_thr"
 path = "examples/zenoh/z_sub_thr.rs"
 
 [[example]]
+name = "z_ping"
+path = "examples/zenoh/z_ping.rs"
+
+[[example]]
+name = "z_pong"
+path = "examples/zenoh/z_pong.rs"
+
+[[example]]
 name = "zn_scout"
 path = "examples/zenoh-net/zn_scout.rs"
 
@@ -150,4 +158,12 @@ path = "examples/zenoh-net/zn_pub_shm_thr.rs"
 [[example]]
 name = "zn_sub_shm_thr"
 path = "examples/zenoh-net/zn_sub_shm_thr.rs"
+
+[[example]]
+name = "zn_ping"
+path = "examples/zenoh-net/zn_ping.rs"
+
+[[example]]
+name = "zn_pong"
+path = "examples/zenoh-net/zn_pong.rs"
 

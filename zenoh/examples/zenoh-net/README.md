@@ -141,6 +141,20 @@
       zn_storage -s /demo/**
    ```
 
+### zn_pub_shm & zn_sub_shm
+
+   A pub/sub example involving the zero-copy feature based on shared memory.
+
+   Typical Subscriber usage:
+   ```bash
+      z_sub_shm
+   ```
+
+   Typical Publisher usage:
+   ```bash
+      z_pub_shm
+   ```
+
 ### zn_pub_thr & zn_sub_thr
 
    Pub/Sub throughput test.
@@ -155,4 +169,40 @@
    Typical Publisher usage:
    ```bash
       z_pub_thr 1024
+   ```
+
+### zn_ping & zn_pong
+
+   Pub/Sub roundtrip time test.
+   This example allows to perform roundtrip time measurements. The zn_ping example 
+   performs a write operation on a first resource, waits for a reply from the pong 
+   example on a second resource and measures the time between the two.
+   The pong application waits for samples on the first resource and replies by
+   writing back the received data on the second resource.
+
+   Typical Pong usage:
+   ```bash
+      zn_pong
+   ```
+
+   Typical Ping usage:
+   ```bash
+      zn_ping 1024
+   ```
+
+### zn_pub_shm_thr & zn_sub_shm_thr
+
+   Pub/Sub throughput test involving the zero-copy feature based on shared memory.
+   This example allows to perform throughput measurements between a pubisher performing
+   write operations with the zero-copy feature and a subscriber receiving notifications
+   of those writes.
+
+   Typical Subscriber usage:
+   ```bash
+      zn_sub_shm_thr
+   ```
+
+   Typical Publisher usage:
+   ```bash
+      zn_pub_shm_thr
    ```

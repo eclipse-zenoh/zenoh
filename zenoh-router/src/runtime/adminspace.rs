@@ -38,11 +38,12 @@ pub struct AdminSpace {
     primitives: Mutex<Option<Arc<dyn Primitives + Send + Sync>>>,
     mappings: Mutex<HashMap<ZInt, String>>,
     pid_str: String,
+    version: String,
     handlers: HashMap<String, Handler>,
 }
 
 impl AdminSpace {
-    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr) {
+    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr, version: String) {
         let pid_str = runtime.get_pid_str().await;
         let root_path = format!("/@/router/{}", pid_str);
 
@@ -66,6 +67,7 @@ impl AdminSpace {
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             pid_str,
+            version,
             handlers,
         });
 
@@ -132,6 +134,7 @@ impl AdminSpace {
 
         let json = json!({
             "pid": self.pid_str,
+            "version": self.version,
             "locators": locators,
             "sessions": sessions,
             "plugins": plugins,

@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::prelude::FutureExt;
-use futures::prelude::*;
+use async_std::prelude::*;
+use async_std::stream::StreamExt;
 use zenoh::net::*;
 
 #[async_std::main]
@@ -30,7 +30,7 @@ async fn main() {
     };
     let timeout = async_std::task::sleep(std::time::Duration::from_secs(1));
 
-    FutureExt::race(scout, timeout).await;
+    scout.race(timeout).await;
 
     // stop scouting
     drop(stream);

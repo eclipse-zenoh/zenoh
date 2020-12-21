@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::future;
 use clap::{App, Arg};
+use futures::prelude::*;
 use std::time::Instant;
 use zenoh::net::ResKey::*;
 use zenoh::net::*;
@@ -23,54 +23,65 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, m, n) = parse_args();
-
+    let (config, size) = parse_args();
     let session = open(config.into()).await.unwrap();
 
-    let reskey = RId(session
-        .declare_resource(&RName("/test/thr".to_string()))
+    // The resource to publish data on
+    let reskey_ping = RId(session
+        .declare_resource(&RName("/test/ping".to_string()))
         .await
         .unwrap());
 
-    let mut count = 0u128;
-    let mut start = Instant::now();
+    // The resource to wait the response back
+    let reskey_pong = RId(session
+        .declare_resource(&RName("/test/pong".to_string()))
+        .await
+        .unwrap());
 
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
         period: None,
     };
-    let mut nm = 0;
-    let _sub = session
-        .declare_callback_subscriber(&reskey, &sub_info, move |_sample| {
-            if count == 0 {
-                start = Instant::now();
-                count += 1;
-            } else if count < n {
-                count += 1;
-            } else {
-                print_stats(start, n);
-                nm += 1;
-                count = 0;
-                if nm >= m {
-                    std::process::exit(0)
-                }
-            }
-        })
+    let mut sub = session
+        .declare_subscriber(&reskey_pong, &sub_info)
         .await
         .unwrap();
 
-    // Stop forever
-    future::pending::<()>().await;
+    let data: RBuf = (0usize..size)
+        .map(|i| (i % 10) as u8)
+        .collect::<Vec<u8>>()
+        .into();
+
+    let mut count: u64 = 0;
+    loop {
+        let data = data.clone();
+        let write_time = Instant::now();
+        session
+            .write_ext(
+                &reskey_ping,
+                data,
+                encoding::DEFAULT,
+                data_kind::DEFAULT,
+                CongestionControl::Block, // Make sure to not drop messages because of congestion control
+            )
+            .await
+            .unwrap();
+
+        if let Some(sample) = sub.stream().next().await {
+            println!(
+                "{} bytes: seq={} time={:?}µs",
+                sample.payload.len(),
+                count,
+                write_time.elapsed().as_micros(),
+            );
+        }
+
+        count += 1;
+    }
 }
 
-fn print_stats(start: Instant, n: u128) {
-    let elapsed = start.elapsed().as_secs_f64();
-    let thpt = (n as f64) / elapsed;
-    println!("{} msg/s", thpt);
-}
-
-fn parse_args() -> (Properties, u32, u128) {
+fn parse_args() -> (Properties, usize) {
     let args = App::new("zenoh-net throughput sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
@@ -83,26 +94,15 @@ fn parse_args() -> (Properties, u32, u128) {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
-        .arg(
-            Arg::from_usage("-s, --samples=[number] 'Number of throughput measurements.'")
-                .default_value("10"),
-        )
-        .arg(
-            Arg::from_usage(
-                "-n, --number=[number] 'Number of messages in each throughput measurements.'",
-            )
-            .default_value("100000"),
-        )
         .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
+        ))
+        .arg(Arg::from_usage(
+            "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
         ))
         .get_matches();
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
-        Properties::from(std::fs::read_to_string(conf_file).unwrap())
-    } else {
-        Properties::default()
-    };
+    let mut config = Properties::default();
     for key in ["mode", "peer", "listener"].iter() {
         if let Some(value) = args.values_of(key) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
@@ -112,8 +112,7 @@ fn parse_args() -> (Properties, u32, u128) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let samples: u32 = args.value_of("samples").unwrap().parse().unwrap();
-    let number: u128 = args.value_of("number").unwrap().parse().unwrap();
+    let size: usize = args.value_of("PAYLOAD_SIZE").unwrap().parse().unwrap();
 
-    (config, samples, number)
+    (config, size)
 }
