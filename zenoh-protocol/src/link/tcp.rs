@@ -11,9 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
-use async_std::sync::{channel, Arc, Barrier, Mutex, Receiver, RwLock, Sender, Weak};
+use async_std::sync::{Arc, Barrier, Mutex, RwLock, Weak};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -34,8 +35,8 @@ use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror};
 //       no limit regarding the MTU. However, given the batching strategy
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the TCP MTU is constrained to
-//       2^16-1 bytes (i.e., 65535).
-const TCP_MAX_MTU: usize = 65_535;
+//       2^16 + 1 bytes (i.e., 65537).
+const TCP_MAX_MTU: usize = 65_537;
 
 zconfigurable! {
     // Default MTU (TCP PDU) in bytes.
@@ -101,6 +102,15 @@ impl Tcp {
         transport: Transport,
         manager: Arc<ManagerTcpInner>,
     ) -> Tcp {
+        // Set the TCP nodelay option
+        if let Err(err) = socket.set_nodelay(true) {
+            log::warn!(
+                "Unable to set NODEALY option on TCP link {} => {} : {}",
+                src_addr,
+                dst_addr,
+                err
+            );
+        }
         // Set the TCP linger option
         if let Err(err) = zenoh_util::net::set_linger(
             &socket,
@@ -185,7 +195,7 @@ impl LinkTrait for Tcp {
             };
 
             // The channel for stopping the read task
-            let (sender, receiver) = channel::<()>(1);
+            let (sender, receiver) = bounded::<()>(1);
             // Store the sender
             *guard = Some(sender);
 
@@ -411,7 +421,7 @@ async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
                         }
                         // We have read at least two bytes in the buffer, update the read start index
                         r_s_pos = r_l_pos + 2;
-                        // Read the lenght as litlle endian from the buffer (array of 2 bytes)
+                        // Read the length as litlle endian from the buffer (array of 2 bytes)
                         let length: [u8; 2] = buffer[r_l_pos..r_s_pos].try_into().unwrap();
                         // Decode the total amount of bytes that we are expected to read
                         let to_read = u16::from_le_bytes(length) as usize;
@@ -568,7 +578,7 @@ struct ListenerTcpInner {
 impl ListenerTcpInner {
     fn new(socket: Arc<TcpListener>) -> ListenerTcpInner {
         // Create the channel necessary to break the accept loop
-        let (sender, receiver) = channel::<()>(1);
+        let (sender, receiver) = bounded::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
         let barrier = Arc::new(Barrier::new(2));
         // Update the list of active listeners on the manager
@@ -716,9 +726,10 @@ impl ManagerTcpInner {
         match zasyncwrite!(self.listener).remove(&addr) {
             Some(listener) => {
                 // Send the stop signal
-                listener.sender.send(()).await;
-                // Wait for the accept loop to be stopped
-                listener.barrier.wait().await;
+                if listener.sender.send(()).await.is_ok() {
+                    // Wait for the accept loop to be stopped
+                    listener.barrier.wait().await;
+                }
                 Ok(())
             }
             None => {

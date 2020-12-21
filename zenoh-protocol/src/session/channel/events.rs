@@ -14,7 +14,7 @@
 use async_std::sync::{Arc, Weak};
 use async_trait::async_trait;
 
-use super::{Channel, LinkAlive, TransmissionQueue};
+use super::{Channel, LinkAlive, TransmissionPipeline};
 
 use crate::link::Link;
 use crate::proto::{smsg, SessionMessage};
@@ -26,12 +26,12 @@ use zenoh_util::collections::Timed;
 /*          LINK KEEP ALIVE          */
 /*************************************/
 pub(super) struct KeepAliveEvent {
-    queue: Arc<TransmissionQueue>,
+    queue: Arc<TransmissionPipeline>,
     link: Link,
 }
 
 impl KeepAliveEvent {
-    pub(super) fn new(queue: Arc<TransmissionQueue>, link: Link) -> KeepAliveEvent {
+    pub(super) fn new(queue: Arc<TransmissionPipeline>, link: Link) -> KeepAliveEvent {
         KeepAliveEvent { queue, link }
     }
 }

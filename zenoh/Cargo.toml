@@ -38,6 +38,7 @@ transport_udp = []
 default = ["transport_tcp", "transport_udp", "zero-copy"]
 
 [dependencies]
+async-std = { version = "=1.8.0", features = ["attributes"] }
 async-trait = "0.1.38"
 futures = "0.3.5"
 pin-project-lite = "0.1.7"
@@ -53,9 +54,6 @@ zenoh-protocol = { version = "0.5.0-beta.5", path = "../zenoh-protocol" }
 zenoh-router = { version = "0.5.0-beta.5", path = "../zenoh-router" }
 zenoh-util = { version = "0.5.0-beta.5", path = "../zenoh-util" }
 
-[dependencies.async-std]
-version = "=1.6.5"
-features = ["unstable", "attributes"]
 
 [dev-dependencies]
 clap = "2.33"
@@ -92,6 +90,14 @@ path = "examples/zenoh/z_put_thr.rs"
 [[example]]
 name = "z_sub_thr"
 path = "examples/zenoh/z_sub_thr.rs"
+
+[[example]]
+name = "z_ping"
+path = "examples/zenoh/z_ping.rs"
+
+[[example]]
+name = "z_pong"
+path = "examples/zenoh/z_pong.rs"
 
 [[example]]
 name = "zn_scout"
@@ -152,4 +158,12 @@ path = "examples/zenoh-net/zn_pub_shm_thr.rs"
 [[example]]
 name = "zn_sub_shm_thr"
 path = "examples/zenoh-net/zn_sub_shm_thr.rs"
+
+[[example]]
+name = "zn_ping"
+path = "examples/zenoh-net/zn_ping.rs"
+
+[[example]]
+name = "zn_pong"
+path = "examples/zenoh-net/zn_pong.rs"
 

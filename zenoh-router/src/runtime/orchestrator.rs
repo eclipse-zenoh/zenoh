@@ -189,6 +189,10 @@ impl SessionOrchestrator {
                 s => Some(s.parse().unwrap()),
             })
             .collect::<Vec<Locator>>();
+        let scouting = config
+            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
         let addr = config
             .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
             .parse()
@@ -200,13 +204,16 @@ impl SessionOrchestrator {
         let this = self.clone();
         async_std::task::spawn(async move { this.connector(peers).await });
 
-        let mcast_socket = SessionOrchestrator::bind_mcast_port(&addr).await?;
-        let iface = SessionOrchestrator::get_interface(iface)?;
-        let ucast_socket = SessionOrchestrator::bind_ucast_port(iface).await?;
-        let this = self.clone();
-        async_std::task::spawn(async move {
-            this.responder(&mcast_socket, &ucast_socket).await;
-        });
+        if scouting {
+            let mcast_socket = SessionOrchestrator::bind_mcast_port(&addr).await?;
+            let iface = SessionOrchestrator::get_interface(iface)?;
+            let ucast_socket = SessionOrchestrator::bind_ucast_port(iface).await?;
+            let this = self.clone();
+            async_std::task::spawn(async move {
+                this.responder(&mcast_socket, &ucast_socket).await;
+            });
+        }
+
         Ok(())
     }
 

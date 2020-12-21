@@ -107,13 +107,16 @@ pipeline {
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-x86_64-gnu \
-            /bin/bash -c "\
-            cargo build --release --bins --lib --examples && \
-            cargo deb -p zenoh-router && \
-            cargo deb -p zenoh-http && \
-            cargo deb -p zenoh-storages && \
-            ./gen_zenoh_deb.sh x86_64-unknown-linux-gnu amd64 \
-            "
+            cargo build --release --bins --lib --examples
+        if [[ ${GIT_TAG} != origin/* ]]; then
+          docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-x86_64-gnu \
+              /bin/bash -c "\
+              cargo deb -p zenoh-router && \
+              cargo deb -p zenoh-rest && \
+              cargo deb -p zenoh-storages && \
+              ./gen_zenoh_deb.sh x86_64-unknown-linux-gnu amd64 \
+              "
+        fi
         '''
       }
     }
@@ -132,13 +135,16 @@ pipeline {
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-i686-gnu \
-            /bin/bash -c "\
-            cargo build --release --bins --lib --examples && \
-            cargo deb -p zenoh-router && \
-            cargo deb -p zenoh-http && \
-            cargo deb -p zenoh-storages && \
-            ./gen_zenoh_deb.sh i686-unknown-linux-gnu i386 \
-            "
+            cargo build --release --bins --lib --examples
+        if [[ ${GIT_TAG} != origin/* ]]; then
+          docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-i686-gnu \
+              /bin/bash -c "\
+              cargo deb -p zenoh-router && \
+              cargo deb -p zenoh-rest && \
+              cargo deb -p zenoh-storages && \
+              ./gen_zenoh_deb.sh i686-unknown-linux-gnu i386 \
+              "
+        fi
         '''
       }
     }
@@ -157,13 +163,16 @@ pipeline {
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2014-aarch64-gnu \
-            /bin/bash -c "\
-            cargo build --release --bins --lib --examples && \
-            cargo deb -p zenoh-router && \
-            cargo deb -p zenoh-http && \
-            cargo deb -p zenoh-storages && \
-            ./gen_zenoh_deb.sh aarch64-unknown-linux-gnu aarch64 \
-            "
+            cargo build --release --bins --lib --examples
+        if [[ ${GIT_TAG} != origin/* ]]; then
+          docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2014-aarch64-gnu \
+              /bin/bash -c "\
+              cargo deb -p zenoh-router && \
+              cargo deb -p zenoh-rest && \
+              cargo deb -p zenoh-storages && \
+              ./gen_zenoh_deb.sh aarch64-unknown-linux-gnu aarch64 \
+              "
+        fi
         '''
       }
     }
@@ -231,7 +240,10 @@ pipeline {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
             ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*x86_64-unknown-linux-gnu.tgz target/x86_64-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            scp eclipse-zenoh-${LABEL}-*x86_64-unknown-linux-gnu.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            if [[ ${GIT_TAG} != origin/* ]]; then
+              scp target/x86_64-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            fi
           '''
         }
       }
@@ -243,7 +255,10 @@ pipeline {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
             ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*i686-unknown-linux-gnu.tgz target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            scp eclipse-zenoh-${LABEL}-*i686-unknown-linux-gnu.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            if [[ ${GIT_TAG} != origin/* ]]; then
+              scp target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            fi
           '''
         }
       }
@@ -275,7 +290,7 @@ pipeline {
 
     stage('[UbuntuVM] Build Packages.gz for download.eclipse.org') {
       agent { label 'UbuntuVM' }
-      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && (params.BUILD_LINUX64 || params.BUILD_LINUX32) }}
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && !env.GIT_TAG.startsWith('origin/') && (params.BUILD_LINUX64 || params.BUILD_LINUX32) }}
       steps {
         deleteDir()
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {

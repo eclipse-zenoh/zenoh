@@ -108,6 +108,9 @@ fn parse_args() -> (Properties, u32, u128) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
+    if args.is_present("no-multicast-scouting") {
+        config.insert("multicast_scouting".to_string(), "false".to_string());
+    }
 
     let samples: u32 = args.value_of("samples").unwrap().parse().unwrap();
     let number: u128 = args.value_of("number").unwrap().parse().unwrap();

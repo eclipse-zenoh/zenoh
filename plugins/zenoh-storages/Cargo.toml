@@ -32,6 +32,7 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
+async-std = { version = "=1.8.0", features = ["unstable"] }
 zenoh = { version = "0.5.0-beta.5", path = "../../zenoh" }
 zenoh-router = { version = "0.5.0-beta.5", path = "../../zenoh-router" }
 zenoh-util = { version = "0.5.0-beta.5", path = "../../zenoh-util" }
@@ -43,10 +44,6 @@ clap = "2"
 log = "0.4"
 env_logger = "0.7.1"
 lazy_static = "1.4.0"
-
-[dependencies.async-std]
-version = "=1.6.5"
-features = ["unstable"]
 
 [package.metadata.deb]
 name = "zenoh-storages"

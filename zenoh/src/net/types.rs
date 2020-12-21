@@ -12,8 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::Session;
+use async_std::channel::{Receiver, Sender, TrySendError};
 use async_std::stream::Stream;
-use async_std::sync::{Arc, Receiver, RwLock, Sender, TrySendError};
+use async_std::sync::{Arc, RwLock};
 use async_std::task;
 use pin_project_lite::pin_project;
 use std::collections::HashMap;
@@ -559,7 +560,7 @@ pub struct RepliesSender {
 impl RepliesSender {
     #[inline(always)]
     pub async fn send(&'_ self, msg: Sample) {
-        self.sender.send((self.kind, msg)).await
+        let _ = self.sender.send((self.kind, msg)).await;
     }
 
     #[inline(always)]
@@ -567,13 +568,13 @@ impl RepliesSender {
         match self.sender.try_send((self.kind, msg)) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(sample)) => Err(TrySendError::Full(sample.1)),
-            Err(TrySendError::Disconnected(sample)) => Err(TrySendError::Disconnected(sample.1)),
+            Err(TrySendError::Closed(sample)) => Err(TrySendError::Closed(sample.1)),
         }
     }
 
     #[inline(always)]
     pub fn capacity(&self) -> usize {
-        self.sender.capacity()
+        self.sender.capacity().unwrap_or(0)
     }
 
     #[inline(always)]

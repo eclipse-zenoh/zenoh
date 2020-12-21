@@ -32,6 +32,7 @@ maintenance = { status = "actively-developed" }
 
 
 [dependencies]
+async-std = { version = "=1.8.0", features = ["unstable"] }
 async-trait = "0.1.38"
 clap = "2.33.3"
 env_logger = "0.7.1"
@@ -44,9 +45,6 @@ zenoh =  { version = "0.5.0-beta.5", path = "../zenoh" }
 zenoh-protocol =  { version = "0.5.0-beta.5", path = "../zenoh-protocol" }
 zenoh-router =  { version = "0.5.0-beta.5", path = "../zenoh-router" }
 zenoh-util =  { version = "0.5.0-beta.5", path = "../zenoh-util" }
-
-[dependencies.async-std]
-version = "=1.6.5"
 
 [profile.release]
 debug=false
@@ -99,6 +97,27 @@ name = "session_thr_router"
 test = false
 bench = false
 
+[[bin]]
+name = "session_ping_peer"
+test = false
+bench = false
+
+[[bin]]
+name = "session_pong_peer"
+test = false
+bench = false
+
+[[bin]]
+name = "session_delay_sub_peer"
+test = false
+bench = false
+
+[[bin]]
+name = "session_delay_pub_peer"
+test = false
+bench = false
+
+
 
 [[bin]]
 name = "router_thr_sub_peer"
@@ -148,5 +167,25 @@ bench = false
 
 [[bin]]
 name = "util_credit_queue_batching"
+test = false
+bench = false
+
+[[bin]]
+name = "zn_ping"
+test = false
+bench = false
+
+[[bin]]
+name = "zn_pong"
+test = false
+bench = false
+
+[[bin]]
+name = "z_ping"
+test = false
+bench = false
+
+[[bin]]
+name = "z_pong"
 test = false
 bench = false

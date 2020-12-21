@@ -12,7 +12,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh-http"
+name = "zenoh-rest"
 version = "0.5.0-beta.5"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -23,11 +23,11 @@ authors = ["kydos <angelo@icorsaro.net>",
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "The zenoh HTTP plugin"
+description = "The zenoh REST plugin"
 
 
 [lib]
-name = "zplugin_http"
+name = "zplugin_rest"
 crate-type = ["cdylib"]
 
 
@@ -35,22 +35,19 @@ crate-type = ["cdylib"]
 zenoh = { version = "0.5.0-beta.5", path = "../../zenoh" }
 zenoh-router = { version = "0.5.0-beta.5", path = "../../zenoh-router" }
 zenoh-protocol = { version = "0.5.0-beta.5", path = "../../zenoh-protocol" }
+async-std = { version = "=1.8.0", features = ["unstable"] }
 futures = "0.3.5"
 clap = "2"
 log = "0.4"
 env_logger = "0.7.1"
 tide = "0.13.0"
 
-[dependencies.async-std]
-version = "=1.6.5"
-features = ["unstable"]
-
 [[example]]
 name = "zn_serve_sse"
 path = "examples/zenoh-net/zn_serve_sse.rs"
 
 [package.metadata.deb]
-name = "zenoh-http"
+name = "zenoh-rest"
 maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2020 ADLINK Technology Inc."
 section = "net"

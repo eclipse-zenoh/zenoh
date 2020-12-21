@@ -19,7 +19,8 @@ use crate::proto::{
 };
 use crate::session::defaults::SESSION_SEQ_NUM_RESOLUTION;
 use crate::session::{Action, Session, SessionManagerInner, TransportTrait};
-use async_std::sync::{Arc, Mutex, Sender};
+use async_std::channel::Sender;
+use async_std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use rand::Rng;
 use std::collections::HashMap;
@@ -142,7 +143,7 @@ impl InitialSession {
             let e = format!("A session opening is already pending on link: {:?}", link);
             log::warn!("{}", e);
             let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
-            notify.send(err).await;
+            let _ = notify.send(err).await;
             return zerror!(ZErrorKind::InvalidLink { descr: e });
         }
 
@@ -174,7 +175,7 @@ impl InitialSession {
             );
             log::warn!("{}", e);
             let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
-            notify.send(err).await;
+            let _ = notify.send(err).await;
             return zerror!(ZErrorKind::InvalidLink { descr: e });
         }
 
@@ -406,7 +407,7 @@ impl InitialSession {
             );
             log::warn!("{}", e);
             let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
-            pending.notify.send(err).await;
+            let _ = pending.notify.send(err).await;
             return Action::Close;
         }
 
@@ -758,7 +759,7 @@ impl InitialSession {
             let _ = zlinksend!(message, link);
 
             // Notify
-            opened.notify.send(Err(e)).await;
+            let _ = opened.notify.send(Err(e)).await;
             return Action::Close;
         }
 
@@ -767,7 +768,7 @@ impl InitialSession {
             Ok(callback) => callback,
             Err(e) => {
                 // Notify
-                opened.notify.send(Err(e)).await;
+                let _ = opened.notify.send(Err(e)).await;
                 return Action::Close;
             }
         };
@@ -797,7 +798,7 @@ impl InitialSession {
             if let Err(e) = session.set_callback(callback).await {
                 log::warn!("{}", e);
                 // Notify
-                opened.notify.send(Err(e)).await;
+                let _ = opened.notify.send(Err(e)).await;
                 return Action::Close;
             }
         }
@@ -807,12 +808,15 @@ impl InitialSession {
             Ok(transport) => {
                 // Notify
                 log::debug!("New session link established with {}: {}", opened.pid, link);
-                opened.notify.send(Ok(session)).await;
-                Action::ChangeTransport(transport)
+                if opened.notify.send(Ok(session)).await.is_ok() {
+                    Action::ChangeTransport(transport)
+                } else {
+                    Action::Close
+                }
             }
             Err(e) => {
                 // Notify
-                opened.notify.send(Err(e)).await;
+                let _ = opened.notify.send(Err(e)).await;
                 Action::Close
             }
         }
@@ -849,7 +853,7 @@ impl InitialSession {
         // Notify
         if let Some(notify) = notify {
             let err = zerror!(ZErrorKind::Other { descr: e });
-            notify.send(err).await;
+            let _ = notify.send(err).await;
         }
 
         Action::Close
@@ -873,7 +877,7 @@ impl InitialSession {
         if let Some(pending) = zasynclock!(self.pending).remove(link) {
             // Notify
             let err = zerror!(ZErrorKind::IOError { descr: e });
-            pending.notify.send(err).await;
+            let _ = pending.notify.send(err).await;
         }
 
         Action::Close
@@ -931,7 +935,7 @@ impl TransportTrait for InitialSession {
 
             // Notify
             let err = zerror!(ZErrorKind::IOError { descr: e });
-            pending.notify.send(err).await;
+            let _ = pending.notify.send(err).await;
         }
     }
 }

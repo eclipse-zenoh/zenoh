@@ -19,9 +19,9 @@ use crate::net::{
 };
 use crate::utils::new_reception_timestamp;
 use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
+use async_std::channel::Receiver;
 use async_std::pin::Pin;
 use async_std::stream::Stream;
-use async_std::sync::Receiver;
 use async_std::task::{Context, Poll};
 use log::{debug, warn};
 use pin_project_lite::pin_project;

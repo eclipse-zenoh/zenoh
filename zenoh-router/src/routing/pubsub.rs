@@ -15,13 +15,17 @@ use async_std::sync::Arc;
 use std::collections::HashMap;
 use uhlc::HLC;
 
-use zenoh_protocol::core::{whatami, CongestionControl, Reliability, SubInfo, SubMode, ZInt};
+use zenoh_protocol::core::{
+    whatami, CongestionControl, Reliability, ResKey, SubInfo, SubMode, ZInt,
+};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
 
 use crate::routing::face::FaceState;
 use crate::routing::resource::{Context, Resource};
 use crate::routing::router::Tables;
+
+pub type DataRoute = HashMap<usize, (Arc<FaceState>, ResKey)>;
 
 pub(crate) fn propagate_subscription(
     whatami: whatami::Type,
@@ -144,33 +148,16 @@ fn propagate_data(
         }
 }
 
-pub async fn route_data(
+pub async fn get_route(
     tables: &mut Tables,
     face: &Arc<FaceState>,
-    rid: u64,
+    rid: ZInt,
     suffix: &str,
-    congestion_control: CongestionControl,
-    info: Option<DataInfo>,
-    payload: RBuf,
-) {
+    info: &Option<DataInfo>,
+    payload: &RBuf,
+) -> Option<DataRoute> {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => unsafe {
-            // if an HLC was configured (via Config.add_timestamp),
-            // check DataInfo and add a timestamp if there isn't
-            let info = match &tables.hlc {
-                Some(hlc) => match treat_timestamp(hlc, info).await {
-                    Ok(info) => info,
-                    Err(e) => {
-                        log::error!(
-                            "Error treating timestamp for received Data ({}): drop it!",
-                            e
-                        );
-                        return;
-                    }
-                },
-                None => info,
-            };
-
             match Resource::get_resource(prefix, suffix) {
                 Some(res) => {
                     for mres in &res.matches {
@@ -187,21 +174,8 @@ pub async fn route_data(
                             }
                         }
                     }
-                    for (outface, reskey) in res.route.values() {
-                        if propagate_data(tables.whatami, face, outface) {
-                            outface
-                                .primitives
-                                .data(
-                                    reskey,
-                                    payload.clone(),
-                                    Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
-                                    congestion_control,
-                                    info.clone(),
-                                    None,
-                                )
-                                .await
-                        }
-                    }
+
+                    Some(res.route.clone())
                 }
                 None => {
                     let mut faces = HashMap::new();
@@ -229,26 +203,57 @@ pub async fn route_data(
                             }
                         }
                     }
-                    for (outface, reskey) in faces.into_values() {
-                        if propagate_data(tables.whatami, face, &outface) {
-                            outface
-                                .primitives
-                                .data(
-                                    &reskey,
-                                    payload.clone(),
-                                    Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
-                                    congestion_control,
-                                    info.clone(),
-                                    None,
-                                )
-                                .await
-                        }
-                    }
+                    Some(faces)
                 }
             }
         },
         None => {
             log::error!("Route data with unknown rid {}!", rid);
+            None
+        }
+    }
+}
+
+pub async fn route_data(
+    tables: &mut Tables,
+    face: &Arc<FaceState>,
+    rid: u64,
+    suffix: &str,
+    congestion_control: CongestionControl,
+    info: Option<DataInfo>,
+    payload: RBuf,
+) {
+    if let Some(route) = get_route(tables, face, rid, suffix, &info, &payload).await {
+        // if an HLC was configured (via Config.add_timestamp),
+        // check DataInfo and add a timestamp if there isn't
+        let data_info = match &tables.hlc {
+            Some(hlc) => match treat_timestamp(hlc, info).await {
+                Ok(info) => info,
+                Err(e) => {
+                    log::error!(
+                        "Error treating timestamp for received Data ({}): drop it!",
+                        e
+                    );
+                    return;
+                }
+            },
+            None => info,
+        };
+
+        for (_id, (outface, reskey)) in route {
+            if propagate_data(tables.whatami, face, &outface) {
+                outface
+                    .primitives
+                    .data(
+                        &reskey,
+                        payload.clone(),
+                        Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                        congestion_control,
+                        data_info.clone(),
+                        None,
+                    )
+                    .await
+            }
         }
     }
 }

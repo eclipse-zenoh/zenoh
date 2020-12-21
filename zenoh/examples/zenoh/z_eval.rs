@@ -102,6 +102,9 @@ fn parse_args() -> (Properties, String) {
             Arg::from_usage("-p, --path=[PATH] 'The path the eval will respond for'")
                 .default_value("/demo/example/eval"),
         )
+        .arg(Arg::from_usage(
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
+        ))
         .get_matches();
 
     let mut config = Properties::default();
@@ -110,6 +113,10 @@ fn parse_args() -> (Properties, String) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
+    if args.is_present("no-multicast-scouting") {
+        config.insert("multicast_scouting".to_string(), "false".to_string());
+    }
+
     let path = args.value_of("path").unwrap().to_string();
 
     (config, path)

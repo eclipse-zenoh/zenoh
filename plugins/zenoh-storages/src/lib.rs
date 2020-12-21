@@ -13,7 +13,8 @@
 //
 #![recursion_limit = "512"]
 
-use async_std::sync::{Arc, Sender};
+use async_std::channel::Sender;
+use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use libloading::Symbol;

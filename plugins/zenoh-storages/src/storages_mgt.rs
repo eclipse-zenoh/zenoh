@@ -11,7 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{channel, Arc, RwLock, Sender};
+use async_std::channel::{bounded, Sender};
+use async_std::sync::{Arc, RwLock};
 use async_std::task;
 use futures::prelude::*;
 use futures::select;
@@ -32,7 +33,7 @@ pub(crate) async fn start_storage(
 ) -> ZResult<Sender<bool>> {
     debug!("Start storage {} on {}", admin_path, path_expr);
 
-    let (tx, rx) = channel::<bool>(1);
+    let (tx, rx) = bounded::<bool>(1);
     task::spawn(async move {
         let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
 

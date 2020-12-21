@@ -68,6 +68,10 @@ fn parse_args() -> (Properties, String, String) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
         }
     }
+    if args.is_present("no-multicast-scouting") {
+        config.insert("multicast_scouting".to_string(), "false".to_string());
+    }
+
     let path = args.value_of("path").unwrap();
     let value = args.value_of("value").unwrap();
 

@@ -18,11 +18,11 @@
 #[macro_export]
 macro_rules! zasynclock {
     ($var:expr) => {
-        if let Some(g) = $var.try_lock() {
-            g
-        } else {
-            $var.lock().await
-        }
+        // if let Some(g) = $var.try_lock() {
+        //     g
+        // } else {
+        $var.lock().await
+        // }
     };
 }
 

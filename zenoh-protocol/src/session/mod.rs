@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 mod channel;
-mod defaults;
+pub mod defaults;
 mod initial;
 mod manager;
 mod primitives;

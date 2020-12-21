@@ -136,7 +136,7 @@ fn propagate_query(
         }
 }
 
-async fn route_query_to_map(
+async fn get_route(
     tables: &mut Tables,
     face: &Arc<FaceState>,
     qid: ZInt,
@@ -197,8 +197,8 @@ pub(crate) async fn route_query(
     target: QueryTarget,
     consolidation: QueryConsolidation,
 ) {
-    if let Some(outfaces) = route_query_to_map(tables, face, qid, rid, suffix).await {
-        match outfaces.len() {
+    if let Some(route) = get_route(tables, face, qid, rid, suffix).await {
+        match route.len() {
             0 => {
                 log::debug!(
                     "Send final reply {}:{} (no matching queryables)",
@@ -208,7 +208,7 @@ pub(crate) async fn route_query(
                 face.primitives.clone().reply_final(qid).await
             }
             _ => {
-                for (outface, reskey, qid) in outfaces.into_values() {
+                for (outface, reskey, qid) in route.into_values() {
                     outface
                         .primitives
                         .query(
