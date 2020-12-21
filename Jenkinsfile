@@ -6,6 +6,9 @@ pipeline {
                  type: 'PT_BRANCH_TAG',
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'master')
+    string(name: 'RUST_TOOLCHAIN',
+           description: 'The version of rust toolchain to use (e.g. nightly-2020-12-20)',
+           defaultValue: 'nightly')
     string(name: 'DOCKER_TAG',
            description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
            defaultValue: '')
@@ -42,6 +45,7 @@ pipeline {
   }
   environment {
       LABEL = get_label()
+      DOWNLOAD_DIR="/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}"
       MACOSX_DEPLOYMENT_TARGET=10.7
   }
 
@@ -63,8 +67,7 @@ pipeline {
       steps {
         sh '''
         env
-        echo "Building eclipse-zenoh-${LABEL}"
-        rustup update
+        rustup default ${RUST_TOOLCHAIN}
         '''
       }
     }
@@ -73,6 +76,7 @@ pipeline {
       when { expression { return params.BUILD_MACOSX }}
       steps {
         sh '''
+        echo "Building eclipse-zenoh-${LABEL}"
         cargo build --release --all-targets
         cargo test --release
         '''
@@ -93,7 +97,11 @@ pipeline {
       when { expression { return params.BUILD_DOCKER }}
       steps {
         sh '''
-        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-x86_64-unknown-linux-musl cargo build --release --bins --lib
+        docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-x86_64-unknown-linux-musl \
+          /bin/ash -c "\
+            rustup default ${RUST_TOOLCHAIN} && \
+            cargo build --release --bins --lib \
+          "
         if [ -n "${DOCKER_TAG}" ]; then
           export EXTRA_TAG="-t eclipse/zenoh:${DOCKER_TAG}"
         fi
@@ -107,16 +115,16 @@ pipeline {
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-x86_64-gnu \
-            cargo build --release --bins --lib --examples
-        if [[ ${GIT_TAG} != origin/* ]]; then
-          docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-x86_64-gnu \
-              /bin/bash -c "\
+          /bin/bash -c "\
+            rustup default ${RUST_TOOLCHAIN} && \
+            cargo build --release --bins --lib --examples && \
+            if [[ ${GIT_TAG} != origin/* ]]; then \
               cargo deb -p zenoh-router && \
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh x86_64-unknown-linux-gnu amd64 \
-              "
-        fi
+            fi \
+          "
         '''
       }
     }
@@ -135,16 +143,16 @@ pipeline {
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-i686-gnu \
-            cargo build --release --bins --lib --examples
-        if [[ ${GIT_TAG} != origin/* ]]; then
-          docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2010-i686-gnu \
-              /bin/bash -c "\
+          /bin/bash -c "\
+            rustup default ${RUST_TOOLCHAIN} && \
+            cargo build --release --bins --lib --examples && \
+            if [[ ${GIT_TAG} != origin/* ]]; then \
               cargo deb -p zenoh-router && \
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh i686-unknown-linux-gnu i386 \
-              "
-        fi
+            fi \
+          "
         '''
       }
     }
@@ -163,16 +171,16 @@ pipeline {
       steps {
         sh '''
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2014-aarch64-gnu \
-            cargo build --release --bins --lib --examples
-        if [[ ${GIT_TAG} != origin/* ]]; then
-          docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-manylinux2014-aarch64-gnu \
-              /bin/bash -c "\
+          /bin/bash -c "\
+            rustup default ${RUST_TOOLCHAIN} && \
+            cargo build --release --bins --lib --examples && \
+            if [[ ${GIT_TAG} != origin/* ]]; then
               cargo deb -p zenoh-router && \
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh aarch64-unknown-linux-gnu aarch64 \
-              "
-        fi
+            fi \
+          "
         '''
       }
     }
@@ -219,6 +227,26 @@ pipeline {
         zip eclipse-zenoh-${LABEL}-i686-pc-windows-gnu.zip --junk-paths target/i686-pc-windows-gnu/release/zenohd.exe target/i686-pc-windows-gnu/release/*.dll
         zip eclipse-zenoh-${LABEL}-examples-i686-pc-windows-gnu.zip --exclude 'target/i686-pc-windows-gnu/release/examples/*-*' --junk-paths target/i686-pc-windows-gnu/release/examples/*.exe
         '''
+      }
+    }
+
+    stage('[MacMini] Prepare directory on download.eclipse.org') {
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD }}
+      steps {
+        // Note: remove existing dir on download.eclipse.org only if it's for a branch
+        // (e.g. master that is rebuilt periodically from different commits)
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+          sh '''
+            if [[ ${GIT_TAG} == origin/* ]]; then
+              ssh genie.zenoh@projects-storage.eclipse.org rm -fr /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+              COMMIT_ID=`git log -n1 --format="%h"`
+              echo "https://github.com/eclipse-zenoh/zenoh/tree/${COMMIT_ID}" > _git_commit_${COMMIT_ID}.txt
+              rustc --version > _rust_toolchain_${RUST_TOOLCHAIN}.txt
+              scp _*.txt genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            fi
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+          '''
+        }
       }
     }
 
