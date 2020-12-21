@@ -123,7 +123,7 @@ pipeline {
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh x86_64-unknown-linux-gnu amd64 \
-            fi \
+            ;fi \
           "
         '''
       }
@@ -151,7 +151,7 @@ pipeline {
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh i686-unknown-linux-gnu i386 \
-            fi \
+            ;fi \
           "
         '''
       }
@@ -179,7 +179,7 @@ pipeline {
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh aarch64-unknown-linux-gnu aarch64 \
-            fi \
+            ;fi \
           "
         '''
       }
@@ -238,13 +238,13 @@ pipeline {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
             if [[ ${GIT_TAG} == origin/* ]]; then
-              ssh genie.zenoh@projects-storage.eclipse.org rm -fr /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-              COMMIT_ID=`git log -n1 --format="%h"`
-              echo "https://github.com/eclipse-zenoh/zenoh/tree/${COMMIT_ID}" > _git_commit_${COMMIT_ID}.txt
-              rustc --version > _rust_toolchain_${RUST_TOOLCHAIN}.txt
-              scp _*.txt genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+              ssh genie.zenoh@projects-storage.eclipse.org rm -fr ${DOWNLOAD_DIR}
             fi
-            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
+            COMMIT_ID=`git log -n1 --format="%h"`
+            echo "https://github.com/eclipse-zenoh/zenoh/tree/${COMMIT_ID}" > _git_commit_${COMMIT_ID}.txt
+            rustc --version > _rust_toolchain_${RUST_TOOLCHAIN}.txt
+            scp _*.txt genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
           '''
         }
       }
@@ -255,8 +255,8 @@ pipeline {
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*macosx*.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
+            scp eclipse-zenoh-${LABEL}-*macosx*.tgz genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
           '''
         }
       }
@@ -267,10 +267,10 @@ pipeline {
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*x86_64-unknown-linux-gnu.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
+            scp eclipse-zenoh-${LABEL}-*x86_64-unknown-linux-gnu.tgz genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
             if [[ ${GIT_TAG} != origin/* ]]; then
-              scp target/x86_64-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+              scp target/x86_64-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
             fi
           '''
         }
@@ -282,10 +282,10 @@ pipeline {
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*i686-unknown-linux-gnu.tgz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
+            scp eclipse-zenoh-${LABEL}-*i686-unknown-linux-gnu.tgz genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
             if [[ ${GIT_TAG} != origin/* ]]; then
-              scp target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+              scp target/i686-unknown-linux-gnu/debian/*.deb genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
             fi
           '''
         }
@@ -297,8 +297,8 @@ pipeline {
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*x86_64-pc-windows-gnu.zip genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
+            scp eclipse-zenoh-${LABEL}-*x86_64-pc-windows-gnu.zip genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
           '''
         }
       }
@@ -309,8 +309,8 @@ pipeline {
       steps {
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p /home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}
-            scp eclipse-zenoh-${LABEL}-*i686-pc-windows-gnu.zip genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
+            scp eclipse-zenoh-${LABEL}-*i686-pc-windows-gnu.zip genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
           '''
         }
       }
@@ -323,11 +323,11 @@ pipeline {
         deleteDir()
         sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
           sh '''
-          scp genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/*.deb ./
+          scp genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/*.deb ./
           dpkg-scanpackages --multiversion . > Packages
           cat Packages
           gzip -c9 < Packages > Packages.gz
-          scp Packages.gz genie.zenoh@projects-storage.eclipse.org:/home/data/httpd/download.eclipse.org/zenoh/zenoh/${LABEL}/
+          scp Packages.gz genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
           '''
         }
       }
