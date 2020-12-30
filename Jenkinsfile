@@ -100,12 +100,22 @@ pipeline {
         docker run --init --rm -v $(pwd):/workdir -w /workdir adlinktech/zenoh-dev-x86_64-unknown-linux-musl \
           /bin/ash -c "\
             rustup default ${RUST_TOOLCHAIN} && \
-            cargo build --release --bins --lib \
+            cargo build --release --bins --lib --examples \
           "
         if [ -n "${DOCKER_TAG}" ]; then
           export EXTRA_TAG="-t eclipse/zenoh:${DOCKER_TAG}"
         fi
         docker build -t eclipse/zenoh:${LABEL} ${EXTRA_TAG} .
+        '''
+      }
+    }
+
+    stage('[MacMini] x86_64-unknown-linux-musl Package') {
+      when { expression { return params.BUILD_DOCKER }}
+      steps {
+        sh '''
+        tar -czvf eclipse-zenoh-${LABEL}-x86_64-unknown-linux-musl.tgz --strip-components 3 target/x86_64-unknown-linux-musl/release/zenohd target/x86_64-unknown-linux-musl/release/*.so
+        tar -czvf eclipse-zenoh-${LABEL}-examples-x86_64-unknown-linux-musl.tgz --exclude 'target/x86_64-unknown-linux-musl/release/examples/*.*' --exclude 'target/x86_64-unknown-linux-musl/release/examples/*-*' --strip-components 4 target/x86_64-unknown-linux-musl/release/examples/*
         '''
       }
     }
@@ -257,6 +267,18 @@ pipeline {
           sh '''
             ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
             scp eclipse-zenoh-${LABEL}-*macosx*.tgz genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
+          '''
+        }
+      }
+    }
+
+    stage('[MacMini] Publish zenoh-x86_64-unknown-linux-musl to download.eclipse.org') {
+      when { expression { return params.PUBLISH_ECLIPSE_DOWNLOAD && params.BUILD_DOCKER }}
+      steps {
+        sshagent ( ['projects-storage.eclipse.org-bot-ssh']) {
+          sh '''
+            ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
+            scp eclipse-zenoh-${LABEL}-*x86_64-unknown-linux-musl.tgz genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
           '''
         }
       }
