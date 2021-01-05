@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Channel, DefragBuffer, SeqNum};
-use crate::core::{Channel as ChPr, PeerId, Reliability, ZInt};
+use super::SessionTransport;
+use crate::core::{Channel, PeerId, ZInt};
 use crate::link::Link;
 use crate::proto::{Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage};
 use crate::session::{Action, TransportTrait};
@@ -28,51 +28,6 @@ macro_rules! zlinkget {
 /*************************************/
 /*         CHANNEL RX STRUCT         */
 /*************************************/
-
-pub(crate) struct ChannelRxReliable {
-    sn: SeqNum,
-    defrag_buffer: DefragBuffer,
-}
-
-impl ChannelRxReliable {
-    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> ChannelRxReliable {
-        // Set the sequence number in the state as it had
-        // received a message with initial_sn - 1
-        let last_initial_sn = if initial_sn == 0 {
-            sn_resolution - 1
-        } else {
-            initial_sn - 1
-        };
-
-        ChannelRxReliable {
-            sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::Reliable),
-        }
-    }
-}
-
-pub(crate) struct ChannelRxBestEffort {
-    sn: SeqNum,
-    defrag_buffer: DefragBuffer,
-}
-
-impl ChannelRxBestEffort {
-    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> ChannelRxBestEffort {
-        // Set the sequence number in the state as it had
-        // received a message with initial_sn - 1
-        let last_initial_sn = if initial_sn == 0 {
-            sn_resolution - 1
-        } else {
-            initial_sn - 1
-        };
-
-        ChannelRxBestEffort {
-            sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::BestEffort),
-        }
-    }
-}
-
 macro_rules! zcallback {
     ($ch:expr, $msg:expr) => {
         log::trace!("Session: {}. Message: {:?}", $ch.get_pid(), $msg);
@@ -157,7 +112,7 @@ macro_rules! zreceiveframe {
     };
 }
 
-impl Channel {
+impl SessionTransport {
     /*************************************/
     /*   MESSAGE RECEIVED FROM THE LINK  */
     /*************************************/
@@ -223,7 +178,7 @@ impl Channel {
 }
 
 #[async_trait]
-impl TransportTrait for Channel {
+impl TransportTrait for SessionTransport {
     async fn receive_message(&self, link: &Link, message: SessionMessage) -> Action {
         log::trace!(
             "Received from peer {} on link {}: {:?}",
@@ -244,8 +199,8 @@ impl TransportTrait for Channel {
         // Process the received message
         match message.body {
             SessionBody::Frame(Frame { ch, sn, payload }) => match ch {
-                ChPr::Reliable => self.process_reliable_frame(sn, payload).await,
-                ChPr::BestEffort => self.process_best_effort_frame(sn, payload).await,
+                Channel::Reliable => self.process_reliable_frame(sn, payload).await,
+                Channel::BestEffort => self.process_best_effort_frame(sn, payload).await,
             },
             SessionBody::AckNack { .. } => {
                 log::trace!("Handling of AckNack Messages not yet implemented!");

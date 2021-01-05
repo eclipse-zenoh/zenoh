@@ -14,8 +14,8 @@
 use async_std::sync::{Arc, Weak};
 use async_trait::async_trait;
 
-use super::{Channel, LinkAlive, TransmissionPipeline};
-
+use super::TransmissionPipeline;
+use super::{LinkAlive, SessionTransport};
 use crate::link::Link;
 use crate::proto::{smsg, SessionMessage};
 use crate::session::defaults::QUEUE_PRIO_DATA;
@@ -56,13 +56,17 @@ impl Timed for KeepAliveEvent {
 /*        LINK LEASE EVENT           */
 /*************************************/
 pub(super) struct LinkLeaseEvent {
-    ch: Weak<Channel>,
+    ch: Weak<SessionTransport>,
     alive: Arc<LinkAlive>,
     link: Link,
 }
 
 impl LinkLeaseEvent {
-    pub(super) fn new(ch: Weak<Channel>, alive: Arc<LinkAlive>, link: Link) -> LinkLeaseEvent {
+    pub(super) fn new(
+        ch: Weak<SessionTransport>,
+        alive: Arc<LinkAlive>,
+        link: Link,
+    ) -> LinkLeaseEvent {
         LinkLeaseEvent { ch, alive, link }
     }
 }
@@ -90,33 +94,6 @@ impl Timed for LinkLeaseEvent {
                 log::warn!("Link {} has expired with peer: {}", self.link, ch.get_pid());
                 // Close only the link
                 let _ = ch.close_link(&self.link, smsg::close_reason::EXPIRED).await;
-            }
-        }
-    }
-}
-
-/*************************************/
-/*        SESSION LEASE EVENT        */
-/*************************************/
-pub(super) struct SessionLeaseEvent {
-    ch: Weak<Channel>,
-}
-
-impl SessionLeaseEvent {
-    pub(super) fn new(ch: Weak<Channel>) -> SessionLeaseEvent {
-        SessionLeaseEvent { ch }
-    }
-}
-
-#[async_trait]
-impl Timed for SessionLeaseEvent {
-    async fn run(&mut self) {
-        if let Some(ch) = self.ch.upgrade() {
-            let links = ch.get_links().await;
-            if links.is_empty() {
-                log::warn!("Session has expired with peer: {}", ch.get_pid());
-                // The last link has expired, close the whole session
-                let _ = ch.delete().await;
             }
         }
     }

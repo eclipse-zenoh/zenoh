@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod channel;
 pub mod defaults;
 mod initial;
 mod manager;
 mod primitives;
+mod transport;
 
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};

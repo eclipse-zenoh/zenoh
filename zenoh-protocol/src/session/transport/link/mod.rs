@@ -11,16 +11,24 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Channel, KeepAliveEvent, LinkLeaseEvent, SeqNumGenerator, TransmissionPipeline};
+mod batch;
+mod events;
+mod rx;
+mod tx;
+
 use crate::core::ZInt;
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
+use crate::session::transport::{SeqNumGenerator, SessionTransport};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex, Weak};
 use async_std::task;
+use batch::*;
+use events::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+pub(crate) use tx::*;
 use zenoh_util::collections::{TimedEvent, TimedHandle, Timer};
 use zenoh_util::core::ZResult;
 
@@ -74,7 +82,7 @@ impl LinkAlive {
 }
 
 #[derive(Clone)]
-pub(crate) struct ChannelLink {
+pub(crate) struct SessionTransportLink {
     link: Link,
     queue: Arc<TransmissionPipeline>,
     alive: Arc<LinkAlive>,
@@ -82,10 +90,10 @@ pub(crate) struct ChannelLink {
     signal: Sender<()>,
 }
 
-impl ChannelLink {
+impl SessionTransportLink {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        ch: Weak<Channel>,
+        ch: Weak<SessionTransport>,
         link: Link,
         batch_size: usize,
         keep_alive: ZInt,
@@ -93,7 +101,7 @@ impl ChannelLink {
         sn_reliable: Arc<Mutex<SeqNumGenerator>>,
         sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
         timer: Timer,
-    ) -> ChannelLink {
+    ) -> SessionTransportLink {
         // The queue
         let queue = Arc::new(TransmissionPipeline::new(
             batch_size.min(link.get_mtu()),
@@ -124,7 +132,7 @@ impl ChannelLink {
         // Event handles
         let handles = vec![ka_handle, ll_handle];
 
-        // Channel for signal the termination of consume task
+        // SessionTransport for signal the termination of consume task
         let (sender, receiver) = bounded::<()>(1);
 
         // Spawn the timed events and the consume task
@@ -152,7 +160,7 @@ impl ChannelLink {
             }
         });
 
-        ChannelLink {
+        SessionTransportLink {
             link,
             queue,
             alive,
@@ -162,7 +170,7 @@ impl ChannelLink {
     }
 }
 
-impl ChannelLink {
+impl SessionTransportLink {
     #[inline]
     pub(crate) fn get_link(&self) -> &Link {
         &self.link

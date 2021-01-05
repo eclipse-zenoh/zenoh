@@ -11,6 +11,15 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::defaults::{
+    SESSION_BATCH_SIZE, SESSION_KEEP_ALIVE, SESSION_LEASE, SESSION_OPEN_RETRIES,
+    SESSION_OPEN_TIMEOUT, SESSION_SEQ_NUM_RESOLUTION,
+};
+use super::transport::SessionTransport;
+use super::{InitialSession, SessionEventHandler, SessionHandler, Transport};
+use crate::core::{PeerId, WhatAmI, ZInt};
+use crate::link::{Link, LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
+use crate::proto::{smsg, Attachment, ZenohMessage};
 use async_std::channel::bounded;
 use async_std::prelude::*;
 use async_std::sync::{Arc, RwLock, Weak};
@@ -19,18 +28,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::Ipv4Addr;
 use std::time::Duration;
-
-use super::channel::Channel;
-use super::defaults::{
-    SESSION_BATCH_SIZE, SESSION_KEEP_ALIVE, SESSION_LEASE, SESSION_OPEN_RETRIES,
-    SESSION_OPEN_TIMEOUT, SESSION_SEQ_NUM_RESOLUTION,
-};
-use super::{InitialSession, SessionEventHandler, SessionHandler, Transport};
-
-use crate::core::{PeerId, WhatAmI, ZInt};
-use crate::link::{Link, LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
-use crate::proto::{smsg, Attachment, ZenohMessage};
-
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasyncread, zasyncwrite, zerror};
 
@@ -220,7 +217,7 @@ impl SessionManager {
             match open_fut.try_join(channel_fut).await {
                 // Future timeout result
                 Ok((_, channel_res)) => match channel_res {
-                    // Channel result
+                    // SessionTransport result
                     Ok(res) => match res {
                         Ok(session) => return Ok(session),
                         Err(e) => {
@@ -319,7 +316,7 @@ pub(crate) struct SessionManagerInner {
     pub(crate) config: SessionManagerInnerConfig,
     initial: RwLock<Option<Arc<InitialSession>>>,
     protocols: RwLock<HashMap<LocatorProtocol, LinkManager>>,
-    sessions: RwLock<HashMap<PeerId, Arc<Channel>>>,
+    sessions: RwLock<HashMap<PeerId, Arc<SessionTransport>>>,
 }
 
 impl SessionManagerInner {
@@ -544,7 +541,7 @@ impl SessionManagerInner {
         let keep_alive = self.config.keep_alive.min(interval);
 
         // Create the channel object
-        let a_ch = Arc::new(Channel::new(
+        let a_ch = Arc::new(SessionTransport::new(
             a_self.clone(),
             peer.clone(),
             *whatami,
@@ -585,10 +582,10 @@ const STR_ERR: &str = "Session not available";
 
 /// [`Session`] is the session handler returned when opening a new session
 #[derive(Clone)]
-pub struct Session(Weak<Channel>);
+pub struct Session(Weak<SessionTransport>);
 
 impl Session {
-    fn new(inner: Weak<Channel>) -> Self {
+    fn new(inner: Weak<SessionTransport>) -> Self {
         Self(inner)
     }
 
@@ -597,8 +594,8 @@ impl Session {
     /*************************************/
     #[inline]
     pub(super) fn get_transport(&self) -> ZResult<Transport> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(Transport::new(channel))
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(Transport::new(transport))
     }
 
     #[inline]

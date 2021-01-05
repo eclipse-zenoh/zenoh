@@ -11,39 +11,32 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod batch;
 mod defragmentation;
 mod events;
 mod link;
-// mod reliability_queue;
-mod rx;
 mod scheduling;
 mod seq_num;
-mod tx;
 
-use crate::core::{PeerId, WhatAmI, ZInt};
+use crate::core::{PeerId, Reliability, WhatAmI, ZInt};
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
 use crate::session::defaults::QUEUE_PRIO_DATA;
 use crate::session::{SessionEventHandler, SessionManagerInner};
 use async_std::sync::{Arc, Mutex, RwLock, Weak};
 use async_trait::async_trait;
-use batch::*;
 use defragmentation::*;
 use events::*;
 use link::*;
-use rx::*;
 use scheduling::*;
 use seq_num::*;
 use std::time::Duration;
-use tx::*;
 use zenoh_util::collections::{TimedEvent, TimedHandle, Timer};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zasyncopt, zasyncread, zasyncwrite, zerror};
 
 #[async_trait]
 pub(crate) trait Scheduling {
-    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<ChannelLink>>>);
+    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<SessionTransportLink>>>);
 }
 
 macro_rules! zlinkget {
@@ -58,10 +51,54 @@ macro_rules! zlinkindex {
     };
 }
 
+pub(crate) struct SessionTransportRxReliable {
+    sn: SeqNum,
+    defrag_buffer: DefragBuffer,
+}
+
+impl SessionTransportRxReliable {
+    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SessionTransportRxReliable {
+        // Set the sequence number in the state as it had
+        // received a message with initial_sn - 1
+        let last_initial_sn = if initial_sn == 0 {
+            sn_resolution - 1
+        } else {
+            initial_sn - 1
+        };
+
+        SessionTransportRxReliable {
+            sn: SeqNum::new(last_initial_sn, sn_resolution),
+            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::Reliable),
+        }
+    }
+}
+
+pub(crate) struct SessionTransportRxBestEffort {
+    sn: SeqNum,
+    defrag_buffer: DefragBuffer,
+}
+
+impl SessionTransportRxBestEffort {
+    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SessionTransportRxBestEffort {
+        // Set the sequence number in the state as it had
+        // received a message with initial_sn - 1
+        let last_initial_sn = if initial_sn == 0 {
+            sn_resolution - 1
+        } else {
+            initial_sn - 1
+        };
+
+        SessionTransportRxBestEffort {
+            sn: SeqNum::new(last_initial_sn, sn_resolution),
+            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::BestEffort),
+        }
+    }
+}
+
 /*************************************/
 /*           CHANNEL STRUCT          */
 /*************************************/
-pub(crate) struct Channel {
+pub(crate) struct SessionTransport {
     // The manager this channel is associated to
     pub(super) manager: Arc<SessionManagerInner>,
     // The remote peer id
@@ -81,11 +118,11 @@ pub(crate) struct Channel {
     // The sn generator for the TX best_effort channel
     pub(super) tx_sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
     // The RX reliable channel
-    pub(super) rx_reliable: Mutex<ChannelRxReliable>,
+    pub(super) rx_reliable: Mutex<SessionTransportRxReliable>,
     // The RX best effort channel
-    pub(super) rx_best_effort: Mutex<ChannelRxBestEffort>,
+    pub(super) rx_best_effort: Mutex<SessionTransportRxBestEffort>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Vec<ChannelLink>>>,
+    pub(super) links: Arc<RwLock<Vec<SessionTransportLink>>>,
     // The scehduling function
     pub(super) scheduling: Box<dyn Scheduling + Send + Sync>,
     // The internal timer
@@ -98,7 +135,7 @@ pub(crate) struct Channel {
     pub(super) w_self: RwLock<Option<Weak<Self>>>,
 }
 
-impl Channel {
+impl SessionTransport {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         manager: Arc<SessionManagerInner>,
@@ -110,8 +147,8 @@ impl Channel {
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
         batch_size: usize,
-    ) -> Channel {
-        Channel {
+    ) -> SessionTransport {
+        SessionTransport {
             manager,
             pid,
             whatami,
@@ -127,8 +164,14 @@ impl Channel {
                 initial_sn_tx,
                 sn_resolution,
             ))),
-            rx_reliable: Mutex::new(ChannelRxReliable::new(initial_sn_rx, sn_resolution)),
-            rx_best_effort: Mutex::new(ChannelRxBestEffort::new(initial_sn_rx, sn_resolution)),
+            rx_reliable: Mutex::new(SessionTransportRxReliable::new(
+                initial_sn_rx,
+                sn_resolution,
+            )),
+            rx_best_effort: Mutex::new(SessionTransportRxBestEffort::new(
+                initial_sn_rx,
+                sn_resolution,
+            )),
             links: Arc::new(RwLock::new(Vec::new())),
             scheduling: Box::new(FirstMatch::new()),
             timer: Timer::new(),
@@ -292,7 +335,7 @@ impl Channel {
         }
 
         // Create a channel link from a link
-        let link = ChannelLink::new(
+        let link = SessionTransportLink::new(
             zasyncopt!(self.w_self).clone(),
             link,
             self.batch_size,
