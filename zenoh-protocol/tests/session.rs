@@ -16,7 +16,7 @@ use async_std::sync::{Arc, Barrier, Mutex};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use zenoh_protocol::core::{whatami, PeerId, ZInt};
 use zenoh_protocol::link::{Link, Locator};
@@ -35,19 +35,13 @@ const SLEEP: Duration = Duration::from_secs(1);
 // Session Handler for the router
 struct SHRouterLease {
     new_ses_bar: Arc<Barrier>,
-    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>,
 }
 
 impl SHRouterLease {
     fn new(barrier: Arc<Barrier>) -> Self {
         Self {
             new_ses_bar: barrier,
-            sessions: Mutex::new(HashMap::new()),
         }
-    }
-
-    async fn get_barrier(&self, peer: &PeerId) -> Arc<Barrier> {
-        zasynclock!(self.sessions).get(peer).unwrap().clone()
     }
 }
 
@@ -55,25 +49,19 @@ impl SHRouterLease {
 impl SessionHandler for SHRouterLease {
     async fn new_session(
         &self,
-        session: Session,
+        _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        let barrier = Arc::new(Barrier::new(2));
-        let mh = Arc::new(MHRouterLease::new(barrier.clone()));
-        let peer = session.get_pid()?;
-        zasynclock!(self.sessions).insert(peer, barrier);
+        let mh = Arc::new(MHRouterLease::new());
         self.new_ses_bar.wait().await;
-
         Ok(mh)
     }
 }
 
-struct MHRouterLease {
-    barrier: Arc<Barrier>,
-}
+struct MHRouterLease;
 
 impl MHRouterLease {
-    fn new(barrier: Arc<Barrier>) -> Self {
-        Self { barrier }
+    fn new() -> Self {
+        Self
     }
 }
 
@@ -88,12 +76,11 @@ impl SessionEventHandler for MHRouterLease {
     async fn del_link(&self, _link: Link) {}
 
     async fn closing(&self) {
-        println!("Session Lease [***]: session being closed on the router...");
+        println!("Session Lease [***]: session is being closed on the router...");
     }
 
     async fn closed(&self) {
         println!("Session Lease [***]: session has been closed on the router...");
-        self.barrier.wait().await;
     }
 }
 
@@ -108,10 +95,6 @@ impl SHClientLease {
             sessions: Mutex::new(HashMap::new()),
         }
     }
-
-    async fn get_barrier(&self, peer: &PeerId) -> Arc<Barrier> {
-        zasynclock!(self.sessions).get(peer).unwrap().clone()
-    }
 }
 
 #[async_trait]
@@ -121,20 +104,18 @@ impl SessionHandler for SHClientLease {
         session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         let barrier = Arc::new(Barrier::new(2));
-        let mh = Arc::new(MHCLientLease::new(barrier.clone()));
+        let mh = Arc::new(MHCLientLease::new());
         let peer = session.get_pid()?;
         zasynclock!(self.sessions).insert(peer, barrier);
         Ok(mh)
     }
 }
 
-struct MHCLientLease {
-    barrier: Arc<Barrier>,
-}
+struct MHCLientLease;
 
 impl MHCLientLease {
-    fn new(barrier: Arc<Barrier>) -> Self {
-        Self { barrier }
+    fn new() -> Self {
+        Self
     }
 }
 
@@ -151,7 +132,7 @@ impl SessionEventHandler for MHCLientLease {
     async fn closing(&self) {}
 
     async fn closed(&self) {
-        self.barrier.wait().await;
+        // self.barrier.wait().await;
     }
 }
 
@@ -260,7 +241,6 @@ async fn session_lease(locator: Locator) {
     let mut links = c_ses1.get_links().await.unwrap();
     println!("Session Lease [4a2]: {:?}", links);
     assert_eq!(links.len(), 1);
-    let start = Instant::now();
     for l in links.drain(..) {
         let res = c_ses1.close_link(&l).await;
         println!("Session Lease [4a3]: {:?}", res);
@@ -270,11 +250,7 @@ async fn session_lease(locator: Locator) {
     /* [5] */
     // Verify that the session has been closed on the router
     let lease = Duration::from_millis(lease as u64);
-    let barrier = router_handler.get_barrier(&client01_id).await;
-    let res = barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-    let end = Instant::now();
-    assert!(end - start >= lease);
+    task::sleep(lease).await;
 
     println!("\nSession Lease [5a1]");
     let sessions = router_manager.get_sessions().await;
@@ -282,10 +258,6 @@ async fn session_lease(locator: Locator) {
     assert_eq!(sessions.len(), 0);
 
     // Verify that the session has been closed on the client
-    let barrier = client01_handler.get_barrier(&router_id).await;
-    let res = barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
     println!("Session Lease [5b1]");
     let sessions = client01_manager.get_sessions().await;
     println!("Session Lease [5b2]: {:?}", sessions);
