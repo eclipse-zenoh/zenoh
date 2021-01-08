@@ -13,29 +13,25 @@
 //
 mod locator;
 pub use locator::*;
-
 mod manager;
 pub use manager::*;
 
 /* Import of Link modules */
 #[cfg(feature = "transport_tcp")]
 mod tcp;
-#[cfg(feature = "transport_udp")]
-mod udp;
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-mod unixsock_stream;
+// #[cfg(feature = "transport_udp")]
+// mod udp;
+// #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+// mod unixsock_stream;
 
 /* General imports */
-use async_std::sync::{Arc, Weak};
+use async_std::sync::Arc;
 use async_trait::async_trait;
-
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-
-use crate::session::Transport;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zweak;
+use std::ops::Deref;
+use zenoh_util::core::ZResult;
 
 /*************************************/
 /*              LINK                 */
@@ -43,74 +39,19 @@ use zenoh_util::zweak;
 const STR_ERR: &str = "Link not available";
 
 #[derive(Clone)]
-pub struct Link {
-    mtu: usize,
-    src: Locator,
-    dst: Locator,
-    is_reliable: bool,
-    is_streamed: bool,
-    inner: Weak<dyn LinkTrait + Send + Sync>,
-}
+pub struct Link(Arc<dyn LinkTrait + Send + Sync>);
 
 impl Link {
-    pub fn new(link: Arc<dyn LinkTrait + Send + Sync>) -> Link {
-        Link {
-            mtu: link.get_mtu(),
-            src: link.get_src(),
-            dst: link.get_dst(),
-            is_reliable: link.is_reliable(),
-            is_streamed: link.is_streamed(),
-            inner: Arc::downgrade(&link),
-        }
+    fn new(link: Arc<dyn LinkTrait + Send + Sync>) -> Link {
+        Self(link)
     }
+}
 
-    #[inline]
-    pub async fn close(&self) -> ZResult<()> {
-        let link = zweak!(self.inner, STR_ERR);
-        link.close().await
-    }
+impl Deref for Link {
+    type Target = Arc<dyn LinkTrait + Send + Sync>;
 
-    #[inline]
-    pub fn get_mtu(&self) -> usize {
-        self.mtu
-    }
-
-    #[inline]
-    pub fn get_src(&self) -> Locator {
-        self.src.clone()
-    }
-
-    #[inline]
-    pub fn get_dst(&self) -> Locator {
-        self.dst.clone()
-    }
-
-    #[inline]
-    pub fn is_reliable(&self) -> bool {
-        self.is_reliable
-    }
-
-    #[inline]
-    pub fn is_streamed(&self) -> bool {
-        self.is_streamed
-    }
-
-    #[inline]
-    pub async fn send(&self, buffer: &[u8]) -> ZResult<()> {
-        let link = zweak!(self.inner, STR_ERR);
-        link.send(buffer).await
-    }
-
-    #[inline]
-    pub async fn start(&self) -> ZResult<()> {
-        let link = zweak!(self.inner, STR_ERR);
-        link.start().await
-    }
-
-    #[inline]
-    pub async fn stop(&self) -> ZResult<()> {
-        let link = zweak!(self.inner, STR_ERR);
-        link.stop().await
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -118,76 +59,58 @@ impl Eq for Link {}
 
 impl PartialEq for Link {
     fn eq(&self, other: &Self) -> bool {
-        self.inner.ptr_eq(&other.inner)
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
 impl Hash for Link {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.src.hash(state);
-        self.dst.hash(state);
+        self.0.get_src().hash(state);
+        self.0.get_dst().hash(state);
     }
 }
 
 impl fmt::Display for Link {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} => {}", self.get_src(), self.get_dst())
+        write!(f, "{} => {}", self.0.get_src(), self.0.get_dst())
     }
 }
 
 impl fmt::Debug for Link {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let status = self.inner.upgrade().is_some();
         f.debug_struct("Link")
-            .field("src", &self.get_src())
-            .field("dst", &self.get_dst())
-            .field("mtu", &self.get_mtu())
-            .field("is_reliable", &self.is_reliable())
-            .field("is_streamed", &self.is_streamed())
-            .field("active", &status)
+            .field("src", &self.0.get_src())
+            .field("dst", &self.0.get_dst())
+            .field("mtu", &self.0.get_mtu())
+            .field("is_reliable", &self.0.is_reliable())
+            .field("is_streamed", &self.0.is_streamed())
             .finish()
     }
 }
 
 #[async_trait]
 pub trait LinkTrait {
-    async fn close(&self) -> ZResult<()>;
-
     fn get_mtu(&self) -> usize;
-
     fn get_src(&self) -> Locator;
-
     fn get_dst(&self) -> Locator;
-
     fn is_reliable(&self) -> bool;
-
     fn is_streamed(&self) -> bool;
 
-    async fn send(&self, buffer: &[u8]) -> ZResult<()>;
-
-    async fn start(&self) -> ZResult<()>;
-
-    async fn stop(&self) -> ZResult<()>;
+    async fn send(&self, buffer: &[u8]) -> ZResult<usize>;
+    async fn receive(&self, buffer: &mut [u8]) -> ZResult<usize>;
+    async fn close(&self) -> ZResult<()>;
 }
 
 /*************************************/
 /*           LINK MANAGER            */
 /*************************************/
-pub type LinkManager = Arc<dyn ManagerTrait + Send + Sync>;
+pub type LinkManager = Arc<dyn LinkManagerTrait + Send + Sync>;
 
 #[async_trait]
-pub trait ManagerTrait {
-    async fn new_link(&self, dst: &Locator, transport: &Transport) -> ZResult<Link>;
-
-    async fn get_link(&self, src: &Locator, dst: &Locator) -> ZResult<Link>;
-
-    async fn del_link(&self, src: &Locator, dst: &Locator) -> ZResult<()>;
-
+pub trait LinkManagerTrait {
+    async fn new_link(&self, dst: &Locator) -> ZResult<Link>;
     async fn new_listener(&self, locator: &Locator) -> ZResult<Locator>;
-
     async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
-
     async fn get_listeners(&self) -> Vec<Locator>;
-
     async fn get_locators(&self) -> Vec<Locator>;
 }

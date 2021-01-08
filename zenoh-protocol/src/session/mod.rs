@@ -17,55 +17,17 @@ mod manager;
 mod primitives;
 mod transport;
 
+use crate::core::{PeerId, WhatAmI, ZInt};
 use crate::link::Link;
-use crate::proto::{SessionMessage, ZenohMessage};
+use crate::proto::{smsg, ZenohMessage};
 use async_std::sync::{Arc, Weak};
 use async_trait::async_trait;
-use initial::*;
+pub(crate) use initial::*;
 pub use manager::*;
 pub use primitives::*;
+use std::fmt;
+use transport::*;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zerror, zweak};
-
-/*********************************************************/
-/*           Trait for implementing a transport          */
-/*********************************************************/
-const STR_ERR: &str = "Transport not available";
-
-#[derive(Clone)]
-pub struct Transport(Weak<dyn TransportTrait + Send + Sync>);
-
-impl Transport {
-    pub fn new(transport: Arc<dyn TransportTrait + Send + Sync>) -> Transport {
-        let transport = Arc::downgrade(&transport);
-        Transport(transport)
-    }
-}
-
-impl Transport {
-    pub async fn receive_message(&self, link: &Link, msg: SessionMessage) -> ZResult<Action> {
-        let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.receive_message(link, msg).await)
-    }
-
-    pub async fn link_err(&self, link: &Link) -> ZResult<()> {
-        let transport = zweak!(self.0, STR_ERR);
-        transport.link_err(link).await;
-        Ok(())
-    }
-}
-
-#[async_trait]
-pub trait TransportTrait {
-    async fn receive_message(&self, link: &Link, msg: SessionMessage) -> Action;
-    async fn link_err(&self, link: &Link);
-}
-
-pub enum Action {
-    ChangeTransport(Transport),
-    Close,
-    Read,
-}
 
 /*********************************************************/
 /* Session Callback to be implemented by the Upper Layer */
@@ -73,13 +35,9 @@ pub enum Action {
 #[async_trait]
 pub trait SessionEventHandler {
     async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
-
     async fn new_link(&self, link: Link);
-
     async fn del_link(&self, link: Link);
-
     async fn closing(&self);
-
     async fn closed(&self);
 }
 
@@ -114,4 +72,156 @@ impl SessionEventHandler for DummyHandler {
     async fn closing(&self) {}
 
     async fn closed(&self) {}
+}
+
+/*************************************/
+/*              SESSION              */
+/*************************************/
+const STR_ERR: &str = "Session not available";
+
+/// [`Session`] is the session handler returned when opening a new session
+#[derive(Clone)]
+pub struct Session(Weak<SessionTransport>);
+
+impl Session {
+    fn new(inner: Weak<SessionTransport>) -> Self {
+        Self(inner)
+    }
+
+    /*************************************/
+    /*         SESSION ACCESSORS         */
+    /*************************************/
+    #[inline]
+    pub(super) async fn add_link(&self, link: Link) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
+        channel.add_link(link).await?;
+        Ok(())
+    }
+
+    #[inline]
+    pub(super) async fn _del_link(&self, link: &Link) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
+        channel.del_link(&link).await?;
+        Ok(())
+    }
+
+    #[inline]
+    pub(super) async fn get_callback(
+        &self,
+    ) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
+        let channel = zweak!(self.0, STR_ERR);
+        let callback = channel.get_callback().await;
+        Ok(callback)
+    }
+
+    #[inline]
+    pub(super) async fn set_callback(
+        &self,
+        callback: Arc<dyn SessionEventHandler + Send + Sync>,
+    ) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
+        channel.set_callback(callback).await;
+        Ok(())
+    }
+
+    /*************************************/
+    /*          PUBLIC ACCESSORS         */
+    /*************************************/
+    #[inline]
+    pub fn get_pid(&self) -> ZResult<PeerId> {
+        let channel = zweak!(self.0, STR_ERR);
+        Ok(channel.get_pid())
+    }
+
+    #[inline]
+    pub fn get_whatami(&self) -> ZResult<WhatAmI> {
+        let channel = zweak!(self.0, STR_ERR);
+        Ok(channel.get_whatami())
+    }
+
+    #[inline]
+    pub fn get_lease(&self) -> ZResult<ZInt> {
+        let channel = zweak!(self.0, STR_ERR);
+        Ok(channel.get_lease())
+    }
+
+    #[inline]
+    pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
+        let channel = zweak!(self.0, STR_ERR);
+        Ok(channel.get_sn_resolution())
+    }
+
+    #[inline]
+    pub async fn close(&self) -> ZResult<()> {
+        log::trace!("{:?}. Close", self);
+        let channel = zweak!(self.0, STR_ERR);
+        channel.close(smsg::close_reason::GENERIC).await
+    }
+
+    #[inline]
+    pub async fn close_link(&self, link: &Link) -> ZResult<()> {
+        let channel = zweak!(self.0, STR_ERR);
+        channel
+            .close_link(link, smsg::close_reason::GENERIC)
+            .await?;
+        Ok(())
+    }
+
+    #[inline]
+    pub async fn get_links(&self) -> ZResult<Vec<Link>> {
+        log::trace!("{:?}. Get links", self);
+        let channel = zweak!(self.0, STR_ERR);
+        Ok(channel.get_links().await)
+    }
+
+    #[inline]
+    pub async fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
+        log::trace!("{:?}. Schedule: {:?}", self, message);
+        let channel = zweak!(self.0, STR_ERR);
+        channel.schedule(message).await;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl SessionEventHandler for Session {
+    #[inline]
+    async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+        self.schedule(message).await
+    }
+
+    #[inline]
+    async fn new_link(&self, _link: Link) {}
+
+    #[inline]
+    async fn del_link(&self, _link: Link) {}
+
+    #[inline]
+    async fn closing(&self) {}
+
+    #[inline]
+    async fn closed(&self) {}
+}
+
+impl Eq for Session {}
+
+impl PartialEq for Session {
+    fn eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl fmt::Debug for Session {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(channel) = self.0.upgrade() {
+            f.debug_struct("Session")
+                .field("peer", &channel.get_pid())
+                .field("lease", &channel.get_lease())
+                .field("keep_alive", &channel.get_keep_alive())
+                .field("sn_resolution", &channel.get_sn_resolution())
+                .finish()
+        } else {
+            write!(f, "Session closed")
+        }
+    }
 }

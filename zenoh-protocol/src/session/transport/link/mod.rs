@@ -37,8 +37,8 @@ async fn consume_task(
     queue: Arc<TransmissionPipeline>,
     link: Link,
     receiver: Receiver<()>,
-) -> ZResult<()> {
-    let mut result: ZResult<()> = Ok(());
+) -> ZResult<usize> {
+    let mut result: ZResult<usize> = Ok(0);
 
     // Keep draining the queue
     let consume = async {
@@ -197,7 +197,7 @@ impl SessionTransportLink {
 
         // Drain what remains in the queue before exiting
         while let Some(batch) = self.queue.drain().await {
-            self.link.send(batch.get_buffer()).await?;
+            self.link.send(batch.get_buffer()).await;
         }
 
         // Defuse the timed events
@@ -206,6 +206,7 @@ impl SessionTransportLink {
         }
 
         // Close the underlying link
-        self.link.close().await
+        self.link.close().await;
+        Ok(())
     }
 }

@@ -15,8 +15,6 @@ use super::SessionTransport;
 use crate::core::{Channel, PeerId, ZInt};
 use crate::link::Link;
 use crate::proto::{Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage};
-use crate::session::{Action, TransportTrait};
-use async_trait::async_trait;
 use zenoh_util::{zasynclock, zasyncread};
 
 macro_rules! zlinkget {
@@ -58,7 +56,8 @@ macro_rules! zreceiveframe {
                 // Delete the whole session
                 $ch.delete().await;
                 // Close the link
-                return Action::Close;
+                // return Action::Close;
+                return;
             }
         };
         if !precedes {
@@ -72,7 +71,8 @@ macro_rules! zreceiveframe {
                 $guard.defrag_buffer.clear();
             }
             // Keep reading
-            return Action::Read;
+            // return Action::Read;
+            return;
         }
 
         // Set will always return OK because we have already checked
@@ -87,7 +87,8 @@ macro_rules! zreceiveframe {
                 if let Err(e) = res {
                     log::trace!("Session: {}. Defragmentation error: {:?}", $ch.get_pid(), e);
                     $guard.defrag_buffer.clear();
-                    return Action::Read;
+                    // return Action::Read;
+                    return;
                 }
 
                 if is_final {
@@ -95,7 +96,8 @@ macro_rules! zreceiveframe {
                         Some(msg) => msg,
                         None => {
                             log::trace!("Session: {}. Defragmentation error.", $ch.get_pid());
-                            return Action::Read;
+                            // return Action::Read;
+                            return;
                         }
                     };
                     zcallback!($ch, msg);
@@ -108,7 +110,7 @@ macro_rules! zreceiveframe {
             }
         }
         // Keep reading
-        return Action::Read;
+        // return Action::Read;
     };
 }
 
@@ -116,26 +118,20 @@ impl SessionTransport {
     /*************************************/
     /*   MESSAGE RECEIVED FROM THE LINK  */
     /*************************************/
-    async fn process_reliable_frame(&self, sn: ZInt, payload: FramePayload) -> Action {
+    async fn process_reliable_frame(&self, sn: ZInt, payload: FramePayload) {
         // @TODO: Implement the reordering and reliability. Wait for missing messages.
         let mut guard = zasynclock!(self.rx_reliable);
 
         zreceiveframe!(self, guard, sn, payload);
     }
 
-    async fn process_best_effort_frame(&self, sn: ZInt, payload: FramePayload) -> Action {
+    async fn process_best_effort_frame(&self, sn: ZInt, payload: FramePayload) {
         let mut guard = zasynclock!(self.rx_best_effort);
 
         zreceiveframe!(self, guard, sn, payload);
     }
 
-    async fn process_close(
-        &self,
-        link: &Link,
-        pid: Option<PeerId>,
-        reason: u8,
-        link_only: bool,
-    ) -> Action {
+    async fn process_close(&self, link: &Link, pid: Option<PeerId>, reason: u8, link_only: bool) {
         // Check if the PID is correct when provided
         if let Some(pid) = pid {
             if pid != self.pid {
@@ -145,7 +141,8 @@ impl SessionTransport {
                     pid,
                     reason
                 );
-                return Action::Read;
+                // return Action::Read;
+                return;
             }
         }
 
@@ -157,10 +154,10 @@ impl SessionTransport {
             self.delete().await;
         }
 
-        Action::Close
+        // Action::Close
     }
 
-    async fn process_keep_alive(&self, link: &Link, pid: Option<PeerId>) -> Action {
+    async fn process_keep_alive(&self, link: &Link, pid: Option<PeerId>) {
         // Check if the PID is correct when provided
         if let Some(pid) = pid {
             if pid != self.pid {
@@ -169,17 +166,14 @@ impl SessionTransport {
                     link,
                     pid
                 );
-                return Action::Read;
+                // return Action::Read;
             }
         }
 
-        Action::Read
+        // Action::Read
     }
-}
 
-#[async_trait]
-impl TransportTrait for SessionTransport {
-    async fn receive_message(&self, link: &Link, message: SessionMessage) -> Action {
+    async fn receive_message(&self, link: &Link, message: SessionMessage) {
         log::trace!(
             "Received from peer {} on link {}: {:?}",
             self.get_pid(),
@@ -192,7 +186,8 @@ impl TransportTrait for SessionTransport {
         if let Some(link) = zlinkget!(guard, link) {
             link.mark_alive();
         } else {
-            return Action::Close;
+            // return Action::Close;
+            return;
         }
         drop(guard);
 
@@ -205,7 +200,8 @@ impl TransportTrait for SessionTransport {
             SessionBody::AckNack { .. } => {
                 log::trace!("Handling of AckNack Messages not yet implemented!");
                 self.delete().await;
-                Action::Close
+                // return Action::Close;
+                return;
             }
             SessionBody::Close(Close {
                 pid,
@@ -215,28 +211,33 @@ impl TransportTrait for SessionTransport {
             SessionBody::Hello { .. } => {
                 log::trace!("Handling of Hello Messages not yet implemented!");
                 self.delete().await;
-                Action::Close
+                // return Action::Close;
+                return;
             }
             SessionBody::KeepAlive(KeepAlive { pid }) => self.process_keep_alive(link, pid).await,
             SessionBody::Ping { .. } => {
                 log::trace!("Handling of Ping Messages not yet implemented!");
                 self.delete().await;
-                Action::Close
+                // return Action::Close;
+                return;
             }
             SessionBody::Pong { .. } => {
                 log::trace!("Handling of Pong Messages not yet implemented!");
                 self.delete().await;
-                Action::Close
+                // return Action::Close;
+                return;
             }
             SessionBody::Scout { .. } => {
                 log::trace!("Handling of Scout Messages not yet implemented!");
                 self.delete().await;
-                Action::Close
+                // return Action::Close;
+                return;
             }
             SessionBody::Sync { .. } => {
                 log::trace!("Handling of Sync Messages not yet implemented!");
                 self.delete().await;
-                Action::Close
+                // return Action::Close;
+                return;
             }
             SessionBody::InitSyn { .. }
             | SessionBody::InitAck { .. }
@@ -248,7 +249,8 @@ impl TransportTrait for SessionTransport {
                     link
                 );
                 self.delete().await;
-                Action::Close
+                // return Action::Close;
+                return;
             }
         }
     }

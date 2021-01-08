@@ -51,6 +51,9 @@ zconfigurable! {
     // Default retries when opening a session
     pub static ref SESSION_OPEN_RETRIES: usize = 3;
 
+    // Default maximum number of pending sessions being opened with the host
+    pub static ref SESSION_OPEN_MAX_CONCURRENT: usize = 1_024;
+
     // Parameters of the link transmission queue
     // - The size of each queue relates to the number of batches a given queue can contain.
     // - The amount of memory being allocated for each queue is then QUEUE_SIZE_XXX * SESSION_BATCH_SIZE.

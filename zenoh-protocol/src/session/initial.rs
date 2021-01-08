@@ -17,13 +17,18 @@ use crate::link::{Link, Locator};
 use crate::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
 };
-use crate::session::defaults::SESSION_SEQ_NUM_RESOLUTION;
-use crate::session::{Action, Session, SessionManagerInner, TransportTrait};
-use async_std::channel::Sender;
+use crate::session::defaults::{
+    SESSION_OPEN_MAX_CONCURRENT, SESSION_OPEN_TIMEOUT, SESSION_SEQ_NUM_RESOLUTION,
+};
+use crate::session::{Session, SessionManagerInner};
+use async_std::channel::{Receiver, RecvError, Sender};
+use async_std::future::TimeoutError;
+use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
-use async_trait::async_trait;
 use rand::Rng;
 use std::collections::HashMap;
+use std::pin::Pin;
+use std::time::{Duration, Instant};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zcheck, zerror};
 
@@ -94,16 +99,19 @@ impl RBuf {
     }
 }
 
+// The session being opened and not yet initialized
 struct Pending {
     notify: Sender<ZResult<Session>>,
 }
 
+// The session initialized but not yet opened
 struct Initialized {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     initial_sn: ZInt,
 }
 
+// The opened (i.e. established) sessions
 struct Opened {
     whatami: WhatAmI,
     pid: PeerId,
@@ -112,20 +120,39 @@ struct Opened {
     notify: Sender<ZResult<Session>>,
 }
 
-pub(super) struct InitialSession {
-    manager: Arc<SessionManagerInner>,
-    pending: Mutex<HashMap<Link, Pending>>,
-    initialized: Mutex<HashMap<PeerId, Initialized>>,
-    opened: Mutex<HashMap<Link, Opened>>,
+pub(super) enum InitialReadOutput {
+    Existing((Arc<IncomingSession>, ZResult<usize>)),
+    New(Link),
 }
 
-impl InitialSession {
-    pub(super) fn new(manager: Arc<SessionManagerInner>) -> InitialSession {
-        InitialSession {
+// The initial session
+pub(crate) struct SessionManagerInitial {
+    // Reference to the main Session Manager
+    manager: Arc<SessionManagerInner>,
+    // Session being initialized and waiting for a response
+    pending: Mutex<HashMap<Link, Pending>>,
+    // Initialized sessions but not yet opened
+    initialized: Mutex<HashMap<PeerId, Initialized>>,
+    // Opened (i.e. established) sessions
+    opened: Mutex<HashMap<Link, Opened>>,
+    // Channel senders for the initial_read_task
+    sender_newlink: Sender<InitialReadOutput>,
+    sender_stop: Sender<()>,
+}
+
+impl SessionManagerInitial {
+    pub(super) fn new(
+        manager: Arc<SessionManagerInner>,
+        sender_newlink: Sender<InitialReadOutput>,
+        sender_stop: Sender<()>,
+    ) -> SessionManagerInitial {
+        SessionManagerInitial {
             manager,
             pending: Mutex::new(HashMap::new()),
             initialized: Mutex::new(HashMap::new()),
             opened: Mutex::new(HashMap::new()),
+            sender_newlink,
+            sender_stop,
         }
     }
 
@@ -167,19 +194,16 @@ impl InitialSession {
         );
 
         // Send the message on the link
-        if let Err(e) = zlinksend!(message, link) {
-            let e = format!(
-                "Failed to send open message on link {:?}: {}",
-                link,
-                e.to_string()
-            );
+        let res = zlinksend!(message, link);
+        if res.is_err() {
+            let e = format!("Failed to send open message on link: {:?}", link,);
             log::warn!("{}", e);
             let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
             let _ = notify.send(err).await;
             return zerror!(ZErrorKind::InvalidLink { descr: e });
         }
 
-        // Store the pending for the callback to be used in the process_message
+        // Store the pending for the callback to be used in the handle_message
         zasynclock!(self.pending).insert(
             link.clone(),
             Pending {
@@ -193,14 +217,14 @@ impl InitialSession {
     /*************************************/
     /*          PROCESS MESSAGES         */
     /*************************************/
-    async fn process_init_syn(
+    async fn handle_init_syn(
         &self,
         link: &Link,
         syn_version: u8,
         syn_whatami: WhatAmI,
         syn_pid: PeerId,
         syn_sn_resolution: Option<ZInt>,
-    ) -> Action {
+    ) {
         // Check if the version is supported
         if syn_version > self.manager.config.version {
             // Send a close message
@@ -219,7 +243,8 @@ impl InitialSession {
             );
 
             // Close the link
-            return Action::Close;
+            // return Action::Close;
+            return;
         }
 
         // Get the SN Resolution
@@ -260,7 +285,8 @@ impl InitialSession {
             );
 
             // Close the link
-            return Action::Close;
+            // return Action::Close;
+            return;
         }
 
         // Build the fields for the InitSyn message
@@ -277,27 +303,28 @@ impl InitialSession {
             SessionMessage::make_init_ack(whatami, apid, sn_resolution, cookie, attachment);
 
         // Send the message on the link
-        if let Err(e) = zlinksend!(message, link) {
+        let res = zlinksend!(message, link);
+        if res.is_err() {
             log::warn!(
-                "Unable to send InitAck on link {} to peer {}: {}",
+                "Unable to send InitAck on link {} to peer: {}",
                 link,
                 syn_pid,
-                e
             );
-            return Action::Close;
+            // return Action::Close;
+            return;
         }
 
-        Action::Read
+        // Action::Read
     }
 
-    async fn process_init_ack(
+    async fn handle_init_ack(
         &self,
         link: &Link,
         ack_whatami: WhatAmI,
         ack_pid: PeerId,
         ack_sn_resolution: Option<ZInt>,
         ack_cookie: RBuf,
-    ) -> Action {
+    ) {
         // Check if a pending init is already present for this link
         let pending = if let Some(pending) = zasynclock!(self.pending).remove(link) {
             pending
@@ -318,7 +345,8 @@ impl InitialSession {
             );
 
             // Close the link
-            return Action::Close;
+            // return Action::Close;
+            return;
         };
 
         // Get the sn resolution
@@ -340,7 +368,8 @@ impl InitialSession {
                 );
 
                 // Close the link
-                return Action::Close;
+                // return Action::Close;
+                return;
             }
             sn_resolution
         } else {
@@ -368,7 +397,8 @@ impl InitialSession {
                 );
 
                 // Close the link
-                return Action::Close;
+                // return Action::Close;
+                return;
             }
             initialized.initial_sn
         } else {
@@ -399,16 +429,14 @@ impl InitialSession {
         let message = SessionMessage::make_open_syn(lease, initial_sn, ack_cookie, attachment);
 
         // Send the message on the link
-        if let Err(e) = zlinksend!(message, link) {
-            let e = format!(
-                "Failed to send OpenSyn message on link {:?}: {}",
-                link,
-                e.to_string()
-            );
+        let res = zlinksend!(message, link);
+        if res.is_err() {
+            let e = format!("Failed to send OpenSyn message on link: {:?}", link,);
             log::warn!("{}", e);
             let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
             let _ = pending.notify.send(err).await;
-            return Action::Close;
+            // return Action::Close;
+            return;
         }
 
         let mut guard = zasynclock!(self.opened);
@@ -423,16 +451,16 @@ impl InitialSession {
             },
         );
 
-        Action::Read
+        // Action::Read
     }
 
-    async fn process_open_syn(
+    async fn handle_open_syn(
         &self,
         link: &Link,
         syn_lease: ZInt,
         syn_initial_sn: ZInt,
         mut syn_cookie: RBuf,
-    ) -> Action {
+    ) {
         let cookie = if let Some(cookie) = syn_cookie.read_cookie() {
             // @TODO: verify cookie with HMAC
             cookie
@@ -452,7 +480,8 @@ impl InitialSession {
             );
 
             // Close the link
-            return Action::Close;
+            // return Action::Close;
+            return;
         };
 
         // Initialize the session if it is new
@@ -478,7 +507,8 @@ impl InitialSession {
                 );
 
                 // Close the link
-                return Action::Close;
+                // return Action::Close;
+                return;
             }
             initialized.initial_sn
         } else {
@@ -524,11 +554,13 @@ impl InitialSession {
                             log::warn!("Rejecting Open on link {} because of maximum links limit reached for peer: {}", link, cookie.pid);
 
                             // Close the link
-                            return Action::Close;
+                            // return Action::Close;
+                            return;
                         }
                     } else {
                         // Close the link
-                        return Action::Close;
+                        // return Action::Close;
+                        return;
                     }
                 }
 
@@ -548,11 +580,13 @@ impl InitialSession {
                         log::warn!("Rejecting Open on link {} because of invalid lease on already existing session with peer: {}", link, cookie.pid);
 
                         // Close the link
-                        return Action::Close;
+                        // return Action::Close;
+                        return;
                     }
                 } else {
                     // Close the link
-                    return Action::Close;
+                    // return Action::Close;
+                    return;
                 }
 
                 // Check if the sn_resolution is valid (i.e. the same of existing session)
@@ -572,13 +606,15 @@ impl InitialSession {
                                     session with peer: {}", link, cookie.pid);
 
                         // Close the link
-                        return Action::Close;
+                        // return Action::Close;
+                        return;
                     }
 
                     snr
                 } else {
                     // Close the link
-                    return Action::Close;
+                    // return Action::Close;
+                    return;
                 };
 
                 break s;
@@ -601,7 +637,8 @@ impl InitialSession {
                         log::warn!("Rejecting Open on link {} because of maximum sessions limit reached for peer: {}", link, cookie.pid);
 
                         // Close the link
-                        return Action::Close;
+                        // return Action::Close;
+                        return;
                     }
                 }
 
@@ -638,7 +675,8 @@ impl InitialSession {
                 cookie.pid,
                 e
             );
-            return Action::Close;
+            // return Action::Close;
+            return;
         }
 
         // Build OpenAck message
@@ -647,14 +685,15 @@ impl InitialSession {
             SessionMessage::make_open_ack(self.manager.config.lease, ack_initial_sn, attachment);
 
         // Send the message on the link
-        if let Err(e) = zlinksend!(message, link) {
+        let res = zlinksend!(message, link);
+        if res.is_err() {
             log::warn!(
-                "Unable to send OpenAck on link {} for peer {}: {}",
+                "Unable to send OpenAck on link {} for peer: {}",
                 link,
                 cookie.pid,
-                e
             );
-            return Action::Close;
+            // return Action::Close;
+            return;
         }
 
         // Assign a callback if the session is new
@@ -668,7 +707,7 @@ impl InitialSession {
                     // NOTE: the read loop of the link the open message was sent on remains blocked
                     //       until the new_session() returns. The read_loop in the various links
                     //       waits for any eventual transport to associate to. This transport is
-                    //       returned only by the process_open() -- this function.
+                    //       returned only by the handle_open() -- this function.
                     let callback = match self
                         .manager
                         .config
@@ -683,32 +722,35 @@ impl InitialSession {
                                 cookie.pid,
                                 e
                             );
-                            return Action::Close;
+                            // return Action::Close;
+                            return;
                         }
                     };
                     // Set the callback on the transport
                     if let Err(e) = session.set_callback(callback).await {
                         log::warn!("Unable to set callback for peer {}: {}", cookie.pid, e);
-                        return Action::Close;
+                        // return Action::Close;
+                        return;
                     }
                 }
             }
             Err(e) => {
                 log::warn!("Unable to get callback for peer {}: {}", cookie.pid, e);
-                return Action::Close;
+                // return Action::Close;
+                return;
             }
         };
 
         log::debug!("New session link established from {}: {}", cookie.pid, link);
 
-        // Return the target transport to use in the link
-        match session.get_transport() {
-            Ok(transport) => Action::ChangeTransport(transport),
-            Err(_) => Action::Close,
-        }
+        // // Return the target transport to use in the link
+        // match session.get_transport() {
+        //     Ok(transport) => Action::ChangeTransport(transport),
+        //     Err(_) => Action::Close,
+        // }
     }
 
-    async fn process_open_ack(&self, link: &Link, lease: ZInt, initial_sn: ZInt) -> Action {
+    async fn handle_open_ack(&self, link: &Link, lease: ZInt, initial_sn: ZInt) {
         let opened = if let Some(opened) = zasynclock!(self.opened).remove(link) {
             opened
         } else {
@@ -727,7 +769,8 @@ impl InitialSession {
             );
 
             // Close the link
-            return Action::Close;
+            // return Action::Close;
+            return;
         };
 
         // Get a new or an existing session
@@ -760,7 +803,8 @@ impl InitialSession {
 
             // Notify
             let _ = opened.notify.send(Err(e)).await;
-            return Action::Close;
+            // return Action::Close;
+            return;
         }
 
         // Set the callback on the session if needed
@@ -769,7 +813,8 @@ impl InitialSession {
             Err(e) => {
                 // Notify
                 let _ = opened.notify.send(Err(e)).await;
-                return Action::Close;
+                // return Action::Close;
+                return;
             }
         };
 
@@ -791,7 +836,8 @@ impl InitialSession {
                         opened.pid,
                         e
                     );
-                    return Action::Close;
+                    // return Action::Close;
+                    return;
                 }
             };
             // Set the callback on the transport
@@ -799,36 +845,31 @@ impl InitialSession {
                 log::warn!("{}", e);
                 // Notify
                 let _ = opened.notify.send(Err(e)).await;
-                return Action::Close;
+                // return Action::Close;
+                return;
             }
         }
 
         // Return the target transport to use in the link
-        match session.get_transport() {
-            Ok(transport) => {
-                // Notify
-                log::debug!("New session link established with {}: {}", opened.pid, link);
-                if opened.notify.send(Ok(session)).await.is_ok() {
-                    Action::ChangeTransport(transport)
-                } else {
-                    Action::Close
-                }
-            }
-            Err(e) => {
-                // Notify
-                let _ = opened.notify.send(Err(e)).await;
-                Action::Close
-            }
-        }
+        // match session.get_transport() {
+        //     Ok(transport) => {
+        //         // Notify
+        //         log::debug!("New session link established with {}: {}", opened.pid, link);
+        //         if opened.notify.send(Ok(session)).await.is_ok() {
+        //             Action::ChangeTransport(transport)
+        //         } else {
+        //             Action::Close
+        //         }
+        //     }
+        //     Err(e) => {
+        //         // Notify
+        //         let _ = opened.notify.send(Err(e)).await;
+        //         Action::Close
+        //     }
+        // }
     }
 
-    async fn process_close(
-        &self,
-        link: &Link,
-        pid: Option<PeerId>,
-        reason: u8,
-        link_only: bool,
-    ) -> Action {
+    async fn handle_close(&self, link: &Link, pid: Option<PeerId>, reason: u8, link_only: bool) {
         if !link_only {
             if let Some(pid) = pid.as_ref() {
                 zasynclock!(self.initialized).remove(pid);
@@ -856,10 +897,10 @@ impl InitialSession {
             let _ = notify.send(err).await;
         }
 
-        Action::Close
+        // Action::Close
     }
 
-    async fn process_invalid(&self, link: &Link, message: SessionMessage) -> Action {
+    async fn handle_invalid(&self, link: &Link, message: SessionMessage) {
         let e = format!("Invalid message received on link: {}", link);
         log::debug!("{}. Message: {:?}", e, message);
 
@@ -880,13 +921,10 @@ impl InitialSession {
             let _ = pending.notify.send(err).await;
         }
 
-        Action::Close
+        // Action::Close
     }
-}
 
-#[async_trait]
-impl TransportTrait for InitialSession {
-    async fn receive_message(&self, link: &Link, message: SessionMessage) -> Action {
+    async fn handle_message(&self, link: &Link, message: SessionMessage) {
         match message.body {
             SessionBody::InitSyn(InitSyn {
                 version,
@@ -894,7 +932,7 @@ impl TransportTrait for InitialSession {
                 pid,
                 sn_resolution,
             }) => {
-                self.process_init_syn(link, version, whatami, pid, sn_resolution)
+                self.handle_init_syn(link, version, whatami, pid, sn_resolution)
                     .await
             }
 
@@ -904,7 +942,7 @@ impl TransportTrait for InitialSession {
                 sn_resolution,
                 cookie,
             }) => {
-                self.process_init_ack(link, whatami, pid, sn_resolution, cookie)
+                self.handle_init_ack(link, whatami, pid, sn_resolution, cookie)
                     .await
             }
 
@@ -912,30 +950,130 @@ impl TransportTrait for InitialSession {
                 lease,
                 initial_sn,
                 cookie,
-            }) => self.process_open_syn(link, lease, initial_sn, cookie).await,
+            }) => self.handle_open_syn(link, lease, initial_sn, cookie).await,
 
             SessionBody::OpenAck(OpenAck { lease, initial_sn }) => {
-                self.process_open_ack(link, lease, initial_sn).await
+                self.handle_open_ack(link, lease, initial_sn).await
             }
 
             SessionBody::Close(Close {
                 pid,
                 reason,
                 link_only,
-            }) => self.process_close(link, pid, reason, link_only).await,
+            }) => self.handle_close(link, pid, reason, link_only).await,
 
-            _ => self.process_invalid(link, message).await,
+            _ => self.handle_invalid(link, message).await,
         }
     }
 
-    async fn link_err(&self, link: &Link) {
-        if let Some(pending) = zasynclock!(self.pending).remove(link) {
-            let e = format!("Unexpected error on link: {}", link);
-            log::debug!("{}", e);
-
-            // Notify
-            let err = zerror!(ZErrorKind::IOError { descr: e });
-            let _ = pending.notify.send(err).await;
-        }
+    #[inline]
+    pub(crate) async fn handle_new_link(&self, link: Link) {
+        self.sender_newlink.send(InitialReadOutput::New(link)).await;
     }
+}
+
+pub(super) struct IncomingSession {
+    link: Link,
+    time: Instant,
+    buffer: Mutex<Vec<u8>>,
+}
+// Consume task
+pub(super) async fn initial_read_task(
+    initial: Arc<SessionManagerInitial>,
+    newlink: Receiver<InitialReadOutput>,
+    stop: Receiver<()>,
+) {
+    async fn receive_from_link(
+        incoming: Arc<IncomingSession>,
+    ) -> Result<InitialReadOutput, RecvError> {
+        let mut buffer = zasynclock!(incoming.buffer);
+        let index = buffer.len();
+        let res = incoming.link.receive(&mut buffer[index..]).await;
+        drop(buffer);
+        Ok(InitialReadOutput::Existing((incoming, res)))
+    }
+    // Keep accepting new sessions the queue
+    let read = async {
+        let mut buffer: Vec<u8> = vec![0u8; 65_537];
+        let mut incoming: Vec<Arc<IncomingSession>> = Vec::new();
+        loop {
+            // Wait for new incoming connections
+            let mut read_fut: Pin<
+                Box<
+                    dyn Future<Output = Result<Result<InitialReadOutput, RecvError>, TimeoutError>>
+                        + Send,
+                >,
+            > = Box::pin(newlink.recv().timeout(Duration::from_secs(u64::MAX)));
+            // Receive data from existing incoming connections
+            for i in incoming.iter() {
+                // Recompute the timeout before considering this incmoing session no longer valid
+                let to = Duration::from_millis(*SESSION_OPEN_TIMEOUT) - (Instant::now() - i.time);
+                read_fut = Box::pin(read_fut.race(receive_from_link(i.clone()).timeout(to)));
+            }
+
+            match read_fut.await {
+                // Result on timeout
+                Ok(res) => match res {
+                    // Result on channel
+                    Ok(out) => match out {
+                        // An event arrived from an existing incoming session
+                        InitialReadOutput::Existing((is, res)) => match res {
+                            Ok(n) => {
+                                let buffer = zasynclock!(is.buffer);
+                                if is.link.is_streamed() {}
+                                // Need to read the full buffer
+                                log::trace!("Read 1 byte on... {}", is.link);
+                            }
+                            Err(e) => {
+                                // There was an error reading from the link, remove it
+                                if let Some(index) = incoming.iter().position(|e| e.link == is.link)
+                                {
+                                    log::debug!("{}", e);
+                                    incoming.remove(index);
+                                }
+                            }
+                        },
+                        // A new incoming session has just arrived
+                        InitialReadOutput::New(link) => {
+                            if incoming.len() < *SESSION_OPEN_MAX_CONCURRENT {
+                                log::trace!("New link waiting... {}", link);
+                                // A new link is available
+                                let is = Arc::new(IncomingSession {
+                                    link,
+                                    buffer: Mutex::new(vec![0u8; 1]),
+                                    time: Instant::now(),
+                                });
+                                incoming.push(is);
+                            } else {
+                                // We reached the limit of concurrent incoming session, this means two things:
+                                // - the values configured for SESSION_OPEN_MAX_CONCURRENT and SESSION_OPEN_TIMEOUT
+                                //   are too small for the scenario zenoh is deployed in;
+                                // - there is a tentative of DoS attack.
+                                // In both cases, let's close the link straight away with no additional notification
+                                log::trace!("Closing link for preventing potential DoS: {}", link);
+                                link.close().await;
+                            }
+                        }
+                    },
+                    Err(_) => {
+                        // An error on the channel occured, we treat it as a stop signal
+                        break;
+                    }
+                },
+                Err(_) => {
+                    // Timeout error, eliminate all the exipred incoming sessions
+                    while let Some(index) = incoming.iter().position(|e| {
+                        (Instant::now() - e.time).as_millis() > (*SESSION_OPEN_TIMEOUT).into()
+                    }) {
+                        log::debug!("Incoming session expired on link: {}", incoming[index].link);
+                        incoming.remove(index);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    };
+
+    let _ = read.race(stop.recv()).await;
 }

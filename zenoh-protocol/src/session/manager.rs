@@ -15,17 +15,18 @@ use super::defaults::{
     SESSION_BATCH_SIZE, SESSION_KEEP_ALIVE, SESSION_LEASE, SESSION_OPEN_RETRIES,
     SESSION_OPEN_TIMEOUT, SESSION_SEQ_NUM_RESOLUTION,
 };
+use super::initial::{initial_read_task, InitialReadOutput};
 use super::transport::SessionTransport;
-use super::{InitialSession, SessionEventHandler, SessionHandler, Transport};
+use super::Session;
+use super::{SessionHandler, SessionManagerInitial};
 use crate::core::{PeerId, WhatAmI, ZInt};
-use crate::link::{Link, LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
-use crate::proto::{smsg, Attachment, ZenohMessage};
+use crate::link::{LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
+use crate::proto::Attachment;
 use async_std::channel::bounded;
 use async_std::prelude::*;
-use async_std::sync::{Arc, RwLock, Weak};
-use async_trait::async_trait;
+use async_std::sync::{Arc, RwLock};
+use async_std::task;
 use std::collections::HashMap;
-use std::fmt;
 use std::net::Ipv4Addr;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -162,12 +163,25 @@ impl SessionManager {
             max_links,
             handler: config.handler,
         };
+
         // Create the inner session manager
         let manager_inner = Arc::new(SessionManagerInner::new(inner_config));
-        // Create the initial session used to establish new connections
-        let initial_session = Arc::new(InitialSession::new(manager_inner.clone()));
+        // Create the initial manager used to establish new connections
+        let (sender_newlink, receiver_newlink) = bounded::<InitialReadOutput>(1);
+        let (sender_stop, receiver_stop) = bounded::<()>(1);
+        let initial_session = Arc::new(SessionManagerInitial::new(
+            manager_inner.clone(),
+            sender_newlink,
+            sender_stop,
+        ));
+
+        // Start the task handling incoming connections
+        let c_is = initial_session.clone();
+        task::spawn(async move {
+            initial_read_task(c_is, receiver_newlink, receiver_stop).await;
+        });
         // Add the session to the inner session manager
-        manager_inner.init_initial_session(initial_session);
+        *manager_inner.initial.try_write().unwrap() = Some(initial_session);
 
         SessionManager(manager_inner)
     }
@@ -186,7 +200,6 @@ impl SessionManager {
     ) -> ZResult<Session> {
         // Retrieve the initial session
         let initial = self.0.get_initial_session().await;
-        let transport = self.0.get_initial_transport().await;
         // Create the timeout duration
         let to = Duration::from_millis(self.0.config.timeout);
 
@@ -196,7 +209,7 @@ impl SessionManager {
             .get_or_new_link_manager(&self.0, &locator.get_proto())
             .await;
         // Create a new link associated by calling the Link Manager
-        let link = match manager.new_link(&locator, &transport).await {
+        let link = match manager.new_link(&locator).await {
             Ok(link) => link,
             Err(e) => {
                 log::warn!("Can not to create a link to locator {}: {}", locator, e);
@@ -245,9 +258,6 @@ impl SessionManager {
                 }
             }
         }
-
-        // Delete the link on the link manager
-        let _ = manager.del_link(&link.get_src(), &link.get_dst()).await;
 
         let e = format!(
             "Can not open a session to {}: maximum number of attemps reached ({})",
@@ -314,7 +324,7 @@ pub(crate) struct SessionManagerInnerConfig {
 
 pub(crate) struct SessionManagerInner {
     pub(crate) config: SessionManagerInnerConfig,
-    initial: RwLock<Option<Arc<InitialSession>>>,
+    initial: RwLock<Option<Arc<SessionManagerInitial>>>,
     protocols: RwLock<HashMap<LocatorProtocol, LinkManager>>,
     sessions: RwLock<HashMap<PeerId, Arc<SessionTransport>>>,
 }
@@ -327,13 +337,6 @@ impl SessionManagerInner {
             protocols: RwLock::new(HashMap::new()),
             sessions: RwLock::new(HashMap::new()),
         }
-    }
-
-    /*************************************/
-    /*          INITIALIZATION           */
-    /*************************************/
-    fn init_initial_session(&self, session: Arc<InitialSession>) {
-        *self.initial.try_write().unwrap() = Some(session);
     }
 
     /*************************************/
@@ -370,7 +373,8 @@ impl SessionManagerInner {
             });
         }
 
-        let lm = LinkManagerBuilder::make(a_self.clone(), protocol);
+        let initial = zasyncread!(self.initial).as_ref().unwrap().clone();
+        let lm = LinkManagerBuilder::make(initial, protocol);
         w_guard.insert(protocol.clone(), lm.clone());
         Ok(lm)
     }
@@ -442,12 +446,7 @@ impl SessionManagerInner {
     /*************************************/
     /*              SESSION              */
     /*************************************/
-    pub(crate) async fn get_initial_transport(&self) -> Transport {
-        let initial = zasyncread!(self.initial).as_ref().unwrap().clone();
-        Transport::new(initial)
-    }
-
-    pub(super) async fn get_initial_session(&self) -> Arc<InitialSession> {
+    pub(crate) async fn get_initial_session(&self) -> Arc<SessionManagerInitial> {
         zasyncread!(self.initial).as_ref().unwrap().clone()
     }
 
@@ -572,163 +571,5 @@ impl SessionManagerInner {
         );
 
         Ok(session)
-    }
-}
-
-/*************************************/
-/*              SESSION              */
-/*************************************/
-const STR_ERR: &str = "Session not available";
-
-/// [`Session`] is the session handler returned when opening a new session
-#[derive(Clone)]
-pub struct Session(Weak<SessionTransport>);
-
-impl Session {
-    fn new(inner: Weak<SessionTransport>) -> Self {
-        Self(inner)
-    }
-
-    /*************************************/
-    /*         SESSION ACCESSORS         */
-    /*************************************/
-    #[inline]
-    pub(super) fn get_transport(&self) -> ZResult<Transport> {
-        let transport = zweak!(self.0, STR_ERR);
-        Ok(Transport::new(transport))
-    }
-
-    #[inline]
-    pub(super) async fn add_link(&self, link: Link) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel.add_link(link).await?;
-        Ok(())
-    }
-
-    #[inline]
-    pub(super) async fn _del_link(&self, link: &Link) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel.del_link(&link).await?;
-        Ok(())
-    }
-
-    #[inline]
-    pub(super) async fn get_callback(
-        &self,
-    ) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
-        let channel = zweak!(self.0, STR_ERR);
-        let callback = channel.get_callback().await;
-        Ok(callback)
-    }
-
-    #[inline]
-    pub(super) async fn set_callback(
-        &self,
-        callback: Arc<dyn SessionEventHandler + Send + Sync>,
-    ) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel.set_callback(callback).await;
-        Ok(())
-    }
-
-    /*************************************/
-    /*          PUBLIC ACCESSORS         */
-    /*************************************/
-    #[inline]
-    pub fn get_pid(&self) -> ZResult<PeerId> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_pid())
-    }
-
-    #[inline]
-    pub fn get_whatami(&self) -> ZResult<WhatAmI> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_whatami())
-    }
-
-    #[inline]
-    pub fn get_lease(&self) -> ZResult<ZInt> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_lease())
-    }
-
-    #[inline]
-    pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_sn_resolution())
-    }
-
-    #[inline]
-    pub async fn close(&self) -> ZResult<()> {
-        log::trace!("{:?}. Close", self);
-        let channel = zweak!(self.0, STR_ERR);
-        channel.close(smsg::close_reason::GENERIC).await
-    }
-
-    #[inline]
-    pub async fn close_link(&self, link: &Link) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel
-            .close_link(link, smsg::close_reason::GENERIC)
-            .await?;
-        Ok(())
-    }
-
-    #[inline]
-    pub async fn get_links(&self) -> ZResult<Vec<Link>> {
-        log::trace!("{:?}. Get links", self);
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_links().await)
-    }
-
-    #[inline]
-    pub async fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
-        log::trace!("{:?}. Schedule: {:?}", self, message);
-        let channel = zweak!(self.0, STR_ERR);
-        channel.schedule(message).await;
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl SessionEventHandler for Session {
-    #[inline]
-    async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        self.schedule(message).await
-    }
-
-    #[inline]
-    async fn new_link(&self, _link: Link) {}
-
-    #[inline]
-    async fn del_link(&self, _link: Link) {}
-
-    #[inline]
-    async fn closing(&self) {}
-
-    #[inline]
-    async fn closed(&self) {}
-}
-
-impl Eq for Session {}
-
-impl PartialEq for Session {
-    fn eq(&self, other: &Self) -> bool {
-        Weak::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl fmt::Debug for Session {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(channel) = self.0.upgrade() {
-            f.debug_struct("Session")
-                .field("peer", &channel.get_pid())
-                .field("lease", &channel.get_lease())
-                .field("keep_alive", &channel.get_keep_alive())
-                .field("sn_resolution", &channel.get_sn_resolution())
-                .finish()
-        } else {
-            write!(f, "Session closed")
-        }
     }
 }

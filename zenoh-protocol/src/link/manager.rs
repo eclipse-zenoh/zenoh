@@ -14,28 +14,28 @@
 use async_std::sync::Arc;
 
 #[cfg(feature = "transport_tcp")]
-use crate::link::tcp::ManagerTcp;
-#[cfg(feature = "transport_udp")]
-use crate::link::udp::ManagerUdp;
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-use crate::link::unixsock_stream::ManagerUnixSockStream;
+use crate::link::tcp::LinkManagerTcp;
+// #[cfg(feature = "transport_udp")]
+// use crate::link::udp::ManagerUdp;
+// #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+// use crate::link::unixsock_stream::ManagerUnixSockStream;
 use crate::link::{LinkManager, LocatorProtocol};
-use crate::session::SessionManagerInner;
+use crate::session::SessionManagerInitial;
 
 pub struct LinkManagerBuilder;
 
 impl LinkManagerBuilder {
     pub(crate) fn make(
-        manager: Arc<SessionManagerInner>,
+        manager: Arc<SessionManagerInitial>,
         protocol: &LocatorProtocol,
     ) -> LinkManager {
         match protocol {
             #[cfg(feature = "transport_tcp")]
-            LocatorProtocol::Tcp => Arc::new(ManagerTcp::new(manager)),
-            #[cfg(feature = "transport_udp")]
-            LocatorProtocol::Udp => Arc::new(ManagerUdp::new(manager)),
-            #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-            LocatorProtocol::UnixSockStream => Arc::new(ManagerUnixSockStream::new(manager)),
+            LocatorProtocol::Tcp => Arc::new(LinkManagerTcp::new(manager)),
+            // #[cfg(feature = "transport_udp")]
+            // LocatorProtocol::Udp => Arc::new(ManagerUdp::new(manager)),
+            // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+            // LocatorProtocol::UnixSockStream => Arc::new(ManagerUnixSockStream::new(manager)),
         }
     }
 }

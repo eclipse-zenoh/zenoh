@@ -36,7 +36,8 @@ zero-copy = []
 transport_tcp = []
 transport_udp = []
 transport_unixsock-stream = []
-default = ["zero-copy", "transport_tcp", "transport_udp", "transport_unixsock-stream"]
+#default = ["zero-copy", "transport_tcp", "transport_udp", "transport_unixsock-stream"]
+default = ["zero-copy", "transport_tcp"]
 
 [dependencies]
 async-std = { version = "=1.8.0", features = ["unstable"] }
