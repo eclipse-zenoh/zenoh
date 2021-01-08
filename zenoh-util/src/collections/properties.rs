@@ -68,7 +68,6 @@ impl<T: KeyTranscoder> fmt::Display for IntKeyProperties<T> {
 
 impl<T: KeyTranscoder> From<HashMap<u64, String>> for IntKeyProperties<T> {
     fn from(map: HashMap<u64, String>) -> Self {
-        println!("**** From<HashMap<u64, String>>");
         Self(map, PhantomData)
     }
 }
