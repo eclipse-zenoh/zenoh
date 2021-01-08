@@ -68,6 +68,7 @@ impl<T: KeyTranscoder> fmt::Display for IntKeyProperties<T> {
 
 impl<T: KeyTranscoder> From<HashMap<u64, String>> for IntKeyProperties<T> {
     fn from(map: HashMap<u64, String>) -> Self {
+        println!("**** From<HashMap<u64, String>>");
         Self(map, PhantomData)
     }
 }
@@ -91,19 +92,24 @@ impl<T: KeyTranscoder> From<Properties> for IntKeyProperties<T> {
 
 impl<T: KeyTranscoder> From<&str> for IntKeyProperties<T> {
     fn from(s: &str) -> Self {
-        s.into()
+        Properties::from(s).into()
     }
 }
 
 impl<T: KeyTranscoder> From<String> for IntKeyProperties<T> {
     fn from(s: String) -> Self {
-        s.into()
+        Properties::from(s).into()
     }
 }
 
 impl<T: KeyTranscoder> From<&[(&str, &str)]> for IntKeyProperties<T> {
     fn from(kvs: &[(&str, &str)]) -> Self {
-        kvs.into()
+        Self(
+            kvs.iter()
+                .filter_map(|(k, v)| T::encode(k).map(|k| (k, v.to_string())))
+                .collect(),
+            PhantomData,
+        )
     }
 }
 
