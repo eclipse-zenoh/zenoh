@@ -27,6 +27,7 @@ use crate::proto::{SessionMessage, ZenohMessage};
 use crate::session::defaults::QUEUE_PRIO_DATA;
 use crate::session::{SessionEventHandler, SessionManagerInner};
 use async_std::sync::{Arc, Mutex, RwLock, Weak};
+use async_std::task;
 use async_trait::async_trait;
 use batch::*;
 use defragmentation::*;
@@ -35,6 +36,7 @@ use link::*;
 use rx::*;
 use scheduling::*;
 use seq_num::*;
+use std::time::Duration;
 use tx::*;
 use zenoh_util::collections::Timer;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -242,6 +244,9 @@ impl Channel {
             link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA)
                 .await;
         }
+
+        // Wait a bit before closing the links
+        task::sleep(Duration::from_millis(1)).await;
 
         // Terminate and clean up the session
         self.delete().await;
