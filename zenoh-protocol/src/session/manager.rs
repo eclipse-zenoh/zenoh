@@ -15,17 +15,14 @@ use super::defaults::{
     SESSION_BATCH_SIZE, SESSION_KEEP_ALIVE, SESSION_LEASE, SESSION_OPEN_RETRIES,
     SESSION_OPEN_TIMEOUT, SESSION_SEQ_NUM_RESOLUTION,
 };
-use super::initial::{initial_read_task, InitialReadOutput};
 use super::transport::SessionTransport;
 use super::Session;
 use super::{SessionHandler, SessionManagerInitial};
 use crate::core::{PeerId, WhatAmI, ZInt};
 use crate::link::{LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
 use crate::proto::Attachment;
-use async_std::channel::bounded;
 use async_std::prelude::*;
 use async_std::sync::{Arc, RwLock};
-use async_std::task;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::time::Duration;
@@ -167,19 +164,7 @@ impl SessionManager {
         // Create the inner session manager
         let manager_inner = Arc::new(SessionManagerInner::new(inner_config));
         // Create the initial manager used to establish new connections
-        let (sender_newlink, receiver_newlink) = bounded::<InitialReadOutput>(1);
-        let (sender_stop, receiver_stop) = bounded::<()>(1);
-        let initial_session = Arc::new(SessionManagerInitial::new(
-            manager_inner.clone(),
-            sender_newlink,
-            sender_stop,
-        ));
-
-        // Start the task handling incoming connections
-        let c_is = initial_session.clone();
-        task::spawn(async move {
-            initial_read_task(c_is, receiver_newlink, receiver_stop).await;
-        });
+        let initial_session = Arc::new(SessionManagerInitial::new(manager_inner.clone()));
         // Add the session to the inner session manager
         *manager_inner.initial.try_write().unwrap() = Some(initial_session);
 
@@ -199,15 +184,12 @@ impl SessionManager {
         attachment: &Option<Attachment>,
     ) -> ZResult<Session> {
         // Retrieve the initial session
-        let initial = self.0.get_initial_session().await;
+        let initial = self.0.get_initial_manager().await;
         // Create the timeout duration
         let to = Duration::from_millis(self.0.config.timeout);
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self
-            .0
-            .get_or_new_link_manager(&self.0, &locator.get_proto())
-            .await;
+        let manager = self.0.get_or_new_link_manager(&locator.get_proto()).await;
         // Create a new link associated by calling the Link Manager
         let link = match manager.new_link(&locator).await {
             Ok(link) => link,
@@ -216,33 +198,17 @@ impl SessionManager {
                 return Err(e);
             }
         };
-        // Create a channel for knowing when a session is open
-        let (sender, receiver) = bounded::<ZResult<Session>>(1);
 
         // Try a maximum number of times to open a session
         let retries = self.0.config.retries;
         for i in 0..retries {
-            // Create the open future
-            let open_fut = initial.open(&link, attachment, &sender).timeout(to);
-            let channel_fut = receiver.recv().timeout(to);
-
             // Check the future result
-            match open_fut.try_join(channel_fut).await {
-                // Future timeout result
-                Ok((_, channel_res)) => match channel_res {
-                    // SessionTransport result
-                    Ok(res) => match res {
-                        Ok(session) => return Ok(session),
-                        Err(e) => {
-                            let e = format!("Can not open a session to {}: {}", locator, e);
-                            log::warn!("{}", e);
-                            return zerror!(ZErrorKind::Other { descr: e });
-                        }
-                    },
+            match initial.open(&link, attachment).timeout(to).await {
+                Ok(res) => match res {
+                    Ok(session) => return Ok(session),
                     Err(e) => {
-                        let e = format!("Can not open a session to {}: {}", locator, e);
-                        log::warn!("{}", e);
-                        return zerror!(ZErrorKind::Other { descr: e });
+                        let _ = link.close().await;
+                        return Err(e);
                     }
                 },
                 Err(e) => {
@@ -282,10 +248,7 @@ impl SessionManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
-        let manager = self
-            .0
-            .get_or_new_link_manager(&self.0, &locator.get_proto())
-            .await;
+        let manager = self.0.get_or_new_link_manager(&locator.get_proto()).await;
         manager.new_listener(locator).await
     }
 
@@ -342,15 +305,11 @@ impl SessionManagerInner {
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
-    async fn get_or_new_link_manager(
-        &self,
-        a_self: &Arc<Self>,
-        protocol: &LocatorProtocol,
-    ) -> LinkManager {
+    async fn get_or_new_link_manager(&self, protocol: &LocatorProtocol) -> LinkManager {
         loop {
             match self.get_link_manager(protocol).await {
                 Ok(manager) => return manager,
-                Err(_) => match self.new_link_manager(a_self, protocol).await {
+                Err(_) => match self.new_link_manager(protocol).await {
                     Ok(manager) => return manager,
                     Err(_) => continue,
                 },
@@ -358,11 +317,7 @@ impl SessionManagerInner {
         }
     }
 
-    async fn new_link_manager(
-        &self,
-        a_self: &Arc<Self>,
-        protocol: &LocatorProtocol,
-    ) -> ZResult<LinkManager> {
+    async fn new_link_manager(&self, protocol: &LocatorProtocol) -> ZResult<LinkManager> {
         let mut w_guard = zasyncwrite!(self.protocols);
         if w_guard.contains_key(protocol) {
             return zerror!(ZErrorKind::Other {
@@ -446,7 +401,7 @@ impl SessionManagerInner {
     /*************************************/
     /*              SESSION              */
     /*************************************/
-    pub(crate) async fn get_initial_session(&self) -> Arc<SessionManagerInitial> {
+    pub(crate) async fn get_initial_manager(&self) -> Arc<SessionManagerInitial> {
         zasyncread!(self.initial).as_ref().unwrap().clone()
     }
 

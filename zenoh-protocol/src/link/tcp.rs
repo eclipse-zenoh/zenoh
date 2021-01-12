@@ -135,7 +135,7 @@ impl LinkTrait for Tcp {
         })
     }
 
-    async fn send(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let res = (&self.socket).write_all(buffer).await;
         if let Err(e) = res {
             log::trace!("Transmission error on TCP link {}: {}", self, e);
@@ -147,9 +147,21 @@ impl LinkTrait for Tcp {
         Ok(buffer.len())
     }
 
-    async fn receive(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match (&self.socket).read(buffer).await {
             Ok(n) => Ok(n),
+            Err(e) => {
+                log::trace!("Reception error on TCP link {}: {}", self, e);
+                zerror!(ZErrorKind::IOError {
+                    descr: format!("{}", e)
+                })
+            }
+        }
+    }
+
+    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+        match (&self.socket).read_exact(buffer).await {
+            Ok(_) => Ok(()),
             Err(e) => {
                 log::trace!("Reception error on TCP link {}: {}", self, e);
                 zerror!(ZErrorKind::IOError {

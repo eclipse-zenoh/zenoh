@@ -36,7 +36,19 @@ use zenoh_util::core::ZResult;
 /*************************************/
 /*              LINK                 */
 /*************************************/
-const STR_ERR: &str = "Link not available";
+#[async_trait]
+pub trait LinkTrait {
+    fn get_mtu(&self) -> usize;
+    fn get_src(&self) -> Locator;
+    fn get_dst(&self) -> Locator;
+    fn is_reliable(&self) -> bool;
+    fn is_streamed(&self) -> bool;
+
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
+    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
+    async fn close(&self) -> ZResult<()>;
+}
 
 #[derive(Clone)]
 pub struct Link(Arc<dyn LinkTrait + Send + Sync>);
@@ -88,24 +100,9 @@ impl fmt::Debug for Link {
     }
 }
 
-#[async_trait]
-pub trait LinkTrait {
-    fn get_mtu(&self) -> usize;
-    fn get_src(&self) -> Locator;
-    fn get_dst(&self) -> Locator;
-    fn is_reliable(&self) -> bool;
-    fn is_streamed(&self) -> bool;
-
-    async fn send(&self, buffer: &[u8]) -> ZResult<usize>;
-    async fn receive(&self, buffer: &mut [u8]) -> ZResult<usize>;
-    async fn close(&self) -> ZResult<()>;
-}
-
 /*************************************/
 /*           LINK MANAGER            */
 /*************************************/
-pub type LinkManager = Arc<dyn LinkManagerTrait + Send + Sync>;
-
 #[async_trait]
 pub trait LinkManagerTrait {
     async fn new_link(&self, dst: &Locator) -> ZResult<Link>;
@@ -114,3 +111,5 @@ pub trait LinkManagerTrait {
     async fn get_listeners(&self) -> Vec<Locator>;
     async fn get_locators(&self) -> Vec<Locator>;
 }
+
+pub type LinkManager = Arc<dyn LinkManagerTrait + Send + Sync>;

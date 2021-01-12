@@ -46,7 +46,7 @@ async fn consume_task(
             // Pull a serialized batch from the queue
             let (batch, index) = queue.pull().await;
             // Send the buffer on the link
-            result = link.send(batch.get_buffer()).await;
+            result = link.write(batch.get_buffer()).await;
             if result.is_err() {
                 break Ok(());
             }
@@ -197,7 +197,7 @@ impl SessionTransportLink {
 
         // Drain what remains in the queue before exiting
         while let Some(batch) = self.queue.drain().await {
-            self.link.send(batch.get_buffer()).await;
+            self.link.write(batch.get_buffer()).await;
         }
 
         // Defuse the timed events
