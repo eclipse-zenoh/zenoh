@@ -11,13 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::RwLock;
-use async_std::sync::{Arc, Weak};
+use async_std::sync::{Arc, RwLock, Weak};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use uhlc::HLC;
 
-use zenoh_protocol::core::{whatami, PeerId, Reliability, SubInfo, SubMode, WhatAmI, ZInt};
+use zenoh_protocol::core::{whatami, PeerId, SubMode, WhatAmI, ZInt};
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_protocol::session::{
     DeMux, Mux, Primitives, Session, SessionEventHandler, SessionHandler,
@@ -33,23 +32,29 @@ pub use crate::routing::resource::*;
 use crate::runtime::orchestrator::SessionOrchestrator;
 
 pub struct Tables {
+    pub(crate) pid: PeerId,
     pub(crate) whatami: whatami::Type,
     face_counter: usize,
     pub(crate) hlc: Option<HLC>,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
-    pub(crate) routers_net: Option<Arc<RwLock<Network>>>,
-    pub(crate) peers_net: Option<Arc<RwLock<Network>>>,
+    pub(crate) router_subs: Vec<Arc<Resource>>,
+    pub(crate) peer_subs: Vec<Arc<Resource>>,
+    pub(crate) routers_net: Option<Network>,
+    pub(crate) peers_net: Option<Network>,
 }
 
 impl Tables {
-    pub fn new(whatami: whatami::Type, hlc: Option<HLC>) -> Self {
+    pub fn new(pid: PeerId, whatami: whatami::Type, hlc: Option<HLC>) -> Self {
         Tables {
+            pid,
             whatami,
             face_counter: 0,
             hlc,
             root_res: Resource::root(),
             faces: HashMap::new(),
+            router_subs: vec![],
+            peer_subs: vec![],
             routers_net: None,
             peers_net: None,
         }
@@ -76,8 +81,14 @@ impl Tables {
         }
     }
 
+    #[inline]
+    pub(crate) fn get_face(&self, pid: &PeerId) -> Option<&Arc<FaceState>> {
+        self.faces.values().find(|face| face.pid == *pid)
+    }
+
     pub async fn open_face(
         &mut self,
+        pid: PeerId,
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
     ) -> Weak<FaceState> {
@@ -88,25 +99,13 @@ impl Tables {
             let mut newface = self
                 .faces
                 .entry(fid)
-                .or_insert_with(|| FaceState::new(fid, whatami, primitives.clone()))
+                .or_insert_with(|| FaceState::new(fid, pid, whatami, primitives.clone()))
                 .clone();
 
             // @TODO temporarily propagate to everybody (clients)
             // if whatami != whatami::CLIENT {
             if true {
                 for face in self.faces.values() {
-                    if propagate_subscription(self.whatami, face, &newface) {
-                        let sub_info = SubInfo {
-                            reliability: Reliability::Reliable,
-                            mode: SubMode::Push,
-                            period: None,
-                        };
-                        for sub in face.subs.iter() {
-                            let reskey = Resource::decl_key(&sub, &mut newface).await;
-                            primitives.subscriber(&reskey, &sub_info, None).await;
-                        }
-                    }
-
                     if propagate_queryable(self.whatami, face, &newface) {
                         for qabl in face.qabl.iter() {
                             let reskey = Resource::decl_key(&qabl, &mut newface).await;
@@ -183,28 +182,33 @@ pub struct Router {
 }
 
 impl Router {
-    pub fn new(whatami: whatami::Type, hlc: Option<HLC>) -> Self {
+    pub fn new(pid: PeerId, whatami: whatami::Type, hlc: Option<HLC>) -> Self {
         Router {
             whatami,
-            tables: Arc::new(RwLock::new(Tables::new(whatami, hlc))),
+            tables: Arc::new(RwLock::new(Tables::new(pid, whatami, hlc))),
         }
     }
 
-    pub async fn init_link_state(&mut self, pid: PeerId, orchestrator: SessionOrchestrator) {
+    pub async fn init_link_state(&mut self, orchestrator: SessionOrchestrator) {
         let mut tables = self.tables.write().await;
         if orchestrator.whatami == whatami::ROUTER {
-            tables.routers_net = Some(Arc::new(RwLock::new(
+            tables.routers_net = Some(
                 Network::new(
                     "[Routers network]".to_string(),
-                    pid.clone(),
+                    tables.pid.clone(),
                     orchestrator.clone(),
                 )
                 .await,
-            )));
+            );
         }
-        tables.peers_net = Some(Arc::new(RwLock::new(
-            Network::new("[Peers network]".to_string(), pid, orchestrator).await,
-        )));
+        tables.peers_net = Some(
+            Network::new(
+                "[Peers network]".to_string(),
+                tables.pid.clone(),
+                orchestrator,
+            )
+            .await,
+        );
     }
 
     pub async fn new_primitives(
@@ -213,14 +217,15 @@ impl Router {
     ) -> Arc<dyn Primitives + Send + Sync> {
         Arc::new(Face {
             tables: self.tables.clone(),
-            state: self
-                .tables
-                .write()
-                .await
-                .open_face(whatami::CLIENT, primitives)
-                .await
-                .upgrade()
-                .unwrap(),
+            state: {
+                let mut tables = self.tables.write().await;
+                let pid = tables.pid.clone();
+                tables
+                    .open_face(pid, whatami::CLIENT, primitives)
+                    .await
+                    .upgrade()
+                    .unwrap()
+            },
         })
     }
 }
@@ -234,38 +239,51 @@ impl SessionHandler for Router {
         let mut tables = self.tables.write().await;
         let whatami = session.get_whatami()?;
         if whatami != whatami::CLIENT && tables.peers_net.is_some() {
-            let network = match self.whatami {
-                whatami::ROUTER => match whatami {
-                    whatami::ROUTER => tables.routers_net.as_ref().unwrap().clone(),
-                    _ => tables.peers_net.as_ref().unwrap().clone(),
-                },
-                _ => tables.peers_net.as_ref().unwrap().clone(),
-            };
             let handler = Arc::new(LinkStateInterceptor::new(
                 session.clone(),
-                network.clone(),
+                self.tables.clone(),
                 DeMux::new(Face {
                     tables: self.tables.clone(),
                     state: tables
-                        .open_face(whatami, Arc::new(Mux::new(Arc::new(session.clone()))))
+                        .open_face(
+                            session.get_pid().unwrap(),
+                            whatami,
+                            Arc::new(Mux::new(Arc::new(session.clone()))),
+                        )
                         .await
                         .upgrade()
                         .unwrap(),
                 }),
             ));
-            network.write().await.add_link(session.clone()).await;
+
+            match (self.whatami, whatami) {
+                (whatami::ROUTER, whatami::ROUTER) => {
+                    let net = tables.routers_net.as_mut().unwrap();
+                    net.add_link(session.clone()).await;
+                    let childs = net.compute_trees().await;
+                    new_childs_for_subs(&mut tables, childs, whatami::ROUTER).await;
+                }
+                _ => {
+                    let net = tables.peers_net.as_mut().unwrap();
+                    net.add_link(session.clone()).await;
+                    let childs = net.compute_trees().await;
+                    new_childs_for_subs(&mut tables, childs, whatami::PEER).await;
+                }
+            };
+
             Ok(handler)
         } else {
             Ok(Arc::new(DeMux::new(Face {
                 tables: self.tables.clone(),
-                state: Tables::open_face(
-                    &mut tables,
-                    whatami,
-                    Arc::new(Mux::new(Arc::new(session.clone()))),
-                )
-                .await
-                .upgrade()
-                .unwrap(),
+                state: tables
+                    .open_face(
+                        session.get_pid().unwrap(),
+                        whatami,
+                        Arc::new(Mux::new(Arc::new(session.clone()))),
+                    )
+                    .await
+                    .upgrade()
+                    .unwrap(),
             })))
         }
     }
@@ -273,15 +291,15 @@ impl SessionHandler for Router {
 
 pub struct LinkStateInterceptor {
     session: Session,
-    network: Arc<RwLock<Network>>,
+    tables: Arc<RwLock<Tables>>,
     demux: DeMux<Face>,
 }
 
 impl LinkStateInterceptor {
-    fn new(session: Session, network: Arc<RwLock<Network>>, demux: DeMux<Face>) -> Self {
+    fn new(session: Session, tables: Arc<RwLock<Tables>>, demux: DeMux<Face>) -> Self {
         LinkStateInterceptor {
             session,
-            network,
+            tables,
             demux,
         }
     }
@@ -293,11 +311,23 @@ impl SessionEventHandler for LinkStateInterceptor {
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
-                self.network
-                    .write()
-                    .await
-                    .link_states(list.link_states, pid)
-                    .await;
+                let mut tables = self.tables.write().await;
+                let whatami = self.session.get_whatami()?;
+                match (tables.whatami, whatami) {
+                    (whatami::ROUTER, whatami::ROUTER) => {
+                        let net = tables.routers_net.as_mut().unwrap();
+                        net.link_states(list.link_states, pid).await;
+                        let childs = net.compute_trees().await;
+                        new_childs_for_subs(&mut tables, childs, whatami::ROUTER).await;
+                    }
+                    _ => {
+                        let net = tables.peers_net.as_mut().unwrap();
+                        net.link_states(list.link_states, pid).await;
+                        let childs = net.compute_trees().await;
+                        new_childs_for_subs(&mut tables, childs, whatami::PEER).await;
+                    }
+                };
+
                 Ok(())
             }
             _ => self.demux.handle_message(msg).await,
@@ -310,7 +340,24 @@ impl SessionEventHandler for LinkStateInterceptor {
 
     async fn closing(&self) {
         self.demux.closing().await;
-        self.network.write().await.remove_link(&self.session).await;
+        let mut tables = self.tables.write().await;
+        match self.session.get_whatami() {
+            Ok(whatami) => match (tables.whatami, whatami) {
+                (whatami::ROUTER, whatami::ROUTER) => {
+                    let net = tables.routers_net.as_mut().unwrap();
+                    net.remove_link(&self.session).await;
+                    let childs = net.compute_trees().await;
+                    new_childs_for_subs(&mut tables, childs, whatami::ROUTER).await;
+                }
+                _ => {
+                    let net = tables.peers_net.as_mut().unwrap();
+                    net.remove_link(&self.session).await;
+                    let childs = net.compute_trees().await;
+                    new_childs_for_subs(&mut tables, childs, whatami::PEER).await;
+                }
+            },
+            Err(_) => log::error!("Unable to get whatami closing session!"),
+        };
     }
 
     async fn closed(&self) {}

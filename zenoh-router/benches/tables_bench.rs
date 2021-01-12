@@ -17,7 +17,7 @@ extern crate zenoh_router;
 use async_std::sync::Arc;
 use async_std::task;
 use criterion::{BenchmarkId, Criterion};
-use zenoh_protocol::core::{whatami, CongestionControl, Reliability, SubInfo, SubMode};
+use zenoh_protocol::core::{whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::session::{DummyHandler, Mux};
 use zenoh_router::routing::pubsub::*;
@@ -26,10 +26,12 @@ use zenoh_router::routing::router::Tables;
 
 fn tables_bench(c: &mut Criterion) {
     task::block_on(async {
-        let mut tables = Tables::new(whatami::ROUTER, None);
+        let mut tables = Tables::new(PeerId::new(0, [0; 16]), whatami::ROUTER, None);
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
 
-        let face0 = tables.open_face(whatami::CLIENT, primitives.clone()).await;
+        let face0 = tables
+            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .await;
         declare_resource(
             &mut tables,
             &mut face0.upgrade().unwrap(),
@@ -47,7 +49,9 @@ fn tables_bench(c: &mut Criterion) {
         )
         .await;
 
-        let face1 = tables.open_face(whatami::CLIENT, primitives.clone()).await;
+        let face1 = tables
+            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .await;
 
         let mut tables_bench = c.benchmark_group("tables_bench");
         let sub_info = SubInfo {
@@ -66,8 +70,14 @@ fn tables_bench(c: &mut Criterion) {
                     &["/bench/tables/AA", &i.to_string()].concat(),
                 )
                 .await;
-                declare_subscription(&mut tables, &mut face1.upgrade().unwrap(), i, "", &sub_info)
-                    .await;
+                declare_client_subscription(
+                    &mut tables,
+                    &mut face1.upgrade().unwrap(),
+                    i,
+                    "",
+                    &sub_info,
+                )
+                .await;
             }
 
             let face0 = face0.upgrade().unwrap();

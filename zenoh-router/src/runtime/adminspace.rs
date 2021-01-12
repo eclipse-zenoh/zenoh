@@ -156,8 +156,6 @@ impl AdminSpace {
                     .routers_net
                     .as_ref()
                     .unwrap()
-                    .read()
-                    .await
                     .dot()
                     .as_bytes(),
             ),
@@ -178,8 +176,6 @@ impl AdminSpace {
                     .peers_net
                     .as_ref()
                     .unwrap()
-                    .read()
-                    .await
                     .dot()
                     .as_bytes(),
             ),

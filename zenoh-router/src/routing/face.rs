@@ -26,6 +26,7 @@ use zenoh_protocol::session::Primitives;
 
 pub struct FaceState {
     pub(super) id: usize,
+    pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
@@ -39,11 +40,13 @@ pub struct FaceState {
 impl FaceState {
     pub(super) fn new(
         id: usize,
+        pid: PeerId,
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
+            pid,
             whatami,
             primitives,
             local_mappings: HashMap::new(),
@@ -97,18 +100,56 @@ impl Primitives for Face {
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
-        _routing_context: Option<RoutingContext>,
+        routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        declare_subscription(
-            &mut tables,
-            &mut self.state.clone(),
-            prefixid,
-            suffix,
-            sub_info,
-        )
-        .await;
+        match routing_context {
+            Some(routing_context) => {
+                let router = match tables
+                    .routers_net
+                    .as_ref()
+                    .unwrap()
+                    .get_link(&self.state.pid)
+                {
+                    Some(link) => match link.mappings.get(&routing_context) {
+                        Some(router) => router.clone(),
+                        None => {
+                            log::error!(
+                                "Received subscription with unknown routing context id {}",
+                                routing_context
+                            );
+                            return;
+                        }
+                    },
+                    None => {
+                        log::error!("Cannot find net context for face {}", self.state.pid);
+                        return;
+                    }
+                };
+
+                declare_router_subscription(
+                    &mut tables,
+                    &mut self.state.clone(),
+                    prefixid,
+                    suffix,
+                    sub_info,
+                    router,
+                )
+                .await
+            }
+
+            None => {
+                declare_client_subscription(
+                    &mut tables,
+                    &mut self.state.clone(),
+                    prefixid,
+                    suffix,
+                    sub_info,
+                )
+                .await
+            }
+        }
     }
 
     async fn forget_subscriber(&self, reskey: &ResKey, _routing_context: Option<RoutingContext>) {

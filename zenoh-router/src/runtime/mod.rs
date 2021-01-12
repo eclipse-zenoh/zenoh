@@ -71,7 +71,7 @@ impl Runtime {
         } else {
             None
         };
-        let mut router = Arc::new(Router::new(whatami, hlc));
+        let mut router = Arc::new(Router::new(pid.clone(), whatami, hlc));
 
         let sm_config = SessionManagerConfig {
             version,
@@ -100,7 +100,7 @@ impl Runtime {
         {
             unsafe {
                 Arc::get_mut_unchecked(&mut router)
-                    .init_link_state(pid.clone(), orchestrator.clone())
+                    .init_link_state(orchestrator.clone())
                     .await;
             }
         }

@@ -12,11 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::Arc;
+use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 use uhlc::HLC;
 
 use zenoh_protocol::core::{
-    whatami, CongestionControl, Reliability, ResKey, SubInfo, SubMode, ZInt,
+    whatami, CongestionControl, PeerId, Reliability, ResKey, SubInfo, SubMode, ZInt,
 };
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
@@ -42,7 +43,192 @@ pub(crate) fn propagate_subscription(
         }
 }
 
-pub async fn declare_subscription(
+pub async fn declare_router_subscription(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    prefixid: ZInt,
+    suffix: &str,
+    sub_info: &SubInfo,
+    router: PeerId,
+) {
+    match tables.get_mapping(&face, &prefixid).cloned() {
+        Some(mut prefix) => unsafe {
+            // Register router subscription
+            let mut res = Resource::make_resource(&mut prefix, suffix);
+            Resource::match_resource(&tables, &mut res);
+            {
+                let res_mut = Arc::get_mut_unchecked(&mut res);
+                if !res_mut.router_subs.contains(&router) {
+                    log::debug!(
+                        "Register router subscription {} (router: {})",
+                        res_mut.name(),
+                        router
+                    );
+                    res_mut.router_subs.push(router.clone());
+                    tables.router_subs.push(res.clone())
+                }
+            }
+
+            // Propagate subscription to routers
+            let net = tables.routers_net.as_ref().unwrap();
+            match net.get_idx(&router) {
+                Some(tree_sid) => {
+                    for child in &net.childs[tree_sid.index()] {
+                        match tables.get_face(&net.graph[*child].pid).cloned() {
+                            Some(mut someface) => {
+                                if someface.id != face.id {
+                                    let reskey = Resource::decl_key(&res, &mut someface).await;
+
+                                    log::debug!(
+                                        "Send router subscription {} on face {} {}",
+                                        res.name(),
+                                        someface.id,
+                                        someface.pid,
+                                    );
+
+                                    someface
+                                        .primitives
+                                        .subscriber(
+                                            &reskey,
+                                            &sub_info,
+                                            Some(tree_sid.index() as ZInt),
+                                        )
+                                        .await;
+                                }
+                            }
+                            None => {
+                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                            }
+                        }
+                    }
+                }
+                None => log::error!(
+                    "Error propagating sub {}: cannot get index of {}!",
+                    res.name(),
+                    router
+                ),
+            }
+
+            // Propagate subscription to peers
+            if face.whatami != whatami::PEER {
+                register_peer_subscription(
+                    tables,
+                    face,
+                    &mut prefix,
+                    suffix,
+                    sub_info,
+                    tables.pid.clone(),
+                )
+                .await
+            }
+
+            // Propagate subscription to clients
+            let whatami = tables.whatami;
+            for someface in &mut tables.faces.values_mut() {
+                if propagate_subscription(whatami, face, someface) {
+                    let reskey = Resource::decl_key(&res, someface).await;
+                    someface
+                        .primitives
+                        .subscriber(&reskey, sub_info, None)
+                        .await;
+                }
+            }
+            Tables::build_matches_direct_tables(&mut res);
+        },
+        None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
+    }
+}
+
+async fn register_peer_subscription(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    prefix: &mut Arc<Resource>,
+    suffix: &str,
+    sub_info: &SubInfo,
+    peer: PeerId,
+) {
+    // Register peer subscription
+    let mut res = Resource::make_resource(prefix, suffix);
+    Resource::match_resource(&tables, &mut res);
+    unsafe {
+        let res_mut = Arc::get_mut_unchecked(&mut res);
+        if !res_mut.peer_subs.contains(&peer) {
+            log::debug!(
+                "Register peer subscription {} (peer: {})",
+                res_mut.name(),
+                peer
+            );
+            res_mut.peer_subs.push(peer.clone());
+            tables.peer_subs.push(res.clone())
+        }
+    }
+
+    // Propagate subscription to peers
+    let net = tables.peers_net.as_ref().unwrap();
+    match net.get_idx(&peer) {
+        Some(tree_sid) => {
+            for child in &net.childs[tree_sid.index()] {
+                match tables.get_face(&net.graph[*child].pid).cloned() {
+                    Some(mut someface) => {
+                        if someface.id != face.id {
+                            let reskey = Resource::decl_key(&res, &mut someface).await;
+
+                            log::debug!(
+                                "Send peer subscription {} on face {} {}",
+                                res.name(),
+                                someface.id,
+                                someface.pid,
+                            );
+
+                            someface
+                                .primitives
+                                .subscriber(&reskey, &sub_info, Some(tree_sid.index() as ZInt))
+                                .await;
+                        }
+                    }
+                    None => {
+                        log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                    }
+                }
+            }
+        }
+        None => log::error!(
+            "Error propagating sub {}: cannot get index of {}!",
+            res.name(),
+            peer,
+        ),
+    }
+}
+
+pub async fn declare_peer_subscription(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    prefixid: ZInt,
+    suffix: &str,
+    sub_info: &SubInfo,
+    peer: PeerId,
+) {
+    match tables.get_mapping(&face, &prefixid).cloned() {
+        Some(mut prefix) => unsafe {
+            register_peer_subscription(tables, face, &mut prefix, suffix, sub_info, peer).await;
+
+            let mut propa_sub_info = sub_info.clone();
+            propa_sub_info.mode = SubMode::Push;
+            declare_router_subscription(
+                tables,
+                face,
+                prefixid,
+                suffix,
+                &propa_sub_info,
+                tables.pid.clone(),
+            )
+            .await;
+        },
+        None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
+    }
+}
+
+pub async fn declare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -83,22 +269,19 @@ pub async fn declare_subscription(
                     }
                 }
             }
+            Arc::get_mut_unchecked(face).subs.push(res);
 
-            // Propagate subscription
             let mut propa_sub_info = sub_info.clone();
             propa_sub_info.mode = SubMode::Push;
-            let whatami = tables.whatami;
-            for someface in &mut tables.faces.values_mut() {
-                if propagate_subscription(whatami, face, someface) {
-                    let reskey = Resource::decl_key(&res, someface).await;
-                    someface
-                        .primitives
-                        .subscriber(&reskey, &propa_sub_info, None)
-                        .await;
-                }
-            }
-            Tables::build_matches_direct_tables(&mut res);
-            Arc::get_mut_unchecked(face).subs.push(res);
+            declare_router_subscription(
+                tables,
+                face,
+                prefixid,
+                suffix,
+                &propa_sub_info,
+                tables.pid.clone(),
+            )
+            .await;
         },
         None => log::error!("Declare subscription for unknown rid {}!", prefixid),
     }
@@ -129,6 +312,67 @@ pub async fn undeclare_subscription(
             None => log::error!("Undeclare unknown subscription!"),
         },
         None => log::error!("Undeclare subscription with unknown prefix!"),
+    }
+}
+
+pub(crate) async fn new_childs_for_subs(
+    tables: &mut Tables,
+    childs: Vec<Vec<NodeIndex>>,
+    net_type: whatami::Type,
+) {
+    for (tree_sid, tree_childs) in childs.into_iter().enumerate() {
+        if !tree_childs.is_empty() {
+            let net = match net_type {
+                whatami::ROUTER => tables.routers_net.as_ref().unwrap(),
+                _ => tables.peers_net.as_ref().unwrap(),
+            };
+            let tree_id = net.graph[NodeIndex::new(tree_sid)].pid.clone();
+
+            let subs_res = match net_type {
+                whatami::ROUTER => &tables.router_subs,
+                _ => &tables.peer_subs,
+            };
+
+            for res in subs_res {
+                let subs = match net_type {
+                    whatami::ROUTER => &res.router_subs,
+                    _ => &res.peer_subs,
+                };
+                for sub in subs {
+                    if *sub == tree_id {
+                        for child in &tree_childs {
+                            match tables.get_face(&net.graph[*child].pid).cloned() {
+                                Some(mut face) => {
+                                    let reskey = Resource::decl_key(&res, &mut face).await;
+                                    let sub_info = SubInfo {
+                                        // TODO
+                                        reliability: Reliability::Reliable,
+                                        mode: SubMode::Push,
+                                        period: None,
+                                    };
+                                    log::debug!(
+                                        "Send {} subscription {} on face {} {} (new_child)",
+                                        net_type,
+                                        res.name(),
+                                        face.id,
+                                        face.pid,
+                                    );
+                                    face.primitives
+                                        .subscriber(&reskey, &sub_info, Some(tree_sid as ZInt))
+                                        .await;
+                                }
+                                None => {
+                                    log::error!(
+                                        "Unable to find face for pid {}",
+                                        net.graph[*child].pid
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

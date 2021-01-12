@@ -23,12 +23,12 @@ use zenoh_protocol::session::{Session, SessionEventHandler};
 
 use crate::runtime::orchestrator::SessionOrchestrator;
 
-struct Node {
-    pid: PeerId,
-    whatami: whatami::Type,
-    locators: Option<Vec<Locator>>,
-    sn: ZInt,
-    links: Vec<PeerId>,
+pub(crate) struct Node {
+    pub(crate) pid: PeerId,
+    pub(crate) whatami: whatami::Type,
+    pub(crate) locators: Option<Vec<Locator>>,
+    pub(crate) sn: ZInt,
+    pub(crate) links: Vec<PeerId>,
 }
 
 impl std::fmt::Debug for Node {
@@ -37,9 +37,9 @@ impl std::fmt::Debug for Node {
     }
 }
 
-struct Link {
-    session: Session,
-    mappings: HashMap<ZInt, PeerId>,
+pub(crate) struct Link {
+    pub(crate) session: Session,
+    pub(crate) mappings: HashMap<ZInt, PeerId>,
 }
 
 impl Link {
@@ -51,12 +51,14 @@ impl Link {
     }
 }
 
-pub struct Network {
-    name: String,
-    idx: NodeIndex,
-    links: Vec<Link>,
-    graph: petgraph::stable_graph::StableUnGraph<Node, f32>,
-    orchestrator: SessionOrchestrator,
+pub(crate) struct Network {
+    pub(crate) name: String,
+    pub(crate) idx: NodeIndex,
+    pub(crate) links: Vec<Link>,
+    pub(crate) parent: Vec<Option<NodeIndex>>,
+    pub(crate) childs: Vec<Vec<NodeIndex>>,
+    pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
+    pub(crate) orchestrator: SessionOrchestrator,
 }
 
 impl Network {
@@ -74,6 +76,8 @@ impl Network {
             name,
             idx,
             links: vec![],
+            parent: vec![None],
+            childs: vec![vec![]],
             graph,
             orchestrator,
         }
@@ -86,19 +90,19 @@ impl Network {
         )
     }
 
-    fn get_idx(&self, pid: &PeerId) -> Option<NodeIndex> {
+    pub(crate) fn get_idx(&self, pid: &PeerId) -> Option<NodeIndex> {
         self.graph
             .node_indices()
             .find(|idx| self.graph[*idx].pid == *pid)
     }
 
-    fn get_link(&self, pid: &PeerId) -> Option<&Link> {
+    pub(crate) fn get_link(&self, pid: &PeerId) -> Option<&Link> {
         self.links
             .iter()
             .find(|link| link.session.get_pid().unwrap() == *pid)
     }
 
-    fn get_link_mut(&mut self, pid: &PeerId) -> Option<&mut Link> {
+    pub(crate) fn get_link_mut(&mut self, pid: &PeerId) -> Option<&mut Link> {
         self.links
             .iter_mut()
             .find(|link| link.session.get_pid().unwrap() == *pid)
@@ -178,6 +182,20 @@ impl Network {
                 }
             }
         }
+    }
+
+    fn update_edge(&mut self, idx1: NodeIndex, idx2: NodeIndex) {
+        use std::hash::Hasher;
+        let mut hasher = std::collections::hash_map::DefaultHasher::default();
+        if self.graph[idx1].pid.as_slice() > self.graph[idx2].pid.as_slice() {
+            hasher.write(self.graph[idx2].pid.as_slice());
+            hasher.write(self.graph[idx1].pid.as_slice());
+        } else {
+            hasher.write(self.graph[idx1].pid.as_slice());
+            hasher.write(self.graph[idx2].pid.as_slice());
+        }
+        let weight = 100.0 + ((hasher.finish() as u32) as f64) / std::u32::MAX as f64;
+        self.graph.update_edge(idx1, idx2, weight);
     }
 
     pub(crate) async fn link_states(&mut self, link_states: Vec<LinkState>, src: PeerId) {
@@ -327,7 +345,7 @@ impl Network {
                             self.graph[*idx1].pid,
                             self.graph[idx2].pid
                         );
-                        self.graph.update_edge(*idx1, idx2, 1.0);
+                        self.update_edge(*idx1, idx2);
                     }
                 } else {
                     let node = Node {
@@ -449,7 +467,7 @@ impl Network {
         };
         if self.graph[idx].links.contains(&self.graph[self.idx].pid) {
             log::trace!("Update edge (link) {} {}", self.graph[self.idx].pid, pid);
-            self.graph.update_edge(self.idx, idx, 1.0);
+            self.update_edge(self.idx, idx);
         }
         self.graph[self.idx].links.push(pid.clone());
         self.graph[self.idx].sn += 1;
@@ -542,5 +560,64 @@ impl Network {
             retain
         });
         removed
+    }
+
+    pub(crate) async fn compute_trees(&mut self) -> Vec<Vec<NodeIndex>> {
+        let indexes = self.graph.node_indices().collect::<Vec<NodeIndex>>();
+        let max_idx = indexes.iter().max().unwrap();
+
+        let old_childs = self.childs.clone();
+
+        self.parent.resize_with(max_idx.index() + 1, || None);
+        self.childs.clear();
+        self.childs.resize_with(max_idx.index() + 1, Vec::new);
+
+        for tree_root_idx in &indexes {
+            let path = petgraph::algo::bellman_ford(&self.graph, *tree_root_idx)
+                .unwrap()
+                .1;
+
+            let ps: Vec<Option<String>> = path
+                .iter()
+                .enumerate()
+                .map(|(is, o)| {
+                    o.map(|ip| {
+                        format!(
+                            "{} <- {}",
+                            self.graph[ip].pid.clone(),
+                            self.graph[NodeIndex::new(is)].pid.clone()
+                        )
+                    })
+                })
+                .collect();
+            log::debug!("Tree {} {:?}", self.graph[*tree_root_idx].pid, ps);
+
+            self.parent[tree_root_idx.index()] = path[self.idx.index()];
+
+            for idx in &indexes {
+                if let Some(parent_idx) = path[idx.index()] {
+                    if parent_idx == self.idx {
+                        self.childs[tree_root_idx.index()].push(*idx);
+                    }
+                }
+            }
+        }
+
+        let mut new_childs = Vec::with_capacity(self.childs.len());
+        new_childs.resize(self.childs.len(), vec![]);
+
+        for i in 0..new_childs.len() {
+            new_childs[i] = if i < old_childs.len() {
+                self.childs[i]
+                    .iter()
+                    .filter(|idx| !old_childs[i].contains(idx))
+                    .cloned()
+                    .collect()
+            } else {
+                self.childs[i].clone()
+            };
+        }
+
+        new_childs
     }
 }

@@ -16,7 +16,7 @@ use crate::routing::router::Tables;
 use async_std::sync::{Arc, Weak};
 use std::collections::HashMap;
 use zenoh_protocol::core::rname;
-use zenoh_protocol::core::{ResKey, SubInfo, ZInt};
+use zenoh_protocol::core::{PeerId, ResKey, SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
 
@@ -35,6 +35,8 @@ pub struct Resource {
     pub(super) suffix: String,
     pub(super) nonwild_prefix: Option<(Arc<Resource>, String)>,
     pub(super) childs: HashMap<String, Arc<Resource>>,
+    pub(super) router_subs: Vec<PeerId>,
+    pub(super) peer_subs: Vec<PeerId>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) route: HashMap<usize, (Arc<FaceState>, ResKey)>,
@@ -58,6 +60,8 @@ impl Resource {
             suffix: String::from(suffix),
             nonwild_prefix,
             childs: HashMap::new(),
+            router_subs: vec![],
+            peer_subs: vec![],
             contexts: HashMap::new(),
             matches: Vec::new(),
             route: HashMap::new(),
@@ -94,6 +98,8 @@ impl Resource {
             suffix: String::from(""),
             nonwild_prefix: None,
             childs: HashMap::new(),
+            router_subs: vec![],
+            peer_subs: vec![],
             contexts: HashMap::new(),
             matches: Vec::new(),
             route: HashMap::new(),

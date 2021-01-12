@@ -29,9 +29,15 @@ use zenoh_router::routing::router::*;
 #[test]
 fn base_test() {
     task::block_on(async {
-        let mut tables = Tables::new(whatami::ROUTER, Some(HLC::default()));
+        let mut tables = Tables::new(
+            PeerId::new(0, [0; 16]),
+            whatami::ROUTER,
+            Some(HLC::default()),
+        );
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
-        let face = tables.open_face(whatami::CLIENT, primitives.clone()).await;
+        let face = tables
+            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .await;
         declare_resource(
             &mut tables,
             &mut face.upgrade().unwrap(),
@@ -54,7 +60,7 @@ fn base_test() {
             mode: SubMode::Push,
             period: None,
         };
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face.upgrade().unwrap(),
             1,
@@ -125,9 +131,15 @@ fn match_test() {
             "/x/*e",
         ];
 
-        let mut tables = Tables::new(whatami::ROUTER, Some(HLC::default()));
+        let mut tables = Tables::new(
+            PeerId::new(0, [0; 16]),
+            whatami::ROUTER,
+            Some(HLC::default()),
+        );
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
-        let face = tables.open_face(whatami::CLIENT, primitives.clone()).await;
+        let face = tables
+            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .await;
         for (i, rname) in rnames.iter().enumerate() {
             declare_resource(
                 &mut tables,
@@ -159,10 +171,16 @@ fn match_test() {
 #[test]
 fn clean_test() {
     task::block_on(async {
-        let mut tables = Tables::new(whatami::ROUTER, Some(HLC::default()));
+        let mut tables = Tables::new(
+            PeerId::new(0, [0; 16]),
+            whatami::ROUTER,
+            Some(HLC::default()),
+        );
 
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
-        let face0 = tables.open_face(whatami::CLIENT, primitives.clone()).await;
+        let face0 = tables
+            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .await;
         assert!(face0.upgrade().is_some());
 
         // --------------
@@ -223,7 +241,7 @@ fn clean_test() {
             period: None,
         };
 
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
             0,
@@ -237,7 +255,7 @@ fn clean_test() {
         let res2 = optres2.unwrap();
         assert!(res2.upgrade().is_some());
 
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
             1,
@@ -274,7 +292,7 @@ fn clean_test() {
 
         // --------------
         declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 2, 0, "/todrop3").await;
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
             0,
@@ -297,7 +315,7 @@ fn clean_test() {
         // --------------
         declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/todrop4").await;
         declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 4, 0, "/todrop5").await;
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
             0,
@@ -305,7 +323,7 @@ fn clean_test() {
             &sub_info,
         )
         .await;
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
             0,
@@ -461,7 +479,11 @@ impl Primitives for ClientPrimitives {
 #[test]
 fn client_test() {
     task::block_on(async {
-        let mut tables = Tables::new(whatami::ROUTER, Some(HLC::default()));
+        let mut tables = Tables::new(
+            PeerId::new(0, [0; 16]),
+            whatami::ROUTER,
+            Some(HLC::default()),
+        );
         let sub_info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
@@ -469,7 +491,13 @@ fn client_test() {
         };
 
         let primitives0 = Arc::new(ClientPrimitives::new());
-        let face0 = tables.open_face(whatami::CLIENT, primitives0.clone()).await;
+        let face0 = tables
+            .open_face(
+                PeerId::new(0, [0; 16]),
+                whatami::CLIENT,
+                primitives0.clone(),
+            )
+            .await;
         declare_resource(
             &mut tables,
             &mut face0.upgrade().unwrap(),
@@ -481,7 +509,7 @@ fn client_test() {
         primitives0
             .resource(11, &ResKey::RName("/test/client".to_string()))
             .await;
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
             11,
@@ -502,7 +530,13 @@ fn client_test() {
             .await;
 
         let primitives1 = Arc::new(ClientPrimitives::new());
-        let face1 = tables.open_face(whatami::CLIENT, primitives1.clone()).await;
+        let face1 = tables
+            .open_face(
+                PeerId::new(0, [0; 16]),
+                whatami::CLIENT,
+                primitives1.clone(),
+            )
+            .await;
         declare_resource(
             &mut tables,
             &mut face1.upgrade().unwrap(),
@@ -514,7 +548,7 @@ fn client_test() {
         primitives1
             .resource(21, &ResKey::RName("/test/client".to_string()))
             .await;
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face1.upgrade().unwrap(),
             21,
@@ -535,7 +569,13 @@ fn client_test() {
             .await;
 
         let primitives2 = Arc::new(ClientPrimitives::new());
-        let face2 = tables.open_face(whatami::CLIENT, primitives2.clone()).await;
+        let face2 = tables
+            .open_face(
+                PeerId::new(0, [0; 16]),
+                whatami::CLIENT,
+                primitives2.clone(),
+            )
+            .await;
         declare_resource(
             &mut tables,
             &mut face2.upgrade().unwrap(),
@@ -547,7 +587,7 @@ fn client_test() {
         primitives2
             .resource(31, &ResKey::RName("/test/client".to_string()))
             .await;
-        declare_subscription(
+        declare_client_subscription(
             &mut tables,
             &mut face2.upgrade().unwrap(),
             31,
