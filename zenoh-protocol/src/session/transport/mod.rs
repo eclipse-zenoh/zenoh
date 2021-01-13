@@ -169,22 +169,6 @@ impl SessionTransport {
         self.whatami
     }
 
-    pub(crate) fn get_lease(&self) -> ZInt {
-        // let guard = zasyncread!(self.links);
-        // let mut lease: ZInt = 0;
-        // for l in guard.iter() {
-        //     if l.lease > lease {
-        //         lease = l.lease;
-        //     }
-        // }
-        // lease
-        0
-    }
-
-    pub(crate) fn get_keep_alive(&self) -> ZInt {
-        0
-    }
-
     pub(crate) fn get_sn_resolution(&self) -> ZInt {
         self.sn_resolution
     }

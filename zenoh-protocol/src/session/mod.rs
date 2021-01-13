@@ -90,7 +90,7 @@ impl Session {
     /*         SESSION ACCESSORS         */
     /*************************************/
     #[inline]
-    pub(super) async fn get_transport(&self) -> ZResult<Arc<SessionTransport>> {
+    pub(super) fn get_transport(&self) -> ZResult<Arc<SessionTransport>> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport)
     }
@@ -108,12 +108,6 @@ impl Session {
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.get_whatami())
-    }
-
-    #[inline]
-    pub fn get_lease(&self) -> ZResult<ZInt> {
-        let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.get_lease())
     }
 
     #[inline]
@@ -161,16 +155,9 @@ impl SessionEventHandler for Session {
         self.schedule(message).await
     }
 
-    #[inline]
     async fn new_link(&self, _link: Link) {}
-
-    #[inline]
     async fn del_link(&self, _link: Link) {}
-
-    #[inline]
     async fn closing(&self) {}
-
-    #[inline]
     async fn closed(&self) {}
 }
 
@@ -187,8 +174,6 @@ impl fmt::Debug for Session {
         if let Some(transport) = self.0.upgrade() {
             f.debug_struct("Session")
                 .field("peer", &transport.get_pid())
-                .field("lease", &transport.get_lease())
-                .field("keep_alive", &transport.get_keep_alive())
                 .field("sn_resolution", &transport.get_sn_resolution())
                 .finish()
         } else {

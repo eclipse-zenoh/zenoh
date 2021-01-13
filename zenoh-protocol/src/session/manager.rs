@@ -638,7 +638,7 @@ impl SessionManager {
             .await;
 
         // Retrive the session's transport
-        let transport = session.get_transport().await?;
+        let transport = session.get_transport()?;
 
         // Compute a suitable keep alive interval based on the lease
         // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
@@ -948,10 +948,13 @@ async fn incoming_link_task(link: &Link, manager: SessionManager) -> ZResult<()>
 
     let session = loop {
         // Check if this open is related to a totally new session (i.e. new peer) or to an exsiting one
-        if let Some(s) = manager.get_session(&cookie.pid).await {
+        if let Some(session) = manager.get_session(&cookie.pid).await {
+            // Get the underlying transport
+            let transport = session.get_transport()?;
+
             // Check if we have reached maximum number of links for this session
             if let Some(limit) = manager.config.max_links {
-                let links = s.get_links().await?;
+                let links = transport.get_links().await;
                 if links.len() >= limit {
                     // Send a close message
                     let peer_id = Some(manager.config.pid.clone());
@@ -969,8 +972,7 @@ async fn incoming_link_task(link: &Link, manager: SessionManager) -> ZResult<()>
             }
 
             // Check if the sn_resolution is valid (i.e. the same of existing session)
-            let snr = s.get_sn_resolution()?;
-            if cookie.sn_resolution != snr {
+            if cookie.sn_resolution != transport.sn_resolution {
                 // Send a close message
                 let peer_id = Some(manager.config.pid.clone());
                 let reason_id = smsg::close_reason::INVALID;
@@ -985,7 +987,7 @@ async fn incoming_link_task(link: &Link, manager: SessionManager) -> ZResult<()>
                 return zerror!(ZErrorKind::InvalidMessage { descr: e });
             }
 
-            break s;
+            break session;
         } else {
             // Check if a limit for the maximum number of open sessions is set
             if let Some(limit) = manager.config.max_sessions {
@@ -1039,7 +1041,7 @@ async fn incoming_link_task(link: &Link, manager: SessionManager) -> ZResult<()>
     let _ = link.write_session_message(message).await?;
 
     // Retrive the session's transport
-    let transport = session.get_transport().await?;
+    let transport = session.get_transport()?;
 
     // Add the link to the session
     // Compute a suitable keep alive interval based on the lease
