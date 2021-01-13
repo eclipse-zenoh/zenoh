@@ -25,13 +25,15 @@ mod tcp;
 // mod unixsock_stream;
 
 /* General imports */
+use crate::io::{RBuf, WBuf};
+use crate::proto::SessionMessage;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use zenoh_util::core::ZResult;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*************************************/
 /*              LINK                 */
@@ -45,10 +47,13 @@ pub trait LinkTrait {
     fn is_streamed(&self) -> bool;
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
 }
+
+const DEFAULT_WBUF_CAPACITY: usize = 64;
 
 #[derive(Clone)]
 pub struct Link(Arc<dyn LinkTrait + Send + Sync>);
@@ -56,6 +61,62 @@ pub struct Link(Arc<dyn LinkTrait + Send + Sync>);
 impl Link {
     fn new(link: Arc<dyn LinkTrait + Send + Sync>) -> Link {
         Self(link)
+    }
+
+    pub async fn write_session_message(&self, msg: SessionMessage) -> ZResult<()> {
+        // Create the buffer for serializing the message
+        let mut wbuf = WBuf::new(DEFAULT_WBUF_CAPACITY, false);
+        if self.is_streamed() {
+            // Reserve 16 bits to write the length
+            wbuf.write_bytes(&[0u8, 0u8]);
+        }
+        // Serialize the message
+        wbuf.write_session_message(&msg);
+        if self.is_streamed() {
+            // Write the length on the first 16 bits
+            let length: u16 = wbuf.len() as u16 - 2;
+            let bits = wbuf.get_first_slice_mut(..2);
+            bits.copy_from_slice(&length.to_le_bytes());
+        }
+        let mut buffer = vec![0u8; wbuf.len()];
+        wbuf.copy_into_slice(&mut buffer[..]);
+
+        // Send the message on the link
+        self.write_all(&buffer).await
+    }
+
+    pub async fn read_session_message(&self) -> ZResult<Vec<SessionMessage>> {
+        // Read from the link
+        let buffer = if self.is_streamed() {
+            // Read and decode the message length
+            let mut length_bytes = [0u8; 2];
+            let _ = self.read_exact(&mut length_bytes).await?;
+            let to_read = u16::from_le_bytes(length_bytes) as usize;
+            // Read the message
+            let mut buffer = vec![0u8; to_read];
+            let _ = self.read_exact(&mut buffer).await?;
+            buffer
+        } else {
+            // Read the message
+            let mut buffer = vec![0u8; self.get_mtu()];
+            let n = self.read(&mut buffer).await?;
+            buffer.truncate(n);
+            buffer
+        };
+
+        let mut rbuf = RBuf::from(buffer);
+        let mut messages: Vec<SessionMessage> = Vec::with_capacity(1);
+        while rbuf.can_read() {
+            match rbuf.read_session_message() {
+                Some(msg) => messages.push(msg),
+                None => {
+                    let e = format!("Decoding error on link: {}", self);
+                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                }
+            }
+        }
+
+        Ok(messages)
     }
 }
 

@@ -20,15 +20,12 @@ use crate::link::tcp::LinkManagerTcp;
 // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 // use crate::link::unixsock_stream::ManagerUnixSockStream;
 use crate::link::{LinkManager, LocatorProtocol};
-use crate::session::SessionManagerInitial;
+use crate::session::SessionManager;
 
 pub struct LinkManagerBuilder;
 
 impl LinkManagerBuilder {
-    pub(crate) fn make(
-        manager: Arc<SessionManagerInitial>,
-        protocol: &LocatorProtocol,
-    ) -> LinkManager {
+    pub(crate) fn make(manager: SessionManager, protocol: &LocatorProtocol) -> LinkManager {
         match protocol {
             #[cfg(feature = "transport_tcp")]
             LocatorProtocol::Tcp => Arc::new(LinkManagerTcp::new(manager)),

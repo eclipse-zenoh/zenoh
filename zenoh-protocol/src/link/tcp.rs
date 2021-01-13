@@ -24,7 +24,7 @@ use std::net::Shutdown;
 use std::time::Duration;
 
 use super::{Link, LinkManagerTrait, LinkTrait, Locator};
-use crate::session::SessionManagerInitial;
+use crate::session::SessionManager;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
 
@@ -54,18 +54,16 @@ zconfigurable! {
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-#[macro_export]
-macro_rules! get_tcp_addr {
-    ($locator:expr) => {
-        match $locator {
-            Locator::Tcp(addr) => addr,
-            _ => {
-                let e = format!("Not a TCP locator: {}", $locator);
-                log::debug!("{}", e);
-                return zerror!(ZErrorKind::InvalidLocator { descr: e });
-            }
+#[allow(unreachable_patterns)]
+fn get_tcp_addr(locator: &Locator) -> ZResult<&SocketAddr> {
+    match locator {
+        Locator::Tcp(addr) => Ok(addr),
+        _ => {
+            let e = format!("Not a TCP locator: {}", locator);
+            log::debug!("{}", e);
+            return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
-    };
+    }
 }
 
 /*************************************/
@@ -95,6 +93,7 @@ impl Tcp {
                 err
             );
         }
+
         // Set the TCP linger option
         if let Err(err) = zenoh_util::net::set_linger(
             &socket,
@@ -136,15 +135,27 @@ impl LinkTrait for Tcp {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let res = (&self.socket).write_all(buffer).await;
-        if let Err(e) = res {
-            log::trace!("Transmission error on TCP link {}: {}", self, e);
-            return zerror!(ZErrorKind::IOError {
-                descr: format!("{}", e)
-            });
+        match (&self.socket).write(buffer).await {
+            Ok(n) => Ok(n),
+            Err(e) => {
+                log::trace!("Transmission error on TCP link {}: {}", self, e);
+                zerror!(ZErrorKind::IOError {
+                    descr: format!("{}", e)
+                })
+            }
         }
+    }
 
-        Ok(buffer.len())
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+        match (&self.socket).write_all(buffer).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                log::trace!("Transmission error on TCP link {}: {}", self, e);
+                zerror!(ZErrorKind::IOError {
+                    descr: format!("{}", e)
+                })
+            }
+        }
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
@@ -191,260 +202,6 @@ impl LinkTrait for Tcp {
         true
     }
 }
-
-// async fn read_task(link: Arc<Tcp>, stop: Receiver<()>) {
-// let read_loop = async {
-//     // The link object to be passed to the transport
-//     let lobj: Link = Link::new(link.clone());
-//     // Acquire the lock on the transport
-//     let mut guard = zasynclock!(link.transport);
-
-//     // // The RBuf to read a message batch onto
-//     let mut rbuf = RBuf::new();
-
-//     // The buffer allocated to read from a single syscall
-//     let mut buffer = vec![0u8; *TCP_READ_BUFFER_SIZE];
-
-//     // The vector for storing the deserialized messages
-//     let mut messages: Vec<SessionMessage> = Vec::with_capacity(*TCP_READ_MESSAGES_VEC_SIZE);
-
-//     // An example of the received buffer and the correspoding indexes is:
-//     //
-//     //  0 1 2 3 4 5 6 7  ..  n 0 1 2 3 4 5 6 7      k 0 1 2 3 4 5 6 7      x
-//     // +-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+
-//     // | L | First batch      | L | Second batch     | L | Incomplete batch |
-//     // +-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+
-//     //
-//     // - Decoding Iteration 0:
-//     //      r_l_pos = 0; r_s_pos = 2; r_e_pos = n;
-//     //
-//     // - Decoding Iteration 1:
-//     //      r_l_pos = n; r_s_pos = n+2; r_e_pos = n+k;
-//     //
-//     // - Decoding Iteration 2:
-//     //      r_l_pos = n+k; r_s_pos = n+k+2; r_e_pos = n+k+x;
-//     //
-//     // In this example, Iteration 2 will fail since the batch is incomplete and
-//     // fewer bytes than the ones indicated in the length are read. The incomplete
-//     // batch is hence stored in a RBuf in order to read more bytes from the socket
-//     // and deserialize a complete batch. In case it is not possible to read at once
-//     // the 2 bytes indicating the message batch length (i.e., only the first byte is
-//     // available), the first byte is copied at the beginning of the buffer and more
-//     // bytes are read in the next iteration.
-
-//     // The read position of the length bytes in the buffer
-//     let mut r_l_pos: usize;
-//     // The start read position of the message bytes in the buffer
-//     let mut r_s_pos: usize;
-//     // The end read position of the messages bytes in the buffer
-//     let mut r_e_pos: usize;
-//     // The write position in the buffer
-//     let mut w_pos: usize = 0;
-
-//     // Keep track of the number of bytes still to read for incomplete message batches
-//     let mut left_to_read: usize = 0;
-
-//     // Macro to handle a link error
-//     macro_rules! zlinkerror {
-//         ($notify:expr) => {
-//             // Close the underlying TCP socket
-//             let _ = link.socket.shutdown(Shutdown::Both);
-//             // Delete the link from the manager
-//             let _ = link.manager.del_link(&link.src_addr, &link.dst_addr).await;
-//             if $notify {
-//                 // Notify the transport
-//                 let _ = guard.link_err(&lobj).await;
-//             }
-//             // Exit
-//             return Ok(());
-//         };
-//     }
-
-//     // Macro to add a slice to the RBuf
-//     macro_rules! zaddslice {
-//         ($start:expr, $end:expr) => {
-//             let tot = $end - $start;
-//             let mut slice = Vec::with_capacity(tot);
-//             slice.extend_from_slice(&buffer[$start..$end]);
-//             rbuf.add_slice(ArcSlice::new(Arc::new(slice), 0, tot));
-//         };
-//     }
-
-//     // Macro for deserializing the messages
-//     macro_rules! zdeserialize {
-//         () => {
-//             // Deserialize all the messages from the current RBuf
-//             while rbuf.can_read() {
-//                 match rbuf.read_session_message() {
-//                     Some(msg) => messages.push(msg),
-//                     None => {
-//                         zlinkerror!(true);
-//                     }
-//                 }
-//             }
-
-//             for msg in messages.drain(..) {
-//                 let res = guard.receive_message(&lobj, msg).await;
-//                 // Enforce the action as instructed by the upper logic
-//                 match res {
-//                     Ok(action) => match action {
-//                         Action::Read => {}
-//                         Action::ChangeTransport(transport) => {
-//                             log::trace!("Change transport on TCP link: {}", link);
-//                             *guard = transport
-//                         }
-//                         Action::Close => {
-//                             log::trace!("Closing TCP link: {}", link);
-//                             zlinkerror!(false);
-//                         }
-//                     },
-//                     Err(e) => {
-//                         log::trace!("Closing TCP link {}: {}", link, e);
-//                         zlinkerror!(false);
-//                     }
-//                 }
-//             }
-//         };
-//     }
-//     log::trace!("Ready to read from TCP link: {}", link);
-//     loop {
-//         // Async read from the TCP socket
-//         match (&link.socket).read(&mut buffer[w_pos..]).await {
-//             Ok(mut n) => {
-//                 if n == 0 {
-//                     // Reading 0 bytes means error
-//                     log::debug!("Zero bytes reading on TCP link: {}", link);
-//                     zlinkerror!(true);
-//                 }
-
-//                 // If we had a w_pos different from 0, it means we add an incomplete length reading
-//                 // in the previous iteration: we have only read 1 byte instead of 2.
-//                 if w_pos != 0 {
-//                     // Update the number of read bytes by adding the bytes we have already read in
-//                     // the previous iteration. "n" now is the index pointing to the last valid
-//                     // position in the buffer.
-//                     n += w_pos;
-//                     // Reset the write index
-//                     w_pos = 0;
-//                 }
-
-//                 // Reset the read length index
-//                 r_l_pos = 0;
-
-//                 // Check if we had an incomplete message batch
-//                 if left_to_read > 0 {
-//                     // Check if still we haven't read enough bytes
-//                     if n < left_to_read {
-//                         // Update the number of bytes still to read;
-//                         left_to_read -= n;
-//                         // Copy the relevant buffer slice in the RBuf
-//                         zaddslice!(0, n);
-//                         // Keep reading from the socket
-//                         continue;
-//                     }
-//                     // We are ready to decode a complete message batch
-//                     // Copy the relevant buffer slice in the RBuf
-//                     zaddslice!(0, left_to_read);
-//                     // Read the batch
-//                     zdeserialize!();
-//                     // Update the read length index
-//                     r_l_pos = left_to_read;
-//                     // Reset the remaining bytes to read
-//                     left_to_read = 0;
-
-//                     // Check if we have completely read the batch
-//                     if buffer[r_l_pos..n].is_empty() {
-//                         // Reset the RBuf
-//                         rbuf.clear();
-//                         // Keep reading from the socket
-//                         continue;
-//                     }
-//                 }
-
-//                 // Loop over all the buffer which may contain multiple message batches
-//                 loop {
-//                     // Compute the total number of bytes we have read
-//                     let read = buffer[r_l_pos..n].len();
-//                     // Check if we have read the 2 bytes necessary to decode the message length
-//                     if read < 2 {
-//                         // Copy the bytes at the beginning of the buffer
-//                         buffer.copy_within(r_l_pos..n, 0);
-//                         // Update the write index
-//                         w_pos = read;
-//                         // Keep reading from the socket
-//                         break;
-//                     }
-//                     // We have read at least two bytes in the buffer, update the read start index
-//                     r_s_pos = r_l_pos + 2;
-//                     // Read the length as litlle endian from the buffer (array of 2 bytes)
-//                     let length: [u8; 2] = buffer[r_l_pos..r_s_pos].try_into().unwrap();
-//                     // Decode the total amount of bytes that we are expected to read
-//                     let to_read = u16::from_le_bytes(length) as usize;
-
-//                     // Check if we have really something to read
-//                     if to_read == 0 {
-//                         // Keep reading from the socket
-//                         break;
-//                     }
-//                     // Compute the number of useful bytes we have actually read
-//                     let read = buffer[r_s_pos..n].len();
-
-//                     if read == 0 {
-//                         // The buffer might be empty in case of having read only the two bytes
-//                         // of the length and no additional bytes are left in the reading buffer
-//                         left_to_read = to_read;
-//                         // Keep reading from the socket
-//                         break;
-//                     } else if read < to_read {
-//                         // We haven't read enough bytes for a complete batch, so
-//                         // we need to store the bytes read so far and keep reading
-
-//                         // Update the number of bytes we still have to read to
-//                         // obtain a complete message batch for decoding
-//                         left_to_read = to_read - read;
-
-//                         // Copy the buffer in the RBuf if not empty
-//                         zaddslice!(r_s_pos, n);
-
-//                         // Keep reading from the socket
-//                         break;
-//                     }
-
-//                     // We have at least one complete message batch we can deserialize
-//                     // Compute the read end index of the message batch in the buffer
-//                     r_e_pos = r_s_pos + to_read;
-
-//                     // Copy the relevant buffer slice in the RBuf
-//                     zaddslice!(r_s_pos, r_e_pos);
-//                     // Deserialize the batch
-//                     zdeserialize!();
-
-//                     // Reset the current RBuf
-//                     rbuf.clear();
-//                     // Reset the remaining bytes to read
-//                     left_to_read = 0;
-
-//                     // Check if we are done with the current reading buffer
-//                     if buffer[r_e_pos..n].is_empty() {
-//                         // Keep reading from the socket
-//                         break;
-//                     }
-
-//                     // Update the read length index to read the next message batch
-//                     r_l_pos = r_e_pos;
-//                 }
-//             }
-//             Err(e) => {
-//                 log::debug!("Reading error on TCP link {}: {}", link, e);
-//                 zlinkerror!(true);
-//             }
-//         }
-//     }
-// };
-
-// // Execute the read loop
-// let _ = read_loop.race(stop.recv()).await;
-// }
 
 impl Drop for Tcp {
     fn drop(&mut self) {
@@ -496,14 +253,14 @@ impl ListenerTcpInner {
 }
 
 pub struct LinkManagerTcp {
-    initial: Arc<SessionManagerInitial>,
+    manager: SessionManager,
     listener: Arc<RwLock<HashMap<SocketAddr, Arc<ListenerTcpInner>>>>,
 }
 
 impl LinkManagerTcp {
-    pub(crate) fn new(initial: Arc<SessionManagerInitial>) -> Self {
+    pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
-            initial,
+            manager,
             listener: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -512,7 +269,7 @@ impl LinkManagerTcp {
 #[async_trait]
 impl LinkManagerTrait for LinkManagerTcp {
     async fn new_link(&self, locator: &Locator) -> ZResult<Link> {
-        let dst_addr = get_tcp_addr!(locator);
+        let dst_addr = get_tcp_addr(locator)?;
 
         // Create the TCP connection
         let stream = match TcpStream::connect(dst_addr).await {
@@ -547,7 +304,7 @@ impl LinkManagerTrait for LinkManagerTcp {
     }
 
     async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
-        let addr = get_tcp_addr!(locator);
+        let addr = get_tcp_addr(locator)?;
 
         // Bind the TCP socket
         let socket = match TcpListener::bind(addr).await {
@@ -574,7 +331,7 @@ impl LinkManagerTrait for LinkManagerTcp {
         // Spawn the accept loop for the listener
         let c_listeners = self.listener.clone();
         let c_addr = local_addr;
-        let c_initial = self.initial.clone();
+        let c_initial = self.manager.clone();
         task::spawn(async move {
             // Wait for the accept loop to terminate
             accept_task(listener, c_initial).await;
@@ -586,7 +343,7 @@ impl LinkManagerTrait for LinkManagerTcp {
     }
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let addr = get_tcp_addr!(locator);
+        let addr = get_tcp_addr(locator)?;
 
         // Stop the listener
         match zasyncwrite!(self.listener).remove(&addr) {
@@ -638,7 +395,7 @@ impl LinkManagerTrait for LinkManagerTcp {
     }
 }
 
-async fn accept_task(listener: Arc<ListenerTcpInner>, initial: Arc<SessionManagerInitial>) {
+async fn accept_task(listener: Arc<ListenerTcpInner>, manager: SessionManager) {
     // The accept future
     let accept_loop = async {
         log::trace!(
@@ -687,7 +444,7 @@ async fn accept_task(listener: Arc<ListenerTcpInner>, initial: Arc<SessionManage
             let link = Arc::new(Tcp::new(stream, src_addr, dst_addr));
 
             // Communicate the new link to the initial session manager
-            initial.handle_new_link(Link::new(link)).await;
+            manager.handle_new_link(Link::new(link)).await;
         }
     };
 

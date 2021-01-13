@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 pub mod defaults;
-mod initial;
 mod manager;
 mod primitives;
 mod transport;
@@ -22,7 +21,6 @@ use crate::link::Link;
 use crate::proto::{smsg, ZenohMessage};
 use async_std::sync::{Arc, Weak};
 use async_trait::async_trait;
-pub(crate) use initial::*;
 pub use manager::*;
 pub use primitives::*;
 use std::fmt;
@@ -92,36 +90,9 @@ impl Session {
     /*         SESSION ACCESSORS         */
     /*************************************/
     #[inline]
-    pub(super) async fn add_link(&self, link: Link) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel.add_link(link).await?;
-        Ok(())
-    }
-
-    #[inline]
-    pub(super) async fn _del_link(&self, link: &Link) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel.del_link(&link).await?;
-        Ok(())
-    }
-
-    #[inline]
-    pub(super) async fn get_callback(
-        &self,
-    ) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
-        let channel = zweak!(self.0, STR_ERR);
-        let callback = channel.get_callback().await;
-        Ok(callback)
-    }
-
-    #[inline]
-    pub(super) async fn set_callback(
-        &self,
-        callback: Arc<dyn SessionEventHandler + Send + Sync>,
-    ) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel.set_callback(callback).await;
-        Ok(())
+    pub(super) async fn get_transport(&self) -> ZResult<Arc<SessionTransport>> {
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport)
     }
 
     /*************************************/
@@ -129,39 +100,39 @@ impl Session {
     /*************************************/
     #[inline]
     pub fn get_pid(&self) -> ZResult<PeerId> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_pid())
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.get_pid())
     }
 
     #[inline]
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_whatami())
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.get_whatami())
     }
 
     #[inline]
     pub fn get_lease(&self) -> ZResult<ZInt> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_lease())
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.get_lease())
     }
 
     #[inline]
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_sn_resolution())
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.get_sn_resolution())
     }
 
     #[inline]
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("{:?}. Close", self);
-        let channel = zweak!(self.0, STR_ERR);
-        channel.close(smsg::close_reason::GENERIC).await
+        let transport = zweak!(self.0, STR_ERR);
+        transport.close(smsg::close_reason::GENERIC).await
     }
 
     #[inline]
     pub async fn close_link(&self, link: &Link) -> ZResult<()> {
-        let channel = zweak!(self.0, STR_ERR);
-        channel
+        let transport = zweak!(self.0, STR_ERR);
+        transport
             .close_link(link, smsg::close_reason::GENERIC)
             .await?;
         Ok(())
@@ -170,15 +141,15 @@ impl Session {
     #[inline]
     pub async fn get_links(&self) -> ZResult<Vec<Link>> {
         log::trace!("{:?}. Get links", self);
-        let channel = zweak!(self.0, STR_ERR);
-        Ok(channel.get_links().await)
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.get_links().await)
     }
 
     #[inline]
     pub async fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
         log::trace!("{:?}. Schedule: {:?}", self, message);
-        let channel = zweak!(self.0, STR_ERR);
-        channel.schedule(message).await;
+        let transport = zweak!(self.0, STR_ERR);
+        transport.schedule(message).await;
         Ok(())
     }
 }
@@ -213,12 +184,12 @@ impl PartialEq for Session {
 
 impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(channel) = self.0.upgrade() {
+        if let Some(transport) = self.0.upgrade() {
             f.debug_struct("Session")
-                .field("peer", &channel.get_pid())
-                .field("lease", &channel.get_lease())
-                .field("keep_alive", &channel.get_keep_alive())
-                .field("sn_resolution", &channel.get_sn_resolution())
+                .field("peer", &transport.get_pid())
+                .field("lease", &transport.get_lease())
+                .field("keep_alive", &transport.get_keep_alive())
+                .field("sn_resolution", &transport.get_sn_resolution())
                 .finish()
         } else {
             write!(f, "Session closed")
