@@ -20,7 +20,7 @@ use crate::core::ZInt;
 use crate::io::{ArcSlice, RBuf};
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
-use crate::session::defaults::QUEUE_PRIO_DATA;
+use crate::session::defaults::QUEUE_PRIO_CTRL;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
@@ -188,7 +188,7 @@ async fn tx_task(link: SessionTransportLink, stop: Receiver<ZResult<()>>) -> ZRe
                     let attachment = None;
                     let message = SessionMessage::make_keep_alive(pid, attachment);
                     link.pipeline
-                        .push_session_message(message, QUEUE_PRIO_DATA)
+                        .push_session_message(message, QUEUE_PRIO_CTRL)
                         .await;
                 }
             }

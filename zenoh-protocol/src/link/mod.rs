@@ -132,7 +132,7 @@ impl Eq for Link {}
 
 impl PartialEq for Link {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
+        (self.0.get_src() == other.0.get_src()) && (self.0.get_dst() == other.0.get_dst())
     }
 }
 
