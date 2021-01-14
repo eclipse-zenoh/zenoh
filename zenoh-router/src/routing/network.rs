@@ -51,12 +51,18 @@ impl Link {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct Tree {
+    pub(crate) parent: Option<NodeIndex>,
+    pub(crate) childs: Vec<NodeIndex>,
+    pub(crate) directions: Vec<Option<NodeIndex>>,
+}
+
 pub(crate) struct Network {
     pub(crate) name: String,
     pub(crate) idx: NodeIndex,
     pub(crate) links: Vec<Link>,
-    pub(crate) parent: Vec<Option<NodeIndex>>,
-    pub(crate) childs: Vec<Vec<NodeIndex>>,
+    pub(crate) trees: Vec<Tree>,
     pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
     pub(crate) orchestrator: SessionOrchestrator,
 }
@@ -76,8 +82,11 @@ impl Network {
             name,
             idx,
             links: vec![],
-            parent: vec![None],
-            childs: vec![vec![]],
+            trees: vec![Tree {
+                parent: None,
+                childs: vec![],
+                directions: vec![None],
+            }],
             graph,
             orchestrator,
         }
@@ -566,11 +575,14 @@ impl Network {
         let indexes = self.graph.node_indices().collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
 
-        let old_childs = self.childs.clone();
+        let old_childs: Vec<Vec<NodeIndex>> = self.trees.iter().map(|t| t.childs.clone()).collect();
 
-        self.parent.resize_with(max_idx.index() + 1, || None);
-        self.childs.clear();
-        self.childs.resize_with(max_idx.index() + 1, Vec::new);
+        self.trees.clear();
+        self.trees.resize_with(max_idx.index() + 1, || Tree {
+            parent: None,
+            childs: vec![],
+            directions: vec![],
+        });
 
         for tree_root_idx in &indexes {
             let path = petgraph::algo::bellman_ford(&self.graph, *tree_root_idx)
@@ -592,29 +604,62 @@ impl Network {
                 .collect();
             log::debug!("Tree {} {:?}", self.graph[*tree_root_idx].pid, ps);
 
-            self.parent[tree_root_idx.index()] = path[self.idx.index()];
+            self.trees[tree_root_idx.index()].parent = path[self.idx.index()];
 
             for idx in &indexes {
                 if let Some(parent_idx) = path[idx.index()] {
                     if parent_idx == self.idx {
-                        self.childs[tree_root_idx.index()].push(*idx);
+                        self.trees[tree_root_idx.index()].childs.push(*idx);
                     }
+                }
+            }
+
+            self.trees[tree_root_idx.index()]
+                .directions
+                .resize_with(max_idx.index() + 1, || None);
+            let mut dfs = petgraph::algo::DfsSpace::new(&self.graph);
+            for destination in &indexes {
+                if self.idx != *destination
+                    && petgraph::algo::has_path_connecting(
+                        &self.graph,
+                        self.idx,
+                        *destination,
+                        Some(&mut dfs),
+                    )
+                {
+                    let mut direction = None;
+                    let mut current = *destination;
+                    while let Some(parent) = path[current.index()] {
+                        if parent == self.idx {
+                            direction = Some(current);
+                            break;
+                        } else {
+                            current = parent;
+                        }
+                    }
+
+                    self.trees[tree_root_idx.index()].directions[destination.index()] =
+                        match direction {
+                            Some(direction) => Some(direction),
+                            None => self.trees[tree_root_idx.index()].parent,
+                        };
                 }
             }
         }
 
-        let mut new_childs = Vec::with_capacity(self.childs.len());
-        new_childs.resize(self.childs.len(), vec![]);
+        let mut new_childs = Vec::with_capacity(self.trees.len());
+        new_childs.resize(self.trees.len(), vec![]);
 
         for i in 0..new_childs.len() {
             new_childs[i] = if i < old_childs.len() {
-                self.childs[i]
+                self.trees[i]
+                    .childs
                     .iter()
                     .filter(|idx| !old_childs[i].contains(idx))
                     .cloned()
                     .collect()
             } else {
-                self.childs[i].clone()
+                self.trees[i].childs.clone()
             };
         }
 

@@ -79,7 +79,7 @@ async unsafe fn register_router_subscription(
     let net = tables.routers_net.as_ref().unwrap();
     match net.get_idx(&router) {
         Some(tree_sid) => {
-            for child in &net.childs[tree_sid.index()] {
+            for child in &net.trees[tree_sid.index()].childs {
                 match tables.get_face(&net.graph[*child].pid).cloned() {
                     Some(mut someface) => {
                         if someface.id != face.id {
@@ -166,7 +166,7 @@ async fn register_peer_subscription(
     let net = tables.peers_net.as_ref().unwrap();
     match net.get_idx(&peer) {
         Some(tree_sid) => {
-            for child in &net.childs[tree_sid.index()] {
+            for child in &net.trees[tree_sid.index()].childs {
                 match tables.get_face(&net.graph[*child].pid).cloned() {
                     Some(mut someface) => {
                         if someface.id != face.id {
