@@ -28,19 +28,27 @@ use crate::routing::router::Tables;
 
 pub type DataRoute = HashMap<usize, (Arc<FaceState>, ResKey)>;
 
-pub(crate) fn propagate_subscription(
-    whatami: whatami::Type,
-    src_face: &Arc<FaceState>,
-    dst_face: &Arc<FaceState>,
-) -> bool {
-    src_face.id != dst_face.id
-        && match whatami {
-            whatami::ROUTER => {
-                (src_face.whatami != whatami::PEER || dst_face.whatami != whatami::PEER)
-                    && (src_face.whatami != whatami::ROUTER || dst_face.whatami != whatami::ROUTER)
+async fn propagate_simple_subscription(
+    tables: &mut Tables,
+    src_face: &mut Arc<FaceState>,
+    res: &Arc<Resource>,
+    sub_info: &SubInfo,
+) {
+    for dst_face in &mut tables.faces.values_mut() {
+        if src_face.id != dst_face.id
+            && match tables.whatami {
+                whatami::ROUTER => dst_face.whatami == whatami::CLIENT,
+                whatami::PEER => dst_face.whatami == whatami::CLIENT,
+                _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
             }
-            _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
+        {
+            let reskey = Resource::decl_key(res, dst_face).await;
+            dst_face
+                .primitives
+                .subscriber(&reskey, sub_info, None)
+                .await;
         }
+    }
 }
 
 async unsafe fn register_router_subscription(
@@ -109,16 +117,8 @@ async unsafe fn register_router_subscription(
     }
 
     // Propagate subscription to clients
-    let whatami = tables.whatami;
-    for someface in &mut tables.faces.values_mut() {
-        if propagate_subscription(whatami, face, someface) {
-            let reskey = Resource::decl_key(&res, someface).await;
-            someface
-                .primitives
-                .subscriber(&reskey, sub_info, None)
-                .await;
-        }
-    }
+    propagate_simple_subscription(tables, face, &res, sub_info).await;
+
     Tables::build_matches_direct_tables(&mut res);
 }
 
@@ -211,17 +211,19 @@ pub async fn declare_peer_subscription(
         Some(mut prefix) => unsafe {
             register_peer_subscription(tables, face, &mut prefix, suffix, sub_info, peer).await;
 
-            let mut propa_sub_info = sub_info.clone();
-            propa_sub_info.mode = SubMode::Push;
-            declare_router_subscription(
-                tables,
-                face,
-                prefixid,
-                suffix,
-                &propa_sub_info,
-                tables.pid.clone(),
-            )
-            .await;
+            if tables.whatami == whatami::ROUTER {
+                let mut propa_sub_info = sub_info.clone();
+                propa_sub_info.mode = SubMode::Push;
+                declare_router_subscription(
+                    tables,
+                    face,
+                    prefixid,
+                    suffix,
+                    &propa_sub_info,
+                    tables.pid.clone(),
+                )
+                .await;
+            }
         },
         None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
     }
@@ -280,17 +282,39 @@ pub async fn declare_client_subscription(
         Some(mut prefix) => unsafe {
             register_client_subscription(tables, face, &mut prefix, suffix, sub_info).await;
 
-            let mut propa_sub_info = sub_info.clone();
-            propa_sub_info.mode = SubMode::Push;
-            declare_router_subscription(
-                tables,
-                face,
-                prefixid,
-                suffix,
-                &propa_sub_info,
-                tables.pid.clone(),
-            )
-            .await;
+            match tables.whatami {
+                whatami::ROUTER => {
+                    let mut propa_sub_info = sub_info.clone();
+                    propa_sub_info.mode = SubMode::Push;
+                    declare_router_subscription(
+                        tables,
+                        face,
+                        prefixid,
+                        suffix,
+                        &propa_sub_info,
+                        tables.pid.clone(),
+                    )
+                    .await;
+                }
+                whatami::PEER => {
+                    let mut propa_sub_info = sub_info.clone();
+                    propa_sub_info.mode = SubMode::Push;
+                    declare_peer_subscription(
+                        tables,
+                        face,
+                        prefixid,
+                        suffix,
+                        &propa_sub_info,
+                        tables.pid.clone(),
+                    )
+                    .await;
+                }
+                _ => {
+                    let mut res = Resource::make_resource(&mut prefix, suffix);
+                    Resource::match_resource(&tables, &mut res);
+                    propagate_simple_subscription(tables, face, &res, sub_info).await;
+                }
+            }
         },
         None => log::error!("Declare subscription for unknown rid {}!", prefixid),
     }
