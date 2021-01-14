@@ -324,7 +324,19 @@ pub async fn undeclare_subscription(
     }
 }
 
-pub(crate) async fn new_childs_for_subs(
+pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+    let sub_info = SubInfo {
+        reliability: Reliability::Reliable, // TODO
+        mode: SubMode::Push,
+        period: None,
+    };
+    for sub in &tables.router_subs {
+        let reskey = Resource::decl_key(&sub, face).await;
+        face.primitives.subscriber(&reskey, &sub_info, None).await;
+    }
+}
+
+pub(crate) async fn pubsub_new_childs(
     tables: &mut Tables,
     childs: Vec<Vec<NodeIndex>>,
     net_type: whatami::Type,
