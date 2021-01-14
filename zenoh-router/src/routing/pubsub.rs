@@ -43,6 +43,85 @@ pub(crate) fn propagate_subscription(
         }
 }
 
+async unsafe fn register_router_subscription(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    prefix: &mut Arc<Resource>,
+    suffix: &str,
+    sub_info: &SubInfo,
+    router: PeerId,
+) {
+    // Register router subscription
+    let mut res = Resource::make_resource(prefix, suffix);
+    Resource::match_resource(&tables, &mut res);
+    {
+        let res_mut = Arc::get_mut_unchecked(&mut res);
+        if !res_mut.router_subs.contains(&router) {
+            log::debug!(
+                "Register router subscription {} (router: {})",
+                res_mut.name(),
+                router
+            );
+            res_mut.router_subs.push(router.clone());
+            tables.router_subs.push(res.clone())
+        }
+    }
+
+    // Propagate subscription to routers
+    let net = tables.routers_net.as_ref().unwrap();
+    match net.get_idx(&router) {
+        Some(tree_sid) => {
+            for child in &net.childs[tree_sid.index()] {
+                match tables.get_face(&net.graph[*child].pid).cloned() {
+                    Some(mut someface) => {
+                        if someface.id != face.id {
+                            let reskey = Resource::decl_key(&res, &mut someface).await;
+
+                            log::debug!(
+                                "Send router subscription {} on face {} {}",
+                                res.name(),
+                                someface.id,
+                                someface.pid,
+                            );
+
+                            someface
+                                .primitives
+                                .subscriber(&reskey, &sub_info, Some(tree_sid.index() as ZInt))
+                                .await;
+                        }
+                    }
+                    None => {
+                        log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                    }
+                }
+            }
+        }
+        None => log::error!(
+            "Error propagating sub {}: cannot get index of {}!",
+            res.name(),
+            router
+        ),
+    }
+
+    // Propagate subscription to peers
+    if face.whatami != whatami::PEER {
+        register_peer_subscription(tables, face, prefix, suffix, sub_info, tables.pid.clone()).await
+    }
+
+    // Propagate subscription to clients
+    let whatami = tables.whatami;
+    for someface in &mut tables.faces.values_mut() {
+        if propagate_subscription(whatami, face, someface) {
+            let reskey = Resource::decl_key(&res, someface).await;
+            someface
+                .primitives
+                .subscriber(&reskey, sub_info, None)
+                .await;
+        }
+    }
+    Tables::build_matches_direct_tables(&mut res);
+}
+
 pub async fn declare_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -53,87 +132,7 @@ pub async fn declare_router_subscription(
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
-            // Register router subscription
-            let mut res = Resource::make_resource(&mut prefix, suffix);
-            Resource::match_resource(&tables, &mut res);
-            {
-                let res_mut = Arc::get_mut_unchecked(&mut res);
-                if !res_mut.router_subs.contains(&router) {
-                    log::debug!(
-                        "Register router subscription {} (router: {})",
-                        res_mut.name(),
-                        router
-                    );
-                    res_mut.router_subs.push(router.clone());
-                    tables.router_subs.push(res.clone())
-                }
-            }
-
-            // Propagate subscription to routers
-            let net = tables.routers_net.as_ref().unwrap();
-            match net.get_idx(&router) {
-                Some(tree_sid) => {
-                    for child in &net.childs[tree_sid.index()] {
-                        match tables.get_face(&net.graph[*child].pid).cloned() {
-                            Some(mut someface) => {
-                                if someface.id != face.id {
-                                    let reskey = Resource::decl_key(&res, &mut someface).await;
-
-                                    log::debug!(
-                                        "Send router subscription {} on face {} {}",
-                                        res.name(),
-                                        someface.id,
-                                        someface.pid,
-                                    );
-
-                                    someface
-                                        .primitives
-                                        .subscriber(
-                                            &reskey,
-                                            &sub_info,
-                                            Some(tree_sid.index() as ZInt),
-                                        )
-                                        .await;
-                                }
-                            }
-                            None => {
-                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
-                            }
-                        }
-                    }
-                }
-                None => log::error!(
-                    "Error propagating sub {}: cannot get index of {}!",
-                    res.name(),
-                    router
-                ),
-            }
-
-            // Propagate subscription to peers
-            if face.whatami != whatami::PEER {
-                register_peer_subscription(
-                    tables,
-                    face,
-                    &mut prefix,
-                    suffix,
-                    sub_info,
-                    tables.pid.clone(),
-                )
-                .await
-            }
-
-            // Propagate subscription to clients
-            let whatami = tables.whatami;
-            for someface in &mut tables.faces.values_mut() {
-                if propagate_subscription(whatami, face, someface) {
-                    let reskey = Resource::decl_key(&res, someface).await;
-                    someface
-                        .primitives
-                        .subscriber(&reskey, sub_info, None)
-                        .await;
-                }
-            }
-            Tables::build_matches_direct_tables(&mut res);
+            register_router_subscription(tables, face, &mut prefix, suffix, sub_info, router).await;
         },
         None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
     }
@@ -228,6 +227,48 @@ pub async fn declare_peer_subscription(
     }
 }
 
+async unsafe fn register_client_subscription(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    prefix: &mut Arc<Resource>,
+    suffix: &str,
+    sub_info: &SubInfo,
+) {
+    // Register subscription
+    let mut res = Resource::make_resource(prefix, suffix);
+    Resource::match_resource(&tables, &mut res);
+    {
+        let res = Arc::get_mut_unchecked(&mut res);
+        log::debug!("Register subscription {} for face {}", res.name(), face.id);
+        match res.contexts.get_mut(&face.id) {
+            Some(mut ctx) => match &ctx.subs {
+                Some(info) => {
+                    if SubMode::Pull == info.mode {
+                        Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
+                    }
+                }
+                None => {
+                    Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
+                }
+            },
+            None => {
+                res.contexts.insert(
+                    face.id,
+                    Arc::new(Context {
+                        face: face.clone(),
+                        local_rid: None,
+                        remote_rid: None,
+                        subs: Some(sub_info.clone()),
+                        qabl: false,
+                        last_values: HashMap::new(),
+                    }),
+                );
+            }
+        }
+    }
+    Arc::get_mut_unchecked(face).subs.push(res);
+}
+
 pub async fn declare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -237,39 +278,7 @@ pub async fn declare_client_subscription(
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
-            // Register subscription
-            let mut res = Resource::make_resource(&mut prefix, suffix);
-            Resource::match_resource(&tables, &mut res);
-            {
-                let res = Arc::get_mut_unchecked(&mut res);
-                log::debug!("Register subscription {} for face {}", res.name(), face.id);
-                match res.contexts.get_mut(&face.id) {
-                    Some(mut ctx) => match &ctx.subs {
-                        Some(info) => {
-                            if SubMode::Pull == info.mode {
-                                Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
-                            }
-                        }
-                        None => {
-                            Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
-                        }
-                    },
-                    None => {
-                        res.contexts.insert(
-                            face.id,
-                            Arc::new(Context {
-                                face: face.clone(),
-                                local_rid: None,
-                                remote_rid: None,
-                                subs: Some(sub_info.clone()),
-                                qabl: false,
-                                last_values: HashMap::new(),
-                            }),
-                        );
-                    }
-                }
-            }
-            Arc::get_mut_unchecked(face).subs.push(res);
+            register_client_subscription(tables, face, &mut prefix, suffix, sub_info).await;
 
             let mut propa_sub_info = sub_info.clone();
             propa_sub_info.mode = SubMode::Push;
