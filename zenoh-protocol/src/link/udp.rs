@@ -81,13 +81,15 @@ fn get_udp_addr(locator: &Locator) -> ZResult<&SocketAddr> {
 /*************************************/
 /*              LINK                 */
 /*************************************/
+type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<Udp>>>>;
+
 struct UnconnectedUdp {
     close: UnconnectedClose,
     channel: UnconnectedChannel,
 }
 
 struct UnconnectedClose {
-    links: Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<Udp>>>>,
+    links: LinkHashMap,
     status: ListenerUdpStatus,
     signal: Sender<()>,
 }
@@ -372,7 +374,7 @@ impl LinkManagerTrait for LinkManagerUdp {
 
         // Create UDP link
         let link = Arc::new(Udp::new(Arc::new(socket), src_addr, dst_addr, None));
-        let lobj = Link::new(link.clone());
+        let lobj = Link::new(link);
 
         Ok(lobj)
     }
@@ -439,7 +441,8 @@ impl LinkManagerTrait for LinkManagerUdp {
 
                 let guard = zasynclock!(listener.links);
                 if guard.is_empty() {
-                    if listener.sender.send(()).await.is_ok() {
+                    let res = listener.sender.send(()).await;
+                    if res.is_ok() {
                         // Wait for the accept loop to be stopped
                         listener.barrier.wait().await;
                     }
@@ -493,7 +496,7 @@ impl ListenerUdpStatus {
 
 struct ListenerUdp {
     socket: Arc<UdpSocket>,
-    links: Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<Udp>>>>,
+    links: LinkHashMap,
     status: ListenerUdpStatus,
     sender: Sender<()>,
     receiver: Receiver<()>,
