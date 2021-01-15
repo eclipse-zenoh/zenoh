@@ -19,8 +19,8 @@ pub use manager::*;
 /* Import of Link modules */
 #[cfg(feature = "transport_tcp")]
 mod tcp;
-// #[cfg(feature = "transport_udp")]
-// mod udp;
+#[cfg(feature = "transport_udp")]
+mod udp;
 // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 // mod unixsock_stream;
 

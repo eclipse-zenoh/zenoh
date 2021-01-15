@@ -573,7 +573,7 @@ impl SessionManager {
             };
             let initial_sn_tx = {
                 let mut rng = rand::thread_rng();
-                rng.gen_range(0, sn_resolution)
+                rng.gen_range(0..sn_resolution)
             };
 
             // Store the data
@@ -932,7 +932,7 @@ async fn incoming_link_task(link: &Link, manager: SessionManager) -> ZResult<()>
     } else {
         let initial_sn = {
             let mut rng = rand::thread_rng();
-            rng.gen_range(0, cookie.sn_resolution)
+            rng.gen_range(0..cookie.sn_resolution)
         };
         guard.insert(
             cookie.pid.clone(),
@@ -1008,8 +1008,6 @@ async fn incoming_link_task(link: &Link, manager: SessionManager) -> ZResult<()>
                     return zerror!(ZErrorKind::InvalidMessage { descr: e });
                 }
             }
-
-            log::debug!("OpenSyn max sessions is valid on link: {}", link);
 
             // Create a new session
             let res = manager

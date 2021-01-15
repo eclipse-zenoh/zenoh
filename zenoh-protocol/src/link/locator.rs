@@ -36,8 +36,8 @@ pub const PORT_SEPARATOR: char = ':';
 // Protocol literals
 #[cfg(feature = "transport_tcp")]
 pub const STR_TCP: &str = "tcp";
-// #[cfg(feature = "transport_udp")]
-// pub const STR_UDP: &str = "udp";
+#[cfg(feature = "transport_udp")]
+pub const STR_UDP: &str = "udp";
 // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 // pub const STR_UNIXSOCK_STREAM: &str = "unixsock-stream";
 
@@ -45,8 +45,8 @@ pub const STR_TCP: &str = "tcp";
 pub enum LocatorProtocol {
     #[cfg(feature = "transport_tcp")]
     Tcp,
-    // #[cfg(feature = "transport_udp")]
-    // Udp,
+    #[cfg(feature = "transport_udp")]
+    Udp,
     // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     // UnixSockStream,
 }
@@ -56,8 +56,8 @@ impl fmt::Display for LocatorProtocol {
         match self {
             #[cfg(feature = "transport_tcp")]
             LocatorProtocol::Tcp => write!(f, "{}", STR_TCP)?,
-            // #[cfg(feature = "transport_udp")]
-            // LocatorProtocol::Udp => write!(f, "{}", STR_UDP)?,
+            #[cfg(feature = "transport_udp")]
+            LocatorProtocol::Udp => write!(f, "{}", STR_UDP)?,
             // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             // LocatorProtocol::UnixSockStream => write!(f, "{}", STR_UNIXSOCK_STREAM)?,
         }
@@ -69,8 +69,8 @@ impl fmt::Display for LocatorProtocol {
 pub enum Locator {
     #[cfg(feature = "transport_tcp")]
     Tcp(SocketAddr),
-    // #[cfg(feature = "transport_udp")]
-    // Udp(SocketAddr),
+    #[cfg(feature = "transport_udp")]
+    Udp(SocketAddr),
     // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     // UnixSockStream(PathBuf),
 }
@@ -123,28 +123,28 @@ impl FromStr for Locator {
                 });
                 addr.map(Locator::Tcp)
             }
-            // #[cfg(feature = "transport_udp")]
-            // STR_UDP => {
-            //     let addr = task::block_on(async {
-            //         match addr.to_socket_addrs().await {
-            //             Ok(mut addr_iter) => {
-            //                 if let Some(addr) = addr_iter.next() {
-            //                     Ok(addr)
-            //                 } else {
-            //                     let e = format!("Couldn't resolve UDP locator: {}", s.to_string());
-            //                     log::warn!("{}", e);
-            //                     zerror!(ZErrorKind::InvalidLocator { descr: e })
-            //                 }
-            //             }
-            //             Err(e) => {
-            //                 let e = format!("Invalid UDP locator: {}", e);
-            //                 log::warn!("{}", e);
-            //                 zerror!(ZErrorKind::InvalidLocator { descr: e })
-            //             }
-            //         }
-            //     });
-            //     addr.map(Locator::Udp)
-            // }
+            #[cfg(feature = "transport_udp")]
+            STR_UDP => {
+                let addr = task::block_on(async {
+                    match addr.to_socket_addrs().await {
+                        Ok(mut addr_iter) => {
+                            if let Some(addr) = addr_iter.next() {
+                                Ok(addr)
+                            } else {
+                                let e = format!("Couldn't resolve UDP locator: {}", s.to_string());
+                                log::warn!("{}", e);
+                                zerror!(ZErrorKind::InvalidLocator { descr: e })
+                            }
+                        }
+                        Err(e) => {
+                            let e = format!("Invalid UDP locator: {}", e);
+                            log::warn!("{}", e);
+                            zerror!(ZErrorKind::InvalidLocator { descr: e })
+                        }
+                    }
+                });
+                addr.map(Locator::Udp)
+            }
             // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             // STR_UNIXSOCK_STREAM => {
             //     let addr = task::block_on(async {
@@ -173,8 +173,8 @@ impl Locator {
         match self {
             #[cfg(feature = "transport_tcp")]
             Locator::Tcp(..) => LocatorProtocol::Tcp,
-            // #[cfg(feature = "transport_udp")]
-            // Locator::Udp(..) => LocatorProtocol::Udp,
+            #[cfg(feature = "transport_udp")]
+            Locator::Udp(..) => LocatorProtocol::Udp,
             // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             // Locator::UnixSockStream(..) => LocatorProtocol::UnixSockStream,
         }
@@ -186,8 +186,8 @@ impl fmt::Display for Locator {
         match self {
             #[cfg(feature = "transport_tcp")]
             Locator::Tcp(addr) => write!(f, "{}/{}", STR_TCP, addr)?,
-            // #[cfg(feature = "transport_udp")]
-            // Locator::Udp(addr) => write!(f, "{}/{}", STR_UDP, addr)?,
+            #[cfg(feature = "transport_udp")]
+            Locator::Udp(addr) => write!(f, "{}/{}", STR_UDP, addr)?,
             // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             // Locator::UnixSockStream(addr) => {
             //     let path = addr.to_str().unwrap_or("None");
@@ -203,8 +203,8 @@ impl fmt::Debug for Locator {
         let (proto, addr): (&str, String) = match self {
             #[cfg(feature = "transport_tcp")]
             Locator::Tcp(addr) => (STR_TCP, addr.to_string()),
-            // #[cfg(feature = "transport_udp")]
-            // Locator::Udp(addr) => (STR_UDP, addr.to_string()),
+            #[cfg(feature = "transport_udp")]
+            Locator::Udp(addr) => (STR_UDP, addr.to_string()),
             // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             // Locator::UnixSockStream(addr) => {
             //     let path = addr.to_str().unwrap_or("None");

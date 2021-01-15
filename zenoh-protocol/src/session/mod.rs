@@ -75,7 +75,7 @@ impl SessionEventHandler for DummyHandler {
 /*************************************/
 /*              SESSION              */
 /*************************************/
-const STR_ERR: &str = "Session not available";
+const STR_ERR: &str = "Session closed";
 
 /// [`Session`] is the session handler returned when opening a new session
 #[derive(Clone)]
@@ -177,7 +177,7 @@ impl fmt::Debug for Session {
                 .field("sn_resolution", &transport.get_sn_resolution())
                 .finish()
         } else {
-            write!(f, "Session closed")
+            write!(f, "{}", STR_ERR)
         }
     }
 }

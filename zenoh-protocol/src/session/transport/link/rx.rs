@@ -54,8 +54,8 @@ impl SessionTransportLink {
                 reason,
                 link_only,
             }) => self.handle_close(pid, reason, link_only).await,
-            SessionBody::KeepAlive { .. }
-            | SessionBody::Ping { .. }
+            SessionBody::KeepAlive { .. } => {}
+            SessionBody::Ping { .. }
             | SessionBody::Pong { .. }
             | SessionBody::Sync { .. }
             | SessionBody::AckNack { .. } => {

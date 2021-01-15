@@ -112,16 +112,16 @@ fn locator_tcp() {
     task::block_on(run(locators));
 }
 
-// #[cfg(feature = "transport_udp")]
-// #[test]
-// fn locator_udp() {
-//     // Define the locators
-//     let locators: Vec<Locator> = vec![
-//         "udp/127.0.0.1:7447".parse().unwrap(),
-//         "udp/localhost:7448".parse().unwrap(),
-//     ];
-//     task::block_on(run(locators));
-// }
+#[cfg(feature = "transport_udp")]
+#[test]
+fn locator_udp() {
+    // Define the locators
+    let locators: Vec<Locator> = vec![
+        "udp/127.0.0.1:7447".parse().unwrap(),
+        "udp/localhost:7448".parse().unwrap(),
+    ];
+    task::block_on(run(locators));
+}
 
 // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 // #[test]
@@ -143,15 +143,16 @@ fn locator_tcp() {
 //     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
 // }
 
-// #[test]
-// fn locator_tcp_udp() {
-//     // Define the locators
-//     let locators: Vec<Locator> = vec![
-//         "tcp/127.0.0.1:7449".parse().unwrap(),
-//         "udp/127.0.0.1:7449".parse().unwrap(),
-//     ];
-//     task::block_on(run(locators));
-// }
+#[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
+#[test]
+fn locator_tcp_udp() {
+    // Define the locators
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7449".parse().unwrap(),
+        "udp/127.0.0.1:7449".parse().unwrap(),
+    ];
+    task::block_on(run(locators));
+}
 
 // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 // #[test]

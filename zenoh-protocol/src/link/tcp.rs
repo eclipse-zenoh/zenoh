@@ -39,11 +39,6 @@ const TCP_MAX_MTU: usize = 65_537;
 zconfigurable! {
     // Default MTU (TCP PDU) in bytes.
     static ref TCP_DEFAULT_MTU: usize = TCP_MAX_MTU;
-    // Size of buffer used to read from socket.
-    static ref TCP_READ_BUFFER_SIZE: usize = 2*TCP_MAX_MTU;
-
-    // Size of the vector used to deserialize the messages.
-    static ref TCP_READ_MESSAGES_VEC_SIZE: usize = 32;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:
@@ -76,10 +71,6 @@ pub struct Tcp {
     src_addr: SocketAddr,
     // The destination socket address of this link (address used on the remote host)
     dst_addr: SocketAddr,
-    // The source Zenoh locator of this link (locator used on the local host)
-    src_locator: Locator,
-    // The destination Zenoh locator of this link (locator used on the local host)
-    dst_locator: Locator,
 }
 
 impl Tcp {
@@ -114,8 +105,6 @@ impl Tcp {
             socket,
             src_addr,
             dst_addr,
-            src_locator: Locator::Tcp(src_addr),
-            dst_locator: Locator::Tcp(dst_addr),
         }
     }
 }
@@ -134,6 +123,7 @@ impl LinkTrait for Tcp {
         })
     }
 
+    #[inline]
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match (&self.socket).write(buffer).await {
             Ok(n) => Ok(n),
@@ -146,6 +136,7 @@ impl LinkTrait for Tcp {
         }
     }
 
+    #[inline]
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         match (&self.socket).write_all(buffer).await {
             Ok(_) => Ok(()),
@@ -158,6 +149,7 @@ impl LinkTrait for Tcp {
         }
     }
 
+    #[inline]
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match (&self.socket).read(buffer).await {
             Ok(n) => Ok(n),
@@ -170,6 +162,7 @@ impl LinkTrait for Tcp {
         }
     }
 
+    #[inline]
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         match (&self.socket).read_exact(buffer).await {
             Ok(_) => Ok(()),
@@ -182,22 +175,27 @@ impl LinkTrait for Tcp {
         }
     }
 
+    #[inline]
     fn get_src(&self) -> Locator {
-        self.src_locator.clone()
+        Locator::Tcp(self.src_addr)
     }
 
+    #[inline]
     fn get_dst(&self) -> Locator {
-        self.dst_locator.clone()
+        Locator::Tcp(self.dst_addr)
     }
 
+    #[inline]
     fn get_mtu(&self) -> usize {
         *TCP_DEFAULT_MTU
     }
 
+    #[inline]
     fn is_reliable(&self) -> bool {
         true
     }
 
+    #[inline]
     fn is_streamed(&self) -> bool {
         true
     }
@@ -229,21 +227,21 @@ impl fmt::Debug for Tcp {
 /*************************************/
 /*          LISTENER                 */
 /*************************************/
-struct ListenerTcpInner {
+struct ListenerTcp {
     socket: Arc<TcpListener>,
     sender: Sender<()>,
     receiver: Receiver<()>,
     barrier: Arc<Barrier>,
 }
 
-impl ListenerTcpInner {
-    fn new(socket: Arc<TcpListener>) -> ListenerTcpInner {
+impl ListenerTcp {
+    fn new(socket: Arc<TcpListener>) -> ListenerTcp {
         // Create the channel necessary to break the accept loop
         let (sender, receiver) = bounded::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
         let barrier = Arc::new(Barrier::new(2));
         // Update the list of active listeners on the manager
-        ListenerTcpInner {
+        ListenerTcp {
             socket,
             sender,
             receiver,
@@ -254,7 +252,7 @@ impl ListenerTcpInner {
 
 pub struct LinkManagerTcp {
     manager: SessionManager,
-    listener: Arc<RwLock<HashMap<SocketAddr, Arc<ListenerTcpInner>>>>,
+    listener: Arc<RwLock<HashMap<SocketAddr, Arc<ListenerTcp>>>>,
 }
 
 impl LinkManagerTcp {
@@ -324,17 +322,17 @@ impl LinkManagerTrait for LinkManagerTcp {
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
         };
-        let listener = Arc::new(ListenerTcpInner::new(socket));
+        let listener = Arc::new(ListenerTcp::new(socket));
         // Update the list of active listeners on the manager
         zasyncwrite!(self.listener).insert(local_addr, listener.clone());
 
         // Spawn the accept loop for the listener
         let c_listeners = self.listener.clone();
         let c_addr = local_addr;
-        let c_initial = self.manager.clone();
+        let c_manager = self.manager.clone();
         task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(listener, c_initial).await;
+            accept_task(listener, c_manager).await;
             // Delete the listener from the manager
             zasyncwrite!(c_listeners).remove(&c_addr);
         });
@@ -395,7 +393,7 @@ impl LinkManagerTrait for LinkManagerTcp {
     }
 }
 
-async fn accept_task(listener: Arc<ListenerTcpInner>, manager: SessionManager) {
+async fn accept_task(listener: Arc<ListenerTcp>, manager: SessionManager) {
     // The accept future
     let accept_loop = async {
         log::trace!(

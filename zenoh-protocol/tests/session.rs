@@ -441,21 +441,20 @@ async fn session_open_close(locator: Locator) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp() {
-    env_logger::init();
     let locator: Locator = "tcp/127.0.0.1:7447".parse().unwrap();
     task::block_on(async {
         session_open_close(locator.clone()).await;
     });
 }
 
-// #[test]
-// fn session_udp() {
-//     env_logger::init();
-//     let locator: Locator = "udp/127.0.0.1:7447".parse().unwrap();
-//     task::block_on(async {
-//         session_open_close(locator.clone()).await;
-//     });
-// }
+#[cfg(feature = "transport_udp")]
+#[test]
+fn session_udp() {
+    let locator: Locator = "udp/127.0.0.1:7447".parse().unwrap();
+    task::block_on(async {
+        session_open_close(locator.clone()).await;
+    });
+}
 
 // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 // #[test]
