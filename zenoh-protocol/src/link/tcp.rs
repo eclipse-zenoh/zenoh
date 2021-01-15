@@ -11,6 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::{Link, LinkManagerTrait, LinkTrait, Locator};
+use crate::session::SessionManager;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
@@ -22,9 +24,6 @@ use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
 use std::time::Duration;
-
-use super::{Link, LinkManagerTrait, LinkTrait, Locator};
-use crate::session::SessionManager;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
 
@@ -269,7 +268,6 @@ impl LinkManagerTrait for LinkManagerTcp {
     async fn new_link(&self, locator: &Locator) -> ZResult<Link> {
         let dst_addr = get_tcp_addr(locator)?;
 
-        // Create the TCP connection
         let stream = match TcpStream::connect(dst_addr).await {
             Ok(stream) => stream,
             Err(e) => {
@@ -278,7 +276,7 @@ impl LinkManagerTrait for LinkManagerTcp {
                 return zerror!(ZErrorKind::Other { descr: e });
             }
         };
-        // Create a new link object
+
         let src_addr = match stream.local_addr() {
             Ok(addr) => addr,
             Err(e) => {
@@ -287,6 +285,7 @@ impl LinkManagerTrait for LinkManagerTcp {
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
         };
+
         let dst_addr = match stream.peer_addr() {
             Ok(addr) => addr,
             Err(e) => {
@@ -295,10 +294,10 @@ impl LinkManagerTrait for LinkManagerTcp {
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
         };
-        let link = Arc::new(Tcp::new(stream, src_addr, dst_addr));
-        let link = Link::new(link);
 
-        Ok(link)
+        let link = Arc::new(Tcp::new(stream, src_addr, dst_addr));
+
+        Ok(Link::new(link))
     }
 
     async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
@@ -347,7 +346,8 @@ impl LinkManagerTrait for LinkManagerTcp {
         match zasyncwrite!(self.listener).remove(&addr) {
             Some(listener) => {
                 // Send the stop signal
-                if listener.sender.send(()).await.is_ok() {
+                let res = listener.sender.send(()).await;
+                if res.is_ok() {
                     // Wait for the accept loop to be stopped
                     listener.barrier.wait().await;
                 }

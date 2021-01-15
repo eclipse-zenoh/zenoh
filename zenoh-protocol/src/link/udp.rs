@@ -58,10 +58,6 @@ const UDP_MTU_LIMIT: usize = 8_192;
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
     static ref UDP_DEFAULT_MTU: usize = UDP_MTU_LIMIT;
-    // Size of buffer used to read from socket.
-    static ref UDP_READ_BUFFER_SIZE: usize = UDP_MAX_MTU;
-    // Size of the vector used to deserialize the messages.
-    static ref UDP_READ_MESSAGES_VEC_SIZE: usize = 32;
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref UDP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
@@ -85,17 +81,9 @@ fn get_udp_addr(locator: &Locator) -> ZResult<&SocketAddr> {
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<Udp>>>>;
 
 struct UnconnectedUdp {
-    close: UnconnectedClose,
-    mvar: UnconnectedMvar,
-}
-
-struct UnconnectedClose {
     links: LinkHashMap,
     status: ListenerUdpStatus,
     signal: Sender<()>,
-}
-
-struct UnconnectedMvar {
     input: Mvar<(Vec<u8>, usize, usize)>,
     output: Mvar<(Vec<u8>, usize)>,
 }
@@ -116,18 +104,8 @@ impl Udp {
         socket: Arc<UdpSocket>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
-        mut is_unconnected: Option<UnconnectedClose>,
+        unconnected: Option<UnconnectedUdp>,
     ) -> Udp {
-        let unconnected = if let Some(close) = is_unconnected.take() {
-            let mvar = UnconnectedMvar {
-                input: Mvar::new(),
-                output: Mvar::new(),
-            };
-            Some(UnconnectedUdp { close, mvar })
-        } else {
-            None
-        };
-
         Udp {
             socket,
             src_addr,
@@ -138,10 +116,11 @@ impl Udp {
 
     async fn received(&self, mut buffer: Vec<u8>, len: usize) -> Vec<u8> {
         let unconnected = self.unconnected.as_ref().unwrap();
+        // Make sure that all bytes are read
         let mut start: usize = 0;
         while start < len {
-            unconnected.mvar.input.put((buffer, start, len)).await;
-            let tuple = unconnected.mvar.output.take().await;
+            unconnected.input.put((buffer, start, len)).await;
+            let tuple = unconnected.output.take().await;
             buffer = tuple.0;
             start += tuple.1;
         }
@@ -157,11 +136,14 @@ impl Udp {
                 });
             }
         };
-
-        let (slice, start, len) = unconnected.mvar.input.take().await;
+        // Get the buffer used in the main loop
+        let (slice, start, len) = unconnected.input.take().await;
+        // Copy the read bytes into the target buffer
         let len = len.min(buffer.len());
         buffer[0..len].copy_from_slice(&slice[start..start + len]);
-        unconnected.mvar.output.put((slice, len)).await;
+        // Return back the ownership of the buffer used to read from the socket
+        unconnected.output.put((slice, len)).await;
+        // Return the amount read
         Ok(len)
     }
 
@@ -183,10 +165,10 @@ impl LinkTrait for Udp {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
         if let Some(unconnected) = self.unconnected.as_ref() {
-            let mut guard = zasynclock!(unconnected.close.links);
+            let mut guard = zasynclock!(unconnected.links);
             guard.remove(&(self.src_addr, self.dst_addr));
-            if !unconnected.close.status.is_active() && guard.is_empty() {
-                let _ = unconnected.close.signal.send(()).await;
+            if !unconnected.status.is_active() && guard.is_empty() {
+                let _ = unconnected.signal.send(()).await;
             }
         }
         Ok(())
@@ -531,7 +513,7 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
 
         log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
         // Buffers for deserialization
-        let mut buff = vec![0; *UDP_READ_BUFFER_SIZE];
+        let mut buff = vec![0; UDP_MAX_MTU];
         loop {
             // Wait for incoming connections
             let (n, dst_addr) = match listener.socket.recv_from(&mut buff).await {
@@ -561,17 +543,19 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
                         if listener.status.is_active() {
                             // A new peers has sent data to this socket
                             log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
-                            let close = UnconnectedClose {
+                            let unconnected = UnconnectedUdp {
                                 links: listener.links.clone(),
                                 status: listener.status.clone(),
                                 signal: listener.sender.clone(),
+                                input: Mvar::new(),
+                                output: Mvar::new(),
                             };
                             // Create the new link object
                             let link = Arc::new(Udp::new(
                                 listener.socket.clone(),
                                 src_addr,
                                 dst_addr,
-                                Some(close),
+                                Some(unconnected),
                             ));
                             // Add the new link to the set of connected peers
                             zaddlink!(src_addr, dst_addr, Arc::downgrade(&link));

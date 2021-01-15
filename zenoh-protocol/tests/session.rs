@@ -456,16 +456,16 @@ fn session_udp() {
     });
 }
 
-// #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-// #[test]
-// fn session_unix() {
-//     env_logger::init();
-//     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-//     let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
-//         .parse()
-//         .unwrap();
-//     task::block_on(async {
-//         session_open_close(locator.clone()).await;
-//     });
-//     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-// }
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[test]
+fn session_unix() {
+    env_logger::init();
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
+    let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
+        .parse()
+        .unwrap();
+    task::block_on(async {
+        session_open_close(locator.clone()).await;
+    });
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
+}

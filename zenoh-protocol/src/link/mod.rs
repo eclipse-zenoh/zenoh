@@ -21,8 +21,8 @@ pub use manager::*;
 mod tcp;
 #[cfg(feature = "transport_udp")]
 mod udp;
-// #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-// mod unixsock_stream;
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+mod unixsock_stream;
 
 /* General imports */
 use crate::io::{RBuf, WBuf};
