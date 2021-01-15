@@ -214,6 +214,10 @@ impl SessionTransport {
 
         let guard = zasyncread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
+            let c_l = l.clone();
+            // Drop the guard
+            drop(guard);
+
             // Close message to be sent on the target link
             let peer_id = Some(self.manager.pid());
             let reason_id = reason;
@@ -222,10 +226,7 @@ impl SessionTransport {
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
             // Schedule the close message for transmission
-            l.schedule_session_message(msg, QUEUE_PRIO_DATA).await;
-
-            // Drop the guard
-            drop(guard);
+            c_l.schedule_session_message(msg, QUEUE_PRIO_DATA).await;
 
             // Remove the link from the channel
             self.del_link(&link).await?;
