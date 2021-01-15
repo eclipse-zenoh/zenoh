@@ -24,6 +24,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::sync::Mvar;
 use zenoh_util::{zasynclock, zerror};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
@@ -85,7 +86,7 @@ type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<Udp>>>>;
 
 struct UnconnectedUdp {
     close: UnconnectedClose,
-    channel: UnconnectedChannel,
+    mvar: UnconnectedMvar,
 }
 
 struct UnconnectedClose {
@@ -94,11 +95,9 @@ struct UnconnectedClose {
     signal: Sender<()>,
 }
 
-struct UnconnectedChannel {
-    sender_1: Sender<(Vec<u8>, usize)>,
-    receiver_1: Receiver<(Vec<u8>, usize)>,
-    sender_2: Sender<(Vec<u8>, usize)>,
-    receiver_2: Receiver<(Vec<u8>, usize)>,
+struct UnconnectedMvar {
+    input: Mvar<(Vec<u8>, usize, usize)>,
+    output: Mvar<(Vec<u8>, usize)>,
 }
 
 pub struct Udp {
@@ -120,15 +119,11 @@ impl Udp {
         mut is_unconnected: Option<UnconnectedClose>,
     ) -> Udp {
         let unconnected = if let Some(close) = is_unconnected.take() {
-            let (sender_1, receiver_1) = bounded::<(Vec<u8>, usize)>(1);
-            let (sender_2, receiver_2) = bounded::<(Vec<u8>, usize)>(1);
-            let channel = UnconnectedChannel {
-                sender_1,
-                receiver_1,
-                sender_2,
-                receiver_2,
+            let mvar = UnconnectedMvar {
+                input: Mvar::new(),
+                output: Mvar::new(),
             };
-            Some(UnconnectedUdp { close, channel })
+            Some(UnconnectedUdp { close, mvar })
         } else {
             None
         };
@@ -141,47 +136,32 @@ impl Udp {
         }
     }
 
-    async fn received(&self, buffer: Vec<u8>, len: usize) -> (Vec<u8>, usize) {
-        self.unconnected
-            .as_ref()
-            .unwrap()
-            .channel
-            .sender_1
-            .send((buffer, len))
-            .await
-            .unwrap();
-        let res = self
-            .unconnected
-            .as_ref()
-            .unwrap()
-            .channel
-            .receiver_2
-            .recv()
-            .await
-            .unwrap();
-        res
+    async fn received(&self, mut buffer: Vec<u8>, len: usize) -> Vec<u8> {
+        let unconnected = self.unconnected.as_ref().unwrap();
+        let mut start: usize = 0;
+        while start < len {
+            unconnected.mvar.input.put((buffer, start, len)).await;
+            let tuple = unconnected.mvar.output.take().await;
+            buffer = tuple.0;
+            start += tuple.1;
+        }
+        buffer
     }
 
     async fn read_unconnected(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let (slice, len) = self
-            .unconnected
-            .as_ref()
-            .unwrap()
-            .channel
-            .receiver_1
-            .recv()
-            .await
-            .unwrap();
+        let unconnected = match self.unconnected.as_ref() {
+            Some(unconnected) => unconnected,
+            None => {
+                return zerror!(ZErrorKind::IOError {
+                    descr: "Send error".to_string()
+                });
+            }
+        };
+
+        let (slice, start, len) = unconnected.mvar.input.take().await;
         let len = len.min(buffer.len());
-        buffer[0..len].copy_from_slice(&slice[0..len]);
-        self.unconnected
-            .as_ref()
-            .unwrap()
-            .channel
-            .sender_2
-            .send((slice, len))
-            .await
-            .unwrap();
+        buffer[0..len].copy_from_slice(&slice[start..start + len]);
+        unconnected.mvar.output.put((slice, len)).await;
         Ok(len)
     }
 
@@ -233,13 +213,10 @@ impl LinkTrait for Udp {
     #[inline]
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut written: usize = 0;
-        loop {
-            let n = self.write(&buffer[written..]).await?;
-            written += n;
-            if written == buffer.len() {
-                return Ok(());
-            }
+        while written < buffer.len() {
+            written += self.write(&buffer[written..]).await?;
         }
+        Ok(())
     }
 
     #[inline]
@@ -553,7 +530,6 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
         };
 
         log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
-
         // Buffers for deserialization
         let mut buff = vec![0; *UDP_READ_BUFFER_SIZE];
         loop {
@@ -576,20 +552,10 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
                 }
             };
 
-            loop {
+            let link = loop {
                 let res = zgetlink!(src_addr, dst_addr);
                 match res {
-                    Some(link) => {
-                        if let Some(link) = link.upgrade() {
-                            // Process all the messages
-                            let tuple = link.received(buff, n).await;
-                            buff = tuple.0;
-                            // @TODO: make sure that we have receive all data
-                        } else {
-                            zdellink!(src_addr, dst_addr);
-                        }
-                        break;
-                    }
+                    Some(link) => break link.upgrade(),
                     None => {
                         // Create a new link if the listener is active
                         if listener.status.is_active() {
@@ -617,10 +583,16 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
                                 src_addr,
                                 dst_addr
                             );
-                            break;
+                            break None;
                         }
                     }
                 }
+            };
+
+            if let Some(link) = link {
+                buff = link.received(buff, n).await;
+            } else {
+                zdellink!(src_addr, dst_addr);
             }
         }
     };

@@ -13,19 +13,15 @@
 //
 #[macro_use]
 extern crate lazy_static;
-
 use std::path::{Path, PathBuf};
-
 pub mod collections;
 pub mod core;
 pub mod ffi;
+mod lib_loader;
 pub mod net;
 pub mod sync;
-
-mod lib_loader;
-pub use lib_loader::*;
-
 pub use crate::core::macros::*;
+pub use lib_loader::*;
 
 /// the "ZENOH_HOME" environement variable name
 pub const ZENOH_HOME_ENV_VAR: &str = "ZENOH_HOME";
