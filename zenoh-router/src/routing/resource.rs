@@ -14,7 +14,8 @@
 use crate::routing::face::FaceState;
 use crate::routing::router::Tables;
 use async_std::sync::{Arc, Weak};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use zenoh_protocol::core::rname;
 use zenoh_protocol::core::{PeerId, ResKey, SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
@@ -35,11 +36,24 @@ pub struct Resource {
     pub(super) suffix: String,
     pub(super) nonwild_prefix: Option<(Arc<Resource>, String)>,
     pub(super) childs: HashMap<String, Arc<Resource>>,
-    pub(super) router_subs: Vec<PeerId>,
-    pub(super) peer_subs: Vec<PeerId>,
+    pub(super) router_subs: HashSet<PeerId>,
+    pub(super) peer_subs: HashSet<PeerId>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) route: HashMap<usize, (Arc<FaceState>, ResKey)>,
+}
+
+impl PartialEq for Resource {
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name()
+    }
+}
+impl Eq for Resource {}
+
+impl Hash for Resource {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name().hash(state);
+    }
 }
 
 impl Resource {
@@ -60,8 +74,8 @@ impl Resource {
             suffix: String::from(suffix),
             nonwild_prefix,
             childs: HashMap::new(),
-            router_subs: vec![],
-            peer_subs: vec![],
+            router_subs: HashSet::new(),
+            peer_subs: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
             route: HashMap::new(),
@@ -98,8 +112,8 @@ impl Resource {
             suffix: String::from(""),
             nonwild_prefix: None,
             childs: HashMap::new(),
-            router_subs: vec![],
-            peer_subs: vec![],
+            router_subs: HashSet::new(),
+            peer_subs: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
             route: HashMap::new(),

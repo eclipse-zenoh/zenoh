@@ -13,7 +13,7 @@
 //
 use async_std::sync::{Arc, RwLock, Weak};
 use async_trait::async_trait;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uhlc::HLC;
 
 use zenoh_protocol::core::{whatami, PeerId, SubMode, WhatAmI, ZInt};
@@ -38,8 +38,8 @@ pub struct Tables {
     pub(crate) hlc: Option<HLC>,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
-    pub(crate) router_subs: Vec<Arc<Resource>>,
-    pub(crate) peer_subs: Vec<Arc<Resource>>,
+    pub(crate) router_subs: HashSet<Arc<Resource>>,
+    pub(crate) peer_subs: HashSet<Arc<Resource>>,
     pub(crate) routers_net: Option<Network>,
     pub(crate) peers_net: Option<Network>,
 }
@@ -53,8 +53,8 @@ impl Tables {
             hlc,
             root_res: Resource::root(),
             faces: HashMap::new(),
-            router_subs: vec![],
-            peer_subs: vec![],
+            router_subs: HashSet::new(),
+            peer_subs: HashSet::new(),
             routers_net: None,
             peers_net: None,
         }

@@ -67,8 +67,8 @@ async unsafe fn register_router_subscription(
                 res_mut.name(),
                 router
             );
-            res_mut.router_subs.push(router.clone());
-            tables.router_subs.push(res.clone())
+            res_mut.router_subs.insert(router.clone());
+            tables.router_subs.insert(res.clone());
         }
     }
 
@@ -153,8 +153,8 @@ async fn register_peer_subscription(
                 res_mut.name(),
                 peer
             );
-            res_mut.peer_subs.push(peer.clone());
-            tables.peer_subs.push(res.clone())
+            res_mut.peer_subs.insert(peer.clone());
+            tables.peer_subs.insert(res.clone());
         }
     }
 
