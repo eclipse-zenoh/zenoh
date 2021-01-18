@@ -30,6 +30,16 @@ impl<T> Mvar<T> {
         }
     }
 
+    pub async fn try_take(&self) -> Option<T> {
+        let mut guard = zasynclock!(self.inner);
+        if let Some(inner) = guard.take() {
+            drop(guard);
+            self.cond_put.notify_one();
+            return Some(inner);
+        }
+        None
+    }
+
     pub async fn take(&self) -> T {
         loop {
             let mut guard = zasynclock!(self.inner);

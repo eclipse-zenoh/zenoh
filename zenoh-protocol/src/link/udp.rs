@@ -165,6 +165,12 @@ impl LinkTrait for Udp {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
         if let Some(unconnected) = self.unconnected.as_ref() {
+            // Bring back the buffer if present in the input
+            if let Some(tuple) = unconnected.input.try_take().await {
+                let (slice, _start, len) = tuple;
+                unconnected.output.put((slice, len)).await;
+            }
+            // Delete the link from the list of links
             let mut guard = zasynclock!(unconnected.links);
             guard.remove(&(self.src_addr, self.dst_addr));
             if !unconnected.status.is_active() && guard.is_empty() {
