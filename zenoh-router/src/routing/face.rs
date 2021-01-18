@@ -31,8 +31,9 @@ pub struct FaceState {
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
-    pub(super) subs: Vec<Arc<Resource>>,
-    pub(super) qabl: Vec<Arc<Resource>>,
+    pub(super) local_subs: Vec<Arc<Resource>>,
+    pub(super) remote_subs: Vec<Arc<Resource>>,
+    pub(super) remote_qabl: Vec<Arc<Resource>>,
     pub(super) next_qid: ZInt,
     pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
 }
@@ -51,8 +52,9 @@ impl FaceState {
             primitives,
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
-            subs: Vec::new(),
-            qabl: Vec::new(),
+            local_subs: Vec::new(),
+            remote_subs: Vec::new(),
+            remote_qabl: Vec::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
         })

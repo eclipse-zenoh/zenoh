@@ -111,7 +111,7 @@ impl Tables {
             if true {
                 for face in self.faces.values() {
                     if propagate_queryable(self.whatami, face, &newface) {
-                        for qabl in face.qabl.iter() {
+                        for qabl in face.remote_qabl.iter() {
                             let reskey = Resource::decl_key(&qabl, &mut newface).await;
                             primitives.queryable(&reskey, None).await;
                         }
@@ -139,11 +139,11 @@ impl Tables {
                     Resource::clean(&mut res);
                 }
                 face.local_mappings.clear();
-                while let Some(mut res) = face.subs.pop() {
+                while let Some(mut res) = face.remote_subs.pop() {
                     Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
                     Resource::clean(&mut res);
                 }
-                while let Some(mut res) = face.qabl.pop() {
+                while let Some(mut res) = face.remote_qabl.pop() {
                     Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
                     Resource::clean(&mut res);
                 }

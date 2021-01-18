@@ -90,7 +90,7 @@ pub(crate) async fn declare_queryable(
                 }
             }
             Tables::build_matches_direct_tables(&mut res);
-            Arc::get_mut_unchecked(face).qabl.push(res);
+            Arc::get_mut_unchecked(face).remote_qabl.push(res);
         },
         None => log::error!("Declare queryable for unknown rid {}!", prefixid),
     }
@@ -110,7 +110,7 @@ pub async fn undeclare_queryable(
                     Arc::get_mut_unchecked(&mut ctx).qabl = false;
                 }
                 Arc::get_mut_unchecked(face)
-                    .subs
+                    .remote_subs
                     .retain(|x| !Arc::ptr_eq(&x, &res));
                 Resource::clean(&mut res)
             },

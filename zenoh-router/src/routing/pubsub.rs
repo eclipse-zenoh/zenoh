@@ -36,17 +36,23 @@ async fn propagate_simple_subscription(
 ) {
     for dst_face in &mut tables.faces.values_mut() {
         if src_face.id != dst_face.id
+            && !dst_face.local_subs.contains(res)
             && match tables.whatami {
                 whatami::ROUTER => dst_face.whatami == whatami::CLIENT,
                 whatami::PEER => dst_face.whatami == whatami::CLIENT,
                 _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
             }
         {
-            let reskey = Resource::decl_key(res, dst_face).await;
-            dst_face
-                .primitives
-                .subscriber(&reskey, sub_info, None)
-                .await;
+            unsafe {
+                Arc::get_mut_unchecked(dst_face)
+                    .local_subs
+                    .push(res.clone());
+                let reskey = Resource::decl_key(res, dst_face).await;
+                dst_face
+                    .primitives
+                    .subscriber(&reskey, sub_info, None)
+                    .await;
+            }
         }
     }
 }
@@ -264,7 +270,7 @@ async unsafe fn register_client_subscription(
             }
         }
     }
-    Arc::get_mut_unchecked(face).subs.push(res.clone());
+    Arc::get_mut_unchecked(face).remote_subs.push(res.clone());
 }
 
 pub async fn declare_client_subscription(
@@ -334,7 +340,7 @@ pub async fn undeclare_subscription(
                     Arc::get_mut_unchecked(&mut ctx).subs = None;
                 }
                 Arc::get_mut_unchecked(face)
-                    .subs
+                    .remote_subs
                     .retain(|x| !Arc::ptr_eq(&x, &res));
                 Resource::clean(&mut res)
             },
@@ -351,8 +357,11 @@ pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<F
         period: None,
     };
     for sub in &tables.router_subs {
-        let reskey = Resource::decl_key(&sub, face).await;
-        face.primitives.subscriber(&reskey, &sub_info, None).await;
+        unsafe {
+            Arc::get_mut_unchecked(face).local_subs.push(sub.clone());
+            let reskey = Resource::decl_key(&sub, face).await;
+            face.primitives.subscriber(&reskey, &sub_info, None).await;
+        }
     }
 }
 
