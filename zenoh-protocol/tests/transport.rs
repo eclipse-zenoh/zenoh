@@ -292,8 +292,9 @@ async fn run(
     task::sleep(SLEEP).await;
 }
 
+#[cfg(feature = "transport_tcp")]
 #[test]
-fn channel_tcp() {
+fn transport_tcp() {
     // Define the locators
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
     // Define the reliability and congestion control
@@ -311,8 +312,9 @@ fn channel_tcp() {
     });
 }
 
+#[cfg(feature = "transport_udp")]
 #[test]
-fn channel_udp() {
+fn transport_udp() {
     // Define the locator
     let locators: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
     // Define the reliability and congestion control
@@ -332,7 +334,7 @@ fn channel_udp() {
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
-fn channel_unix() {
+fn transport_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
     let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
@@ -354,8 +356,9 @@ fn channel_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
 }
 
+#[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
-fn channel_tcp_udp() {
+fn transport_tcp_udp() {
     // Define the locator
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:7448".parse().unwrap(),
@@ -376,9 +379,13 @@ fn channel_tcp_udp() {
     });
 }
 
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[cfg(all(
+    feature = "transport_tcp",
+    feature = "transport_unixsock-stream",
+    target_family = "unix"
+))]
 #[test]
-fn channel_tcp_unix() {
+fn transport_tcp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
@@ -403,9 +410,13 @@ fn channel_tcp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
 }
 
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[cfg(all(
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+    target_family = "unix"
+))]
 #[test]
-fn channel_udp_unix() {
+fn transport_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
@@ -430,9 +441,14 @@ fn channel_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
 }
 
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[cfg(all(
+    feature = "transport_tcp",
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+    target_family = "unix"
+))]
 #[test]
-fn channel_tcp_udp_unix() {
+fn transport_tcp_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![

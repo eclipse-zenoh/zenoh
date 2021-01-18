@@ -13,7 +13,7 @@
 //
 use async_std::task;
 use std::fmt;
-use std::sync::atomic::spin_loop_hint;
+use std::hint::spin_loop;
 
 const SPIN_LIMIT: usize = 6;
 const YIELD_LIMIT: usize = 10;
@@ -41,7 +41,7 @@ impl Backoff {
     #[inline]
     pub fn spin(&mut self) {
         for _ in 0..1 << self.step.min(SPIN_LIMIT) {
-            spin_loop_hint();
+            spin_loop();
         }
 
         if self.step <= SPIN_LIMIT {
@@ -53,7 +53,7 @@ impl Backoff {
     pub async fn snooze(&mut self) {
         if self.step <= SPIN_LIMIT {
             for _ in 0..1 << self.step {
-                spin_loop_hint();
+                spin_loop();
             }
         } else {
             task::yield_now().await;

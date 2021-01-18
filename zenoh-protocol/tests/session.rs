@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use zenoh_protocol::core::{whatami, PeerId, ZInt};
+use zenoh_protocol::core::{whatami, PeerId};
 use zenoh_protocol::link::{Link, Locator};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
@@ -31,258 +31,6 @@ use zenoh_util::zasynclock;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
-
-// Session Handler for the router
-struct SHRouterLease {
-    new_ses_bar: Arc<Barrier>,
-}
-
-impl SHRouterLease {
-    fn new(barrier: Arc<Barrier>) -> Self {
-        Self {
-            new_ses_bar: barrier,
-        }
-    }
-}
-
-#[async_trait]
-impl SessionHandler for SHRouterLease {
-    async fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        let mh = Arc::new(MHRouterLease::new());
-        self.new_ses_bar.wait().await;
-        Ok(mh)
-    }
-}
-
-struct MHRouterLease;
-
-impl MHRouterLease {
-    fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl SessionEventHandler for MHRouterLease {
-    async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-        Ok(())
-    }
-
-    async fn new_link(&self, _link: Link) {}
-
-    async fn del_link(&self, _link: Link) {}
-
-    async fn closing(&self) {
-        println!("Session Lease [***]: session is being closed on the router...");
-    }
-
-    async fn closed(&self) {
-        println!("Session Lease [***]: session has been closed on the router...");
-    }
-}
-
-// Session Handler for the client
-struct SHClientLease {
-    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>,
-}
-
-impl SHClientLease {
-    fn new() -> Self {
-        Self {
-            sessions: Mutex::new(HashMap::new()),
-        }
-    }
-}
-
-#[async_trait]
-impl SessionHandler for SHClientLease {
-    async fn new_session(
-        &self,
-        session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        let barrier = Arc::new(Barrier::new(2));
-        let mh = Arc::new(MHCLientLease::new());
-        let peer = session.get_pid()?;
-        zasynclock!(self.sessions).insert(peer, barrier);
-        Ok(mh)
-    }
-}
-
-struct MHCLientLease;
-
-impl MHCLientLease {
-    fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl SessionEventHandler for MHCLientLease {
-    async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-        Ok(())
-    }
-
-    async fn new_link(&self, _link: Link) {}
-
-    async fn del_link(&self, _link: Link) {}
-
-    async fn closing(&self) {}
-
-    async fn closed(&self) {
-        // self.barrier.wait().await;
-    }
-}
-
-async fn session_lease(locator: Locator) {
-    let attachment = None;
-
-    // Common session lease in milliseconds
-    let lease: ZInt = 1_000;
-
-    /* [ROUTER] */
-    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-
-    // Create the barrier to detect when a new session is open
-    let router_new_barrier = Arc::new(Barrier::new(2));
-    let router_handler = Arc::new(SHRouterLease::new(router_new_barrier.clone()));
-
-    // Create the router session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: Some(lease),
-        keep_alive: None,
-        sn_resolution: None,
-        batch_size: None,
-        timeout: None,
-        retries: None,
-        max_sessions: None,
-        max_links: None,
-    };
-    let router_manager = SessionManager::new(config, Some(opt_config));
-
-    /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-    let client01_handler = Arc::new(SHClientLease::new());
-
-    // Create the transport session manager for the first client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client01_id.clone(),
-        handler: client01_handler.clone(),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: Some(lease),
-        keep_alive: None,
-        sn_resolution: None,
-        batch_size: None,
-        timeout: None,
-        retries: None,
-        max_sessions: None,
-        max_links: None,
-    };
-    let client01_manager = SessionManager::new(config, Some(opt_config));
-
-    /* [1] */
-    println!("\nSession Lease [1a1]");
-    // Add the locator on the router
-    let res = router_manager.add_listener(&locator).await;
-    println!("Session Lease [1a1]: {:?}", res);
-    assert!(res.is_ok());
-    println!("Session Lease [1a2]");
-    let locators = router_manager.get_listeners().await;
-    println!("Session Lease [1a2]: {:?}", locators);
-    assert_eq!(locators.len(), 1);
-
-    /* [2] */
-    // Open a session from the client to the router
-    println!("\nSession Lease [2a1]");
-    let res = client01_manager.open_session(&locator, &attachment).await;
-    println!("Session Lease [2a2]: {:?}", res);
-    assert!(res.is_ok());
-    let c_ses1 = res.unwrap();
-    println!("Session Lease [2b1]");
-    let sessions = client01_manager.get_sessions().await;
-    println!("Session Lease [2b2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 1);
-    assert_eq!(c_ses1.get_pid().unwrap(), router_id);
-    println!("Session Lease [2c1]");
-    let links = c_ses1.get_links().await.unwrap();
-    println!("Session Lease [2c2]: {:?}", links);
-    assert_eq!(links.len(), 1);
-
-    /* [3] */
-    // Verify that the session has been open on the router
-    let res = router_new_barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
-    println!("\nSession Lease [3a1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Lease [3b2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 1);
-    let r_ses1 = &sessions[0];
-    assert_eq!(r_ses1.get_pid().unwrap(), client01_id);
-    println!("Session Lease [3c1]");
-    let links = r_ses1.get_links().await.unwrap();
-    println!("Session Lease [3d2]: {:?}", links);
-    assert_eq!(links.len(), 1);
-
-    /* [4] */
-    // Close all the links to trigger session lease expiration
-    println!("\nSession Lease [4a1]");
-    let mut links = c_ses1.get_links().await.unwrap();
-    println!("Session Lease [4a2]: {:?}", links);
-    assert_eq!(links.len(), 1);
-    for l in links.drain(..) {
-        let res = c_ses1.close_link(&l).await;
-        println!("Session Lease [4a3]: {:?}", res);
-        assert!(res.is_ok());
-    }
-
-    /* [5] */
-    // Verify that the session has been closed on the router
-    let lease = Duration::from_millis(lease as u64);
-    task::sleep(lease).await;
-
-    println!("\nSession Lease [5a1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Lease [5a2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 0);
-
-    // Verify that the session has been closed on the client
-    println!("Session Lease [5b1]");
-    let sessions = client01_manager.get_sessions().await;
-    println!("Session Lease [5b2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 0);
-
-    // Verify that the session handler is no longer valid
-    println!("Session Lease [5c1]");
-    let peer = async {
-        while c_ses1.get_pid().is_ok() {
-            task::yield_now().await;
-        }
-    };
-    let res = peer.timeout(TIMEOUT).await;
-    println!("Session Lease [5c2]: {:?}", res);
-    assert!(res.is_ok());
-
-    /* [6] */
-    // Perform clean up of the open locators
-    println!("Session Open Close [6a1]");
-    let res = router_manager.del_listener(&locator).await;
-    println!("Session Open Close [6a2]: {:?}", res);
-    assert!(res.is_ok());
-
-    task::sleep(SLEEP).await;
-}
 
 #[cfg(test)]
 struct SHRouterOpenClose {
@@ -690,34 +438,34 @@ async fn session_open_close(locator: Locator) {
     task::sleep(SLEEP).await;
 }
 
+#[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp() {
     let locator: Locator = "tcp/127.0.0.1:7447".parse().unwrap();
     task::block_on(async {
         session_open_close(locator.clone()).await;
-        session_lease(locator).await;
     });
 }
 
+#[cfg(feature = "transport_udp")]
 #[test]
 fn session_udp() {
     let locator: Locator = "udp/127.0.0.1:7447".parse().unwrap();
     task::block_on(async {
         session_open_close(locator.clone()).await;
-        session_lease(locator).await;
     });
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn session_unix() {
+    env_logger::init();
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
     let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
         .parse()
         .unwrap();
     task::block_on(async {
         session_open_close(locator.clone()).await;
-        session_lease(locator).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
 }

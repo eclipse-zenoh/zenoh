@@ -84,7 +84,7 @@ macro_rules! zgetbatch_dropmsg {
                     // Execute the dropping strategy if provided
                     if $msg.is_droppable() {
                         log::trace!(
-                            "Message dropped because the transmission queue is full: {:?}",
+                            "Message dropped because the transmission pipeline is full: {:?}",
                             $msg
                         );
                         // Drop the guard to allow the sending task to
@@ -235,7 +235,7 @@ impl StageIn {
 
     async fn serialize_zenoh_message(&mut self, message: ZenohMessage) {
         macro_rules! zserialize {
-            ($message:expr) => {
+            () => {
                 // Get the current serialization batch. Drop the message
                 // if no batches are available
                 let batch = zgetbatch_dropmsg!(self, message);
@@ -248,7 +248,7 @@ impl StageIn {
         }
 
         // Attempt the serialization on the current batch
-        zserialize!(&message);
+        zserialize!();
 
         // The first serialization attempt has failed. This means that the current
         // batch is either full or the message is too large. In case of the former,
@@ -263,7 +263,7 @@ impl StageIn {
             self.cond_canpull.notify_one();
 
             // Attempt the serialization on a new empty batch
-            zserialize!(&message);
+            zserialize!();
         }
 
         // The second serialization attempt has failed. This means that the message is

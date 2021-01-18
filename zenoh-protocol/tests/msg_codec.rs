@@ -39,7 +39,7 @@ macro_rules! option_gen {
 }
 
 fn gen_buffer(max_size: usize) -> Vec<u8> {
-    let len: usize = thread_rng().gen_range(1, max_size + 1);
+    let len: usize = thread_rng().gen_range(1..max_size + 1);
     let mut buf: Vec<u8> = Vec::with_capacity(len);
     buf.resize(len, 0);
     thread_rng().fill(buf.as_mut_slice());
@@ -62,7 +62,7 @@ fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
 
 fn gen_reply_context(is_final: bool) -> ReplyContext {
     let qid = gen!(ZInt);
-    let source_kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4);
+    let source_kind: ZInt = thread_rng().gen_range(0..4);
     let replier_id = if is_final { None } else { Some(gen_pid()) };
     ReplyContext::make(qid, source_kind, replier_id)
 }
@@ -133,7 +133,8 @@ fn gen_declarations() -> Vec<Declaration> {
 }
 
 fn gen_key() -> ResKey {
-    match thread_rng().gen_range::<u8, u8, u8>(0, 3) {
+    let num: u8 = thread_rng().gen_range(0..3);
+    match num {
         0 => ResKey::from(gen!(ZInt)),
         1 => ResKey::from("my_resource".to_string()),
         _ => ResKey::from((gen!(ZInt), "my_resource".to_string())),
@@ -141,13 +142,14 @@ fn gen_key() -> ResKey {
 }
 
 fn gen_query_target() -> QueryTarget {
-    let kind = thread_rng().gen_range::<ZInt, ZInt, ZInt>(0, 4);
+    let kind: ZInt = thread_rng().gen_range(0..4);
     let target = gen_target();
     QueryTarget { kind, target }
 }
 
 fn gen_target() -> Target {
-    match thread_rng().gen_range::<u8, u8, u8>(0, 4) {
+    let num: u8 = thread_rng().gen_range(0..4);
+    match num {
         0 => Target::BestMatching,
         1 => Target::Complete { n: 3 },
         2 => Target::All,
@@ -156,7 +158,8 @@ fn gen_target() -> Target {
 }
 
 fn gen_consolidation_mode() -> ConsolidationMode {
-    match thread_rng().gen_range::<u8, u8, u8>(0, 3) {
+    let num: u8 = thread_rng().gen_range(0..3);
+    match num {
         0 => ConsolidationMode::None,
         1 => ConsolidationMode::Lazy,
         _ => ConsolidationMode::Full,

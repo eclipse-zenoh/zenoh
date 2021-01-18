@@ -101,6 +101,7 @@ async fn run(locators: Vec<Locator>) {
     }
 }
 
+#[cfg(feature = "transport_tcp")]
 #[test]
 fn locator_tcp() {
     // Define the locators
@@ -111,6 +112,7 @@ fn locator_tcp() {
     task::block_on(run(locators));
 }
 
+#[cfg(feature = "transport_udp")]
 #[test]
 fn locator_udp() {
     // Define the locators
@@ -141,6 +143,7 @@ fn locator_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
 }
 
+#[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn locator_tcp_udp() {
     // Define the locators
@@ -151,7 +154,12 @@ fn locator_tcp_udp() {
     task::block_on(run(locators));
 }
 
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[cfg(all(
+    feature = "transport_tcp",
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+    target_family = "unix"
+))]
 #[test]
 fn locator_tcp_udp_unix() {
     // Remove the file if it still exists
@@ -168,7 +176,11 @@ fn locator_tcp_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
 }
 
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[cfg(all(
+    feature = "transport_tcp",
+    feature = "transport_unixsock-stream",
+    target_family = "unix"
+))]
 #[test]
 fn locator_tcp_unix() {
     // Remove the file if it still exists
@@ -184,7 +196,11 @@ fn locator_tcp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
 }
 
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[cfg(all(
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+    target_family = "unix"
+))]
 #[test]
 fn locator_udp_unix() {
     // Remove the file if it still exists

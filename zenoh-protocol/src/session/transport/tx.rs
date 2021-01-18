@@ -13,7 +13,7 @@
 //
 use async_std::sync::{Arc, RwLock};
 
-use super::{ChannelLink, Scheduling};
+use super::{Scheduling, SessionTransportLink};
 use crate::proto::ZenohMessage;
 use crate::session::defaults::QUEUE_PRIO_DATA;
 
@@ -30,7 +30,7 @@ impl FirstMatch {
 
 #[async_trait]
 impl Scheduling for FirstMatch {
-    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<ChannelLink>>>) {
+    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<SessionTransportLink>>>) {
         let guard = zasyncread!(links);
         for cl in guard.iter() {
             let link = cl.get_link();

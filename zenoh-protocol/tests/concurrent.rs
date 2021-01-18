@@ -342,6 +342,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
     task::sleep(SLEEP).await;
 }
 
+#[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_concurrent() {
     env_logger::init();

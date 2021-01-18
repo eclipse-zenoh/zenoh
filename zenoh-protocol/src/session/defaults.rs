@@ -25,8 +25,14 @@ zconfigurable! {
     // Default session lease in milliseconds: 10 seconds
     pub static ref SESSION_LEASE: ZInt = 10_000;
 
-    // Default interval for keep alive messages in milliseconds: 1 second
-    pub static ref SESSION_KEEP_ALIVE: ZInt = 1_000;
+    // Default interval for keep alive messages in milliseconds: 2.5 seconds
+    // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
+    //       set the actual keep_alive timeout to one fourth of the agreed session lease.
+    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+    //       check which considers a link as failed when no messages are received in 3.5 times the
+    //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
+    //       session lease.
+    pub static ref SESSION_KEEP_ALIVE: ZInt = 2_500;
 
     // The default sequence number resolution takes 4 bytes on the wire.
     // Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.
@@ -51,6 +57,9 @@ zconfigurable! {
     // Default retries when opening a session
     pub static ref SESSION_OPEN_RETRIES: usize = 3;
 
+    // Default maximum number of pending sessions being opened with the host
+    pub static ref SESSION_OPEN_MAX_CONCURRENT: usize = 1_024;
+
     // Parameters of the link transmission queue
     // - The size of each queue relates to the number of batches a given queue can contain.
     // - The amount of memory being allocated for each queue is then QUEUE_SIZE_XXX * SESSION_BATCH_SIZE.
@@ -60,6 +69,6 @@ zconfigurable! {
     pub static ref QUEUE_SIZE_RETX: usize = 1;
     pub static ref QUEUE_SIZE_DATA: usize = 4;
 
-    // The default backoff time in microseconds to allow the
+    // The default backoff time in microseconds to allow the batching to potentially progress
     pub static ref QUEUE_PULL_BACKOFF: u64 = 1;
 }
