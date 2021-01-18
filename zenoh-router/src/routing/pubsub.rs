@@ -115,8 +115,6 @@ async unsafe fn register_router_subscription(
 
     // Propagate subscription to clients
     propagate_simple_subscription(tables, face, res, sub_info).await;
-
-    Tables::build_matches_direct_tables(res);
 }
 
 pub async fn declare_router_subscription(
@@ -132,6 +130,8 @@ pub async fn declare_router_subscription(
             let mut res = Resource::make_resource(&mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_router_subscription(tables, face, &mut res, sub_info, router).await;
+
+            Tables::build_matches_direct_tables(&mut res);
         },
         None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
     }
@@ -221,6 +221,8 @@ pub async fn declare_peer_subscription(
                 )
                 .await;
             }
+
+            Tables::build_matches_direct_tables(&mut res);
         },
         None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
     }
@@ -307,6 +309,8 @@ pub async fn declare_client_subscription(
                     propagate_simple_subscription(tables, face, &res, sub_info).await;
                 }
             }
+
+            Tables::build_matches_direct_tables(&mut res);
         },
         None => log::error!("Declare subscription for unknown rid {}!", prefixid),
     }
