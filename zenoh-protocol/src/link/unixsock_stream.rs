@@ -354,26 +354,31 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
         let lock_file_path = format!("{}.lock", path);
 
         // We try to open the lock file, with O_RDONLY | O_CREAT
+        // and mode S_IRUSR | S_IWUSR, user read-write permissions
         let mut open_flags = nix::fcntl::OFlag::empty();
 
         open_flags.insert(nix::fcntl::OFlag::O_CREAT);
         open_flags.insert(nix::fcntl::OFlag::O_RDONLY);
 
+        let mut open_mode = nix::sys::stat::Mode::empty();
+        open_mode.insert(nix::sys::stat::Mode::S_IRUSR);
+        open_mode.insert(nix::sys::stat::Mode::S_IWUSR);
 
-        let open_mode = nix::sys::stat::Mode::from_bits_truncate(0600);
-
-        let lock_fd =
-            match nix::fcntl::open(std::path::Path::new(&lock_file_path), open_flags, nix::sys::stat::Mode::empty()) {
-                Ok(raw_fd) => raw_fd,
-                Err(e) => {
-                    let e = format!(
-                        "Can not create a new UnixSock-Stream listener on {} - Unable to open lock file {}",
+        let lock_fd = match nix::fcntl::open(
+            std::path::Path::new(&lock_file_path),
+            open_flags,
+            open_mode,
+        ) {
+            Ok(raw_fd) => raw_fd,
+            Err(e) => {
+                let e = format!(
+                        "Can not create a new UnixSock-Stream listener on {} - Unable to open lock file: {}",
                         path, e
                     );
-                    log::warn!("{}", e);
-                    return zerror!(ZErrorKind::InvalidLink { descr: e });
-                }
-            };
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
 
         // We try to acquire the lock
 
@@ -382,7 +387,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Err(e) => {
                 nix::unistd::close(lock_fd);
                 let e = format!(
-                    "Can not create a new UnixSock-Stream listener on {} - Unable to acquire look {}",
+                    "Can not create a new UnixSock-Stream listener on {} - Unable to acquire look: {}",
                     path, e
                 );
                 log::warn!("{}", e);
@@ -390,8 +395,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             }
         };
 
-        //Lock is acquired we can unlink the socket file
-
+        //Lock is acquired we can remove the socket file
         remove_file(path.clone());
 
         // Bind the Unix socket
@@ -463,7 +467,6 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
                     // Wait for the accept loop to be stopped
                     listener.barrier.wait().await;
                 }
-
 
                 //Release the lock
 
