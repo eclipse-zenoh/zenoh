@@ -337,6 +337,63 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
     async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
         let path = get_unix_path_as_string(locator);
 
+        // Because of the lack of SO_REUSEADDR we have to check if the
+        // file is still there and if it is not used by another process.
+        // In order to do so we use a separate lock file.
+        // If the lock CAN NOT be acquired means that another process is
+        // holding the lock NOW, therefore we cannot use the socket.
+        // Kernel guarantees that the lock is release if the owner exists
+        // or crashes.
+
+        // If the lock CAN be acquired means no one is using the socket.
+        // Therefore we can unlink the socket file and create the new one with
+        // bind(2)
+
+        // We generate the path for the lock file, by adding .lock
+        // to the socket file
+        let lock_file_path = format!("{}.lock", path);
+
+        // We try to open the lock file, with O_RDONLY | O_CREAT
+        let mut open_flags = nix::fcntl::OFlag::empty();
+
+        open_flags.insert(nix::fcntl::OFlag::O_CREAT);
+        open_flags.insert(nix::fcntl::OFlag::O_RDONLY);
+
+
+        let open_mode = nix::sys::stat::Mode::from_bits_truncate(0600);
+
+        let lock_fd =
+            match nix::fcntl::open(std::path::Path::new(&lock_file_path), open_flags, nix::sys::stat::Mode::empty()) {
+                Ok(raw_fd) => raw_fd,
+                Err(e) => {
+                    let e = format!(
+                        "Can not create a new UnixSock-Stream listener on {} - Unable to open lock file {}",
+                        path, e
+                    );
+                    log::warn!("{}", e);
+                    return zerror!(ZErrorKind::InvalidLink { descr: e });
+                }
+            };
+
+        // We try to acquire the lock
+
+        match nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::LockExclusiveNonblock) {
+            Ok(()) => (),
+            Err(e) => {
+                nix::unistd::close(lock_fd);
+                let e = format!(
+                    "Can not create a new UnixSock-Stream listener on {} - Unable to acquire look {}",
+                    path, e
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        //Lock is acquired we can unlink the socket file
+
+        remove_file(path.clone());
+
         // Bind the Unix socket
         let socket = match UnixListener::bind(&path).await {
             Ok(socket) => Arc::new(socket),
@@ -406,6 +463,53 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
                     // Wait for the accept loop to be stopped
                     listener.barrier.wait().await;
                 }
+
+
+                //Release the lock
+
+                //Create lock file path
+                let lock_file_path = format!("{}.lock", path);
+
+                // We try to open the lock file, with O_RDONLY | O_CREAT
+                let mut open_flags = nix::fcntl::OFlag::empty();
+
+                open_flags.insert(nix::fcntl::OFlag::O_RDONLY);
+                open_flags.insert(nix::fcntl::OFlag::O_CREAT);
+
+                let open_mode = nix::sys::stat::Mode::from_bits_truncate(0600);
+
+                let lock_fd = match nix::fcntl::open(
+                    std::path::Path::new(&lock_file_path),
+                    open_flags,
+                    open_mode,
+                ) {
+                    Ok(raw_fd) => raw_fd,
+                    Err(e) => {
+                        let e = format!(
+                            "Can not create a new UnixSock-Stream listener on {}: {}",
+                            path, e
+                        );
+                        log::warn!("{}", e);
+                        return zerror!(ZErrorKind::InvalidLink { descr: e });
+                    }
+                };
+
+                // We try to acquire the lock
+
+                match nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::UnlockNonblock) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        nix::unistd::close(lock_fd);
+                        let e = format!(
+                            "Can not create a new UnixSock-Stream listener on {}: {}",
+                            path, e
+                        );
+                        log::warn!("{}", e);
+                        return zerror!(ZErrorKind::InvalidLink { descr: e });
+                    }
+                };
+                nix::unistd::close(lock_fd);
+
                 // Remove the Unix Domain Socket file
                 let res = remove_file(path);
                 log::trace!("UnixSock-Stream Domain Socket removal result: {:?}", res);
