@@ -85,6 +85,7 @@ async fn run(locators: Vec<Locator>) {
         for l in locators.iter() {
             println!("Add {}", l);
             let res = sm.add_listener(l).await;
+            println!("Res: {:?}", res);
             assert!(res.is_ok());
         }
 
@@ -94,6 +95,7 @@ async fn run(locators: Vec<Locator>) {
         for l in locators.iter() {
             println!("Del {}", l);
             let res = sm.del_listener(l).await;
+            println!("Res: {:?}", res);
             assert!(res.is_ok());
         }
 
@@ -141,6 +143,8 @@ fn locator_unix() {
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock.lock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock.lock");
 }
 
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
@@ -174,6 +178,7 @@ fn locator_tcp_udp_unix() {
     ];
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock.lock");
 }
 
 #[cfg(all(
@@ -194,6 +199,7 @@ fn locator_tcp_unix() {
     ];
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock.lock");
 }
 
 #[cfg(all(
@@ -214,4 +220,5 @@ fn locator_udp_unix() {
     ];
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock.lock");
 }
