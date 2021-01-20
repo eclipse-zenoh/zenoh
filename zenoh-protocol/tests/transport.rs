@@ -354,6 +354,7 @@ fn transport_unix() {
         close_session(router_manager, client_session, locators).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
 
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
@@ -408,6 +409,7 @@ fn transport_tcp_unix() {
         close_session(router_manager, client_session, locators).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
 }
 
 #[cfg(all(
@@ -439,6 +441,7 @@ fn transport_udp_unix() {
         close_session(router_manager, client_session, locators).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
 }
 
 #[cfg(all(
@@ -472,4 +475,5 @@ fn transport_tcp_udp_unix() {
         close_session(router_manager, client_session, locators).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
 }
