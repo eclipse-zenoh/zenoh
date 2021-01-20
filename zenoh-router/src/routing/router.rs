@@ -128,6 +128,7 @@ impl Tables {
                 log::debug!("Close face {}", face.id);
                 finalize_pending_queries(self, &mut face).await;
 
+                let mut face_clone = face.clone();
                 let face = Arc::get_mut_unchecked(&mut face);
                 for mut res in face.remote_mappings.values_mut() {
                     Arc::get_mut_unchecked(res).contexts.remove(&face.id);
@@ -141,6 +142,7 @@ impl Tables {
                 face.local_mappings.clear();
                 while let Some(mut res) = face.remote_subs.pop() {
                     Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
+                    unregister_client_subscription(self, &mut face_clone, &mut res).await;
                     Resource::clean(&mut res);
                 }
                 while let Some(mut res) = face.remote_qabl.pop() {

@@ -504,6 +504,86 @@ pub async fn undeclare_peer_subscription(
     }
 }
 
+pub(crate) async unsafe fn unregister_client_subscription(
+    tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    res: &mut Arc<Resource>,
+) {
+    log::debug!(
+        "Unregister client subscription {} for face {}",
+        res.name(),
+        face.id
+    );
+    if let Some(mut ctx) = Arc::get_mut_unchecked(res).contexts.get_mut(&face.id) {
+        Arc::get_mut_unchecked(&mut ctx).subs = None;
+    }
+    Arc::get_mut_unchecked(face)
+        .remote_subs
+        .retain(|x| !Arc::ptr_eq(&x, &res));
+
+    match tables.whatami {
+        whatami::ROUTER => {
+            if !res.contexts.values().any(|ctx| ctx.subs.is_some())
+                && !tables
+                    .peer_subs
+                    .iter()
+                    .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
+            {
+                unregister_router_subscription(tables, face, res, tables.pid.clone()).await;
+            }
+        }
+        whatami::PEER => {
+            if !res.contexts.values().any(|ctx| ctx.subs.is_some())
+                && !tables
+                    .peer_subs
+                    .iter()
+                    .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
+            {
+                unregister_peer_subscription(tables, face, res, tables.pid.clone()).await;
+            }
+        }
+        _ => {
+            if !res.contexts.values().any(|ctx| ctx.subs.is_some()) {
+                propagate_forget_simple_subscription(tables, res).await;
+            }
+        }
+    }
+
+    let mut client_subs: Vec<Arc<FaceState>> = res
+        .contexts
+        .values()
+        .filter_map(|ctx| {
+            if ctx.subs.is_some() {
+                Some(ctx.face.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    if client_subs.len() == 1
+        && !tables
+            .router_subs
+            .iter()
+            .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
+        && !tables
+            .peer_subs
+            .iter()
+            .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
+    {
+        let face = &mut client_subs[0];
+        if face.local_subs.contains(&res) {
+            let reskey = Resource::get_best_key(&res, "", face.id);
+            face.primitives.forget_subscriber(&reskey, None).await;
+
+            Arc::get_mut_unchecked(face)
+                .local_subs
+                .retain(|sub| sub != &(*res));
+        }
+    }
+
+    Resource::clean(res)
+}
+
 pub async fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -513,91 +593,7 @@ pub async fn undeclare_client_subscription(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => unsafe {
-                log::debug!(
-                    "Unregister subscription {} for face {}",
-                    res.name(),
-                    face.id
-                );
-                if let Some(mut ctx) = Arc::get_mut_unchecked(&mut res).contexts.get_mut(&face.id) {
-                    Arc::get_mut_unchecked(&mut ctx).subs = None;
-                }
-                Arc::get_mut_unchecked(face)
-                    .remote_subs
-                    .retain(|x| !Arc::ptr_eq(&x, &res));
-
-                match tables.whatami {
-                    whatami::ROUTER => {
-                        if !res.contexts.values().any(|ctx| ctx.subs.is_some())
-                            && !tables
-                                .peer_subs
-                                .iter()
-                                .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
-                        {
-                            unregister_router_subscription(
-                                tables,
-                                face,
-                                &mut res,
-                                tables.pid.clone(),
-                            )
-                            .await;
-                        }
-                    }
-                    whatami::PEER => {
-                        if !res.contexts.values().any(|ctx| ctx.subs.is_some())
-                            && !tables
-                                .peer_subs
-                                .iter()
-                                .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
-                        {
-                            unregister_peer_subscription(
-                                tables,
-                                face,
-                                &mut res,
-                                tables.pid.clone(),
-                            )
-                            .await;
-                        }
-                    }
-                    _ => {
-                        if !res.contexts.values().any(|ctx| ctx.subs.is_some()) {
-                            propagate_forget_simple_subscription(tables, &mut res).await;
-                        }
-                    }
-                }
-
-                let mut client_subs: Vec<Arc<FaceState>> = res
-                    .contexts
-                    .values()
-                    .filter_map(|ctx| {
-                        if ctx.subs.is_some() {
-                            Some(ctx.face.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                if client_subs.len() == 1
-                    && !tables
-                        .router_subs
-                        .iter()
-                        .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
-                    && !tables
-                        .peer_subs
-                        .iter()
-                        .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
-                {
-                    let face = &mut client_subs[0];
-                    if face.local_subs.contains(&res) {
-                        let reskey = Resource::get_best_key(&res, "", face.id);
-                        face.primitives.forget_subscriber(&reskey, None).await;
-
-                        Arc::get_mut_unchecked(face)
-                            .local_subs
-                            .retain(|sub| sub != &res);
-                    }
-                }
-
-                Resource::clean(&mut res)
+                unregister_client_subscription(tables, face, &mut res).await;
             },
             None => log::error!("Undeclare unknown subscription!"),
         },
