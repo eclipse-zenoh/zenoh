@@ -151,10 +151,9 @@ impl Primitives for Face {
             | (whatami::PEER, whatami::ROUTER)
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
-                    let router = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid)
-                    {
+                    let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
                         Some(link) => match link.mappings.get(&routing_context) {
-                            Some(router) => router.clone(),
+                            Some(peer) => peer.clone(),
                             None => {
                                 log::error!(
                                     "Received peer subscription with unknown routing context id {}",
@@ -175,7 +174,7 @@ impl Primitives for Face {
                         prefixid,
                         suffix,
                         sub_info,
-                        router,
+                        peer,
                     )
                     .await
                 }
@@ -198,10 +197,95 @@ impl Primitives for Face {
         }
     }
 
-    async fn forget_subscriber(&self, reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    async fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
-        undeclare_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix).await;
+        match (tables.whatami, self.state.whatami) {
+            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+                Some(routing_context) => {
+                    let router = match tables
+                        .routers_net
+                        .as_ref()
+                        .unwrap()
+                        .get_link(&self.state.pid)
+                    {
+                        Some(link) => match link.mappings.get(&routing_context) {
+                            Some(router) => router.clone(),
+                            None => {
+                                log::error!(
+                                        "Received router forget subscription with unknown routing context id {}",
+                                        routing_context
+                                    );
+                                return;
+                            }
+                        },
+                        None => {
+                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            return;
+                        }
+                    };
+
+                    undeclare_router_subscription(
+                        &mut tables,
+                        &mut self.state.clone(),
+                        prefixid,
+                        suffix,
+                        router,
+                    )
+                    .await
+                }
+
+                None => {
+                    log::error!("Received router forget subscription with no routing context");
+                    return;
+                }
+            },
+            (whatami::ROUTER, whatami::PEER)
+            | (whatami::PEER, whatami::ROUTER)
+            | (whatami::PEER, whatami::PEER) => match routing_context {
+                Some(routing_context) => {
+                    let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
+                        Some(link) => match link.mappings.get(&routing_context) {
+                            Some(peer) => peer.clone(),
+                            None => {
+                                log::error!(
+                                    "Received peer forget subscription with unknown routing context id {}",
+                                    routing_context
+                                );
+                                return;
+                            }
+                        },
+                        None => {
+                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            return;
+                        }
+                    };
+
+                    undeclare_peer_subscription(
+                        &mut tables,
+                        &mut self.state.clone(),
+                        prefixid,
+                        suffix,
+                        peer,
+                    )
+                    .await
+                }
+
+                None => {
+                    log::error!("Received peer forget subscription with no routing context");
+                    return;
+                }
+            },
+            _ => {
+                undeclare_client_subscription(
+                    &mut tables,
+                    &mut self.state.clone(),
+                    prefixid,
+                    suffix,
+                )
+                .await
+            }
+        }
     }
 
     async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}

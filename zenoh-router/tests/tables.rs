@@ -31,7 +31,7 @@ fn base_test() {
     task::block_on(async {
         let mut tables = Tables::new(
             PeerId::new(0, [0; 16]),
-            whatami::ROUTER,
+            whatami::CLIENT,
             Some(HLC::default()),
         );
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
@@ -133,7 +133,7 @@ fn match_test() {
 
         let mut tables = Tables::new(
             PeerId::new(0, [0; 16]),
-            whatami::ROUTER,
+            whatami::CLIENT,
             Some(HLC::default()),
         );
         let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
@@ -173,7 +173,7 @@ fn clean_test() {
     task::block_on(async {
         let mut tables = Tables::new(
             PeerId::new(0, [0; 16]),
-            whatami::ROUTER,
+            whatami::CLIENT,
             Some(HLC::default()),
         );
 
@@ -269,12 +269,13 @@ fn clean_test() {
         let res3 = optres3.unwrap();
         assert!(res3.upgrade().is_some());
 
-        undeclare_subscription(&mut tables, &mut face0.upgrade().unwrap(), 1, "/todrop12").await;
+        undeclare_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 1, "/todrop12")
+            .await;
         assert!(res1.upgrade().is_some());
         assert!(res2.upgrade().is_some());
         assert!(!res3.upgrade().is_some());
 
-        undeclare_subscription(
+        undeclare_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
             0,
@@ -306,7 +307,8 @@ fn clean_test() {
         let res1 = optres1.unwrap();
         assert!(res1.upgrade().is_some());
 
-        undeclare_subscription(&mut tables, &mut face0.upgrade().unwrap(), 0, "/todrop3").await;
+        undeclare_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 0, "/todrop3")
+            .await;
         assert!(res1.upgrade().is_some());
 
         undeclare_resource(&mut tables, &mut face0.upgrade().unwrap(), 2).await;
@@ -481,7 +483,7 @@ fn client_test() {
     task::block_on(async {
         let mut tables = Tables::new(
             PeerId::new(0, [0; 16]),
-            whatami::ROUTER,
+            whatami::CLIENT,
             Some(HLC::default()),
         );
         let sub_info = SubInfo {
