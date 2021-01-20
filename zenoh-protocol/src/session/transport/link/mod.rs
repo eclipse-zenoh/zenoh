@@ -148,15 +148,15 @@ impl SessionTransportLink {
     }
 
     pub(crate) async fn close(self) -> ZResult<()> {
-        // Send the signal
+        // Send the TX stop signal
         let _ = self.stop_tx().await;
-        let _ = self.stop_rx().await;
-
         // Drain what remains in the queue before exiting
         while let Some(batch) = self.pipeline.drain().await {
             let _ = self.inner.write_all(batch.get_buffer()).await;
         }
 
+        // Send the RX stop signal
+        let _ = self.stop_rx().await;
         // Close the underlying link
         self.inner.close().await
     }
