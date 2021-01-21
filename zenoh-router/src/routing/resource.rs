@@ -19,7 +19,9 @@ use std::hash::{Hash, Hasher};
 use zenoh_protocol::core::rname;
 use zenoh_protocol::core::{PeerId, ResKey, SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::DataInfo;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
+
+pub type DataRoute = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
 
 pub(super) struct Context {
     pub(super) face: Arc<FaceState>,
@@ -40,7 +42,7 @@ pub struct Resource {
     pub(super) peer_subs: HashSet<PeerId>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) route: HashMap<usize, (Arc<FaceState>, ResKey)>,
+    pub(super) routes: Vec<DataRoute>,
 }
 
 impl PartialEq for Resource {
@@ -78,7 +80,7 @@ impl Resource {
             peer_subs: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
-            route: HashMap::new(),
+            routes: Vec::new(),
         }
     }
 
@@ -116,7 +118,7 @@ impl Resource {
             peer_subs: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
-            route: HashMap::new(),
+            routes: Vec::new(),
         })
     }
 
@@ -451,7 +453,7 @@ pub async fn declare_resource(
                 Arc::get_mut_unchecked(face)
                     .remote_mappings
                     .insert(rid, res.clone());
-                Tables::build_matches_direct_tables(&mut res);
+                tables.compute_matches_routes(&mut res);
             },
         },
         None => log::error!("Declare resource with unknown prefix {}!", prefixid),

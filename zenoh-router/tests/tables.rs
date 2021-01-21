@@ -609,6 +609,7 @@ fn client_test() {
             CongestionControl::Block,
             None,
             RBuf::new(),
+            None,
         )
         .await;
 
@@ -635,6 +636,7 @@ fn client_test() {
             CongestionControl::Block,
             None,
             RBuf::new(),
+            None,
         )
         .await;
 
@@ -661,6 +663,7 @@ fn client_test() {
             CongestionControl::Block,
             None,
             RBuf::new(),
+            None,
         )
         .await;
 
@@ -687,6 +690,7 @@ fn client_test() {
             CongestionControl::Block,
             None,
             RBuf::new(),
+            None,
         )
         .await;
 
@@ -713,6 +717,7 @@ fn client_test() {
             CongestionControl::Block,
             None,
             RBuf::new(),
+            None,
         )
         .await;
 

@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use uhlc::HLC;
 
-use zenoh_protocol::core::{whatami, PeerId, SubMode, WhatAmI, ZInt};
+use zenoh_protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_protocol::session::{
     DeMux, Mux, Primitives, Session, SessionEventHandler, SessionHandler,
@@ -155,30 +155,8 @@ impl Tables {
         }
     }
 
-    unsafe fn build_direct_tables(res: &mut Arc<Resource>) {
-        let mut dests = HashMap::new();
-        for match_ in &res.matches {
-            for (fid, context) in &match_.upgrade().unwrap().contexts {
-                if let Some(subinfo) = &context.subs {
-                    if SubMode::Push == subinfo.mode {
-                        let reskey = Resource::get_best_key(res, "", *fid);
-                        dests.insert(*fid, (context.face.clone(), reskey));
-                    }
-                }
-            }
-        }
-        Arc::get_mut_unchecked(res).route = dests;
-    }
-
-    pub(crate) unsafe fn build_matches_direct_tables(res: &mut Arc<Resource>) {
-        Tables::build_direct_tables(res);
-
-        let resclone = res.clone();
-        for match_ in &mut Arc::get_mut_unchecked(res).matches {
-            if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
-                Tables::build_direct_tables(&mut match_.upgrade().unwrap());
-            }
-        }
+    pub(crate) unsafe fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
+        compute_matches_data_routes(self, res);
     }
 }
 

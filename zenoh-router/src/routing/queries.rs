@@ -89,7 +89,7 @@ pub(crate) async fn declare_queryable(
                     someface.primitives.queryable(&reskey, None).await;
                 }
             }
-            Tables::build_matches_direct_tables(&mut res);
+            tables.compute_matches_routes(&mut res);
             Arc::get_mut_unchecked(face).remote_qabl.push(res);
         },
         None => log::error!("Declare queryable for unknown rid {}!", prefixid),

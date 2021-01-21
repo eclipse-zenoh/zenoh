@@ -17,16 +17,14 @@ use std::collections::HashMap;
 use uhlc::HLC;
 
 use zenoh_protocol::core::{
-    whatami, CongestionControl, PeerId, Reliability, ResKey, SubInfo, SubMode, ZInt,
+    whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode, ZInt,
 };
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::DataInfo;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
 use crate::routing::face::FaceState;
-use crate::routing::resource::{Context, Resource};
+use crate::routing::resource::{Context, DataRoute, Resource};
 use crate::routing::router::Tables;
-
-pub type DataRoute = HashMap<usize, (Arc<FaceState>, ResKey)>;
 
 async fn propagate_simple_subscription(
     tables: &mut Tables,
@@ -137,7 +135,7 @@ pub async fn declare_router_subscription(
             Resource::match_resource(&tables, &mut res);
             register_router_subscription(tables, face, &mut res, sub_info, router).await;
 
-            Tables::build_matches_direct_tables(&mut res);
+            compute_matches_data_routes(tables, &mut res);
         },
         None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
     }
@@ -228,7 +226,7 @@ pub async fn declare_peer_subscription(
                 .await;
             }
 
-            Tables::build_matches_direct_tables(&mut res);
+            compute_matches_data_routes(tables, &mut res);
         },
         None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
     }
@@ -316,7 +314,7 @@ pub async fn declare_client_subscription(
                 }
             }
 
-            Tables::build_matches_direct_tables(&mut res);
+            compute_matches_data_routes(tables, &mut res);
         },
         None => log::error!("Declare subscription for unknown rid {}!", prefixid),
     }
@@ -677,88 +675,142 @@ pub(crate) async fn pubsub_new_childs(
     }
 }
 
-#[inline]
-fn propagate_data(
-    whatami: whatami::Type,
-    src_face: &Arc<FaceState>,
-    dst_face: &Arc<FaceState>,
-) -> bool {
-    src_face.id != dst_face.id
-        && match whatami {
-            whatami::ROUTER => {
-                (src_face.whatami != whatami::PEER || dst_face.whatami != whatami::PEER)
-                    && (src_face.whatami != whatami::ROUTER || dst_face.whatami != whatami::ROUTER)
+unsafe fn compute_data_route(
+    tables: &Tables,
+    prefix: &Arc<Resource>,
+    suffix: &str,
+    routing_context: Option<usize>,
+) -> DataRoute {
+    let mut route = HashMap::new();
+    let resname = [&prefix.name(), suffix].concat();
+    let res = Resource::get_resource(prefix, suffix);
+    let matches = match res.as_ref() {
+        Some(res) => std::borrow::Cow::from(&res.matches),
+        None => std::borrow::Cow::from(Resource::get_matches(tables, &resname)),
+    };
+
+    for mres in matches.iter() {
+        let mut mres = mres.upgrade().unwrap();
+        let mres = Arc::get_mut_unchecked(&mut mres);
+        if tables.whatami == whatami::ROUTER {
+            let net = tables.routers_net.as_ref().unwrap();
+            for sub in &mres.router_subs {
+                if let Some(direction) = net.trees[routing_context.unwrap()].directions
+                    [net.get_idx(sub).unwrap().index()]
+                {
+                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
+                    route.entry(face.id).or_insert_with(|| {
+                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
+                        (face.clone(), reskey, Some(routing_context.unwrap() as u64))
+                    });
+                }
             }
-            _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
+            let net = tables.peers_net.as_ref().unwrap();
+            for sub in &mres.peer_subs {
+                if let Some(direction) =
+                    net.trees[net.idx.index()].directions[net.get_idx(sub).unwrap().index()]
+                {
+                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
+                    route.entry(face.id).or_insert_with(|| {
+                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
+                        (face.clone(), reskey, Some(net.idx.index() as u64))
+                    });
+                }
+            }
         }
+
+        if tables.whatami == whatami::PEER {
+            let net = tables.peers_net.as_ref().unwrap();
+            for sub in &mres.peer_subs {
+                if let Some(direction) = net.trees[routing_context.unwrap()].directions
+                    [net.get_idx(sub).unwrap().index()]
+                {
+                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
+                    route.entry(face.id).or_insert_with(|| {
+                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
+                        (face.clone(), reskey, Some(routing_context.unwrap() as u64))
+                    });
+                }
+            }
+        }
+
+        for (sid, context) in &mut mres.contexts {
+            if let Some(subinfo) = &context.subs {
+                if subinfo.mode == SubMode::Push {
+                    route.entry(*sid).or_insert_with(|| {
+                        let reskey = Resource::get_best_key(prefix, suffix, *sid);
+                        (context.face.clone(), reskey, None)
+                    });
+                }
+            }
+        }
+    }
+    route
 }
 
-pub async fn get_route(
-    tables: &mut Tables,
-    face: &Arc<FaceState>,
-    rid: ZInt,
-    suffix: &str,
-    info: &Option<DataInfo>,
-    payload: &RBuf,
-) -> Option<DataRoute> {
-    match tables.get_mapping(&face, &rid) {
-        Some(prefix) => unsafe {
-            match Resource::get_resource(prefix, suffix) {
-                Some(res) => {
-                    for mres in &res.matches {
-                        let mut mres = mres.upgrade().unwrap();
-                        let mres = Arc::get_mut_unchecked(&mut mres);
-                        for mut context in mres.contexts.values_mut() {
-                            if let Some(subinfo) = &context.subs {
-                                if SubMode::Pull == subinfo.mode {
-                                    Arc::get_mut_unchecked(&mut context).last_values.insert(
-                                        [&prefix.name(), suffix].concat(),
-                                        (info.clone(), payload.clone()),
-                                    );
-                                }
-                            }
-                        }
-                    }
+unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+    let mut res_mut = res.clone();
+    let res_mut = Arc::get_mut_unchecked(&mut res_mut);
+    match tables.whatami {
+        whatami::ROUTER => {
+            let indexes = tables
+                .routers_net
+                .as_ref()
+                .unwrap()
+                .graph
+                .node_indices()
+                .collect::<Vec<NodeIndex>>();
+            let max_idx = indexes.iter().max().unwrap();
+            res_mut.routes.clear();
+            res_mut
+                .routes
+                .resize_with(max_idx.index() + 1, HashMap::new);
 
-                    Some(res.route.clone())
-                }
-                None => {
-                    let mut faces = HashMap::new();
-                    let resname = [&prefix.name(), suffix].concat();
-                    for mres in Resource::get_matches(&tables, &resname) {
-                        let mut mres = mres.upgrade().unwrap();
-                        let mres = Arc::get_mut_unchecked(&mut mres);
-                        for (sid, mut context) in &mut mres.contexts {
-                            if let Some(subinfo) = &context.subs {
-                                match subinfo.mode {
-                                    SubMode::Pull => {
-                                        Arc::get_mut_unchecked(&mut context).last_values.insert(
-                                            resname.clone(),
-                                            (info.clone(), payload.clone()),
-                                        );
-                                    }
-                                    SubMode::Push => {
-                                        faces.entry(*sid).or_insert_with(|| {
-                                            let reskey =
-                                                Resource::get_best_key(prefix, suffix, *sid);
-                                            (context.face.clone(), reskey)
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Some(faces)
-                }
+            for idx in &indexes {
+                res_mut.routes[idx.index()] =
+                    compute_data_route(tables, res, "", Some(idx.index()));
             }
-        },
-        None => {
-            log::error!("Route data with unknown rid {}!", rid);
-            None
+        }
+        whatami::PEER => {
+            let indexes = tables
+                .peers_net
+                .as_ref()
+                .unwrap()
+                .graph
+                .node_indices()
+                .collect::<Vec<NodeIndex>>();
+            let max_idx = indexes.iter().max().unwrap();
+            res_mut.routes.clear();
+            res_mut
+                .routes
+                .resize_with(max_idx.index() + 1, HashMap::new);
+
+            for idx in &indexes {
+                res_mut.routes[idx.index()] =
+                    compute_data_route(tables, res, "", Some(idx.index()));
+            }
+        }
+        _ => {
+            res_mut.routes.clear();
+            res_mut
+                .routes
+                .push(compute_data_route(tables, res, "", None));
         }
     }
 }
 
+pub(crate) unsafe fn compute_matches_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+    compute_data_routes(tables, res);
+
+    let resclone = res.clone();
+    for match_ in &mut Arc::get_mut_unchecked(res).matches {
+        if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
+            compute_data_routes(tables, &mut match_.upgrade().unwrap());
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn route_data(
     tables: &mut Tables,
     face: &Arc<FaceState>,
@@ -767,38 +819,76 @@ pub async fn route_data(
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
     payload: RBuf,
+    routing_context: Option<RoutingContext>,
 ) {
-    if let Some(route) = get_route(tables, face, rid, suffix, &info, &payload).await {
-        // if an HLC was configured (via Config.add_timestamp),
-        // check DataInfo and add a timestamp if there isn't
-        let data_info = match &tables.hlc {
-            Some(hlc) => match treat_timestamp(hlc, info).await {
-                Ok(info) => info,
-                Err(e) => {
-                    log::error!(
-                        "Error treating timestamp for received Data ({}): drop it!",
-                        e
-                    );
-                    return;
-                }
-            },
-            None => info,
-        };
-
-        for (_id, (outface, reskey)) in route {
-            if propagate_data(tables.whatami, face, &outface) {
-                outface
-                    .primitives
-                    .data(
-                        &reskey,
-                        payload.clone(),
-                        Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
-                        congestion_control,
-                        data_info.clone(),
-                        None,
-                    )
-                    .await
+    let local_context = match (tables.whatami, face.whatami) {
+        (whatami::ROUTER, whatami::ROUTER) => {
+            let net = tables.routers_net.as_ref().unwrap();
+            match routing_context {
+                Some(ctx) => net
+                    .get_idx(&net.get_link(&face.pid).unwrap().mappings.get(&ctx).unwrap())
+                    .unwrap()
+                    .index(),
+                None => 0,
             }
+        }
+        (whatami::ROUTER, whatami::PEER)
+        | (whatami::PEER, whatami::ROUTER)
+        | (whatami::PEER, whatami::PEER) => {
+            let net = tables.peers_net.as_ref().unwrap();
+            match routing_context {
+                Some(ctx) => net
+                    .get_idx(&net.get_link(&face.pid).unwrap().mappings.get(&ctx).unwrap())
+                    .unwrap()
+                    .index(),
+                None => 0,
+            }
+        }
+        _ => 0,
+    };
+
+    match tables.get_mapping(&face, &rid) {
+        Some(prefix) => unsafe {
+            log::debug!("Route data for res {}{}", prefix.name(), suffix,);
+            let route = match Resource::get_resource(prefix, suffix) {
+                Some(res) => res.routes[local_context].clone(),
+                None => compute_data_route(tables, prefix, suffix, Some(local_context)),
+            };
+
+            // if an HLC was configured (via Config.add_timestamp),
+            // check DataInfo and add a timestamp if there isn't
+            let data_info = match &tables.hlc {
+                Some(hlc) => match treat_timestamp(hlc, info).await {
+                    Ok(info) => info,
+                    Err(e) => {
+                        log::error!(
+                            "Error treating timestamp for received Data ({}): drop it!",
+                            e
+                        );
+                        return;
+                    }
+                },
+                None => info,
+            };
+
+            for (_id, (outface, reskey, context)) in route {
+                if face.id != outface.id {
+                    outface
+                        .primitives
+                        .data(
+                            &reskey,
+                            payload.clone(),
+                            Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                            congestion_control,
+                            data_info.clone(),
+                            context,
+                        )
+                        .await
+                }
+            }
+        },
+        None => {
+            log::error!("Route data with unknown rid {}!", rid);
         }
     }
 }

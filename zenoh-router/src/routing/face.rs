@@ -311,7 +311,7 @@ impl Primitives for Face {
         _reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
-        _routing_context: Option<RoutingContext>,
+        routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
@@ -323,6 +323,7 @@ impl Primitives for Face {
             congestion_control,
             data_info,
             payload,
+            routing_context,
         )
         .await;
     }
