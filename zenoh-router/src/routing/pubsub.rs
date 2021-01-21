@@ -614,12 +614,13 @@ pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<F
     }
 }
 
-pub(crate) async fn pubsub_new_childs(
+pub(crate) async fn pubsub_tree_change(
     tables: &mut Tables,
-    childs: Vec<Vec<NodeIndex>>,
+    new_childs: Vec<Vec<NodeIndex>>,
     net_type: whatami::Type,
 ) {
-    for (tree_sid, tree_childs) in childs.into_iter().enumerate() {
+    // propagate subs to now childs
+    for (tree_sid, tree_childs) in new_childs.into_iter().enumerate() {
         if !tree_childs.is_empty() {
             let net = match net_type {
                 whatami::ROUTER => tables.routers_net.as_ref().unwrap(),
@@ -672,6 +673,11 @@ pub(crate) async fn pubsub_new_childs(
                 }
             }
         }
+    }
+
+    // recompute routes
+    unsafe {
+        compute_data_routes_from(tables, &mut tables.root_res.clone());
     }
 }
 
@@ -796,6 +802,14 @@ unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
                 .routes
                 .push(compute_data_route(tables, res, "", None));
         }
+    }
+}
+
+unsafe fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+    compute_data_routes(tables, res);
+    let res = Arc::get_mut_unchecked(res);
+    for child in res.childs.values_mut() {
+        compute_data_routes_from(tables, child);
     }
 }
 

@@ -244,14 +244,14 @@ impl SessionHandler for Router {
                 (whatami::ROUTER, whatami::ROUTER) => {
                     let net = tables.routers_net.as_mut().unwrap();
                     net.add_link(session.clone()).await;
-                    let childs = net.compute_trees().await;
-                    pubsub_new_childs(&mut tables, childs, whatami::ROUTER).await;
+                    let new_childs = net.compute_trees().await;
+                    pubsub_tree_change(&mut tables, new_childs, whatami::ROUTER).await;
                 }
                 _ => {
                     let net = tables.peers_net.as_mut().unwrap();
                     net.add_link(session.clone()).await;
-                    let childs = net.compute_trees().await;
-                    pubsub_new_childs(&mut tables, childs, whatami::PEER).await;
+                    let new_childs = net.compute_trees().await;
+                    pubsub_tree_change(&mut tables, new_childs, whatami::PEER).await;
                 }
             };
 
@@ -301,14 +301,14 @@ impl SessionEventHandler for LinkStateInterceptor {
                     (whatami::ROUTER, whatami::ROUTER) => {
                         let net = tables.routers_net.as_mut().unwrap();
                         net.link_states(list.link_states, pid).await;
-                        let childs = net.compute_trees().await;
-                        pubsub_new_childs(&mut tables, childs, whatami::ROUTER).await;
+                        let new_childs = net.compute_trees().await;
+                        pubsub_tree_change(&mut tables, new_childs, whatami::ROUTER).await;
                     }
                     _ => {
                         let net = tables.peers_net.as_mut().unwrap();
                         net.link_states(list.link_states, pid).await;
-                        let childs = net.compute_trees().await;
-                        pubsub_new_childs(&mut tables, childs, whatami::PEER).await;
+                        let new_childs = net.compute_trees().await;
+                        pubsub_tree_change(&mut tables, new_childs, whatami::PEER).await;
                     }
                 };
 
@@ -330,14 +330,14 @@ impl SessionEventHandler for LinkStateInterceptor {
                 (whatami::ROUTER, whatami::ROUTER) => {
                     let net = tables.routers_net.as_mut().unwrap();
                     net.remove_link(&self.session).await;
-                    let childs = net.compute_trees().await;
-                    pubsub_new_childs(&mut tables, childs, whatami::ROUTER).await;
+                    let new_childs = net.compute_trees().await;
+                    pubsub_tree_change(&mut tables, new_childs, whatami::ROUTER).await;
                 }
                 _ => {
                     let net = tables.peers_net.as_mut().unwrap();
                     net.remove_link(&self.session).await;
-                    let childs = net.compute_trees().await;
-                    pubsub_new_childs(&mut tables, childs, whatami::PEER).await;
+                    let new_childs = net.compute_trees().await;
+                    pubsub_tree_change(&mut tables, new_childs, whatami::PEER).await;
                 }
             },
             Err(_) => log::error!("Unable to get whatami closing session!"),
