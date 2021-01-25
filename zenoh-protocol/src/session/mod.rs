@@ -11,7 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+mod authenticator;
 pub mod defaults;
+mod initial;
 mod manager;
 mod primitives;
 mod transport;

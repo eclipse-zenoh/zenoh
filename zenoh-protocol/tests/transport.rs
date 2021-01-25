@@ -167,11 +167,10 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
 
     // Create an empty session with the client
     // Open session -> This should be accepted
-    let attachment = None;
     for l in locators.iter() {
         println!("Opening session with {}", l);
         let res = client_manager
-            .open_session(l, &attachment)
+            .open_session(l)
             .timeout(TIMEOUT)
             .await
             .unwrap();

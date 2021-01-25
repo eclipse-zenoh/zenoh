@@ -89,6 +89,8 @@ impl Runtime {
             retries: None,
             max_sessions: None,
             max_links: None,
+            peer_authenticator: None,
+            link_authenticator: None,
         };
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));

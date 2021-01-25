@@ -30,6 +30,7 @@ use crate::proto::SessionMessage;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use std::cmp::PartialEq;
+use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
@@ -53,7 +54,7 @@ pub trait LinkTrait {
     async fn close(&self) -> ZResult<()>;
 }
 
-const DEFAULT_WBUF_CAPACITY: usize = 64;
+const WBUF_SIZE: usize = 64;
 
 #[derive(Clone)]
 pub struct Link(Arc<dyn LinkTrait + Send + Sync>);
@@ -65,7 +66,7 @@ impl Link {
 
     pub async fn write_session_message(&self, msg: SessionMessage) -> ZResult<()> {
         // Create the buffer for serializing the message
-        let mut wbuf = WBuf::new(DEFAULT_WBUF_CAPACITY, false);
+        let mut wbuf = WBuf::new(WBUF_SIZE, false);
         if self.is_streamed() {
             // Reserve 16 bits to write the length
             wbuf.write_bytes(&[0u8, 0u8]);
@@ -160,6 +161,8 @@ impl fmt::Debug for Link {
             .finish()
     }
 }
+
+pub type LinkProperties = HashMap<usize, String>;
 
 /*************************************/
 /*           LINK MANAGER            */
