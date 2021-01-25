@@ -333,11 +333,58 @@ async unsafe fn propagate_forget_simple_subscription(tables: &mut Tables, res: &
     }
 }
 
+async fn propagate_forget_sourced_subscription(
+    tables: &mut Tables,
+    res: &mut Arc<Resource>,
+    src_face: &mut Arc<FaceState>,
+    source: &PeerId,
+    net_type: whatami::Type,
+) {
+    let net = tables.get_net(net_type).unwrap();
+    match net.get_idx(source) {
+        Some(tree_sid) => {
+            for child in &net.trees[tree_sid.index()].childs {
+                match tables.get_face(&net.graph[*child].pid).cloned() {
+                    Some(mut someface) => {
+                        if someface.id != src_face.id {
+                            let reskey = Resource::decl_key(res, &mut someface).await;
+
+                            log::debug!(
+                                "Send forget {} subscription {} on face {} {}",
+                                match net_type {
+                                    whatami::ROUTER => "router",
+                                    _ => "peer",
+                                },
+                                res.name(),
+                                someface.id,
+                                someface.pid,
+                            );
+
+                            someface
+                                .primitives
+                                .forget_subscriber(&reskey, Some(tree_sid.index() as ZInt))
+                                .await;
+                        }
+                    }
+                    None => {
+                        log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                    }
+                }
+            }
+        }
+        None => log::error!(
+            "Error propagating sub {}: cannot get index of {}!",
+            res.name(),
+            source
+        ),
+    }
+}
+
 async unsafe fn unregister_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    router: PeerId,
+    router: &PeerId,
 ) {
     if res.router_subs.contains(&router) {
         log::debug!(
@@ -347,48 +394,14 @@ async unsafe fn unregister_router_subscription(
         );
         Arc::get_mut_unchecked(res)
             .router_subs
-            .retain(|sub| *sub != router);
+            .retain(|sub| sub != router);
 
-        // Propagate forget subscription to routers
-        let net = tables.routers_net.as_ref().unwrap();
-        match net.get_idx(&router) {
-            Some(tree_sid) => {
-                for child in &net.trees[tree_sid.index()].childs {
-                    match tables.get_face(&net.graph[*child].pid).cloned() {
-                        Some(mut someface) => {
-                            if someface.id != face.id {
-                                let reskey = Resource::decl_key(res, &mut someface).await;
-
-                                log::debug!(
-                                    "Send forget router subscription {} on face {} {}",
-                                    res.name(),
-                                    someface.id,
-                                    someface.pid,
-                                );
-
-                                someface
-                                    .primitives
-                                    .forget_subscriber(&reskey, Some(tree_sid.index() as ZInt))
-                                    .await;
-                            }
-                        }
-                        None => {
-                            log::error!("Unable to find face for pid {}", net.graph[*child].pid)
-                        }
-                    }
-                }
-            }
-            None => log::error!(
-                "Error propagating sub {}: cannot get index of {}!",
-                res.name(),
-                router
-            ),
-        }
+        propagate_forget_sourced_subscription(tables, res, face, router, whatami::ROUTER).await;
 
         if res.router_subs.is_empty() {
             tables.router_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
 
-            unregister_peer_subscription(tables, face, res, tables.pid.clone()).await;
+            unregister_peer_subscription(tables, face, res, &tables.pid.clone()).await;
             propagate_forget_simple_subscription(tables, res).await;
         }
     }
@@ -399,7 +412,7 @@ pub async fn undeclare_router_subscription(
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
     suffix: &str,
-    router: PeerId,
+    router: &PeerId,
 ) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
@@ -417,7 +430,7 @@ async unsafe fn unregister_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    peer: PeerId,
+    peer: &PeerId,
 ) {
     if res.peer_subs.contains(&peer) {
         log::debug!(
@@ -427,43 +440,9 @@ async unsafe fn unregister_peer_subscription(
         );
         Arc::get_mut_unchecked(res)
             .peer_subs
-            .retain(|sub| *sub != peer);
+            .retain(|sub| sub != peer);
 
-        // Propagate forget subscription to peers
-        let net = tables.peers_net.as_ref().unwrap();
-        match net.get_idx(&peer) {
-            Some(tree_sid) => {
-                for child in &net.trees[tree_sid.index()].childs {
-                    match tables.get_face(&net.graph[*child].pid).cloned() {
-                        Some(mut someface) => {
-                            if someface.id != face.id {
-                                let reskey = Resource::decl_key(res, &mut someface).await;
-
-                                log::debug!(
-                                    "Send forget peer subscription {} on face {} {}",
-                                    res.name(),
-                                    someface.id,
-                                    someface.pid,
-                                );
-
-                                someface
-                                    .primitives
-                                    .forget_subscriber(&reskey, Some(tree_sid.index() as ZInt))
-                                    .await;
-                            }
-                        }
-                        None => {
-                            log::error!("Unable to find face for pid {}", net.graph[*child].pid)
-                        }
-                    }
-                }
-            }
-            None => log::error!(
-                "Error propagating forget sub {}: cannot get index of {}!",
-                res.name(),
-                peer
-            ),
-        }
+        propagate_forget_sourced_subscription(tables, res, face, peer, whatami::PEER).await;
 
         if res.peer_subs.is_empty() {
             tables.peer_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
@@ -476,7 +455,7 @@ pub async fn undeclare_peer_subscription(
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
     suffix: &str,
-    peer: PeerId,
+    peer: &PeerId,
 ) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
@@ -490,7 +469,7 @@ pub async fn undeclare_peer_subscription(
                         .iter()
                         .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
                 {
-                    unregister_router_subscription(tables, face, &mut res, tables.pid.clone())
+                    unregister_router_subscription(tables, face, &mut res, &tables.pid.clone())
                         .await;
                 }
 
@@ -527,7 +506,7 @@ pub(crate) async unsafe fn unregister_client_subscription(
                     .iter()
                     .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
             {
-                unregister_router_subscription(tables, face, res, tables.pid.clone()).await;
+                unregister_router_subscription(tables, face, res, &tables.pid.clone()).await;
             }
         }
         whatami::PEER => {
@@ -537,7 +516,7 @@ pub(crate) async unsafe fn unregister_client_subscription(
                     .iter()
                     .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
             {
-                unregister_peer_subscription(tables, face, res, tables.pid.clone()).await;
+                unregister_peer_subscription(tables, face, res, &tables.pid.clone()).await;
             }
         }
         _ => {
@@ -622,10 +601,7 @@ pub(crate) async fn pubsub_tree_change(
     // propagate subs to now childs
     for (tree_sid, tree_childs) in new_childs.into_iter().enumerate() {
         if !tree_childs.is_empty() {
-            let net = match net_type {
-                whatami::ROUTER => tables.routers_net.as_ref().unwrap(),
-                _ => tables.peers_net.as_ref().unwrap(),
-            };
+            let net = tables.get_net(net_type).unwrap();
             let tree_id = net.graph[NodeIndex::new(tree_sid)].pid.clone();
 
             let subs_res = match net_type {

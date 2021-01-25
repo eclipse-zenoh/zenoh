@@ -82,6 +82,15 @@ impl Tables {
     }
 
     #[inline]
+    pub(crate) fn get_net(&self, net_type: whatami::Type) -> Option<&Network> {
+        match net_type {
+            whatami::ROUTER => self.routers_net.as_ref(),
+            whatami::PEER => self.peers_net.as_ref(),
+            _ => None,
+        }
+    }
+
+    #[inline]
     pub(crate) fn get_face(&self, pid: &PeerId) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.pid == *pid)
     }

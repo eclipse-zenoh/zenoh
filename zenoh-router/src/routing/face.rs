@@ -230,7 +230,7 @@ impl Primitives for Face {
                         &mut self.state.clone(),
                         prefixid,
                         suffix,
-                        router,
+                        &router,
                     )
                     .await
                 }
@@ -266,7 +266,7 @@ impl Primitives for Face {
                         &mut self.state.clone(),
                         prefixid,
                         suffix,
-                        peer,
+                        &peer,
                     )
                     .await
                 }
