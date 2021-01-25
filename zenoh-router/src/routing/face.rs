@@ -225,7 +225,7 @@ impl Primitives for Face {
                         }
                     };
 
-                    undeclare_router_subscription(
+                    forget_router_subscription(
                         &mut tables,
                         &mut self.state.clone(),
                         prefixid,
@@ -261,7 +261,7 @@ impl Primitives for Face {
                         }
                     };
 
-                    undeclare_peer_subscription(
+                    forget_peer_subscription(
                         &mut tables,
                         &mut self.state.clone(),
                         prefixid,
@@ -277,13 +277,8 @@ impl Primitives for Face {
                 }
             },
             _ => {
-                undeclare_client_subscription(
-                    &mut tables,
-                    &mut self.state.clone(),
-                    prefixid,
-                    suffix,
-                )
-                .await
+                forget_client_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix)
+                    .await
             }
         }
     }

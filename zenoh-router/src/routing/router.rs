@@ -65,6 +65,11 @@ impl Tables {
         &self.root_res
     }
 
+    // pub(crate) unsafe fn split_mut(self) -> (Self, &mut Self) {
+    //     let r = &mut self as *mut Self;
+    //     (self, &mut *r)
+    // }
+
     pub async fn print(&self) -> String {
         Resource::print_tree(&self.root_res)
     }
@@ -151,7 +156,7 @@ impl Tables {
                 face.local_mappings.clear();
                 while let Some(mut res) = face.remote_subs.pop() {
                     Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
-                    unregister_client_subscription(self, &mut face_clone, &mut res).await;
+                    undeclare_client_subscription(self, &mut face_clone, &mut res).await;
                     Resource::clean(&mut res);
                 }
                 while let Some(mut res) = face.remote_qabl.pop() {
@@ -305,18 +310,34 @@ impl SessionEventHandler for LinkStateInterceptor {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
                 let mut tables = self.tables.write().await;
+                // let tables2 = &mut *(&tables as *mut Tables);
                 let whatami = self.session.get_whatami()?;
                 match (tables.whatami, whatami) {
                     (whatami::ROUTER, whatami::ROUTER) => {
-                        let net = tables.routers_net.as_mut().unwrap();
-                        net.link_states(list.link_states, pid).await;
-                        let new_childs = net.compute_trees().await;
+                        for (_, removed_node) in tables
+                            .routers_net
+                            .as_mut()
+                            .unwrap()
+                            .link_states(list.link_states, pid)
+                            .await
+                        {
+                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER)
+                                .await;
+                        }
+                        let new_childs = tables.routers_net.as_mut().unwrap().compute_trees().await;
                         pubsub_tree_change(&mut tables, new_childs, whatami::ROUTER).await;
                     }
                     _ => {
-                        let net = tables.peers_net.as_mut().unwrap();
-                        net.link_states(list.link_states, pid).await;
-                        let new_childs = net.compute_trees().await;
+                        for (_, removed_node) in tables
+                            .peers_net
+                            .as_mut()
+                            .unwrap()
+                            .link_states(list.link_states, pid)
+                            .await
+                        {
+                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
+                        }
+                        let new_childs = tables.peers_net.as_mut().unwrap().compute_trees().await;
                         pubsub_tree_change(&mut tables, new_childs, whatami::PEER).await;
                     }
                 };
@@ -337,15 +358,29 @@ impl SessionEventHandler for LinkStateInterceptor {
         match self.session.get_whatami() {
             Ok(whatami) => match (tables.whatami, whatami) {
                 (whatami::ROUTER, whatami::ROUTER) => {
-                    let net = tables.routers_net.as_mut().unwrap();
-                    net.remove_link(&self.session).await;
-                    let new_childs = net.compute_trees().await;
+                    for (_, removed_node) in tables
+                        .routers_net
+                        .as_mut()
+                        .unwrap()
+                        .remove_link(&self.session)
+                        .await
+                    {
+                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
+                    }
+                    let new_childs = tables.routers_net.as_mut().unwrap().compute_trees().await;
                     pubsub_tree_change(&mut tables, new_childs, whatami::ROUTER).await;
                 }
                 _ => {
-                    let net = tables.peers_net.as_mut().unwrap();
-                    net.remove_link(&self.session).await;
-                    let new_childs = net.compute_trees().await;
+                    for (_, removed_node) in tables
+                        .peers_net
+                        .as_mut()
+                        .unwrap()
+                        .remove_link(&self.session)
+                        .await
+                    {
+                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
+                    }
+                    let new_childs = tables.peers_net.as_mut().unwrap().compute_trees().await;
                     pubsub_tree_change(&mut tables, new_childs, whatami::PEER).await;
                 }
             },

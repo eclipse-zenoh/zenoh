@@ -336,7 +336,7 @@ async unsafe fn propagate_forget_simple_subscription(tables: &mut Tables, res: &
 async fn propagate_forget_sourced_subscription(
     tables: &mut Tables,
     res: &mut Arc<Resource>,
-    src_face: &mut Arc<FaceState>,
+    src_face: Option<&Arc<FaceState>>,
     source: &PeerId,
     net_type: whatami::Type,
 ) {
@@ -346,7 +346,7 @@ async fn propagate_forget_sourced_subscription(
             for child in &net.trees[tree_sid.index()].childs {
                 match tables.get_face(&net.graph[*child].pid).cloned() {
                     Some(mut someface) => {
-                        if someface.id != src_face.id {
+                        if src_face.is_none() || someface.id != src_face.unwrap().id {
                             let reskey = Resource::decl_key(res, &mut someface).await;
 
                             log::debug!(
@@ -382,32 +382,39 @@ async fn propagate_forget_sourced_subscription(
 
 async unsafe fn unregister_router_subscription(
     tables: &mut Tables,
-    face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     router: &PeerId,
 ) {
-    if res.router_subs.contains(&router) {
-        log::debug!(
-            "Unregister router subscription {} (router: {})",
-            res.name(),
-            router
-        );
-        Arc::get_mut_unchecked(res)
-            .router_subs
-            .retain(|sub| sub != router);
+    log::debug!(
+        "Unregister router subscription {} (router: {})",
+        res.name(),
+        router
+    );
+    Arc::get_mut_unchecked(res)
+        .router_subs
+        .retain(|sub| sub != router);
 
-        propagate_forget_sourced_subscription(tables, res, face, router, whatami::ROUTER).await;
+    if res.router_subs.is_empty() {
+        tables.router_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
 
-        if res.router_subs.is_empty() {
-            tables.router_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
-
-            unregister_peer_subscription(tables, face, res, &tables.pid.clone()).await;
-            propagate_forget_simple_subscription(tables, res).await;
-        }
+        undeclare_peer_subscription(tables, None, res, &tables.pid.clone()).await;
+        propagate_forget_simple_subscription(tables, res).await;
     }
 }
 
-pub async fn undeclare_router_subscription(
+async unsafe fn undeclare_router_subscription(
+    tables: &mut Tables,
+    face: Option<&Arc<FaceState>>,
+    res: &mut Arc<Resource>,
+    router: &PeerId,
+) {
+    if res.router_subs.contains(router) {
+        unregister_router_subscription(tables, res, router).await;
+        propagate_forget_sourced_subscription(tables, res, face, router, whatami::ROUTER).await;
+    }
+}
+
+pub async fn forget_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -417,7 +424,7 @@ pub async fn undeclare_router_subscription(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => unsafe {
-                unregister_router_subscription(tables, face, &mut res, router).await;
+                undeclare_router_subscription(tables, Some(face), &mut res, router).await;
                 Resource::clean(&mut res)
             },
             None => log::error!("Undeclare unknown router subscription!"),
@@ -428,29 +435,36 @@ pub async fn undeclare_router_subscription(
 
 async unsafe fn unregister_peer_subscription(
     tables: &mut Tables,
-    face: &mut Arc<FaceState>,
+    res: &mut Arc<Resource>,
+    peer: &PeerId,
+) {
+    log::debug!(
+        "Unregister peer subscription {} (peer: {})",
+        res.name(),
+        peer
+    );
+    Arc::get_mut_unchecked(res)
+        .peer_subs
+        .retain(|sub| sub != peer);
+
+    if res.peer_subs.is_empty() {
+        tables.peer_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
+    }
+}
+
+async unsafe fn undeclare_peer_subscription(
+    tables: &mut Tables,
+    face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     peer: &PeerId,
 ) {
     if res.peer_subs.contains(&peer) {
-        log::debug!(
-            "Unregister peer subscription {} (peer: {})",
-            res.name(),
-            peer
-        );
-        Arc::get_mut_unchecked(res)
-            .peer_subs
-            .retain(|sub| sub != peer);
-
+        unregister_peer_subscription(tables, res, peer).await;
         propagate_forget_sourced_subscription(tables, res, face, peer, whatami::PEER).await;
-
-        if res.peer_subs.is_empty() {
-            tables.peer_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
-        }
     }
 }
 
-pub async fn undeclare_peer_subscription(
+pub async fn forget_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -460,16 +474,16 @@ pub async fn undeclare_peer_subscription(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => unsafe {
-                unregister_peer_subscription(tables, face, &mut res, peer).await;
+                undeclare_peer_subscription(tables, Some(face), &mut res, peer).await;
 
                 if tables.whatami == whatami::ROUTER
                     && !res.contexts.values().any(|ctx| ctx.subs.is_some())
                     && !tables
                         .peer_subs
                         .iter()
-                        .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
+                        .any(|res| res.peer_subs.iter().any(|peer| peer != &tables.pid))
                 {
-                    unregister_router_subscription(tables, face, &mut res, &tables.pid.clone())
+                    undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone())
                         .await;
                 }
 
@@ -481,7 +495,7 @@ pub async fn undeclare_peer_subscription(
     }
 }
 
-pub(crate) async unsafe fn unregister_client_subscription(
+pub(crate) async unsafe fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -506,7 +520,7 @@ pub(crate) async unsafe fn unregister_client_subscription(
                     .iter()
                     .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
             {
-                unregister_router_subscription(tables, face, res, &tables.pid.clone()).await;
+                undeclare_router_subscription(tables, None, res, &tables.pid.clone()).await;
             }
         }
         whatami::PEER => {
@@ -516,7 +530,7 @@ pub(crate) async unsafe fn unregister_client_subscription(
                     .iter()
                     .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
             {
-                unregister_peer_subscription(tables, face, res, &tables.pid.clone()).await;
+                undeclare_peer_subscription(tables, None, res, &tables.pid.clone()).await;
             }
         }
         _ => {
@@ -561,7 +575,7 @@ pub(crate) async unsafe fn unregister_client_subscription(
     Resource::clean(res)
 }
 
-pub async fn undeclare_client_subscription(
+pub async fn forget_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -570,7 +584,7 @@ pub async fn undeclare_client_subscription(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => unsafe {
-                unregister_client_subscription(tables, face, &mut res).await;
+                undeclare_client_subscription(tables, face, &mut res).await;
             },
             None => log::error!("Undeclare unknown subscription!"),
         },
@@ -590,6 +604,40 @@ pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<F
             let reskey = Resource::decl_key(&sub, face).await;
             face.primitives.subscriber(&reskey, &sub_info, None).await;
         }
+    }
+}
+
+pub(crate) async fn pubsub_remove_node(
+    tables: &mut Tables,
+    node: &PeerId,
+    net_type: whatami::Type,
+) {
+    match net_type {
+        whatami::ROUTER => unsafe {
+            for mut res in tables
+                .router_subs
+                .iter()
+                .filter(|res| res.router_subs.contains(node))
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>()
+            {
+                unregister_router_subscription(tables, &mut res, node).await;
+                Resource::clean(&mut res)
+            }
+        },
+        whatami::PEER => unsafe {
+            for mut res in tables
+                .peer_subs
+                .iter()
+                .filter(|res| res.peer_subs.contains(node))
+                .cloned()
+                .collect::<Vec<Arc<Resource>>>()
+            {
+                unregister_peer_subscription(tables, &mut res, node).await;
+                Resource::clean(&mut res)
+            }
+        },
+        _ => (),
     }
 }
 

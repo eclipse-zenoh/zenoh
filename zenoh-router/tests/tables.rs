@@ -269,13 +269,13 @@ fn clean_test() {
         let res3 = optres3.unwrap();
         assert!(res3.upgrade().is_some());
 
-        undeclare_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 1, "/todrop12")
+        forget_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 1, "/todrop12")
             .await;
         assert!(res1.upgrade().is_some());
         assert!(res2.upgrade().is_some());
         assert!(!res3.upgrade().is_some());
 
-        undeclare_client_subscription(
+        forget_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
             0,
@@ -307,8 +307,7 @@ fn clean_test() {
         let res1 = optres1.unwrap();
         assert!(res1.upgrade().is_some());
 
-        undeclare_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 0, "/todrop3")
-            .await;
+        forget_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 0, "/todrop3").await;
         assert!(res1.upgrade().is_some());
 
         undeclare_resource(&mut tables, &mut face0.upgrade().unwrap(), 2).await;

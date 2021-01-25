@@ -207,7 +207,11 @@ impl Network {
         self.graph.update_edge(idx1, idx2, weight);
     }
 
-    pub(crate) async fn link_states(&mut self, link_states: Vec<LinkState>, src: PeerId) {
+    pub(crate) async fn link_states(
+        &mut self,
+        link_states: Vec<LinkState>,
+        src: PeerId,
+    ) -> Vec<(NodeIndex, Node)> {
         log::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
 
         let src_link = match self.get_link_mut(&src) {
@@ -218,7 +222,7 @@ impl Network {
                     self.name,
                     src
                 );
-                return;
+                return vec![];
             }
         };
 
@@ -387,7 +391,7 @@ impl Network {
         let removed = self.remove_detached_nodes();
         let link_states = link_states
             .into_iter()
-            .filter(|ls| !removed.contains(&ls.1))
+            .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
             .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
 
         if self.orchestrator.whatami == whatami::PEER {
@@ -451,6 +455,7 @@ impl Network {
                 }
             }
         }
+        removed
     }
 
     pub(crate) async fn add_link(&mut self, session: Session) {
@@ -497,7 +502,7 @@ impl Network {
         self.send_on_link(idxs, &session).await;
     }
 
-    pub(crate) async fn remove_link(&mut self, session: &Session) {
+    pub(crate) async fn remove_link(&mut self, session: &Session) -> Vec<(NodeIndex, Node)> {
         let pid = session.get_pid().unwrap();
         log::trace!("{} remove_link {}", self.name, pid);
         self.links
@@ -508,7 +513,7 @@ impl Network {
         if let Some(edge) = self.graph.find_edge_undirected(self.idx, idx) {
             self.graph.remove_edge(edge.0);
         }
-        self.remove_detached_nodes();
+        let removed = self.remove_detached_nodes();
 
         self.graph[self.idx].sn += 1;
 
@@ -541,9 +546,11 @@ impl Network {
                 log::error!("{} Error sending LinkStateList: {}", self.name, e);
             }
         }
+
+        removed
     }
 
-    fn remove_detached_nodes(&mut self) -> Vec<NodeIndex> {
+    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, Node)> {
         let mut dfs_stack = vec![self.idx];
         let mut visit_map = self.graph.visit_map();
         while let Some(node) = dfs_stack.pop() {
@@ -559,15 +566,12 @@ impl Network {
         }
 
         let mut removed = vec![];
-        self.graph.retain_nodes(|graph, idx| {
-            let pid = &graph[idx].pid;
-            let retain = visit_map.is_visited(&idx);
-            if !retain {
-                log::debug!("Remove node {}", pid);
-                removed.push(idx);
+        for idx in self.graph.node_indices().collect::<Vec<NodeIndex>>() {
+            if !visit_map.is_visited(&idx) {
+                log::debug!("Remove node {}", &self.graph[idx].pid);
+                removed.push((idx, self.graph.remove_node(idx).unwrap()));
             }
-            retain
-        });
+        }
         removed
     }
 
