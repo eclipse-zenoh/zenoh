@@ -287,7 +287,6 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
         // Syncrhonize after opening the sessions
         c_barod.wait().timeout(TIMEOUT).await.unwrap();
-        task::sleep(SLEEP).await;
 
         // Verify that the session has been correctly open
         println!(

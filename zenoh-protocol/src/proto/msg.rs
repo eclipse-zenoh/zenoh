@@ -121,6 +121,10 @@ mod imsg {
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
     }
+
+    pub(super) mod attachment {
+        pub(crate) const PROPERTIES: u8 = 0x00;
+    }
 }
 
 /*************************************/
@@ -145,6 +149,12 @@ pub mod zmsg {
         // Message decorators
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
+    }
+
+    pub mod attachment {
+        use super::imsg;
+
+        pub const PROPERTIES: u8 = imsg::attachment::PROPERTIES;
     }
 
     // Zenoh message flags
@@ -759,6 +769,12 @@ pub mod smsg {
 
         // Message decorators
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
+    }
+
+    pub mod attachment {
+        use super::imsg;
+
+        pub const PROPERTIES: u8 = imsg::attachment::PROPERTIES;
     }
 
     // Session message flags

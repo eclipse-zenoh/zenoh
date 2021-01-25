@@ -14,16 +14,55 @@
 use super::authenticator::AuthenticatedPeerLink;
 use super::defaults::SESSION_SEQ_NUM_RESOLUTION;
 use super::{Opened, Session, SessionManager};
-use crate::core::{PeerId, WhatAmI, ZInt};
+use crate::core::{PeerId, Property, WhatAmI, ZInt};
 use crate::io::{RBuf, WBuf};
 use crate::link::{Link, Locator};
-use crate::proto::{smsg, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage};
+use crate::proto::{
+    smsg, Attachment, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
+};
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zerror};
 
 type IError = (ZError, Option<u8>);
 type IResult<T> = Result<T, IError>;
+
+const WBUF_SIZE: usize = 64;
+
+/*************************************/
+/*              UTILS                */
+/*************************************/
+fn attachment_from_properties(ps: &[Property]) -> ZResult<Attachment> {
+    if ps.is_empty() {
+        let e = "Can not create an attachment with zero properties".to_string();
+        zerror!(ZErrorKind::Other { descr: e })
+    } else {
+        let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        wbuf.write_properties(ps);
+        let rbuf: RBuf = wbuf.into();
+        let attachment = Attachment::make(smsg::attachment::PROPERTIES, rbuf);
+        Ok(attachment)
+    }
+}
+
+fn properties_from_attachment(mut att: Attachment) -> ZResult<Vec<Property>> {
+    if att.encoding != smsg::attachment::PROPERTIES {
+        let e = format!(
+            "Invalid attachment encoding for properties: {}",
+            att.encoding
+        );
+        return zerror!(ZErrorKind::Other { descr: e });
+    }
+
+    let res = att.buffer.read_properties();
+    match res {
+        Some(ps) => Ok(ps),
+        None => {
+            let e = "Error while decoding properties".to_string();
+            zerror!(ZErrorKind::Other { descr: e })
+        }
+    }
+}
 
 /*************************************/
 /*             COOKIE                */
@@ -88,6 +127,9 @@ async fn close_link(
     }
 }
 
+/*************************************/
+/*              OPEN                 */
+/*************************************/
 struct InitSynOutput {
     sn_resolution: ZInt,
 }
@@ -96,11 +138,24 @@ async fn open_send_init_syn(
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<InitSynOutput> {
+    // Build the InitSyn attachment
+    let init_syn_attachment = {
+        let mut init_syn_properties: Vec<Property> = vec![];
+        for pa in manager.config.peer_authenticator.iter() {
+            let mut ps = pa
+                .get_init_syn_properties(&auth_link, &manager.config.pid)
+                .await
+                .map_err(|e| (e, None))?;
+            init_syn_properties.append(&mut ps);
+        }
+        attachment_from_properties(&init_syn_properties).ok()
+    };
+
     // Build and send an InitSyn Message
-    let initsyn_version = manager.config.version;
-    let initsyn_whatami = manager.config.whatami;
-    let initsyn_pid = manager.config.pid.clone();
-    let initsyn_sn_resolution = if manager.config.sn_resolution == *SESSION_SEQ_NUM_RESOLUTION {
+    let init_syn_version = manager.config.version;
+    let init_syn_whatami = manager.config.whatami;
+    let init_syn_pid = manager.config.pid.clone();
+    let init_syn_sn_resolution = if manager.config.sn_resolution == *SESSION_SEQ_NUM_RESOLUTION {
         None
     } else {
         Some(manager.config.sn_resolution)
@@ -108,11 +163,11 @@ async fn open_send_init_syn(
 
     // Build and send the InitSyn message
     let message = SessionMessage::make_init_syn(
-        initsyn_version,
-        initsyn_whatami,
-        initsyn_pid,
-        initsyn_sn_resolution,
-        None,
+        init_syn_version,
+        init_syn_whatami,
+        init_syn_pid,
+        init_syn_sn_resolution,
+        init_syn_attachment,
     );
     let _ = link
         .write_session_message(message)
@@ -131,6 +186,7 @@ struct InitAckOutput {
     sn_resolution: ZInt,
     initial_sn_tx: ZInt,
     cookie: RBuf,
+    open_syn_attachment: Option<Attachment>,
 }
 async fn open_recv_init_ack(
     manager: &SessionManager,
@@ -151,8 +207,8 @@ async fn open_recv_init_ack(
         ));
     }
 
-    let msg = messages.remove(0);
-    let (initack_whatami, initack_pid, initack_sn_resolution, initack_cookie) = match msg.body {
+    let mut msg = messages.remove(0);
+    let (init_ack_whatami, init_ack_pid, init_ack_sn_resolution, init_ack_cookie) = match msg.body {
         SessionBody::InitAck(InitAck {
             whatami,
             pid,
@@ -173,12 +229,12 @@ async fn open_recv_init_ack(
 
     // Check if a session is already open with the target peer
     let mut guard = zasynclock!(manager.opened);
-    let (sn_resolution, initial_sn_tx) = if let Some(s) = guard.get(&initack_pid) {
-        if let Some(sn_resolution) = initack_sn_resolution {
+    let (sn_resolution, initial_sn_tx, is_opened) = if let Some(s) = guard.get(&init_ack_pid) {
+        if let Some(sn_resolution) = init_ack_sn_resolution {
             if sn_resolution != s.sn_resolution {
                 let e = format!(
                     "Rejecting InitAck on link {} because of invalid sn resolution: {}",
-                    link, initack_pid
+                    link, init_ack_pid
                 );
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
@@ -186,14 +242,14 @@ async fn open_recv_init_ack(
                 ));
             }
         }
-        (s.sn_resolution, s.initial_sn)
+        (s.sn_resolution, s.initial_sn, true)
     } else {
-        let sn_resolution = match initack_sn_resolution {
+        let sn_resolution = match init_ack_sn_resolution {
             Some(sn_resolution) => {
                 if sn_resolution > input.sn_resolution {
                     let e = format!(
                         "Rejecting InitAck on link {} because of invalid sn resolution: {}",
-                        link, initack_pid
+                        link, init_ack_pid
                     );
                     return Err((
                         zerror2!(ZErrorKind::InvalidMessage { descr: e }),
@@ -208,27 +264,52 @@ async fn open_recv_init_ack(
             let mut rng = rand::thread_rng();
             rng.gen_range(0..sn_resolution)
         };
+        (sn_resolution, initial_sn_tx, false)
+    };
 
+    let init_ack_properties: Vec<Property> = match msg.attachment.take() {
+        Some(att) => {
+            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+        }
+        None => vec![],
+    };
+    let mut open_syn_properties: Vec<Property> = vec![];
+    let open_syn_attachment = {
+        for pa in manager.config.peer_authenticator.iter() {
+            let mut ps = pa
+                .handle_init_ack(
+                    &auth_link,
+                    &init_ack_pid,
+                    sn_resolution,
+                    &init_ack_properties,
+                )
+                .await
+                .map_err(|e| (e, None))?;
+            open_syn_properties.append(&mut ps);
+        }
+        attachment_from_properties(&open_syn_properties).ok()
+    };
+
+    if !is_opened {
         // Store the data
         guard.insert(
-            initack_pid.clone(),
+            init_ack_pid.clone(),
             Opened {
-                whatami: initack_whatami,
+                whatami: init_ack_whatami,
                 sn_resolution,
                 initial_sn: initial_sn_tx,
             },
         );
-
-        (sn_resolution, initial_sn_tx)
-    };
+    }
     drop(guard);
 
     let output = InitAckOutput {
-        pid: initack_pid,
-        whatami: initack_whatami,
+        pid: init_ack_pid,
+        whatami: init_ack_whatami,
         sn_resolution,
         initial_sn_tx,
-        cookie: initack_cookie,
+        cookie: init_ack_cookie,
+        open_syn_attachment,
     };
     Ok(output)
 }
@@ -242,14 +323,17 @@ struct OpenSynOutput {
 async fn open_send_open_syn(
     manager: &SessionManager,
     link: &Link,
-    auth_link: &AuthenticatedPeerLink,
+    _auth_link: &AuthenticatedPeerLink,
     input: InitAckOutput,
 ) -> IResult<OpenSynOutput> {
     // Build and send an OpenSyn message
     let lease = manager.config.lease;
-    let attachment = None;
-    let message =
-        SessionMessage::make_open_syn(lease, input.initial_sn_tx, input.cookie, attachment);
+    let message = SessionMessage::make_open_syn(
+        lease,
+        input.initial_sn_tx,
+        input.cookie,
+        input.open_syn_attachment,
+    );
     let _ = link
         .write_session_message(message)
         .await
@@ -291,7 +375,7 @@ async fn open_recv_open_ack(
         ));
     }
 
-    let msg = messages.remove(0);
+    let mut msg = messages.remove(0);
     let (lease, initial_sn_rx) = match msg.body {
         SessionBody::OpenAck(OpenAck { lease, initial_sn }) => (lease, initial_sn),
         invalid => {
@@ -305,6 +389,19 @@ async fn open_recv_open_ack(
             ));
         }
     };
+
+    let opean_ack_properties: Vec<Property> = match msg.attachment.take() {
+        Some(att) => {
+            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+        }
+        None => vec![],
+    };
+    for pa in manager.config.peer_authenticator.iter() {
+        let _ = pa
+            .handle_open_ack(&auth_link, &opean_ack_properties)
+            .await
+            .map_err(|e| (e, None))?;
+    }
 
     let output = OpenAckOutput {
         pid: input.pid,
@@ -402,7 +499,22 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
     Ok(session)
 }
 
-pub(super) async fn accept_link(manager: &SessionManager, link: &Link) -> ZResult<()> {
+/*************************************/
+/*             ACCEPT                */
+/*************************************/
+// async fn accept_recv_init_syn(
+//     manager: &SessionManager,
+//     link: &Link,
+//     auth_link: &AuthenticatedPeerLink,
+// ) -> IResult<()> {
+
+// }
+
+pub(super) async fn accept_link(
+    manager: &SessionManager,
+    link: &Link,
+    _auth_link: &AuthenticatedPeerLink,
+) -> ZResult<()> {
     /*************************************/
     /*             InitSyn               */
     /*************************************/

@@ -33,7 +33,7 @@ pub trait LinkAuthenticatorTrait {
         &self,
         link: &Link,
         properties: Option<LinkProperties>,
-    ) -> ZResult<AuthenticatedPeerLink>;
+    ) -> ZResult<Option<PeerId>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
     /// of the authenticator in such a way no unnecessary data is left around
@@ -56,16 +56,10 @@ impl DummyLinkAuthenticator {
 impl LinkAuthenticatorTrait for DummyLinkAuthenticator {
     async fn handle_new_link(
         &self,
-        link: &Link,
-        properties: Option<LinkProperties>,
-    ) -> ZResult<AuthenticatedPeerLink> {
-        let apl = AuthenticatedPeerLink {
-            src: link.get_src(),
-            dst: link.get_dst(),
-            peer_id: None,
-            properties,
-        };
-        Ok(apl)
+        _link: &Link,
+        _properties: Option<LinkProperties>,
+    ) -> ZResult<Option<PeerId>> {
+        Ok(None)
     }
 
     async fn handle_link_err(&self, _link: &Link) {}

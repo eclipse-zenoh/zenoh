@@ -12,7 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::authenticator::{
-    DummyLinkAuthenticator, DummyPeerAuthenticator, LinkAuthenticator, PeerAuthenticator,
+    AuthenticatedPeerLink, DummyLinkAuthenticator, DummyPeerAuthenticator, LinkAuthenticator,
+    PeerAuthenticator,
 };
 use super::defaults::{
     SESSION_BATCH_SIZE, SESSION_KEEP_ALIVE, SESSION_LEASE, SESSION_OPEN_MAX_CONCURRENT,
@@ -22,7 +23,9 @@ use super::transport::SessionTransport;
 use super::Session;
 use super::SessionHandler;
 use crate::core::{PeerId, WhatAmI, ZInt};
-use crate::link::{Link, LinkManager, LinkManagerBuilder, Locator, LocatorProtocol};
+use crate::link::{
+    Link, LinkManager, LinkManagerBuilder, LinkProperties, Locator, LocatorProtocol,
+};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
@@ -106,8 +109,8 @@ pub struct SessionManagerOptionalConfig {
     pub retries: Option<usize>,
     pub max_sessions: Option<usize>,
     pub max_links: Option<usize>,
-    pub peer_authenticator: Option<PeerAuthenticator>,
-    pub link_authenticator: Option<LinkAuthenticator>,
+    pub peer_authenticator: Option<Vec<PeerAuthenticator>>,
+    pub link_authenticator: Option<Vec<LinkAuthenticator>>,
 }
 
 pub(super) struct SessionManagerConfigInner {
@@ -123,7 +126,7 @@ pub(super) struct SessionManagerConfigInner {
     pub(super) max_sessions: Option<usize>,
     pub(super) max_links: Option<usize>,
     pub(super) peer_authenticator: Vec<PeerAuthenticator>,
-    pub(super) link_authenticator: LinkAuthenticator,
+    pub(super) link_authenticator: Vec<LinkAuthenticator>,
     pub(super) handler: Arc<dyn SessionHandler + Send + Sync>,
 }
 
@@ -161,7 +164,7 @@ impl SessionManager {
         let mut max_sessions = None;
         let mut max_links = None;
         let mut peer_authenticator = vec![DummyPeerAuthenticator::make()];
-        let mut link_authenticator = DummyLinkAuthenticator::make();
+        let mut link_authenticator = vec![DummyLinkAuthenticator::make()];
 
         // Override default values if provided
         if let Some(opt) = opt_config {
@@ -186,7 +189,7 @@ impl SessionManager {
             max_sessions = opt.max_sessions;
             max_links = opt.max_links;
             if let Some(v) = opt.peer_authenticator {
-                peer_authenticator = vec![v];
+                peer_authenticator = v;
             }
             if let Some(v) = opt.link_authenticator {
                 link_authenticator = v;
@@ -439,7 +442,7 @@ impl SessionManager {
         zerror!(ZErrorKind::Other { descr: e })
     }
 
-    pub(crate) async fn handle_new_link(&self, link: Link) {
+    pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LinkProperties>) {
         let mut guard = zasynclock!(self.incoming);
         if guard.len() >= *SESSION_OPEN_MAX_CONCURRENT {
             // We reached the limit of concurrent incoming session, this means two things:
@@ -457,19 +460,53 @@ impl SessionManager {
         guard.insert(link.clone());
         drop(guard);
 
+        let mut peer_id: Option<PeerId> = None;
+        for la in self.config.link_authenticator.iter() {
+            let res = la.handle_new_link(&link, properties.clone()).await;
+            match res {
+                Ok(pid) => {
+                    // Check that all the peer authenticators
+                    // eventually return the same PeerId
+                    if let Some(pid1) = peer_id.as_ref() {
+                        if let Some(pid2) = pid.as_ref() {
+                            if pid1 != pid2 {
+                                log::debug!("Ambigous PeerID identification for link: {}", link);
+                                let _ = link.close().await;
+                                zasynclock!(self.incoming).remove(&link);
+                                return;
+                            }
+                        }
+                    } else {
+                        peer_id = pid;
+                    }
+                }
+                Err(e) => {
+                    log::debug!("{}", e);
+                    return;
+                }
+            }
+        }
+
+        // Spawn a task to accept the link
         let c_incoming = self.incoming.clone();
         let c_manager = self.clone();
         task::spawn(async move {
+            let auth_link = AuthenticatedPeerLink {
+                src: link.get_src(),
+                dst: link.get_dst(),
+                peer_id,
+                properties,
+            };
+
             let to = Duration::from_millis(*SESSION_OPEN_TIMEOUT);
-            let res = super::initial::accept_link(&c_manager, &link)
+            let res = super::initial::accept_link(&c_manager, &link, &auth_link)
                 .timeout(to)
                 .await;
             if let Err(e) = res {
                 log::debug!("{}", e);
                 let _ = link.close().await;
             }
-            let mut guard = zasynclock!(c_incoming);
-            guard.remove(&link);
+            zasynclock!(c_incoming).remove(&link);
         });
     }
 }
