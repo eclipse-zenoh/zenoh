@@ -60,6 +60,7 @@ pub(crate) struct Tree {
 
 pub(crate) struct Network {
     pub(crate) name: String,
+    pub(crate) peers_autoconnect: bool,
     pub(crate) idx: NodeIndex,
     pub(crate) links: Vec<Link>,
     pub(crate) trees: Vec<Tree>,
@@ -68,7 +69,12 @@ pub(crate) struct Network {
 }
 
 impl Network {
-    pub(crate) async fn new(name: String, pid: PeerId, orchestrator: SessionOrchestrator) -> Self {
+    pub(crate) async fn new(
+        name: String,
+        pid: PeerId,
+        orchestrator: SessionOrchestrator,
+        peers_autoconnect: bool,
+    ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         log::debug!("{} Add node (self) {}", name, pid);
         let idx = graph.add_node(Node {
@@ -80,6 +86,7 @@ impl Network {
         });
         Network {
             name,
+            peers_autoconnect,
             idx,
             links: vec![],
             trees: vec![Tree {
@@ -394,7 +401,7 @@ impl Network {
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
             .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
 
-        if self.orchestrator.whatami == whatami::PEER {
+        if self.peers_autoconnect && self.orchestrator.whatami == whatami::PEER {
             // Connect discovered peers
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];

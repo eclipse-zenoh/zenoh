@@ -93,6 +93,10 @@ impl Runtime {
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
         let mut orchestrator = SessionOrchestrator::new(session_manager, whatami);
+        let peers_autuconnect = config
+            .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
         if config
             .get_or(&ZN_LINK_STATE_KEY, ZN_LINK_STATE_DEFAULT)
             .to_lowercase()
@@ -100,11 +104,11 @@ impl Runtime {
         {
             unsafe {
                 Arc::get_mut_unchecked(&mut router)
-                    .init_link_state(orchestrator.clone())
+                    .init_link_state(orchestrator.clone(), peers_autuconnect)
                     .await;
             }
         }
-        match orchestrator.init(config).await {
+        match orchestrator.init(config, peers_autuconnect).await {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
                     pid,
@@ -223,6 +227,15 @@ pub mod config {
     pub const ZN_LINK_STATE_KEY: u64 = 0x4B;
     pub const ZN_LINK_STATE_DEFAULT: &str = "true";
 
+    /// Indicates if peers should connect to each other
+    /// when they discover each other (through multicast
+    /// or link_state protocol).
+    /// String key : `"peers_autoconnect"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"true"`.
+    pub const ZN_PEERS_AUTOCONNECT_KEY: u64 = 0x4C;
+    pub const ZN_PEERS_AUTOCONNECT_DEFAULT: &str = "true";
+
     pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
         match m {
             "peer" => Ok(whatami::PEER),
@@ -249,6 +262,7 @@ impl KeyTranscoder for RuntimeTranscoder {
             "scouting_delay" => Some(ZN_SCOUTING_DELAY_KEY),
             "add_timestamp" => Some(ZN_ADD_TIMESTAMP_KEY),
             "link_state" => Some(ZN_LINK_STATE_KEY),
+            "peers_autoconnect" => Some(ZN_PEERS_AUTOCONNECT_KEY),
             _ => None,
         }
     }
@@ -267,6 +281,7 @@ impl KeyTranscoder for RuntimeTranscoder {
             0x49 => Some("scouting_delay".to_string()),
             0x4A => Some("add_timestamp".to_string()),
             0x4B => Some("link_state".to_string()),
+            0x4C => Some("peers_autoconnect".to_string()),
             _ => None,
         }
     }

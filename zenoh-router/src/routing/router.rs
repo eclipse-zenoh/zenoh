@@ -187,7 +187,11 @@ impl Router {
         }
     }
 
-    pub async fn init_link_state(&mut self, orchestrator: SessionOrchestrator) {
+    pub async fn init_link_state(
+        &mut self,
+        orchestrator: SessionOrchestrator,
+        peers_autoconnect: bool,
+    ) {
         let mut tables = self.tables.write().await;
         if orchestrator.whatami == whatami::ROUTER {
             tables.routers_net = Some(
@@ -195,6 +199,7 @@ impl Router {
                     "[Routers network]".to_string(),
                     tables.pid.clone(),
                     orchestrator.clone(),
+                    peers_autoconnect,
                 )
                 .await,
             );
@@ -204,6 +209,7 @@ impl Router {
                 "[Peers network]".to_string(),
                 tables.pid.clone(),
                 orchestrator,
+                peers_autoconnect,
             )
             .await,
         );
