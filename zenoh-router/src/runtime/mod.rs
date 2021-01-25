@@ -41,7 +41,9 @@ pub struct Runtime {
 impl Runtime {
     pub async fn new(version: u8, config: RuntimeProperties, id: Option<&str>) -> ZResult<Runtime> {
         let pid = if let Some(s) = id {
-            let vec = hex::decode(s).map_err(|e| {
+            // filter-out '-' characters (in case s has UUID format)
+            let s = s.replace('-', "");
+            let vec = hex::decode(&s).map_err(|e| {
                 zerror2!(ZErrorKind::Other {
                     descr: format!("Invalid id: {} - {}", s, e)
                 })
