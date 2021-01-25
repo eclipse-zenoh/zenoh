@@ -34,80 +34,80 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Mux<T> {
 #[async_trait]
 impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
     async fn resource(&self, rid: ZInt, reskey: &ResKey) {
-        let mut decls = Vec::new();
-        decls.push(Declaration::Resource {
+        let d = Declaration::Resource {
             rid,
             key: reskey.clone(),
-        });
+        };
+        let decls = vec![d];
         self.handler
             .handle_message(ZenohMessage::make_declare(decls, None))
             .await;
     }
 
     async fn forget_resource(&self, rid: ZInt) {
-        let mut decls = Vec::new();
-        decls.push(Declaration::ForgetResource { rid });
+        let d = Declaration::ForgetResource { rid };
+        let decls = vec![d];
         self.handler
             .handle_message(ZenohMessage::make_declare(decls, None))
             .await;
     }
 
     async fn subscriber(&self, reskey: &ResKey, sub_info: &SubInfo) {
-        let mut decls = Vec::new();
-        decls.push(Declaration::Subscriber {
+        let d = Declaration::Subscriber {
             key: reskey.clone(),
             info: sub_info.clone(),
-        });
+        };
+        let decls = vec![d];
         self.handler
             .handle_message(ZenohMessage::make_declare(decls, None))
             .await;
     }
 
     async fn forget_subscriber(&self, reskey: &ResKey) {
-        let mut decls = Vec::new();
-        decls.push(Declaration::ForgetSubscriber {
+        let d = Declaration::ForgetSubscriber {
             key: reskey.clone(),
-        });
+        };
+        let decls = vec![d];
         self.handler
             .handle_message(ZenohMessage::make_declare(decls, None))
             .await;
     }
 
     async fn publisher(&self, reskey: &ResKey) {
-        let mut decls = Vec::new();
-        decls.push(Declaration::Publisher {
+        let d = Declaration::Publisher {
             key: reskey.clone(),
-        });
+        };
+        let decls = vec![d];
         self.handler
             .handle_message(ZenohMessage::make_declare(decls, None))
             .await;
     }
 
     async fn forget_publisher(&self, reskey: &ResKey) {
-        let mut decls = Vec::new();
-        decls.push(Declaration::ForgetPublisher {
+        let d = Declaration::ForgetPublisher {
             key: reskey.clone(),
-        });
+        };
+        let decls = vec![d];
         self.handler
             .handle_message(ZenohMessage::make_declare(decls, None))
             .await;
     }
 
     async fn queryable(&self, reskey: &ResKey) {
-        let mut decls = Vec::new();
-        decls.push(Declaration::Queryable {
+        let d = Declaration::Queryable {
             key: reskey.clone(),
-        });
+        };
+        let decls = vec![d];
         self.handler
             .handle_message(ZenohMessage::make_declare(decls, None))
             .await;
     }
 
     async fn forget_queryable(&self, reskey: &ResKey) {
-        let mut decls = Vec::new();
-        decls.push(Declaration::ForgetQueryable {
+        let d = Declaration::ForgetQueryable {
             key: reskey.clone(),
-        });
+        };
+        let decls = vec![d];
         self.handler
             .handle_message(ZenohMessage::make_declare(decls, None))
             .await;

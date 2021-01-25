@@ -92,7 +92,7 @@ impl RBuf {
     }
 
     pub fn read_locator(&mut self) -> Option<Locator> {
-        Some(self.read_string()?.parse().ok()?)
+        self.read_string()?.parse().ok()
     }
 
     pub fn read_locators(&mut self) -> Option<Vec<Locator>> {

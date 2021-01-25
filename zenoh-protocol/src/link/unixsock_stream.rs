@@ -24,6 +24,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fs::remove_file;
 use std::net::Shutdown;
+use std::os::unix::io::RawFd;
 use std::time::Duration;
 use uuid::Uuid;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -239,9 +240,11 @@ impl ListenerUnixSockStream {
     }
 }
 
+type ListenerHashMap = (Arc<ListenerUnixSockStream>, RawFd);
+
 pub struct LinkManagerUnixSockStream {
     manager: SessionManager,
-    listener: Arc<RwLock<HashMap<String, Arc<ListenerUnixSockStream>>>>,
+    listener: Arc<RwLock<HashMap<String, ListenerHashMap>>>,
 }
 
 impl LinkManagerUnixSockStream {
@@ -337,6 +340,69 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
     async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
         let path = get_unix_path_as_string(locator);
 
+        // Because of the lack of SO_REUSEADDR we have to check if the
+        // file is still there and if it is not used by another process.
+        // In order to do so we use a separate lock file.
+        // If the lock CAN NOT be acquired means that another process is
+        // holding the lock NOW, therefore we cannot use the socket.
+        // Kernel guarantees that the lock is release if the owner exists
+        // or crashes.
+
+        // If the lock CAN be acquired means no one is using the socket.
+        // Therefore we can unlink the socket file and create the new one with
+        // bind(2)
+
+        // We generate the path for the lock file, by adding .lock
+        // to the socket file
+        let lock_file_path = format!("{}.lock", path);
+
+        // We try to open the lock file, with O_RDONLY | O_CREAT
+        // and mode S_IRUSR | S_IWUSR, user read-write permissions
+        let mut open_flags = nix::fcntl::OFlag::empty();
+
+        open_flags.insert(nix::fcntl::OFlag::O_CREAT);
+        open_flags.insert(nix::fcntl::OFlag::O_RDONLY);
+
+        let mut open_mode = nix::sys::stat::Mode::empty();
+        open_mode.insert(nix::sys::stat::Mode::S_IRUSR);
+        open_mode.insert(nix::sys::stat::Mode::S_IWUSR);
+
+        let lock_fd = match nix::fcntl::open(
+            std::path::Path::new(&lock_file_path),
+            open_flags,
+            open_mode,
+        ) {
+            Ok(raw_fd) => raw_fd,
+            Err(e) => {
+                let e = format!(
+                        "Can not create a new UnixSock-Stream listener on {} - Unable to open lock file: {}",
+                        path, e
+                    );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        // We try to acquire the lock
+
+        match nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::LockExclusiveNonblock) {
+            Ok(()) => (),
+            Err(e) => {
+                let _ = nix::unistd::close(lock_fd);
+                let e = format!(
+                    "Can not create a new UnixSock-Stream listener on {} - Unable to acquire look: {}",
+                    path, e
+                );
+                log::warn!("{}", e);
+                return zerror!(ZErrorKind::InvalidLink { descr: e });
+            }
+        };
+
+        //Lock is acquired we can remove the socket file
+        // If the file does not exist this would return an error.
+        // We are not interested if the file was not existing.
+        let _ = remove_file(path.clone());
+
         // Bind the Unix socket
         let socket = match UnixListener::bind(&path).await {
             Ok(socket) => Arc::new(socket),
@@ -378,7 +444,8 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
 
         let listener = Arc::new(ListenerUnixSockStream::new(socket));
         // Update the list of active listeners on the manager
-        zasyncwrite!(self.listener).insert(local_path_str.clone(), listener.clone());
+        let listener_info = (listener.clone(), lock_fd);
+        zasyncwrite!(self.listener).insert(local_path_str.clone(), listener_info);
 
         // Spawn the accept loop for the listener
         let c_listeners = self.listener.clone();
@@ -399,15 +466,35 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
 
         // Stop the listener
         match zasyncwrite!(self.listener).remove(&path) {
-            Some(listener) => {
+            Some(listener_info) => {
+                let (listener, lock_fd) = listener_info;
                 // Send the stop signal
                 let res = listener.sender.send(()).await;
                 if res.is_ok() {
                     // Wait for the accept loop to be stopped
                     listener.barrier.wait().await;
                 }
+
+                //Release the loc
+                let lock_file_path = format!("{}.lock", path);
+
+                match nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::UnlockNonblock) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        let _ = nix::unistd::close(lock_fd);
+                        let e = format!(
+                            "Can not create a new UnixSock-Stream listener on {}: {}",
+                            path, e
+                        );
+                        log::warn!("{}", e);
+                        return zerror!(ZErrorKind::InvalidLink { descr: e });
+                    }
+                };
+                let _ = nix::unistd::close(lock_fd);
+                let _ = remove_file(path);
+
                 // Remove the Unix Domain Socket file
-                let res = remove_file(path);
+                let res = remove_file(lock_file_path);
                 log::trace!("UnixSock-Stream Domain Socket removal result: {:?}", res);
                 Ok(())
             }

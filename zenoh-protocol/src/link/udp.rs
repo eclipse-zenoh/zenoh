@@ -165,6 +165,15 @@ impl LinkTrait for Udp {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
         if let Some(unconnected) = self.unconnected.as_ref() {
+            // Bring back the buffer if present in the input
+            if let Some(tuple) = unconnected.input.try_take().await {
+                let (slice, _start, len) = tuple;
+                unconnected.output.put((slice, len)).await;
+            } else if unconnected.output.has_take_waiting() {
+                let slice = vec![0u8; UDP_MAX_MTU];
+                unconnected.output.put((slice, UDP_MAX_MTU)).await;
+            }
+            // Delete the link from the list of links
             let mut guard = zasynclock!(unconnected.links);
             guard.remove(&(self.src_addr, self.dst_addr));
             if !unconnected.status.is_active() && guard.is_empty() {
@@ -513,7 +522,7 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
 
         log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
         // Buffers for deserialization
-        let mut buff = vec![0; UDP_MAX_MTU];
+        let mut buff = vec![0u8; UDP_MAX_MTU];
         loop {
             // Wait for incoming connections
             let (n, dst_addr) = match listener.socket.recv_from(&mut buff).await {
