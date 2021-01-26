@@ -69,3 +69,9 @@ impl Cipher {
         Ok(bytes)
     }
 }
+
+impl Default for Cipher {
+    fn default() -> Cipher {
+        Cipher::new()
+    }
+}
