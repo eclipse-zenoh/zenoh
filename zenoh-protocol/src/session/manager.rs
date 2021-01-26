@@ -32,6 +32,7 @@ use async_std::task;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::crypto::Cipher;
 use zenoh_util::{zasynclock, zerror};
 
 /// # Examples
@@ -143,6 +144,8 @@ pub struct SessionManager {
     pub(super) opened: Arc<Mutex<HashMap<PeerId, Opened>>>,
     // Incoming uninitialized sessions
     pub(super) incoming: Arc<Mutex<HashSet<Link>>>,
+    // Default cipher for cookies
+    pub(super) cipher: Arc<Cipher>,
     // Established listeners
     protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManager>>>,
     // Established sessions
@@ -219,6 +222,7 @@ impl SessionManager {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             opened: Arc::new(Mutex::new(HashMap::new())),
             incoming: Arc::new(Mutex::new(HashSet::new())),
+            cipher: Arc::new(Cipher::new()),
         }
     }
 

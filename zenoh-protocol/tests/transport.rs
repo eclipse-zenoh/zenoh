@@ -293,7 +293,7 @@ async fn run(
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-fn transport_tcp() {
+fn transport_tcp_only() {
     // Define the locators
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
     // Define the reliability and congestion control

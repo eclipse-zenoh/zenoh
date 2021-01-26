@@ -16,6 +16,7 @@ extern crate lazy_static;
 use std::path::{Path, PathBuf};
 pub mod collections;
 pub mod core;
+pub mod crypto;
 pub mod ffi;
 mod lib_loader;
 pub mod net;

@@ -20,7 +20,8 @@ use crate::link::{Link, Locator};
 use crate::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
 };
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaChaRng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zerror};
 
@@ -73,6 +74,7 @@ struct Cookie {
     sn_resolution: ZInt,
     src: Locator,
     dst: Locator,
+    nonce: ZInt,
 }
 
 impl WBuf {
@@ -82,6 +84,7 @@ impl WBuf {
         zcheck!(self.write_zint(cookie.sn_resolution));
         zcheck!(self.write_string(&cookie.src.to_string()));
         zcheck!(self.write_string(&cookie.dst.to_string()));
+        zcheck!(self.write_zint(cookie.nonce));
         true
     }
 }
@@ -93,6 +96,7 @@ impl RBuf {
         let sn_resolution = self.read_zint()?;
         let src: Locator = self.read_locator()?;
         let dst: Locator = self.read_locator()?;
+        let nonce = self.read_zint()?;
 
         Some(Cookie {
             whatami,
@@ -100,6 +104,7 @@ impl RBuf {
             sn_resolution,
             src,
             dst,
+            nonce,
         })
     }
 }
@@ -268,8 +273,8 @@ async fn open_recv_init_ack(
             None => input.sn_resolution,
         };
         let initial_sn_tx = {
-            let mut rng = rand::thread_rng();
-            rng.gen_range(0..sn_resolution)
+            let mut prng = ChaChaRng::from_entropy();
+            prng.gen_range(0..sn_resolution)
         };
         (sn_resolution, initial_sn_tx, false)
     };
@@ -649,6 +654,10 @@ async fn accept_send_init_ack(
         sn_resolution: agreed_sn_resolution,
         src: link.get_src(),
         dst: link.get_dst(),
+        nonce: {
+            let mut prng = ChaChaRng::from_entropy();
+            prng.gen_range(0..agreed_sn_resolution)
+        },
     };
     wbuf.write_cookie(&cookie);
 
@@ -660,7 +669,12 @@ async fn accept_send_init_ack(
     } else {
         Some(agreed_sn_resolution)
     };
-    let cookie = RBuf::from(wbuf); // @TODO: use HMAC to sign the cookie
+
+    // Use the Cipher to enncrypt the cookie
+    let serialized = RBuf::from(wbuf).to_vec();
+    let encrypted = manager.cipher.encrypt(serialized);
+    let cookie = RBuf::from(encrypted);
+
     let message = SessionMessage::make_init_ack(
         whatami,
         apid,
@@ -705,7 +719,7 @@ async fn accept_recv_open_syn(
     }
 
     let mut msg = messages.remove(0);
-    let (open_syn_lease, open_syn_initial_sn, mut open_syn_cookie) = match msg.body {
+    let (open_syn_lease, open_syn_initial_sn, open_syn_cookie) = match msg.body {
         SessionBody::OpenSyn(OpenSyn {
             lease,
             initial_sn,
@@ -730,15 +744,24 @@ async fn accept_recv_open_syn(
         }
     };
 
-    let cookie = if let Some(cookie) = open_syn_cookie.read_cookie() {
-        // @TODO: verify cookie with HMAC
-        cookie
-    } else {
-        let e = format!("Rejecting OpenSyn on link: {}. Invalid cookie.", link,);
-        return Err((
-            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-            Some(smsg::close_reason::INVALID),
-        ));
+    // Decrypt the cookie with the cyper
+    let encrypted = open_syn_cookie.to_vec();
+    let decrypted = manager
+        .cipher
+        .decrypt(encrypted)
+        .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+    let mut open_syn_cookie = RBuf::from(decrypted);
+
+    // Verify the cookie
+    let cookie = match open_syn_cookie.read_cookie() {
+        Some(ck) => ck,
+        None => {
+            let e = format!("Rejecting OpenSyn on link: {}. Invalid cookie.", link,);
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
+        }
     };
 
     // Validate with the peer authenticators
@@ -801,8 +824,8 @@ async fn accept_init_session(
         opened.initial_sn
     } else {
         let initial_sn = {
-            let mut rng = rand::thread_rng();
-            rng.gen_range(0..input.cookie.sn_resolution)
+            let mut prng = ChaChaRng::from_entropy();
+            prng.gen_range(0..input.cookie.sn_resolution)
         };
         guard.insert(
             input.cookie.pid.clone(),
