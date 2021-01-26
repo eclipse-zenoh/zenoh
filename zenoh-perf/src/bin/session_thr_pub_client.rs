@@ -21,7 +21,7 @@ use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{whatami, WhatAmI, ZenohMessage};
 use zenoh_protocol::session::{
-    DummyHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    DummySessionEventHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
 };
 
 struct MySH {}
@@ -39,7 +39,7 @@ impl SessionHandler for MySH {
         _whatami: WhatAmI,
         _session: Arc<dyn SessionEventHandler + Send + Sync>,
     ) -> Arc<dyn SessionEventHandler + Send + Sync> {
-        Arc::new(DummyHandler::new())
+        Arc::new(DummySessionEventHandler::new())
     }
 }
 

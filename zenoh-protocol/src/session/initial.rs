@@ -520,6 +520,7 @@ struct AcceptInitSynOutput {
     whatami: WhatAmI,
     pid: PeerId,
     sn_resolution: ZInt,
+    init_ack_attachment: Option<Attachment>,
 }
 async fn accept_recv_init_syn(
     manager: &SessionManager,
@@ -597,10 +598,35 @@ async fn accept_recv_init_syn(
         *SESSION_SEQ_NUM_RESOLUTION
     };
 
+    // Validate the InitSyn with the peer authenticators
+    let init_syn_properties: Vec<Property> = match msg.attachment.take() {
+        Some(att) => {
+            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+        }
+        None => vec![],
+    };
+    let mut init_ack_properties: Vec<Property> = vec![];
+    let init_ack_attachment = {
+        for pa in manager.config.peer_authenticator.iter() {
+            let mut ps = pa
+                .handle_init_syn(
+                    &auth_link,
+                    &init_syn_pid,
+                    init_syn_sn_resolution,
+                    &init_syn_properties,
+                )
+                .await
+                .map_err(|e| (e, None))?;
+            init_ack_properties.append(&mut ps);
+        }
+        attachment_from_properties(&init_ack_properties).ok()
+    };
+
     let output = AcceptInitSynOutput {
         whatami: init_syn_whatami,
         pid: init_syn_pid,
         sn_resolution: init_syn_sn_resolution,
+        init_ack_attachment,
     };
     Ok(output)
 }
@@ -609,7 +635,7 @@ struct AcceptInitAckOutput {}
 async fn accept_send_init_ack(
     manager: &SessionManager,
     link: &Link,
-    auth_link: &AuthenticatedPeerLink,
+    _auth_link: &AuthenticatedPeerLink,
     input: AcceptInitSynOutput,
 ) -> IResult<AcceptInitAckOutput> {
     // Compute the minimum SN Resolution
@@ -635,8 +661,13 @@ async fn accept_send_init_ack(
         Some(agreed_sn_resolution)
     };
     let cookie = RBuf::from(wbuf); // @TODO: use HMAC to sign the cookie
-    let attachment = None;
-    let message = SessionMessage::make_init_ack(whatami, apid, sn_resolution, cookie, attachment);
+    let message = SessionMessage::make_init_ack(
+        whatami,
+        apid,
+        sn_resolution,
+        cookie,
+        input.init_ack_attachment,
+    );
 
     // Send the message on the link
     let _ = link
@@ -652,16 +683,14 @@ struct AcceptOpenSynOutput {
     cookie: Cookie,
     initial_sn: ZInt,
     lease: ZInt,
+    open_ack_attachment: Option<Attachment>,
 }
 async fn accept_recv_open_syn(
     manager: &SessionManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
-    input: AcceptInitAckOutput,
+    _input: AcceptInitAckOutput,
 ) -> IResult<AcceptOpenSynOutput> {
-    /*************************************/
-    /*             OpenSyn               */
-    /*************************************/
     // Wait to read an OpenSyn
     let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
@@ -712,10 +741,30 @@ async fn accept_recv_open_syn(
         ));
     };
 
+    // Validate with the peer authenticators
+    let open_syn_properties: Vec<Property> = match msg.attachment.take() {
+        Some(att) => {
+            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+        }
+        None => vec![],
+    };
+    let mut open_ack_properties: Vec<Property> = vec![];
+    let open_ack_attachment = {
+        for pa in manager.config.peer_authenticator.iter() {
+            let mut ps = pa
+                .handle_open_syn(&auth_link, &open_syn_properties)
+                .await
+                .map_err(|e| (e, None))?;
+            open_ack_properties.append(&mut ps);
+        }
+        attachment_from_properties(&open_ack_properties).ok()
+    };
+
     let output = AcceptOpenSynOutput {
         cookie,
         initial_sn: open_syn_initial_sn,
         lease: open_syn_lease,
+        open_ack_attachment,
     };
     Ok(output)
 }
@@ -723,11 +772,12 @@ async fn accept_recv_open_syn(
 struct AcceptInitSessionOutput {
     session: Session,
     initial_sn: ZInt,
+    open_ack_attachment: Option<Attachment>,
 }
 async fn accept_init_session(
     manager: &SessionManager,
     link: &Link,
-    auth_link: &AuthenticatedPeerLink,
+    _auth_link: &AuthenticatedPeerLink,
     input: AcceptOpenSynOutput,
 ) -> IResult<AcceptInitSessionOutput> {
     // Initialize the session if it is new
@@ -859,6 +909,7 @@ async fn accept_init_session(
     let output = AcceptInitSessionOutput {
         session,
         initial_sn: open_ack_initial_sn,
+        open_ack_attachment: input.open_ack_attachment,
     };
     Ok(output)
 }
@@ -869,12 +920,15 @@ struct AcceptOpenAckOutput {
 async fn accept_send_open_ack(
     manager: &SessionManager,
     link: &Link,
-    auth_link: &AuthenticatedPeerLink,
+    _auth_link: &AuthenticatedPeerLink,
     input: AcceptInitSessionOutput,
 ) -> ZResult<AcceptOpenAckOutput> {
     // Build OpenAck message
-    let attachment = None;
-    let message = SessionMessage::make_open_ack(manager.config.lease, input.initial_sn, attachment);
+    let message = SessionMessage::make_open_ack(
+        manager.config.lease,
+        input.initial_sn,
+        input.open_ack_attachment,
+    );
 
     // Send the message on the link
     let _ = link.write_session_message(message).await?;
@@ -888,7 +942,7 @@ async fn accept_send_open_ack(
 async fn accept_finalize_session(
     manager: &SessionManager,
     link: &Link,
-    auth_link: &AuthenticatedPeerLink,
+    _auth_link: &AuthenticatedPeerLink,
     input: AcceptOpenAckOutput,
 ) -> ZResult<()> {
     // Retrive the session's transport

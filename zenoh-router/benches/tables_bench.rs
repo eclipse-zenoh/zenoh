@@ -19,7 +19,7 @@ use async_std::task;
 use criterion::{BenchmarkId, Criterion};
 use zenoh_protocol::core::{whatami, CongestionControl, Reliability, SubInfo, SubMode};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::session::{DummyHandler, Mux};
+use zenoh_protocol::session::{DummySessionEventHandler, Mux};
 use zenoh_router::routing::broker::Tables;
 use zenoh_router::routing::pubsub::*;
 use zenoh_router::routing::resource::*;
@@ -27,7 +27,7 @@ use zenoh_router::routing::resource::*;
 fn tables_bench(c: &mut Criterion) {
     task::block_on(async {
         let tables = Tables::new(whatami::ROUTER, None);
-        let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
 
         let face0 = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
         declare_resource(

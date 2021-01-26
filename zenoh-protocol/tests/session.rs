@@ -22,7 +22,7 @@ use zenoh_protocol::core::{whatami, PeerId};
 use zenoh_protocol::link::{Link, Locator};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
-    DummyHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
     SessionManagerConfig, SessionManagerOptionalConfig,
 };
 
@@ -114,7 +114,7 @@ impl SessionHandler for SHClientOpenClose {
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(DummyHandler::new()))
+        Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }
 

@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod authenticator;
+pub mod authenticator;
 pub mod defaults;
 mod initial;
 mod manager;
@@ -51,16 +51,16 @@ pub trait SessionHandler {
 
 // Define an empty SessionCallback for the listener session
 #[derive(Default)]
-pub struct DummyHandler;
+pub struct DummySessionEventHandler;
 
-impl DummyHandler {
+impl DummySessionEventHandler {
     pub fn new() -> Self {
         Self
     }
 }
 
 #[async_trait]
-impl SessionEventHandler for DummyHandler {
+impl SessionEventHandler for DummySessionEventHandler {
     async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }

@@ -23,14 +23,14 @@ use zenoh_protocol::core::{
 };
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::DataInfo;
-use zenoh_protocol::session::{DummyHandler, Mux, Primitives};
+use zenoh_protocol::session::{DummySessionEventHandler, Mux, Primitives};
 use zenoh_router::routing::broker::*;
 
 #[test]
 fn base_test() {
     task::block_on(async {
         let tables = Tables::new(whatami::ROUTER, Some(HLC::default()));
-        let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
         let face = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
         declare_resource(
             &mut *tables.write().await,
@@ -126,7 +126,7 @@ fn match_test() {
         ];
 
         let tables = Tables::new(whatami::ROUTER, Some(HLC::default()));
-        let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
         let face = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
         for (i, rname) in rnames.iter().enumerate() {
             declare_resource(
@@ -161,7 +161,7 @@ fn clean_test() {
     task::block_on(async {
         let tables = Tables::new(whatami::ROUTER, Some(HLC::default()));
 
-        let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
         let face0 = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
         assert!(face0.upgrade().is_some());
 

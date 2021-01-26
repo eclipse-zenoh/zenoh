@@ -39,7 +39,7 @@ use zenoh_util::{zasynclock, zerror};
 /// use async_std::sync::Arc;
 /// use async_trait::async_trait;
 /// use zenoh_protocol::core::{PeerId, WhatAmI, whatami};
-/// use zenoh_protocol::session::{DummyHandler, SessionEventHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
+/// use zenoh_protocol::session::{DummySessionEventHandler, SessionEventHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 ///
 /// use zenoh_util::core::ZResult;
 ///
@@ -57,7 +57,7 @@ use zenoh_util::{zasynclock, zerror};
 ///     async fn new_session(&self,
 ///         _session: Session
 ///     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-///         Ok(Arc::new(DummyHandler::new()))
+///         Ok(Arc::new(DummySessionEventHandler::new()))
 ///     }
 /// }
 ///
