@@ -17,9 +17,10 @@ use crate::io::{RBuf, WBuf};
 use crate::link::Locator;
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use std::collections::HashMap;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::crypto::{hmac, PseudoRng};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite};
 
 const WBUF_SIZE: usize = 64;
@@ -109,22 +110,22 @@ impl RBuf {
 /// ~     hash      ~
 /// +---------------+
 struct OpenSynProperty {
-    user: String,
-    hash: String,
+    user: Vec<u8>,
+    hmac: Vec<u8>,
 }
 
 impl WBuf {
     fn write_opensyn_property(&mut self, opensyn_property: &OpenSynProperty) -> bool {
-        zcheck!(self.write_string(&opensyn_property.user));
-        self.write_string(&opensyn_property.hash)
+        zcheck!(self.write_bytes_array(&opensyn_property.user));
+        self.write_bytes_array(&opensyn_property.hmac)
     }
 }
 
 impl RBuf {
     fn read_opensyn_property(&mut self) -> Option<OpenSynProperty> {
-        let user = self.read_string()?;
-        let hash = self.read_string()?;
-        Some(OpenSynProperty { user, hash })
+        let user = self.read_bytes_array()?;
+        let hmac = self.read_bytes_array()?;
+        Some(OpenSynProperty { user, hmac })
     }
 }
 
@@ -132,20 +133,21 @@ impl RBuf {
 /*          Authenticator            */
 /*************************************/
 pub struct Credentials {
-    user: String,
-    password: String,
+    user: Vec<u8>,
+    password: Vec<u8>,
 }
 
 pub struct UserPasswordAuthenticator {
-    lookup: RwLock<HashMap<String, String>>,
+    lookup: RwLock<HashMap<Vec<u8>, Vec<u8>>>,
     credentials: Credentials,
     nonces: Mutex<HashMap<(Locator, Locator), ZInt>>,
+    prng: Mutex<PseudoRng>,
 }
 
 impl UserPasswordAuthenticator {
     pub fn new(
-        lookup: HashMap<String, String>,
-        credentials: (String, String),
+        lookup: HashMap<Vec<u8>, Vec<u8>>,
+        credentials: (Vec<u8>, Vec<u8>),
     ) -> UserPasswordAuthenticator {
         UserPasswordAuthenticator {
             lookup: RwLock::new(lookup),
@@ -154,16 +156,17 @@ impl UserPasswordAuthenticator {
                 password: credentials.1,
             },
             nonces: Mutex::new(HashMap::new()),
+            prng: Mutex::new(PseudoRng::from_entropy()),
         }
     }
 
-    pub async fn add_user(&self, user: String, password: String) -> ZResult<()> {
+    pub async fn add_user(&self, user: Vec<u8>, password: Vec<u8>) -> ZResult<()> {
         let mut guard = zasyncwrite!(self.lookup);
         guard.insert(user, password);
         Ok(())
     }
 
-    pub async fn del_user(&self, user: &str) -> ZResult<()> {
+    pub async fn del_user(&self, user: &[u8]) -> ZResult<()> {
         let mut guard = zasyncwrite!(self.lookup);
         guard.remove(user);
         Ok(())
@@ -225,10 +228,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         }
 
         // Create the InitAck attachment
-        let nonce = {
-            let mut rng = rand::thread_rng();
-            rng.gen_range(0..sn_resolution)
-        };
+        let nonce = zasynclock!(self.prng).gen_range(0..sn_resolution);
         let initack_property = InitAckProperty { nonce };
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
@@ -263,7 +263,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let _initack_property = match rbuf.read_initack_property() {
+        let init_ack_property = match rbuf.read_initack_property() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -272,10 +272,13 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         };
 
+        // Create the HMAC of the password using the nonce received as a key (it's a challenge)
+        let key = init_ack_property.nonce.to_le_bytes();
+        let hmac = hmac::sign(&key, &self.credentials.password)?;
         // Create the OpenSyn attachment
         let opensyn_property = OpenSynProperty {
             user: self.credentials.user.clone(),
-            hash: self.credentials.password.clone(),
+            hmac,
         };
         // Encode the InitAck attachment
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
@@ -294,7 +297,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         link: &AuthenticatedPeerLink,
         properties: &[Property],
     ) -> ZResult<Vec<Property>> {
-        let _nonce = match zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone())) {
+        let nonce = match zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone())) {
             Some(nonce) => nonce,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -317,7 +320,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let opensyn_property = match rbuf.read_opensyn_property() {
+        let open_syn_property = match rbuf.read_opensyn_property() {
             Some(osp) => osp,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -326,7 +329,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         };
 
-        let password = match zasyncread!(self.lookup).get(&opensyn_property.user) {
+        let password = match zasyncread!(self.lookup).get(&open_syn_property.user) {
             Some(password) => password.clone(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -335,7 +338,10 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         };
 
-        if password != opensyn_property.hash {
+        // Create the HMAC of the password using the nonce received as challenge
+        let key = nonce.to_le_bytes();
+        let hmac = hmac::sign(&key, &password)?;
+        if hmac != open_syn_property.hmac {
             return zerror!(ZErrorKind::InvalidMessage {
                 descr: format!("Received OpenSyn with invalid password on link: {}", link),
             });

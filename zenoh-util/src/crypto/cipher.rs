@@ -11,35 +11,33 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::PseudoRng;
 use crate::core::{ZError, ZErrorKind, ZResult};
 use crate::zerror;
 use aes_soft::cipher::generic_array::GenericArray;
-use aes_soft::cipher::{BlockCipher, NewBlockCipher};
+use aes_soft::cipher::{BlockCipher as AesBlockCipher, NewBlockCipher};
 use aes_soft::Aes128;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaChaRng;
+use rand::Rng;
 
-const BLOCK_SIZE: usize = 16;
+pub const BLOCK_SIZE: usize = 16;
 
-pub struct Cipher {
+pub struct BlockCipher {
     inner: Aes128,
 }
 
-impl Cipher {
-    pub fn new() -> Cipher {
-        let mut key_bytes = [0u8; BLOCK_SIZE];
-        let mut prng = ChaChaRng::from_entropy();
-        prng.fill_bytes(&mut key_bytes);
-        let key = GenericArray::from_slice(&key_bytes);
-        let inner = aes_soft::Aes128::new(&key);
-
-        Cipher { inner }
+impl BlockCipher {
+    pub fn new(key: [u8; BLOCK_SIZE]) -> BlockCipher {
+        BlockCipher {
+            inner: aes_soft::Aes128::new(&key.into()),
+        }
     }
 
-    pub fn encrypt(&self, mut bytes: Vec<u8>) -> Vec<u8> {
+    pub fn encrypt(&self, mut bytes: Vec<u8>, padding: &mut PseudoRng) -> Vec<u8> {
         let modulo = bytes.len() % BLOCK_SIZE;
-        let missing = if modulo == 0 { 0 } else { BLOCK_SIZE - modulo };
-        bytes.resize(bytes.len() + missing, 0u8);
+        if modulo != 0 {
+            let missing = BLOCK_SIZE - modulo;
+            bytes.resize_with(bytes.len() + missing, || padding.gen::<u8>());
+        }
 
         let mut start: usize = 0;
         while start < bytes.len() {
@@ -67,11 +65,5 @@ impl Cipher {
         }
 
         Ok(bytes)
-    }
-}
-
-impl Default for Cipher {
-    fn default() -> Cipher {
-        Cipher::new()
     }
 }

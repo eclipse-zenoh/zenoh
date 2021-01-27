@@ -11,9 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod cipher;
-pub mod hmac;
-mod prng;
+use rand_chacha::ChaCha20Rng;
 
-pub use cipher::*;
-pub use prng::*;
+pub type PseudoRng = ChaCha20Rng;

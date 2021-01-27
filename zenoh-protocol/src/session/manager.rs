@@ -29,10 +29,11 @@ use crate::link::{
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
+use rand::{RngCore, SeedableRng};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::crypto::Cipher;
+use zenoh_util::crypto::{BlockCipher, PseudoRng, BLOCK_SIZE};
 use zenoh_util::{zasynclock, zerror};
 
 /// # Examples
@@ -144,8 +145,10 @@ pub struct SessionManager {
     pub(super) opened: Arc<Mutex<HashMap<PeerId, Opened>>>,
     // Incoming uninitialized sessions
     pub(super) incoming: Arc<Mutex<HashSet<Link>>>,
+    // Default PRNG
+    pub(super) prng: Arc<Mutex<PseudoRng>>,
     // Default cipher for cookies
-    pub(super) cipher: Arc<Cipher>,
+    pub(super) cipher: Arc<BlockCipher>,
     // Established listeners
     protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManager>>>,
     // Established sessions
@@ -216,13 +219,20 @@ impl SessionManager {
             handler: config.handler,
         };
 
+        // Initialize the PRNG and the Cipher
+        let mut prng = PseudoRng::from_entropy();
+        let mut key = [0u8; BLOCK_SIZE];
+        prng.fill_bytes(&mut key);
+        let cipher = BlockCipher::new(key);
+
         SessionManager {
             config: Arc::new(config_inner),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             opened: Arc::new(Mutex::new(HashMap::new())),
             incoming: Arc::new(Mutex::new(HashSet::new())),
-            cipher: Arc::new(Cipher::new()),
+            prng: Arc::new(Mutex::new(prng)),
+            cipher: Arc::new(cipher),
         }
     }
 

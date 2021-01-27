@@ -20,8 +20,7 @@ use crate::link::{Link, Locator};
 use crate::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
 };
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaChaRng;
+use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zerror};
 
@@ -272,10 +271,7 @@ async fn open_recv_init_ack(
             }
             None => input.sn_resolution,
         };
-        let initial_sn_tx = {
-            let mut prng = ChaChaRng::from_entropy();
-            prng.gen_range(0..sn_resolution)
-        };
+        let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..sn_resolution);
         (sn_resolution, initial_sn_tx, false)
     };
 
@@ -654,10 +650,7 @@ async fn accept_send_init_ack(
         sn_resolution: agreed_sn_resolution,
         src: link.get_src(),
         dst: link.get_dst(),
-        nonce: {
-            let mut prng = ChaChaRng::from_entropy();
-            prng.gen_range(0..agreed_sn_resolution)
-        },
+        nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
     };
     wbuf.write_cookie(&cookie);
 
@@ -670,9 +663,11 @@ async fn accept_send_init_ack(
         Some(agreed_sn_resolution)
     };
 
-    // Use the Cipher to enncrypt the cookie
+    // Use the BlockCipher to enncrypt the cookie
     let serialized = RBuf::from(wbuf).to_vec();
-    let encrypted = manager.cipher.encrypt(serialized);
+    let mut guard = zasynclock!(manager.prng);
+    let encrypted = manager.cipher.encrypt(serialized, &mut *guard);
+    drop(guard);
     let cookie = RBuf::from(encrypted);
 
     let message = SessionMessage::make_init_ack(
@@ -823,10 +818,7 @@ async fn accept_init_session(
         }
         opened.initial_sn
     } else {
-        let initial_sn = {
-            let mut prng = ChaChaRng::from_entropy();
-            prng.gen_range(0..input.cookie.sn_resolution)
-        };
+        let initial_sn = zasynclock!(manager.prng).gen_range(0..input.cookie.sn_resolution);
         guard.insert(
             input.cookie.pid.clone(),
             Opened {

@@ -44,6 +44,8 @@ clap = "2"
 libloading = "0.6.7"
 shellexpand = "2.1.0"
 home = "0.5.3"
+hmac = "0.10.1"
+sha3 = "0.9.1"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["iphlpapi"] }

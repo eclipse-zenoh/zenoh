@@ -11,9 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod cipher;
-pub mod hmac;
-mod prng;
+use crate::core::{ZError, ZErrorKind, ZResult};
+use crate::zerror2;
+use hmac::{Hmac, Mac, NewMac};
+use sha3::Sha3_256;
 
-pub use cipher::*;
-pub use prng::*;
+pub fn sign(key: &[u8], data: &[u8]) -> ZResult<Vec<u8>> {
+    let mut hmac = Hmac::<Sha3_256>::new_varkey(&key).map_err(|e| {
+        zerror2!(ZErrorKind::Other {
+            descr: e.to_string()
+        })
+    })?;
+    hmac.update(&data);
+    Ok(hmac.finalize().into_bytes().as_slice().to_vec())
+}
