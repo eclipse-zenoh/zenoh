@@ -709,7 +709,8 @@ unsafe fn compute_data_route(
     tables: &Tables,
     prefix: &Arc<Resource>,
     suffix: &str,
-    routing_context: Option<usize>,
+    source: Option<usize>,
+    source_type: whatami::Type,
 ) -> DataRoute {
     let mut route = HashMap::new();
     let resname = [&prefix.name(), suffix].concat();
@@ -724,26 +725,34 @@ unsafe fn compute_data_route(
         let mres = Arc::get_mut_unchecked(&mut mres);
         if tables.whatami == whatami::ROUTER {
             let net = tables.routers_net.as_ref().unwrap();
+            let router_source = match source_type {
+                whatami::ROUTER => source.unwrap(),
+                _ => net.idx.index(),
+            };
             for sub in &mres.router_subs {
-                if let Some(direction) = net.trees[routing_context.unwrap()].directions
-                    [net.get_idx(sub).unwrap().index()]
+                if let Some(direction) =
+                    net.trees[router_source].directions[net.get_idx(sub).unwrap().index()]
                 {
                     let face = tables.get_face(&net.graph[direction].pid).unwrap();
                     route.entry(face.id).or_insert_with(|| {
                         let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(routing_context.unwrap() as u64))
+                        (face.clone(), reskey, Some(router_source as u64))
                     });
                 }
             }
             let net = tables.peers_net.as_ref().unwrap();
+            let peer_source = match source_type {
+                whatami::PEER => source.unwrap(),
+                _ => net.idx.index(),
+            };
             for sub in &mres.peer_subs {
                 if let Some(direction) =
-                    net.trees[net.idx.index()].directions[net.get_idx(sub).unwrap().index()]
+                    net.trees[peer_source].directions[net.get_idx(sub).unwrap().index()]
                 {
                     let face = tables.get_face(&net.graph[direction].pid).unwrap();
                     route.entry(face.id).or_insert_with(|| {
                         let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(net.idx.index() as u64))
+                        (face.clone(), reskey, Some(peer_source as u64))
                     });
                 }
             }
@@ -751,14 +760,18 @@ unsafe fn compute_data_route(
 
         if tables.whatami == whatami::PEER {
             let net = tables.peers_net.as_ref().unwrap();
+            let peer_source = match source_type {
+                whatami::ROUTER | whatami::PEER => source.unwrap(),
+                _ => net.idx.index(),
+            };
             for sub in &mres.peer_subs {
-                if let Some(direction) = net.trees[routing_context.unwrap()].directions
-                    [net.get_idx(sub).unwrap().index()]
+                if let Some(direction) =
+                    net.trees[peer_source].directions[net.get_idx(sub).unwrap().index()]
                 {
                     let face = tables.get_face(&net.graph[direction].pid).unwrap();
                     route.entry(face.id).or_insert_with(|| {
                         let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(routing_context.unwrap() as u64))
+                        (face.clone(), reskey, Some(peer_source as u64))
                     });
                 }
             }
@@ -781,51 +794,46 @@ unsafe fn compute_data_route(
 unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     let mut res_mut = res.clone();
     let res_mut = Arc::get_mut_unchecked(&mut res_mut);
-    match tables.whatami {
-        whatami::ROUTER => {
-            let indexes = tables
-                .routers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .collect::<Vec<NodeIndex>>();
-            let max_idx = indexes.iter().max().unwrap();
-            res_mut.routes.clear();
-            res_mut
-                .routes
-                .resize_with(max_idx.index() + 1, HashMap::new);
+    if tables.whatami == whatami::ROUTER {
+        let indexes = tables
+            .routers_net
+            .as_ref()
+            .unwrap()
+            .graph
+            .node_indices()
+            .collect::<Vec<NodeIndex>>();
+        let max_idx = indexes.iter().max().unwrap();
+        res_mut.routers_routes.clear();
+        res_mut
+            .routers_routes
+            .resize_with(max_idx.index() + 1, HashMap::new);
 
-            for idx in &indexes {
-                res_mut.routes[idx.index()] =
-                    compute_data_route(tables, res, "", Some(idx.index()));
-            }
+        for idx in &indexes {
+            res_mut.routers_routes[idx.index()] =
+                compute_data_route(tables, res, "", Some(idx.index()), whatami::ROUTER);
         }
-        whatami::PEER => {
-            let indexes = tables
-                .peers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .collect::<Vec<NodeIndex>>();
-            let max_idx = indexes.iter().max().unwrap();
-            res_mut.routes.clear();
-            res_mut
-                .routes
-                .resize_with(max_idx.index() + 1, HashMap::new);
+    }
+    if tables.whatami == whatami::ROUTER || tables.whatami == whatami::PEER {
+        let indexes = tables
+            .peers_net
+            .as_ref()
+            .unwrap()
+            .graph
+            .node_indices()
+            .collect::<Vec<NodeIndex>>();
+        let max_idx = indexes.iter().max().unwrap();
+        res_mut.peers_routes.clear();
+        res_mut
+            .peers_routes
+            .resize_with(max_idx.index() + 1, HashMap::new);
 
-            for idx in &indexes {
-                res_mut.routes[idx.index()] =
-                    compute_data_route(tables, res, "", Some(idx.index()));
-            }
+        for idx in &indexes {
+            res_mut.peers_routes[idx.index()] =
+                compute_data_route(tables, res, "", Some(idx.index()), whatami::PEER);
         }
-        _ => {
-            res_mut.routes.clear();
-            res_mut
-                .routes
-                .push(compute_data_route(tables, res, "", None));
-        }
+    }
+    if tables.whatami == whatami::CLIENT {
+        res_mut.client_route = Some(compute_data_route(tables, res, "", None, whatami::CLIENT));
     }
 }
 
@@ -859,38 +867,102 @@ pub async fn route_data(
     payload: RBuf,
     routing_context: Option<RoutingContext>,
 ) {
-    let local_context = match (tables.whatami, face.whatami) {
-        (whatami::ROUTER, whatami::ROUTER) => {
-            let net = tables.routers_net.as_ref().unwrap();
-            match routing_context {
-                Some(ctx) => net
-                    .get_idx(&net.get_link(&face.pid).unwrap().mappings.get(&ctx).unwrap())
-                    .unwrap()
-                    .index(),
-                None => 0,
-            }
-        }
-        (whatami::ROUTER, whatami::PEER)
-        | (whatami::PEER, whatami::ROUTER)
-        | (whatami::PEER, whatami::PEER) => {
-            let net = tables.peers_net.as_ref().unwrap();
-            match routing_context {
-                Some(ctx) => net
-                    .get_idx(&net.get_link(&face.pid).unwrap().mappings.get(&ctx).unwrap())
-                    .unwrap()
-                    .index(),
-                None => 0,
-            }
-        }
-        _ => 0,
-    };
-
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => unsafe {
             log::debug!("Route data for res {}{}", prefix.name(), suffix,);
-            let route = match Resource::get_resource(prefix, suffix) {
-                Some(res) => res.routes[local_context].clone(),
-                None => compute_data_route(tables, prefix, suffix, Some(local_context)),
+
+            let route = match tables.whatami {
+                whatami::ROUTER => match face.whatami {
+                    whatami::ROUTER => {
+                        let routers_net = tables.routers_net.as_ref().unwrap();
+                        let local_context = routers_net
+                            .get_idx(
+                                &routers_net
+                                    .get_link(&face.pid)
+                                    .unwrap()
+                                    .mappings
+                                    .get(&routing_context.unwrap())
+                                    .unwrap(),
+                            )
+                            .unwrap()
+                            .index();
+                        match Resource::get_resource(prefix, suffix) {
+                            Some(res) => res.routers_routes[local_context].clone(),
+                            None => compute_data_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                Some(local_context),
+                                whatami::ROUTER,
+                            ),
+                        }
+                    }
+                    whatami::PEER => {
+                        let peers_net = tables.peers_net.as_ref().unwrap();
+                        let local_context = peers_net
+                            .get_idx(
+                                &peers_net
+                                    .get_link(&face.pid)
+                                    .unwrap()
+                                    .mappings
+                                    .get(&routing_context.unwrap())
+                                    .unwrap(),
+                            )
+                            .unwrap()
+                            .index();
+                        match Resource::get_resource(prefix, suffix) {
+                            Some(res) => res.peers_routes[local_context].clone(),
+                            None => compute_data_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                Some(local_context),
+                                whatami::PEER,
+                            ),
+                        }
+                    }
+                    _ => match Resource::get_resource(prefix, suffix) {
+                        Some(res) => res.routers_routes[0].clone(),
+                        None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
+                    },
+                },
+                whatami::PEER => match face.whatami {
+                    whatami::ROUTER | whatami::PEER => {
+                        let peers_net = tables.peers_net.as_ref().unwrap();
+                        let local_context = peers_net
+                            .get_idx(
+                                &peers_net
+                                    .get_link(&face.pid)
+                                    .unwrap()
+                                    .mappings
+                                    .get(&routing_context.unwrap())
+                                    .unwrap(),
+                            )
+                            .unwrap()
+                            .index();
+                        match Resource::get_resource(prefix, suffix) {
+                            Some(res) => res.peers_routes[local_context].clone(),
+                            None => compute_data_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                Some(local_context),
+                                whatami::PEER,
+                            ),
+                        }
+                    }
+                    _ => match Resource::get_resource(prefix, suffix) {
+                        Some(res) => res.peers_routes[0].clone(),
+                        None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
+                    },
+                },
+                _ => match Resource::get_resource(prefix, suffix) {
+                    Some(res) => match &res.client_route {
+                        Some(route) => route.clone(),
+                        None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
+                    },
+                    None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
+                },
             };
 
             // if an HLC was configured (via Config.add_timestamp),

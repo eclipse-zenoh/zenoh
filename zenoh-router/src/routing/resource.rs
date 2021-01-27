@@ -42,7 +42,9 @@ pub struct Resource {
     pub(super) peer_subs: HashSet<PeerId>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) routes: Vec<DataRoute>,
+    pub(super) routers_routes: Vec<DataRoute>,
+    pub(super) peers_routes: Vec<DataRoute>,
+    pub(super) client_route: Option<DataRoute>,
 }
 
 impl PartialEq for Resource {
@@ -80,7 +82,9 @@ impl Resource {
             peer_subs: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
-            routes: Vec::new(),
+            routers_routes: Vec::new(),
+            peers_routes: Vec::new(),
+            client_route: None,
         }
     }
 
@@ -118,7 +122,9 @@ impl Resource {
             peer_subs: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
-            routes: Vec::new(),
+            routers_routes: Vec::new(),
+            peers_routes: Vec::new(),
+            client_route: None,
         })
     }
 
