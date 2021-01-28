@@ -21,7 +21,8 @@ use zenoh_protocol::core::{PeerId, ResKey, SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
-pub type Route = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
+pub(super) type Route = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
+pub(super) type PullCaches = Vec<Arc<Context>>;
 
 pub(super) struct Context {
     pub(super) face: Arc<FaceState>,
@@ -44,6 +45,7 @@ pub struct Resource {
     pub(super) peer_qabls: HashSet<PeerId>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
+    pub(super) matching_pulls: PullCaches,
     pub(super) routers_data_routes: Vec<Route>,
     pub(super) peers_data_routes: Vec<Route>,
     pub(super) client_data_route: Option<Route>,
@@ -89,6 +91,7 @@ impl Resource {
             peer_qabls: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
+            matching_pulls: Vec::new(),
             routers_data_routes: Vec::new(),
             peers_data_routes: Vec::new(),
             client_data_route: None,
@@ -134,6 +137,7 @@ impl Resource {
             peer_qabls: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
+            matching_pulls: Vec::new(),
             routers_data_routes: Vec::new(),
             peers_data_routes: Vec::new(),
             client_data_route: None,

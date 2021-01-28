@@ -13,6 +13,7 @@
 //
 use async_std::sync::Arc;
 use petgraph::graph::NodeIndex;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use uhlc::HLC;
 
@@ -23,7 +24,7 @@ use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
 use crate::routing::face::FaceState;
-use crate::routing::resource::{Context, Resource, Route};
+use crate::routing::resource::{Context, PullCaches, Resource, Route};
 use crate::routing::router::Tables;
 
 async fn propagate_simple_subscription(
@@ -713,11 +714,13 @@ unsafe fn compute_data_route(
     source_type: whatami::Type,
 ) -> Route {
     let mut route = HashMap::new();
-    let resname = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
     let matches = match res.as_ref() {
-        Some(res) => std::borrow::Cow::from(&res.matches),
-        None => std::borrow::Cow::from(Resource::get_matches(tables, &resname)),
+        Some(res) => Cow::from(&res.matches),
+        None => Cow::from(Resource::get_matches(
+            tables,
+            &[&prefix.name(), suffix].concat(),
+        )),
     };
 
     for mres in matches.iter() {
@@ -791,6 +794,29 @@ unsafe fn compute_data_route(
     route
 }
 
+fn compute_matching_pulls(tables: &Tables, prefix: &Arc<Resource>, suffix: &str) -> PullCaches {
+    let mut pull_caches = vec![];
+    let res = Resource::get_resource(prefix, suffix);
+    let matches = match res.as_ref() {
+        Some(res) => Cow::from(&res.matches),
+        None => Cow::from(Resource::get_matches(
+            tables,
+            &[&prefix.name(), suffix].concat(),
+        )),
+    };
+    for mres in matches.iter() {
+        let mres = mres.upgrade().unwrap();
+        for context in mres.contexts.values() {
+            if let Some(subinfo) = &context.subs {
+                if subinfo.mode == SubMode::Pull {
+                    pull_caches.push(context.clone());
+                }
+            }
+        }
+    }
+    pull_caches
+}
+
 unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     let mut res_mut = res.clone();
     let res_mut = Arc::get_mut_unchecked(&mut res_mut);
@@ -836,6 +862,7 @@ unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
         res_mut.client_data_route =
             Some(compute_data_route(tables, res, "", None, whatami::CLIENT));
     }
+    res_mut.matching_pulls = compute_matching_pulls(tables, res, "");
 }
 
 unsafe fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
@@ -871,6 +898,8 @@ pub async fn route_data(
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => unsafe {
             log::debug!("Route data for res {}{}", prefix.name(), suffix,);
+
+            let res = Resource::get_resource(prefix, suffix);
 
             let route = match tables.whatami {
                 whatami::ROUTER => match face.whatami {
@@ -911,7 +940,7 @@ pub async fn route_data(
                             )
                             .unwrap()
                             .index();
-                        match Resource::get_resource(prefix, suffix) {
+                        match &res {
                             Some(res) => res.peers_data_routes[local_context].clone(),
                             None => compute_data_route(
                                 tables,
@@ -922,7 +951,7 @@ pub async fn route_data(
                             ),
                         }
                     }
-                    _ => match Resource::get_resource(prefix, suffix) {
+                    _ => match &res {
                         Some(res) => res.routers_data_routes[0].clone(),
                         None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
                     },
@@ -941,7 +970,7 @@ pub async fn route_data(
                             )
                             .unwrap()
                             .index();
-                        match Resource::get_resource(prefix, suffix) {
+                        match &res {
                             Some(res) => res.peers_data_routes[local_context].clone(),
                             None => compute_data_route(
                                 tables,
@@ -952,12 +981,12 @@ pub async fn route_data(
                             ),
                         }
                     }
-                    _ => match Resource::get_resource(prefix, suffix) {
+                    _ => match &res {
                         Some(res) => res.peers_data_routes[0].clone(),
                         None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
                     },
                 },
-                _ => match Resource::get_resource(prefix, suffix) {
+                _ => match &res {
                     Some(res) => match &res.client_data_route {
                         Some(route) => route.clone(),
                         None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
@@ -966,35 +995,49 @@ pub async fn route_data(
                 },
             };
 
-            // if an HLC was configured (via Config.add_timestamp),
-            // check DataInfo and add a timestamp if there isn't
-            let data_info = match &tables.hlc {
-                Some(hlc) => match treat_timestamp(hlc, info).await {
-                    Ok(info) => info,
-                    Err(e) => {
-                        log::error!(
-                            "Error treating timestamp for received Data ({}): drop it!",
-                            e
-                        );
-                        return;
-                    }
-                },
-                None => info,
+            let matching_pulls = match &res {
+                Some(res) => res.matching_pulls.clone(),
+                None => compute_matching_pulls(tables, prefix, suffix),
             };
 
-            for (_id, (outface, reskey, context)) in route {
-                if face.id != outface.id {
-                    outface
-                        .primitives
-                        .data(
-                            &reskey,
-                            payload.clone(),
-                            Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
-                            congestion_control,
-                            data_info.clone(),
-                            context,
-                        )
-                        .await
+            if !(route.is_empty() && matching_pulls.is_empty()) {
+                // if an HLC was configured (via Config.add_timestamp),
+                // check DataInfo and add a timestamp if there isn't
+                let data_info = match &tables.hlc {
+                    Some(hlc) => match treat_timestamp(hlc, info).await {
+                        Ok(info) => info,
+                        Err(e) => {
+                            log::error!(
+                                "Error treating timestamp for received Data ({}): drop it!",
+                                e
+                            );
+                            return;
+                        }
+                    },
+                    None => info,
+                };
+
+                for (_id, (outface, reskey, context)) in route {
+                    if face.id != outface.id {
+                        outface
+                            .primitives
+                            .data(
+                                &reskey,
+                                payload.clone(),
+                                Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                                congestion_control,
+                                data_info.clone(),
+                                context,
+                            )
+                            .await
+                    }
+                }
+
+                for mut context in matching_pulls {
+                    Arc::get_mut_unchecked(&mut context).last_values.insert(
+                        [&prefix.name(), suffix].concat(),
+                        (data_info.clone(), payload.clone()),
+                    );
                 }
             }
         },
