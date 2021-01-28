@@ -39,10 +39,10 @@ default = ["transport_tcp", "transport_udp", "zero-copy"]
 
 [dependencies]
 async-std = { version = "=1.8.0", features = ["attributes"] }
-async-trait = "0.1.38"
-futures = "0.3.5"
-pin-project-lite = "0.1.7"
-rand = "0.7.3"
+async-trait = "0.1.42"
+futures = "0.3.12"
+pin-project-lite = "0.2.4"
+rand = "0.8.3"
 regex = "1"
 log = "0.4"
 lazy_static = "1.4.0"
@@ -57,7 +57,7 @@ zenoh-util = { version = "0.5.0-beta.5", path = "../zenoh-util" }
 
 [dev-dependencies]
 clap = "2.33"
-env_logger = "0.7.1"
+env_logger = "0.8.2"
 
 [[example]]
 name = "z_put"
