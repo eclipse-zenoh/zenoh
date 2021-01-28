@@ -173,7 +173,15 @@ pub trait PeerAuthenticatorTrait {
     /// # Arguments
     /// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] generating the error
     ///
-    async fn handle_link_err(&self, _link: &AuthenticatedPeerLink);
+    async fn handle_link_err(&self, link: &AuthenticatedPeerLink);
+
+    /// Handle any error on a link. This callback is mainly used to clean-up any internal state
+    /// of the authenticator in such a way no unnecessary data is left around
+    ///
+    /// # Arguments
+    /// * `peerd_id` - The [`PeerId`][PeerId] of the session being closed.
+    ///
+    async fn handle_close(&self, peer_id: &PeerId);
 }
 
 pub struct DummyPeerAuthenticator;
@@ -231,4 +239,6 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
     }
 
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}
+
+    async fn handle_close(&self, _peer_id: &PeerId) {}
 }

@@ -18,7 +18,7 @@ use crate::link::Locator;
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{hmac, PseudoRng};
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite};
@@ -60,13 +60,13 @@ struct InitSynProperty {
 }
 
 impl WBuf {
-    fn write_initsyn_property(&mut self, initsyn_property: &InitSynProperty) -> bool {
-        self.write_zint(initsyn_property.version)
+    fn write_init_syn_property(&mut self, init_syn_property: &InitSynProperty) -> bool {
+        self.write_zint(init_syn_property.version)
     }
 }
 
 impl RBuf {
-    fn read_initsyn_property(&mut self) -> Option<InitSynProperty> {
+    fn read_init_syn_property(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
         Some(InitSynProperty { version })
     }
@@ -86,13 +86,13 @@ struct InitAckProperty {
 }
 
 impl WBuf {
-    fn write_initack_property(&mut self, initack_property: &InitAckProperty) -> bool {
-        self.write_zint(initack_property.nonce)
+    fn write_init_ack_property(&mut self, init_ack_property: &InitAckProperty) -> bool {
+        self.write_zint(init_ack_property.nonce)
     }
 }
 
 impl RBuf {
-    fn read_initack_property(&mut self) -> Option<InitAckProperty> {
+    fn read_init_ack_property(&mut self) -> Option<InitAckProperty> {
         let nonce = self.read_zint()?;
         Some(InitAckProperty { nonce })
     }
@@ -115,14 +115,14 @@ struct OpenSynProperty {
 }
 
 impl WBuf {
-    fn write_opensyn_property(&mut self, opensyn_property: &OpenSynProperty) -> bool {
-        zcheck!(self.write_bytes_array(&opensyn_property.user));
-        self.write_bytes_array(&opensyn_property.hmac)
+    fn write_open_syn_property(&mut self, open_syn_property: &OpenSynProperty) -> bool {
+        zcheck!(self.write_bytes_array(&open_syn_property.user));
+        self.write_bytes_array(&open_syn_property.hmac)
     }
 }
 
 impl RBuf {
-    fn read_opensyn_property(&mut self) -> Option<OpenSynProperty> {
+    fn read_open_syn_property(&mut self) -> Option<OpenSynProperty> {
         let user = self.read_bytes_array()?;
         let hmac = self.read_bytes_array()?;
         Some(OpenSynProperty { user, hmac })
@@ -132,15 +132,21 @@ impl RBuf {
 /*************************************/
 /*          Authenticator            */
 /*************************************/
-pub struct Credentials {
+struct Credentials {
     user: Vec<u8>,
     password: Vec<u8>,
+}
+
+struct Authenticated {
+    credentials: Credentials,
+    links: HashSet<(Locator, Locator)>,
 }
 
 pub struct UserPasswordAuthenticator {
     lookup: RwLock<HashMap<Vec<u8>, Vec<u8>>>,
     credentials: Credentials,
-    nonces: Mutex<HashMap<(Locator, Locator), ZInt>>,
+    nonces: Mutex<HashMap<(Locator, Locator), (PeerId, ZInt)>>,
+    authenticated: Mutex<HashMap<PeerId, Authenticated>>,
     prng: Mutex<PseudoRng>,
 }
 
@@ -156,6 +162,7 @@ impl UserPasswordAuthenticator {
                 password: credentials.1,
             },
             nonces: Mutex::new(HashMap::new()),
+            authenticated: Mutex::new(HashMap::new()),
             prng: Mutex::new(PseudoRng::from_entropy()),
         }
     }
@@ -180,11 +187,11 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
     ) -> ZResult<Vec<Property>> {
-        let initsyn_property = InitSynProperty {
+        let init_syn_property = InitSynProperty {
             version: USRPWD_VERSION,
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_initsyn_property(&initsyn_property);
+        wbuf.write_init_syn_property(&init_syn_property);
         let rbuf: RBuf = wbuf.into();
 
         let prop = Property {
@@ -197,7 +204,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        peer_id: &PeerId,
         sn_resolution: ZInt,
         properties: &[Property],
     ) -> ZResult<Vec<Property>> {
@@ -212,7 +219,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let initsyn_property = match rbuf.read_initsyn_property() {
+        let init_syn_property = match rbuf.read_init_syn_property() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -221,7 +228,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         };
 
-        if initsyn_property.version != USRPWD_VERSION {
+        if init_syn_property.version != USRPWD_VERSION {
             return zerror!(ZErrorKind::InvalidMessage {
                 descr: format!("Rejected InitSyn with invalid attachment on link: {}", link),
             });
@@ -229,10 +236,10 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         // Create the InitAck attachment
         let nonce = zasynclock!(self.prng).gen_range(0..sn_resolution);
-        let initack_property = InitAckProperty { nonce };
+        let init_ack_property = InitAckProperty { nonce };
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_initack_property(&initack_property);
+        wbuf.write_init_ack_property(&init_ack_property);
         let rbuf: RBuf = wbuf.into();
         let prop = Property {
             key: properties::authorization::USRPWD,
@@ -240,7 +247,10 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         };
 
         // Insert the nonce in the set of sent nonces
-        zasynclock!(self.nonces).insert((link.src.clone(), link.dst.clone()), nonce);
+        zasynclock!(self.nonces).insert(
+            (link.src.clone(), link.dst.clone()),
+            (peer_id.clone(), nonce),
+        );
 
         Ok(vec![prop])
     }
@@ -263,7 +273,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let init_ack_property = match rbuf.read_initack_property() {
+        let init_ack_property = match rbuf.read_init_ack_property() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -276,13 +286,13 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let key = init_ack_property.nonce.to_le_bytes();
         let hmac = hmac::sign(&key, &self.credentials.password)?;
         // Create the OpenSyn attachment
-        let opensyn_property = OpenSynProperty {
+        let open_syn_property = OpenSynProperty {
             user: self.credentials.user.clone(),
             hmac,
         };
         // Encode the InitAck attachment
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_opensyn_property(&opensyn_property);
+        wbuf.write_open_syn_property(&open_syn_property);
         let rbuf: RBuf = wbuf.into();
         let prop = Property {
             key: properties::authorization::USRPWD,
@@ -297,17 +307,18 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         link: &AuthenticatedPeerLink,
         properties: &[Property],
     ) -> ZResult<Vec<Property>> {
-        let nonce = match zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone())) {
-            Some(nonce) => nonce,
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!(
-                        "Received OpenSyn but no nonce has been created for link: {}",
-                        link
-                    ),
-                });
-            }
-        };
+        let (peer_id, nonce) =
+            match zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone())) {
+                Some(tuple) => tuple,
+                None => {
+                    return zerror!(ZErrorKind::InvalidMessage {
+                        descr: format!(
+                            "Received OpenSyn but no nonce has been associated to link: {}",
+                            link
+                        ),
+                    });
+                }
+            };
 
         let res = properties
             .iter()
@@ -320,7 +331,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let open_syn_property = match rbuf.read_opensyn_property() {
+        let open_syn_property = match rbuf.read_open_syn_property() {
             Some(osp) => osp,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -347,6 +358,31 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             });
         }
 
+        // Check PID validity
+        let mut guard = zasynclock!(self.authenticated);
+        match guard.get_mut(&peer_id) {
+            Some(auth) => {
+                if open_syn_property.user != auth.credentials.user
+                    || password != auth.credentials.password
+                {
+                    return zerror!(ZErrorKind::InvalidMessage {
+                        descr: format!("Received OpenSyn with invalid password on link: {}", link),
+                    });
+                }
+                auth.links.insert((link.src.clone(), link.dst.clone()));
+            }
+            None => {
+                let credentials = Credentials {
+                    user: open_syn_property.user,
+                    password,
+                };
+                let mut links = HashSet::new();
+                links.insert((link.src.clone(), link.dst.clone()));
+                let auth = Authenticated { credentials, links };
+                guard.insert(peer_id, auth);
+            }
+        }
+
         Ok(vec![])
     }
 
@@ -360,5 +396,23 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
     async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {
         zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone()));
+
+        // Need to check if it authenticated and remove it if this is the last link
+        let mut guard = zasynclock!(self.authenticated);
+        let mut to_del: Option<PeerId> = None;
+        for (peer_id, auth) in guard.iter_mut() {
+            auth.links.remove(&(link.src.clone(), link.dst.clone()));
+            if auth.links.is_empty() {
+                to_del = Some(peer_id.clone());
+                break;
+            }
+        }
+        if let Some(peer_id) = to_del.take() {
+            guard.remove(&peer_id);
+        }
+    }
+
+    async fn handle_close(&self, peer_id: &PeerId) {
+        zasynclock!(self.authenticated).remove(peer_id);
     }
 }

@@ -366,7 +366,12 @@ impl SessionManager {
 
     pub(super) async fn del_session(&self, peer: &PeerId) -> ZResult<()> {
         match zasynclock!(self.sessions).remove(peer) {
-            Some(_) => Ok(()),
+            Some(_) => {
+                for pa in self.config.peer_authenticator.iter() {
+                    pa.handle_close(peer).await;
+                }
+                Ok(())
+            }
             None => {
                 let e = format!("Can not delete the session of peer: {}", peer);
                 log::trace!("{}", e);

@@ -83,8 +83,18 @@ impl SessionHandler for SHClientAuthenticator {
 }
 
 async fn authenticator_user_password(locator: Locator) {
-    let user = "user".to_string();
-    let password = "password".to_string();
+    /* [CLIENT] */
+    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+    let user01 = "user01".to_string();
+    let password01 = "password01".to_string();
+
+    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
+    let user02 = "invalid".to_string();
+    let password02 = "invalid".to_string();
+
+    let client03_id = client01_id.clone();
+    let user03 = "user03".to_string();
+    let password03 = "password03".to_string();
 
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
@@ -96,8 +106,11 @@ async fn authenticator_user_password(locator: Locator) {
         id: router_id.clone(),
         handler: router_handler.clone(),
     };
+
     let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    lookup.insert(user.clone().into(), password.clone().into());
+    lookup.insert(user01.clone().into(), password01.clone().into());
+    lookup.insert(user03.clone().into(), password03.clone().into());
+
     let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(
         lookup,
         ("foo".into(), "foo".into()),
@@ -116,10 +129,6 @@ async fn authenticator_user_password(locator: Locator) {
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
 
-    /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
-
     // Create the transport session manager for the first client
     let config = SessionManagerConfig {
         version: 0,
@@ -130,7 +139,7 @@ async fn authenticator_user_password(locator: Locator) {
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client01 = Arc::new(UserPasswordAuthenticator::new(
         lookup,
-        (user.into(), password.into()),
+        (user01.clone().into(), password01.clone().into()),
     ));
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -153,8 +162,6 @@ async fn authenticator_user_password(locator: Locator) {
         id: client02_id.clone(),
         handler: Arc::new(SHClientAuthenticator::new()),
     };
-    let user02 = "user".to_string();
-    let password02 = "invalid".to_string();
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client02 = Arc::new(UserPasswordAuthenticator::new(
         lookup,
@@ -173,6 +180,32 @@ async fn authenticator_user_password(locator: Locator) {
         link_authenticator: None,
     };
     let client02_manager = SessionManager::new(config, Some(opt_config));
+
+    // Create the transport session manager for the third client
+    let config = SessionManagerConfig {
+        version: 0,
+        whatami: whatami::CLIENT,
+        id: client03_id.clone(),
+        handler: Arc::new(SHClientAuthenticator::new()),
+    };
+    let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let peer_authenticator_client03 = Arc::new(UserPasswordAuthenticator::new(
+        lookup,
+        (user03.into(), password03.into()),
+    ));
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: None,
+        max_links: None,
+        peer_authenticator: Some(vec![peer_authenticator_client03]),
+        link_authenticator: None,
+    };
+    let client03_manager = SessionManager::new(config, Some(opt_config));
 
     /* [1] */
     println!("\nSession Authenticator [1a1]");
@@ -232,13 +265,21 @@ async fn authenticator_user_password(locator: Locator) {
     let c_ses2 = res.unwrap();
 
     /* [7] */
+    // Open a fourth session from the client to the router
+    // -> This should be rejected
     println!("Session Authenticator [7a1]");
-    let res = c_ses1.close().await;
+    let res = client03_manager.open_session(&locator).await;
     println!("Session Authenticator [7a1]: {:?}", res);
+    assert!(res.is_err());
+
+    /* [7] */
+    println!("Session Authenticator [8a1]");
+    let res = c_ses1.close().await;
+    println!("Session Authenticator [8a1]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Authenticator [7a2]");
+    println!("Session Authenticator [8a2]");
     let res = c_ses2.close().await;
-    println!("Session Authenticator [7a2]: {:?}", res);
+    println!("Session Authenticator [8a2]: {:?}", res);
     assert!(res.is_ok());
 }
 
@@ -271,4 +312,5 @@ fn authenticator_unix() {
         authenticator_user_password(locator).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
 }
