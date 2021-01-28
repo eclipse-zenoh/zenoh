@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use rand::{RngCore, SeedableRng};
-use zenoh_util::crypto::{BlockCipher, PseudoRng, BLOCK_SIZE};
+use zenoh_util::crypto::{BlockCipher, PseudoRng};
 
 const RUN: usize = 16;
 
@@ -56,7 +56,7 @@ fn encrypt_decrypt(cipher: &BlockCipher, prng: &mut PseudoRng) {
 #[test]
 fn cipher() {
     let mut prng = PseudoRng::from_entropy();
-    let mut key = [0u8; BLOCK_SIZE];
+    let mut key = [0u8; BlockCipher::BLOCK_SIZE];
     prng.fill_bytes(&mut key);
     let cipher = BlockCipher::new(key);
 
