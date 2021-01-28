@@ -521,9 +521,16 @@ impl SessionManager {
             let res = super::initial::accept_link(&c_manager, &link, &auth_link)
                 .timeout(to)
                 .await;
-            if let Err(e) = res {
-                log::debug!("{}", e);
-                let _ = link.close().await;
+            match res {
+                Ok(res) => {
+                    if let Err(e) = res {
+                        log::debug!("{}", e);
+                    }
+                }
+                Err(e) => {
+                    log::debug!("{}", e);
+                    let _ = link.close().await;
+                }
             }
             zasynclock!(c_incoming).remove(&link);
         });
