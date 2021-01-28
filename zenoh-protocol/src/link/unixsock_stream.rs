@@ -603,7 +603,7 @@ async fn accept_task(listener: Arc<ListenerUnixSockStream>, manager: SessionMana
             let link = Arc::new(UnixSockStream::new(stream, src_path, dst_path));
 
             // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::new(link)).await;
+            manager.handle_new_link(Link::new(link), None).await;
         }
     };
 

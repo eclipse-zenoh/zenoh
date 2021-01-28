@@ -442,7 +442,7 @@ async fn accept_task(listener: Arc<ListenerTcp>, manager: SessionManager) {
             let link = Arc::new(Tcp::new(stream, src_addr, dst_addr));
 
             // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::new(link)).await;
+            manager.handle_new_link(Link::new(link), None).await;
         }
     };
 

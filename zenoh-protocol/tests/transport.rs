@@ -167,11 +167,10 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
 
     // Create an empty session with the client
     // Open session -> This should be accepted
-    let attachment = None;
     for l in locators.iter() {
         println!("Opening session with {}", l);
         let res = client_manager
-            .open_session(l, &attachment)
+            .open_session(l)
             .timeout(TIMEOUT)
             .await
             .unwrap();
@@ -294,7 +293,7 @@ async fn run(
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-fn transport_tcp() {
+fn transport_tcp_only() {
     // Define the locators
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
     // Define the reliability and congestion control

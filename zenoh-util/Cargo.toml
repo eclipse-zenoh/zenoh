@@ -29,23 +29,27 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 maintenance = { status = "actively-developed" }
 
 [dependencies]
+aes-soft = "0.6.4"
 async-std = { version = "=1.8.0", features = ["unstable"] }
-async-trait = "0.1.38"
+async-trait = "0.1.42"
 event-listener = "2.5.1"
-futures = "0.3.5"
+futures = "0.3.12"
 lazy_static = "1.4.0"
-log = "0.4.11"
-rand = "0.7.3"
+log = "0.4.14"
+rand = "0.8.3"
+rand_chacha = "0.3.0"
 hex = "0.4.2"
-humantime = "2.0"
+humantime = "2.1.0"
 clap = "2"
-libloading = "0.6.5"
-shellexpand = "2.0.0"
+libloading = "0.6.7"
+shellexpand = "2.1.0"
 home = "0.5.3"
+hmac = "0.10.1"
+sha3 = "0.9.1"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.77"
-pnet = "0.26.0"
+libc = "0.2.83"
+pnet = "0.27.2"

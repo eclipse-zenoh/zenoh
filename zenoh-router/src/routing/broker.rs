@@ -40,8 +40,8 @@ pub use crate::routing::resource::*;
 ///
 ///   async{
 ///     // implement Primitives trait
-///     use zenoh_protocol::session::{DummyHandler, Mux};
-///     let dummy_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+///     use zenoh_protocol::session::{DummySessionEventHandler, Mux};
+///     let dummy_primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
 ///
 ///     // UUID used for HLC and PeerId
 ///     let id = uuid::Uuid::new_v4();

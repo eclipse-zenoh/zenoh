@@ -13,12 +13,15 @@
 //
 use crate::routing::router::Router;
 use crate::runtime::orchestrator::SessionOrchestrator;
+use async_std::fs;
 use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use config::*;
+use std::collections::HashMap;
 use uhlc::HLC;
 use zenoh_protocol::core::PeerId;
+use zenoh_protocol::session::authenticator::{PeerAuthenticator, UserPasswordAuthenticator};
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
-use zenoh_util::collections::{IntKeyProperties, KeyTranscoder};
+use zenoh_util::collections::{IntKeyProperties, KeyTranscoder, Properties};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zerror, zerror2};
 
@@ -82,6 +85,36 @@ impl Runtime {
             handler: router.clone(),
         };
 
+        // Initialize the UserPassword authenticator if needed
+        let mut peer_authenticator: Option<Vec<PeerAuthenticator>> = None;
+        if let Some(user) = config.get(&ZN_USER_KEY) {
+            if let Some(password) = config.get(&ZN_PASSWORD_KEY) {
+                // We have both user password parameter defined. Check if we
+                // need to build the user-password lookup dictionary for incoming
+                // connections, e.g. on the router.
+                let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+                if let Some(dict) = config.get(&ZN_USER_PASSWORD_DICTIONARY_KEY) {
+                    let content = fs::read_to_string(dict).await.map_err(|e| {
+                        zerror2!(ZErrorKind::Other {
+                            descr: format!("Invalid user-password dictionary file: {}", e)
+                        })
+                    })?;
+                    // Populate the user-password dictionary
+                    let mut ps = Properties::from(content);
+                    for (user, password) in ps.drain() {
+                        lookup.insert(user.into(), password.into());
+                    }
+                }
+                // Create the UserPassword Authenticator based on provided info
+                let upa = Arc::new(UserPasswordAuthenticator::new(
+                    lookup,
+                    (user.to_string().into(), password.to_string().into()),
+                ));
+                peer_authenticator = Some(vec![upa]);
+                log::debug!("User-password authentication is enabled",);
+            }
+        }
+
         let sm_opt_config = SessionManagerOptionalConfig {
             lease: None,
             keep_alive: None,
@@ -91,6 +124,8 @@ impl Runtime {
             retries: None,
             max_sessions: None,
             max_links: None,
+            peer_authenticator,
+            link_authenticator: None,
         };
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
@@ -148,6 +183,7 @@ pub mod config {
     /// Accepted values : `"peer"`, `"client"`.
     /// Default value : `"peer"`.
     pub const ZN_MODE_KEY: u64 = 0x40;
+    pub const ZN_MODE_STR: &str = "mode";
     pub const ZN_MODE_DEFAULT: &str = "peer";
 
     /// The locator of a peer to connect to.
@@ -156,6 +192,7 @@ pub mod config {
     /// Default value : None.
     /// Multiple values accepted.
     pub const ZN_PEER_KEY: u64 = 0x41;
+    pub const ZN_PEER_STR: &str = "peer";
 
     /// A locator to listen on.
     /// String key : `"listener"`.
@@ -163,24 +200,28 @@ pub mod config {
     /// Default value : None.
     /// Multiple values accepted.
     pub const ZN_LISTENER_KEY: u64 = 0x42;
+    pub const ZN_LISTENER_STR: &str = "listener";
 
     /// The user name to use for authentication.
     /// String key : `"user"`.
     /// Accepted values : `<string>`.
     /// Default value : None.
     pub const ZN_USER_KEY: u64 = 0x43;
+    pub const ZN_USER_STR: &str = "user";
 
     /// The password to use for authentication.
     /// String key : `"password"`.
     /// Accepted values : `<string>`.
     /// Default value : None.
     pub const ZN_PASSWORD_KEY: u64 = 0x44;
+    pub const ZN_PASSWORD_STR: &str = "password";
 
     /// Activates/Desactivates multicast scouting.
     /// String key : `"multicast_scouting"`.
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"true"`.
     pub const ZN_MULTICAST_SCOUTING_KEY: u64 = 0x45;
+    pub const ZN_MULTICAST_SCOUTING_STR: &str = "multicast_scouting";
     pub const ZN_MULTICAST_SCOUTING_DEFAULT: &str = "true";
 
     /// The network interface to use for multicast scouting.
@@ -188,6 +229,7 @@ pub mod config {
     /// Accepted values : `"auto"`, `<ip address>`, `<interface name>`.
     /// Default value : `"auto"`.
     pub const ZN_MULTICAST_INTERFACE_KEY: u64 = 0x46;
+    pub const ZN_MULTICAST_INTERFACE_STR: &str = "multicast_interface";
     pub const ZN_MULTICAST_INTERFACE_DEFAULT: &str = "auto";
 
     /// The multicast address and ports to use for multicast scouting.
@@ -195,6 +237,7 @@ pub mod config {
     /// Accepted values : `<ip address>:<port>`.
     /// Default value : `"224.0.0.224:7447"`.
     pub const ZN_MULTICAST_ADDRESS_KEY: u64 = 0x47;
+    pub const ZN_MULTICAST_ADDRESS_STR: &str = "multicast_address";
     pub const ZN_MULTICAST_ADDRESS_DEFAULT: &str = "224.0.0.224:7447";
 
     /// In client mode, the period dedicated to scouting a router before failing.
@@ -202,6 +245,7 @@ pub mod config {
     /// Accepted values : `<float in seconds>`.
     /// Default value : `"3.0"`.
     pub const ZN_SCOUTING_TIMEOUT_KEY: u64 = 0x48;
+    pub const ZN_SCOUTING_TIMEOUT_STR: &str = "scouting_timeout";
     pub const ZN_SCOUTING_TIMEOUT_DEFAULT: &str = "3.0";
 
     /// In peer mode, the period dedicated to scouting first remote peers before doing anything else.
@@ -209,6 +253,7 @@ pub mod config {
     /// Accepted values : `<float in seconds>`.
     /// Default value : `"0.2"`.
     pub const ZN_SCOUTING_DELAY_KEY: u64 = 0x49;
+    pub const ZN_SCOUTING_DELAY_STR: &str = "scouting_delay";
     pub const ZN_SCOUTING_DELAY_DEFAULT: &str = "0.2";
 
     /// Indicates if data messages should be timestamped.
@@ -216,6 +261,7 @@ pub mod config {
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"false"`.
     pub const ZN_ADD_TIMESTAMP_KEY: u64 = 0x4A;
+    pub const ZN_ADD_TIMESTAMP_STR: &str = "add_timestamp";
     pub const ZN_ADD_TIMESTAMP_DEFAULT: &str = "false";
 
     /// Indicates if the link state protocol should run.
@@ -223,7 +269,15 @@ pub mod config {
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"true"`.
     pub const ZN_LINK_STATE_KEY: u64 = 0x4B;
+    pub const ZN_LINK_STATE_STR: &str = "link_state";
     pub const ZN_LINK_STATE_DEFAULT: &str = "true";
+
+    /// The file path containing the user password dictionary.
+    /// String key : `"user_password_dictionary"`.
+    /// Accepted values : `<file path>`.
+    /// Default value : None.
+    pub const ZN_USER_PASSWORD_DICTIONARY_KEY: u64 = 0x4C;
+    pub const ZN_USER_PASSWORD_DICTIONARY_STR: &str = "user_password_dictionary";
 
     pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
         match m {
@@ -239,36 +293,38 @@ pub struct RuntimeTranscoder();
 impl KeyTranscoder for RuntimeTranscoder {
     fn encode(key: &str) -> Option<u64> {
         match &key.to_lowercase()[..] {
-            "mode" => Some(ZN_MODE_KEY),
-            "peer" => Some(ZN_PEER_KEY),
-            "listener" => Some(ZN_LISTENER_KEY),
-            "user" => Some(ZN_USER_KEY),
-            "password" => Some(ZN_PASSWORD_KEY),
-            "multicast_scouting" => Some(ZN_MULTICAST_SCOUTING_KEY),
-            "multicast_interface" => Some(ZN_MULTICAST_INTERFACE_KEY),
-            "multicast_address" => Some(ZN_MULTICAST_ADDRESS_KEY),
-            "scouting_timeout" => Some(ZN_SCOUTING_TIMEOUT_KEY),
-            "scouting_delay" => Some(ZN_SCOUTING_DELAY_KEY),
-            "add_timestamp" => Some(ZN_ADD_TIMESTAMP_KEY),
-            "link_state" => Some(ZN_LINK_STATE_KEY),
+            ZN_MODE_STR => Some(ZN_MODE_KEY),
+            ZN_PEER_STR => Some(ZN_PEER_KEY),
+            ZN_LISTENER_STR => Some(ZN_LISTENER_KEY),
+            ZN_USER_STR => Some(ZN_USER_KEY),
+            ZN_PASSWORD_STR => Some(ZN_PASSWORD_KEY),
+            ZN_MULTICAST_SCOUTING_STR => Some(ZN_MULTICAST_SCOUTING_KEY),
+            ZN_MULTICAST_INTERFACE_STR => Some(ZN_MULTICAST_INTERFACE_KEY),
+            ZN_MULTICAST_ADDRESS_STR => Some(ZN_MULTICAST_ADDRESS_KEY),
+            ZN_SCOUTING_TIMEOUT_STR => Some(ZN_SCOUTING_TIMEOUT_KEY),
+            ZN_SCOUTING_DELAY_STR => Some(ZN_SCOUTING_DELAY_KEY),
+            ZN_ADD_TIMESTAMP_STR => Some(ZN_ADD_TIMESTAMP_KEY),
+            ZN_LINK_STATE_STR => Some(ZN_LINK_STATE_KEY),
+            ZN_USER_PASSWORD_DICTIONARY_STR => Some(ZN_USER_PASSWORD_DICTIONARY_KEY),
             _ => None,
         }
     }
 
     fn decode(key: u64) -> Option<String> {
         match key {
-            0x40 => Some("mode".to_string()),
-            0x41 => Some("peer".to_string()),
-            0x42 => Some("listener".to_string()),
-            0x43 => Some("user".to_string()),
-            0x44 => Some("password".to_string()),
-            0x45 => Some("multicast_scouting".to_string()),
-            0x46 => Some("multicast_interface".to_string()),
-            0x47 => Some("multicast_address".to_string()),
-            0x48 => Some("scouting_timeout".to_string()),
-            0x49 => Some("scouting_delay".to_string()),
-            0x4A => Some("add_timestamp".to_string()),
-            0x4B => Some("link_state".to_string()),
+            ZN_MODE_KEY => Some(ZN_MODE_STR.to_string()),
+            ZN_PEER_KEY => Some(ZN_PEER_STR.to_string()),
+            ZN_LISTENER_KEY => Some(ZN_LISTENER_STR.to_string()),
+            ZN_USER_KEY => Some(ZN_USER_STR.to_string()),
+            ZN_PASSWORD_KEY => Some(ZN_PASSWORD_STR.to_string()),
+            ZN_MULTICAST_SCOUTING_KEY => Some(ZN_MULTICAST_SCOUTING_STR.to_string()),
+            ZN_MULTICAST_INTERFACE_KEY => Some(ZN_MULTICAST_INTERFACE_STR.to_string()),
+            ZN_MULTICAST_ADDRESS_KEY => Some(ZN_MULTICAST_ADDRESS_STR.to_string()),
+            ZN_SCOUTING_TIMEOUT_KEY => Some(ZN_SCOUTING_TIMEOUT_STR.to_string()),
+            ZN_SCOUTING_DELAY_KEY => Some(ZN_SCOUTING_DELAY_STR.to_string()),
+            ZN_ADD_TIMESTAMP_KEY => Some(ZN_ADD_TIMESTAMP_STR.to_string()),
+            ZN_LINK_STATE_KEY => Some(ZN_LINK_STATE_STR.to_string()),
+            ZN_USER_PASSWORD_DICTIONARY_KEY => Some(ZN_USER_PASSWORD_DICTIONARY_STR.to_string()),
             _ => None,
         }
     }

@@ -22,7 +22,7 @@ use zenoh_protocol::core::{whatami, PeerId};
 use zenoh_protocol::link::{Link, Locator};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
-    DummyHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
     SessionManagerConfig, SessionManagerOptionalConfig,
 };
 
@@ -114,13 +114,11 @@ impl SessionHandler for SHClientOpenClose {
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(DummyHandler::new()))
+        Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }
 
 async fn session_open_close(locator: Locator) {
-    let attachment = None;
-
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
@@ -144,6 +142,8 @@ async fn session_open_close(locator: Locator) {
         retries: None,
         max_sessions: Some(1),
         max_links: Some(2),
+        peer_authenticator: None,
+        link_authenticator: None,
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
 
@@ -183,7 +183,7 @@ async fn session_open_close(locator: Locator) {
     // Open a first session from the client to the router
     // -> This should be accepted
     println!("Session Open Close [1c1]");
-    let res = client01_manager.open_session(&locator, &attachment).await;
+    let res = client01_manager.open_session(&locator).await;
     println!("Session Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -216,7 +216,7 @@ async fn session_open_close(locator: Locator) {
     // Open a second session from the client to the router
     // -> This should be accepted
     println!("\nSession Open Close [2a1]");
-    let res = client01_manager.open_session(&locator, &attachment).await;
+    let res = client01_manager.open_session(&locator).await;
     println!("Session Open Close [2a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -251,7 +251,7 @@ async fn session_open_close(locator: Locator) {
     // Open session -> This should be rejected because
     // of the maximum limit of links per session
     println!("\nSession Open Close [3a1]");
-    let res = client01_manager.open_session(&locator, &attachment).await;
+    let res = client01_manager.open_session(&locator).await;
     println!("Session Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
     println!("Session Open Close [3b1]");
@@ -301,7 +301,7 @@ async fn session_open_close(locator: Locator) {
     // Open session -> This should be accepted because
     // the number of links should be back to 0
     println!("\nSession Open Close [5a1]");
-    let res = client01_manager.open_session(&locator, &attachment).await;
+    let res = client01_manager.open_session(&locator).await;
     println!("Session Open Close [5a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
@@ -334,7 +334,7 @@ async fn session_open_close(locator: Locator) {
     // Open session -> This should be rejected because
     // of the maximum limit of sessions
     println!("\nSession Open Close [6a1]");
-    let res = client02_manager.open_session(&locator, &attachment).await;
+    let res = client02_manager.open_session(&locator).await;
     println!("Session Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
     println!("Session Open Close [6b1]");
@@ -379,7 +379,7 @@ async fn session_open_close(locator: Locator) {
     // Open session -> This should be accepted because
     // the number of sessions should be back to 0
     println!("\nSession Open Close [8a1]");
-    let res = client02_manager.open_session(&locator, &attachment).await;
+    let res = client02_manager.open_session(&locator).await;
     println!("Session Open Close [8a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();

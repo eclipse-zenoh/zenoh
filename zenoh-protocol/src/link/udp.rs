@@ -569,7 +569,7 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
                             // Add the new link to the set of connected peers
                             zaddlink!(src_addr, dst_addr, Arc::downgrade(&link));
 
-                            manager.handle_new_link(Link::new(link)).await;
+                            manager.handle_new_link(Link::new(link), None).await;
                         } else {
                             log::debug!(
                                 "Rejected UDP connection from {}: listerner {} is not active",
