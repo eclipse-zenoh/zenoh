@@ -127,7 +127,7 @@ impl<T: KeyTranscoder> From<&[(u64, &str)]> for IntKeyProperties<T> {
 static PROP_SEPS: &[&str] = &["\r\n", "\n", ";"];
 const DEFAULT_PROP_SEP: char = ';';
 
-const KV_SEP: char = '=';
+const KV_SEP: &[char] = &['=', ':'];
 
 #[derive(Clone, Debug, PartialEq)]
 /// A map of key/value (String,String) properties.
@@ -163,13 +163,13 @@ impl fmt::Display for Properties {
             if v.is_empty() {
                 write!(f, "{}", k)?
             } else {
-                write!(f, "{}{}{}", k, KV_SEP, v)?
+                write!(f, "{}{}{}", k, KV_SEP[0], v)?
             }
             for (k, v) in it {
                 if v.is_empty() {
                     write!(f, "{}{}", DEFAULT_PROP_SEP, k)?
                 } else {
-                    write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP, v)?
+                    write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP[0], v)?
                 }
             }
         }
