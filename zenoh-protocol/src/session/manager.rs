@@ -33,7 +33,7 @@ use rand::{RngCore, SeedableRng};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::crypto::{BlockCipher, PseudoRng, BLOCK_SIZE};
+use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::{zasynclock, zerror};
 
 /// # Examples
@@ -221,7 +221,7 @@ impl SessionManager {
 
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
-        let mut key = [0u8; BLOCK_SIZE];
+        let mut key = [0u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
         let cipher = BlockCipher::new(key);
 
