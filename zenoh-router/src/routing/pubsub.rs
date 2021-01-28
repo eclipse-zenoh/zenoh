@@ -643,11 +643,11 @@ pub(crate) async fn pubsub_remove_node(
 
 pub(crate) async fn pubsub_tree_change(
     tables: &mut Tables,
-    new_childs: Vec<Vec<NodeIndex>>,
+    new_childs: &[Vec<NodeIndex>],
     net_type: whatami::Type,
 ) {
     // propagate subs to now childs
-    for (tree_sid, tree_childs) in new_childs.into_iter().enumerate() {
+    for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
             let net = tables.get_net(net_type).unwrap();
             let tree_id = net.graph[NodeIndex::new(tree_sid)].pid.clone();
@@ -664,7 +664,7 @@ pub(crate) async fn pubsub_tree_change(
                 };
                 for sub in subs {
                     if *sub == tree_id {
-                        for child in &tree_childs {
+                        for child in tree_childs {
                             match tables.get_face(&net.graph[*child].pid).cloned() {
                                 Some(mut face) => {
                                     let reskey = Resource::decl_key(&res, &mut face).await;
