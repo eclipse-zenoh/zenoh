@@ -12,8 +12,10 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::{Arc, RwLock, Weak};
+use async_std::task::sleep;
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 use uhlc::HLC;
 
 use zenoh_protocol::core::{whatami, PeerId, WhatAmI, ZInt};
@@ -23,6 +25,7 @@ use zenoh_protocol::session::{
 };
 
 use zenoh_util::core::ZResult;
+use zenoh_util::zconfigurable;
 
 use crate::routing::face::{Face, FaceState};
 use crate::routing::network::Network;
@@ -30,6 +33,10 @@ pub use crate::routing::pubsub::*;
 pub use crate::routing::queries::*;
 pub use crate::routing::resource::*;
 use crate::runtime::orchestrator::SessionOrchestrator;
+
+zconfigurable! {
+    static ref LINK_CLOSURE_DELAY: u64 = 200;
+}
 
 pub struct Tables {
     pub(crate) pid: PeerId,
@@ -360,6 +367,7 @@ impl SessionEventHandler for LinkStateInterceptor {
 
     async fn closing(&self) {
         self.demux.closing().await;
+        sleep(Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
         let mut tables = self.tables.write().await;
         match self.session.get_whatami() {
             Ok(whatami) => match (tables.whatami, whatami) {
