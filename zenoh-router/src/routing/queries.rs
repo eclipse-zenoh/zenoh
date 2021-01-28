@@ -20,15 +20,13 @@ use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
 use crate::routing::face::FaceState;
-use crate::routing::resource::{Context, Resource};
+use crate::routing::resource::{Context, Resource, Route};
 use crate::routing::router::Tables;
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: ZInt,
 }
-
-type QueryRoute = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
 
 async fn propagate_simple_queryable(
     tables: &mut Tables,
@@ -653,7 +651,7 @@ unsafe fn compute_query_route(
     suffix: &str,
     source: Option<usize>,
     source_type: whatami::Type,
-) -> QueryRoute {
+) -> Route {
     let mut route = HashMap::new();
     let resname = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
@@ -743,13 +741,13 @@ unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
             .node_indices()
             .collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
-        res_mut.routers_routes.clear();
+        res_mut.routers_query_routes.clear();
         res_mut
-            .routers_routes
+            .routers_query_routes
             .resize_with(max_idx.index() + 1, HashMap::new);
 
         for idx in &indexes {
-            res_mut.routers_routes[idx.index()] =
+            res_mut.routers_query_routes[idx.index()] =
                 compute_query_route(tables, res, "", Some(idx.index()), whatami::ROUTER);
         }
     }
@@ -762,18 +760,19 @@ unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
             .node_indices()
             .collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
-        res_mut.peers_routes.clear();
+        res_mut.peers_query_routes.clear();
         res_mut
-            .peers_routes
+            .peers_query_routes
             .resize_with(max_idx.index() + 1, HashMap::new);
 
         for idx in &indexes {
-            res_mut.peers_routes[idx.index()] =
+            res_mut.peers_query_routes[idx.index()] =
                 compute_query_route(tables, res, "", Some(idx.index()), whatami::PEER);
         }
     }
     if tables.whatami == whatami::CLIENT {
-        res_mut.client_route = Some(compute_query_route(tables, res, "", None, whatami::CLIENT));
+        res_mut.client_query_route =
+            Some(compute_query_route(tables, res, "", None, whatami::CLIENT));
     }
 }
 
@@ -834,7 +833,7 @@ pub async fn route_query(
                             .unwrap()
                             .index();
                         match Resource::get_resource(prefix, suffix) {
-                            Some(res) => res.routers_routes[local_context].clone(),
+                            Some(res) => res.routers_query_routes[local_context].clone(),
                             None => compute_query_route(
                                 tables,
                                 prefix,
@@ -858,7 +857,7 @@ pub async fn route_query(
                             .unwrap()
                             .index();
                         match Resource::get_resource(prefix, suffix) {
-                            Some(res) => res.peers_routes[local_context].clone(),
+                            Some(res) => res.peers_query_routes[local_context].clone(),
                             None => compute_query_route(
                                 tables,
                                 prefix,
@@ -869,7 +868,7 @@ pub async fn route_query(
                         }
                     }
                     _ => match Resource::get_resource(prefix, suffix) {
-                        Some(res) => res.routers_routes[0].clone(),
+                        Some(res) => res.routers_query_routes[0].clone(),
                         None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
                     },
                 },
@@ -888,7 +887,7 @@ pub async fn route_query(
                             .unwrap()
                             .index();
                         match Resource::get_resource(prefix, suffix) {
-                            Some(res) => res.peers_routes[local_context].clone(),
+                            Some(res) => res.peers_query_routes[local_context].clone(),
                             None => compute_query_route(
                                 tables,
                                 prefix,
@@ -899,12 +898,12 @@ pub async fn route_query(
                         }
                     }
                     _ => match Resource::get_resource(prefix, suffix) {
-                        Some(res) => res.peers_routes[0].clone(),
+                        Some(res) => res.peers_query_routes[0].clone(),
                         None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
                     },
                 },
                 _ => match Resource::get_resource(prefix, suffix) {
-                    Some(res) => match &res.client_route {
+                    Some(res) => match &res.client_query_route {
                         Some(route) => route.clone(),
                         None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
                     },

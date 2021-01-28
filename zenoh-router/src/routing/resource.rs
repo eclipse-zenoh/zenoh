@@ -21,7 +21,7 @@ use zenoh_protocol::core::{PeerId, ResKey, SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
-pub type DataRoute = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
+pub type Route = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
 
 pub(super) struct Context {
     pub(super) face: Arc<FaceState>,
@@ -44,9 +44,12 @@ pub struct Resource {
     pub(super) peer_qabls: HashSet<PeerId>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) routers_routes: Vec<DataRoute>,
-    pub(super) peers_routes: Vec<DataRoute>,
-    pub(super) client_route: Option<DataRoute>,
+    pub(super) routers_data_routes: Vec<Route>,
+    pub(super) peers_data_routes: Vec<Route>,
+    pub(super) client_data_route: Option<Route>,
+    pub(super) routers_query_routes: Vec<Route>,
+    pub(super) peers_query_routes: Vec<Route>,
+    pub(super) client_query_route: Option<Route>,
 }
 
 impl PartialEq for Resource {
@@ -86,9 +89,12 @@ impl Resource {
             peer_qabls: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
-            routers_routes: Vec::new(),
-            peers_routes: Vec::new(),
-            client_route: None,
+            routers_data_routes: Vec::new(),
+            peers_data_routes: Vec::new(),
+            client_data_route: None,
+            routers_query_routes: Vec::new(),
+            peers_query_routes: Vec::new(),
+            client_query_route: None,
         }
     }
 
@@ -128,9 +134,12 @@ impl Resource {
             peer_qabls: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
-            routers_routes: Vec::new(),
-            peers_routes: Vec::new(),
-            client_route: None,
+            routers_data_routes: Vec::new(),
+            peers_data_routes: Vec::new(),
+            client_data_route: None,
+            routers_query_routes: Vec::new(),
+            peers_query_routes: Vec::new(),
+            client_query_route: None,
         })
     }
 
