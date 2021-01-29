@@ -23,5 +23,5 @@ edition = "2018"
 
 [dependencies]
 zenoh = { version = "0.5.0-beta.5", path = "../../zenoh" }
-async-std = { version = "=1.8.0", features = ["unstable"] }
+async-std = "=1.9.0"
 async-trait = "0.1"

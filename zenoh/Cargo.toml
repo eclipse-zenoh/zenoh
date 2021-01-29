@@ -38,7 +38,7 @@ transport_udp = []
 default = ["transport_tcp", "transport_udp", "zero-copy"]
 
 [dependencies]
-async-std = { version = "=1.8.0", features = ["attributes"] }
+async-std = { version = "=1.9.0", features = ["attributes"] }
 async-trait = "0.1.42"
 futures = "0.3.12"
 pin-project-lite = "0.2.4"
