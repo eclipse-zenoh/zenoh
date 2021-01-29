@@ -23,6 +23,7 @@ use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 use zenoh_protocol::{
     core::{
         queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget, ResKey,
@@ -41,6 +42,7 @@ zconfigurable! {
     static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
     static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
     static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    static ref API_OPEN_SESSION_DELAY: u64 = 500;
 }
 
 pub(crate) struct SessionState {
@@ -215,7 +217,7 @@ impl Session {
                 )
                 .await;
                 // Workaround for the declare_and_shoot problem
-                task::sleep(std::time::Duration::from_millis(200)).await;
+                task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
                 Ok(session)
             }
             Err(err) => Err(err),
