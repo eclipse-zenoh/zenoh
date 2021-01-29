@@ -137,11 +137,9 @@ fn main() {
         return print_usage(bin);
     };
 
-    let attachment = None;
-
     // Connect to publisher
     task::block_on(async {
-        if manager.open_session(&connect_to, &attachment).await.is_ok() {
+        if manager.open_session(&connect_to).await.is_ok() {
             println!("Opened session on {}", connect_to);
         } else {
             println!("Failed to open session on {}", connect_to);

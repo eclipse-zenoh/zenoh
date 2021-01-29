@@ -77,13 +77,9 @@ fn main() {
 
     task::block_on(async {
         let mut has_locator = false;
-        let attachment = None;
         for locator in args {
             has_locator = true;
-            if let Err(_err) = manager
-                .open_session(&locator.parse().unwrap(), &attachment)
-                .await
-            {
+            if let Err(_err) = manager.open_session(&locator.parse().unwrap()).await {
                 println!("Unable to connect to {}!", locator);
                 return;
             }
