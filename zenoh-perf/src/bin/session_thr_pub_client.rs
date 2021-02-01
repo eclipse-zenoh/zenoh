@@ -21,7 +21,8 @@ use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{whatami, WhatAmI, ZenohMessage};
 use zenoh_protocol::session::{
-    DummySessionEventHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    DummySessionEventHandler, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig,
 };
 
 struct MySH {}
@@ -104,11 +105,9 @@ fn main() {
     };
     let manager = SessionManager::new(config, None);
 
-    let attachment = None;
-
     // Connect to publisher
     task::block_on(async {
-        let session = if let Ok(s) = manager.open_session(&connect_to, &attachment).await {
+        let session = if let Ok(s) = manager.open_session(&connect_to).await {
             println!("Opened session on {}", connect_to);
             s
         } else {
@@ -122,6 +121,7 @@ fn main() {
         let info = None;
         let payload = RBuf::from(vec![0u8; payload]);
         let reply_context = None;
+        let attachment = None;
 
         let message =
             ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);

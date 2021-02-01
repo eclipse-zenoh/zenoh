@@ -161,11 +161,7 @@ fn main() {
 
     // Connect to publisher
     task::block_on(async {
-        let attachment = None;
-        let session = manager
-            .open_session(&connect_to, &attachment)
-            .await
-            .unwrap();
+        let session = manager.open_session(&connect_to).await.unwrap();
 
         let payload = vec![0u8; size - 8];
         let mut count: u64 = 0;
