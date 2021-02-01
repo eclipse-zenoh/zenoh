@@ -61,7 +61,7 @@ fn get_plugins_from_args() -> Vec<String> {
 fn main() {
     task::block_on(async {
         env_logger::init();
-        log::debug!("zenohd {}", GIT_VERSION);
+        log::debug!("zenohd {}", *LONG_VERSION);
 
         let plugin_search_dir_usage = format!(
             "--plugin-search-dir=[DIRECTORY]... \
