@@ -23,9 +23,7 @@ use super::transport::SessionTransport;
 use super::Session;
 use super::SessionHandler;
 use crate::core::{PeerId, WhatAmI, ZInt};
-use crate::link::{
-    Link, LinkManager, LinkManagerBuilder, LinkProperties, Locator, LocatorProtocol,
-};
+use crate::link::{Link, LinkManager, LinkManagerBuilder, LinkProperty, Locator, LocatorProtocol};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
@@ -243,9 +241,13 @@ impl SessionManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
+    pub async fn add_listener(
+        &self,
+        locator: &Locator,
+        ps: Option<LinkProperty>,
+    ) -> ZResult<Locator> {
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
-        manager.new_listener(locator).await
+        manager.new_listener(locator, ps).await
     }
 
     pub async fn get_listeners(&self) -> Vec<Locator> {
@@ -422,13 +424,17 @@ impl SessionManager {
         Ok(session)
     }
 
-    pub async fn open_session(&self, locator: &Locator) -> ZResult<Session> {
+    pub async fn open_session(
+        &self,
+        locator: &Locator,
+        ps: Option<&LinkProperty>,
+    ) -> ZResult<Session> {
         // Create the timeout duration
         let to = Duration::from_millis(self.config.timeout);
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
         // Create a new link associated by calling the Link Manager
-        let link = match manager.new_link(&locator).await {
+        let link = match manager.new_link(&locator, ps).await {
             Ok(link) => link,
             Err(e) => {
                 log::warn!("Can not to create a link to locator {}: {}", locator, e);
@@ -461,7 +467,7 @@ impl SessionManager {
         zerror!(ZErrorKind::Other { descr: e })
     }
 
-    pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LinkProperties>) {
+    pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LinkProperty>) {
         let mut guard = zasynclock!(self.incoming);
         if guard.len() >= *SESSION_OPEN_MAX_CONCURRENT {
             // We reached the limit of concurrent incoming session, this means two things:
@@ -481,7 +487,7 @@ impl SessionManager {
 
         let mut peer_id: Option<PeerId> = None;
         for la in self.config.link_authenticator.iter() {
-            let res = la.handle_new_link(&link, properties.clone()).await;
+            let res = la.handle_new_link(&link, properties.as_ref()).await;
             match res {
                 Ok(pid) => {
                     // Check that all the peer authenticators

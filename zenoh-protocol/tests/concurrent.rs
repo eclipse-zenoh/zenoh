@@ -157,7 +157,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
     let peer01_task = task::spawn(async move {
         // Add the locators on the first peer
         for loc in c_loc01.iter() {
-            let res = peer01_manager.add_listener(&loc).await;
+            let res = peer01_manager.add_listener(&loc, None).await;
             println!("[Session Peer 01] => Adding locator {:?}: {:?}", loc, res);
             assert!(res.is_ok());
         }
@@ -179,7 +179,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
                 // Syncrhonize before opening the sessions
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let res = c_p01m.open_session(&c_loc).await;
+                let res = c_p01m.open_session(&c_loc, None).await;
                 println!(
                     "[Session Peer 01] => Opening session with {:?}: {:?}",
                     c_loc, res
@@ -251,7 +251,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
     let peer02_task = task::spawn(async move {
         // Add the locators on the first peer
         for loc in c_loc02.iter() {
-            let res = peer02_manager.add_listener(&loc).await;
+            let res = peer02_manager.add_listener(&loc, None).await;
             println!("[Session Peer 02] => Adding locator {:?}: {:?}", loc, res);
             assert!(res.is_ok());
         }
@@ -273,7 +273,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
                 // Syncrhonize before opening the sessions
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let res = c_p02m.open_session(&c_loc).await;
+                let res = c_p02m.open_session(&c_loc, None).await;
                 println!(
                     "[Session Peer 02] => Opening session with {:?}: {:?}",
                     c_loc, res

@@ -158,7 +158,7 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
     for l in locators.iter() {
         println!("Add locator: {}", l);
         let res = router_manager
-            .add_listener(l)
+            .add_listener(l, None)
             .timeout(TIMEOUT)
             .await
             .unwrap();
@@ -170,7 +170,7 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
     for l in locators.iter() {
         println!("Opening session with {}", l);
         let res = client_manager
-            .open_session(l)
+            .open_session(l, None)
             .timeout(TIMEOUT)
             .await
             .unwrap();

@@ -11,16 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Link, LinkManagerTrait, LinkTrait, Locator};
+use super::{Link, LinkManagerTrait, LinkProperty, LinkTrait, Locator};
 use crate::session::SessionManager;
 use async_std::channel::{bounded, Receiver, Sender};
-use async_std::net::{SocketAddr, UdpSocket};
+use async_std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Barrier, Mutex, Weak};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -64,16 +65,66 @@ zconfigurable! {
 }
 
 #[allow(unreachable_patterns)]
-fn get_udp_addr(locator: &Locator) -> ZResult<&SocketAddr> {
+async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
     match locator {
-        Locator::Udp(addr) => Ok(addr),
+        Locator::Udp(addr) => match addr {
+            LocatorUdp::SocketAddr(addr) => Ok(*addr),
+            LocatorUdp::DNSName(addr) => match addr.to_socket_addrs().await {
+                Ok(mut addr_iter) => {
+                    if let Some(addr) = addr_iter.next() {
+                        Ok(addr)
+                    } else {
+                        let e = format!("Couldn't resolve TCP locator: {}", addr);
+                        zerror!(ZErrorKind::InvalidLocator { descr: e })
+                    }
+                }
+                Err(e) => {
+                    let e = format!("{}: {}", e, addr);
+                    zerror!(ZErrorKind::InvalidLocator { descr: e })
+                }
+            },
+        },
         _ => {
-            let e = format!("Not a UDP locator: {}", locator);
-            log::debug!("{}", e);
+            let e = format!("Not a TCP locator: {}", locator);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }
 }
+
+/*************************************/
+/*             LOCATOR               */
+/*************************************/
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum LocatorUdp {
+    SocketAddr(SocketAddr),
+    DNSName(String),
+}
+
+impl FromStr for LocatorUdp {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse() {
+            Ok(addr) => Ok(LocatorUdp::SocketAddr(addr)),
+            Err(_) => Ok(LocatorUdp::DNSName(s.to_string())),
+        }
+    }
+}
+
+impl fmt::Display for LocatorUdp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LocatorUdp::SocketAddr(addr) => write!(f, "{}", addr)?,
+            LocatorUdp::DNSName(addr) => write!(f, "{}", addr)?,
+        }
+        Ok(())
+    }
+}
+
+/*************************************/
+/*            PROPERTY               */
+/*************************************/
+pub type LinkPropertyUdp = ();
 
 /*************************************/
 /*              LINK                 */
@@ -233,12 +284,12 @@ impl LinkTrait for Udp {
 
     #[inline]
     fn get_src(&self) -> Locator {
-        Locator::Udp(self.src_addr)
+        Locator::Udp(LocatorUdp::SocketAddr(self.src_addr))
     }
 
     #[inline]
     fn get_dst(&self) -> Locator {
-        Locator::Udp(self.dst_addr)
+        Locator::Udp(LocatorUdp::SocketAddr(self.dst_addr))
     }
 
     #[inline]
@@ -292,8 +343,8 @@ impl LinkManagerUdp {
 
 #[async_trait]
 impl LinkManagerTrait for LinkManagerUdp {
-    async fn new_link(&self, dst: &Locator) -> ZResult<Link> {
-        let dst_addr = get_udp_addr(dst)?;
+    async fn new_link(&self, dst: &Locator, _ps: Option<&LinkProperty>) -> ZResult<Link> {
+        let dst_addr = get_udp_addr(dst).await?;
         // Establish a UDP socket
         let res = if dst_addr.is_ipv4() {
             // IPv4 format
@@ -347,10 +398,10 @@ impl LinkManagerTrait for LinkManagerUdp {
         Ok(lobj)
     }
 
-    async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
-        let addr = get_udp_addr(locator)?;
+    async fn new_listener(&self, locator: &Locator, _ps: Option<LinkProperty>) -> ZResult<Locator> {
+        let addr = get_udp_addr(locator).await?;
 
-        if let Some(listener) = zasynclock!(self.listeners).get(addr) {
+        if let Some(listener) = zasynclock!(self.listeners).get(&addr) {
             listener.status.activate();
             let local_addr = match listener.socket.local_addr() {
                 Ok(addr) => addr,
@@ -360,7 +411,7 @@ impl LinkManagerTrait for LinkManagerUdp {
                     return zerror!(ZErrorKind::InvalidLink { descr: e });
                 }
             };
-            return Ok(Locator::Udp(local_addr));
+            return Ok(Locator::Udp(LocatorUdp::SocketAddr(local_addr)));
         }
 
         // Bind the UDP socket
@@ -395,11 +446,11 @@ impl LinkManagerTrait for LinkManagerUdp {
             // Delete the listener from the manager
             zasynclock!(c_listeners).remove(&c_addr);
         });
-        Ok(Locator::Udp(local_addr))
+        Ok(Locator::Udp(LocatorUdp::SocketAddr(local_addr)))
     }
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let addr = get_udp_addr(locator)?;
+        let addr = get_udp_addr(locator).await?;
         // Stop the listener
         let mut guard = zasynclock!(self.listeners);
         match guard.remove(&addr) {
@@ -432,7 +483,7 @@ impl LinkManagerTrait for LinkManagerUdp {
     async fn get_listeners(&self) -> Vec<Locator> {
         zasynclock!(self.listeners)
             .keys()
-            .map(|x| Locator::Udp(*x))
+            .map(|x| Locator::Udp(LocatorUdp::SocketAddr(*x)))
             .collect()
     }
 

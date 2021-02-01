@@ -210,7 +210,7 @@ async fn authenticator_user_password(locator: Locator) {
     /* [1] */
     println!("\nSession Authenticator [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(&locator).await;
+    let res = router_manager.add_listener(&locator, None).await;
     println!("Session Authenticator [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Authenticator [1a2]");
@@ -222,7 +222,7 @@ async fn authenticator_user_password(locator: Locator) {
     // Open a first session from the client to the router
     // -> This should be accepted
     println!("Session Authenticator [2a1]");
-    let res = client01_manager.open_session(&locator).await;
+    let res = client01_manager.open_session(&locator, None).await;
     println!("Session Authenticator [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -237,7 +237,7 @@ async fn authenticator_user_password(locator: Locator) {
     // Open a second session from the client to the router
     // -> This should be rejected
     println!("Session Authenticator [4a1]");
-    let res = client02_manager.open_session(&locator).await;
+    let res = client02_manager.open_session(&locator, None).await;
     println!("Session Authenticator [4a1]: {:?}", res);
     assert!(res.is_err());
 
@@ -245,7 +245,7 @@ async fn authenticator_user_password(locator: Locator) {
     // Open a third session from the client to the router
     // -> This should be accepted
     println!("Session Authenticator [5a1]");
-    let res = client01_manager.open_session(&locator).await;
+    let res = client01_manager.open_session(&locator, None).await;
     println!("Session Authenticator [5a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -259,7 +259,7 @@ async fn authenticator_user_password(locator: Locator) {
     // Open a fourth session from the client to the router
     // -> This should be accepted
     println!("Session Authenticator [6a1]");
-    let res = client02_manager.open_session(&locator).await;
+    let res = client02_manager.open_session(&locator, None).await;
     println!("Session Authenticator [6a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -268,7 +268,7 @@ async fn authenticator_user_password(locator: Locator) {
     // Open a fourth session from the client to the router
     // -> This should be rejected
     println!("Session Authenticator [7a1]");
-    let res = client03_manager.open_session(&locator).await;
+    let res = client03_manager.open_session(&locator, None).await;
     println!("Session Authenticator [7a1]: {:?}", res);
     assert!(res.is_err());
 

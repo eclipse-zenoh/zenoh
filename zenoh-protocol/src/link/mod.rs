@@ -12,25 +12,25 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 mod locator;
-pub use locator::*;
 mod manager;
-pub use manager::*;
-
-/* Import of Link modules */
+mod property;
 #[cfg(feature = "transport_tcp")]
 mod tcp;
+#[cfg(feature = "transport_tls")]
+mod tls;
 #[cfg(feature = "transport_udp")]
 mod udp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 mod unixsock_stream;
 
-/* General imports */
 use crate::io::{RBuf, WBuf};
 use crate::proto::SessionMessage;
 use async_std::sync::Arc;
 use async_trait::async_trait;
+pub use locator::*;
+pub use manager::*;
+pub use property::*;
 use std::cmp::PartialEq;
-use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
@@ -162,15 +162,17 @@ impl fmt::Debug for Link {
     }
 }
 
-pub type LinkProperties = HashMap<usize, String>;
-
 /*************************************/
 /*           LINK MANAGER            */
 /*************************************/
 #[async_trait]
 pub trait LinkManagerTrait {
-    async fn new_link(&self, dst: &Locator) -> ZResult<Link>;
-    async fn new_listener(&self, locator: &Locator) -> ZResult<Locator>;
+    async fn new_link(&self, dst: &Locator, property: Option<&LinkProperty>) -> ZResult<Link>;
+    async fn new_listener(
+        &self,
+        locator: &Locator,
+        property: Option<LinkProperty>,
+    ) -> ZResult<Locator>;
     async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
     async fn get_listeners(&self) -> Vec<Locator>;
     async fn get_locators(&self) -> Vec<Locator>;

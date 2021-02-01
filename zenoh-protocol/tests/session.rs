@@ -172,7 +172,7 @@ async fn session_open_close(locator: Locator) {
     /* [1] */
     println!("\nSession Open Close [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(&locator).await;
+    let res = router_manager.add_listener(&locator, None).await;
     println!("Session Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Open Close [1a2]");
@@ -183,7 +183,7 @@ async fn session_open_close(locator: Locator) {
     // Open a first session from the client to the router
     // -> This should be accepted
     println!("Session Open Close [1c1]");
-    let res = client01_manager.open_session(&locator).await;
+    let res = client01_manager.open_session(&locator, None).await;
     println!("Session Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -216,7 +216,7 @@ async fn session_open_close(locator: Locator) {
     // Open a second session from the client to the router
     // -> This should be accepted
     println!("\nSession Open Close [2a1]");
-    let res = client01_manager.open_session(&locator).await;
+    let res = client01_manager.open_session(&locator, None).await;
     println!("Session Open Close [2a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -251,7 +251,7 @@ async fn session_open_close(locator: Locator) {
     // Open session -> This should be rejected because
     // of the maximum limit of links per session
     println!("\nSession Open Close [3a1]");
-    let res = client01_manager.open_session(&locator).await;
+    let res = client01_manager.open_session(&locator, None).await;
     println!("Session Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
     println!("Session Open Close [3b1]");
@@ -301,7 +301,7 @@ async fn session_open_close(locator: Locator) {
     // Open session -> This should be accepted because
     // the number of links should be back to 0
     println!("\nSession Open Close [5a1]");
-    let res = client01_manager.open_session(&locator).await;
+    let res = client01_manager.open_session(&locator, None).await;
     println!("Session Open Close [5a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
@@ -334,7 +334,7 @@ async fn session_open_close(locator: Locator) {
     // Open session -> This should be rejected because
     // of the maximum limit of sessions
     println!("\nSession Open Close [6a1]");
-    let res = client02_manager.open_session(&locator).await;
+    let res = client02_manager.open_session(&locator, None).await;
     println!("Session Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
     println!("Session Open Close [6b1]");
@@ -379,7 +379,7 @@ async fn session_open_close(locator: Locator) {
     // Open session -> This should be accepted because
     // the number of sessions should be back to 0
     println!("\nSession Open Close [8a1]");
-    let res = client02_manager.open_session(&locator).await;
+    let res = client02_manager.open_session(&locator, None).await;
     println!("Session Open Close [8a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();

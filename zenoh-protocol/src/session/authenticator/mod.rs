@@ -15,7 +15,7 @@ pub(super) mod properties;
 mod userpassword;
 
 use crate::core::{PeerId, Property, ZInt};
-use crate::link::{Link, LinkProperties, Locator};
+use crate::link::{Link, LinkProperty, Locator};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use std::fmt;
@@ -32,7 +32,7 @@ pub trait LinkAuthenticatorTrait {
     async fn handle_new_link(
         &self,
         link: &Link,
-        properties: Option<LinkProperties>,
+        properties: Option<&LinkProperty>,
     ) -> ZResult<Option<PeerId>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
@@ -57,7 +57,7 @@ impl LinkAuthenticatorTrait for DummyLinkAuthenticator {
     async fn handle_new_link(
         &self,
         _link: &Link,
-        _properties: Option<LinkProperties>,
+        _properties: Option<&LinkProperty>,
     ) -> ZResult<Option<PeerId>> {
         Ok(None)
     }
@@ -70,12 +70,12 @@ impl LinkAuthenticatorTrait for DummyLinkAuthenticator {
 /*************************************/
 pub type PeerAuthenticator = Arc<dyn PeerAuthenticatorTrait + Send + Sync>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AuthenticatedPeerLink {
     pub src: Locator,
     pub dst: Locator,
     pub peer_id: Option<PeerId>,
-    pub properties: Option<LinkProperties>,
+    pub properties: Option<LinkProperty>,
 }
 
 impl fmt::Display for AuthenticatedPeerLink {

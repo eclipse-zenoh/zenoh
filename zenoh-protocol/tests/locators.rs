@@ -84,7 +84,7 @@ async fn run(locators: Vec<Locator>) {
         // Create the listeners
         for l in locators.iter() {
             println!("Add {}", l);
-            let res = sm.add_listener(l).await;
+            let res = sm.add_listener(l, None).await;
             println!("Res: {:?}", res);
             assert!(res.is_ok());
         }
@@ -221,4 +221,12 @@ fn locator_udp_unix() {
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock.lock");
+}
+
+#[cfg(feature = "transport_tls")]
+#[test]
+fn locator_tls() {
+    // Define the locators
+    let locators: Vec<Locator> = vec!["tls/localhost:7452".parse().unwrap()];
+    task::block_on(run(locators));
 }
