@@ -40,7 +40,7 @@ default = ["zero-copy", "transport_tcp", "transport_udp", "transport_unixsock-st
 
 [dependencies]
 aes-soft = "0.6.4"
-async-std = "=1.9.0"
+async-std = { version = "=1.9.0", features = ["unstable"] }
 async-trait = "0.1.42"
 env_logger = "0.8.2"
 hex = "0.4.2"
