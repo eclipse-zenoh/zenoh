@@ -50,7 +50,7 @@ zconfigurable! {
 #[allow(unreachable_patterns)]
 fn get_unix_path(locator: &Locator) -> ZResult<PathBuf> {
     match locator {
-        Locator::UnixSocketStream(path) => Ok(path.0),
+        Locator::UnixSocketStream(path) => Ok(path.0.clone()),
         _ => {
             let e = format!("Not a UnixSocketStream locator: {:?}", locator);
             log::debug!("{}", e);
@@ -388,7 +388,11 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
         Ok(Link::new(link))
     }
 
-    async fn new_listener(&self, locator: &Locator, _ps: Option<LinkProperty>) -> ZResult<Locator> {
+    async fn new_listener(
+        &self,
+        locator: &Locator,
+        _ps: Option<&LinkProperty>,
+    ) -> ZResult<Locator> {
         let path = get_unix_path_as_string(locator);
 
         // Because of the lack of SO_REUSEADDR we have to check if the
@@ -581,7 +585,7 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
         }
         locators
             .into_iter()
-            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(x))))
+            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream(x)))
             .collect()
     }
 }

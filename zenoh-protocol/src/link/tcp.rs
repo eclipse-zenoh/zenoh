@@ -278,14 +278,14 @@ impl fmt::Debug for Tcp {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerTcp {
-    socket: Arc<TcpListener>,
+    socket: TcpListener,
     sender: Sender<()>,
     receiver: Receiver<()>,
     barrier: Arc<Barrier>,
 }
 
 impl ListenerTcp {
-    fn new(socket: Arc<TcpListener>) -> ListenerTcp {
+    fn new(socket: TcpListener) -> ListenerTcp {
         // Create the channel necessary to break the accept loop
         let (sender, receiver) = bounded::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
@@ -339,27 +339,23 @@ impl LinkManagerTrait for LinkManagerTcp {
         Ok(Link::new(link))
     }
 
-    async fn new_listener(&self, locator: &Locator, _ps: Option<LinkProperty>) -> ZResult<Locator> {
+    async fn new_listener(
+        &self,
+        locator: &Locator,
+        _ps: Option<&LinkProperty>,
+    ) -> ZResult<Locator> {
         let addr = get_tcp_addr(locator).await?;
 
         // Bind the TCP socket
-        let socket = match TcpListener::bind(addr).await {
-            Ok(socket) => Arc::new(socket),
-            Err(e) => {
-                let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let socket = TcpListener::bind(addr).await.map_err(|e| {
+            let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
-        let local_addr = match socket.local_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let local_addr = socket.local_addr().map_err(|e| {
+            let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
         let listener = Arc::new(ListenerTcp::new(socket));
         // Update the list of active listeners on the manager
         zasyncwrite!(self.listener).insert(local_addr, listener.clone());

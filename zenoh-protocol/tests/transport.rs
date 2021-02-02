@@ -15,11 +15,13 @@ use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
 use async_trait::async_trait;
+use std::io::Cursor;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh_protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::link::{Link, Locator};
+use zenoh_protocol::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
+use zenoh_protocol::link::{Link, LinkProperty, Locator};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
@@ -130,7 +132,10 @@ impl SessionEventHandler for SCClient {
     async fn closed(&self) {}
 }
 
-async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>, Session) {
+async fn open_session(
+    router_locators: &[(Locator, Option<LinkProperty>)],
+    client_locators: &[(Locator, Option<LinkProperty>)],
+) -> (SessionManager, Arc<SHRouter>, Session) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -155,10 +160,10 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
     let client_manager = SessionManager::new(config, None);
 
     // Create the listener on the router
-    for l in locators.iter() {
+    for (l, p) in router_locators.iter() {
         println!("Add locator: {}", l);
         let res = router_manager
-            .add_listener(l, None)
+            .add_listener(l, p.as_ref())
             .timeout(TIMEOUT)
             .await
             .unwrap();
@@ -167,10 +172,10 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
 
     // Create an empty session with the client
     // Open session -> This should be accepted
-    for l in locators.iter() {
+    for (l, p) in client_locators.iter() {
         println!("Opening session with {}", l);
         let res = client_manager
-            .open_session(l, None)
+            .open_session(l, p.as_ref())
             .timeout(TIMEOUT)
             .await
             .unwrap();
@@ -191,11 +196,11 @@ async fn open_session(locators: Vec<Locator>) -> (SessionManager, Arc<SHRouter>,
 async fn close_session(
     router_manager: SessionManager,
     client_session: Session,
-    locators: Vec<Locator>,
+    locators: &[(Locator, Option<LinkProperty>)],
 ) {
     // Close the client session
     let mut ll = "".to_string();
-    for l in locators.iter() {
+    for (l, _) in locators.iter() {
         ll.push_str(&format!("{} ", l));
     }
     println!("Closing session with {}", ll);
@@ -203,7 +208,7 @@ async fn close_session(
     assert!(res.is_ok());
 
     // Stop the locators on the manager
-    for l in locators.iter() {
+    for (l, _) in locators.iter() {
         println!("Del locator: {}", l);
         let res = router_manager
             .del_listener(l)
@@ -217,7 +222,7 @@ async fn close_session(
     task::sleep(SLEEP).await;
 }
 
-async fn run(
+async fn single_run(
     router_handler: Arc<SHRouter>,
     client_session: Session,
     reliability: Reliability,
@@ -291,44 +296,47 @@ async fn run(
     task::sleep(SLEEP).await;
 }
 
+async fn run(
+    router_locators: &[(Locator, Option<LinkProperty>)],
+    client_locators: &[(Locator, Option<LinkProperty>)],
+    reliability: &[Reliability],
+    congestion_control: &[CongestionControl],
+) {
+    assert_eq!(router_locators.len(), client_locators.len());
+    let (router_manager, router_handler, client_session) =
+        open_session(router_locators, client_locators).await;
+    for rl in reliability.iter() {
+        for cc in congestion_control.iter() {
+            single_run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
+        }
+    }
+    close_session(router_manager, client_session, router_locators).await;
+}
+
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_only() {
     // Define the locators
-    let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
+    let locators: Vec<(Locator, Option<LinkProperty>)> =
+        vec![("tcp/127.0.0.1:7447".parse().unwrap(), None)];
     // Define the reliability and congestion control
     let reliability = [Reliability::Reliable, Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(async {
-        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
-        for rl in reliability.iter() {
-            for cc in congestion_control.iter() {
-                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
-            }
-        }
-        close_session(router_manager, client_session, locators).await;
-    });
+    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn transport_udp() {
     // Define the locator
-    let locators: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
+    let locators: Vec<(Locator, Option<LinkProperty>)> =
+        vec![("udp/127.0.0.1:7447".parse().unwrap(), None)];
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(async {
-        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
-        for rl in reliability.iter() {
-            for cc in congestion_control.iter() {
-                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
-            }
-        }
-        close_session(router_manager, client_session, locators).await;
-    });
+    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -336,22 +344,17 @@ fn transport_udp() {
 fn transport_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
-        .parse()
-        .unwrap()];
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![(
+        "unixsock-stream/zenoh-test-unix-socket-5.sock"
+            .parse()
+            .unwrap(),
+        None,
+    )];
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(async {
-        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
-        for rl in reliability.iter() {
-            for cc in congestion_control.iter() {
-                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
-            }
-        }
-        close_session(router_manager, client_session, locators).await;
-    });
+    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
@@ -360,23 +363,15 @@ fn transport_unix() {
 #[test]
 fn transport_tcp_udp() {
     // Define the locator
-    let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7448".parse().unwrap(),
-        "udp/127.0.0.1:7448".parse().unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("tcp/127.0.0.1:7448".parse().unwrap(), None),
+        ("udp/127.0.0.1:7448".parse().unwrap(), None),
     ];
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(async {
-        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
-        for rl in reliability.iter() {
-            for cc in congestion_control.iter() {
-                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
-            }
-        }
-        close_session(router_manager, client_session, locators).await;
-    });
+    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
 }
 
 #[cfg(all(
@@ -388,25 +383,20 @@ fn transport_tcp_udp() {
 fn transport_tcp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7449".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-6.sock"
-            .parse()
-            .unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("tcp/127.0.0.1:7449".parse().unwrap(), None),
+        (
+            "unixsock-stream/zenoh-test-unix-socket-6.sock"
+                .parse()
+                .unwrap(),
+            None,
+        ),
     ];
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(async {
-        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
-        for rl in reliability.iter() {
-            for cc in congestion_control.iter() {
-                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
-            }
-        }
-        close_session(router_manager, client_session, locators).await;
-    });
+    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
 }
@@ -420,25 +410,20 @@ fn transport_tcp_unix() {
 fn transport_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
-        "udp/127.0.0.1:7449".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-7.sock"
-            .parse()
-            .unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("udp/127.0.0.1:7449".parse().unwrap(), None),
+        (
+            "unixsock-stream/zenoh-test-unix-socket-7.sock"
+                .parse()
+                .unwrap(),
+            None,
+        ),
     ];
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(async {
-        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
-        for rl in reliability.iter() {
-            for cc in congestion_control.iter() {
-                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
-            }
-        }
-        close_session(router_manager, client_session, locators).await;
-    });
+    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
 }
@@ -453,26 +438,125 @@ fn transport_udp_unix() {
 fn transport_tcp_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7450".parse().unwrap(),
-        "udp/127.0.0.1:7450".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-8.sock"
-            .parse()
-            .unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("tcp/127.0.0.1:7450".parse().unwrap(), None),
+        ("udp/127.0.0.1:7450".parse().unwrap(), None),
+        (
+            "unixsock-stream/zenoh-test-unix-socket-8.sock"
+                .parse()
+                .unwrap(),
+            None,
+        ),
     ];
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(async {
-        let (router_manager, router_handler, client_session) = open_session(locators.clone()).await;
-        for rl in reliability.iter() {
-            for cc in congestion_control.iter() {
-                run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
-            }
-        }
-        close_session(router_manager, client_session, locators).await;
-    });
+    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
+}
+
+#[cfg(feature = "transport_tls")]
+#[test]
+fn transport_tls() {
+    // NOTE: this an auto-generated pair of certificate and key.
+    //       The target domain is localhost, so it has no real
+    //       mapping to any existing domain. The certificate and key
+    //       have been generated using: https://github.com/jsha/minica
+    let key = "-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAz105EYUbOdW5uJ8o/TqtxtOtKJL7AQdy5yiXoslosAsulaew
+4JSJetVa6Fa6Bq5BK6fsphGD9bpGGeiBZFBt75JRjOrkj4DwlLGa0CPLTgG5hul4
+Ufe9B7VG3J5P8OwUqIYmPzj8uTbNtkgFRcYumHR28h4GkYdG5Y04AV4vIjgKE47j
+AgV5ACRHkcmGrTzF2HOes2wT73l4yLSkKR4GlIWu5cLRdI8PTUmjMFAh/GIh1ahd
++VqXz051V3jok0n1klVNjc6DnWuH3j/MSOg/52C3YfcUjCeIJGVfcqDnPTJKSNEF
+yVTYCUjWy+B0B4fMz3MpU17dDWpvS5hfc4VrgQIDAQABAoIBAQCq+i208XBqdnwk
+6y7r5Tcl6qErBE3sIk0upjypX7Ju/TlS8iqYckENQ+AqFGBcY8+ehF5O68BHm2hz
+sk8F/H84+wc8zuzYGjPEFtEUb38RecCUqeqog0Gcmm6sN+ioOLAr6DifBojy2mox
+sx6N0oPW9qigp/s4gTcGzTLxhcwNRHWuoWjQwq6y6qwt2PJXnllii5B5iIJhKAxE
+EOmcVCmFbPavQ1Xr9F5jd5rRc1TYq28hXX8dZN2JhdVUbLlHzaiUfTnA/8yI4lyq
+bEmqu29Oqe+CmDtB6jRnrLiIwyZxzXKuxXaO6NqgxqtaVjLcdISEgZMeHEftuOtf
+C1xxodaVAoGBAOb1Y1SvUGx+VADSt1d30h3bBm1kU/1LhLKZOAQrnFMrEfyOfYbz
+AZ4FJgXE6ZsB1BA7hC0eJDVHz8gTgDJQrOOO8WJWDGRe4TbZkCi5IizYg5UH/6az
+I/WKlfdA4j1tftbQhycHL+9bGzdoRzrwIK489PG4oVAJJCaK2CVtx+l3AoGBAOXY
+75sHOiMaIvDA7qlqFbaBkdi1NzH7bCgy8IntNfLxlOCmGjxeNZzKrkode3JWY9SI
+Mo/nuWj8EZBEHj5omCapzOtkW/Nhnzc4C6U3BCspdrQ4mzbmzEGTdhqvxepa7U7K
+iRcoD1iU7kINCEwg2PsB/BvCSrkn6lpIJlYXlJDHAoGAY7QjgXd9fJi8ou5Uf8oW
+RxU6nRbmuz5Sttc2O3aoMa8yQJkyz4Mwe4s1cuAjCOutJKTM1r1gXC/4HyNsAEyb
+llErG4ySJPJgv1EEzs+9VSbTBw9A6jIDoAiH3QmBoYsXapzy+4I6y1XFVhIKTgND
+2HQwOfm+idKobIsb7GyMFNkCgYBIsixWZBrHL2UNsHfLrXngl2qBmA81B8hVjob1
+mMkPZckopGB353Qdex1U464/o4M/nTQgv7GsuszzTBgktQAqeloNuVg7ygyJcnh8
+cMIoxJx+s8ijvKutse4Q0rdOQCP+X6CsakcwRSp2SZjuOxVljmMmhHUNysocc+Vs
+JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
+LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
+ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
+-----END RSA PRIVATE KEY-----";
+    let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(key.as_bytes())).unwrap();
+
+    let cert = "-----BEGIN CERTIFICATE-----
+MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgMmJiOTlkMB4XDTIxMDIwMjE0NDYzNFoXDTIzMDMw
+NDE0NDYzNFowFDESMBAGA1UEAxMJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF
+AAOCAQ8AMIIBCgKCAQEAz105EYUbOdW5uJ8o/TqtxtOtKJL7AQdy5yiXoslosAsu
+laew4JSJetVa6Fa6Bq5BK6fsphGD9bpGGeiBZFBt75JRjOrkj4DwlLGa0CPLTgG5
+hul4Ufe9B7VG3J5P8OwUqIYmPzj8uTbNtkgFRcYumHR28h4GkYdG5Y04AV4vIjgK
+E47jAgV5ACRHkcmGrTzF2HOes2wT73l4yLSkKR4GlIWu5cLRdI8PTUmjMFAh/GIh
+1ahd+VqXz051V3jok0n1klVNjc6DnWuH3j/MSOg/52C3YfcUjCeIJGVfcqDnPTJK
+SNEFyVTYCUjWy+B0B4fMz3MpU17dDWpvS5hfc4VrgQIDAQABo3YwdDAOBgNVHQ8B
+Af8EBAMCBaAwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMAwGA1UdEwEB
+/wQCMAAwHwYDVR0jBBgwFoAULXa6lBiO7OLL5Z6XuF5uF5wR9PQwFAYDVR0RBA0w
+C4IJbG9jYWxob3N0MA0GCSqGSIb3DQEBCwUAA4IBAQBOMkNXfzPEDU475zbiSi3v
+JOhpZLyuoaYY62RzZc9VF8YRybJlWKUWdR3szAiUd1xCJe/beNX7b9lPg6wNadKq
+DGTWFmVxSfpVMO9GQYBXLDcNaAUXzsDLC5sbAFST7jkAJELiRn6KtQYxZ2kEzo7G
+QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
+F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
+AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
+-----END CERTIFICATE-----";
+    let certs = pemfile::certs(&mut Cursor::new(cert.as_bytes())).unwrap();
+
+    // Set this server to use one cert together with the loaded private key
+    let mut server_config = ServerConfig::new(NoClientAuth::new());
+    server_config
+        .set_single_cert(certs, keys.remove(0))
+        .unwrap();
+
+    // Configure the client
+    let ca = "-----BEGIN CERTIFICATE-----
+MIIDSzCCAjOgAwIBAgIIK7mduKtTVxkwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgMmJiOTlkMCAXDTIxMDIwMjEzMTc0NVoYDzIxMjEw
+MjAyMTMxNzQ1WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSAyYmI5OWQwggEi
+MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCoBZOxIfVq7LoEpVCMlQzuDnFy
+d+yuk5pFasEQvZ3IvWVta4rPFJ3WGl4UNF6v9bZegNHp+oo70guZ8ps9ez34qrwB
+rrNtZ0YJLDvR0ygloinZZeiclrZcu+x9vRdnyfWqrAulJBMlJIbbHcNx2OCkq7MM
+HdpLJMXxKVbIlQQYGUzRkNTAaK2PiFX5BaqmnZZyo7zNbz7L2asg+0K/FpiS2IRA
+coHPTa9BtsLUJUPRHPr08pgTjM1MQwa+Xxg1+wtMh85xdrqMi6Oe0cxefS+0L04F
+KVfMD3bW8AyuugvcTEpGnea2EvMoPfLWpnPGU3XO8lRZyotZDQzrPvNyYKM3AgMB
+AAGjgYYwgYMwDgYDVR0PAQH/BAQDAgKEMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggr
+BgEFBQcDAjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBQtdrqUGI7s4svl
+npe4Xm4XnBH09DAfBgNVHSMEGDAWgBQtdrqUGI7s4svlnpe4Xm4XnBH09DANBgkq
+hkiG9w0BAQsFAAOCAQEAJliEt607VUOSDsUeabhG8MIhYDhxe+mjJ4i7N/0xk9JU
+piCUdQr26HyYCzN+bNdjw663rxuVGtTTdHSw2CJHsPSOEDinbYkLMSyDeomsnr0S
+4e0hKUeqXXYg0iC/O2283ZEvvQK5SE+cjm0La0EmqO0mj3Mkc4Fsg8hExYuOur4M
+M0AufDKUhroksKKiCmjsFj1x55VcU45Ag8069lzBk7ntcGQpHUUkwZzvD4FXf8IR
+pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
+tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
+-----END CERTIFICATE-----";
+
+    let mut client_config = ClientConfig::new();
+    client_config
+        .root_store
+        .add_pem_file(&mut Cursor::new(ca.as_bytes()))
+        .unwrap();
+
+    // Define the locator
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![(
+        "tls/localhost:7451".parse().unwrap(),
+        Some((client_config, server_config).into()),
+    )];
+
+    // Define the reliability and congestion control
+    let reliability = [Reliability::BestEffort];
+    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
+    // Run
+    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
 }

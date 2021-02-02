@@ -16,7 +16,8 @@ use async_std::task;
 use async_trait::async_trait;
 use std::time::Duration;
 use zenoh_protocol::core::{whatami, PeerId};
-use zenoh_protocol::link::{Link, Locator};
+use zenoh_protocol::link::tls::{NoClientAuth, ServerConfig};
+use zenoh_protocol::link::{Link, LinkProperty, Locator};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
@@ -70,7 +71,7 @@ impl SessionEventHandler for SC {
     async fn closed(&self) {}
 }
 
-async fn run(locators: Vec<Locator>) {
+async fn run(locators: Vec<(Locator, Option<LinkProperty>)>) {
     // Create the session manager
     let config = SessionManagerConfig {
         version: 0,
@@ -82,9 +83,9 @@ async fn run(locators: Vec<Locator>) {
 
     for _ in 0..RUNS {
         // Create the listeners
-        for l in locators.iter() {
+        for (l, p) in locators.iter() {
             println!("Add {}", l);
-            let res = sm.add_listener(l, None).await;
+            let res = sm.add_listener(l, p.as_ref()).await;
             println!("Res: {:?}", res);
             assert!(res.is_ok());
         }
@@ -92,7 +93,7 @@ async fn run(locators: Vec<Locator>) {
         task::sleep(SLEEP).await;
 
         // Delete the listeners
-        for l in locators.iter() {
+        for (l, _) in locators.iter() {
             println!("Del {}", l);
             let res = sm.del_listener(l).await;
             println!("Res: {:?}", res);
@@ -107,9 +108,9 @@ async fn run(locators: Vec<Locator>) {
 #[test]
 fn locator_tcp() {
     // Define the locators
-    let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7447".parse().unwrap(),
-        "tcp/localhost:7448".parse().unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("tcp/127.0.0.1:7447".parse().unwrap(), None),
+        ("tcp/localhost:7448".parse().unwrap(), None),
     ];
     task::block_on(run(locators));
 }
@@ -118,9 +119,9 @@ fn locator_tcp() {
 #[test]
 fn locator_udp() {
     // Define the locators
-    let locators: Vec<Locator> = vec![
-        "udp/127.0.0.1:7447".parse().unwrap(),
-        "udp/localhost:7448".parse().unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("udp/127.0.0.1:7447".parse().unwrap(), None),
+        ("udp/localhost:7448".parse().unwrap(), None),
     ];
     task::block_on(run(locators));
 }
@@ -132,13 +133,19 @@ fn locator_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
     // Define the locators
-    let locators: Vec<Locator> = vec![
-        "unixsock-stream/zenoh-test-unix-socket-0.sock"
-            .parse()
-            .unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-1.sock"
-            .parse()
-            .unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        (
+            "unixsock-stream/zenoh-test-unix-socket-0.sock"
+                .parse()
+                .unwrap(),
+            None,
+        ),
+        (
+            "unixsock-stream/zenoh-test-unix-socket-1.sock"
+                .parse()
+                .unwrap(),
+            None,
+        ),
     ];
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
@@ -151,9 +158,9 @@ fn locator_unix() {
 #[test]
 fn locator_tcp_udp() {
     // Define the locators
-    let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7449".parse().unwrap(),
-        "udp/127.0.0.1:7449".parse().unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("tcp/127.0.0.1:7449".parse().unwrap(), None),
+        ("udp/127.0.0.1:7449".parse().unwrap(), None),
     ];
     task::block_on(run(locators));
 }
@@ -169,12 +176,15 @@ fn locator_tcp_udp_unix() {
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
     // Define the locators
-    let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7450".parse().unwrap(),
-        "udp/127.0.0.1:7450".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-2.sock"
-            .parse()
-            .unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("tcp/127.0.0.1:7450".parse().unwrap(), None),
+        ("udp/127.0.0.1:7450".parse().unwrap(), None),
+        (
+            "unixsock-stream/zenoh-test-unix-socket-2.sock"
+                .parse()
+                .unwrap(),
+            None,
+        ),
     ];
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
@@ -191,11 +201,14 @@ fn locator_tcp_unix() {
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
     // Define the locators
-    let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7451".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-3.sock"
-            .parse()
-            .unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("tcp/127.0.0.1:7451".parse().unwrap(), None),
+        (
+            "unixsock-stream/zenoh-test-unix-socket-3.sock"
+                .parse()
+                .unwrap(),
+            None,
+        ),
     ];
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
@@ -212,11 +225,14 @@ fn locator_udp_unix() {
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
     // Define the locators
-    let locators: Vec<Locator> = vec![
-        "udp/127.0.0.1:7451".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-4.sock"
-            .parse()
-            .unwrap(),
+    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
+        ("udp/127.0.0.1:7451".parse().unwrap(), None),
+        (
+            "unixsock-stream/zenoh-test-unix-socket-4.sock"
+                .parse()
+                .unwrap(),
+            None,
+        ),
     ];
     task::block_on(run(locators));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
@@ -226,7 +242,9 @@ fn locator_udp_unix() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn locator_tls() {
+    let server_config: LinkProperty = ServerConfig::new(NoClientAuth::new()).into();
     // Define the locators
-    let locators: Vec<Locator> = vec!["tls/localhost:7452".parse().unwrap()];
+    let locators: Vec<(Locator, Option<LinkProperty>)> =
+        vec![("tls/localhost:7452".parse().unwrap(), Some(server_config))];
     task::block_on(run(locators));
 }

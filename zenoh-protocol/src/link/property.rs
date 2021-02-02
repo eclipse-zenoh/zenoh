@@ -22,6 +22,7 @@ use super::udp::LinkPropertyUdp;
 use super::unixsock_stream::LinkPropertyUnixSocketStream;
 use std::fmt;
 
+#[derive(Clone)]
 pub enum LinkProperty {
     #[cfg(feature = "transport_tcp")]
     Tcp(LinkPropertyTcp),

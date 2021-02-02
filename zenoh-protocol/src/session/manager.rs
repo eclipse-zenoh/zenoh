@@ -244,7 +244,7 @@ impl SessionManager {
     pub async fn add_listener(
         &self,
         locator: &Locator,
-        ps: Option<LinkProperty>,
+        ps: Option<&LinkProperty>,
     ) -> ZResult<Locator> {
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
         manager.new_listener(locator, ps).await

@@ -17,7 +17,7 @@ mod property;
 #[cfg(feature = "transport_tcp")]
 mod tcp;
 #[cfg(feature = "transport_tls")]
-mod tls;
+pub mod tls;
 #[cfg(feature = "transport_udp")]
 mod udp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -171,7 +171,7 @@ pub trait LinkManagerTrait {
     async fn new_listener(
         &self,
         locator: &Locator,
-        property: Option<LinkProperty>,
+        property: Option<&LinkProperty>,
     ) -> ZResult<Locator>;
     async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
     async fn get_listeners(&self) -> Vec<Locator>;

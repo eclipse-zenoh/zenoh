@@ -398,7 +398,11 @@ impl LinkManagerTrait for LinkManagerUdp {
         Ok(lobj)
     }
 
-    async fn new_listener(&self, locator: &Locator, _ps: Option<LinkProperty>) -> ZResult<Locator> {
+    async fn new_listener(
+        &self,
+        locator: &Locator,
+        _ps: Option<&LinkProperty>,
+    ) -> ZResult<Locator> {
         let addr = get_udp_addr(locator).await?;
 
         if let Some(listener) = zasynclock!(self.listeners).get(&addr) {

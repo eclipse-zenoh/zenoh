@@ -13,9 +13,9 @@
 //
 use super::{Link, LinkManagerTrait, LinkProperty, LinkTrait, Locator};
 use crate::session::SessionManager;
-use async_rustls::rustls::{ClientConfig, ServerConfig};
-use async_rustls::webpki::{DNSName, DNSNameRef};
-use async_rustls::{TlsConnector, TlsStream};
+pub use async_rustls::rustls::*;
+pub use async_rustls::webpki::*;
+use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use async_std::prelude::*;
@@ -26,6 +26,7 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
+use std::net::Shutdown;
 use std::str::FromStr;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -88,11 +89,22 @@ async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
                 zerror!(ZErrorKind::InvalidLocator { descr: e })
             }
             LocatorTls::DNSName(addr) => {
-                let domain = DNSNameRef::try_from_ascii_str(addr).map_err(|e| {
-                    let e = format!("{}", e);
-                    zerror2!(ZErrorKind::InvalidLocator { descr: e })
-                })?;
-                Ok(domain.to_owned())
+                // Separate the domain from the port.
+                // E.g. zenoh.io:7447 returns (zenoh.io, 7447).
+                let split: Vec<&str> = addr.split(':').collect();
+                match split.get(0) {
+                    Some(dom) => {
+                        let domain = DNSNameRef::try_from_ascii_str(dom).map_err(|e| {
+                            let e = format!("{}", e);
+                            zerror2!(ZErrorKind::InvalidLocator { descr: e })
+                        })?;
+                        Ok(domain.to_owned())
+                    }
+                    None => {
+                        let e = format!("Couldn't get domain for: {}", addr);
+                        zerror!(ZErrorKind::InvalidLocator { descr: e })
+                    }
+                }
             }
         },
         _ => {
@@ -107,7 +119,7 @@ fn get_tls_prop(property: &LinkProperty) -> ZResult<&LinkPropertyTls> {
     match property {
         LinkProperty::Tls(prop) => Ok(prop),
         _ => {
-            let e = format!("Not a TLS property");
+            let e = "Not a TLS property".to_string();
             log::debug!("{}", e);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
@@ -147,9 +159,61 @@ impl fmt::Display for LocatorTls {
 /*************************************/
 /*            PROPERTY               */
 /*************************************/
+#[derive(Clone)]
 pub struct LinkPropertyTls {
     client: Option<Arc<ClientConfig>>,
-    server: Option<ServerConfig>,
+    server: Option<Arc<ServerConfig>>,
+}
+
+impl LinkPropertyTls {
+    fn new(
+        client: Option<Arc<ClientConfig>>,
+        server: Option<Arc<ServerConfig>>,
+    ) -> LinkPropertyTls {
+        LinkPropertyTls { client, server }
+    }
+}
+
+impl From<LinkPropertyTls> for LinkProperty {
+    fn from(property: LinkPropertyTls) -> LinkProperty {
+        LinkProperty::Tls(property)
+    }
+}
+
+impl From<(Arc<ClientConfig>, Arc<ServerConfig>)> for LinkProperty {
+    fn from(tuple: (Arc<ClientConfig>, Arc<ServerConfig>)) -> LinkProperty {
+        Self::from(LinkPropertyTls::new(Some(tuple.0), Some(tuple.1)))
+    }
+}
+
+impl From<(ClientConfig, ServerConfig)> for LinkProperty {
+    fn from(tuple: (ClientConfig, ServerConfig)) -> LinkProperty {
+        Self::from((Arc::new(tuple.0), Arc::new(tuple.1)))
+    }
+}
+
+impl From<Arc<ClientConfig>> for LinkProperty {
+    fn from(client: Arc<ClientConfig>) -> LinkProperty {
+        Self::from(LinkPropertyTls::new(Some(client), None))
+    }
+}
+
+impl From<ClientConfig> for LinkProperty {
+    fn from(client: ClientConfig) -> LinkProperty {
+        Self::from(Arc::new(client))
+    }
+}
+
+impl From<Arc<ServerConfig>> for LinkProperty {
+    fn from(server: Arc<ServerConfig>) -> LinkProperty {
+        Self::from(LinkPropertyTls::new(None, Some(server)))
+    }
+}
+
+impl From<ServerConfig> for LinkProperty {
+    fn from(server: ServerConfig) -> LinkProperty {
+        Self::from(Arc::new(server))
+    }
 }
 
 /*************************************/
@@ -159,7 +223,7 @@ pub struct Tls {
     // The underlying socket as returned from the async-rustls library
     // NOTE: TlsStream requires &mut for read and write operations. This means
     //       that concurrent reads and writes are not possible. To achieve that,
-    //       we use an UnsafeCell for interior mutability. Usingg an UnsafeCell
+    //       we use an UnsafeCell for interior mutability. Using an UnsafeCell
     //       is safe in our case since the transmission and reception logic
     //       already ensures that no concurrent reads or writes can happen on
     //       the same stream: there is only one task at the time that writes on
@@ -173,6 +237,32 @@ pub struct Tls {
 
 impl Tls {
     fn new(socket: TlsStream<TcpStream>, src_addr: SocketAddr, dst_addr: SocketAddr) -> Tls {
+        let (tcp_stream, _) = socket.get_ref();
+        // Set the TLS nodelay option
+        if let Err(err) = tcp_stream.set_nodelay(true) {
+            log::warn!(
+                "Unable to set NODEALY option on TLS link {} => {} : {}",
+                src_addr,
+                dst_addr,
+                err
+            );
+        }
+
+        // Set the TLS linger option
+        if let Err(err) = zenoh_util::net::set_linger(
+            &tcp_stream,
+            Some(Duration::from_secs(
+                (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
+            )),
+        ) {
+            log::warn!(
+                "Unable to set LINGER option on TLS link {} => {} : {}",
+                src_addr,
+                dst_addr,
+                err
+            );
+        }
+
         // Build the Tls object
         Tls {
             inner: UnsafeCell::new(socket),
@@ -181,10 +271,10 @@ impl Tls {
         }
     }
 
-    fn get_sock(&self) -> &TlsStream<TcpStream> {
-        unsafe { &*self.inner.get() }
-    }
-
+    // NOTE: It is safe to suppress Clippy warning since no concurrent reads
+    //       or concurrent writes will ever happen. This is enforced by the
+    //       transmission and reception logic in zenoh.
+    #[allow(clippy::mut_from_ref)]
     fn get_sock_mut(&self) -> &mut TlsStream<TcpStream> {
         unsafe { &mut *self.inner.get() }
     }
@@ -197,8 +287,13 @@ unsafe impl Sync for Tls {}
 impl LinkTrait for Tls {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TLS link: {}", self);
-        // Close the underlying TLS socket
-        let res = self.get_sock_mut().flush().await;
+        // Flush the TLS stream
+        let tls_stream = self.get_sock_mut();
+        let res = tls_stream.flush().await;
+        log::trace!("TLS link flush {}: {:?}", self, res);
+        // Close the underlying TCP stream
+        let (tcp_stream, _) = tls_stream.get_ref();
+        let res = tcp_stream.shutdown(Shutdown::Both);
         log::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| {
             zerror2!(ZErrorKind::IOError {
@@ -285,6 +380,14 @@ impl LinkTrait for Tls {
     }
 }
 
+impl Drop for Tls {
+    fn drop(&mut self) {
+        // Close the underlying TCP stream
+        let (tcp_stream, _) = self.get_sock_mut().get_ref();
+        let _ = tcp_stream.shutdown(Shutdown::Both);
+    }
+}
+
 impl fmt::Display for Tls {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_addr, self.dst_addr)?;
@@ -305,14 +408,15 @@ impl fmt::Debug for Tls {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerTls {
-    socket: Arc<TcpListener>,
+    socket: TcpListener,
+    acceptor: TlsAcceptor,
     sender: Sender<()>,
     receiver: Receiver<()>,
     barrier: Arc<Barrier>,
 }
 
 impl ListenerTls {
-    fn new(socket: Arc<TcpListener>) -> ListenerTls {
+    fn new(socket: TcpListener, acceptor: TlsAcceptor) -> ListenerTls {
         // Create the channel necessary to break the accept loop
         let (sender, receiver) = bounded::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
@@ -320,6 +424,7 @@ impl ListenerTls {
         // Update the list of active listeners on the manager
         ListenerTls {
             socket,
+            acceptor,
             sender,
             receiver,
             barrier,
@@ -346,24 +451,9 @@ impl LinkManagerTrait for LinkManagerTls {
     async fn new_link(&self, locator: &Locator, ps: Option<&LinkProperty>) -> ZResult<Link> {
         let domain = get_tls_dns(locator).await?;
         let addr = get_tls_addr(locator).await?;
+        let host: &str = domain.as_ref().into();
 
         // Initialize the TcpStream
-        let host: &str = domain.as_ref().into();
-        let addr = match host.to_socket_addrs().await {
-            Ok(mut addr_iter) => {
-                if let Some(addr) = addr_iter.next() {
-                    Ok(addr)
-                } else {
-                    let e = format!("Couldn't resolve TLS locator: {}", host);
-                    zerror!(ZErrorKind::InvalidLocator { descr: e })
-                }
-            }
-            Err(e) => {
-                let e = format!("{}: {}", e, host);
-                zerror!(ZErrorKind::InvalidLocator { descr: e })
-            }
-        }?;
-
         let tcp_stream = TcpStream::connect(addr).await.map_err(|e| {
             let e = format!("Can not create a new TLS link bound to {}: {}", host, e);
             zerror2!(ZErrorKind::Other { descr: e })
@@ -378,31 +468,6 @@ impl LinkManagerTrait for LinkManagerTls {
             let e = format!("Can not create a new TLS link bound to {}: {}", host, e);
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
-
-        // Set the TLS nodelay option
-        if let Err(err) = tcp_stream.set_nodelay(true) {
-            log::warn!(
-                "Unable to set NODEALY option on TLS link {} => {} : {}",
-                src_addr,
-                dst_addr,
-                err
-            );
-        }
-
-        // Set the TLS linger option
-        if let Err(err) = zenoh_util::net::set_linger(
-            &tcp_stream,
-            Some(Duration::from_secs(
-                (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
-            )),
-        ) {
-            log::warn!(
-                "Unable to set LINGER option on TLS link {} => {} : {}",
-                src_addr,
-                dst_addr,
-                err
-            );
-        }
 
         // Initialize the TLS stream
         let config = match ps {
@@ -430,28 +495,40 @@ impl LinkManagerTrait for LinkManagerTls {
         Ok(Link::new(link))
     }
 
-    async fn new_listener(&self, locator: &Locator, _ps: Option<LinkProperty>) -> ZResult<Locator> {
-        let (addr, domain) = get_tls_addr(locator).await?;
+    async fn new_listener(&self, locator: &Locator, ps: Option<&LinkProperty>) -> ZResult<Locator> {
+        let addr = get_tls_addr(locator).await?;
 
-        // Bind the TLS socket
-        let socket = match TcpListener::bind(addr).await {
-            Ok(socket) => Arc::new(socket),
-            Err(e) => {
-                let e = format!("Can not create a new TLS listener on {}: {}", addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        // Verify there is a valid ServerConfig
+        let prop = ps.as_ref().ok_or({
+            let e = format!(
+                "Can not create a new TLS listener on {}: no ServerConfig provided",
+                addr
+            );
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+        let tls_prop = get_tls_prop(prop)?;
+        let config = tls_prop.server.as_ref().ok_or({
+            let e = format!(
+                "Can not create a new TLS listener on {}: no ServerConfig provided",
+                addr
+            );
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
-        let local_addr = match socket.local_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!("Can not create a new TLS listener on {}: {}", addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
-        let listener = Arc::new(ListenerTls::new(socket));
+        // Initialize the TcpListener
+        let socket = TcpListener::bind(addr).await.map_err(|e| {
+            let e = format!("Can not create a new TLS listener on {}: {}", addr, e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        let local_addr = socket.local_addr().map_err(|e| {
+            let e = format!("Can not create a new TLS listener on {}: {}", addr, e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        // Initialize the TlsAcceptor
+        let acceptor = TlsAcceptor::from(config.clone());
+        let listener = Arc::new(ListenerTls::new(socket, acceptor));
         // Update the list of active listeners on the manager
         zasyncwrite!(self.listener).insert(local_addr, listener.clone());
 
@@ -466,11 +543,11 @@ impl LinkManagerTrait for LinkManagerTls {
             zasyncwrite!(c_listeners).remove(&c_addr);
         });
 
-        Ok(Locator::Tls((local_addr, domain.to_owned())))
+        Ok(Locator::Tls(LocatorTls::SocketAddr(local_addr)))
     }
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let addr = get_tls_addr(locator)?;
+        let addr = get_tls_addr(locator).await?;
 
         // Stop the listener
         match zasyncwrite!(self.listener).remove(&addr) {
@@ -497,7 +574,7 @@ impl LinkManagerTrait for LinkManagerTls {
     async fn get_listeners(&self) -> Vec<Locator> {
         zasyncread!(self.listener)
             .keys()
-            .map(|x| Locator::Tls(*x))
+            .map(|x| Locator::Tls(LocatorTls::SocketAddr(*x)))
             .collect()
     }
 
@@ -519,7 +596,10 @@ impl LinkManagerTrait for LinkManagerTls {
                 locators.push(*addr)
             }
         }
-        locators.into_iter().map(Locator::Tls).collect()
+        locators
+            .into_iter()
+            .map(|x| Locator::Tls(LocatorTls::SocketAddr(x)))
+            .collect()
     }
 }
 
@@ -532,7 +612,7 @@ async fn accept_task(listener: Arc<ListenerTls>, manager: SessionManager) {
         );
         loop {
             // Wait for incoming connections
-            let stream = match listener.socket.accept().await {
+            let tcp_stream = match listener.socket.accept().await {
                 Ok((stream, _)) => stream,
                 Err(e) => {
                     log::warn!(
@@ -550,7 +630,7 @@ async fn accept_task(listener: Arc<ListenerTls>, manager: SessionManager) {
                 }
             };
             // Get the source and destination TLS addresses
-            let src_addr = match stream.local_addr() {
+            let src_addr = match tcp_stream.local_addr() {
                 Ok(addr) => addr,
                 Err(e) => {
                     let e = format!("Can not accept TLS connection: {}", e);
@@ -558,8 +638,18 @@ async fn accept_task(listener: Arc<ListenerTls>, manager: SessionManager) {
                     continue;
                 }
             };
-            let dst_addr = match stream.peer_addr() {
+            let dst_addr = match tcp_stream.peer_addr() {
                 Ok(addr) => addr,
+                Err(e) => {
+                    let e = format!("Can not accept TLS connection: {}", e);
+                    log::warn!("{}", e);
+                    continue;
+                }
+            };
+
+            // Accept the TLS connection
+            let tls_stream = match listener.acceptor.accept(tcp_stream).await {
+                Ok(stream) => TlsStream::Server(stream),
                 Err(e) => {
                     let e = format!("Can not accept TLS connection: {}", e);
                     log::warn!("{}", e);
@@ -569,7 +659,7 @@ async fn accept_task(listener: Arc<ListenerTls>, manager: SessionManager) {
 
             log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
             // Create the new link object
-            let link = Arc::new(Tls::new(stream, src_addr, dst_addr));
+            let link = Arc::new(Tls::new(tls_stream, src_addr, dst_addr));
 
             // Communicate the new link to the initial session manager
             manager.handle_new_link(Link::new(link), None).await;

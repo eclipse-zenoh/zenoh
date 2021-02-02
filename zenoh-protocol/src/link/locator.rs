@@ -31,7 +31,6 @@ use zenoh_util::zerror;
 /*          LOCATOR                  */
 /*************************************/
 pub const PROTO_SEPARATOR: char = '/';
-pub const PORT_SEPARATOR: char = ':';
 // Protocol literals
 #[cfg(feature = "transport_tcp")]
 pub const STR_TCP: &str = "tcp";
@@ -88,16 +87,18 @@ impl FromStr for Locator {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let sep_index = s.find(PROTO_SEPARATOR);
 
-        let index = sep_index.ok_or(zerror2!(ZErrorKind::InvalidLocator {
-            descr: format!("Invalid locator: {}", s)
-        }))?;
+        let index = sep_index.ok_or_else(|| {
+            zerror2!(ZErrorKind::InvalidLocator {
+                descr: format!("Invalid locator: {}", s)
+            })
+        })?;
 
         let (proto, addr) = s.split_at(index);
-        let addr =
-            addr.strip_prefix(PROTO_SEPARATOR)
-                .ok_or(zerror2!(ZErrorKind::InvalidLocator {
-                    descr: format!("Invalid locator: {}", s)
-                }))?;
+        let addr = addr.strip_prefix(PROTO_SEPARATOR).ok_or_else(|| {
+            zerror2!(ZErrorKind::InvalidLocator {
+                descr: format!("Invalid locator: {}", s)
+            })
+        })?;
 
         match proto {
             #[cfg(feature = "transport_tcp")]
@@ -146,29 +147,3 @@ impl fmt::Display for Locator {
         Ok(())
     }
 }
-
-// impl fmt::Debug for Locator {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         let (proto, addr): (&str, String) = match self {
-//             #[cfg(feature = "transport_tcp")]
-//             Locator::Tcp(addr) => (STR_TCP, addr.to_string()),
-//             #[cfg(feature = "transport_udp")]
-//             Locator::Udp(addr) => (STR_UDP, addr.to_string()),
-//             #[cfg(feature = "transport_tls")]
-//             Locator::Tls((addr, doma)) => {
-//                 let domain: &str = doma.as_ref().into();
-//                 (STR_TLS, format!("{} ({})", domain, addr))
-//             }
-//             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-//             Locator::UnixSocketStream(addr) => {
-//                 let path = addr.to_str().unwrap_or("None");
-//                 (STR_UNIXSOCK_STREAM, path.to_string())
-//             }
-//         };
-
-//         f.debug_struct("Locator")
-//             .field("protocol", &proto)
-//             .field("address", &addr)
-//             .finish()
-//     }
-// }
