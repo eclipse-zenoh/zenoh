@@ -1134,9 +1134,9 @@ dependencies = [
 
 [[package]]
 name = "httparse"
-version = "1.3.4"
+version = "1.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd179ae861f0c2e53da70d892f5f3029f9594be0c41dc5269cd371691b1dc2f9"
+checksum = "615caabe2c3160b313d52ccc905335f4ed5f10881dd63dc5699d47e90be85691"
 
 [[package]]
 name = "humantime"
@@ -1255,9 +1255,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.84"
+version = "0.2.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cca32fa0182e8c0989459524dc356b8f2b5c10f1b9eb521b7d182c03cf8c5ff"
+checksum = "7ccac4b00700875e6a07c6cde370d44d32fa01c5a65cdd2fca6858c479d28bb3"
 
 [[package]]
 name = "libloading"
@@ -2605,7 +2605,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "zenoh"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.6"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2628,7 +2628,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-protocol"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.6"
 dependencies = [
  "aes-soft",
  "async-std",
@@ -2652,7 +2652,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-rest"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.6"
 dependencies = [
  "async-std",
  "base64 0.13.0",
@@ -2669,7 +2669,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-router"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.6"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2695,7 +2695,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-storages"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.6"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2713,7 +2713,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-util"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.6"
 dependencies = [
  "aes-soft",
  "async-std",
@@ -2739,7 +2739,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh_backend_traits"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.6"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2748,7 +2748,7 @@ dependencies = [
 
 [[package]]
 name = "zplugin-example"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.6"
 dependencies = [
  "async-std",
  "clap",
