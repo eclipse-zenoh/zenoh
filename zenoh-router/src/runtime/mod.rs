@@ -11,165 +11,24 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::routing::router::Router;
-use crate::runtime::orchestrator::SessionOrchestrator;
-use async_std::fs;
-use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::collections::HashMap;
-use std::io::Cursor;
-use uhlc::HLC;
-use zenoh_protocol::core::{whatami, PeerId};
-use zenoh_util::properties::runtime::*;
-// #[cfg(feature = "transport_tls")]
-use zenoh_protocol::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
-use zenoh_protocol::link::LocatorProperty;
-use zenoh_protocol::session::authenticator::{PeerAuthenticator, UserPasswordAuthenticator};
-use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::Properties;
-use zenoh_util::{zerror, zerror2};
-
+mod adminspace;
 pub mod orchestrator;
 
-mod adminspace;
+use crate::routing::router::Router;
+use crate::runtime::orchestrator::SessionOrchestrator;
 pub use adminspace::AdminSpace;
+use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use uhlc::HLC;
+use zenoh_protocol::core::{whatami, PeerId};
+use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::properties::runtime::*;
+use zenoh_util::{zerror, zerror2};
 
 pub struct RuntimeState {
     pub pid: PeerId,
     pub router: Arc<Router>,
     pub orchestrator: SessionOrchestrator,
-}
-
-async fn build_user_password_peer_authenticator(
-    config: &RuntimeProperties,
-) -> ZResult<Option<UserPasswordAuthenticator>> {
-    if let Some(user) = config.get(&ZN_USER_KEY) {
-        if let Some(password) = config.get(&ZN_PASSWORD_KEY) {
-            // We have both user password parameter defined. Check if we
-            // need to build the user-password lookup dictionary for incoming
-            // connections, e.g. on the router.
-            let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-            if let Some(dict) = config.get(&ZN_USER_PASSWORD_DICTIONARY_KEY) {
-                let content = fs::read_to_string(dict).await.map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: format!("Invalid user-password dictionary file: {}", e)
-                    })
-                })?;
-                // Populate the user-password dictionary
-                let mut ps = Properties::from(content);
-                for (user, password) in ps.drain() {
-                    lookup.insert(user.into(), password.into());
-                }
-            }
-            // Create the UserPassword Authenticator based on provided info
-            let upa = UserPasswordAuthenticator::new(
-                lookup,
-                (user.to_string().into(), password.to_string().into()),
-            );
-            log::debug!("User-password authentication is enabled");
-
-            return Ok(Some(upa));
-        }
-    }
-    Ok(None)
-}
-
-// #[cfg(feature = "transport_tls")]
-async fn build_tls_locator_property(
-    config: &RuntimeProperties,
-) -> ZResult<Option<LocatorProperty>> {
-    let mut client_config: Option<ClientConfig> = None;
-    if let Some(tls_ca_certificate) = config.get(&ZN_TLS_ROOT_CA_CERTIFICATE_KEY) {
-        let ca = fs::read(tls_ca_certificate).await.map_err(|e| {
-            zerror2!(ZErrorKind::Other {
-                descr: format!("Invalid TLS CA certificate file: {}", e)
-            })
-        })?;
-        let mut cc = ClientConfig::new();
-        let _ = cc
-            .root_store
-            .add_pem_file(&mut Cursor::new(ca))
-            .map_err(|_| {
-                zerror2!(ZErrorKind::Other {
-                    descr: "Invalid TLS CA certificate file".to_string()
-                })
-            })?;
-        client_config = Some(cc);
-        log::debug!("TLS client is configured");
-    }
-
-    let mut server_config: Option<ServerConfig> = None;
-    if let Some(tls_server_private_key) = config.get(&ZN_TLS_SERVER_PRIVATE_KEY_KEY) {
-        if let Some(tls_server_certificate) = config.get(&ZN_TLS_SERVER_CERTIFICATE_KEY) {
-            let pkey = fs::read(tls_server_private_key).await.map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: format!("Invalid TLS private key file: {}", e)
-                })
-            })?;
-            let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(pkey)).unwrap();
-
-            let cert = fs::read(tls_server_certificate).await.map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: format!("Invalid TLS server certificate file: {}", e)
-                })
-            })?;
-            let certs = pemfile::certs(&mut Cursor::new(cert)).unwrap();
-
-            let mut sc = ServerConfig::new(NoClientAuth::new());
-            sc.set_single_cert(certs, keys.remove(0)).unwrap();
-            server_config = Some(sc);
-            log::debug!("TLS server is configured");
-        }
-    }
-
-    if client_config.is_none() && server_config.is_none() {
-        Ok(None)
-    } else {
-        Ok(Some((client_config, server_config).into()))
-    }
-}
-
-async fn build_opt_config_from_properties(
-    config: &RuntimeProperties,
-) -> ZResult<SessionManagerOptionalConfig> {
-    let mut peer_authenticator: Vec<PeerAuthenticator> = vec![];
-    let mut locator_property: Vec<LocatorProperty> = vec![];
-
-    let mut upa = build_user_password_peer_authenticator(config).await?;
-    if let Some(upa) = upa.take() {
-        peer_authenticator.push(Arc::new(upa));
-    }
-
-    // #[cfg(feature = "transport_tls")]
-    {
-        let mut tls = build_tls_locator_property(config).await?;
-        if let Some(tls) = tls.take() {
-            locator_property.push(tls);
-        }
-    }
-
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        batch_size: None,
-        timeout: None,
-        retries: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: if peer_authenticator.is_empty() {
-            None
-        } else {
-            Some(peer_authenticator)
-        },
-        link_authenticator: None,
-        locator_property: if locator_property.is_empty() {
-            None
-        } else {
-            Some(locator_property)
-        },
-    };
-    Ok(opt_config)
 }
 
 pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
@@ -229,9 +88,9 @@ impl Runtime {
             id: pid.clone(),
             handler: router.clone(),
         };
-        let sm_opt_config = build_opt_config_from_properties(&config).await?;
+        let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
 
-        let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
+        let session_manager = SessionManager::new(sm_config, sm_opt_config);
         let mut orchestrator = SessionOrchestrator::new(session_manager, whatami);
         let peers_autuconnect = config
             .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)

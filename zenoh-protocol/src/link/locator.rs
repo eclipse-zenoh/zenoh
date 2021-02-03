@@ -19,12 +19,12 @@ use super::tls::{LocatorPropertyTls, LocatorTls};
 use super::udp::{LocatorPropertyUdp, LocatorUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use super::unixsock_stream::{LocatorPropertyUnixSocketStream, LocatorUnixSocketStream};
-
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::Hash;
 use std::str::FromStr;
-use zenoh_util::core::{ZError, ZErrorKind};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::properties::runtime::RuntimeProperties;
 use zenoh_util::zerror;
 
 /*************************************/
@@ -178,6 +178,18 @@ impl LocatorProperty {
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LocatorProperty::UnixSocketStream(..) => LocatorProtocol::UnixSocketStream,
         }
+    }
+
+    pub async fn from_properties(config: &RuntimeProperties) -> ZResult<Vec<LocatorProperty>> {
+        let mut ps: Vec<LocatorProperty> = vec![];
+        #[cfg(feature = "transport_tls")]
+        {
+            let mut res = LocatorPropertyTls::from_properties(config).await?;
+            if let Some(p) = res.take() {
+                ps.push(p);
+            }
+        }
+        Ok(ps)
     }
 }
 

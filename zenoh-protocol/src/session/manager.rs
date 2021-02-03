@@ -34,6 +34,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
+use zenoh_util::properties::*;
 use zenoh_util::{zasynclock, zerror};
 
 /// # Examples
@@ -115,6 +116,43 @@ pub struct SessionManagerOptionalConfig {
     pub peer_authenticator: Option<Vec<PeerAuthenticator>>,
     pub link_authenticator: Option<Vec<LinkAuthenticator>>,
     pub locator_property: Option<Vec<LocatorProperty>>,
+}
+
+impl SessionManagerOptionalConfig {
+    pub async fn from_properties(
+        config: &RuntimeProperties,
+    ) -> ZResult<Option<SessionManagerOptionalConfig>> {
+        let peer_authenticator = PeerAuthenticator::from_properties(config).await?;
+        let link_authenticator = LinkAuthenticator::from_properties(config).await?;
+        let locator_property = LocatorProperty::from_properties(config).await?;
+
+        let opt_config = SessionManagerOptionalConfig {
+            lease: None,
+            keep_alive: None,
+            sn_resolution: None,
+            batch_size: None,
+            timeout: None,
+            retries: None,
+            max_sessions: None,
+            max_links: None,
+            peer_authenticator: if peer_authenticator.is_empty() {
+                None
+            } else {
+                Some(peer_authenticator)
+            },
+            link_authenticator: if link_authenticator.is_empty() {
+                None
+            } else {
+                Some(link_authenticator)
+            },
+            locator_property: if locator_property.is_empty() {
+                None
+            } else {
+                Some(locator_property)
+            },
+        };
+        Ok(Some(opt_config))
+    }
 }
 
 pub(super) struct SessionManagerConfigInner {
@@ -490,8 +528,7 @@ impl SessionManager {
             let res = la.handle_new_link(&link, properties.as_ref()).await;
             match res {
                 Ok(pid) => {
-                    // Check that all the peer authenticators
-                    // eventually return the same PeerId
+                    // Check that all the peer authenticators, eventually return the same PeerId
                     if let Some(pid1) = peer_id.as_ref() {
                         if let Some(pid2) = pid.as_ref() {
                             if pid1 != pid2 {

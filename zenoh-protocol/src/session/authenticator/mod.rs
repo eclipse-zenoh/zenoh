@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub(super) mod properties;
+pub(super) mod attachment;
 mod userpassword;
 
 use crate::core::{PeerId, Property, ZInt};
@@ -19,14 +19,36 @@ use crate::link::{Link, Locator, LocatorProperty};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use std::fmt;
+use std::ops::Deref;
 pub use userpassword::*;
 use zenoh_util::core::ZResult;
+use zenoh_util::properties::runtime::*;
 
 /*************************************/
 /*              LINK                 */
 /*************************************/
-pub type LinkAuthenticator = Arc<dyn LinkAuthenticatorTrait + Send + Sync>;
+pub struct LinkAuthenticator(Arc<dyn LinkAuthenticatorTrait + Send + Sync>);
 
+impl LinkAuthenticator {
+    pub(crate) async fn from_properties(
+        _config: &RuntimeProperties,
+    ) -> ZResult<Vec<LinkAuthenticator>> {
+        let las: Vec<LinkAuthenticator> = vec![];
+        Ok(las)
+    }
+}
+
+impl Deref for LinkAuthenticator {
+    type Target = Arc<dyn LinkAuthenticatorTrait + Send + Sync>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/*************************************/
+/*           DUMMY LINK              */
+/*************************************/
 #[async_trait]
 pub trait LinkAuthenticatorTrait {
     async fn handle_new_link(
@@ -48,7 +70,7 @@ pub struct DummyLinkAuthenticator;
 
 impl DummyLinkAuthenticator {
     pub fn make() -> LinkAuthenticator {
-        Arc::new(DummyLinkAuthenticator)
+        LinkAuthenticator(Arc::new(DummyLinkAuthenticator))
     }
 }
 
@@ -68,7 +90,29 @@ impl LinkAuthenticatorTrait for DummyLinkAuthenticator {
 /*************************************/
 /*              PEER                 */
 /*************************************/
-pub type PeerAuthenticator = Arc<dyn PeerAuthenticatorTrait + Send + Sync>;
+#[derive(Clone)]
+pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait + Send + Sync>);
+
+impl PeerAuthenticator {
+    pub(crate) async fn from_properties(
+        config: &RuntimeProperties,
+    ) -> ZResult<Vec<PeerAuthenticator>> {
+        let mut pas: Vec<PeerAuthenticator> = vec![];
+        let mut res = UserPasswordAuthenticator::from_properties(config).await?;
+        if let Some(pa) = res.take() {
+            pas.push(pa.into());
+        }
+        Ok(pas)
+    }
+}
+
+impl Deref for PeerAuthenticator {
+    type Target = Arc<dyn PeerAuthenticatorTrait + Send + Sync>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug)]
 pub struct AuthenticatedPeerLink {
@@ -184,11 +228,14 @@ pub trait PeerAuthenticatorTrait {
     async fn handle_close(&self, peer_id: &PeerId);
 }
 
+/*************************************/
+/*           DUMMY PEER              */
+/*************************************/
 pub struct DummyPeerAuthenticator;
 
 impl DummyPeerAuthenticator {
     pub fn make() -> PeerAuthenticator {
-        Arc::new(DummyPeerAuthenticator)
+        PeerAuthenticator(Arc::new(DummyPeerAuthenticator))
     }
 }
 

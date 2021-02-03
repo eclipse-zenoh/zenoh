@@ -11,16 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{properties, AuthenticatedPeerLink, PeerAuthenticatorTrait};
+use super::{attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorTrait};
 use crate::core::{PeerId, Property, ZInt};
 use crate::io::{RBuf, WBuf};
 use crate::link::Locator;
-use async_std::sync::{Mutex, RwLock};
+use async_std::fs;
+use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use std::collections::{HashMap, HashSet};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{hmac, PseudoRng};
+use zenoh_util::properties::*;
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite};
 
 const WBUF_SIZE: usize = 64;
@@ -178,6 +180,40 @@ impl UserPasswordAuthenticator {
         guard.remove(user);
         Ok(())
     }
+
+    pub async fn from_properties(
+        config: &RuntimeProperties,
+    ) -> ZResult<Option<UserPasswordAuthenticator>> {
+        if let Some(user) = config.get(&ZN_USER_KEY) {
+            if let Some(password) = config.get(&ZN_PASSWORD_KEY) {
+                // We have both user password parameter defined. Check if we
+                // need to build the user-password lookup dictionary for incoming
+                // connections, e.g. on the router.
+                let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+                if let Some(dict) = config.get(&ZN_USER_PASSWORD_DICTIONARY_KEY) {
+                    let content = fs::read_to_string(dict).await.map_err(|e| {
+                        zerror2!(ZErrorKind::Other {
+                            descr: format!("Invalid user-password dictionary file: {}", e)
+                        })
+                    })?;
+                    // Populate the user-password dictionary
+                    let mut ps = Properties::from(content);
+                    for (user, password) in ps.drain() {
+                        lookup.insert(user.into(), password.into());
+                    }
+                }
+                // Create the UserPassword Authenticator based on provided info
+                let upa = UserPasswordAuthenticator::new(
+                    lookup,
+                    (user.to_string().into(), password.to_string().into()),
+                );
+                log::debug!("User-password authentication is enabled");
+
+                return Ok(Some(upa));
+            }
+        }
+        Ok(None)
+    }
 }
 
 #[async_trait]
@@ -195,7 +231,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let rbuf: RBuf = wbuf.into();
 
         let prop = Property {
-            key: properties::authorization::USRPWD,
+            key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
         Ok(vec![prop])
@@ -210,7 +246,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     ) -> ZResult<Vec<Property>> {
         let res = properties
             .iter()
-            .find(|p| p.key == properties::authorization::USRPWD);
+            .find(|p| p.key == attachment::authorization::USRPWD);
         let mut rbuf: RBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
@@ -242,7 +278,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         wbuf.write_init_ack_property(&init_ack_property);
         let rbuf: RBuf = wbuf.into();
         let prop = Property {
-            key: properties::authorization::USRPWD,
+            key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
 
@@ -264,7 +300,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     ) -> ZResult<Vec<Property>> {
         let res = properties
             .iter()
-            .find(|p| p.key == properties::authorization::USRPWD);
+            .find(|p| p.key == attachment::authorization::USRPWD);
         let mut rbuf: RBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
@@ -295,7 +331,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         wbuf.write_open_syn_property(&open_syn_property);
         let rbuf: RBuf = wbuf.into();
         let prop = Property {
-            key: properties::authorization::USRPWD,
+            key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
 
@@ -322,7 +358,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         let res = properties
             .iter()
-            .find(|p| p.key == properties::authorization::USRPWD);
+            .find(|p| p.key == attachment::authorization::USRPWD);
         let mut rbuf: RBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
@@ -414,5 +450,17 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
     async fn handle_close(&self, peer_id: &PeerId) {
         zasynclock!(self.authenticated).remove(peer_id);
+    }
+}
+
+impl From<Arc<UserPasswordAuthenticator>> for PeerAuthenticator {
+    fn from(v: Arc<UserPasswordAuthenticator>) -> PeerAuthenticator {
+        PeerAuthenticator(v)
+    }
+}
+
+impl From<UserPasswordAuthenticator> for PeerAuthenticator {
+    fn from(v: UserPasswordAuthenticator) -> PeerAuthenticator {
+        Self::from(Arc::new(v))
     }
 }

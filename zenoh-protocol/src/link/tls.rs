@@ -15,8 +15,9 @@ use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use crate::session::SessionManager;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
-use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
+use async_rustls::{rustls::internal::pemfile, TlsAcceptor, TlsConnector, TlsStream};
 use async_std::channel::{bounded, Receiver, Sender};
+use async_std::fs;
 use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Barrier, RwLock};
@@ -26,10 +27,12 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
+use std::io::Cursor;
 use std::net::Shutdown;
 use std::str::FromStr;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::properties::runtime::*;
 use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
 
 // Default MTU (TLS PDU) in bytes.
@@ -171,6 +174,60 @@ impl LocatorPropertyTls {
         server: Option<Arc<ServerConfig>>,
     ) -> LocatorPropertyTls {
         LocatorPropertyTls { client, server }
+    }
+
+    pub(super) async fn from_properties(
+        config: &RuntimeProperties,
+    ) -> ZResult<Option<LocatorProperty>> {
+        let mut client_config: Option<ClientConfig> = None;
+        if let Some(tls_ca_certificate) = config.get(&ZN_TLS_ROOT_CA_CERTIFICATE_KEY) {
+            let ca = fs::read(tls_ca_certificate).await.map_err(|e| {
+                zerror2!(ZErrorKind::Other {
+                    descr: format!("Invalid TLS CA certificate file: {}", e)
+                })
+            })?;
+            let mut cc = ClientConfig::new();
+            let _ = cc
+                .root_store
+                .add_pem_file(&mut Cursor::new(ca))
+                .map_err(|_| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: "Invalid TLS CA certificate file".to_string()
+                    })
+                })?;
+            client_config = Some(cc);
+            log::debug!("TLS client is configured");
+        }
+
+        let mut server_config: Option<ServerConfig> = None;
+        if let Some(tls_server_private_key) = config.get(&ZN_TLS_SERVER_PRIVATE_KEY_KEY) {
+            if let Some(tls_server_certificate) = config.get(&ZN_TLS_SERVER_CERTIFICATE_KEY) {
+                let pkey = fs::read(tls_server_private_key).await.map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: format!("Invalid TLS private key file: {}", e)
+                    })
+                })?;
+                let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(pkey)).unwrap();
+
+                let cert = fs::read(tls_server_certificate).await.map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: format!("Invalid TLS server certificate file: {}", e)
+                    })
+                })?;
+                let certs = pemfile::certs(&mut Cursor::new(cert)).unwrap();
+
+                let mut sc = ServerConfig::new(NoClientAuth::new());
+                sc.set_single_cert(certs, keys.remove(0)).unwrap();
+                server_config = Some(sc);
+                log::debug!("TLS server is configured");
+            }
+        }
+
+        if client_config.is_none() && server_config.is_none() {
+            Ok(None)
+        } else {
+            Ok(Some((client_config, server_config).into()))
+        }
     }
 }
 
