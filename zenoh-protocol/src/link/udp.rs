@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Link, LinkManagerTrait, LocatorProperty, LinkTrait, Locator};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use crate::session::SessionManager;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, ToSocketAddrs, UdpSocket};

@@ -126,7 +126,7 @@ impl Runtime {
             max_links: None,
             peer_authenticator,
             link_authenticator: None,
-            link_property: None,
+            locator_property: None,
         };
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));

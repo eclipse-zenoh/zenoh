@@ -118,7 +118,7 @@ impl SessionHandler for SHClientOpenClose {
     }
 }
 
-async fn session_open_close(locator: Locator, link_property: Option<Vec<LocatorProperty>>) {
+async fn session_open_close(locator: Locator, locator_property: Option<Vec<LocatorProperty>>) {
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
@@ -144,7 +144,7 @@ async fn session_open_close(locator: Locator, link_property: Option<Vec<LocatorP
         max_links: Some(2),
         peer_authenticator: None,
         link_authenticator: None,
-        link_property: link_property.clone(),
+        locator_property: locator_property.clone(),
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
 
@@ -170,7 +170,7 @@ async fn session_open_close(locator: Locator, link_property: Option<Vec<LocatorP
         max_links: Some(2),
         peer_authenticator: None,
         link_authenticator: None,
-        link_property: link_property.clone(),
+        locator_property: locator_property.clone(),
     };
     let client01_manager = SessionManager::new(config, Some(opt_config));
 
@@ -192,7 +192,7 @@ async fn session_open_close(locator: Locator, link_property: Option<Vec<LocatorP
         max_links: Some(2),
         peer_authenticator: None,
         link_authenticator: None,
-        link_property,
+        locator_property,
     };
     let client02_manager = SessionManager::new(config, Some(opt_config));
 

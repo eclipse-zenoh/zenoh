@@ -117,7 +117,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         max_links: None,
         peer_authenticator: None,
         link_authenticator: None,
-        link_property: None,
+        locator_property: None,
     };
     let peer01_manager = SessionManager::new(config, Some(opt_config));
 
@@ -140,7 +140,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         max_links: None,
         peer_authenticator: None,
         link_authenticator: None,
-        link_property: None,
+        locator_property: None,
     };
     let peer02_manager = SessionManager::new(config, Some(opt_config));
 

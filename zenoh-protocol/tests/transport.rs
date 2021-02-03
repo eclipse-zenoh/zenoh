@@ -135,7 +135,7 @@ impl SessionEventHandler for SCClient {
 
 async fn open_session(
     locators: &[Locator],
-    link_property: Option<Vec<LocatorProperty>>,
+    locator_property: Option<Vec<LocatorProperty>>,
 ) -> (SessionManager, Arc<SHRouter>, Session) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
@@ -160,7 +160,7 @@ async fn open_session(
         max_links: None,
         peer_authenticator: None,
         link_authenticator: None,
-        link_property,
+        locator_property: locator_property.clone(),
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
 
@@ -171,7 +171,20 @@ async fn open_session(
         id: client_id,
         handler: Arc::new(SHClient::new()),
     };
-    let client_manager = SessionManager::new(config, None);
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: None,
+        max_links: None,
+        peer_authenticator: None,
+        link_authenticator: None,
+        locator_property,
+    };
+    let client_manager = SessionManager::new(config, Some(opt_config));
 
     // Create the listener on the router
     for l in locators.iter() {

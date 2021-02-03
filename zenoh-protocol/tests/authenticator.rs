@@ -126,7 +126,7 @@ async fn authenticator_user_password(locator: Locator) {
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_router.clone()]),
         link_authenticator: None,
-        link_property: None,
+        locator_property: None,
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
 
@@ -153,7 +153,7 @@ async fn authenticator_user_password(locator: Locator) {
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client01]),
         link_authenticator: None,
-        link_property: None,
+        locator_property: None,
     };
     let client01_manager = SessionManager::new(config, Some(opt_config));
 
@@ -180,7 +180,7 @@ async fn authenticator_user_password(locator: Locator) {
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client02]),
         link_authenticator: None,
-        link_property: None,
+        locator_property: None,
     };
     let client02_manager = SessionManager::new(config, Some(opt_config));
 
@@ -207,7 +207,7 @@ async fn authenticator_user_password(locator: Locator) {
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client03]),
         link_authenticator: None,
-        link_property: None,
+        locator_property: None,
     };
     let client03_manager = SessionManager::new(config, Some(opt_config));
 
