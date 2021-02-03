@@ -13,7 +13,7 @@
 #
 [package]
 name = "zplugin-example"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
            "Olivier Hécart <olivier.hecart@adlinktech.com>",
@@ -29,8 +29,8 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
-zenoh = { version = "0.5.0-beta.6", path = "../../zenoh" }
-zenoh-router = { version = "0.5.0-beta.6", path = "../../zenoh-router" }
+zenoh = { version = "0.5.0-beta.7", path = "../../zenoh" }
+zenoh-router = { version = "0.5.0-beta.7", path = "../../zenoh-router" }
 futures = "0.3.12"
 clap = "2"
 log = "0.4"

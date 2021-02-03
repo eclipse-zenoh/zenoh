@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-protocol"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -39,7 +39,7 @@ transport_unixsock-stream = ["nix"]
 default = ["zero-copy", "transport_tcp", "transport_udp", "transport_unixsock-stream"]
 
 [dependencies]
-zenoh-util =  { version = "0.5.0-beta.6", path = "../zenoh-util" }
+zenoh-util =  { version = "0.5.0-beta.7", path = "../zenoh-util" }
 async-std = { version = "=1.9.0", features = ["unstable"] }
 async-trait = "0.1.42"
 aes-soft = "0.6.4"

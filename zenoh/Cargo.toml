@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -38,9 +38,9 @@ transport_udp = []
 default = ["transport_tcp", "transport_udp", "zero-copy"]
 
 [dependencies]
-zenoh-protocol = { version = "0.5.0-beta.6", path = "../zenoh-protocol" }
-zenoh-router = { version = "0.5.0-beta.6", path = "../zenoh-router" }
-zenoh-util = { version = "0.5.0-beta.6", path = "../zenoh-util" }
+zenoh-protocol = { version = "0.5.0-beta.7", path = "../zenoh-protocol" }
+zenoh-router = { version = "0.5.0-beta.7", path = "../zenoh-router" }
+zenoh-util = { version = "0.5.0-beta.7", path = "../zenoh-util" }
 async-std = { version = "=1.9.0", features = ["attributes", "unstable"] }
 async-trait = "0.1.42"
 futures = "0.3.12"

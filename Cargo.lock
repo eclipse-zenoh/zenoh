@@ -2613,7 +2613,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "zenoh"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2636,7 +2636,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-protocol"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 dependencies = [
  "aes-soft",
  "async-std",
@@ -2660,7 +2660,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-rest"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 dependencies = [
  "async-std",
  "base64 0.13.0",
@@ -2677,7 +2677,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-router"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2703,7 +2703,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-storages"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2721,7 +2721,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-util"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 dependencies = [
  "aes-soft",
  "async-std",
@@ -2747,7 +2747,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh_backend_traits"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2756,7 +2756,7 @@ dependencies = [
 
 [[package]]
 name = "zplugin-example"
-version = "0.5.0-beta.6"
+version = "0.5.0-beta.7"
 dependencies = [
  "async-std",
  "clap",
