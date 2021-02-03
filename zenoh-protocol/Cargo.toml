@@ -50,7 +50,7 @@ rand_chacha = "0.3.0"
 http-types = "2.10.0"
 uhlc = "0.2.1"
 uuid = { version = "0.8.2", features = ["v4"] }
-shared_memory = {git = "https://github.com/elast0ny/shared_memory-rs.git" }
+shared_memory = "0.11.4"
 serde = "1.0.123"
 bincode = "1.3.1"
 nix = {version = "0.19.1", optional = true}
