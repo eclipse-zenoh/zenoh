@@ -13,13 +13,14 @@
 //
 use async_std::sync::Arc;
 use petgraph::graph::NodeIndex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use zenoh_protocol::core::{whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
 use crate::routing::face::FaceState;
+use crate::routing::network::Network;
 use crate::routing::resource::{Context, Resource, Route};
 use crate::routing::router::Tables;
 
@@ -76,29 +77,33 @@ async unsafe fn register_router_queryable(
         let net = tables.routers_net.as_ref().unwrap();
         match net.get_idx(&router) {
             Some(tree_sid) => {
-                for child in &net.trees[tree_sid.index()].childs {
-                    match tables.get_face(&net.graph[*child].pid).cloned() {
-                        Some(mut someface) => {
-                            if someface.id != face.id {
-                                let reskey = Resource::decl_key(res, &mut someface).await;
+                if net.trees.len() > tree_sid.index() {
+                    for child in &net.trees[tree_sid.index()].childs {
+                        match tables.get_face(&net.graph[*child].pid).cloned() {
+                            Some(mut someface) => {
+                                if someface.id != face.id {
+                                    let reskey = Resource::decl_key(res, &mut someface).await;
 
-                                log::debug!(
-                                    "Send router queryable {} on face {} {}",
-                                    res.name(),
-                                    someface.id,
-                                    someface.pid,
-                                );
+                                    log::debug!(
+                                        "Send router queryable {} on face {} {}",
+                                        res.name(),
+                                        someface.id,
+                                        someface.pid,
+                                    );
 
-                                someface
-                                    .primitives
-                                    .queryable(&reskey, Some(tree_sid.index() as ZInt))
-                                    .await;
+                                    someface
+                                        .primitives
+                                        .queryable(&reskey, Some(tree_sid.index() as ZInt))
+                                        .await;
+                                }
+                            }
+                            None => {
+                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
                             }
                         }
-                        None => {
-                            log::error!("Unable to find face for pid {}", net.graph[*child].pid)
-                        }
                     }
+                } else {
+                    log::trace!("Tree for router {} not yet ready", router);
                 }
             }
             None => log::error!(
@@ -160,29 +165,33 @@ async unsafe fn register_peer_queryable(
         let net = tables.peers_net.as_ref().unwrap();
         match net.get_idx(&peer) {
             Some(tree_sid) => {
-                for child in &net.trees[tree_sid.index()].childs {
-                    match tables.get_face(&net.graph[*child].pid).cloned() {
-                        Some(mut someface) => {
-                            if someface.id != face.id {
-                                let reskey = Resource::decl_key(res, &mut someface).await;
+                if net.trees.len() > tree_sid.index() {
+                    for child in &net.trees[tree_sid.index()].childs {
+                        match tables.get_face(&net.graph[*child].pid).cloned() {
+                            Some(mut someface) => {
+                                if someface.id != face.id {
+                                    let reskey = Resource::decl_key(res, &mut someface).await;
 
-                                log::debug!(
-                                    "Send peer queryable {} on face {} {}",
-                                    res.name(),
-                                    someface.id,
-                                    someface.pid,
-                                );
+                                    log::debug!(
+                                        "Send peer queryable {} on face {} {}",
+                                        res.name(),
+                                        someface.id,
+                                        someface.pid,
+                                    );
 
-                                someface
-                                    .primitives
-                                    .queryable(&reskey, Some(tree_sid.index() as ZInt))
-                                    .await;
+                                    someface
+                                        .primitives
+                                        .queryable(&reskey, Some(tree_sid.index() as ZInt))
+                                        .await;
+                                }
+                            }
+                            None => {
+                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
                             }
                         }
-                        None => {
-                            log::error!("Unable to find face for pid {}", net.graph[*child].pid)
-                        }
                     }
+                } else {
+                    log::trace!("Tree for peer {} not yet ready", peer);
                 }
             }
             None => log::error!(
@@ -592,44 +601,47 @@ pub(crate) async fn queries_tree_change(
     new_childs: &[Vec<NodeIndex>],
     net_type: whatami::Type,
 ) {
-    // propagate qabls to now childs
+    // propagate qabls to new childs
     for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
             let net = tables.get_net(net_type).unwrap();
-            let tree_id = net.graph[NodeIndex::new(tree_sid)].pid.clone();
+            let tree_idx = NodeIndex::new(tree_sid);
+            if net.graph.contains_node(tree_idx) {
+                let tree_id = net.graph[tree_idx].pid.clone();
 
-            let qabls_res = match net_type {
-                whatami::ROUTER => &tables.router_qabls,
-                _ => &tables.peer_qabls,
-            };
-
-            for res in qabls_res {
-                let qabls = match net_type {
-                    whatami::ROUTER => &res.router_qabls,
-                    _ => &res.peer_qabls,
+                let qabls_res = match net_type {
+                    whatami::ROUTER => &tables.router_qabls,
+                    _ => &tables.peer_qabls,
                 };
-                for qabl in qabls {
-                    if *qabl == tree_id {
-                        for child in tree_childs {
-                            match tables.get_face(&net.graph[*child].pid).cloned() {
-                                Some(mut face) => {
-                                    let reskey = Resource::decl_key(&res, &mut face).await;
-                                    log::debug!(
-                                        "Send {} queryable {} on face {} {} (new_child)",
-                                        net_type,
-                                        res.name(),
-                                        face.id,
-                                        face.pid,
-                                    );
-                                    face.primitives
-                                        .queryable(&reskey, Some(tree_sid as ZInt))
-                                        .await;
-                                }
-                                None => {
-                                    log::error!(
-                                        "Unable to find face for pid {}",
-                                        net.graph[*child].pid
-                                    )
+
+                for res in qabls_res {
+                    let qabls = match net_type {
+                        whatami::ROUTER => &res.router_qabls,
+                        _ => &res.peer_qabls,
+                    };
+                    for qabl in qabls {
+                        if *qabl == tree_id {
+                            for child in tree_childs {
+                                match tables.get_face(&net.graph[*child].pid).cloned() {
+                                    Some(mut face) => {
+                                        let reskey = Resource::decl_key(&res, &mut face).await;
+                                        log::debug!(
+                                            "Send {} queryable {} on face {} {} (new_child)",
+                                            net_type,
+                                            res.name(),
+                                            face.id,
+                                            face.pid,
+                                        );
+                                        face.primitives
+                                            .queryable(&reskey, Some(tree_sid as ZInt))
+                                            .await;
+                                    }
+                                    None => {
+                                        log::error!(
+                                            "Unable to find face for pid {}",
+                                            net.graph[*child].pid
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -642,6 +654,38 @@ pub(crate) async fn queries_tree_change(
     // recompute routes
     unsafe {
         compute_query_routes_from(tables, &mut tables.root_res.clone());
+    }
+}
+
+#[inline]
+fn insert_faces_for_qabls(
+    route: &mut Route,
+    prefix: &Arc<Resource>,
+    suffix: &str,
+    tables: &Tables,
+    net: &Network,
+    source: usize,
+    qabls: &HashSet<PeerId>,
+) {
+    if net.trees.len() > source {
+        for qabl in qabls {
+            if let Some(qabl_idx) = net.get_idx(qabl) {
+                if net.trees[source].directions.len() > qabl_idx.index() {
+                    if let Some(direction) = net.trees[source].directions[qabl_idx.index()] {
+                        if net.graph.contains_node(direction) {
+                            if let Some(face) = tables.get_face(&net.graph[direction].pid) {
+                                route.entry(face.id).or_insert_with(|| {
+                                    let reskey = Resource::get_best_key(prefix, suffix, face.id);
+                                    (face.clone(), reskey, Some(source as u64))
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        log::trace!("Tree for node {} not yet ready", source);
     }
 }
 
@@ -669,33 +713,29 @@ unsafe fn compute_query_route(
                 whatami::ROUTER => source.unwrap(),
                 _ => net.idx.index(),
             };
-            for qabl in &mres.router_qabls {
-                if let Some(direction) =
-                    net.trees[router_source].directions[net.get_idx(qabl).unwrap().index()]
-                {
-                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
-                    route.entry(face.id).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(router_source as u64))
-                    });
-                }
-            }
+            insert_faces_for_qabls(
+                &mut route,
+                prefix,
+                suffix,
+                tables,
+                net,
+                router_source,
+                &mres.router_qabls,
+            );
             let net = tables.peers_net.as_ref().unwrap();
             let peer_source = match source_type {
                 whatami::PEER => source.unwrap(),
                 _ => net.idx.index(),
             };
-            for qabl in &mres.peer_qabls {
-                if let Some(direction) =
-                    net.trees[peer_source].directions[net.get_idx(qabl).unwrap().index()]
-                {
-                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
-                    route.entry(face.id).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(peer_source as u64))
-                    });
-                }
-            }
+            insert_faces_for_qabls(
+                &mut route,
+                prefix,
+                suffix,
+                tables,
+                net,
+                peer_source,
+                &mres.peer_qabls,
+            );
         }
 
         if tables.whatami == whatami::PEER {
@@ -704,17 +744,15 @@ unsafe fn compute_query_route(
                 whatami::ROUTER | whatami::PEER => source.unwrap(),
                 _ => net.idx.index(),
             };
-            for qabl in &mres.peer_qabls {
-                if let Some(direction) =
-                    net.trees[peer_source].directions[net.get_idx(qabl).unwrap().index()]
-                {
-                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
-                    route.entry(face.id).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(peer_source as u64))
-                    });
-                }
-            }
+            insert_faces_for_qabls(
+                &mut route,
+                prefix,
+                suffix,
+                tables,
+                net,
+                peer_source,
+                &mres.peer_qabls,
+            );
         }
 
         for (sid, context) in &mut mres.contexts {

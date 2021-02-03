@@ -14,7 +14,7 @@
 use async_std::sync::Arc;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uhlc::HLC;
 
 use zenoh_protocol::core::{
@@ -24,6 +24,7 @@ use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
 use crate::routing::face::FaceState;
+use crate::routing::network::Network;
 use crate::routing::resource::{Context, PullCaches, Resource, Route};
 use crate::routing::router::Tables;
 
@@ -80,29 +81,37 @@ async unsafe fn register_router_subscription(
         let net = tables.routers_net.as_ref().unwrap();
         match net.get_idx(&router) {
             Some(tree_sid) => {
-                for child in &net.trees[tree_sid.index()].childs {
-                    match tables.get_face(&net.graph[*child].pid).cloned() {
-                        Some(mut someface) => {
-                            if someface.id != face.id {
-                                let reskey = Resource::decl_key(res, &mut someface).await;
+                if net.trees.len() > tree_sid.index() {
+                    for child in &net.trees[tree_sid.index()].childs {
+                        match tables.get_face(&net.graph[*child].pid).cloned() {
+                            Some(mut someface) => {
+                                if someface.id != face.id {
+                                    let reskey = Resource::decl_key(res, &mut someface).await;
 
-                                log::debug!(
-                                    "Send router subscription {} on face {} {}",
-                                    res.name(),
-                                    someface.id,
-                                    someface.pid,
-                                );
+                                    log::debug!(
+                                        "Send router subscription {} on face {} {}",
+                                        res.name(),
+                                        someface.id,
+                                        someface.pid,
+                                    );
 
-                                someface
-                                    .primitives
-                                    .subscriber(&reskey, &sub_info, Some(tree_sid.index() as ZInt))
-                                    .await;
+                                    someface
+                                        .primitives
+                                        .subscriber(
+                                            &reskey,
+                                            &sub_info,
+                                            Some(tree_sid.index() as ZInt),
+                                        )
+                                        .await;
+                                }
+                            }
+                            None => {
+                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
                             }
                         }
-                        None => {
-                            log::error!("Unable to find face for pid {}", net.graph[*child].pid)
-                        }
                     }
+                } else {
+                    log::trace!("Tree for router {} not yet ready", router);
                 }
             }
             None => log::error!(
@@ -166,29 +175,37 @@ async unsafe fn register_peer_subscription(
         let net = tables.peers_net.as_ref().unwrap();
         match net.get_idx(&peer) {
             Some(tree_sid) => {
-                for child in &net.trees[tree_sid.index()].childs {
-                    match tables.get_face(&net.graph[*child].pid).cloned() {
-                        Some(mut someface) => {
-                            if someface.id != face.id {
-                                let reskey = Resource::decl_key(res, &mut someface).await;
+                if net.trees.len() > tree_sid.index() {
+                    for child in &net.trees[tree_sid.index()].childs {
+                        match tables.get_face(&net.graph[*child].pid).cloned() {
+                            Some(mut someface) => {
+                                if someface.id != face.id {
+                                    let reskey = Resource::decl_key(res, &mut someface).await;
 
-                                log::debug!(
-                                    "Send peer subscription {} on face {} {}",
-                                    res.name(),
-                                    someface.id,
-                                    someface.pid,
-                                );
+                                    log::debug!(
+                                        "Send peer subscription {} on face {} {}",
+                                        res.name(),
+                                        someface.id,
+                                        someface.pid,
+                                    );
 
-                                someface
-                                    .primitives
-                                    .subscriber(&reskey, &sub_info, Some(tree_sid.index() as ZInt))
-                                    .await;
+                                    someface
+                                        .primitives
+                                        .subscriber(
+                                            &reskey,
+                                            &sub_info,
+                                            Some(tree_sid.index() as ZInt),
+                                        )
+                                        .await;
+                                }
+                            }
+                            None => {
+                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
                             }
                         }
-                        None => {
-                            log::error!("Unable to find face for pid {}", net.graph[*child].pid)
-                        }
                     }
+                } else {
+                    log::trace!("Tree for peer {} not yet ready", peer);
                 }
             }
             None => log::error!(
@@ -647,50 +664,53 @@ pub(crate) async fn pubsub_tree_change(
     new_childs: &[Vec<NodeIndex>],
     net_type: whatami::Type,
 ) {
-    // propagate subs to now childs
+    // propagate subs to new childs
     for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
             let net = tables.get_net(net_type).unwrap();
-            let tree_id = net.graph[NodeIndex::new(tree_sid)].pid.clone();
+            let tree_idx = NodeIndex::new(tree_sid);
+            if net.graph.contains_node(tree_idx) {
+                let tree_id = net.graph[tree_idx].pid.clone();
 
-            let subs_res = match net_type {
-                whatami::ROUTER => &tables.router_subs,
-                _ => &tables.peer_subs,
-            };
-
-            for res in subs_res {
-                let subs = match net_type {
-                    whatami::ROUTER => &res.router_subs,
-                    _ => &res.peer_subs,
+                let subs_res = match net_type {
+                    whatami::ROUTER => &tables.router_subs,
+                    _ => &tables.peer_subs,
                 };
-                for sub in subs {
-                    if *sub == tree_id {
-                        for child in tree_childs {
-                            match tables.get_face(&net.graph[*child].pid).cloned() {
-                                Some(mut face) => {
-                                    let reskey = Resource::decl_key(&res, &mut face).await;
-                                    let sub_info = SubInfo {
-                                        // TODO
-                                        reliability: Reliability::Reliable,
-                                        mode: SubMode::Push,
-                                        period: None,
-                                    };
-                                    log::debug!(
-                                        "Send {} subscription {} on face {} {} (new_child)",
-                                        net_type,
-                                        res.name(),
-                                        face.id,
-                                        face.pid,
-                                    );
-                                    face.primitives
-                                        .subscriber(&reskey, &sub_info, Some(tree_sid as ZInt))
-                                        .await;
-                                }
-                                None => {
-                                    log::error!(
-                                        "Unable to find face for pid {}",
-                                        net.graph[*child].pid
-                                    )
+
+                for res in subs_res {
+                    let subs = match net_type {
+                        whatami::ROUTER => &res.router_subs,
+                        _ => &res.peer_subs,
+                    };
+                    for sub in subs {
+                        if *sub == tree_id {
+                            for child in tree_childs {
+                                match tables.get_face(&net.graph[*child].pid).cloned() {
+                                    Some(mut face) => {
+                                        let reskey = Resource::decl_key(&res, &mut face).await;
+                                        let sub_info = SubInfo {
+                                            // TODO
+                                            reliability: Reliability::Reliable,
+                                            mode: SubMode::Push,
+                                            period: None,
+                                        };
+                                        log::debug!(
+                                            "Send {} subscription {} on face {} {} (new_child)",
+                                            net_type,
+                                            res.name(),
+                                            face.id,
+                                            face.pid,
+                                        );
+                                        face.primitives
+                                            .subscriber(&reskey, &sub_info, Some(tree_sid as ZInt))
+                                            .await;
+                                    }
+                                    None => {
+                                        log::error!(
+                                            "Unable to find face for pid {}",
+                                            net.graph[*child].pid
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -703,6 +723,38 @@ pub(crate) async fn pubsub_tree_change(
     // recompute routes
     unsafe {
         compute_data_routes_from(tables, &mut tables.root_res.clone());
+    }
+}
+
+#[inline]
+fn insert_faces_for_subs(
+    route: &mut Route,
+    prefix: &Arc<Resource>,
+    suffix: &str,
+    tables: &Tables,
+    net: &Network,
+    source: usize,
+    subs: &HashSet<PeerId>,
+) {
+    if net.trees.len() > source {
+        for sub in subs {
+            if let Some(sub_idx) = net.get_idx(sub) {
+                if net.trees[source].directions.len() > sub_idx.index() {
+                    if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
+                        if net.graph.contains_node(direction) {
+                            if let Some(face) = tables.get_face(&net.graph[direction].pid) {
+                                route.entry(face.id).or_insert_with(|| {
+                                    let reskey = Resource::get_best_key(prefix, suffix, face.id);
+                                    (face.clone(), reskey, Some(source as u64))
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        log::trace!("Tree for node {} not yet ready", source);
     }
 }
 
@@ -732,33 +784,30 @@ unsafe fn compute_data_route(
                 whatami::ROUTER => source.unwrap(),
                 _ => net.idx.index(),
             };
-            for sub in &mres.router_subs {
-                if let Some(direction) =
-                    net.trees[router_source].directions[net.get_idx(sub).unwrap().index()]
-                {
-                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
-                    route.entry(face.id).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(router_source as u64))
-                    });
-                }
-            }
+            insert_faces_for_subs(
+                &mut route,
+                prefix,
+                suffix,
+                tables,
+                net,
+                router_source,
+                &mres.router_subs,
+            );
+
             let net = tables.peers_net.as_ref().unwrap();
             let peer_source = match source_type {
                 whatami::PEER => source.unwrap(),
                 _ => net.idx.index(),
             };
-            for sub in &mres.peer_subs {
-                if let Some(direction) =
-                    net.trees[peer_source].directions[net.get_idx(sub).unwrap().index()]
-                {
-                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
-                    route.entry(face.id).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(peer_source as u64))
-                    });
-                }
-            }
+            insert_faces_for_subs(
+                &mut route,
+                prefix,
+                suffix,
+                tables,
+                net,
+                peer_source,
+                &mres.peer_subs,
+            );
         }
 
         if tables.whatami == whatami::PEER {
@@ -767,17 +816,15 @@ unsafe fn compute_data_route(
                 whatami::ROUTER | whatami::PEER => source.unwrap(),
                 _ => net.idx.index(),
             };
-            for sub in &mres.peer_subs {
-                if let Some(direction) =
-                    net.trees[peer_source].directions[net.get_idx(sub).unwrap().index()]
-                {
-                    let face = tables.get_face(&net.graph[direction].pid).unwrap();
-                    route.entry(face.id).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                        (face.clone(), reskey, Some(peer_source as u64))
-                    });
-                }
-            }
+            insert_faces_for_subs(
+                &mut route,
+                prefix,
+                suffix,
+                tables,
+                net,
+                peer_source,
+                &mres.peer_subs,
+            );
         }
 
         for (sid, context) in &mut mres.contexts {
