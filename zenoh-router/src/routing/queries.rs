@@ -29,10 +29,47 @@ pub(crate) struct Query {
     src_qid: ZInt,
 }
 
+#[inline]
+async fn send_sourced_queryable_to_net_childs(
+    tables: &Tables,
+    net: &Network,
+    childs: &[NodeIndex],
+    res: &Arc<Resource>,
+    src_face: Option<&Arc<FaceState>>,
+    routing_context: Option<RoutingContext>,
+) {
+    for child in childs {
+        if net.graph.contains_node(*child) {
+            match tables.get_face(&net.graph[*child].pid).cloned() {
+                Some(mut someface) => {
+                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                        let reskey = Resource::decl_key(res, &mut someface).await;
+
+                        log::debug!(
+                            "Send queryable {} on face {} {}",
+                            res.name(),
+                            someface.id,
+                            someface.pid,
+                        );
+
+                        someface
+                            .primitives
+                            .queryable(&reskey, routing_context)
+                            .await;
+                    }
+                }
+                None => {
+                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
+                }
+            }
+        }
+    }
+}
+
 async fn propagate_simple_queryable(
     tables: &mut Tables,
-    src_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
+    src_face: &mut Arc<FaceState>,
 ) {
     for dst_face in &mut tables.faces.values_mut() {
         if src_face.id != dst_face.id
@@ -51,6 +88,38 @@ async fn propagate_simple_queryable(
                 dst_face.primitives.queryable(&reskey, None).await;
             }
         }
+    }
+}
+
+async fn propagate_sourced_queryable(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    src_face: Option<&Arc<FaceState>>,
+    source: &PeerId,
+    net_type: whatami::Type,
+) {
+    let net = tables.get_net(net_type).unwrap();
+    match net.get_idx(source) {
+        Some(tree_sid) => {
+            if net.trees.len() > tree_sid.index() {
+                send_sourced_queryable_to_net_childs(
+                    tables,
+                    net,
+                    &net.trees[tree_sid.index()].childs,
+                    res,
+                    src_face,
+                    Some(tree_sid.index() as ZInt),
+                )
+                .await;
+            } else {
+                log::trace!("Tree for node {} not yet ready", source);
+            }
+        }
+        None => log::error!(
+            "Error propagating qabl {}: cannot get index of {}!",
+            res.name(),
+            source
+        ),
     }
 }
 
@@ -74,44 +143,7 @@ async unsafe fn register_router_queryable(
         }
 
         // Propagate queryable to routers
-        let net = tables.routers_net.as_ref().unwrap();
-        match net.get_idx(&router) {
-            Some(tree_sid) => {
-                if net.trees.len() > tree_sid.index() {
-                    for child in &net.trees[tree_sid.index()].childs {
-                        match tables.get_face(&net.graph[*child].pid).cloned() {
-                            Some(mut someface) => {
-                                if someface.id != face.id {
-                                    let reskey = Resource::decl_key(res, &mut someface).await;
-
-                                    log::debug!(
-                                        "Send router queryable {} on face {} {}",
-                                        res.name(),
-                                        someface.id,
-                                        someface.pid,
-                                    );
-
-                                    someface
-                                        .primitives
-                                        .queryable(&reskey, Some(tree_sid.index() as ZInt))
-                                        .await;
-                                }
-                            }
-                            None => {
-                                log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                            }
-                        }
-                    }
-                } else {
-                    log::trace!("Tree for router {} not yet ready", router);
-                }
-            }
-            None => log::error!(
-                "Error propagating qabl {}: cannot get index of {}!",
-                res.name(),
-                router
-            ),
-        }
+        propagate_sourced_queryable(tables, res, Some(face), &router, whatami::ROUTER).await;
 
         // Propagate queryable to peers
         if face.whatami != whatami::PEER {
@@ -120,7 +152,7 @@ async unsafe fn register_router_queryable(
     }
 
     // Propagate queryable to clients
-    propagate_simple_queryable(tables, face, res).await;
+    propagate_simple_queryable(tables, res, face).await;
 }
 
 pub async fn declare_router_queryable(
@@ -162,44 +194,7 @@ async unsafe fn register_peer_queryable(
         }
 
         // Propagate queryable to peers
-        let net = tables.peers_net.as_ref().unwrap();
-        match net.get_idx(&peer) {
-            Some(tree_sid) => {
-                if net.trees.len() > tree_sid.index() {
-                    for child in &net.trees[tree_sid.index()].childs {
-                        match tables.get_face(&net.graph[*child].pid).cloned() {
-                            Some(mut someface) => {
-                                if someface.id != face.id {
-                                    let reskey = Resource::decl_key(res, &mut someface).await;
-
-                                    log::debug!(
-                                        "Send peer queryable {} on face {} {}",
-                                        res.name(),
-                                        someface.id,
-                                        someface.pid,
-                                    );
-
-                                    someface
-                                        .primitives
-                                        .queryable(&reskey, Some(tree_sid.index() as ZInt))
-                                        .await;
-                                }
-                            }
-                            None => {
-                                log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                            }
-                        }
-                    }
-                } else {
-                    log::trace!("Tree for peer {} not yet ready", peer);
-                }
-            }
-            None => log::error!(
-                "Error propagating qabl {}: cannot get index of {}!",
-                res.name(),
-                peer,
-            ),
-        }
+        propagate_sourced_queryable(tables, res, Some(face), &peer, whatami::PEER).await;
     }
 }
 
@@ -275,13 +270,50 @@ pub async fn declare_client_queryable(
                     register_peer_queryable(tables, face, &mut res, tables.pid.clone()).await;
                 }
                 _ => {
-                    propagate_simple_queryable(tables, face, &res).await;
+                    propagate_simple_queryable(tables, &res, face).await;
                 }
             }
 
             compute_matches_query_routes(tables, &mut res);
         },
         None => log::error!("Declare queryable for unknown rid {}!", prefixid),
+    }
+}
+
+#[inline]
+async fn send_forget_sourced_queryable_to_net_childs(
+    tables: &Tables,
+    net: &Network,
+    childs: &[NodeIndex],
+    res: &Arc<Resource>,
+    src_face: Option<&Arc<FaceState>>,
+    routing_context: Option<RoutingContext>,
+) {
+    for child in childs {
+        if net.graph.contains_node(*child) {
+            match tables.get_face(&net.graph[*child].pid).cloned() {
+                Some(mut someface) => {
+                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                        let reskey = Resource::decl_key(res, &mut someface).await;
+
+                        log::debug!(
+                            "Send forget queryable {} on face {} {}",
+                            res.name(),
+                            someface.id,
+                            someface.pid,
+                        );
+
+                        someface
+                            .primitives
+                            .forget_queryable(&reskey, routing_context)
+                            .await;
+                    }
+                }
+                None => {
+                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
+                }
+            }
+        }
     }
 }
 
@@ -308,34 +340,15 @@ async fn propagate_forget_sourced_queryable(
     let net = tables.get_net(net_type).unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
-            for child in &net.trees[tree_sid.index()].childs {
-                match tables.get_face(&net.graph[*child].pid).cloned() {
-                    Some(mut someface) => {
-                        if src_face.is_none() || someface.id != src_face.unwrap().id {
-                            let reskey = Resource::decl_key(res, &mut someface).await;
-
-                            log::debug!(
-                                "Send forget {} queryable {} on face {} {}",
-                                match net_type {
-                                    whatami::ROUTER => "router",
-                                    _ => "peer",
-                                },
-                                res.name(),
-                                someface.id,
-                                someface.pid,
-                            );
-
-                            someface
-                                .primitives
-                                .forget_queryable(&reskey, Some(tree_sid.index() as ZInt))
-                                .await;
-                        }
-                    }
-                    None => {
-                        log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                    }
-                }
-            }
+            send_forget_sourced_queryable_to_net_childs(
+                tables,
+                net,
+                &net.trees[tree_sid.index()].childs,
+                res,
+                src_face,
+                Some(tree_sid.index() as ZInt),
+            )
+            .await;
         }
         None => log::error!(
             "Error propagating qabl {}: cannot get index of {}!",
@@ -621,29 +634,15 @@ pub(crate) async fn queries_tree_change(
                     };
                     for qabl in qabls {
                         if *qabl == tree_id {
-                            for child in tree_childs {
-                                match tables.get_face(&net.graph[*child].pid).cloned() {
-                                    Some(mut face) => {
-                                        let reskey = Resource::decl_key(&res, &mut face).await;
-                                        log::debug!(
-                                            "Send {} queryable {} on face {} {} (new_child)",
-                                            net_type,
-                                            res.name(),
-                                            face.id,
-                                            face.pid,
-                                        );
-                                        face.primitives
-                                            .queryable(&reskey, Some(tree_sid as ZInt))
-                                            .await;
-                                    }
-                                    None => {
-                                        log::trace!(
-                                            "Unable to find face for pid {}",
-                                            net.graph[*child].pid
-                                        )
-                                    }
-                                }
-                            }
+                            send_sourced_queryable_to_net_childs(
+                                tables,
+                                net,
+                                tree_childs,
+                                res,
+                                None,
+                                Some(tree_sid as ZInt),
+                            )
+                            .await;
                         }
                     }
                 }
