@@ -197,7 +197,7 @@ fn ordered_queue_random_mask() {
     let mut rng = thread_rng();
     while sequence.len() > 0 {
         // Get random sequence number
-        let index = rng.gen_range(0, sequence.len());
+        let index = rng.gen_range(0..sequence.len());
         let sn = sequence.remove(index);
         // Update the tail
         if sn > tail {

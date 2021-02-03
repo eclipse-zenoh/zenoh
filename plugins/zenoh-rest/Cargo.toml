@@ -35,12 +35,14 @@ crate-type = ["cdylib"]
 zenoh = { version = "0.5.0-beta.5", path = "../../zenoh" }
 zenoh-router = { version = "0.5.0-beta.5", path = "../../zenoh-router" }
 zenoh-protocol = { version = "0.5.0-beta.5", path = "../../zenoh-protocol" }
-async-std = { version = "=1.8.0", features = ["unstable"] }
-futures = "0.3.5"
+async-std = "=1.9.0"
+futures = "0.3.12"
+tide = "0.16.0"
+serde_json = "1.0"
+base64 = "0.13.0"
 clap = "2"
 log = "0.4"
-env_logger = "0.7.1"
-tide = "0.13.0"
+env_logger = "0.8.2"
 
 [[example]]
 name = "zn_serve_sse"

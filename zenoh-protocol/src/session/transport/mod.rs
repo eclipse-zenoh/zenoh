@@ -11,39 +11,29 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod batch;
 mod defragmentation;
-mod events;
 mod link;
-// mod reliability_queue;
 mod rx;
-mod scheduling;
 mod seq_num;
 mod tx;
 
-use crate::core::{PeerId, WhatAmI, ZInt};
+use crate::core::{PeerId, Reliability, WhatAmI, ZInt};
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
 use crate::session::defaults::QUEUE_PRIO_DATA;
-use crate::session::{SessionEventHandler, SessionManagerInner};
-use async_std::sync::{Arc, Mutex, RwLock, Weak};
+use crate::session::{SessionEventHandler, SessionManager};
+use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
-use batch::*;
 use defragmentation::*;
-use events::*;
 use link::*;
-use rx::*;
-use scheduling::*;
-use seq_num::*;
-use std::time::Duration;
+pub(super) use seq_num::*;
 use tx::*;
-use zenoh_util::collections::{TimedEvent, TimedHandle, Timer};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zasynclock, zasyncopt, zasyncread, zasyncwrite, zerror};
+use zenoh_util::{zasyncread, zasyncwrite, zerror};
 
 #[async_trait]
 pub(crate) trait Scheduling {
-    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<ChannelLink>>>);
+    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<SessionTransportLink>>>);
 }
 
 macro_rules! zlinkget {
@@ -58,67 +48,94 @@ macro_rules! zlinkindex {
     };
 }
 
+pub(crate) struct SessionTransportRxReliable {
+    sn: SeqNum,
+    defrag_buffer: DefragBuffer,
+}
+
+impl SessionTransportRxReliable {
+    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SessionTransportRxReliable {
+        // Set the sequence number in the state as it had
+        // received a message with initial_sn - 1
+        let last_initial_sn = if initial_sn == 0 {
+            sn_resolution - 1
+        } else {
+            initial_sn - 1
+        };
+
+        SessionTransportRxReliable {
+            sn: SeqNum::new(last_initial_sn, sn_resolution),
+            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::Reliable),
+        }
+    }
+}
+
+pub(crate) struct SessionTransportRxBestEffort {
+    sn: SeqNum,
+    defrag_buffer: DefragBuffer,
+}
+
+impl SessionTransportRxBestEffort {
+    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SessionTransportRxBestEffort {
+        // Set the sequence number in the state as it had
+        // received a message with initial_sn - 1
+        let last_initial_sn = if initial_sn == 0 {
+            sn_resolution - 1
+        } else {
+            initial_sn - 1
+        };
+
+        SessionTransportRxBestEffort {
+            sn: SeqNum::new(last_initial_sn, sn_resolution),
+            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::BestEffort),
+        }
+    }
+}
+
 /*************************************/
-/*           CHANNEL STRUCT          */
+/*             TRANSPORT             */
 /*************************************/
-pub(crate) struct Channel {
+#[derive(Clone)]
+pub(crate) struct SessionTransport {
     // The manager this channel is associated to
-    pub(super) manager: Arc<SessionManagerInner>,
+    pub(super) manager: SessionManager,
     // The remote peer id
     pub(super) pid: PeerId,
     // The remote whatami
     pub(super) whatami: WhatAmI,
-    // The session lease in seconds
-    pub(super) lease: ZInt,
-    // Keep alive interval
-    pub(super) keep_alive: ZInt,
     // The SN resolution
     pub(super) sn_resolution: ZInt,
-    // The batch size
-    pub(super) batch_size: usize,
     // The sn generator for the TX reliable channel
     pub(super) tx_sn_reliable: Arc<Mutex<SeqNumGenerator>>,
     // The sn generator for the TX best_effort channel
     pub(super) tx_sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
     // The RX reliable channel
-    pub(super) rx_reliable: Mutex<ChannelRxReliable>,
+    pub(super) rx_reliable: Arc<Mutex<SessionTransportRxReliable>>,
     // The RX best effort channel
-    pub(super) rx_best_effort: Mutex<ChannelRxBestEffort>,
+    pub(super) rx_best_effort: Arc<Mutex<SessionTransportRxBestEffort>>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Vec<ChannelLink>>>,
+    pub(super) links: Arc<RwLock<Vec<SessionTransportLink>>>,
     // The scehduling function
-    pub(super) scheduling: Box<dyn Scheduling + Send + Sync>,
-    // The internal timer
-    pub(super) timer: Timer,
-    // The lease event
-    pub(super) lease_event_handle: Mutex<Option<TimedHandle>>,
+    pub(super) scheduling: Arc<dyn Scheduling + Send + Sync>,
     // The callback
-    pub(super) callback: RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>,
-    // Weak reference to self
-    pub(super) w_self: RwLock<Option<Weak<Self>>>,
+    pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>>,
 }
 
-impl Channel {
+impl SessionTransport {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        manager: Arc<SessionManagerInner>,
+        manager: SessionManager,
         pid: PeerId,
         whatami: WhatAmI,
-        lease: ZInt,
-        keep_alive: ZInt,
         sn_resolution: ZInt,
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
-        batch_size: usize,
-    ) -> Channel {
-        Channel {
+    ) -> SessionTransport {
+        SessionTransport {
             manager,
             pid,
             whatami,
-            lease,
-            keep_alive,
             sn_resolution,
-            batch_size,
             tx_sn_reliable: Arc::new(Mutex::new(SeqNumGenerator::new(
                 initial_sn_tx,
                 sn_resolution,
@@ -127,22 +144,18 @@ impl Channel {
                 initial_sn_tx,
                 sn_resolution,
             ))),
-            rx_reliable: Mutex::new(ChannelRxReliable::new(initial_sn_rx, sn_resolution)),
-            rx_best_effort: Mutex::new(ChannelRxBestEffort::new(initial_sn_rx, sn_resolution)),
+            rx_reliable: Arc::new(Mutex::new(SessionTransportRxReliable::new(
+                initial_sn_rx,
+                sn_resolution,
+            ))),
+            rx_best_effort: Arc::new(Mutex::new(SessionTransportRxBestEffort::new(
+                initial_sn_rx,
+                sn_resolution,
+            ))),
             links: Arc::new(RwLock::new(Vec::new())),
-            scheduling: Box::new(FirstMatch::new()),
-            timer: Timer::new(),
-            lease_event_handle: Mutex::new(None),
-            callback: RwLock::new(None),
-            w_self: RwLock::new(None),
+            scheduling: Arc::new(FirstMatch::new()),
+            callback: Arc::new(RwLock::new(None)),
         }
-    }
-
-    pub(crate) async fn initialize(&self, w_self: Weak<Self>) {
-        // Initialize the weak reference to self
-        *zasyncwrite!(self.w_self) = Some(w_self.clone());
-        // Start the session lease timeout
-        self.start_session_lease().await;
     }
 
     /*************************************/
@@ -156,14 +169,6 @@ impl Channel {
         self.whatami
     }
 
-    pub(crate) fn get_lease(&self) -> ZInt {
-        self.lease
-    }
-
-    pub(crate) fn get_keep_alive(&self) -> ZInt {
-        self.keep_alive
-    }
-
     pub(crate) fn get_sn_resolution(&self) -> ZInt {
         self.sn_resolution
     }
@@ -175,26 +180,6 @@ impl Channel {
     pub(crate) async fn set_callback(&self, callback: Arc<dyn SessionEventHandler + Send + Sync>) {
         let mut guard = zasyncwrite!(self.callback);
         *guard = Some(callback.clone());
-    }
-
-    /*************************************/
-    /*          SESSION LEASE            */
-    /*************************************/
-    async fn start_session_lease(&self) {
-        // Lease event
-        let event = SessionLeaseEvent::new(zasyncopt!(self.w_self).clone());
-        // Session lease interval is expressed in seconds
-        let interval = Duration::from_millis(self.lease as u64);
-        let event = TimedEvent::periodic(interval, event);
-        let handle = event.get_handle();
-        // Update the handle
-        let mut guard = zasynclock!(self.lease_event_handle);
-        if let Some(old_handle) = guard.take() {
-            old_handle.defuse();
-        }
-        *guard = Some(handle);
-        // Add the event to the timer
-        self.timer.add(event).await;
     }
 
     /*************************************/
@@ -229,18 +214,19 @@ impl Channel {
 
         let guard = zasyncread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
+            let c_l = l.clone();
+            // Drop the guard
+            drop(guard);
+
             // Close message to be sent on the target link
-            let peer_id = Some(self.manager.config.pid.clone());
+            let peer_id = Some(self.manager.pid());
             let reason_id = reason;
             let link_only = true; // This is should always be true when closing a link
             let attachment = None; // No attachment here
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
             // Schedule the close message for transmission
-            l.schedule_session_message(msg, QUEUE_PRIO_DATA).await;
-
-            // Drop the guard
-            drop(guard);
+            c_l.schedule_session_message(msg, QUEUE_PRIO_DATA).await;
 
             // Remove the link from the channel
             self.del_link(&link).await?;
@@ -253,9 +239,12 @@ impl Channel {
         log::trace!("Closing session with peer: {}", self.pid);
 
         // Close message to be sent on all the links
-        let peer_id = Some(self.manager.config.pid.clone());
+        let peer_id = Some(self.manager.pid());
         let reason_id = reason;
-        let link_only = false; // This is should always be false for user-triggered close
+        // link_only should always be false for user-triggered close. However, in case of
+        // multiple links, it is safer to close all the links first. When no links are left,
+        // the session is then considered closed.
+        let link_only = true;
         let attachment = None; // No attachment here
         let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
@@ -283,7 +272,13 @@ impl Channel {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(crate) async fn add_link(&self, link: Link) -> ZResult<()> {
+    pub(crate) async fn add_link(
+        &self,
+        link: Link,
+        batch_size: usize,
+        lease: ZInt,
+        keep_alive: ZInt,
+    ) -> ZResult<()> {
         let mut guard = zasyncwrite!(self.links);
         if zlinkget!(guard, &link).is_some() {
             return zerror!(ZErrorKind::InvalidLink {
@@ -292,23 +287,35 @@ impl Channel {
         }
 
         // Create a channel link from a link
-        let link = ChannelLink::new(
-            zasyncopt!(self.w_self).clone(),
+        let link = SessionTransportLink::new(
+            self.clone(),
             link,
-            self.batch_size,
-            self.keep_alive,
-            self.lease,
+            batch_size,
+            keep_alive,
+            lease,
             self.tx_sn_reliable.clone(),
             self.tx_sn_best_effort.clone(),
-            self.timer.clone(),
         );
 
         // Add the link to the channel
         guard.push(link);
 
-        // Restart the session lease event
-        self.start_session_lease().await;
+        Ok(())
+    }
 
+    pub(crate) async fn start_tx(&self, link: &Link) -> ZResult<()> {
+        let guard = zasyncread!(self.links);
+        if let Some(l) = zlinkget!(guard, link) {
+            l.start_tx().await;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn start_rx(&self, link: &Link) -> ZResult<()> {
+        let guard = zasyncread!(self.links);
+        if let Some(l) = zlinkget!(guard, link) {
+            l.start_rx().await;
+        }
         Ok(())
     }
 
@@ -316,11 +323,16 @@ impl Channel {
         // Try to remove the link
         let mut guard = zasyncwrite!(self.links);
         if let Some(index) = zlinkindex!(guard, link) {
-            // Restart the session lease event
-            self.start_session_lease().await;
             // Remove and close the link
             let link = guard.remove(index);
-            link.close().await
+            let is_empty = guard.is_empty();
+            drop(guard);
+            if is_empty {
+                self.delete().await;
+                Ok(())
+            } else {
+                link.close().await
+            }
         } else {
             zerror!(ZErrorKind::InvalidLink {
                 descr: format!("Can not delete Link {} with peer: {}", link, self.pid)

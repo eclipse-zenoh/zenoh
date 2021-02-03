@@ -108,7 +108,7 @@ impl SessionOrchestrator {
             }
             _ => {
                 for locator in &peers {
-                    match self.manager.open_session(&locator, &None).await {
+                    match self.manager.open_session(&locator).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -396,7 +396,7 @@ impl SessionOrchestrator {
         futures::future::join_all(peers.into_iter().map(|peer| async move {
             loop {
                 log::trace!("Trying to connect to configured peer {}", peer);
-                if self.manager.open_session(&peer, &None).await.is_ok() {
+                if self.manager.open_session(&peer).await.is_ok() {
                     log::debug!("Successfully connected to configured peer {}", peer);
                     break;
                 } else {
@@ -458,7 +458,7 @@ impl SessionOrchestrator {
 
     async fn connect(&self, locators: &[Locator]) -> ZResult<Session> {
         for locator in locators {
-            let session = self.manager.open_session(locator, &None).await;
+            let session = self.manager.open_session(locator).await;
             if session.is_ok() {
                 return session;
             }

@@ -247,3 +247,15 @@ impl Zenoh {
         self.session.close().await
     }
 }
+
+impl From<Session> for Zenoh {
+    fn from(session: Session) -> Self {
+        Zenoh { session }
+    }
+}
+
+impl From<&Session> for Zenoh {
+    fn from(s: &Session) -> Self {
+        Zenoh { session: s.clone() }
+    }
+}

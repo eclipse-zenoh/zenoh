@@ -143,12 +143,10 @@ fn main() {
     };
     let manager = SessionManager::new(config, None);
 
-    let attachment = None;
-
     // Connect to publisher
     task::block_on(async {
         let session = loop {
-            let res = manager.open_session(&connect_to, &attachment).await;
+            let res = manager.open_session(&connect_to).await;
             match res {
                 Ok(s) => {
                     println!("Opened session with {}", connect_to);
@@ -167,6 +165,7 @@ fn main() {
         let info = None;
         let payload = RBuf::from(vec![0u8; payload]);
         let reply_context = None;
+        let attachment = None;
 
         let message =
             ZenohMessage::make_data(reliable, key, info, payload, reply_context, attachment);

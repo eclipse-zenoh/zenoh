@@ -20,7 +20,7 @@ use zenoh_protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResK
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
-    DummyHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
     SessionManagerConfig,
 };
 use zenoh_util::core::ZResult;
@@ -39,7 +39,7 @@ impl SessionHandler for MySH {
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(DummyHandler::new()))
+        Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }
 
@@ -118,11 +118,7 @@ fn main() {
 
     // Connect to publisher
     task::block_on(async {
-        let attachment = None;
-        let session = manager
-            .open_session(&connect_to, &attachment)
-            .await
-            .unwrap();
+        let session = manager.open_session(&connect_to).await.unwrap();
 
         let mut count: u64 = 0;
         loop {

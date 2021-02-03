@@ -11,31 +11,27 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::Arc;
-
 #[cfg(feature = "transport_tcp")]
-use crate::link::tcp::ManagerTcp;
+use crate::link::tcp::LinkManagerTcp;
 #[cfg(feature = "transport_udp")]
-use crate::link::udp::ManagerUdp;
+use crate::link::udp::LinkManagerUdp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-use crate::link::unixsock_stream::ManagerUnixSockStream;
+use crate::link::unixsock_stream::LinkManagerUnixSockStream;
 use crate::link::{LinkManager, LocatorProtocol};
-use crate::session::SessionManagerInner;
+use crate::session::SessionManager;
+use async_std::sync::Arc;
 
 pub struct LinkManagerBuilder;
 
 impl LinkManagerBuilder {
-    pub(crate) fn make(
-        manager: Arc<SessionManagerInner>,
-        protocol: &LocatorProtocol,
-    ) -> LinkManager {
+    pub(crate) fn make(manager: SessionManager, protocol: &LocatorProtocol) -> LinkManager {
         match protocol {
             #[cfg(feature = "transport_tcp")]
-            LocatorProtocol::Tcp => Arc::new(ManagerTcp::new(manager)),
+            LocatorProtocol::Tcp => Arc::new(LinkManagerTcp::new(manager)),
             #[cfg(feature = "transport_udp")]
-            LocatorProtocol::Udp => Arc::new(ManagerUdp::new(manager)),
+            LocatorProtocol::Udp => Arc::new(LinkManagerUdp::new(manager)),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-            LocatorProtocol::UnixSockStream => Arc::new(ManagerUnixSockStream::new(manager)),
+            LocatorProtocol::UnixSockStream => Arc::new(LinkManagerUnixSockStream::new(manager)),
         }
     }
 }

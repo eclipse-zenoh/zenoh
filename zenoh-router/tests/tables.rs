@@ -23,7 +23,7 @@ use zenoh_protocol::core::{
 };
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol::session::{DummyHandler, Mux, Primitives};
+use zenoh_protocol::session::{DummySessionEventHandler, Mux, Primitives};
 use zenoh_router::routing::router::*;
 
 #[test]
@@ -34,7 +34,7 @@ fn base_test() {
             whatami::CLIENT,
             Some(HLC::default()),
         );
-        let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
         let face = tables
             .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
             .await;
@@ -136,7 +136,7 @@ fn match_test() {
             whatami::CLIENT,
             Some(HLC::default()),
         );
-        let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
         let face = tables
             .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
             .await;
@@ -177,7 +177,7 @@ fn clean_test() {
             Some(HLC::default()),
         );
 
-        let primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
         let face0 = tables
             .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
             .await;

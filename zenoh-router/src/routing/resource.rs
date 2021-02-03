@@ -396,7 +396,7 @@ impl Resource {
                 }
             }
             matches
-        };
+        }
         get_matches_from(
             rname,
             rname.starts_with(rname::ADMIN_PREFIX),

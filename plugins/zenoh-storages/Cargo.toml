@@ -32,17 +32,17 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
-async-std = { version = "=1.8.0", features = ["unstable"] }
+async-std = "=1.9.0"
 zenoh = { version = "0.5.0-beta.5", path = "../../zenoh" }
 zenoh-router = { version = "0.5.0-beta.5", path = "../../zenoh-router" }
 zenoh-util = { version = "0.5.0-beta.5", path = "../../zenoh-util" }
 zenoh_backend_traits = { version = "0.5.0-beta.5", path = "../../backends/traits" }
 async-trait = "0.1"
-futures = "0.3.5"
-libloading = "0.6.5"
+futures = "0.3.12"
+libloading = "0.6.7"
 clap = "2"
 log = "0.4"
-env_logger = "0.7.1"
+env_logger = "0.8.2"
 lazy_static = "1.4.0"
 
 [package.metadata.deb]

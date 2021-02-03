@@ -37,15 +37,15 @@ ARG target=i686-unknown-linux-gnu
 # EPEL required for some extra packages
 RUN yum install -y epel-release
 RUN yum install -y dpkg rpm-build openssl-devel clang-devel llvm-devel cmake3
-RUN ln -s /usr/bin/cmake3 /usr/bin/cmake
+RUN mv /usr/bin/cmake /usr/bin/cmake2; ln -s /usr/bin/cmake3 /usr/bin/cmake
 
 ENV PATH /root/.cargo/bin:$PATH
-# Add all supported python versions
-ENV PATH /opt/python/cp35-cp35m/bin/:/opt/python/cp36-cp36m/bin/:/opt/python/cp37-cp37m/bin/:/opt/python/cp38-cp38/bin/:$PATH
+# Use Python3.9
+ENV PATH /opt/python/cp39-cp39/bin/:$PATH
 # Otherwise `cargo new` errors
 ENV USER root
 ENV CARGO_BUILD_TARGET_DIR=target/${target}
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host ${target} --default-toolchain nightly \
-    && pip install maturin \
+    && pip install maturin==0.9.0 \
     && cargo install cbindgen cargo-deb cargo-rpm

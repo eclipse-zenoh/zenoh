@@ -115,6 +115,8 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         retries: None,
         max_sessions: None,
         max_links: None,
+        peer_authenticator: None,
+        link_authenticator: None,
     };
     let peer01_manager = SessionManager::new(config, Some(opt_config));
 
@@ -135,6 +137,8 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         retries: None,
         max_sessions: None,
         max_links: None,
+        peer_authenticator: None,
+        link_authenticator: None,
     };
     let peer02_manager = SessionManager::new(config, Some(opt_config));
 
@@ -175,8 +179,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
                 // Syncrhonize before opening the sessions
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let attachment = None;
-                let res = c_p01m.open_session(&c_loc, &attachment).await;
+                let res = c_p01m.open_session(&c_loc).await;
                 println!(
                     "[Session Peer 01] => Opening session with {:?}: {:?}",
                     c_loc, res
@@ -272,8 +275,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
                 // Syncrhonize before opening the sessions
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let attachment = None;
-                let res = c_p02m.open_session(&c_loc, &attachment).await;
+                let res = c_p02m.open_session(&c_loc).await;
                 println!(
                     "[Session Peer 02] => Opening session with {:?}: {:?}",
                     c_loc, res
@@ -346,6 +348,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
     task::sleep(SLEEP).await;
 }
 
+#[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_concurrent() {
     env_logger::init();

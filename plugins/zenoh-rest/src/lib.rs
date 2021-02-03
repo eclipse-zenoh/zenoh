@@ -23,7 +23,7 @@ use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::*;
-use zenoh::Selector;
+use zenoh::{Change, Selector, Value};
 use zenoh_router::runtime::Runtime;
 
 const PORT_SEPARATOR: char = ':';
@@ -56,17 +56,53 @@ fn get_kind_str(sample: &Sample) -> String {
     data_kind::to_string(kind)
 }
 
+fn value_to_json(value: Value) -> String {
+    // TODO: transcode to JSON when implemented in Value
+    use Value::*;
+
+    match value {
+        Raw(_, _)
+        | Custom {
+            encoding_descr: _,
+            data: _,
+        } => {
+            // encode value as a String, possibly encoding as base64
+            let (_, _, s) = value.encode_to_string();
+            format!(r#""{}""#, s)
+        }
+        StringUTF8(s) => {
+            // convert to Json string for special characters escaping
+            let js = serde_json::json!(s);
+            js.to_string()
+        }
+        Properties(p) => {
+            // convert to Json string for special characters escaping
+            let js = serde_json::json!(*p);
+            js.to_string()
+        }
+        Json(s) => s,
+        Integer(i) => format!(r#"{}"#, i),
+        Float(f) => format!(r#"{}"#, f),
+    }
+}
+
 fn sample_to_json(sample: Sample) -> String {
-    format!(
-        "{{ \"key\": \"{}\", \"value\": \"{}\", \"time\": \"{}\" }}",
-        sample.res_name,
-        String::from_utf8_lossy(&sample.payload.to_vec()),
-        sample
-            .data_info
-            .and_then(|i| i.timestamp)
-            .map(|ts| ts.to_string())
-            .unwrap_or_else(|| "None".to_string())
-    )
+    let res_name = sample.res_name.clone();
+    if let Ok(change) = Change::from_sample(sample, true) {
+        let (encoding, value) = match change.value {
+            Some(v) => (v.encoding_descr(), value_to_json(v)),
+            None => ("None".to_string(), r#""""#.to_string()),
+        };
+        format!(
+            r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
+            change.path, value, encoding, change.timestamp
+        )
+    } else {
+        format!(
+            r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
+            res_name, "ERROR: Failed to decode Sample", "Unkown", "None"
+        )
+    }
 }
 
 async fn to_json(results: Receiver<Reply>) -> String {
@@ -96,15 +132,16 @@ async fn to_html(results: Receiver<Reply>) -> String {
 }
 
 fn enc_from_mime(mime: Option<Mime>) -> ZInt {
+    use zenoh::net::encoding::*;
     match mime {
-        Some(mime) => match zenoh_protocol::proto::encoding::from_str(mime.essence()) {
+        Some(mime) => match from_str(mime.essence()) {
             Ok(encoding) => encoding,
             _ => match mime.basetype() {
-                "text" => zenoh_protocol::proto::encoding::TEXT_PLAIN,
-                &_ => zenoh_protocol::proto::encoding::APP_OCTET_STREAM,
+                "text" => TEXT_PLAIN,
+                &_ => APP_OCTET_STREAM,
             },
         },
-        None => zenoh_protocol::proto::encoding::APP_OCTET_STREAM,
+        None => APP_OCTET_STREAM,
     }
 }
 

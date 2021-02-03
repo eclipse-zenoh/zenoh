@@ -187,8 +187,7 @@ fn main() {
     let manager = SessionManager::new(config, None);
 
     task::block_on(async {
-        let attachment = None;
-        if let Err(_err) = manager.open_session(&connect_to, &attachment).await {
+        if let Err(_err) = manager.open_session(&connect_to).await {
             println!("Unable to connect to {}!", connect_to);
             return;
         }

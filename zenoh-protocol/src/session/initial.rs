@@ -11,58 +11,69 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::{PeerId, WhatAmI, ZInt};
+use super::authenticator::AuthenticatedPeerLink;
+use super::defaults::SESSION_SEQ_NUM_RESOLUTION;
+use super::{Opened, Session, SessionManager};
+use crate::core::{PeerId, Property, WhatAmI, ZInt};
 use crate::io::{RBuf, WBuf};
 use crate::link::{Link, Locator};
 use crate::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
 };
-use crate::session::defaults::SESSION_SEQ_NUM_RESOLUTION;
-use crate::session::{Action, Session, SessionManagerInner, TransportTrait};
-use async_std::channel::Sender;
-use async_std::sync::{Arc, Mutex};
-use async_trait::async_trait;
 use rand::Rng;
-use std::collections::HashMap;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zasynclock, zcheck, zerror};
+use zenoh_util::{zasynclock, zerror};
 
-const DEFAULT_WBUF_CAPACITY: usize = 64;
+type IError = (ZError, Option<u8>);
+type IResult<T> = Result<T, IError>;
 
-// Macro to send a message on a link
-macro_rules! zlinksend {
-    ($msg:expr, $link:expr) => {{
-        // Create the buffer for serializing the message
-        let mut wbuf = WBuf::new(DEFAULT_WBUF_CAPACITY, false);
-        if $link.is_streamed() {
-            // Reserve 16 bits to write the length
-            wbuf.write_bytes(&[0u8, 0u8]);
-        }
-        // Serialize the message
-        wbuf.write_session_message(&$msg);
-        if $link.is_streamed() {
-            // Write the length on the first 16 bits
-            let length: u16 = wbuf.len() as u16 - 2;
-            let bits = wbuf.get_first_slice_mut(..2);
-            bits.copy_from_slice(&length.to_le_bytes());
-        }
-        let mut buffer = vec![0u8; wbuf.len()];
-        wbuf.copy_into_slice(&mut buffer[..]);
+const WBUF_SIZE: usize = 64;
 
-        // Send the message on the link
-        let res = $link.send(&buffer).await;
-        log::trace!("Sending on {}: {:?}. {:?}", $link, $msg, res);
-
-        res
-    }};
+/*************************************/
+/*              UTILS                */
+/*************************************/
+fn attachment_from_properties(ps: &[Property]) -> ZResult<Attachment> {
+    if ps.is_empty() {
+        let e = "Can not create an attachment with zero properties".to_string();
+        zerror!(ZErrorKind::Other { descr: e })
+    } else {
+        let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        wbuf.write_properties(ps);
+        let rbuf: RBuf = wbuf.into();
+        let attachment = Attachment::make(smsg::attachment::PROPERTIES, rbuf);
+        Ok(attachment)
+    }
 }
 
+fn properties_from_attachment(mut att: Attachment) -> ZResult<Vec<Property>> {
+    if att.encoding != smsg::attachment::PROPERTIES {
+        let e = format!(
+            "Invalid attachment encoding for properties: {}",
+            att.encoding
+        );
+        return zerror!(ZErrorKind::Other { descr: e });
+    }
+
+    let res = att.buffer.read_properties();
+    match res {
+        Some(ps) => Ok(ps),
+        None => {
+            let e = "Error while decoding properties".to_string();
+            zerror!(ZErrorKind::Other { descr: e })
+        }
+    }
+}
+
+/*************************************/
+/*             COOKIE                */
+/*************************************/
 struct Cookie {
     whatami: WhatAmI,
     pid: PeerId,
     sn_resolution: ZInt,
     src: Locator,
     dst: Locator,
+    nonce: ZInt,
 }
 
 impl WBuf {
@@ -72,6 +83,7 @@ impl WBuf {
         zcheck!(self.write_zint(cookie.sn_resolution));
         zcheck!(self.write_string(&cookie.src.to_string()));
         zcheck!(self.write_string(&cookie.dst.to_string()));
+        zcheck!(self.write_zint(cookie.nonce));
         true
     }
 }
@@ -83,6 +95,7 @@ impl RBuf {
         let sn_resolution = self.read_zint()?;
         let src: Locator = self.read_locator()?;
         let dst: Locator = self.read_locator()?;
+        let nonce = self.read_zint()?;
 
         Some(Cookie {
             whatami,
@@ -90,852 +103,944 @@ impl RBuf {
             sn_resolution,
             src,
             dst,
+            nonce,
         })
     }
 }
 
-struct Pending {
-    notify: Sender<ZResult<Session>>,
+async fn close_link(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+    mut reason: Option<u8>,
+) {
+    if let Some(reason) = reason.take() {
+        // Build the close message
+        let peer_id = Some(manager.config.pid.clone());
+        let link_only = true;
+        let attachment = None;
+        let message = SessionMessage::make_close(peer_id, reason, link_only, attachment);
+        // Send the close message on the link
+        let _ = link.write_session_message(message).await;
+    }
+    // Close the link
+    let _ = link.close().await;
+    // Notify the authenticators
+    for pa in manager.config.peer_authenticator.iter() {
+        pa.handle_link_err(auth_link).await;
+    }
 }
 
-struct Initialized {
+/*************************************/
+/*              OPEN                 */
+/*************************************/
+struct OpenInitSynOutput {
+    sn_resolution: ZInt,
+}
+async fn open_send_init_syn(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+) -> IResult<OpenInitSynOutput> {
+    // Build the InitSyn attachment
+    let init_syn_attachment = {
+        let mut init_syn_properties: Vec<Property> = vec![];
+        for pa in manager.config.peer_authenticator.iter() {
+            let mut ps = pa
+                .get_init_syn_properties(&auth_link, &manager.config.pid)
+                .await
+                .map_err(|e| (e, None))?;
+            init_syn_properties.append(&mut ps);
+        }
+        attachment_from_properties(&init_syn_properties).ok()
+    };
+
+    // Build and send an InitSyn Message
+    let init_syn_version = manager.config.version;
+    let init_syn_whatami = manager.config.whatami;
+    let init_syn_pid = manager.config.pid.clone();
+    let init_syn_sn_resolution = if manager.config.sn_resolution == *SESSION_SEQ_NUM_RESOLUTION {
+        None
+    } else {
+        Some(manager.config.sn_resolution)
+    };
+
+    // Build and send the InitSyn message
+    let message = SessionMessage::make_init_syn(
+        init_syn_version,
+        init_syn_whatami,
+        init_syn_pid,
+        init_syn_sn_resolution,
+        init_syn_attachment,
+    );
+    let _ = link
+        .write_session_message(message)
+        .await
+        .map_err(|e| (e, None))?;
+
+    let output = OpenInitSynOutput {
+        sn_resolution: manager.config.sn_resolution,
+    };
+    Ok(output)
+}
+
+struct OpenInitAckOutput {
+    pid: PeerId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
-    initial_sn: ZInt,
+    initial_sn_tx: ZInt,
+    cookie: RBuf,
+    open_syn_attachment: Option<Attachment>,
+}
+async fn open_recv_init_ack(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+    input: OpenInitSynOutput,
+) -> IResult<OpenInitAckOutput> {
+    // Wait to read an InitAck
+    let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
+    if messages.len() != 1 {
+        let e = format!(
+            "Received multiple messages in response to an InitSyn on link {}: {:?}",
+            link, messages,
+        );
+        return Err((
+            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            Some(smsg::close_reason::INVALID),
+        ));
+    }
+
+    let mut msg = messages.remove(0);
+    let (init_ack_whatami, init_ack_pid, init_ack_sn_resolution, init_ack_cookie) = match msg.body {
+        SessionBody::InitAck(InitAck {
+            whatami,
+            pid,
+            sn_resolution,
+            cookie,
+        }) => (whatami, pid, sn_resolution, cookie),
+        SessionBody::Close(Close { reason, .. }) => {
+            let e = format!(
+                "Received a close message (reason {}) in response to an InitSyn on link: {}",
+                reason, link,
+            );
+            return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
+        }
+        _ => {
+            let e = format!(
+                "Received an invalid message in response to an InitSyn on link {}: {:?}",
+                link, msg.body
+            );
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
+        }
+    };
+
+    // Check if a session is already open with the target peer
+    let mut guard = zasynclock!(manager.opened);
+    let (sn_resolution, initial_sn_tx, is_opened) = if let Some(s) = guard.get(&init_ack_pid) {
+        if let Some(sn_resolution) = init_ack_sn_resolution {
+            if sn_resolution != s.sn_resolution {
+                let e = format!(
+                    "Rejecting InitAck on link {} because of invalid sn resolution: {}",
+                    link, init_ack_pid
+                );
+                return Err((
+                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    Some(smsg::close_reason::INVALID),
+                ));
+            }
+        }
+        (s.sn_resolution, s.initial_sn, true)
+    } else {
+        let sn_resolution = match init_ack_sn_resolution {
+            Some(sn_resolution) => {
+                if sn_resolution > input.sn_resolution {
+                    let e = format!(
+                        "Rejecting InitAck on link {} because of invalid sn resolution: {}",
+                        link, init_ack_pid
+                    );
+                    return Err((
+                        zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                        Some(smsg::close_reason::INVALID),
+                    ));
+                }
+                sn_resolution
+            }
+            None => input.sn_resolution,
+        };
+        let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..sn_resolution);
+        (sn_resolution, initial_sn_tx, false)
+    };
+
+    let init_ack_properties: Vec<Property> = match msg.attachment.take() {
+        Some(att) => {
+            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+        }
+        None => vec![],
+    };
+    let mut open_syn_properties: Vec<Property> = vec![];
+    let open_syn_attachment = {
+        for pa in manager.config.peer_authenticator.iter() {
+            let mut ps = pa
+                .handle_init_ack(
+                    &auth_link,
+                    &init_ack_pid,
+                    sn_resolution,
+                    &init_ack_properties,
+                )
+                .await
+                .map_err(|e| (e, None))?;
+            open_syn_properties.append(&mut ps);
+        }
+        attachment_from_properties(&open_syn_properties).ok()
+    };
+
+    if !is_opened {
+        // Store the data
+        guard.insert(
+            init_ack_pid.clone(),
+            Opened {
+                whatami: init_ack_whatami,
+                sn_resolution,
+                initial_sn: initial_sn_tx,
+            },
+        );
+    }
+    drop(guard);
+
+    let output = OpenInitAckOutput {
+        pid: init_ack_pid,
+        whatami: init_ack_whatami,
+        sn_resolution,
+        initial_sn_tx,
+        cookie: init_ack_cookie,
+        open_syn_attachment,
+    };
+    Ok(output)
 }
 
-struct Opened {
+struct OpenOpenSynOutput {
+    pid: PeerId,
+    whatami: WhatAmI,
+    sn_resolution: ZInt,
+    initial_sn_tx: ZInt,
+}
+async fn open_send_open_syn(
+    manager: &SessionManager,
+    link: &Link,
+    _auth_link: &AuthenticatedPeerLink,
+    input: OpenInitAckOutput,
+) -> IResult<OpenOpenSynOutput> {
+    // Build and send an OpenSyn message
+    let lease = manager.config.lease;
+    let message = SessionMessage::make_open_syn(
+        lease,
+        input.initial_sn_tx,
+        input.cookie,
+        input.open_syn_attachment,
+    );
+    let _ = link
+        .write_session_message(message)
+        .await
+        .map_err(|e| (e, None))?;
+
+    let output = OpenOpenSynOutput {
+        pid: input.pid,
+        whatami: input.whatami,
+        sn_resolution: input.sn_resolution,
+        initial_sn_tx: input.initial_sn_tx,
+    };
+    Ok(output)
+}
+
+struct OpenAckOutput {
+    pid: PeerId,
+    whatami: WhatAmI,
+    sn_resolution: ZInt,
+    initial_sn_tx: ZInt,
+    initial_sn_rx: ZInt,
+    lease: ZInt,
+}
+async fn open_recv_open_ack(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+    input: OpenOpenSynOutput,
+) -> IResult<OpenAckOutput> {
+    // Wait to read an OpenAck
+    let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
+    if messages.len() != 1 {
+        let e = format!(
+            "Received multiple messages in response to an InitSyn on link {}: {:?}",
+            link, messages,
+        );
+        return Err((
+            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            Some(smsg::close_reason::INVALID),
+        ));
+    }
+
+    let mut msg = messages.remove(0);
+    let (lease, initial_sn_rx) = match msg.body {
+        SessionBody::OpenAck(OpenAck { lease, initial_sn }) => (lease, initial_sn),
+        SessionBody::Close(Close { reason, .. }) => {
+            let e = format!(
+                "Received a close message (reason {}) in response to an OpenSyn on link: {:?}",
+                reason, link,
+            );
+            return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
+        }
+        _ => {
+            let e = format!(
+                "Received an invalid message in response to an OpenSyn on link {}: {:?}",
+                link, msg.body
+            );
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
+        }
+    };
+
+    let opean_ack_properties: Vec<Property> = match msg.attachment.take() {
+        Some(att) => {
+            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+        }
+        None => vec![],
+    };
+    for pa in manager.config.peer_authenticator.iter() {
+        let _ = pa
+            .handle_open_ack(&auth_link, &opean_ack_properties)
+            .await
+            .map_err(|e| (e, None))?;
+    }
+
+    let output = OpenAckOutput {
+        pid: input.pid,
+        whatami: input.whatami,
+        sn_resolution: input.sn_resolution,
+        initial_sn_tx: input.initial_sn_tx,
+        initial_sn_rx,
+        lease,
+    };
+    Ok(output)
+}
+
+async fn open_stages(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+) -> IResult<OpenAckOutput> {
+    let output = open_send_init_syn(manager, link, auth_link).await?;
+    let output = open_recv_init_ack(manager, link, auth_link, output).await?;
+    let output = open_send_open_syn(manager, link, auth_link, output).await?;
+    open_recv_open_ack(manager, link, auth_link, output).await
+}
+
+pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<Session> {
+    let auth_link = AuthenticatedPeerLink {
+        src: link.get_src(),
+        dst: link.get_src(),
+        peer_id: None,
+        properties: None,
+    };
+
+    let res = open_stages(manager, link, &auth_link).await;
+    let info = match res {
+        Ok(v) => v,
+        Err((e, reason)) => {
+            let _ = close_link(manager, link, &auth_link, reason).await;
+            return Err(e);
+        }
+    };
+
+    let session = manager
+        .get_or_new_session(
+            &info.pid,
+            &info.whatami,
+            info.sn_resolution,
+            info.initial_sn_tx,
+            info.initial_sn_rx,
+        )
+        .await;
+
+    // Retrive the session's transport
+    let transport = session.get_transport()?;
+
+    // Compute a suitable keep alive interval based on the lease
+    // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
+    //       set the actual keep_alive timeout to one fourth of the agreed session lease.
+    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+    //       check which considers a link as failed when no messages are received in 3.5 times the
+    //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
+    //       session lease.
+    let keep_alive = manager.config.keep_alive.min(info.lease / 4);
+    let _ = transport
+        .add_link(
+            link.clone(),
+            manager.config.batch_size,
+            info.lease,
+            keep_alive,
+        )
+        .await?;
+
+    // Start the TX loop
+    let _ = transport.start_tx(&link).await?;
+
+    // Assign a callback if the session is new
+    if let Some(callback) = transport.get_callback().await {
+        // Notify the session handler there is a new link on this session
+        callback.new_link(link.clone()).await;
+    } else {
+        // Notify the session handler that there is a new session and get back a callback
+        // NOTE: the read loop of the link the open message was sent on remains blocked
+        //       until the new_session() returns. The read_loop in the various links
+        //       waits for any eventual transport to associate to.
+        let callback = manager.config.handler.new_session(session.clone()).await?;
+        // Set the callback on the transport
+        let _ = transport.set_callback(callback).await;
+    }
+
+    // Start the RX loop
+    let _ = transport.start_rx(&link).await?;
+
+    let mut guard = zasynclock!(manager.opened);
+    guard.remove(&info.pid);
+    drop(guard);
+
+    Ok(session)
+}
+
+/*************************************/
+/*             ACCEPT                */
+/*************************************/
+struct AcceptInitSynOutput {
     whatami: WhatAmI,
     pid: PeerId,
     sn_resolution: ZInt,
-    initial_sn: ZInt,
-    notify: Sender<ZResult<Session>>,
+    init_ack_attachment: Option<Attachment>,
 }
-
-pub(super) struct InitialSession {
-    manager: Arc<SessionManagerInner>,
-    pending: Mutex<HashMap<Link, Pending>>,
-    initialized: Mutex<HashMap<PeerId, Initialized>>,
-    opened: Mutex<HashMap<Link, Opened>>,
-}
-
-impl InitialSession {
-    pub(super) fn new(manager: Arc<SessionManagerInner>) -> InitialSession {
-        InitialSession {
-            manager,
-            pending: Mutex::new(HashMap::new()),
-            initialized: Mutex::new(HashMap::new()),
-            opened: Mutex::new(HashMap::new()),
-        }
+async fn accept_recv_init_syn(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+) -> IResult<AcceptInitSynOutput> {
+    // Wait to read an InitSyn
+    let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
+    if messages.len() != 1 {
+        let e = format!(
+            "Received multiple messages instead of a single InitSyn on link {}: {:?}",
+            link, messages,
+        );
+        return Err((
+            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            Some(smsg::close_reason::INVALID),
+        ));
     }
 
-    /*************************************/
-    /*            OPEN/CLOSE             */
-    /*************************************/
-    pub(super) async fn open(
-        &self,
-        link: &Link,
-        attachment: &Option<Attachment>,
-        notify: &Sender<ZResult<Session>>,
-    ) -> ZResult<()> {
-        // Check if a pending init is already present for this link
-        if zasynclock!(self.pending).get(link).is_some() {
-            let e = format!("A session opening is already pending on link: {:?}", link);
-            log::warn!("{}", e);
-            let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
-            let _ = notify.send(err).await;
-            return zerror!(ZErrorKind::InvalidLink { descr: e });
-        }
-
-        // Build the fields for the InitSyn Message
-        let version = self.manager.config.version;
-        let whatami = self.manager.config.whatami;
-        let pid = self.manager.config.pid.clone();
-        let sn_resolution = if self.manager.config.sn_resolution == *SESSION_SEQ_NUM_RESOLUTION {
-            None
-        } else {
-            Some(self.manager.config.sn_resolution)
-        };
-
-        // Build the Open Message
-        let message = SessionMessage::make_init_syn(
+    let mut msg = messages.remove(0);
+    let (init_syn_version, init_syn_whatami, init_syn_pid, init_syn_sn_resolution) = match msg.body
+    {
+        SessionBody::InitSyn(InitSyn {
             version,
             whatami,
-            pid.clone(),
+            pid,
             sn_resolution,
-            attachment.clone(),
-        );
-
-        // Send the message on the link
-        if let Err(e) = zlinksend!(message, link) {
+        }) => (version, whatami, pid, sn_resolution),
+        _ => {
             let e = format!(
-                "Failed to send open message on link {:?}: {}",
-                link,
-                e.to_string()
+                "Received invalid message instead of an InitSyn on link {}: {:?}",
+                link, msg.body
             );
-            log::warn!("{}", e);
-            let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
-            let _ = notify.send(err).await;
-            return zerror!(ZErrorKind::InvalidLink { descr: e });
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
         }
+    };
 
-        // Store the pending for the callback to be used in the process_message
-        zasynclock!(self.pending).insert(
-            link.clone(),
-            Pending {
-                notify: notify.clone(),
-            },
+    // Check if we are allowed to open more links if the session is established
+    if let Some(s) = manager.get_session(&init_syn_pid).await {
+        // Check if we have reached maximum number of links for this session
+        if let Some(limit) = manager.config.max_links {
+            let links = s.get_links().await.map_err(|e| (e, None))?;
+            if links.len() >= limit {
+                let e = format!(
+                    "Rejecting Open on link {} because of maximum links limit reached for peer: {}",
+                    link, init_syn_pid
+                );
+                return Err((
+                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    Some(smsg::close_reason::INVALID),
+                ));
+            }
+        }
+    }
+
+    // Check if the version is supported
+    if init_syn_version > manager.config.version {
+        let e = format!(
+            "Rejecting InitSyn on link {} because of unsupported Zenoh version from peer: {}",
+            link, init_syn_pid
         );
-
-        Ok(())
+        return Err((
+            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            Some(smsg::close_reason::INVALID),
+        ));
     }
 
-    /*************************************/
-    /*          PROCESS MESSAGES         */
-    /*************************************/
-    async fn process_init_syn(
-        &self,
-        link: &Link,
-        syn_version: u8,
-        syn_whatami: WhatAmI,
-        syn_pid: PeerId,
-        syn_sn_resolution: Option<ZInt>,
-    ) -> Action {
-        // Check if the version is supported
-        if syn_version > self.manager.config.version {
-            // Send a close message
-            let c_pid = Some(self.manager.config.pid.clone());
-            let reason_id = smsg::close_reason::UNSUPPORTED;
-            let link_only = false; // This is should always be false for invalid version
-            let attachment = None; // Parameter of open_session
-            let message = SessionMessage::make_close(c_pid, reason_id, link_only, attachment);
+    // Get the SN Resolution
+    let init_syn_sn_resolution = if let Some(snr) = init_syn_sn_resolution {
+        snr
+    } else {
+        *SESSION_SEQ_NUM_RESOLUTION
+    };
 
-            // Send the message on the link
-            let _ = zlinksend!(message, link);
-            log::warn!(
-                "Rejecting InitSyn on link {} because of unsupported Zenoh version from peer: {}",
-                link,
-                syn_pid
-            );
-
-            // Close the link
-            return Action::Close;
+    // Validate the InitSyn with the peer authenticators
+    let init_syn_properties: Vec<Property> = match msg.attachment.take() {
+        Some(att) => {
+            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
         }
-
-        // Get the SN Resolution
-        let syn_sn_resolution = if let Some(snr) = syn_sn_resolution {
-            snr
-        } else {
-            *SESSION_SEQ_NUM_RESOLUTION
-        };
-
-        // Compute the minimum SN Resolution
-        let agreed_sn_resolution = self.manager.config.sn_resolution.min(syn_sn_resolution);
-
-        // Create the cookie
-        let mut wbuf = WBuf::new(64, false);
-        let cookie = Cookie {
-            whatami: syn_whatami,
-            pid: syn_pid.clone(),
-            sn_resolution: agreed_sn_resolution,
-            src: link.get_src(),
-            dst: link.get_dst(),
-        };
-
-        // Encode the cookie
-        if !wbuf.write_cookie(&cookie) {
-            // Send a close message
-            let peer_id = Some(self.manager.config.pid.clone());
-            let reason_id = smsg::close_reason::MAX_SESSIONS;
-            let link_only = false; // This is should always be false when the session limit is reached
-            let attachment = None; // Parameter of open_session
-            let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-            // Send the message on the link
-            let _ = zlinksend!(message, link);
-            log::warn!(
-                "Rejecting InitSyn on link {} because cannot generate cookie for peer: {}",
-                link,
-                cookie.pid
-            );
-
-            // Close the link
-            return Action::Close;
-        }
-
-        // Build the fields for the InitSyn message
-        let whatami = self.manager.config.whatami;
-        let apid = self.manager.config.pid.clone();
-        let sn_resolution = if agreed_sn_resolution == syn_sn_resolution {
-            None
-        } else {
-            Some(agreed_sn_resolution)
-        };
-        let cookie = RBuf::from(wbuf); // @TODO: use HMAC to sign the cookie
-        let attachment = None;
-        let message =
-            SessionMessage::make_init_ack(whatami, apid, sn_resolution, cookie, attachment);
-
-        // Send the message on the link
-        if let Err(e) = zlinksend!(message, link) {
-            log::warn!(
-                "Unable to send InitAck on link {} to peer {}: {}",
-                link,
-                syn_pid,
-                e
-            );
-            return Action::Close;
-        }
-
-        Action::Read
-    }
-
-    async fn process_init_ack(
-        &self,
-        link: &Link,
-        ack_whatami: WhatAmI,
-        ack_pid: PeerId,
-        ack_sn_resolution: Option<ZInt>,
-        ack_cookie: RBuf,
-    ) -> Action {
-        // Check if a pending init is already present for this link
-        let pending = if let Some(pending) = zasynclock!(self.pending).remove(link) {
-            pending
-        } else {
-            // Send a close message
-            let peer_id = Some(self.manager.config.pid.clone());
-            let reason_id = smsg::close_reason::INVALID;
-            let link_only = true; // This is should always be true for invalid lease on existing session
-            let attachment = None; // Parameter of open_session
-            let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-            // Send the message on the link
-            let _ = zlinksend!(message, link);
-            log::warn!(
-                "Rejecting InitAck on link {} because no InitSyn was sent on the link to: {}",
-                link,
-                ack_pid
-            );
-
-            // Close the link
-            return Action::Close;
-        };
-
-        // Get the sn resolution
-        let sn_resolution = if let Some(sn_resolution) = ack_sn_resolution {
-            if sn_resolution > self.manager.config.sn_resolution {
-                // Send a close message
-                let peer_id = Some(self.manager.config.pid.clone());
-                let reason_id = smsg::close_reason::INVALID;
-                let link_only = true; // This is should always be true for invalid lease on existing session
-                let attachment = None; // Parameter of open_session
-                let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-                // Send the message on the link
-                let _ = zlinksend!(message, link);
-                log::warn!(
-                    "Rejecting InitAck on link {} because of invalid sn resolution: {}",
-                    link,
-                    ack_pid
-                );
-
-                // Close the link
-                return Action::Close;
-            }
-            sn_resolution
-        } else {
-            self.manager.config.sn_resolution
-        };
-
-        // Initialize the session if it is new
-        let mut guard = zasynclock!(self.initialized);
-        let initial_sn = if let Some(initialized) = guard.get(&ack_pid) {
-            if initialized.whatami != ack_whatami || initialized.sn_resolution != sn_resolution {
-                drop(guard);
-                // Send a close message
-                let peer_id = Some(self.manager.config.pid.clone());
-                let reason_id = smsg::close_reason::INVALID;
-                let link_only = true; // This is should always be true for invalid lease on existing session
-                let attachment = None; // Parameter of open_session
-                let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-                // Send the message on the link
-                let _ = zlinksend!(message, link);
-                log::warn!(
-                    "Rejecting InitAck on link {} because of invalid sn resolution: {}",
-                    link,
-                    ack_pid
-                );
-
-                // Close the link
-                return Action::Close;
-            }
-            initialized.initial_sn
-        } else {
-            let initial_sn = {
-                let mut rng = rand::thread_rng();
-                rng.gen_range(0, sn_resolution)
-            };
-            guard.insert(
-                ack_pid.clone(),
-                Initialized {
-                    whatami: ack_whatami,
-                    sn_resolution,
-                    initial_sn,
-                },
-            );
-            log::trace!(
-                "InitAck received from peer: {}. Initial seq num is: {}",
-                ack_pid,
-                initial_sn
-            );
-            initial_sn
-        };
-        drop(guard);
-
-        // Build the fields for the OpenSyn message
-        let lease = self.manager.config.lease;
-        let attachment = None;
-        let message = SessionMessage::make_open_syn(lease, initial_sn, ack_cookie, attachment);
-
-        // Send the message on the link
-        if let Err(e) = zlinksend!(message, link) {
-            let e = format!(
-                "Failed to send OpenSyn message on link {:?}: {}",
-                link,
-                e.to_string()
-            );
-            log::warn!("{}", e);
-            let err = zerror!(ZErrorKind::InvalidLink { descr: e.clone() });
-            let _ = pending.notify.send(err).await;
-            return Action::Close;
-        }
-
-        let mut guard = zasynclock!(self.opened);
-        guard.insert(
-            link.clone(),
-            Opened {
-                whatami: ack_whatami,
-                pid: ack_pid,
-                sn_resolution,
-                initial_sn,
-                notify: pending.notify,
-            },
-        );
-
-        Action::Read
-    }
-
-    async fn process_open_syn(
-        &self,
-        link: &Link,
-        syn_lease: ZInt,
-        syn_initial_sn: ZInt,
-        mut syn_cookie: RBuf,
-    ) -> Action {
-        let cookie = if let Some(cookie) = syn_cookie.read_cookie() {
-            // @TODO: verify cookie with HMAC
-            cookie
-        } else {
-            // Send a close message
-            let peer_id = Some(self.manager.config.pid.clone());
-            let reason_id = smsg::close_reason::INVALID;
-            let link_only = true; // This is should always be true for invalid lease on existing session
-            let attachment = None; // Parameter of open_session
-            let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-            // Send the message on the link
-            let _ = zlinksend!(message, link);
-            log::warn!(
-                "Rejecting OpenSyn on link {} because of invalid cookie",
-                link,
-            );
-
-            // Close the link
-            return Action::Close;
-        };
-
-        // Initialize the session if it is new
-        let mut guard = zasynclock!(self.initialized);
-        let ack_initial_sn = if let Some(initialized) = guard.get(&cookie.pid) {
-            if initialized.whatami != cookie.whatami
-                || initialized.sn_resolution != cookie.sn_resolution
-            {
-                drop(guard);
-                // Send a close message
-                let peer_id = Some(self.manager.config.pid.clone());
-                let reason_id = smsg::close_reason::INVALID;
-                let link_only = true; // This is should always be true for invalid lease on existing session
-                let attachment = None; // Parameter of open_session
-                let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-                // Send the message on the link
-                let _ = zlinksend!(message, link);
-                log::warn!(
-                    "Rejecting InitAck on link {} because of invalid sn resolution: {}",
-                    link,
-                    cookie.pid
-                );
-
-                // Close the link
-                return Action::Close;
-            }
-            initialized.initial_sn
-        } else {
-            let initial_sn = {
-                let mut rng = rand::thread_rng();
-                rng.gen_range(0, cookie.sn_resolution)
-            };
-            guard.insert(
-                cookie.pid.clone(),
-                Initialized {
-                    whatami: cookie.whatami,
-                    sn_resolution: cookie.sn_resolution,
-                    initial_sn,
-                },
-            );
-            log::trace!(
-                "OpenSyn received from peer: {}. Initial seq num is: {}",
-                cookie.pid,
-                initial_sn
-            );
-            initial_sn
-        };
-        drop(guard);
-
-        let session = loop {
-            // Check if this open is related to a totally new session (i.e. new peer) or to an exsiting one
-            if let Ok(s) = self.manager.get_session(&cookie.pid).await {
-                // Check if we have reached maximum number of links for this session
-                if let Some(limit) = self.manager.config.max_links {
-                    if let Ok(links) = s.get_links().await {
-                        if links.len() >= limit {
-                            // Send a close message
-                            let peer_id = Some(self.manager.config.pid.clone());
-                            let reason_id = smsg::close_reason::MAX_LINKS;
-                            let link_only = true; // This is should always be true when the link limit is reached
-                            let attachment = None; // Parameter of open_session
-                            let message = SessionMessage::make_close(
-                                peer_id, reason_id, link_only, attachment,
-                            );
-
-                            // Send the message on the link
-                            let _ = zlinksend!(message, link);
-                            log::warn!("Rejecting Open on link {} because of maximum links limit reached for peer: {}", link, cookie.pid);
-
-                            // Close the link
-                            return Action::Close;
-                        }
-                    } else {
-                        // Close the link
-                        return Action::Close;
-                    }
-                }
-
-                // Check if the lease is valid (i.e. the same of existing session)
-                if let Ok(l) = s.get_lease() {
-                    if syn_lease != l {
-                        // Send a close message
-                        let peer_id = Some(self.manager.config.pid.clone());
-                        let reason_id = smsg::close_reason::INVALID;
-                        let link_only = true; // This is should always be true for invalid lease on existing session
-                        let attachment = None; // Parameter of open_session
-                        let message =
-                            SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-                        // Send the message on the link
-                        let _ = zlinksend!(message, link);
-                        log::warn!("Rejecting Open on link {} because of invalid lease on already existing session with peer: {}", link, cookie.pid);
-
-                        // Close the link
-                        return Action::Close;
-                    }
-                } else {
-                    // Close the link
-                    return Action::Close;
-                }
-
-                // Check if the sn_resolution is valid (i.e. the same of existing session)
-                if let Ok(snr) = s.get_sn_resolution() {
-                    if cookie.sn_resolution != snr {
-                        // Send a close message
-                        let peer_id = Some(self.manager.config.pid.clone());
-                        let reason_id = smsg::close_reason::INVALID;
-                        let link_only = true; // This is should always be true for invalid sn_resolution on exisisting session
-                        let attachment = None; // Parameter of open_session
-                        let message =
-                            SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-                        // Send the message on the link
-                        let _ = zlinksend!(message, link);
-                        log::warn!("Rejecting Open on link {} because of invalid sequence number resolution on already existing\
-                                    session with peer: {}", link, cookie.pid);
-
-                        // Close the link
-                        return Action::Close;
-                    }
-
-                    snr
-                } else {
-                    // Close the link
-                    return Action::Close;
-                };
-
-                break s;
-            } else {
-                // Check if a limit for the maximum number of open sessions is set
-                if let Some(limit) = self.manager.config.max_sessions {
-                    let num = self.manager.get_sessions().await.len();
-                    // Check if we have reached the session limit
-                    if num >= limit {
-                        // Send a close message
-                        let peer_id = Some(self.manager.config.pid.clone());
-                        let reason_id = smsg::close_reason::MAX_SESSIONS;
-                        let link_only = false; // This is should always be false when the session limit is reached
-                        let attachment = None; // Parameter of open_session
-                        let message =
-                            SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-                        // Send the message on the link
-                        let _ = zlinksend!(message, link);
-                        log::warn!("Rejecting Open on link {} because of maximum sessions limit reached for peer: {}", link, cookie.pid);
-
-                        // Close the link
-                        return Action::Close;
-                    }
-                }
-
-                // Create a new session
-                let res = self
-                    .manager
-                    .new_session(
-                        &self.manager,
-                        &cookie.pid,
-                        &cookie.whatami,
-                        syn_lease,
-                        cookie.sn_resolution,
-                        ack_initial_sn,
-                        syn_initial_sn,
-                    )
-                    .await;
-
-                if let Ok(s) = res {
-                    break s;
-                }
-
-                // Concurrency just occured: multiple Open Messages have simultanesouly arrived from different links.
-                // Restart from the beginning to check if the Open Messages have compatible parameters
-                log::trace!("Multiple Open messages have simultanesouly arrived from different links for peer: {}.\
-                             Rechecking validity of Open message recevied on link: {}", cookie.pid, link);
-            }
-        };
-
-        // Add the link to the session
-        if let Err(e) = session.add_link(link.clone()).await {
-            log::warn!(
-                "Unable to add link {} to the session with peer {}: {}",
-                link,
-                cookie.pid,
-                e
-            );
-            return Action::Close;
-        }
-
-        // Build OpenAck message
-        let attachment = None;
-        let message =
-            SessionMessage::make_open_ack(self.manager.config.lease, ack_initial_sn, attachment);
-
-        // Send the message on the link
-        if let Err(e) = zlinksend!(message, link) {
-            log::warn!(
-                "Unable to send OpenAck on link {} for peer {}: {}",
-                link,
-                cookie.pid,
-                e
-            );
-            return Action::Close;
-        }
-
-        // Assign a callback if the session is new
-        match session.get_callback().await {
-            Ok(c) => {
-                if let Some(callback) = c {
-                    // Notify the session handler there is a new link on this session
-                    callback.new_link(link.clone()).await;
-                } else {
-                    // Notify the session handler that there is a new session and get back a callback
-                    // NOTE: the read loop of the link the open message was sent on remains blocked
-                    //       until the new_session() returns. The read_loop in the various links
-                    //       waits for any eventual transport to associate to. This transport is
-                    //       returned only by the process_open() -- this function.
-                    let callback = match self
-                        .manager
-                        .config
-                        .handler
-                        .new_session(session.clone())
-                        .await
-                    {
-                        Ok(callback) => callback,
-                        Err(e) => {
-                            log::warn!(
-                                "Unable to get session event handler for peer {}: {}",
-                                cookie.pid,
-                                e
-                            );
-                            return Action::Close;
-                        }
-                    };
-                    // Set the callback on the transport
-                    if let Err(e) = session.set_callback(callback).await {
-                        log::warn!("Unable to set callback for peer {}: {}", cookie.pid, e);
-                        return Action::Close;
-                    }
-                }
-            }
-            Err(e) => {
-                log::warn!("Unable to get callback for peer {}: {}", cookie.pid, e);
-                return Action::Close;
-            }
-        };
-
-        log::debug!("New session link established from {}: {}", cookie.pid, link);
-
-        // Return the target transport to use in the link
-        match session.get_transport() {
-            Ok(transport) => Action::ChangeTransport(transport),
-            Err(_) => Action::Close,
-        }
-    }
-
-    async fn process_open_ack(&self, link: &Link, lease: ZInt, initial_sn: ZInt) -> Action {
-        let opened = if let Some(opened) = zasynclock!(self.opened).remove(link) {
-            opened
-        } else {
-            // Send a close message
-            let peer_id = Some(self.manager.config.pid.clone());
-            let reason_id = smsg::close_reason::INVALID;
-            let link_only = true; // This is should always be true for invalid lease on existing session
-            let attachment = None; // Parameter of open_session
-            let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-            // Send the message on the link
-            let _ = zlinksend!(message, link);
-            log::warn!(
-                "Rejecting OpenAck on link {} because no OpenSyn was sent on the link.",
-                link,
-            );
-
-            // Close the link
-            return Action::Close;
-        };
-
-        // Get a new or an existing session
-        // NOTE: In case of exsisting session, all the parameters in the accept are ignored
-        let session = self
-            .manager
-            .get_or_new_session(
-                &self.manager,
-                &opened.pid,
-                &opened.whatami,
-                lease,
-                opened.sn_resolution,
-                opened.initial_sn,
-                initial_sn,
-            )
-            .await;
-
-        // Add this link to the session
-        let res = session.add_link(link.clone()).await;
-        if let Err(e) = res {
-            // Invalid value, send a Close message
-            let peer_id = Some(self.manager.config.pid.clone());
-            let reason_id = smsg::close_reason::INVALID;
-            let link_only = true; // This is should always be true for error when adding the link
-            let attachment = None; // No attachment here
-            let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-            // Send the message on the link
-            let _ = zlinksend!(message, link);
-
-            // Notify
-            let _ = opened.notify.send(Err(e)).await;
-            return Action::Close;
-        }
-
-        // Set the callback on the session if needed
-        let callback = match session.get_callback().await {
-            Ok(callback) => callback,
-            Err(e) => {
-                // Notify
-                let _ = opened.notify.send(Err(e)).await;
-                return Action::Close;
-            }
-        };
-
-        if let Some(callback) = callback {
-            callback.new_link(link.clone()).await;
-        } else {
-            // Notify the session handler that there is a new session and get back a callback
-            let callback = match self
-                .manager
-                .config
-                .handler
-                .new_session(session.clone())
+        None => vec![],
+    };
+    let mut init_ack_properties: Vec<Property> = vec![];
+    let init_ack_attachment = {
+        for pa in manager.config.peer_authenticator.iter() {
+            let mut ps = pa
+                .handle_init_syn(
+                    &auth_link,
+                    &init_syn_pid,
+                    init_syn_sn_resolution,
+                    &init_syn_properties,
+                )
                 .await
-            {
-                Ok(callback) => callback,
-                Err(e) => {
-                    log::warn!(
-                        "Unable to get session event handler for peer {}: {}",
-                        opened.pid,
-                        e
-                    );
-                    return Action::Close;
-                }
-            };
-            // Set the callback on the transport
-            if let Err(e) = session.set_callback(callback).await {
-                log::warn!("{}", e);
-                // Notify
-                let _ = opened.notify.send(Err(e)).await;
-                return Action::Close;
-            }
+                .map_err(|e| (e, None))?;
+            init_ack_properties.append(&mut ps);
         }
+        attachment_from_properties(&init_ack_properties).ok()
+    };
 
-        // Return the target transport to use in the link
-        match session.get_transport() {
-            Ok(transport) => {
-                // Notify
-                log::debug!("New session link established with {}: {}", opened.pid, link);
-                if opened.notify.send(Ok(session)).await.is_ok() {
-                    Action::ChangeTransport(transport)
-                } else {
-                    Action::Close
-                }
-            }
-            Err(e) => {
-                // Notify
-                let _ = opened.notify.send(Err(e)).await;
-                Action::Close
-            }
-        }
-    }
-
-    async fn process_close(
-        &self,
-        link: &Link,
-        pid: Option<PeerId>,
-        reason: u8,
-        link_only: bool,
-    ) -> Action {
-        if !link_only {
-            if let Some(pid) = pid.as_ref() {
-                zasynclock!(self.initialized).remove(pid);
-            }
-        }
-
-        let notify = if let Some(pending) = zasynclock!(self.pending).remove(link) {
-            Some(pending.notify)
-        } else if let Some(opened) = zasynclock!(self.opened).remove(link) {
-            Some(opened.notify)
-        } else {
-            None
-        };
-
-        let mut e = "Session closed by the remote peer".to_string();
-        if let Some(pid) = pid {
-            e.push_str(&format!(" {}", pid));
-        }
-        e.push_str(&format!(" with reason: {}", reason));
-        log::debug!("{}", e);
-
-        // Notify
-        if let Some(notify) = notify {
-            let err = zerror!(ZErrorKind::Other { descr: e });
-            let _ = notify.send(err).await;
-        }
-
-        Action::Close
-    }
-
-    async fn process_invalid(&self, link: &Link, message: SessionMessage) -> Action {
-        let e = format!("Invalid message received on link: {}", link);
-        log::debug!("{}. Message: {:?}", e, message);
-
-        // Invalid message, send a Close message
-        let peer_id = Some(self.manager.config.pid.clone());
-        let reason_id = smsg::close_reason::INVALID;
-        let link_only = false; // This is should always be false for invalid messages
-        let attachment = None; // No attachment here
-        let message = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-        // Send the message on the link
-        let _ = zlinksend!(message, link);
-
-        // Notify
-        if let Some(pending) = zasynclock!(self.pending).remove(link) {
-            // Notify
-            let err = zerror!(ZErrorKind::IOError { descr: e });
-            let _ = pending.notify.send(err).await;
-        }
-
-        Action::Close
-    }
+    let output = AcceptInitSynOutput {
+        whatami: init_syn_whatami,
+        pid: init_syn_pid,
+        sn_resolution: init_syn_sn_resolution,
+        init_ack_attachment,
+    };
+    Ok(output)
 }
 
-#[async_trait]
-impl TransportTrait for InitialSession {
-    async fn receive_message(&self, link: &Link, message: SessionMessage) -> Action {
-        match message.body {
-            SessionBody::InitSyn(InitSyn {
-                version,
-                whatami,
-                pid,
-                sn_resolution,
-            }) => {
-                self.process_init_syn(link, version, whatami, pid, sn_resolution)
-                    .await
-            }
+struct AcceptInitAckOutput {}
+async fn accept_send_init_ack(
+    manager: &SessionManager,
+    link: &Link,
+    _auth_link: &AuthenticatedPeerLink,
+    input: AcceptInitSynOutput,
+) -> IResult<AcceptInitAckOutput> {
+    // Compute the minimum SN Resolution
+    let agreed_sn_resolution = manager.config.sn_resolution.min(input.sn_resolution);
 
-            SessionBody::InitAck(InitAck {
-                whatami,
-                pid,
-                sn_resolution,
-                cookie,
-            }) => {
-                self.process_init_ack(link, whatami, pid, sn_resolution, cookie)
-                    .await
-            }
+    // Create and encode the cookie
+    let mut wbuf = WBuf::new(64, false);
+    let cookie = Cookie {
+        whatami: input.whatami,
+        pid: input.pid.clone(),
+        sn_resolution: agreed_sn_resolution,
+        src: link.get_src(),
+        dst: link.get_dst(),
+        nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
+    };
+    wbuf.write_cookie(&cookie);
 
-            SessionBody::OpenSyn(OpenSyn {
-                lease,
+    // Build the fields for the InitAck message
+    let whatami = manager.config.whatami;
+    let apid = manager.config.pid.clone();
+    let sn_resolution = if agreed_sn_resolution == input.sn_resolution {
+        None
+    } else {
+        Some(agreed_sn_resolution)
+    };
+
+    // Use the BlockCipher to enncrypt the cookie
+    let serialized = RBuf::from(wbuf).to_vec();
+    let mut guard = zasynclock!(manager.prng);
+    let encrypted = manager.cipher.encrypt(serialized, &mut *guard);
+    drop(guard);
+    let cookie = RBuf::from(encrypted);
+
+    let message = SessionMessage::make_init_ack(
+        whatami,
+        apid,
+        sn_resolution,
+        cookie,
+        input.init_ack_attachment,
+    );
+
+    // Send the message on the link
+    let _ = link
+        .write_session_message(message)
+        .await
+        .map_err(|e| (e, None))?;
+
+    let output = AcceptInitAckOutput {};
+    Ok(output)
+}
+
+struct AcceptOpenSynOutput {
+    cookie: Cookie,
+    initial_sn: ZInt,
+    lease: ZInt,
+    open_ack_attachment: Option<Attachment>,
+}
+async fn accept_recv_open_syn(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+    _input: AcceptInitAckOutput,
+) -> IResult<AcceptOpenSynOutput> {
+    // Wait to read an OpenSyn
+    let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
+    if messages.len() != 1 {
+        let e = format!(
+            "Received multiple messages instead of a single OpenSyn on link {}: {:?}",
+            link, messages,
+        );
+        return Err((
+            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            Some(smsg::close_reason::INVALID),
+        ));
+    }
+
+    let mut msg = messages.remove(0);
+    let (open_syn_lease, open_syn_initial_sn, open_syn_cookie) = match msg.body {
+        SessionBody::OpenSyn(OpenSyn {
+            lease,
+            initial_sn,
+            cookie,
+        }) => (lease, initial_sn, cookie),
+        SessionBody::Close(Close { reason, .. }) => {
+            let e = format!(
+                "Received a close message (reason {}) instead of an OpenSyn on link: {:?}",
+                reason, link,
+            );
+            return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
+        }
+        _ => {
+            let e = format!(
+                "Received invalid message instead of an OpenSyn on link {}: {:?}",
+                link, msg.body
+            );
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
+        }
+    };
+
+    // Decrypt the cookie with the cyper
+    let encrypted = open_syn_cookie.to_vec();
+    let decrypted = manager
+        .cipher
+        .decrypt(encrypted)
+        .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+    let mut open_syn_cookie = RBuf::from(decrypted);
+
+    // Verify the cookie
+    let cookie = match open_syn_cookie.read_cookie() {
+        Some(ck) => ck,
+        None => {
+            let e = format!("Rejecting OpenSyn on link: {}. Invalid cookie.", link,);
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
+        }
+    };
+
+    // Validate with the peer authenticators
+    let open_syn_properties: Vec<Property> = match msg.attachment.take() {
+        Some(att) => {
+            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+        }
+        None => vec![],
+    };
+    let mut open_ack_properties: Vec<Property> = vec![];
+    let open_ack_attachment = {
+        for pa in manager.config.peer_authenticator.iter() {
+            let mut ps = pa
+                .handle_open_syn(&auth_link, &open_syn_properties)
+                .await
+                .map_err(|e| (e, None))?;
+            open_ack_properties.append(&mut ps);
+        }
+        attachment_from_properties(&open_ack_properties).ok()
+    };
+
+    let output = AcceptOpenSynOutput {
+        cookie,
+        initial_sn: open_syn_initial_sn,
+        lease: open_syn_lease,
+        open_ack_attachment,
+    };
+    Ok(output)
+}
+
+struct AcceptInitSessionOutput {
+    session: Session,
+    initial_sn: ZInt,
+    open_ack_attachment: Option<Attachment>,
+}
+async fn accept_init_session(
+    manager: &SessionManager,
+    link: &Link,
+    _auth_link: &AuthenticatedPeerLink,
+    input: AcceptOpenSynOutput,
+) -> IResult<AcceptInitSessionOutput> {
+    // Initialize the session if it is new
+    // NOTE: Keep the lock on the manager.opened and use it to protect concurrent
+    //       addition of new sessions and links
+    let mut guard = zasynclock!(manager.opened);
+
+    let open_ack_initial_sn = if let Some(opened) = guard.get(&input.cookie.pid) {
+        if opened.whatami != input.cookie.whatami
+            || opened.sn_resolution != input.cookie.sn_resolution
+        {
+            let e = format!(
+                "Rejecting OpenSyn cookie on link: {}. Invalid sn resolution: {}",
+                link, input.cookie.pid
+            );
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
+        }
+        opened.initial_sn
+    } else {
+        let initial_sn = zasynclock!(manager.prng).gen_range(0..input.cookie.sn_resolution);
+        guard.insert(
+            input.cookie.pid.clone(),
+            Opened {
+                whatami: input.cookie.whatami,
+                sn_resolution: input.cookie.sn_resolution,
                 initial_sn,
-                cookie,
-            }) => self.process_open_syn(link, lease, initial_sn, cookie).await,
+            },
+        );
+        initial_sn
+    };
 
-            SessionBody::OpenAck(OpenAck { lease, initial_sn }) => {
-                self.process_open_ack(link, lease, initial_sn).await
+    let session = if let Some(session) = manager.get_session(&input.cookie.pid).await {
+        // Check if this open is related to a totally new session (i.e. new peer) or to an exsiting one
+        // Get the underlying transport
+        let transport = session.get_transport().map_err(|e| (e, None))?;
+
+        // Check if we have reached maximum number of links for this session
+        if let Some(limit) = manager.config.max_links {
+            let links = transport.get_links().await;
+            if links.len() >= limit {
+                let e = format!(
+                    "Rejecting OpenSyn on link: {}. Max links limit reached for peer: {}",
+                    link, input.cookie.pid
+                );
+                return Err((
+                    zerror2!(ZErrorKind::InvalidSession { descr: e }),
+                    Some(smsg::close_reason::MAX_LINKS),
+                ));
             }
-
-            SessionBody::Close(Close {
-                pid,
-                reason,
-                link_only,
-            }) => self.process_close(link, pid, reason, link_only).await,
-
-            _ => self.process_invalid(link, message).await,
         }
+
+        // Check if the sn_resolution is valid (i.e. the same of existing session)
+        if input.cookie.sn_resolution != transport.sn_resolution {
+            let e = format!(
+                "Rejecting OpenSyn on link: {}. Invalid sequence number resolution for peer: {}",
+                link, input.cookie.pid
+            );
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
+        }
+
+        session
+    } else {
+        // Check if a limit for the maximum number of open sessions is set
+        if let Some(limit) = manager.config.max_sessions {
+            let num = manager.get_sessions().await.len();
+            // Check if we have reached the session limit
+            if num >= limit {
+                let e = format!(
+                    "Rejecting OpenSyn on link: {}. Max sessions limit reached for peer: {}",
+                    link, input.cookie.pid
+                );
+                return Err((
+                    zerror2!(ZErrorKind::InvalidSession { descr: e }),
+                    Some(smsg::close_reason::MAX_SESSIONS),
+                ));
+            }
+        }
+
+        // Create a new session
+        manager
+            .new_session(
+                &input.cookie.pid,
+                &input.cookie.whatami,
+                input.cookie.sn_resolution,
+                open_ack_initial_sn,
+                input.initial_sn,
+            )
+            .await
+            .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?
+    };
+
+    // Retrive the session's transport
+    let transport = session.get_transport().map_err(|e| (e, None))?;
+
+    // Add the link to the session
+    // Compute a suitable keep alive interval based on the lease
+    // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
+    //       set the actual keep_alive timeout to one fourth of the agreed session lease.
+    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+    //       check which considers a link as failed when no messages are received in 3.5 times the
+    //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
+    //       session lease.
+    let keep_alive = manager.config.keep_alive.min(input.lease / 4);
+    let _ = transport
+        .add_link(
+            link.clone(),
+            manager.config.batch_size,
+            input.lease,
+            keep_alive,
+        )
+        .await
+        .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?;
+
+    log::debug!(
+        "New session link established from {}: {}",
+        input.cookie.pid,
+        link
+    );
+
+    let output = AcceptInitSessionOutput {
+        session,
+        initial_sn: open_ack_initial_sn,
+        open_ack_attachment: input.open_ack_attachment,
+    };
+    Ok(output)
+}
+
+struct AcceptOpenAckOutput {
+    session: Session,
+}
+async fn accept_send_open_ack(
+    manager: &SessionManager,
+    link: &Link,
+    _auth_link: &AuthenticatedPeerLink,
+    input: AcceptInitSessionOutput,
+) -> ZResult<AcceptOpenAckOutput> {
+    // Build OpenAck message
+    let message = SessionMessage::make_open_ack(
+        manager.config.lease,
+        input.initial_sn,
+        input.open_ack_attachment,
+    );
+
+    // Send the message on the link
+    let _ = link.write_session_message(message).await?;
+
+    let output = AcceptOpenAckOutput {
+        session: input.session,
+    };
+    Ok(output)
+}
+
+async fn accept_finalize_session(
+    manager: &SessionManager,
+    link: &Link,
+    _auth_link: &AuthenticatedPeerLink,
+    input: AcceptOpenAckOutput,
+) -> ZResult<()> {
+    // Retrive the session's transport
+    let transport = input.session.get_transport()?;
+
+    // Start the TX loop
+    let _ = transport.start_tx(&link).await?;
+
+    // Assign a callback if the session is new
+    if let Some(callback) = transport.get_callback().await {
+        // Notify the session handler there is a new link on this session
+        callback.new_link(link.clone()).await;
+    } else {
+        // Notify the session handler that there is a new session and get back a callback
+        // NOTE: the read loop of the link the open message was sent on remains blocked
+        //       until the new_session() returns. The read_loop in the various links
+        //       waits for any eventual transport to associate to.
+        let res = manager
+            .config
+            .handler
+            .new_session(input.session.clone())
+            .await;
+        let callback = match res {
+            Ok(cb) => cb,
+            Err(e) => {
+                let e = format!(
+                    "Rejecting OpenSyn on link: {}. New session error: {:?}",
+                    link, e
+                );
+                return zerror!(ZErrorKind::InvalidSession { descr: e });
+            }
+        };
+        // Set the callback on the transport
+        transport.set_callback(callback).await;
     }
 
-    async fn link_err(&self, link: &Link) {
-        if let Some(pending) = zasynclock!(self.pending).remove(link) {
-            let e = format!("Unexpected error on link: {}", link);
-            log::debug!("{}", e);
+    // Start the RX loop
+    let _ = transport.start_rx(&link).await?;
 
-            // Notify
-            let err = zerror!(ZErrorKind::IOError { descr: e });
-            let _ = pending.notify.send(err).await;
+    Ok(())
+}
+
+async fn accept_link_stages(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+) -> IResult<AcceptInitSessionOutput> {
+    let output = accept_recv_init_syn(manager, link, auth_link).await?;
+    let output = accept_send_init_ack(manager, link, auth_link, output).await?;
+    let output = accept_recv_open_syn(manager, link, auth_link, output).await?;
+    accept_init_session(manager, link, auth_link, output).await
+}
+
+async fn accept_session_stages(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+    input: AcceptInitSessionOutput,
+) -> ZResult<()> {
+    let output = accept_send_open_ack(manager, link, auth_link, input).await?;
+    accept_finalize_session(manager, link, auth_link, output).await
+}
+
+pub(super) async fn accept_link(
+    manager: &SessionManager,
+    link: &Link,
+    auth_link: &AuthenticatedPeerLink,
+) -> ZResult<()> {
+    let res = accept_link_stages(manager, link, auth_link).await;
+    let output = match res {
+        Ok(out) => out,
+        Err((e, reason)) => {
+            close_link(manager, link, auth_link, reason).await;
+            return Err(e);
         }
+    };
+
+    let session = output.session.clone();
+    let res = accept_session_stages(manager, link, auth_link, output).await;
+    if let Err(e) = res {
+        let _ = session.close().await;
+        return Err(e);
     }
+
+    Ok(())
 }

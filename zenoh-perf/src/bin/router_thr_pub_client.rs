@@ -20,7 +20,7 @@ use std::time::Duration;
 use zenoh_protocol::core::{PeerId, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::proto::{whatami, Mux};
-use zenoh_protocol::session::{DummyHandler, SessionManager, SessionManagerConfig};
+use zenoh_protocol::session::{DummySessionEventHandler, SessionManager, SessionManagerConfig};
 use zenoh_router::routing::broker::Broker;
 
 fn print_usage(bin: String) {
@@ -64,7 +64,7 @@ fn main() {
         return print_usage(bin);
     };
 
-    let my_primitives = Arc::new(Mux::new(Arc::new(DummyHandler::new())));
+    let my_primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
     let broker = Arc::new(Broker::new());
 
     let config = SessionManagerConfig {
@@ -77,13 +77,9 @@ fn main() {
 
     task::block_on(async {
         let mut has_locator = false;
-        let attachment = None;
         for locator in args {
             has_locator = true;
-            if let Err(_err) = manager
-                .open_session(&locator.parse().unwrap(), &attachment)
-                .await
-            {
+            if let Err(_err) = manager.open_session(&locator.parse().unwrap()).await {
                 println!("Unable to connect to {}!", locator);
                 return;
             }

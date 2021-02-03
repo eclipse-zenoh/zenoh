@@ -23,7 +23,8 @@ use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{whatami, Mux, Primitives, WhatAmI};
 use zenoh_protocol::session::{
-    DummyHandler, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    DummySessionEventHandler, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig,
 };
 
 struct LightSessionHandler {
@@ -46,7 +47,7 @@ impl SessionHandler for LightSessionHandler {
         session: Arc<dyn SessionEventHandler + Send + Sync>,
     ) -> Arc<dyn SessionEventHandler + Send + Sync> {
         *self.handler.lock().await = Some(session);
-        Arc::new(DummyHandler::new())
+        Arc::new(DummySessionEventHandler::new())
     }
 }
 
@@ -113,8 +114,7 @@ fn main() {
     let manager = SessionManager::new(config, None);
 
     task::block_on(async {
-        let attachment = None;
-        if let Err(_err) = manager.open_session(&connect_to, &attachment).await {
+        if let Err(_err) = manager.open_session(&connect_to).await {
             println!("Unable to connect to {}!", connect_to);
             return;
         }

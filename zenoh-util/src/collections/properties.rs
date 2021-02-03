@@ -91,19 +91,24 @@ impl<T: KeyTranscoder> From<Properties> for IntKeyProperties<T> {
 
 impl<T: KeyTranscoder> From<&str> for IntKeyProperties<T> {
     fn from(s: &str) -> Self {
-        s.into()
+        Properties::from(s).into()
     }
 }
 
 impl<T: KeyTranscoder> From<String> for IntKeyProperties<T> {
     fn from(s: String) -> Self {
-        s.into()
+        Properties::from(s).into()
     }
 }
 
 impl<T: KeyTranscoder> From<&[(&str, &str)]> for IntKeyProperties<T> {
     fn from(kvs: &[(&str, &str)]) -> Self {
-        kvs.into()
+        Self(
+            kvs.iter()
+                .filter_map(|(k, v)| T::encode(k).map(|k| (k, v.to_string())))
+                .collect(),
+            PhantomData,
+        )
     }
 }
 
@@ -122,7 +127,7 @@ impl<T: KeyTranscoder> From<&[(u64, &str)]> for IntKeyProperties<T> {
 static PROP_SEPS: &[&str] = &["\r\n", "\n", ";"];
 const DEFAULT_PROP_SEP: char = ';';
 
-const KV_SEP: char = '=';
+const KV_SEP: &[char] = &['=', ':'];
 
 #[derive(Clone, Debug, PartialEq)]
 /// A map of key/value (String,String) properties.
@@ -158,13 +163,13 @@ impl fmt::Display for Properties {
             if v.is_empty() {
                 write!(f, "{}", k)?
             } else {
-                write!(f, "{}{}{}", k, KV_SEP, v)?
+                write!(f, "{}{}{}", k, KV_SEP[0], v)?
             }
             for (k, v) in it {
                 if v.is_empty() {
                     write!(f, "{}{}", DEFAULT_PROP_SEP, k)?
                 } else {
-                    write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP, v)?
+                    write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP[0], v)?
                 }
             }
         }
