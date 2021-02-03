@@ -646,6 +646,7 @@ mod tests {
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
+            let routing_context = None;
             let reply_context = None;
             let attachment = None;
 
@@ -655,6 +656,7 @@ mod tests {
                 reliability,
                 congestion_control,
                 data_info,
+                routing_context,
                 reply_context,
                 attachment,
             );
@@ -806,6 +808,7 @@ mod tests {
                         let reliability = Reliability::Reliable;
                         let congestion_control = CongestionControl::Block;
                         let data_info = None;
+                        let routing_context = None;
                         let reply_context = None;
                         let attachment = None;
 
@@ -815,6 +818,7 @@ mod tests {
                             reliability,
                             congestion_control,
                             data_info,
+                            routing_context,
                             reply_context,
                             attachment,
                         );

@@ -20,6 +20,7 @@ pub mod crypto;
 pub mod ffi;
 mod lib_loader;
 pub mod net;
+pub mod properties;
 pub mod sync;
 pub use crate::core::macros::*;
 pub use lib_loader::*;

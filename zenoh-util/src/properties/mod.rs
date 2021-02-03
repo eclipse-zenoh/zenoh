@@ -11,6 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+pub mod runtime;
+pub use runtime::*;
+
 use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;

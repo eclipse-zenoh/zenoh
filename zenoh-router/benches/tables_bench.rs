@@ -17,21 +17,23 @@ extern crate zenoh_router;
 use async_std::sync::Arc;
 use async_std::task;
 use criterion::{BenchmarkId, Criterion};
-use zenoh_protocol::core::{whatami, CongestionControl, Reliability, SubInfo, SubMode};
+use zenoh_protocol::core::{whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::session::{DummySessionEventHandler, Mux};
-use zenoh_router::routing::broker::Tables;
 use zenoh_router::routing::pubsub::*;
 use zenoh_router::routing::resource::*;
+use zenoh_router::routing::router::Tables;
 
 fn tables_bench(c: &mut Criterion) {
     task::block_on(async {
-        let tables = Tables::new(whatami::ROUTER, None);
+        let mut tables = Tables::new(PeerId::new(0, [0; 16]), whatami::ROUTER, None);
         let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
 
-        let face0 = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
+        let face0 = tables
+            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .await;
         declare_resource(
-            &mut *tables.write().await,
+            &mut tables,
             &mut face0.upgrade().unwrap(),
             1,
             0,
@@ -39,7 +41,7 @@ fn tables_bench(c: &mut Criterion) {
         )
         .await;
         declare_resource(
-            &mut *tables.write().await,
+            &mut tables,
             &mut face0.upgrade().unwrap(),
             2,
             0,
@@ -47,7 +49,9 @@ fn tables_bench(c: &mut Criterion) {
         )
         .await;
 
-        let face1 = Tables::open_face(&tables, whatami::CLIENT, primitives.clone()).await;
+        let face1 = tables
+            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .await;
 
         let mut tables_bench = c.benchmark_group("tables_bench");
         let sub_info = SubInfo {
@@ -59,15 +63,15 @@ fn tables_bench(c: &mut Criterion) {
         for p in [8, 32, 256, 1024, 8192].iter() {
             for i in 1..(*p) {
                 declare_resource(
-                    &mut *tables.write().await,
+                    &mut tables,
                     &mut face1.upgrade().unwrap(),
                     i,
                     0,
                     &["/bench/tables/AA", &i.to_string()].concat(),
                 )
                 .await;
-                declare_subscription(
-                    &mut *tables.write().await,
+                declare_client_subscription(
+                    &mut tables,
                     &mut face1.upgrade().unwrap(),
                     i,
                     "",
@@ -82,7 +86,6 @@ fn tables_bench(c: &mut Criterion) {
             tables_bench.bench_function(BenchmarkId::new("direct_route", p), |b| {
                 b.iter(|| {
                     task::block_on(async {
-                        let mut tables = tables.write().await;
                         route_data(
                             &mut tables,
                             &face0,
@@ -91,6 +94,7 @@ fn tables_bench(c: &mut Criterion) {
                             CongestionControl::Drop,
                             None,
                             payload.clone(),
+                            None,
                         )
                         .await;
                     })
@@ -100,7 +104,6 @@ fn tables_bench(c: &mut Criterion) {
             tables_bench.bench_function(BenchmarkId::new("known_resource", p), |b| {
                 b.iter(|| {
                     task::block_on(async {
-                        let mut tables = tables.write().await;
                         route_data(
                             &mut tables,
                             &face0,
@@ -109,6 +112,7 @@ fn tables_bench(c: &mut Criterion) {
                             CongestionControl::Drop,
                             None,
                             payload.clone(),
+                            None,
                         )
                         .await;
                     })
@@ -118,7 +122,6 @@ fn tables_bench(c: &mut Criterion) {
             tables_bench.bench_function(BenchmarkId::new("matches_lookup", p), |b| {
                 b.iter(|| {
                     task::block_on(async {
-                        let mut tables = tables.write().await;
                         route_data(
                             &mut tables,
                             &face0,
@@ -127,6 +130,7 @@ fn tables_bench(c: &mut Criterion) {
                             CongestionControl::Drop,
                             None,
                             payload.clone(),
+                            None,
                         )
                         .await;
                     })

@@ -59,7 +59,8 @@ rustc_version = "0.3"
 criterion = "0.3.4"
 
 [features]
-default = []
+transport_tls = ["zenoh-protocol/transport_tls"]
+default = ["transport_tls"]
 
 [[bench]]
 name = "tables_bench"

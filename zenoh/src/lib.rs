@@ -112,7 +112,7 @@ pub use values::*;
 pub mod utils;
 
 pub use zenoh_protocol::core::{Timestamp, TimestampID};
-pub use zenoh_util::collections::Properties;
+pub use zenoh_util::properties::Properties;
 
 /// The zenoh client API.
 pub struct Zenoh {

@@ -70,8 +70,8 @@ use async_std::channel::bounded;
 use futures::prelude::*;
 use log::{debug, trace};
 use zenoh_protocol::core::WhatAmI;
-use zenoh_router::runtime::config::*;
 use zenoh_router::runtime::orchestrator::{Loop, SessionOrchestrator};
+use zenoh_util::properties::runtime::*;
 // Shared memory and zero-copy
 pub use zenoh_protocol::io::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 
