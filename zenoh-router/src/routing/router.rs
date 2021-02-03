@@ -11,66 +11,260 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
+use async_std::sync::{Arc, RwLock, Weak};
+use async_std::task::{sleep, JoinHandle};
 use async_trait::async_trait;
-use petgraph::graph::NodeIndex;
-use petgraph::visit::{VisitMap, Visitable};
-use std::collections::HashMap;
-use std::convert::TryInto;
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 use uhlc::HLC;
 
-use zenoh_protocol::core::{whatami, PeerId, ZInt};
-use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{LinkState, ZenohBody, ZenohMessage};
+use zenoh_protocol::core::{whatami, PeerId, WhatAmI, ZInt};
+use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_protocol::session::{
     DeMux, Mux, Primitives, Session, SessionEventHandler, SessionHandler,
 };
 
 use zenoh_util::core::ZResult;
+use zenoh_util::zconfigurable;
 
-use crate::routing::broker::{Broker, Tables};
-use crate::routing::face::Face;
+use crate::routing::face::{Face, FaceState};
+use crate::routing::network::Network;
+pub use crate::routing::pubsub::*;
+pub use crate::routing::queries::*;
+pub use crate::routing::resource::*;
 use crate::runtime::orchestrator::SessionOrchestrator;
 
-pub struct Router {
-    whatami: whatami::Type,
-    pub broker: Broker,
-    pub routers_net: Option<Arc<RwLock<Network>>>,
-    pub peers_net: Option<Arc<RwLock<Network>>>,
+zconfigurable! {
+    static ref LINK_CLOSURE_DELAY: u64 = 200;
+    static ref TREES_COMPUTATION_DELAY: u64 = 100;
 }
 
-impl Router {
-    pub fn new(whatami: whatami::Type, hlc: Option<HLC>) -> Self {
-        Router {
+pub struct Tables {
+    pub(crate) pid: PeerId,
+    pub(crate) whatami: whatami::Type,
+    face_counter: usize,
+    pub(crate) hlc: Option<HLC>,
+    pub(crate) root_res: Arc<Resource>,
+    pub(crate) faces: HashMap<usize, Arc<FaceState>>,
+    pub(crate) router_subs: HashSet<Arc<Resource>>,
+    pub(crate) peer_subs: HashSet<Arc<Resource>>,
+    pub(crate) router_qabls: HashSet<Arc<Resource>>,
+    pub(crate) peer_qabls: HashSet<Arc<Resource>>,
+    pub(crate) routers_net: Option<Network>,
+    pub(crate) peers_net: Option<Network>,
+    pub(crate) routers_trees_task: Option<JoinHandle<()>>,
+    pub(crate) peers_trees_task: Option<JoinHandle<()>>,
+}
+
+impl Tables {
+    pub fn new(pid: PeerId, whatami: whatami::Type, hlc: Option<HLC>) -> Self {
+        Tables {
+            pid,
             whatami,
-            broker: Broker::new(whatami, hlc),
+            face_counter: 0,
+            hlc,
+            root_res: Resource::root(),
+            faces: HashMap::new(),
+            router_subs: HashSet::new(),
+            peer_subs: HashSet::new(),
+            router_qabls: HashSet::new(),
+            peer_qabls: HashSet::new(),
             routers_net: None,
             peers_net: None,
+            routers_trees_task: None,
+            peers_trees_task: None,
         }
     }
 
-    pub async fn init_link_state(&mut self, pid: PeerId, orchestrator: SessionOrchestrator) {
+    #[doc(hidden)]
+    pub fn _get_root(&self) -> &Arc<Resource> {
+        &self.root_res
+    }
+
+    // pub(crate) unsafe fn split_mut(self) -> (Self, &mut Self) {
+    //     let r = &mut self as *mut Self;
+    //     (self, &mut *r)
+    // }
+
+    pub async fn print(&self) -> String {
+        Resource::print_tree(&self.root_res)
+    }
+
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub(crate) fn get_mapping<'a>(
+        &'a self,
+        face: &'a FaceState,
+        rid: &ZInt,
+    ) -> Option<&'a Arc<Resource>> {
+        match rid {
+            0 => Some(&self.root_res),
+            rid => face.get_mapping(rid),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn get_net(&self, net_type: whatami::Type) -> Option<&Network> {
+        match net_type {
+            whatami::ROUTER => self.routers_net.as_ref(),
+            whatami::PEER => self.peers_net.as_ref(),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn get_face(&self, pid: &PeerId) -> Option<&Arc<FaceState>> {
+        self.faces.values().find(|face| face.pid == *pid)
+    }
+
+    pub async fn open_face(
+        &mut self,
+        pid: PeerId,
+        whatami: WhatAmI,
+        primitives: Arc<dyn Primitives + Send + Sync>,
+    ) -> Weak<FaceState> {
+        unsafe {
+            let fid = self.face_counter;
+            log::debug!("New face {}", fid);
+            self.face_counter += 1;
+            let mut newface = self
+                .faces
+                .entry(fid)
+                .or_insert_with(|| FaceState::new(fid, pid, whatami, primitives.clone()))
+                .clone();
+
+            if whatami == whatami::CLIENT {
+                pubsub_new_client_face(self, &mut newface).await;
+                queries_new_client_face(self, &mut newface).await;
+            }
+            Arc::downgrade(&newface)
+        }
+    }
+
+    pub async fn close_face(&mut self, face: &Weak<FaceState>) {
+        match face.upgrade() {
+            Some(mut face) => unsafe {
+                log::debug!("Close face {}", face.id);
+                finalize_pending_queries(self, &mut face).await;
+
+                let mut face_clone = face.clone();
+                let face = Arc::get_mut_unchecked(&mut face);
+                for mut res in face.remote_mappings.values_mut() {
+                    Arc::get_mut_unchecked(res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
+                }
+                face.remote_mappings.clear();
+                for mut res in face.local_mappings.values_mut() {
+                    Arc::get_mut_unchecked(res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
+                }
+                face.local_mappings.clear();
+                while let Some(mut res) = face.remote_subs.pop() {
+                    Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
+                    undeclare_client_subscription(self, &mut face_clone, &mut res).await;
+                    Resource::clean(&mut res);
+                }
+                while let Some(mut res) = face.remote_qabls.pop() {
+                    Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
+                    Resource::clean(&mut res);
+                }
+                self.faces.remove(&face.id);
+            },
+            None => log::error!("Face already closed!"),
+        }
+    }
+
+    pub(crate) unsafe fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
+        compute_matches_data_routes(self, res);
+    }
+
+    pub(crate) fn schedule_compute_trees(
+        &mut self,
+        tables_ref: Arc<RwLock<Tables>>,
+        net_type: whatami::Type,
+    ) {
+        if (net_type == whatami::ROUTER && self.routers_trees_task.is_none())
+            || (net_type == whatami::PEER && self.peers_trees_task.is_none())
+        {
+            let task = Some(async_std::task::spawn(async move {
+                async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
+                    .await;
+                let mut tables = tables_ref.write().await;
+                let new_childs = match net_type {
+                    whatami::ROUTER => tables.routers_net.as_mut().unwrap().compute_trees().await,
+                    _ => tables.peers_net.as_mut().unwrap().compute_trees().await,
+                };
+                pubsub_tree_change(&mut tables, &new_childs, net_type).await;
+                queries_tree_change(&mut tables, &new_childs, net_type).await;
+                match net_type {
+                    whatami::ROUTER => tables.routers_trees_task = None,
+                    _ => tables.peers_trees_task = None,
+                };
+            }));
+            match net_type {
+                whatami::ROUTER => self.routers_trees_task = task,
+                _ => self.peers_trees_task = task,
+            };
+        }
+    }
+}
+
+pub struct Router {
+    whatami: whatami::Type,
+    pub tables: Arc<RwLock<Tables>>,
+}
+
+impl Router {
+    pub fn new(pid: PeerId, whatami: whatami::Type, hlc: Option<HLC>) -> Self {
+        Router {
+            whatami,
+            tables: Arc::new(RwLock::new(Tables::new(pid, whatami, hlc))),
+        }
+    }
+
+    pub async fn init_link_state(
+        &mut self,
+        orchestrator: SessionOrchestrator,
+        peers_autoconnect: bool,
+    ) {
+        let mut tables = self.tables.write().await;
         if orchestrator.whatami == whatami::ROUTER {
-            self.routers_net = Some(Arc::new(RwLock::new(
+            tables.routers_net = Some(
                 Network::new(
                     "[Routers network]".to_string(),
-                    pid.clone(),
+                    tables.pid.clone(),
                     orchestrator.clone(),
+                    peers_autoconnect,
                 )
                 .await,
-            )));
+            );
         }
-        self.peers_net = Some(Arc::new(RwLock::new(
-            Network::new("[Peers network]".to_string(), pid, orchestrator).await,
-        )));
+        tables.peers_net = Some(
+            Network::new(
+                "[Peers network]".to_string(),
+                tables.pid.clone(),
+                orchestrator,
+                peers_autoconnect,
+            )
+            .await,
+        );
     }
 
     pub async fn new_primitives(
         &self,
         primitives: Arc<dyn Primitives + Send + Sync>,
     ) -> Arc<dyn Primitives + Send + Sync> {
-        self.broker.new_primitives(primitives).await
+        Arc::new(Face {
+            tables: self.tables.clone(),
+            state: {
+                let mut tables = self.tables.write().await;
+                let pid = tables.pid.clone();
+                tables
+                    .open_face(pid, whatami::CLIENT, primitives)
+                    .await
+                    .upgrade()
+                    .unwrap()
+            },
+        })
     }
 }
 
@@ -80,581 +274,68 @@ impl SessionHandler for Router {
         &self,
         session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+        let mut tables = self.tables.write().await;
         let whatami = session.get_whatami()?;
-        if whatami != whatami::CLIENT && self.peers_net.is_some() {
-            let network = match self.whatami {
-                whatami::ROUTER => match whatami {
-                    whatami::ROUTER => self.routers_net.as_ref().unwrap().clone(),
-                    _ => self.peers_net.as_ref().unwrap().clone(),
-                },
-                _ => self.peers_net.as_ref().unwrap().clone(),
-            };
+        if whatami != whatami::CLIENT && tables.peers_net.is_some() {
             let handler = Arc::new(LinkStateInterceptor::new(
                 session.clone(),
-                network.clone(),
+                self.tables.clone(),
                 DeMux::new(Face {
-                    tables: self.broker.tables.clone(),
-                    state: Tables::open_face(
-                        &self.broker.tables,
+                    tables: self.tables.clone(),
+                    state: tables
+                        .open_face(
+                            session.get_pid().unwrap(),
+                            whatami,
+                            Arc::new(Mux::new(Arc::new(session.clone()))),
+                        )
+                        .await
+                        .upgrade()
+                        .unwrap(),
+                }),
+            ));
+
+            match (self.whatami, whatami) {
+                (whatami::ROUTER, whatami::ROUTER) => {
+                    let net = tables.routers_net.as_mut().unwrap();
+                    net.add_link(session.clone()).await;
+                    tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
+                }
+                _ => {
+                    let net = tables.peers_net.as_mut().unwrap();
+                    net.add_link(session.clone()).await;
+                    tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
+                }
+            };
+
+            Ok(handler)
+        } else {
+            Ok(Arc::new(DeMux::new(Face {
+                tables: self.tables.clone(),
+                state: tables
+                    .open_face(
+                        session.get_pid().unwrap(),
                         whatami,
                         Arc::new(Mux::new(Arc::new(session.clone()))),
                     )
                     .await
                     .upgrade()
                     .unwrap(),
-                }),
-            ));
-            network.write().await.add_link(session.clone()).await;
-            Ok(handler)
-        } else {
-            Ok(Arc::new(DeMux::new(Face {
-                tables: self.broker.tables.clone(),
-                state: Tables::open_face(
-                    &self.broker.tables,
-                    whatami,
-                    Arc::new(Mux::new(Arc::new(session.clone()))),
-                )
-                .await
-                .upgrade()
-                .unwrap(),
             })))
         }
     }
 }
 
-struct Node {
-    pid: PeerId,
-    whatami: whatami::Type,
-    locators: Option<Vec<Locator>>,
-    sn: ZInt,
-    links: Vec<PeerId>,
-}
-
-impl std::fmt::Debug for Node {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.pid)
-    }
-}
-
-struct Link {
-    session: Session,
-    mappings: HashMap<ZInt, PeerId>,
-}
-
-impl Link {
-    fn new(session: Session) -> Self {
-        Link {
-            session,
-            mappings: HashMap::new(),
-        }
-    }
-}
-
-pub struct Network {
-    name: String,
-    idx: NodeIndex,
-    links: Vec<Link>,
-    graph: petgraph::stable_graph::StableUnGraph<Node, f32>,
-    orchestrator: SessionOrchestrator,
-}
-
-impl Network {
-    async fn new(name: String, pid: PeerId, orchestrator: SessionOrchestrator) -> Self {
-        let mut graph = petgraph::stable_graph::StableGraph::default();
-        log::debug!("{} Add node (self) {}", name, pid);
-        let idx = graph.add_node(Node {
-            pid,
-            whatami: orchestrator.whatami,
-            locators: None,
-            sn: 1,
-            links: vec![],
-        });
-        Network {
-            name,
-            idx,
-            links: vec![],
-            graph,
-            orchestrator,
-        }
-    }
-
-    pub fn dot(&self) -> String {
-        std::format!(
-            "{:?}",
-            petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
-        )
-    }
-
-    fn get_idx(&self, pid: &PeerId) -> Option<NodeIndex> {
-        self.graph
-            .node_indices()
-            .find(|idx| self.graph[*idx].pid == *pid)
-    }
-
-    fn get_link(&self, pid: &PeerId) -> Option<&Link> {
-        self.links
-            .iter()
-            .find(|link| link.session.get_pid().unwrap() == *pid)
-    }
-
-    fn get_link_mut(&mut self, pid: &PeerId) -> Option<&mut Link> {
-        self.links
-            .iter_mut()
-            .find(|link| link.session.get_pid().unwrap() == *pid)
-    }
-
-    async fn make_link_state(&self, idx: NodeIndex, details: bool) -> LinkState {
-        let links = self.graph[idx]
-            .links
-            .iter()
-            .filter_map(|pid| {
-                if let Some(idx2) = self.get_idx(pid) {
-                    Some(idx2.index().try_into().unwrap())
-                } else {
-                    log::error!(
-                        "{} Internal error building link state: cannot get index of {}",
-                        self.name,
-                        pid
-                    );
-                    None
-                }
-            })
-            .collect();
-        LinkState {
-            psid: idx.index().try_into().unwrap(),
-            sn: self.graph[idx].sn,
-            pid: if details {
-                Some(self.graph[idx].pid.clone())
-            } else {
-                None
-            },
-            whatami: None,
-            locators: if idx == self.idx {
-                Some(self.orchestrator.manager.get_locators().await)
-            } else {
-                self.graph[idx].locators.clone()
-            },
-            links,
-        }
-    }
-
-    async fn make_msg(&self, idxs: Vec<(NodeIndex, bool)>) -> ZenohMessage {
-        let mut list = vec![];
-        for (idx, details) in idxs {
-            list.push(self.make_link_state(idx, details).await);
-        }
-        ZenohMessage::make_link_state_list(list, None)
-    }
-
-    async fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, session: &Session) {
-        let msg = self.make_msg(idxs).await;
-        log::trace!(
-            "{} Send to {} {:?}",
-            self.name,
-            session.get_pid().unwrap(),
-            msg
-        );
-        if let Err(e) = session.handle_message(msg).await {
-            log::error!("{} Error sending LinkStateList: {}", self.name, e);
-        }
-    }
-
-    async fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut predicate: P)
-    where
-        P: FnMut(&Link) -> bool,
-    {
-        let msg = self.make_msg(idxs).await;
-        for link in &self.links {
-            if predicate(link) {
-                log::trace!(
-                    "{} Send to {} {:?}",
-                    self.name,
-                    link.session.get_pid().unwrap(),
-                    msg
-                );
-                if let Err(e) = link.session.handle_message(msg.clone()).await {
-                    log::error!("{} Error sending LinkStateList: {}", self.name, e);
-                }
-            }
-        }
-    }
-
-    async fn link_states(&mut self, link_states: Vec<LinkState>, src: PeerId) {
-        log::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
-
-        let src_link = match self.get_link_mut(&src) {
-            Some(link) => link,
-            None => {
-                log::error!(
-                    "{} Received LinkStateList from unknown link {}",
-                    self.name,
-                    src
-                );
-                return;
-            }
-        };
-
-        // register psid<->pid mappings & apply mapping to nodes
-        let link_states = link_states
-            .into_iter()
-            .filter_map(|link_state| {
-                if let Some(pid) = link_state.pid {
-                    src_link.mappings.insert(link_state.psid, pid.clone());
-                    Some((
-                        pid,
-                        link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
-                        link_state.locators,
-                        link_state.sn,
-                        link_state.links,
-                    ))
-                } else {
-                    match src_link.mappings.get(&link_state.psid) {
-                        Some(pid) => Some((
-                            pid.clone(),
-                            link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
-                            link_state.locators,
-                            link_state.sn,
-                            link_state.links,
-                        )),
-                        None => {
-                            log::error!(
-                                "Received LinkState from {} with unknown node mapping {}",
-                                src,
-                                link_state.psid
-                            );
-                            None
-                        }
-                    }
-                }
-            })
-            .collect::<Vec<(PeerId, whatami::Type, Option<Vec<Locator>>, ZInt, Vec<ZInt>)>>();
-
-        // apply psid<->pid mapping to links
-        let src_link = self.get_link(&src).unwrap();
-        let link_states = link_states
-            .into_iter()
-            .map(|(pid, wai, locs, sn, links)| {
-                let links: Vec<PeerId> = links
-                    .iter()
-                    .filter_map(|l| {
-                        if let Some(pid) = src_link.mappings.get(&l) {
-                            Some(pid.clone())
-                        } else {
-                            log::error!(
-                                "{} Received LinkState from {} with unknown link mapping {}",
-                                self.name,
-                                src,
-                                l
-                            );
-                            None
-                        }
-                    })
-                    .collect();
-                (pid, wai, locs, sn, links)
-            })
-            .collect::<Vec<(
-                PeerId,
-                whatami::Type,
-                Option<Vec<Locator>>,
-                ZInt,
-                Vec<PeerId>,
-            )>>();
-
-        // log::trace!(
-        //     "{} Received from {} mapped: {:?}",
-        //     self.name,
-        //     src,
-        //     link_states
-        // );
-        for link_state in &link_states {
-            log::trace!(
-                "{} Received from {} mapped: {:?}",
-                self.name,
-                src,
-                link_state
-            );
-        }
-
-        // Add nodes to graph & filter out up to date states
-        let mut link_states = link_states
-            .into_iter()
-            .filter_map(
-                |(pid, whatami, locators, sn, links)| match self.get_idx(&pid) {
-                    Some(idx) => {
-                        let node = &mut self.graph[idx];
-                        let oldsn = node.sn;
-                        if oldsn < sn {
-                            node.sn = sn;
-                            node.links = links.clone();
-                            if locators.is_some() {
-                                node.locators = locators;
-                            }
-                            if oldsn == 0 {
-                                Some((links, idx, true))
-                            } else {
-                                Some((links, idx, false))
-                            }
-                        } else {
-                            None
-                        }
-                    }
-                    None => {
-                        let node = Node {
-                            pid: pid.clone(),
-                            whatami,
-                            locators,
-                            sn,
-                            links: links.clone(),
-                        };
-                        log::debug!("{} Add node (state) {}", self.name, pid);
-                        let idx = self.graph.add_node(node);
-                        Some((links, idx, true))
-                    }
-                },
-            )
-            .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
-
-        // Add/remove edges from graph
-        let mut reintroduced_nodes = vec![];
-        for (links, idx1, _) in &link_states {
-            for link in links {
-                if let Some(idx2) = self.get_idx(&link) {
-                    if self.graph[idx2].links.contains(&self.graph[*idx1].pid) {
-                        log::trace!(
-                            "{} Update edge (state) {} {}",
-                            self.name,
-                            self.graph[*idx1].pid,
-                            self.graph[idx2].pid
-                        );
-                        self.graph.update_edge(*idx1, idx2, 1.0);
-                    }
-                } else {
-                    let node = Node {
-                        pid: link.clone(),
-                        whatami: 0,
-                        locators: None,
-                        sn: 0,
-                        links: vec![],
-                    };
-                    log::debug!("{} Add node (reintroduced) {}", self.name, link.clone());
-                    let idx = self.graph.add_node(node);
-                    reintroduced_nodes.push((vec![], idx, true));
-                }
-            }
-            let mut neighbors = self.graph.neighbors_undirected(*idx1).detach();
-            while let Some((eidx, idx2)) = neighbors.next(&self.graph) {
-                if !links.contains(&self.graph[idx2].pid) {
-                    log::trace!(
-                        "{} Remove edge (state) {} {}",
-                        self.name,
-                        self.graph[*idx1].pid,
-                        self.graph[idx2].pid
-                    );
-                    self.graph.remove_edge(eidx);
-                }
-            }
-        }
-        link_states.extend(reintroduced_nodes);
-
-        let removed = self.remove_detached_nodes();
-        let link_states = link_states
-            .into_iter()
-            .filter(|ls| !removed.contains(&ls.1))
-            .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
-
-        if self.orchestrator.whatami == whatami::PEER {
-            // Connect discovered peers
-            for (_, idx, _) in &link_states {
-                let node = &self.graph[*idx];
-                if node.whatami == whatami::PEER || node.whatami == whatami::ROUTER {
-                    if let Some(locators) = &node.locators {
-                        let orchestrator = self.orchestrator.clone();
-                        let pid = node.pid.clone();
-                        let locators = locators.clone();
-                        async_std::task::spawn(async move {
-                            // random backoff
-                            async_std::task::sleep(std::time::Duration::from_millis(
-                                rand::random::<u64>() % 100,
-                            ))
-                            .await;
-                            orchestrator.connect_peer(&pid, &locators).await;
-                        });
-                    }
-                }
-            }
-        }
-
-        // Propagate link states
-        // Note: we need to send all states at once for each face
-        // to avoid premature node deletion on the other side
-        #[allow(clippy::type_complexity)]
-        if !link_states.is_empty() {
-            let (new_idxs, updated_idxs): (
-                Vec<(Vec<PeerId>, NodeIndex, bool)>,
-                Vec<(Vec<PeerId>, NodeIndex, bool)>,
-            ) = link_states.into_iter().partition(|(_, _, new)| *new);
-            let new_idxs = new_idxs
-                .into_iter()
-                .map(|(_, idx1, _new_node)| (idx1, true))
-                .collect::<Vec<(NodeIndex, bool)>>();
-            for link in &self.links {
-                let link_pid = link.session.get_pid().unwrap();
-                if link_pid != src {
-                    let updated_idxs: Vec<(NodeIndex, bool)> = updated_idxs
-                        .clone()
-                        .into_iter()
-                        .filter_map(|(_, idx1, _)| {
-                            if link_pid != self.graph[idx1].pid {
-                                Some((idx1, false))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    if !new_idxs.is_empty() || !updated_idxs.is_empty() {
-                        self.send_on_link(
-                            [&new_idxs[..], &updated_idxs[..]].concat(),
-                            &link.session,
-                        )
-                        .await;
-                    }
-                } else if !new_idxs.is_empty() {
-                    self.send_on_link(new_idxs.clone(), &link.session).await;
-                }
-            }
-        }
-    }
-
-    async fn add_link(&mut self, session: Session) {
-        self.links.push(Link::new(session.clone()));
-
-        let pid = session.get_pid().unwrap();
-        let whatami = session.get_whatami().unwrap();
-        let (idx, new) = match self.get_idx(&pid) {
-            Some(idx) => (idx, false),
-            None => {
-                log::debug!("{} Add node (link) {}", self.name, pid);
-                (
-                    self.graph.add_node(Node {
-                        pid: pid.clone(),
-                        whatami,
-                        locators: None,
-                        sn: 0,
-                        links: vec![],
-                    }),
-                    true,
-                )
-            }
-        };
-        if self.graph[idx].links.contains(&self.graph[self.idx].pid) {
-            log::trace!("Update edge (link) {} {}", self.graph[self.idx].pid, pid);
-            self.graph.update_edge(self.idx, idx, 1.0);
-        }
-        self.graph[self.idx].links.push(pid.clone());
-        self.graph[self.idx].sn += 1;
-
-        if new {
-            self.send_on_links(vec![(idx, true), (self.idx, false)], |link| {
-                link.session.get_pid().unwrap() != pid
-            })
-            .await;
-        } else {
-            self.send_on_links(vec![(self.idx, false)], |link| {
-                link.session.get_pid().unwrap() != pid
-            })
-            .await;
-        }
-
-        let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
-        self.send_on_link(idxs, &session).await;
-    }
-
-    async fn remove_link(&mut self, session: &Session) {
-        let pid = session.get_pid().unwrap();
-        log::trace!("{} remove_link {}", self.name, pid);
-        self.links
-            .retain(|link| link.session.get_pid().unwrap() != pid);
-        self.graph[self.idx].links.retain(|link| *link != pid);
-
-        let idx = self.get_idx(&pid).unwrap();
-        if let Some(edge) = self.graph.find_edge_undirected(self.idx, idx) {
-            self.graph.remove_edge(edge.0);
-        }
-        self.remove_detached_nodes();
-
-        self.graph[self.idx].sn += 1;
-
-        let links = self
-            .links
-            .iter()
-            .map(|link| {
-                self.get_idx(&link.session.get_pid().unwrap())
-                    .unwrap()
-                    .index()
-                    .try_into()
-                    .unwrap()
-            })
-            .collect::<Vec<ZInt>>();
-
-        let msg = ZenohMessage::make_link_state_list(
-            vec![LinkState {
-                psid: self.idx.index().try_into().unwrap(),
-                sn: self.graph[self.idx].sn,
-                pid: None,
-                whatami: None,
-                locators: Some(self.orchestrator.manager.get_locators().await),
-                links,
-            }],
-            None,
-        );
-
-        for link in &self.links {
-            if let Err(e) = link.session.handle_message(msg.clone()).await {
-                log::error!("{} Error sending LinkStateList: {}", self.name, e);
-            }
-        }
-    }
-
-    fn remove_detached_nodes(&mut self) -> Vec<NodeIndex> {
-        let mut dfs_stack = vec![self.idx];
-        let mut visit_map = self.graph.visit_map();
-        while let Some(node) = dfs_stack.pop() {
-            if visit_map.visit(node) {
-                for succpid in &self.graph[node].links {
-                    if let Some(succ) = self.get_idx(succpid) {
-                        if !visit_map.is_visited(&succ) {
-                            dfs_stack.push(succ);
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut removed = vec![];
-        self.graph.retain_nodes(|graph, idx| {
-            let pid = &graph[idx].pid;
-            let retain = visit_map.is_visited(&idx);
-            if !retain {
-                log::debug!("Remove node {}", pid);
-                removed.push(idx);
-            }
-            retain
-        });
-        removed
-    }
-}
-
 pub struct LinkStateInterceptor {
     session: Session,
-    network: Arc<RwLock<Network>>,
+    tables: Arc<RwLock<Tables>>,
     demux: DeMux<Face>,
 }
 
 impl LinkStateInterceptor {
-    fn new(session: Session, network: Arc<RwLock<Network>>, demux: DeMux<Face>) -> Self {
+    fn new(session: Session, tables: Arc<RwLock<Tables>>, demux: DeMux<Face>) -> Self {
         LinkStateInterceptor {
             session,
-            network,
+            tables,
             demux,
         }
     }
@@ -666,11 +347,41 @@ impl SessionEventHandler for LinkStateInterceptor {
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
-                self.network
-                    .write()
-                    .await
-                    .link_states(list.link_states, pid)
-                    .await;
+                let mut tables = self.tables.write().await;
+                // let tables2 = &mut *(&tables as *mut Tables);
+                let whatami = self.session.get_whatami()?;
+                match (tables.whatami, whatami) {
+                    (whatami::ROUTER, whatami::ROUTER) => {
+                        for (_, removed_node) in tables
+                            .routers_net
+                            .as_mut()
+                            .unwrap()
+                            .link_states(list.link_states, pid)
+                            .await
+                        {
+                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER)
+                                .await;
+                            queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER)
+                                .await;
+                        }
+                        tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
+                    }
+                    _ => {
+                        for (_, removed_node) in tables
+                            .peers_net
+                            .as_mut()
+                            .unwrap()
+                            .link_states(list.link_states, pid)
+                            .await
+                        {
+                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
+                            queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER)
+                                .await;
+                        }
+                        tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
+                    }
+                };
+
                 Ok(())
             }
             _ => self.demux.handle_message(msg).await,
@@ -683,7 +394,39 @@ impl SessionEventHandler for LinkStateInterceptor {
 
     async fn closing(&self) {
         self.demux.closing().await;
-        self.network.write().await.remove_link(&self.session).await;
+        sleep(Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
+        let mut tables = self.tables.write().await;
+        match self.session.get_whatami() {
+            Ok(whatami) => match (tables.whatami, whatami) {
+                (whatami::ROUTER, whatami::ROUTER) => {
+                    for (_, removed_node) in tables
+                        .routers_net
+                        .as_mut()
+                        .unwrap()
+                        .remove_link(&self.session)
+                        .await
+                    {
+                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
+                        queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
+                    }
+                    tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
+                }
+                _ => {
+                    for (_, removed_node) in tables
+                        .peers_net
+                        .as_mut()
+                        .unwrap()
+                        .remove_link(&self.session)
+                        .await
+                    {
+                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
+                        queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
+                    }
+                    tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
+                }
+            },
+            Err(_) => log::error!("Unable to get whatami closing session!"),
+        };
     }
 
     async fn closed(&self) {}

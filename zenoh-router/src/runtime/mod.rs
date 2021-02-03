@@ -76,7 +76,7 @@ impl Runtime {
         } else {
             None
         };
-        let mut router = Arc::new(Router::new(whatami, hlc));
+        let mut router = Arc::new(Router::new(pid.clone(), whatami, hlc));
 
         let sm_config = SessionManagerConfig {
             version,
@@ -130,6 +130,10 @@ impl Runtime {
 
         let session_manager = SessionManager::new(sm_config, Some(sm_opt_config));
         let mut orchestrator = SessionOrchestrator::new(session_manager, whatami);
+        let peers_autuconnect = config
+            .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
         if config
             .get_or(&ZN_LINK_STATE_KEY, ZN_LINK_STATE_DEFAULT)
             .to_lowercase()
@@ -137,11 +141,11 @@ impl Runtime {
         {
             unsafe {
                 Arc::get_mut_unchecked(&mut router)
-                    .init_link_state(pid.clone(), orchestrator.clone())
+                    .init_link_state(orchestrator.clone(), peers_autuconnect)
                     .await;
             }
         }
-        match orchestrator.init(config).await {
+        match orchestrator.init(config, peers_autuconnect).await {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
                     pid,
@@ -279,6 +283,16 @@ pub mod config {
     pub const ZN_USER_PASSWORD_DICTIONARY_KEY: u64 = 0x4C;
     pub const ZN_USER_PASSWORD_DICTIONARY_STR: &str = "user_password_dictionary";
 
+    /// Indicates if peers should connect to each other
+    /// when they discover each other (through multicast
+    /// or link_state protocol).
+    /// String key : `"peers_autoconnect"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"true"`.
+    pub const ZN_PEERS_AUTOCONNECT_KEY: u64 = 0x4D;
+    pub const ZN_PEERS_AUTOCONNECT_STR: &str = "peers_autoconnect";
+    pub const ZN_PEERS_AUTOCONNECT_DEFAULT: &str = "true";
+
     pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
         match m {
             "peer" => Ok(whatami::PEER),
@@ -306,6 +320,7 @@ impl KeyTranscoder for RuntimeTranscoder {
             ZN_ADD_TIMESTAMP_STR => Some(ZN_ADD_TIMESTAMP_KEY),
             ZN_LINK_STATE_STR => Some(ZN_LINK_STATE_KEY),
             ZN_USER_PASSWORD_DICTIONARY_STR => Some(ZN_USER_PASSWORD_DICTIONARY_KEY),
+            ZN_PEERS_AUTOCONNECT_STR => Some(ZN_PEERS_AUTOCONNECT_KEY),
             _ => None,
         }
     }
@@ -325,6 +340,7 @@ impl KeyTranscoder for RuntimeTranscoder {
             ZN_ADD_TIMESTAMP_KEY => Some(ZN_ADD_TIMESTAMP_STR.to_string()),
             ZN_LINK_STATE_KEY => Some(ZN_LINK_STATE_STR.to_string()),
             ZN_USER_PASSWORD_DICTIONARY_KEY => Some(ZN_USER_PASSWORD_DICTIONARY_STR.to_string()),
+            ZN_PEERS_AUTOCONNECT_KEY => Some(ZN_PEERS_AUTOCONNECT_STR.to_string()),
             _ => None,
         }
     }

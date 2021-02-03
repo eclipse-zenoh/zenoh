@@ -227,6 +227,7 @@ async fn run(
     let key = ResKey::RName("/test".to_string());
     let payload = RBuf::from(vec![0u8; MSG_SIZE]);
     let data_info = None;
+    let routing_context = None;
     let reply_context = None;
     let attachment = None;
     let message = ZenohMessage::make_data(
@@ -235,6 +236,7 @@ async fn run(
         reliability,
         congestion_control,
         data_info,
+        routing_context,
         reply_context,
         attachment,
     );

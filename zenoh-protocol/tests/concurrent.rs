@@ -208,6 +208,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;
         let data_info = None;
+        let routing_context = None;
         let reply_context = None;
         let attachment = None;
         let message = ZenohMessage::make_data(
@@ -216,6 +217,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             reliability,
             congestion_control,
             data_info,
+            routing_context,
             reply_context,
             attachment,
         );
@@ -306,6 +308,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;
         let data_info = None;
+        let routing_context = None;
         let reply_context = None;
         let attachment = None;
         let message = ZenohMessage::make_data(
@@ -314,6 +317,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             reliability,
             congestion_control,
             data_info,
+            routing_context,
             reply_context,
             attachment,
         );

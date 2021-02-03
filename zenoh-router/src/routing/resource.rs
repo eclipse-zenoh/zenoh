@@ -11,14 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::routing::broker::Tables;
 use crate::routing::face::FaceState;
+use crate::routing::router::Tables;
 use async_std::sync::{Arc, Weak};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use zenoh_protocol::core::rname;
-use zenoh_protocol::core::{SubInfo, ZInt};
+use zenoh_protocol::core::{PeerId, ResKey, SubInfo, ZInt};
 use zenoh_protocol::io::RBuf;
-use zenoh_protocol::proto::DataInfo;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
+
+pub(super) type Route = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
+pub(super) type PullCaches = Vec<Arc<Context>>;
 
 pub(super) struct Context {
     pub(super) face: Arc<FaceState>,
@@ -35,9 +39,32 @@ pub struct Resource {
     pub(super) suffix: String,
     pub(super) nonwild_prefix: Option<(Arc<Resource>, String)>,
     pub(super) childs: HashMap<String, Arc<Resource>>,
+    pub(super) router_subs: HashSet<PeerId>,
+    pub(super) peer_subs: HashSet<PeerId>,
+    pub(super) router_qabls: HashSet<PeerId>,
+    pub(super) peer_qabls: HashSet<PeerId>,
     pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) route: HashMap<usize, (Arc<FaceState>, ZInt, String)>,
+    pub(super) matching_pulls: PullCaches,
+    pub(super) routers_data_routes: Vec<Route>,
+    pub(super) peers_data_routes: Vec<Route>,
+    pub(super) client_data_route: Option<Route>,
+    pub(super) routers_query_routes: Vec<Route>,
+    pub(super) peers_query_routes: Vec<Route>,
+    pub(super) client_query_route: Option<Route>,
+}
+
+impl PartialEq for Resource {
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name()
+    }
+}
+impl Eq for Resource {}
+
+impl Hash for Resource {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name().hash(state);
+    }
 }
 
 impl Resource {
@@ -58,9 +85,19 @@ impl Resource {
             suffix: String::from(suffix),
             nonwild_prefix,
             childs: HashMap::new(),
+            router_subs: HashSet::new(),
+            peer_subs: HashSet::new(),
+            router_qabls: HashSet::new(),
+            peer_qabls: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
-            route: HashMap::new(),
+            matching_pulls: Vec::new(),
+            routers_data_routes: Vec::new(),
+            peers_data_routes: Vec::new(),
+            client_data_route: None,
+            routers_query_routes: Vec::new(),
+            peers_query_routes: Vec::new(),
+            client_query_route: None,
         }
     }
 
@@ -94,9 +131,19 @@ impl Resource {
             suffix: String::from(""),
             nonwild_prefix: None,
             childs: HashMap::new(),
+            router_subs: HashSet::new(),
+            peer_subs: HashSet::new(),
+            router_qabls: HashSet::new(),
+            peer_qabls: HashSet::new(),
             contexts: HashMap::new(),
             matches: Vec::new(),
-            route: HashMap::new(),
+            matching_pulls: Vec::new(),
+            routers_data_routes: Vec::new(),
+            peers_data_routes: Vec::new(),
+            client_data_route: None,
+            routers_query_routes: Vec::new(),
+            peers_query_routes: Vec::new(),
+            client_query_route: None,
         })
     }
 
@@ -239,13 +286,52 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key(prefix: &Arc<Resource>, suffix: &str, sid: usize) -> (ZInt, String) {
+    pub async fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey {
+        let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
+        match nonwild_prefix {
+            Some(mut nonwild_prefix) => unsafe {
+                let mut ctx = Arc::get_mut_unchecked(&mut nonwild_prefix)
+                    .contexts
+                    .entry(face.id)
+                    .or_insert_with(|| {
+                        Arc::new(Context {
+                            face: face.clone(),
+                            local_rid: None,
+                            remote_rid: None,
+                            subs: None,
+                            qabl: false,
+                            last_values: HashMap::new(),
+                        })
+                    });
+
+                let rid = match ctx.local_rid.or(ctx.remote_rid) {
+                    Some(rid) => rid,
+                    None => {
+                        let rid = face.get_next_local_id();
+                        Arc::get_mut_unchecked(&mut ctx).local_rid = Some(rid);
+                        Arc::get_mut_unchecked(face)
+                            .local_mappings
+                            .insert(rid, nonwild_prefix.clone());
+                        face.primitives
+                            .resource(rid, &nonwild_prefix.name().into())
+                            .await;
+                        rid
+                    }
+                };
+                (rid, wildsuffix).into()
+            },
+            None => wildsuffix.into(),
+        }
+    }
+
+    #[inline]
+    pub fn get_best_key(prefix: &Arc<Resource>, suffix: &str, sid: usize) -> ResKey {
         fn get_best_key_(
             prefix: &Arc<Resource>,
             suffix: &str,
             sid: usize,
             checkchilds: bool,
-        ) -> (ZInt, String) {
+        ) -> ResKey {
             if checkchilds && !suffix.is_empty() {
                 let (chunk, rest) = Resource::fst_chunk(suffix);
                 if let Some(child) = prefix.childs.get(chunk) {
@@ -254,16 +340,16 @@ impl Resource {
             }
             if let Some(ctx) = prefix.contexts.get(&sid) {
                 if let Some(rid) = ctx.local_rid {
-                    return (rid, suffix.to_string());
+                    return (rid, suffix).into();
                 } else if let Some(rid) = ctx.remote_rid {
-                    return (rid, suffix.to_string());
+                    return (rid, suffix).into();
                 }
             }
             match &prefix.parent {
                 Some(parent) => {
                     get_best_key_(&parent, &[&prefix.suffix, suffix].concat(), sid, false)
                 }
-                None => (0, suffix.to_string()),
+                None => (0, suffix).into(),
             }
         }
         get_best_key_(prefix, suffix, sid, true)
@@ -392,7 +478,7 @@ pub async fn declare_resource(
                 Arc::get_mut_unchecked(face)
                     .remote_mappings
                     .insert(rid, res.clone());
-                Tables::build_matches_direct_tables(&mut res);
+                tables.compute_matches_routes(&mut res);
             },
         },
         None => log::error!("Declare resource with unknown prefix {}!", prefixid),

@@ -68,6 +68,7 @@ fn bench_make_data(payload: RBuf) {
         None,
         None,
         None,
+        None,
     );
 }
 
@@ -137,6 +138,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         payload.clone(),
         Reliability::BestEffort,
         CongestionControl::Drop,
+        None,
         None,
         None,
         None,

@@ -388,6 +388,7 @@ mod tests {
                     CongestionControl::Block
                 };
                 let data_info = None;
+                let routing_context = None;
                 let reply_context = None;
                 let attachment = None;
                 let msg = ZenohMessage::make_data(
@@ -396,6 +397,7 @@ mod tests {
                     reliability,
                     congestion_control,
                     data_info,
+                    routing_context,
                     reply_context,
                     attachment,
                 );
@@ -457,6 +459,7 @@ mod tests {
                     let key = ResKey::RName("test".to_string());
                     let payload = RBuf::from(vec![0u8; payload_size]);
                     let data_info = None;
+                    let routing_context = None;
                     let reply_context = None;
                     let attachment = None;
                     let msg_in = ZenohMessage::make_data(
@@ -465,6 +468,7 @@ mod tests {
                         *reliability,
                         *congestion_control,
                         data_info,
+                        routing_context,
                         reply_context,
                         attachment,
                     );

@@ -50,10 +50,14 @@ impl SessionOrchestrator {
         SessionOrchestrator { whatami, manager }
     }
 
-    pub async fn init(&mut self, config: RuntimeProperties) -> ZResult<()> {
+    pub async fn init(
+        &mut self,
+        config: RuntimeProperties,
+        peers_autoconnect: bool,
+    ) -> ZResult<()> {
         match self.whatami {
             whatami::CLIENT => self.init_client(config).await,
-            whatami::PEER => self.init_peer(config).await,
+            whatami::PEER => self.init_peer(config, peers_autoconnect).await,
             whatami::ROUTER => self.init_broker(config).await,
             _ => {
                 log::error!("Unknown mode");
@@ -117,7 +121,11 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn init_peer(&mut self, config: RuntimeProperties) -> ZResult<()> {
+    pub async fn init_peer(
+        &mut self,
+        config: RuntimeProperties,
+        peers_autoconnect: bool,
+    ) -> ZResult<()> {
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, PEER_DEFAULT_LISTENER)
             .split(',')
@@ -163,7 +171,15 @@ impl SessionOrchestrator {
             async_std::task::spawn(async move {
                 async_std::prelude::FutureExt::race(
                     this.responder(&mcast_socket, &ucast_socket),
-                    this.connect_all(&ucast_socket, whatami::PEER | whatami::ROUTER, &addr),
+                    this.connect_all(
+                        &ucast_socket,
+                        if peers_autoconnect {
+                            whatami::PEER | whatami::ROUTER
+                        } else {
+                            whatami::ROUTER
+                        },
+                        &addr,
+                    ),
                 )
                 .await;
             });

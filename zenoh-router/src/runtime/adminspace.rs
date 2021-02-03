@@ -26,20 +26,25 @@ use zenoh_protocol::{
         Reliability, ResKey, SubInfo, ZInt,
     },
     io::RBuf,
-    proto::{encoding, DataInfo},
+    proto::{encoding, DataInfo, RoutingContext},
     session::Primitives,
 };
 
-type Handler = Box<dyn Fn(&AdminSpace) -> BoxFuture<'_, (RBuf, ZInt)> + Send + Sync>;
-
-pub struct AdminSpace {
+pub struct AdminContext {
     runtime: Runtime,
     plugins_mgr: PluginsMgr,
-    primitives: Mutex<Option<Arc<dyn Primitives + Send + Sync>>>,
-    mappings: Mutex<HashMap<ZInt, String>>,
     pid_str: String,
     version: String,
-    handlers: HashMap<String, Handler>,
+}
+
+type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (RBuf, ZInt)> + Send + Sync>;
+
+pub struct AdminSpace {
+    pid: PeerId,
+    primitives: Mutex<Option<Arc<dyn Primitives + Send + Sync>>>,
+    mappings: Mutex<HashMap<ZInt, String>>,
+    handlers: HashMap<String, Arc<Handler>>,
+    context: Arc<AdminContext>,
 }
 
 impl AdminSpace {
@@ -47,28 +52,31 @@ impl AdminSpace {
         let pid_str = runtime.get_pid_str().await;
         let root_path = format!("/@/router/{}", pid_str);
 
-        let mut handlers: HashMap<String, Handler> = HashMap::new();
+        let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
         handlers.insert(
             root_path.clone(),
-            Box::new(|admin| AdminSpace::router_data(admin).boxed()),
+            Arc::new(Box::new(|context| router_data(context).boxed())),
         );
         handlers.insert(
             [&root_path, "/linkstate/routers"].concat(),
-            Box::new(|admin| AdminSpace::linkstate_routers_data(admin).boxed()),
+            Arc::new(Box::new(|context| linkstate_routers_data(context).boxed())),
         );
         handlers.insert(
             [&root_path, "/linkstate/peers"].concat(),
-            Box::new(|admin| AdminSpace::linkstate_peers_data(admin).boxed()),
+            Arc::new(Box::new(|context| linkstate_peers_data(context).boxed())),
         );
-
-        let admin = Arc::new(AdminSpace {
+        let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
             plugins_mgr,
-            primitives: Mutex::new(None),
-            mappings: Mutex::new(HashMap::new()),
             pid_str,
             version,
+        });
+        let admin = Arc::new(AdminSpace {
+            pid: runtime.read().await.pid.clone(),
+            primitives: Mutex::new(None),
+            mappings: Mutex::new(HashMap::new()),
             handlers,
+            context,
         });
 
         let primitives = runtime
@@ -80,7 +88,7 @@ impl AdminSpace {
         admin.primitives.lock().await.replace(primitives.clone());
 
         primitives
-            .queryable(&[&root_path, "/**"].concat().into())
+            .queryable(&[&root_path, "/**"].concat().into(), None)
             .await;
     }
 
@@ -95,90 +103,6 @@ impl AdminSpace {
                 .map(|prefix| format!("{}{}", prefix, suffix)),
             ResKey::RName(name) => Some(name.clone()),
         }
-    }
-
-    pub async fn router_data(&self) -> (RBuf, ZInt) {
-        let session_mgr = &self.runtime.read().await.orchestrator.manager;
-
-        // plugins info
-        let plugins: Vec<serde_json::Value> = self
-            .plugins_mgr
-            .plugins
-            .iter()
-            .map(|plugin| {
-                json!({
-                    "name": plugin.name,
-                    "path": plugin.path
-                })
-            })
-            .collect();
-
-        // locators info
-        let locators: Vec<serde_json::Value> = session_mgr
-            .get_locators()
-            .await
-            .iter()
-            .map(|locator| json!(locator.to_string()))
-            .collect();
-
-        // sessions info
-        let sessions = future::join_all(session_mgr.get_sessions().await.iter().map(async move |session|
-            json!({
-                "peer": session.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
-                "links": session.get_links().await.map_or_else(
-                    |_| vec!(),
-                    |links| links.iter().map(|link| link.get_dst().to_string()).collect()
-                )
-            })
-        )).await;
-
-        let json = json!({
-            "pid": self.pid_str,
-            "version": self.version,
-            "locators": locators,
-            "sessions": sessions,
-            "plugins": plugins,
-        });
-        log::trace!("AdminSpace router_data: {:?}", json);
-        (RBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
-    }
-
-    pub async fn linkstate_routers_data(&self) -> (RBuf, ZInt) {
-        (
-            RBuf::from(
-                self.runtime
-                    .read()
-                    .await
-                    .router
-                    .routers_net
-                    .as_ref()
-                    .unwrap()
-                    .read()
-                    .await
-                    .dot()
-                    .as_bytes(),
-            ),
-            encoding::TEXT_PLAIN,
-        )
-    }
-
-    pub async fn linkstate_peers_data(&self) -> (RBuf, ZInt) {
-        (
-            RBuf::from(
-                self.runtime
-                    .read()
-                    .await
-                    .router
-                    .peers_net
-                    .as_ref()
-                    .unwrap()
-                    .read()
-                    .await
-                    .dot()
-                    .as_bytes(),
-            ),
-            encoding::TEXT_PLAIN,
-        )
     }
 }
 
@@ -198,27 +122,32 @@ impl Primitives for AdminSpace {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    async fn publisher(&self, _reskey: &ResKey) {
+    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Publisher {:?}", _reskey);
     }
 
-    async fn forget_publisher(&self, _reskey: &ResKey) {
+    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    async fn subscriber(&self, _reskey: &ResKey, _sub_info: &SubInfo) {
+    async fn subscriber(
+        &self,
+        _reskey: &ResKey,
+        _sub_info: &SubInfo,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    async fn forget_subscriber(&self, _reskey: &ResKey) {
+    async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    async fn queryable(&self, _reskey: &ResKey) {
+    async fn queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    async fn forget_queryable(&self, _reskey: &ResKey) {
+    async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
@@ -229,6 +158,7 @@ impl Primitives for AdminSpace {
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
+        _routing_context: Option<RoutingContext>,
     ) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?} {:?}",
@@ -247,6 +177,7 @@ impl Primitives for AdminSpace {
         qid: ZInt,
         target: QueryTarget,
         _consolidation: QueryConsolidation,
+        _routing_context: Option<RoutingContext>,
     ) {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
@@ -255,42 +186,47 @@ impl Primitives for AdminSpace {
             target,
             _consolidation
         );
-
+        let pid = self.pid.clone();
+        let context = self.context.clone();
         let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
-        let replier_id = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
 
-        let mut replies = vec![];
+        let mut matching_handlers = vec![];
         match self.reskey_to_string(reskey).await {
             Some(name) => {
                 for (path, handler) in &self.handlers {
                     if rname::intersect(&name, path) {
-                        let (payload, encoding) = handler(self).await;
-                        replies.push((
-                            ResKey::RName(path.clone()),
-                            payload,
-                            Some(DataInfo {
-                                source_id: None,
-                                source_sn: None,
-                                first_router_id: None,
-                                first_router_sn: None,
-                                timestamp: None,
-                                kind: None,
-                                encoding: Some(encoding),
-                            }),
-                        ));
+                        matching_handlers.push((path.clone(), handler.clone()));
                     }
                 }
             }
             None => error!("Unknown ResKey!!"),
-        }
+        };
 
         // router is not re-entrant
         task::spawn(async move {
-            for (reskey, payload, data_info) in replies {
+            for (path, handler) in matching_handlers {
+                let (payload, encoding) = handler(&context).await;
+                let data_info = DataInfo {
+                    source_id: None,
+                    source_sn: None,
+                    first_router_id: None,
+                    first_router_sn: None,
+                    timestamp: None,
+                    kind: None,
+                    encoding: Some(encoding),
+                };
                 primitives
-                    .reply_data(qid, EVAL, replier_id.clone(), reskey, data_info, payload)
+                    .reply_data(
+                        qid,
+                        EVAL,
+                        pid.clone(),
+                        ResKey::RName(path),
+                        Some(data_info),
+                        payload,
+                    )
                     .await;
             }
+
             primitives.reply_final(qid).await;
         });
     }
@@ -338,4 +274,82 @@ impl Primitives for AdminSpace {
     async fn close(&self) {
         trace!("recv Close");
     }
+}
+
+pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
+    let session_mgr = &context.runtime.read().await.orchestrator.manager;
+
+    // plugins info
+    let plugins: Vec<serde_json::Value> = context
+        .plugins_mgr
+        .plugins
+        .iter()
+        .map(|plugin| {
+            json!({
+                "name": plugin.name,
+                "path": plugin.path
+            })
+        })
+        .collect();
+
+    // locators info
+    let locators: Vec<serde_json::Value> = session_mgr
+        .get_locators()
+        .await
+        .iter()
+        .map(|locator| json!(locator.to_string()))
+        .collect();
+
+    // sessions info
+    let sessions = future::join_all(session_mgr.get_sessions().await.iter().map(async move |session|
+        json!({
+            "peer": session.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
+            "links": session.get_links().await.map_or_else(
+                |_| vec!(),
+                |links| links.iter().map(|link| link.get_dst().to_string()).collect()
+            )
+        })
+    )).await;
+
+    let json = json!({
+        "pid": context.pid_str,
+        "version": context.version,
+        "locators": locators,
+        "sessions": sessions,
+        "plugins": plugins,
+    });
+    log::trace!("AdminSpace router_data: {:?}", json);
+    (RBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
+}
+
+pub async fn linkstate_routers_data(context: &AdminContext) -> (RBuf, ZInt) {
+    let runtime = &context.runtime.read().await;
+    let tables = runtime.router.tables.read().await;
+
+    let res = (
+        RBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
+        encoding::TEXT_PLAIN,
+    );
+    res
+}
+
+pub async fn linkstate_peers_data(context: &AdminContext) -> (RBuf, ZInt) {
+    (
+        RBuf::from(
+            context
+                .runtime
+                .read()
+                .await
+                .router
+                .tables
+                .read()
+                .await
+                .peers_net
+                .as_ref()
+                .unwrap()
+                .dot()
+                .as_bytes(),
+        ),
+        encoding::TEXT_PLAIN,
+    )
 }

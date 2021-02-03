@@ -43,25 +43,33 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                             self.primitives.resource(rid, &key).await;
                         }
                         Declaration::Publisher { key } => {
-                            self.primitives.publisher(&key).await;
+                            self.primitives.publisher(&key, msg.routing_context).await;
                         }
                         Declaration::Subscriber { key, info } => {
-                            self.primitives.subscriber(&key, &info).await;
+                            self.primitives
+                                .subscriber(&key, &info, msg.routing_context)
+                                .await;
                         }
                         Declaration::Queryable { key } => {
-                            self.primitives.queryable(&key).await;
+                            self.primitives.queryable(&key, msg.routing_context).await;
                         }
                         Declaration::ForgetResource { rid } => {
                             self.primitives.forget_resource(rid).await;
                         }
                         Declaration::ForgetPublisher { key } => {
-                            self.primitives.forget_publisher(&key).await;
+                            self.primitives
+                                .forget_publisher(&key, msg.routing_context)
+                                .await;
                         }
                         Declaration::ForgetSubscriber { key } => {
-                            self.primitives.forget_subscriber(&key).await;
+                            self.primitives
+                                .forget_subscriber(&key, msg.routing_context)
+                                .await;
                         }
                         Declaration::ForgetQueryable { key } => {
-                            self.primitives.forget_queryable(&key).await;
+                            self.primitives
+                                .forget_queryable(&key, msg.routing_context)
+                                .await;
                         }
                     }
                 }
@@ -80,6 +88,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                             msg.reliability,
                             msg.congestion_control,
                             data_info,
+                            msg.routing_context,
                         )
                         .await;
                 }
@@ -127,6 +136,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                         qid,
                         target.unwrap_or_default(),
                         consolidation,
+                        msg.routing_context,
                     )
                     .await;
             }

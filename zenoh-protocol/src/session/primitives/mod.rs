@@ -18,7 +18,7 @@ use crate::core::{
     CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, ZInt,
 };
 use crate::io::RBuf;
-use crate::proto::DataInfo;
+use crate::proto::{DataInfo, RoutingContext};
 use async_trait::async_trait;
 pub use demux::*;
 pub use mux::*;
@@ -28,14 +28,19 @@ pub trait Primitives {
     async fn resource(&self, rid: ZInt, reskey: &ResKey);
     async fn forget_resource(&self, rid: ZInt);
 
-    async fn publisher(&self, reskey: &ResKey);
-    async fn forget_publisher(&self, reskey: &ResKey);
+    async fn publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    async fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn subscriber(&self, reskey: &ResKey, sub_info: &SubInfo);
-    async fn forget_subscriber(&self, reskey: &ResKey);
+    async fn subscriber(
+        &self,
+        reskey: &ResKey,
+        sub_info: &SubInfo,
+        routing_context: Option<RoutingContext>,
+    );
+    async fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn queryable(&self, reskey: &ResKey);
-    async fn forget_queryable(&self, reskey: &ResKey);
+    async fn queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
     async fn data(
         &self,
@@ -44,6 +49,7 @@ pub trait Primitives {
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
+        routing_context: Option<RoutingContext>,
     );
 
     async fn query(
@@ -53,6 +59,7 @@ pub trait Primitives {
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        routing_context: Option<RoutingContext>,
     );
 
     async fn reply_data(
