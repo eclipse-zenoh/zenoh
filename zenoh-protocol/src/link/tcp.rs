@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Link, LinkManagerTrait, LinkProperty, LinkTrait, Locator};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use crate::session::SessionManager;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
@@ -109,7 +109,7 @@ impl fmt::Display for LocatorTcp {
 /*************************************/
 /*            PROPERTY               */
 /*************************************/
-pub type LinkPropertyTcp = ();
+pub type LocatorPropertyTcp = ();
 
 /*************************************/
 /*              LINK                 */
@@ -316,7 +316,7 @@ impl LinkManagerTcp {
 
 #[async_trait]
 impl LinkManagerTrait for LinkManagerTcp {
-    async fn new_link(&self, locator: &Locator, _ps: Option<&LinkProperty>) -> ZResult<Link> {
+    async fn new_link(&self, locator: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let dst_addr = get_tcp_addr(locator).await?;
 
         let stream = TcpStream::connect(dst_addr).await.map_err(|e| {
@@ -342,7 +342,7 @@ impl LinkManagerTrait for LinkManagerTcp {
     async fn new_listener(
         &self,
         locator: &Locator,
-        _ps: Option<&LinkProperty>,
+        _ps: Option<&LocatorProperty>,
     ) -> ZResult<Locator> {
         let addr = get_tcp_addr(locator).await?;
 

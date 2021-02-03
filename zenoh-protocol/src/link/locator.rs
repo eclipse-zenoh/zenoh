@@ -12,13 +12,13 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #[cfg(feature = "transport_tcp")]
-use super::tcp::LocatorTcp;
+use super::tcp::{LocatorPropertyTcp, LocatorTcp};
 #[cfg(feature = "transport_tls")]
-use super::tls::LocatorTls;
+use super::tls::{LocatorPropertyTls, LocatorTls};
 #[cfg(feature = "transport_udp")]
-use super::udp::LocatorUdp;
+use super::udp::{LocatorPropertyUdp, LocatorUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-use super::unixsock_stream::LocatorUnixSocketStream;
+use super::unixsock_stream::{LocatorPropertyUnixSocketStream, LocatorUnixSocketStream};
 
 use std::cmp::PartialEq;
 use std::fmt;
@@ -28,7 +28,7 @@ use zenoh_util::core::{ZError, ZErrorKind};
 use zenoh_util::zerror;
 
 /*************************************/
-/*          LOCATOR                  */
+/*        LOCATOR PROTOCOL           */
 /*************************************/
 pub const PROTO_SEPARATOR: char = '/';
 // Protocol literals
@@ -69,6 +69,9 @@ impl fmt::Display for LocatorProtocol {
     }
 }
 
+/*************************************/
+/*             LOCATOR               */
+/*************************************/
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Locator {
     #[cfg(feature = "transport_tcp")]
@@ -144,6 +147,59 @@ impl fmt::Display for Locator {
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             Locator::UnixSocketStream(addr) => write!(f, "{}/{}", STR_UNIXSOCK_STREAM, addr)?,
         }
+        Ok(())
+    }
+}
+
+/*************************************/
+/*        LOCATOR PROPERTY           */
+/*************************************/
+#[derive(Clone)]
+pub enum LocatorProperty {
+    #[cfg(feature = "transport_tcp")]
+    Tcp(LocatorPropertyTcp),
+    #[cfg(feature = "transport_udp")]
+    Udp(LocatorPropertyUdp),
+    #[cfg(feature = "transport_tls")]
+    Tls(LocatorPropertyTls),
+    #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+    UnixSocketStream(LocatorPropertyUnixSocketStream),
+}
+
+impl LocatorProperty {
+    pub fn get_proto(&self) -> LocatorProtocol {
+        match self {
+            #[cfg(feature = "transport_tcp")]
+            LocatorProperty::Tcp(..) => LocatorProtocol::Tcp,
+            #[cfg(feature = "transport_udp")]
+            LocatorProperty::Udp(..) => LocatorProtocol::Udp,
+            #[cfg(feature = "transport_tls")]
+            LocatorProperty::Tls(..) => LocatorProtocol::Tls,
+            #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+            LocatorProperty::UnixSocketStream(..) => LocatorProtocol::UnixSocketStream,
+        }
+    }
+}
+
+impl fmt::Display for LocatorProperty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            #[cfg(feature = "transport_tcp")]
+            LocatorProperty::Tcp(..) => write!(f, "{}", STR_TCP)?,
+            #[cfg(feature = "transport_udp")]
+            LocatorProperty::Udp(..) => write!(f, "{}", STR_UDP)?,
+            #[cfg(feature = "transport_tls")]
+            LocatorProperty::Tls(..) => write!(f, "{}", STR_TLS)?,
+            #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+            LocatorProperty::UnixSocketStream(..) => write!(f, "{}", STR_UNIXSOCK_STREAM)?,
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for LocatorProperty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)?;
         Ok(())
     }
 }

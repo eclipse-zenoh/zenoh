@@ -13,7 +13,6 @@
 //
 mod locator;
 mod manager;
-mod property;
 #[cfg(feature = "transport_tcp")]
 mod tcp;
 #[cfg(feature = "transport_tls")]
@@ -29,7 +28,6 @@ use async_std::sync::Arc;
 use async_trait::async_trait;
 pub use locator::*;
 pub use manager::*;
-pub use property::*;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -167,11 +165,11 @@ impl fmt::Debug for Link {
 /*************************************/
 #[async_trait]
 pub trait LinkManagerTrait {
-    async fn new_link(&self, dst: &Locator, property: Option<&LinkProperty>) -> ZResult<Link>;
+    async fn new_link(&self, dst: &Locator, property: Option<&LocatorProperty>) -> ZResult<Link>;
     async fn new_listener(
         &self,
         locator: &Locator,
-        property: Option<&LinkProperty>,
+        property: Option<&LocatorProperty>,
     ) -> ZResult<Locator>;
     async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
     async fn get_listeners(&self) -> Vec<Locator>;

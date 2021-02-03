@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Link, LinkManagerTrait, LinkProperty, LinkTrait, Locator};
+use super::{Link, LinkManagerTrait, LocatorProperty, LinkTrait, Locator};
 use crate::session::SessionManager;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
@@ -124,7 +124,7 @@ impl fmt::Display for LocatorUdp {
 /*************************************/
 /*            PROPERTY               */
 /*************************************/
-pub type LinkPropertyUdp = ();
+pub type LocatorPropertyUdp = ();
 
 /*************************************/
 /*              LINK                 */
@@ -343,7 +343,7 @@ impl LinkManagerUdp {
 
 #[async_trait]
 impl LinkManagerTrait for LinkManagerUdp {
-    async fn new_link(&self, dst: &Locator, _ps: Option<&LinkProperty>) -> ZResult<Link> {
+    async fn new_link(&self, dst: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let dst_addr = get_udp_addr(dst).await?;
         // Establish a UDP socket
         let res = if dst_addr.is_ipv4() {
@@ -401,7 +401,7 @@ impl LinkManagerTrait for LinkManagerUdp {
     async fn new_listener(
         &self,
         locator: &Locator,
-        _ps: Option<&LinkProperty>,
+        _ps: Option<&LocatorProperty>,
     ) -> ZResult<Locator> {
         let addr = get_udp_addr(locator).await?;
 

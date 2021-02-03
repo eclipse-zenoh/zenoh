@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Link, LinkManagerTrait, LinkProperty, LinkTrait, Locator};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use crate::session::SessionManager;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
@@ -115,9 +115,9 @@ async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
 }
 
 #[allow(unreachable_patterns)]
-fn get_tls_prop(property: &LinkProperty) -> ZResult<&LinkPropertyTls> {
+fn get_tls_prop(property: &LocatorProperty) -> ZResult<&LocatorPropertyTls> {
     match property {
-        LinkProperty::Tls(prop) => Ok(prop),
+        LocatorProperty::Tls(prop) => Ok(prop),
         _ => {
             let e = "Not a TLS property".to_string();
             log::debug!("{}", e);
@@ -160,58 +160,58 @@ impl fmt::Display for LocatorTls {
 /*            PROPERTY               */
 /*************************************/
 #[derive(Clone)]
-pub struct LinkPropertyTls {
+pub struct LocatorPropertyTls {
     client: Option<Arc<ClientConfig>>,
     server: Option<Arc<ServerConfig>>,
 }
 
-impl LinkPropertyTls {
+impl LocatorPropertyTls {
     fn new(
         client: Option<Arc<ClientConfig>>,
         server: Option<Arc<ServerConfig>>,
-    ) -> LinkPropertyTls {
-        LinkPropertyTls { client, server }
+    ) -> LocatorPropertyTls {
+        LocatorPropertyTls { client, server }
     }
 }
 
-impl From<LinkPropertyTls> for LinkProperty {
-    fn from(property: LinkPropertyTls) -> LinkProperty {
-        LinkProperty::Tls(property)
+impl From<LocatorPropertyTls> for LocatorProperty {
+    fn from(property: LocatorPropertyTls) -> LocatorProperty {
+        LocatorProperty::Tls(property)
     }
 }
 
-impl From<(Arc<ClientConfig>, Arc<ServerConfig>)> for LinkProperty {
-    fn from(tuple: (Arc<ClientConfig>, Arc<ServerConfig>)) -> LinkProperty {
-        Self::from(LinkPropertyTls::new(Some(tuple.0), Some(tuple.1)))
+impl From<(Arc<ClientConfig>, Arc<ServerConfig>)> for LocatorProperty {
+    fn from(tuple: (Arc<ClientConfig>, Arc<ServerConfig>)) -> LocatorProperty {
+        Self::from(LocatorPropertyTls::new(Some(tuple.0), Some(tuple.1)))
     }
 }
 
-impl From<(ClientConfig, ServerConfig)> for LinkProperty {
-    fn from(tuple: (ClientConfig, ServerConfig)) -> LinkProperty {
+impl From<(ClientConfig, ServerConfig)> for LocatorProperty {
+    fn from(tuple: (ClientConfig, ServerConfig)) -> LocatorProperty {
         Self::from((Arc::new(tuple.0), Arc::new(tuple.1)))
     }
 }
 
-impl From<Arc<ClientConfig>> for LinkProperty {
-    fn from(client: Arc<ClientConfig>) -> LinkProperty {
-        Self::from(LinkPropertyTls::new(Some(client), None))
+impl From<Arc<ClientConfig>> for LocatorProperty {
+    fn from(client: Arc<ClientConfig>) -> LocatorProperty {
+        Self::from(LocatorPropertyTls::new(Some(client), None))
     }
 }
 
-impl From<ClientConfig> for LinkProperty {
-    fn from(client: ClientConfig) -> LinkProperty {
+impl From<ClientConfig> for LocatorProperty {
+    fn from(client: ClientConfig) -> LocatorProperty {
         Self::from(Arc::new(client))
     }
 }
 
-impl From<Arc<ServerConfig>> for LinkProperty {
-    fn from(server: Arc<ServerConfig>) -> LinkProperty {
-        Self::from(LinkPropertyTls::new(None, Some(server)))
+impl From<Arc<ServerConfig>> for LocatorProperty {
+    fn from(server: Arc<ServerConfig>) -> LocatorProperty {
+        Self::from(LocatorPropertyTls::new(None, Some(server)))
     }
 }
 
-impl From<ServerConfig> for LinkProperty {
-    fn from(server: ServerConfig) -> LinkProperty {
+impl From<ServerConfig> for LocatorProperty {
+    fn from(server: ServerConfig) -> LocatorProperty {
         Self::from(Arc::new(server))
     }
 }
@@ -448,7 +448,7 @@ impl LinkManagerTls {
 
 #[async_trait]
 impl LinkManagerTrait for LinkManagerTls {
-    async fn new_link(&self, locator: &Locator, ps: Option<&LinkProperty>) -> ZResult<Link> {
+    async fn new_link(&self, locator: &Locator, ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let domain = get_tls_dns(locator).await?;
         let addr = get_tls_addr(locator).await?;
         let host: &str = domain.as_ref().into();
@@ -495,11 +495,15 @@ impl LinkManagerTrait for LinkManagerTls {
         Ok(Link::new(link))
     }
 
-    async fn new_listener(&self, locator: &Locator, ps: Option<&LinkProperty>) -> ZResult<Locator> {
+    async fn new_listener(
+        &self,
+        locator: &Locator,
+        ps: Option<&LocatorProperty>,
+    ) -> ZResult<Locator> {
         let addr = get_tls_addr(locator).await?;
 
         // Verify there is a valid ServerConfig
-        let prop = ps.as_ref().ok_or({
+        let prop = ps.as_ref().ok_or_else(|| {
             let e = format!(
                 "Can not create a new TLS listener on {}: no ServerConfig provided",
                 addr
@@ -507,7 +511,7 @@ impl LinkManagerTrait for LinkManagerTls {
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
         let tls_prop = get_tls_prop(prop)?;
-        let config = tls_prop.server.as_ref().ok_or({
+        let config = tls_prop.server.as_ref().ok_or_else(|| {
             let e = format!(
                 "Can not create a new TLS listener on {}: no ServerConfig provided",
                 addr

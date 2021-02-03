@@ -17,10 +17,11 @@ use async_trait::async_trait;
 use std::time::Duration;
 use zenoh_protocol::core::{whatami, PeerId};
 use zenoh_protocol::link::tls::{NoClientAuth, ServerConfig};
-use zenoh_protocol::link::{Link, LinkProperty, Locator};
+use zenoh_protocol::link::{Link, Locator, LocatorProperty};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 
@@ -71,7 +72,7 @@ impl SessionEventHandler for SC {
     async fn closed(&self) {}
 }
 
-async fn run(locators: Vec<(Locator, Option<LinkProperty>)>) {
+async fn run(locators: &[Locator], link_property: Option<Vec<LocatorProperty>>) {
     // Create the session manager
     let config = SessionManagerConfig {
         version: 0,
@@ -79,13 +80,26 @@ async fn run(locators: Vec<(Locator, Option<LinkProperty>)>) {
         id: PeerId::new(1, [0u8; PeerId::MAX_SIZE]),
         handler: Arc::new(SH::new()),
     };
-    let sm = SessionManager::new(config, None);
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: None,
+        max_links: None,
+        peer_authenticator: None,
+        link_authenticator: None,
+        link_property,
+    };
+    let sm = SessionManager::new(config, Some(opt_config));
 
     for _ in 0..RUNS {
         // Create the listeners
-        for (l, p) in locators.iter() {
+        for l in locators.iter() {
             println!("Add {}", l);
-            let res = sm.add_listener(l, p.as_ref()).await;
+            let res = sm.add_listener(l).await;
             println!("Res: {:?}", res);
             assert!(res.is_ok());
         }
@@ -93,7 +107,7 @@ async fn run(locators: Vec<(Locator, Option<LinkProperty>)>) {
         task::sleep(SLEEP).await;
 
         // Delete the listeners
-        for (l, _) in locators.iter() {
+        for l in locators.iter() {
             println!("Del {}", l);
             let res = sm.del_listener(l).await;
             println!("Res: {:?}", res);
@@ -108,22 +122,24 @@ async fn run(locators: Vec<(Locator, Option<LinkProperty>)>) {
 #[test]
 fn locator_tcp() {
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("tcp/127.0.0.1:7447".parse().unwrap(), None),
-        ("tcp/localhost:7448".parse().unwrap(), None),
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7447".parse().unwrap(),
+        "tcp/localhost:7448".parse().unwrap(),
     ];
-    task::block_on(run(locators));
+    let link_property = None;
+    task::block_on(run(&locators, link_property));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn locator_udp() {
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("udp/127.0.0.1:7447".parse().unwrap(), None),
-        ("udp/localhost:7448".parse().unwrap(), None),
+    let locators: Vec<Locator> = vec![
+        "udp/127.0.0.1:7447".parse().unwrap(),
+        "udp/localhost:7448".parse().unwrap(),
     ];
-    task::block_on(run(locators));
+    let link_property = None;
+    task::block_on(run(&locators, link_property));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -133,21 +149,16 @@ fn locator_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        (
-            "unixsock-stream/zenoh-test-unix-socket-0.sock"
-                .parse()
-                .unwrap(),
-            None,
-        ),
-        (
-            "unixsock-stream/zenoh-test-unix-socket-1.sock"
-                .parse()
-                .unwrap(),
-            None,
-        ),
+    let locators: Vec<Locator> = vec![
+        "unixsock-stream/zenoh-test-unix-socket-0.sock"
+            .parse()
+            .unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-1.sock"
+            .parse()
+            .unwrap(),
     ];
-    task::block_on(run(locators));
+    let link_property = None;
+    task::block_on(run(&locators, link_property));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock.lock");
@@ -158,11 +169,12 @@ fn locator_unix() {
 #[test]
 fn locator_tcp_udp() {
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("tcp/127.0.0.1:7449".parse().unwrap(), None),
-        ("udp/127.0.0.1:7449".parse().unwrap(), None),
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7449".parse().unwrap(),
+        "udp/127.0.0.1:7449".parse().unwrap(),
     ];
-    task::block_on(run(locators));
+    let link_property = None;
+    task::block_on(run(&locators, link_property));
 }
 
 #[cfg(all(
@@ -176,17 +188,15 @@ fn locator_tcp_udp_unix() {
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("tcp/127.0.0.1:7450".parse().unwrap(), None),
-        ("udp/127.0.0.1:7450".parse().unwrap(), None),
-        (
-            "unixsock-stream/zenoh-test-unix-socket-2.sock"
-                .parse()
-                .unwrap(),
-            None,
-        ),
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7450".parse().unwrap(),
+        "udp/127.0.0.1:7450".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-2.sock"
+            .parse()
+            .unwrap(),
     ];
-    task::block_on(run(locators));
+    let link_property = None;
+    task::block_on(run(&locators, link_property));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock.lock");
 }
@@ -201,16 +211,14 @@ fn locator_tcp_unix() {
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("tcp/127.0.0.1:7451".parse().unwrap(), None),
-        (
-            "unixsock-stream/zenoh-test-unix-socket-3.sock"
-                .parse()
-                .unwrap(),
-            None,
-        ),
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7451".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-3.sock"
+            .parse()
+            .unwrap(),
     ];
-    task::block_on(run(locators));
+    let link_property = None;
+    task::block_on(run(&locators, link_property));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock.lock");
 }
@@ -225,16 +233,14 @@ fn locator_udp_unix() {
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("udp/127.0.0.1:7451".parse().unwrap(), None),
-        (
-            "unixsock-stream/zenoh-test-unix-socket-4.sock"
-                .parse()
-                .unwrap(),
-            None,
-        ),
+    let locators: Vec<Locator> = vec![
+        "udp/127.0.0.1:7451".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-4.sock"
+            .parse()
+            .unwrap(),
     ];
-    task::block_on(run(locators));
+    let link_property = None;
+    task::block_on(run(&locators, link_property));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock.lock");
 }
@@ -242,9 +248,8 @@ fn locator_udp_unix() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn locator_tls() {
-    let server_config: LinkProperty = ServerConfig::new(NoClientAuth::new()).into();
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> =
-        vec![("tls/localhost:7452".parse().unwrap(), Some(server_config))];
-    task::block_on(run(locators));
+    let locators = vec!["tls/localhost:7451".parse().unwrap()];
+    let link_property = vec![ServerConfig::new(NoClientAuth::new()).into()];
+    task::block_on(run(&locators, Some(link_property)));
 }

@@ -20,7 +20,7 @@ use std::io::Cursor;
 use std::time::Duration;
 use zenoh_protocol::core::{whatami, PeerId};
 use zenoh_protocol::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
-use zenoh_protocol::link::{Link, LinkProperty, Locator};
+use zenoh_protocol::link::{Link, Locator, LocatorProperty};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
@@ -118,7 +118,7 @@ impl SessionHandler for SHClientOpenClose {
     }
 }
 
-async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
+async fn session_open_close(locator: Locator, link_property: Option<Vec<LocatorProperty>>) {
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
@@ -144,6 +144,7 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
         max_links: Some(2),
         peer_authenticator: None,
         link_authenticator: None,
+        link_property: link_property.clone(),
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
 
@@ -158,7 +159,20 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
         id: client01_id.clone(),
         handler: Arc::new(SHClientOpenClose::new()),
     };
-    let client01_manager = SessionManager::new(config, None);
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: Some(1),
+        max_links: Some(2),
+        peer_authenticator: None,
+        link_authenticator: None,
+        link_property: link_property.clone(),
+    };
+    let client01_manager = SessionManager::new(config, Some(opt_config));
 
     // Create the transport session manager for the second client
     let config = SessionManagerConfig {
@@ -167,14 +181,25 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
         id: client02_id.clone(),
         handler: Arc::new(SHClientOpenClose::new()),
     };
-    let client02_manager = SessionManager::new(config, None);
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: Some(1),
+        max_links: Some(2),
+        peer_authenticator: None,
+        link_authenticator: None,
+        link_property,
+    };
+    let client02_manager = SessionManager::new(config, Some(opt_config));
 
     /* [1] */
     println!("\nSession Open Close [1a1]");
     // Add the locator on the router
-    let res = router_manager
-        .add_listener(&locator, property.as_ref())
-        .await;
+    let res = router_manager.add_listener(&locator).await;
     println!("Session Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Open Close [1a2]");
@@ -185,9 +210,7 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
     // Open a first session from the client to the router
     // -> This should be accepted
     println!("Session Open Close [1c1]");
-    let res = client01_manager
-        .open_session(&locator, property.as_ref())
-        .await;
+    let res = client01_manager.open_session(&locator).await;
     println!("Session Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -220,9 +243,7 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
     // Open a second session from the client to the router
     // -> This should be accepted
     println!("\nSession Open Close [2a1]");
-    let res = client01_manager
-        .open_session(&locator, property.as_ref())
-        .await;
+    let res = client01_manager.open_session(&locator).await;
     println!("Session Open Close [2a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -257,9 +278,7 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
     // Open session -> This should be rejected because
     // of the maximum limit of links per session
     println!("\nSession Open Close [3a1]");
-    let res = client01_manager
-        .open_session(&locator, property.as_ref())
-        .await;
+    let res = client01_manager.open_session(&locator).await;
     println!("Session Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
     println!("Session Open Close [3b1]");
@@ -309,9 +328,7 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
     // Open session -> This should be accepted because
     // the number of links should be back to 0
     println!("\nSession Open Close [5a1]");
-    let res = client01_manager
-        .open_session(&locator, property.as_ref())
-        .await;
+    let res = client01_manager.open_session(&locator).await;
     println!("Session Open Close [5a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
@@ -344,9 +361,7 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
     // Open session -> This should be rejected because
     // of the maximum limit of sessions
     println!("\nSession Open Close [6a1]");
-    let res = client02_manager
-        .open_session(&locator, property.as_ref())
-        .await;
+    let res = client02_manager.open_session(&locator).await;
     println!("Session Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
     println!("Session Open Close [6b1]");
@@ -391,9 +406,7 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
     // Open session -> This should be accepted because
     // the number of sessions should be back to 0
     println!("\nSession Open Close [8a1]");
-    let res = client02_manager
-        .open_session(&locator, property.as_ref())
-        .await;
+    let res = client02_manager.open_session(&locator).await;
     println!("Session Open Close [8a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();
@@ -455,14 +468,14 @@ async fn session_open_close(locator: Locator, property: Option<LinkProperty>) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp() {
-    let locator: Locator = "tcp/127.0.0.1:7447".parse().unwrap();
+    let locator = "tcp/127.0.0.1:7447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn session_udp() {
-    let locator: Locator = "udp/127.0.0.1:7447".parse().unwrap();
+    let locator = "udp/127.0.0.1:7447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }
 
@@ -470,10 +483,10 @@ fn session_udp() {
 #[test]
 fn session_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
+    let locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
         .parse()
         .unwrap();
-    task::block_on(session_open_close(locator.clone(), None));
+    task::block_on(session_open_close(locator, None));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
 }
@@ -569,9 +582,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .add_pem_file(&mut Cursor::new(ca.as_bytes()))
         .unwrap();
 
-    let locator: Locator = "tls/localhost:7447".parse().unwrap();
-    task::block_on(session_open_close(
-        locator,
-        Some((client_config, server_config).into()),
-    ));
+    let locator = "tls/localhost:7447".parse().unwrap();
+    let property = vec![(client_config, server_config).into()];
+    task::block_on(session_open_close(locator, Some(property)));
 }

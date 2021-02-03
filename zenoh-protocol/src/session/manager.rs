@@ -23,7 +23,9 @@ use super::transport::SessionTransport;
 use super::Session;
 use super::SessionHandler;
 use crate::core::{PeerId, WhatAmI, ZInt};
-use crate::link::{Link, LinkManager, LinkManagerBuilder, LinkProperty, Locator, LocatorProtocol};
+use crate::link::{
+    Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
+};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
@@ -111,6 +113,7 @@ pub struct SessionManagerOptionalConfig {
     pub max_links: Option<usize>,
     pub peer_authenticator: Option<Vec<PeerAuthenticator>>,
     pub link_authenticator: Option<Vec<LinkAuthenticator>>,
+    pub link_property: Option<Vec<LocatorProperty>>,
 }
 
 pub(super) struct SessionManagerConfigInner {
@@ -127,6 +130,7 @@ pub(super) struct SessionManagerConfigInner {
     pub(super) max_links: Option<usize>,
     pub(super) peer_authenticator: Vec<PeerAuthenticator>,
     pub(super) link_authenticator: Vec<LinkAuthenticator>,
+    pub(super) link_property: HashMap<LocatorProtocol, LocatorProperty>,
     pub(super) handler: Arc<dyn SessionHandler + Send + Sync>,
 }
 
@@ -156,7 +160,7 @@ pub struct SessionManager {
 impl SessionManager {
     pub fn new(
         config: SessionManagerConfig,
-        opt_config: Option<SessionManagerOptionalConfig>,
+        mut opt_config: Option<SessionManagerOptionalConfig>,
     ) -> SessionManager {
         // Set default optional values
         let mut lease = *SESSION_LEASE;
@@ -169,34 +173,40 @@ impl SessionManager {
         let mut max_links = None;
         let mut peer_authenticator = vec![DummyPeerAuthenticator::make()];
         let mut link_authenticator = vec![DummyLinkAuthenticator::make()];
+        let mut link_property = HashMap::new();
 
         // Override default values if provided
-        if let Some(opt) = opt_config {
-            if let Some(v) = opt.lease {
+        if let Some(mut opt) = opt_config.take() {
+            if let Some(v) = opt.lease.take() {
                 lease = v;
             }
-            if let Some(v) = opt.keep_alive {
+            if let Some(v) = opt.keep_alive.take() {
                 keep_alive = v;
             }
-            if let Some(v) = opt.sn_resolution {
+            if let Some(v) = opt.sn_resolution.take() {
                 sn_resolution = v;
             }
-            if let Some(v) = opt.batch_size {
+            if let Some(v) = opt.batch_size.take() {
                 batch_size = v;
             }
-            if let Some(v) = opt.timeout {
+            if let Some(v) = opt.timeout.take() {
                 timeout = v;
             }
-            if let Some(v) = opt.retries {
+            if let Some(v) = opt.retries.take() {
                 retries = v;
             }
             max_sessions = opt.max_sessions;
             max_links = opt.max_links;
-            if let Some(v) = opt.peer_authenticator {
+            if let Some(v) = opt.peer_authenticator.take() {
                 peer_authenticator = v;
             }
-            if let Some(v) = opt.link_authenticator {
+            if let Some(v) = opt.link_authenticator.take() {
                 link_authenticator = v;
+            }
+            if let Some(mut v) = opt.link_property.take() {
+                for p in v.drain(..) {
+                    link_property.insert(p.get_proto(), p);
+                }
             }
         }
 
@@ -214,6 +224,7 @@ impl SessionManager {
             max_links,
             peer_authenticator,
             link_authenticator,
+            link_property,
             handler: config.handler,
         };
 
@@ -241,12 +252,9 @@ impl SessionManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_listener(
-        &self,
-        locator: &Locator,
-        ps: Option<&LinkProperty>,
-    ) -> ZResult<Locator> {
+    pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
+        let ps = self.config.link_property.get(&locator.get_proto());
         manager.new_listener(locator, ps).await
     }
 
@@ -424,23 +432,14 @@ impl SessionManager {
         Ok(session)
     }
 
-    pub async fn open_session(
-        &self,
-        locator: &Locator,
-        ps: Option<&LinkProperty>,
-    ) -> ZResult<Session> {
+    pub async fn open_session(&self, locator: &Locator) -> ZResult<Session> {
         // Create the timeout duration
         let to = Duration::from_millis(self.config.timeout);
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
+        let ps = self.config.link_property.get(&locator.get_proto());
         // Create a new link associated by calling the Link Manager
-        let link = match manager.new_link(&locator, ps).await {
-            Ok(link) => link,
-            Err(e) => {
-                log::warn!("Can not to create a link to locator {}: {}", locator, e);
-                return Err(e);
-            }
-        };
+        let link = manager.new_link(&locator, ps).await?;
 
         // Try a maximum number of times to open a session
         let retries = self.config.retries;
@@ -467,7 +466,7 @@ impl SessionManager {
         zerror!(ZErrorKind::Other { descr: e })
     }
 
-    pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LinkProperty>) {
+    pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LocatorProperty>) {
         let mut guard = zasynclock!(self.incoming);
         if guard.len() >= *SESSION_OPEN_MAX_CONCURRENT {
             // We reached the limit of concurrent incoming session, this means two things:

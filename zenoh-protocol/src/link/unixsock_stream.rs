@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Link, LinkManagerTrait, LinkProperty, LinkTrait, Locator};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use crate::session::SessionManager;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::os::unix::net::{UnixListener, UnixStream};
@@ -110,7 +110,7 @@ impl fmt::Display for LocatorUnixSocketStream {
 /*************************************/
 /*            PROPERTY               */
 /*************************************/
-pub type LinkPropertyUnixSocketStream = ();
+pub type LocatorPropertyUnixSocketStream = ();
 
 /*************************************/
 /*              LINK                 */
@@ -305,7 +305,7 @@ impl LinkManagerUnixSocketStream {
 
 #[async_trait]
 impl LinkManagerTrait for LinkManagerUnixSocketStream {
-    async fn new_link(&self, locator: &Locator, _ps: Option<&LinkProperty>) -> ZResult<Link> {
+    async fn new_link(&self, locator: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let path = get_unix_path(locator)?;
 
         // Create the UnixSocketStream connection
@@ -391,7 +391,7 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
     async fn new_listener(
         &self,
         locator: &Locator,
-        _ps: Option<&LinkProperty>,
+        _ps: Option<&LocatorProperty>,
     ) -> ZResult<Locator> {
         let path = get_unix_path_as_string(locator);
 

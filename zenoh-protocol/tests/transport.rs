@@ -21,10 +21,11 @@ use std::time::Duration;
 use zenoh_protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
 use zenoh_protocol::io::RBuf;
 use zenoh_protocol::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
-use zenoh_protocol::link::{Link, LinkProperty, Locator};
+use zenoh_protocol::link::{Link, Locator, LocatorProperty};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 
@@ -133,8 +134,8 @@ impl SessionEventHandler for SCClient {
 }
 
 async fn open_session(
-    router_locators: &[(Locator, Option<LinkProperty>)],
-    client_locators: &[(Locator, Option<LinkProperty>)],
+    locators: &[Locator],
+    link_property: Option<Vec<LocatorProperty>>,
 ) -> (SessionManager, Arc<SHRouter>, Session) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
@@ -148,7 +149,20 @@ async fn open_session(
         id: router_id.clone(),
         handler: router_handler.clone(),
     };
-    let router_manager = SessionManager::new(config, None);
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: None,
+        max_links: None,
+        peer_authenticator: None,
+        link_authenticator: None,
+        link_property,
+    };
+    let router_manager = SessionManager::new(config, Some(opt_config));
 
     // Create the client session manager
     let config = SessionManagerConfig {
@@ -160,10 +174,10 @@ async fn open_session(
     let client_manager = SessionManager::new(config, None);
 
     // Create the listener on the router
-    for (l, p) in router_locators.iter() {
+    for l in locators.iter() {
         println!("Add locator: {}", l);
         let res = router_manager
-            .add_listener(l, p.as_ref())
+            .add_listener(l)
             .timeout(TIMEOUT)
             .await
             .unwrap();
@@ -172,10 +186,10 @@ async fn open_session(
 
     // Create an empty session with the client
     // Open session -> This should be accepted
-    for (l, p) in client_locators.iter() {
+    for l in locators.iter() {
         println!("Opening session with {}", l);
         let res = client_manager
-            .open_session(l, p.as_ref())
+            .open_session(l)
             .timeout(TIMEOUT)
             .await
             .unwrap();
@@ -196,11 +210,11 @@ async fn open_session(
 async fn close_session(
     router_manager: SessionManager,
     client_session: Session,
-    locators: &[(Locator, Option<LinkProperty>)],
+    locators: &[Locator],
 ) {
     // Close the client session
     let mut ll = "".to_string();
-    for (l, _) in locators.iter() {
+    for l in locators.iter() {
         ll.push_str(&format!("{} ", l));
     }
     println!("Closing session with {}", ll);
@@ -208,7 +222,7 @@ async fn close_session(
     assert!(res.is_ok());
 
     // Stop the locators on the manager
-    for (l, _) in locators.iter() {
+    for l in locators.iter() {
         println!("Del locator: {}", l);
         let res = router_manager
             .del_listener(l)
@@ -297,46 +311,54 @@ async fn single_run(
 }
 
 async fn run(
-    router_locators: &[(Locator, Option<LinkProperty>)],
-    client_locators: &[(Locator, Option<LinkProperty>)],
+    locators: &[Locator],
+    properties: Option<Vec<LocatorProperty>>,
     reliability: &[Reliability],
     congestion_control: &[CongestionControl],
 ) {
-    assert_eq!(router_locators.len(), client_locators.len());
-    let (router_manager, router_handler, client_session) =
-        open_session(router_locators, client_locators).await;
+    let (router_manager, router_handler, client_session) = open_session(locators, properties).await;
     for rl in reliability.iter() {
         for cc in congestion_control.iter() {
             single_run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
         }
     }
-    close_session(router_manager, client_session, router_locators).await;
+    close_session(router_manager, client_session, locators).await;
 }
 
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_only() {
     // Define the locators
-    let locators: Vec<(Locator, Option<LinkProperty>)> =
-        vec![("tcp/127.0.0.1:7447".parse().unwrap(), None)];
+    let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
+    let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::Reliable, Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
+    task::block_on(run(
+        &locators,
+        properties,
+        &reliability,
+        &congestion_control,
+    ));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn transport_udp() {
     // Define the locator
-    let locators: Vec<(Locator, Option<LinkProperty>)> =
-        vec![("udp/127.0.0.1:7447".parse().unwrap(), None)];
+    let locators: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
+    let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
+    task::block_on(run(
+        &locators,
+        properties,
+        &reliability,
+        &congestion_control,
+    ));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -344,17 +366,20 @@ fn transport_udp() {
 fn transport_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![(
-        "unixsock-stream/zenoh-test-unix-socket-5.sock"
-            .parse()
-            .unwrap(),
-        None,
-    )];
+    let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
+        .parse()
+        .unwrap()];
+    let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
+    task::block_on(run(
+        &locators,
+        properties,
+        &reliability,
+        &congestion_control,
+    ));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
@@ -363,15 +388,21 @@ fn transport_unix() {
 #[test]
 fn transport_tcp_udp() {
     // Define the locator
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("tcp/127.0.0.1:7448".parse().unwrap(), None),
-        ("udp/127.0.0.1:7448".parse().unwrap(), None),
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7448".parse().unwrap(),
+        "udp/127.0.0.1:7448".parse().unwrap(),
     ];
+    let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
+    task::block_on(run(
+        &locators,
+        properties,
+        &reliability,
+        &congestion_control,
+    ));
 }
 
 #[cfg(all(
@@ -383,20 +414,23 @@ fn transport_tcp_udp() {
 fn transport_tcp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("tcp/127.0.0.1:7449".parse().unwrap(), None),
-        (
-            "unixsock-stream/zenoh-test-unix-socket-6.sock"
-                .parse()
-                .unwrap(),
-            None,
-        ),
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7449".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-6.sock"
+            .parse()
+            .unwrap(),
     ];
+    let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
+    task::block_on(run(
+        &locators,
+        properties,
+        &reliability,
+        &congestion_control,
+    ));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
 }
@@ -410,20 +444,23 @@ fn transport_tcp_unix() {
 fn transport_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("udp/127.0.0.1:7449".parse().unwrap(), None),
-        (
-            "unixsock-stream/zenoh-test-unix-socket-7.sock"
-                .parse()
-                .unwrap(),
-            None,
-        ),
+    let locators: Vec<Locator> = vec![
+        "udp/127.0.0.1:7449".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-7.sock"
+            .parse()
+            .unwrap(),
     ];
+    let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
+    task::block_on(run(
+        &locators,
+        properties,
+        &reliability,
+        &congestion_control,
+    ));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
 }
@@ -438,21 +475,24 @@ fn transport_udp_unix() {
 fn transport_tcp_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![
-        ("tcp/127.0.0.1:7450".parse().unwrap(), None),
-        ("udp/127.0.0.1:7450".parse().unwrap(), None),
-        (
-            "unixsock-stream/zenoh-test-unix-socket-8.sock"
-                .parse()
-                .unwrap(),
-            None,
-        ),
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:7450".parse().unwrap(),
+        "udp/127.0.0.1:7450".parse().unwrap(),
+        "unixsock-stream/zenoh-test-unix-socket-8.sock"
+            .parse()
+            .unwrap(),
     ];
+    let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
+    task::block_on(run(
+        &locators,
+        properties,
+        &reliability,
+        &congestion_control,
+    ));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
 }
@@ -549,14 +589,17 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .unwrap();
 
     // Define the locator
-    let locators: Vec<(Locator, Option<LinkProperty>)> = vec![(
-        "tls/localhost:7451".parse().unwrap(),
-        Some((client_config, server_config).into()),
-    )];
+    let locators = vec!["tls/localhost:7451".parse().unwrap()];
+    let properties = vec![(client_config, server_config).into()];
 
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(&locators, &locators, &reliability, &congestion_control));
+    task::block_on(run(
+        &locators,
+        Some(properties),
+        &reliability,
+        &congestion_control,
+    ));
 }
