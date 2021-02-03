@@ -106,7 +106,7 @@ async unsafe fn register_router_subscription(
                                 }
                             }
                             None => {
-                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                                log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
                             }
                         }
                     }
@@ -200,7 +200,7 @@ async unsafe fn register_peer_subscription(
                                 }
                             }
                             None => {
-                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                                log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
                             }
                         }
                     }
@@ -385,7 +385,7 @@ async fn propagate_forget_sourced_subscription(
                         }
                     }
                     None => {
-                        log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                        log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
                     }
                 }
             }
@@ -706,7 +706,7 @@ pub(crate) async fn pubsub_tree_change(
                                             .await;
                                     }
                                     None => {
-                                        log::error!(
+                                        log::trace!(
                                             "Unable to find face for pid {}",
                                             net.graph[*child].pid
                                         )

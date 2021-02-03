@@ -98,7 +98,7 @@ async unsafe fn register_router_queryable(
                                 }
                             }
                             None => {
-                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                                log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
                             }
                         }
                     }
@@ -186,7 +186,7 @@ async unsafe fn register_peer_queryable(
                                 }
                             }
                             None => {
-                                log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                                log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
                             }
                         }
                     }
@@ -332,7 +332,7 @@ async fn propagate_forget_sourced_queryable(
                         }
                     }
                     None => {
-                        log::error!("Unable to find face for pid {}", net.graph[*child].pid)
+                        log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
                     }
                 }
             }
@@ -637,7 +637,7 @@ pub(crate) async fn queries_tree_change(
                                             .await;
                                     }
                                     None => {
-                                        log::error!(
+                                        log::trace!(
                                             "Unable to find face for pid {}",
                                             net.graph[*child].pid
                                         )
