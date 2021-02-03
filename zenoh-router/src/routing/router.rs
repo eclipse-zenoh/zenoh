@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::{Arc, RwLock, Weak};
-use async_std::task::sleep;
+use async_std::task::{sleep, JoinHandle};
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -36,6 +36,7 @@ use crate::runtime::orchestrator::SessionOrchestrator;
 
 zconfigurable! {
     static ref LINK_CLOSURE_DELAY: u64 = 200;
+    static ref TREES_COMPUTATION_DELAY: u64 = 100;
 }
 
 pub struct Tables {
@@ -51,6 +52,8 @@ pub struct Tables {
     pub(crate) peer_qabls: HashSet<Arc<Resource>>,
     pub(crate) routers_net: Option<Network>,
     pub(crate) peers_net: Option<Network>,
+    pub(crate) routers_trees_task: Option<JoinHandle<()>>,
+    pub(crate) peers_trees_task: Option<JoinHandle<()>>,
 }
 
 impl Tables {
@@ -68,6 +71,8 @@ impl Tables {
             peer_qabls: HashSet::new(),
             routers_net: None,
             peers_net: None,
+            routers_trees_task: None,
+            peers_trees_task: None,
         }
     }
 
@@ -171,6 +176,36 @@ impl Tables {
     pub(crate) unsafe fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
         compute_matches_data_routes(self, res);
     }
+
+    pub(crate) fn schedule_compute_trees(
+        &mut self,
+        tables_ref: Arc<RwLock<Tables>>,
+        net_type: whatami::Type,
+    ) {
+        if (net_type == whatami::ROUTER && self.routers_trees_task.is_none())
+            || (net_type == whatami::PEER && self.peers_trees_task.is_none())
+        {
+            let task = Some(async_std::task::spawn(async move {
+                async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
+                    .await;
+                let mut tables = tables_ref.write().await;
+                let new_childs = match net_type {
+                    whatami::ROUTER => tables.routers_net.as_mut().unwrap().compute_trees().await,
+                    _ => tables.peers_net.as_mut().unwrap().compute_trees().await,
+                };
+                pubsub_tree_change(&mut tables, &new_childs, net_type).await;
+                queries_tree_change(&mut tables, &new_childs, net_type).await;
+                match net_type {
+                    whatami::ROUTER => tables.routers_trees_task = None,
+                    _ => tables.peers_trees_task = None,
+                };
+            }));
+            match net_type {
+                whatami::ROUTER => self.routers_trees_task = task,
+                _ => self.peers_trees_task = task,
+            };
+        }
+    }
 }
 
 pub struct Router {
@@ -263,16 +298,12 @@ impl SessionHandler for Router {
                 (whatami::ROUTER, whatami::ROUTER) => {
                     let net = tables.routers_net.as_mut().unwrap();
                     net.add_link(session.clone()).await;
-                    let new_childs = net.compute_trees().await;
-                    pubsub_tree_change(&mut tables, &new_childs, whatami::ROUTER).await;
-                    queries_tree_change(&mut tables, &new_childs, whatami::ROUTER).await;
+                    tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
                 }
                 _ => {
                     let net = tables.peers_net.as_mut().unwrap();
                     net.add_link(session.clone()).await;
-                    let new_childs = net.compute_trees().await;
-                    pubsub_tree_change(&mut tables, &new_childs, whatami::PEER).await;
-                    queries_tree_change(&mut tables, &new_childs, whatami::PEER).await;
+                    tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
                 }
             };
 
@@ -333,9 +364,7 @@ impl SessionEventHandler for LinkStateInterceptor {
                             queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER)
                                 .await;
                         }
-                        let new_childs = tables.routers_net.as_mut().unwrap().compute_trees().await;
-                        pubsub_tree_change(&mut tables, &new_childs, whatami::ROUTER).await;
-                        queries_tree_change(&mut tables, &new_childs, whatami::ROUTER).await;
+                        tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
                     }
                     _ => {
                         for (_, removed_node) in tables
@@ -349,9 +378,7 @@ impl SessionEventHandler for LinkStateInterceptor {
                             queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER)
                                 .await;
                         }
-                        let new_childs = tables.peers_net.as_mut().unwrap().compute_trees().await;
-                        pubsub_tree_change(&mut tables, &new_childs, whatami::PEER).await;
-                        queries_tree_change(&mut tables, &new_childs, whatami::PEER).await;
+                        tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
                     }
                 };
 
@@ -382,9 +409,7 @@ impl SessionEventHandler for LinkStateInterceptor {
                         pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
                         queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
                     }
-                    let new_childs = tables.routers_net.as_mut().unwrap().compute_trees().await;
-                    pubsub_tree_change(&mut tables, &new_childs, whatami::ROUTER).await;
-                    queries_tree_change(&mut tables, &new_childs, whatami::ROUTER).await;
+                    tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
                 }
                 _ => {
                     for (_, removed_node) in tables
@@ -397,9 +422,7 @@ impl SessionEventHandler for LinkStateInterceptor {
                         pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
                         queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
                     }
-                    let new_childs = tables.peers_net.as_mut().unwrap().compute_trees().await;
-                    pubsub_tree_change(&mut tables, &new_childs, whatami::PEER).await;
-                    queries_tree_change(&mut tables, &new_childs, whatami::PEER).await;
+                    tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
                 }
             },
             Err(_) => log::error!("Unable to get whatami closing session!"),
