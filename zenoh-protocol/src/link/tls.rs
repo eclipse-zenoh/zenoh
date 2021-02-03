@@ -216,6 +216,28 @@ impl From<ServerConfig> for LocatorProperty {
     }
 }
 
+impl From<(Option<Arc<ClientConfig>>, Option<Arc<ServerConfig>>)> for LocatorProperty {
+    fn from(tuple: (Option<Arc<ClientConfig>>, Option<Arc<ServerConfig>>)) -> LocatorProperty {
+        Self::from(LocatorPropertyTls::new(tuple.0, tuple.1))
+    }
+}
+
+impl From<(Option<ClientConfig>, Option<ServerConfig>)> for LocatorProperty {
+    fn from(mut tuple: (Option<ClientConfig>, Option<ServerConfig>)) -> LocatorProperty {
+        let client_config = if let Some(client_config) = tuple.0.take() {
+            Some(Arc::new(client_config))
+        } else {
+            None
+        };
+        let server_config = if let Some(server_config) = tuple.1.take() {
+            Some(Arc::new(server_config))
+        } else {
+            None
+        };
+        Self::from((client_config, server_config))
+    }
+}
+
 /*************************************/
 /*              LINK                 */
 /*************************************/
