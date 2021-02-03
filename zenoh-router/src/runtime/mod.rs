@@ -79,7 +79,7 @@ async fn build_tls_locator_property(
     config: &RuntimeProperties,
 ) -> ZResult<Option<LocatorProperty>> {
     let mut client_config: Option<ClientConfig> = None;
-    if let Some(tls_ca_certificate) = config.get(&ZN_TLS_CA_CERTIFICATE_KEY) {
+    if let Some(tls_ca_certificate) = config.get(&ZN_TLS_ROOT_CA_CERTIFICATE_KEY) {
         let ca = fs::read(tls_ca_certificate).await.map_err(|e| {
             zerror2!(ZErrorKind::Other {
                 descr: format!("Invalid TLS CA certificate file: {}", e)
