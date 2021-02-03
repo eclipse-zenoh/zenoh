@@ -28,11 +28,49 @@ use crate::routing::network::Network;
 use crate::routing::resource::{Context, PullCaches, Resource, Route};
 use crate::routing::router::Tables;
 
+#[inline]
+async fn send_sourced_subscription_to_net_childs(
+    tables: &Tables,
+    net: &Network,
+    childs: &[NodeIndex],
+    res: &Arc<Resource>,
+    src_face: Option<&Arc<FaceState>>,
+    sub_info: &SubInfo,
+    routing_context: Option<RoutingContext>,
+) {
+    for child in childs {
+        if net.graph.contains_node(*child) {
+            match tables.get_face(&net.graph[*child].pid).cloned() {
+                Some(mut someface) => {
+                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                        let reskey = Resource::decl_key(res, &mut someface).await;
+
+                        log::debug!(
+                            "Send subscription {} on face {} {}",
+                            res.name(),
+                            someface.id,
+                            someface.pid,
+                        );
+
+                        someface
+                            .primitives
+                            .subscriber(&reskey, sub_info, routing_context)
+                            .await;
+                    }
+                }
+                None => {
+                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
+                }
+            }
+        }
+    }
+}
+
 async fn propagate_simple_subscription(
     tables: &mut Tables,
-    src_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
     sub_info: &SubInfo,
+    src_face: &mut Arc<FaceState>,
 ) {
     for dst_face in &mut tables.faces.values_mut() {
         if src_face.id != dst_face.id
@@ -57,6 +95,40 @@ async fn propagate_simple_subscription(
     }
 }
 
+async fn propagate_sourced_subscription(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    sub_info: &SubInfo,
+    src_face: Option<&Arc<FaceState>>,
+    source: &PeerId,
+    net_type: whatami::Type,
+) {
+    let net = tables.get_net(net_type).unwrap();
+    match net.get_idx(source) {
+        Some(tree_sid) => {
+            if net.trees.len() > tree_sid.index() {
+                send_sourced_subscription_to_net_childs(
+                    tables,
+                    net,
+                    &net.trees[tree_sid.index()].childs,
+                    res,
+                    src_face,
+                    sub_info,
+                    Some(tree_sid.index() as ZInt),
+                )
+                .await;
+            } else {
+                log::trace!("Tree for node {} not yet ready", source);
+            }
+        }
+        None => log::error!(
+            "Error propagating sub {}: cannot get index of {}!",
+            res.name(),
+            source
+        ),
+    }
+}
+
 async unsafe fn register_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
@@ -78,48 +150,8 @@ async unsafe fn register_router_subscription(
         }
 
         // Propagate subscription to routers
-        let net = tables.routers_net.as_ref().unwrap();
-        match net.get_idx(&router) {
-            Some(tree_sid) => {
-                if net.trees.len() > tree_sid.index() {
-                    for child in &net.trees[tree_sid.index()].childs {
-                        match tables.get_face(&net.graph[*child].pid).cloned() {
-                            Some(mut someface) => {
-                                if someface.id != face.id {
-                                    let reskey = Resource::decl_key(res, &mut someface).await;
-
-                                    log::debug!(
-                                        "Send router subscription {} on face {} {}",
-                                        res.name(),
-                                        someface.id,
-                                        someface.pid,
-                                    );
-
-                                    someface
-                                        .primitives
-                                        .subscriber(
-                                            &reskey,
-                                            &sub_info,
-                                            Some(tree_sid.index() as ZInt),
-                                        )
-                                        .await;
-                                }
-                            }
-                            None => {
-                                log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                            }
-                        }
-                    }
-                } else {
-                    log::trace!("Tree for router {} not yet ready", router);
-                }
-            }
-            None => log::error!(
-                "Error propagating sub {}: cannot get index of {}!",
-                res.name(),
-                router
-            ),
-        }
+        propagate_sourced_subscription(tables, res, sub_info, Some(face), &router, whatami::ROUTER)
+            .await;
 
         // Propagate subscription to peers
         if face.whatami != whatami::PEER {
@@ -128,7 +160,7 @@ async unsafe fn register_router_subscription(
     }
 
     // Propagate subscription to clients
-    propagate_simple_subscription(tables, face, res, sub_info).await;
+    propagate_simple_subscription(tables, res, sub_info, face).await;
 }
 
 pub async fn declare_router_subscription(
@@ -172,48 +204,8 @@ async unsafe fn register_peer_subscription(
         }
 
         // Propagate subscription to peers
-        let net = tables.peers_net.as_ref().unwrap();
-        match net.get_idx(&peer) {
-            Some(tree_sid) => {
-                if net.trees.len() > tree_sid.index() {
-                    for child in &net.trees[tree_sid.index()].childs {
-                        match tables.get_face(&net.graph[*child].pid).cloned() {
-                            Some(mut someface) => {
-                                if someface.id != face.id {
-                                    let reskey = Resource::decl_key(res, &mut someface).await;
-
-                                    log::debug!(
-                                        "Send peer subscription {} on face {} {}",
-                                        res.name(),
-                                        someface.id,
-                                        someface.pid,
-                                    );
-
-                                    someface
-                                        .primitives
-                                        .subscriber(
-                                            &reskey,
-                                            &sub_info,
-                                            Some(tree_sid.index() as ZInt),
-                                        )
-                                        .await;
-                                }
-                            }
-                            None => {
-                                log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                            }
-                        }
-                    }
-                } else {
-                    log::trace!("Tree for peer {} not yet ready", peer);
-                }
-            }
-            None => log::error!(
-                "Error propagating sub {}: cannot get index of {}!",
-                res.name(),
-                peer,
-            ),
-        }
+        propagate_sourced_subscription(tables, res, sub_info, Some(face), &peer, whatami::PEER)
+            .await;
     }
 }
 
@@ -328,7 +320,7 @@ pub async fn declare_client_subscription(
                     .await;
                 }
                 _ => {
-                    propagate_simple_subscription(tables, face, &res, sub_info).await;
+                    propagate_simple_subscription(tables, &res, sub_info, face).await;
                 }
             }
 
@@ -338,7 +330,44 @@ pub async fn declare_client_subscription(
     }
 }
 
-async unsafe fn propagate_forget_simple_subscription(tables: &mut Tables, res: &mut Arc<Resource>) {
+#[inline]
+async fn send_forget_sourced_subscription_to_net_childs(
+    tables: &Tables,
+    net: &Network,
+    childs: &[NodeIndex],
+    res: &Arc<Resource>,
+    src_face: Option<&Arc<FaceState>>,
+    routing_context: Option<RoutingContext>,
+) {
+    for child in childs {
+        if net.graph.contains_node(*child) {
+            match tables.get_face(&net.graph[*child].pid).cloned() {
+                Some(mut someface) => {
+                    if src_face.is_none() || someface.id != src_face.unwrap().id {
+                        let reskey = Resource::decl_key(res, &mut someface).await;
+
+                        log::debug!(
+                            "Send forget subscription {} on face {} {}",
+                            res.name(),
+                            someface.id,
+                            someface.pid,
+                        );
+
+                        someface
+                            .primitives
+                            .forget_subscriber(&reskey, routing_context)
+                            .await;
+                    }
+                }
+                None => {
+                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
+                }
+            }
+        }
+    }
+}
+
+async unsafe fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
     for face in tables.faces.values_mut() {
         if face.local_subs.contains(res) {
             let reskey = Resource::get_best_key(res, "", face.id);
@@ -352,8 +381,8 @@ async unsafe fn propagate_forget_simple_subscription(tables: &mut Tables, res: &
 }
 
 async fn propagate_forget_sourced_subscription(
-    tables: &mut Tables,
-    res: &mut Arc<Resource>,
+    tables: &Tables,
+    res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
     source: &PeerId,
     net_type: whatami::Type,
@@ -361,34 +390,15 @@ async fn propagate_forget_sourced_subscription(
     let net = tables.get_net(net_type).unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
-            for child in &net.trees[tree_sid.index()].childs {
-                match tables.get_face(&net.graph[*child].pid).cloned() {
-                    Some(mut someface) => {
-                        if src_face.is_none() || someface.id != src_face.unwrap().id {
-                            let reskey = Resource::decl_key(res, &mut someface).await;
-
-                            log::debug!(
-                                "Send forget {} subscription {} on face {} {}",
-                                match net_type {
-                                    whatami::ROUTER => "router",
-                                    _ => "peer",
-                                },
-                                res.name(),
-                                someface.id,
-                                someface.pid,
-                            );
-
-                            someface
-                                .primitives
-                                .forget_subscriber(&reskey, Some(tree_sid.index() as ZInt))
-                                .await;
-                        }
-                    }
-                    None => {
-                        log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                    }
-                }
-            }
+            send_forget_sourced_subscription_to_net_childs(
+                tables,
+                net,
+                &net.trees[tree_sid.index()].childs,
+                res,
+                src_face,
+                Some(tree_sid.index() as ZInt),
+            )
+            .await;
         }
         None => log::error!(
             "Error propagating sub {}: cannot get index of {}!",
@@ -684,35 +694,21 @@ pub(crate) async fn pubsub_tree_change(
                     };
                     for sub in subs {
                         if *sub == tree_id {
-                            for child in tree_childs {
-                                match tables.get_face(&net.graph[*child].pid).cloned() {
-                                    Some(mut face) => {
-                                        let reskey = Resource::decl_key(&res, &mut face).await;
-                                        let sub_info = SubInfo {
-                                            // TODO
-                                            reliability: Reliability::Reliable,
-                                            mode: SubMode::Push,
-                                            period: None,
-                                        };
-                                        log::debug!(
-                                            "Send {} subscription {} on face {} {} (new_child)",
-                                            net_type,
-                                            res.name(),
-                                            face.id,
-                                            face.pid,
-                                        );
-                                        face.primitives
-                                            .subscriber(&reskey, &sub_info, Some(tree_sid as ZInt))
-                                            .await;
-                                    }
-                                    None => {
-                                        log::trace!(
-                                            "Unable to find face for pid {}",
-                                            net.graph[*child].pid
-                                        )
-                                    }
-                                }
-                            }
+                            let sub_info = SubInfo {
+                                reliability: Reliability::Reliable, // TODO
+                                mode: SubMode::Push,
+                                period: None,
+                            };
+                            send_sourced_subscription_to_net_childs(
+                                tables,
+                                net,
+                                tree_childs,
+                                res,
+                                None,
+                                &sub_info,
+                                Some(tree_sid as ZInt),
+                            )
+                            .await;
                         }
                     }
                 }
