@@ -600,20 +600,22 @@ impl Network {
                 .unwrap()
                 .1;
 
-            let ps: Vec<Option<String>> = path
-                .iter()
-                .enumerate()
-                .map(|(is, o)| {
-                    o.map(|ip| {
-                        format!(
-                            "{} <- {}",
-                            self.graph[ip].pid.clone(),
-                            self.graph[NodeIndex::new(is)].pid.clone()
-                        )
+            if log::log_enabled!(log::Level::Debug) {
+                let ps: Vec<Option<String>> = path
+                    .iter()
+                    .enumerate()
+                    .map(|(is, o)| {
+                        o.map(|ip| {
+                            format!(
+                                "{} <- {}",
+                                self.graph[ip].pid.clone(),
+                                self.graph[NodeIndex::new(is)].pid.clone()
+                            )
+                        })
                     })
-                })
-                .collect();
-            log::debug!("Tree {} {:?}", self.graph[*tree_root_idx].pid, ps);
+                    .collect();
+                log::debug!("Tree {} {:?}", self.graph[*tree_root_idx].pid, ps);
+            }
 
             self.trees[tree_root_idx.index()].parent = path[self.idx.index()];
 
