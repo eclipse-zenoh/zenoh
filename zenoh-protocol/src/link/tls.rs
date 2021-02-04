@@ -32,7 +32,7 @@ use std::net::Shutdown;
 use std::str::FromStr;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::runtime::*;
+use zenoh_util::properties::config::*;
 use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
 
 // Default MTU (TLS PDU) in bytes.
@@ -177,7 +177,7 @@ impl LocatorPropertyTls {
     }
 
     pub(super) async fn from_properties(
-        config: &RuntimeProperties,
+        config: &ConfigProperties,
     ) -> ZResult<Option<LocatorProperty>> {
         let mut client_config: Option<ClientConfig> = None;
         if let Some(tls_ca_certificate) = config.get(&ZN_TLS_ROOT_CA_CERTIFICATE_KEY) {

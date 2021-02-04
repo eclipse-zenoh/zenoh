@@ -34,7 +34,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
-use zenoh_util::properties::*;
+use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::{zasynclock, zerror};
 
 /// # Examples
@@ -120,7 +120,7 @@ pub struct SessionManagerOptionalConfig {
 
 impl SessionManagerOptionalConfig {
     pub async fn from_properties(
-        config: &RuntimeProperties,
+        config: &ConfigProperties,
     ) -> ZResult<Option<SessionManagerOptionalConfig>> {
         let peer_authenticator = PeerAuthenticator::from_properties(config).await?;
         let link_authenticator = LinkAuthenticator::from_properties(config).await?;

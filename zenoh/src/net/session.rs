@@ -18,7 +18,6 @@ use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task;
 use async_trait::async_trait;
-use config::*;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::fmt;

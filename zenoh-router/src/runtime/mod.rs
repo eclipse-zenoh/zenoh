@@ -22,7 +22,7 @@ use uhlc::HLC;
 use zenoh_protocol::core::{whatami, PeerId};
 use zenoh_protocol::session::{SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::runtime::*;
+use zenoh_util::properties::config::*;
 use zenoh_util::{zerror, zerror2};
 
 pub struct RuntimeState {
@@ -46,7 +46,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, config: RuntimeProperties, id: Option<&str>) -> ZResult<Runtime> {
+    pub async fn new(version: u8, config: ConfigProperties, id: Option<&str>) -> ZResult<Runtime> {
         let pid = if let Some(s) = id {
             // filter-out '-' characters (in case s has UUID format)
             let s = s.replace('-', "");

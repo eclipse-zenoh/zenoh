@@ -13,7 +13,7 @@
 //
 use super::{IntKeyProperties, KeyTranscoder};
 
-mod config {
+mod consts {
     /// `"true"`
     pub const ZN_TRUE: &str = "true";
     /// `"false"`
@@ -166,12 +166,13 @@ mod config {
     pub const ZN_JOIN_PUBLICATIONS_STR: &str = "join_publications";
 }
 
-pub use config::*;
+pub use consts::*;
 
-pub type RuntimeProperties = IntKeyProperties<RuntimeTranscoder>;
+pub type ConfigProperties = IntKeyProperties<ConfigTranscoder>;
 
-pub struct RuntimeTranscoder();
-impl KeyTranscoder for RuntimeTranscoder {
+pub struct ConfigTranscoder;
+
+impl KeyTranscoder for ConfigTranscoder {
     fn encode(key: &str) -> Option<u64> {
         match &key.to_lowercase()[..] {
             ZN_MODE_STR => Some(ZN_MODE_KEY),

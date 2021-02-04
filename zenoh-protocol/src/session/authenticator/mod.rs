@@ -22,7 +22,7 @@ use std::fmt;
 use std::ops::Deref;
 pub use userpassword::*;
 use zenoh_util::core::ZResult;
-use zenoh_util::properties::runtime::*;
+use zenoh_util::properties::config::*;
 
 /*************************************/
 /*              LINK                 */
@@ -31,7 +31,7 @@ pub struct LinkAuthenticator(Arc<dyn LinkAuthenticatorTrait + Send + Sync>);
 
 impl LinkAuthenticator {
     pub(crate) async fn from_properties(
-        _config: &RuntimeProperties,
+        _config: &ConfigProperties,
     ) -> ZResult<Vec<LinkAuthenticator>> {
         let las: Vec<LinkAuthenticator> = vec![];
         Ok(las)
@@ -95,7 +95,7 @@ pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait + Send + Sync>);
 
 impl PeerAuthenticator {
     pub(crate) async fn from_properties(
-        config: &RuntimeProperties,
+        config: &ConfigProperties,
     ) -> ZResult<Vec<PeerAuthenticator>> {
         let mut pas: Vec<PeerAuthenticator> = vec![];
         let mut res = UserPasswordAuthenticator::from_properties(config).await?;

@@ -24,7 +24,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::str::FromStr;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::runtime::RuntimeProperties;
+use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::zerror;
 
 /*************************************/
@@ -180,7 +180,7 @@ impl LocatorProperty {
         }
     }
 
-    pub async fn from_properties(config: &RuntimeProperties) -> ZResult<Vec<LocatorProperty>> {
+    pub async fn from_properties(config: &ConfigProperties) -> ZResult<Vec<LocatorProperty>> {
         let mut ps: Vec<LocatorProperty> = vec![];
         #[cfg(feature = "transport_tls")]
         {

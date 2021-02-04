@@ -112,6 +112,7 @@ pub use values::*;
 pub mod utils;
 
 pub use zenoh_protocol::core::{Timestamp, TimestampID};
+pub use zenoh_util::properties::config::ConfigProperties;
 pub use zenoh_util::properties::Properties;
 
 /// The zenoh client API.
@@ -169,7 +170,7 @@ impl Zenoh {
     /// let zenoh = Zenoh::new(config.into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn new(config: net::config::ConfigProperties) -> ZResult<Zenoh> {
+    pub async fn new(config: ConfigProperties) -> ZResult<Zenoh> {
         Ok(Zenoh {
             session: net::open(config).await?,
         })

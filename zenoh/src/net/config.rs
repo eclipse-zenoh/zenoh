@@ -14,8 +14,7 @@
 
 //! Properties to pass to [open](super::open) and [scout](super::scout) functions as configuration
 //! and associated constants.
-use zenoh_util::properties::runtime::RuntimeProperties;
-pub use zenoh_util::properties::runtime::*;
+pub use zenoh_util::properties::config::*;
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [open](super::open)  
 /// to configure the zenoh-net [Session](super::super::Session).
@@ -24,7 +23,6 @@ pub use zenoh_util::properties::runtime::*;
 ///
 /// The [IntKeyProperties](IntKeyProperties) can be built from (`String`/`String`)
 /// [Properties](super::super::Properties) and reverse.
-pub type ConfigProperties = RuntimeProperties;
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> ConfigProperties {

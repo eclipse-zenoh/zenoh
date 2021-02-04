@@ -22,7 +22,8 @@ use rand::{Rng, SeedableRng};
 use std::collections::{HashMap, HashSet};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{hmac, PseudoRng};
-use zenoh_util::properties::*;
+use zenoh_util::properties::config::*;
+use zenoh_util::properties::Properties;
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite};
 
 const WBUF_SIZE: usize = 64;
@@ -182,7 +183,7 @@ impl UserPasswordAuthenticator {
     }
 
     pub async fn from_properties(
-        config: &RuntimeProperties,
+        config: &ConfigProperties,
     ) -> ZResult<Option<UserPasswordAuthenticator>> {
         if let Some(user) = config.get(&ZN_USER_KEY) {
             if let Some(password) = config.get(&ZN_PASSWORD_KEY) {

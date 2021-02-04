@@ -17,7 +17,7 @@ use clap::{App, Arg, Values};
 use git_version::git_version;
 use zenoh_router::plugins::PluginsMgr;
 use zenoh_router::runtime::{AdminSpace, Runtime};
-use zenoh_util::properties::runtime::*;
+use zenoh_util::properties::config::*;
 use zenoh_util::properties::Properties;
 use zenoh_util::LibLoader;
 
@@ -139,7 +139,7 @@ fn main() {
         let mut config = if let Some(conf_file) = args.value_of("config") {
             Properties::from(std::fs::read_to_string(conf_file).unwrap()).into()
         } else {
-            RuntimeProperties::default()
+            ConfigProperties::default()
         };
 
         config.insert(ZN_MODE_KEY, "router".to_string());
