@@ -117,6 +117,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         max_links: None,
         peer_authenticator: None,
         link_authenticator: None,
+        locator_property: None,
     };
     let peer01_manager = SessionManager::new(config, Some(opt_config));
 
@@ -139,6 +140,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         max_links: None,
         peer_authenticator: None,
         link_authenticator: None,
+        locator_property: None,
     };
     let peer02_manager = SessionManager::new(config, Some(opt_config));
 
@@ -351,8 +353,6 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_concurrent() {
-    env_logger::init();
-
     let locator01: Vec<Locator> = vec![
         "tcp/127.0.0.1:7447".parse().unwrap(),
         "tcp/127.0.0.1:7448".parse().unwrap(),

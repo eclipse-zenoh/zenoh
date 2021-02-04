@@ -11,8 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::runtime::config::*;
-use crate::runtime::RuntimeProperties;
 use async_std::net::UdpSocket;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
@@ -24,6 +22,7 @@ use zenoh_protocol::link::Locator;
 use zenoh_protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
 use zenoh_protocol::session::{Session, SessionManager};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::properties::config::*;
 use zenoh_util::zerror;
 
 const RCV_BUF_SIZE: usize = 65536;
@@ -50,11 +49,7 @@ impl SessionOrchestrator {
         SessionOrchestrator { whatami, manager }
     }
 
-    pub async fn init(
-        &mut self,
-        config: RuntimeProperties,
-        peers_autoconnect: bool,
-    ) -> ZResult<()> {
+    pub async fn init(&mut self, config: ConfigProperties, peers_autoconnect: bool) -> ZResult<()> {
         match self.whatami {
             whatami::CLIENT => self.init_client(config).await,
             whatami::PEER => self.init_peer(config, peers_autoconnect).await,
@@ -68,7 +63,7 @@ impl SessionOrchestrator {
         }
     }
 
-    async fn init_client(&mut self, config: RuntimeProperties) -> ZResult<()> {
+    async fn init_client(&mut self, config: ConfigProperties) -> ZResult<()> {
         let peers = config
             .get_or(&ZN_PEER_KEY, "")
             .split(',')
@@ -123,7 +118,7 @@ impl SessionOrchestrator {
 
     pub async fn init_peer(
         &mut self,
-        config: RuntimeProperties,
+        config: ConfigProperties,
         peers_autoconnect: bool,
     ) -> ZResult<()> {
         let listeners = config
@@ -188,7 +183,7 @@ impl SessionOrchestrator {
         Ok(())
     }
 
-    pub async fn init_broker(&mut self, config: RuntimeProperties) -> ZResult<()> {
+    pub async fn init_broker(&mut self, config: ConfigProperties) -> ZResult<()> {
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
             .split(',')

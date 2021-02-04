@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Link, LinkManagerTrait, LinkTrait, Locator};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use crate::session::SessionManager;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::os::unix::net::{UnixListener, UnixStream};
@@ -25,13 +25,14 @@ use std::fmt;
 use std::fs::remove_file;
 use std::net::Shutdown;
 use std::os::unix::io::RawFd;
+use std::str::FromStr;
 use std::time::Duration;
 use uuid::Uuid;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
 
-// Default MTU (UnixSock-Stream PDU) in bytes.
-// NOTE: Since UnixSock-Stream is a byte-stream oriented transport, theoretically it has
+// Default MTU (UnixSocketStream PDU) in bytes.
+// NOTE: Since UnixSocketStream is a byte-stream oriented transport, theoretically it has
 //       no limit regarding the MTU. However, given the batching strategy
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the UNIXSOCKSTREAM MTU is constrained to
@@ -47,11 +48,11 @@ zconfigurable! {
 }
 
 #[allow(unreachable_patterns)]
-fn get_unix_path(locator: &Locator) -> ZResult<&PathBuf> {
+fn get_unix_path(locator: &Locator) -> ZResult<PathBuf> {
     match locator {
-        Locator::UnixSockStream(path) => Ok(path),
+        Locator::UnixSocketStream(path) => Ok(path.0.clone()),
         _ => {
-            let e = format!("Not a UnixSock-Stream locator: {:?}", locator);
+            let e = format!("Not a UnixSocketStream locator: {:?}", locator);
             log::debug!("{}", e);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
@@ -61,16 +62,16 @@ fn get_unix_path(locator: &Locator) -> ZResult<&PathBuf> {
 #[allow(unreachable_patterns)]
 fn get_unix_path_as_string(locator: &Locator) -> String {
     match locator {
-        Locator::UnixSockStream(path) => match path.to_str() {
+        Locator::UnixSocketStream(path) => match path.0.to_str() {
             Some(path_str) => path_str.to_string(),
             None => {
-                let e = format!("Not a UnixSock-Stream locator: {:?}", locator);
+                let e = format!("Not a UnixSocketStream locator: {:?}", locator);
                 log::debug!("{}", e);
                 "None".to_string()
             }
         },
         _ => {
-            let e = format!("Not a UnixSock-Stream locator: {:?}", locator);
+            let e = format!("Not a UnixSocketStream locator: {:?}", locator);
             log::debug!("{}", e);
             "None".to_string()
         }
@@ -78,9 +79,43 @@ fn get_unix_path_as_string(locator: &Locator) -> String {
 }
 
 /*************************************/
+/*             LOCATOR               */
+/*************************************/
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct LocatorUnixSocketStream(PathBuf);
+
+impl FromStr for LocatorUnixSocketStream {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let addr = match PathBuf::from(s).to_str() {
+            Some(path) => Ok(PathBuf::from(path)),
+            None => {
+                let e = format!("Invalid UnixSocketStream locator: {:?}", s);
+                zerror!(ZErrorKind::InvalidLocator { descr: e })
+            }
+        };
+        addr.map(LocatorUnixSocketStream)
+    }
+}
+
+impl fmt::Display for LocatorUnixSocketStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let path = self.0.to_str().unwrap_or("None");
+        write!(f, "{}", path)?;
+        Ok(())
+    }
+}
+
+/*************************************/
+/*            PROPERTY               */
+/*************************************/
+pub type LocatorPropertyUnixSocketStream = ();
+
+/*************************************/
 /*              LINK                 */
 /*************************************/
-pub struct UnixSockStream {
+pub struct UnixSocketStream {
     // The underlying socket as returned from the async-std library
     socket: UnixStream,
     // The Unix domain socket source path
@@ -89,9 +124,9 @@ pub struct UnixSockStream {
     dst_path: String,
 }
 
-impl UnixSockStream {
-    fn new(socket: UnixStream, src_path: String, dst_path: String) -> UnixSockStream {
-        UnixSockStream {
+impl UnixSocketStream {
+    fn new(socket: UnixStream, src_path: String, dst_path: String) -> UnixSocketStream {
+        UnixSocketStream {
             socket,
             src_path,
             dst_path,
@@ -100,12 +135,12 @@ impl UnixSockStream {
 }
 
 #[async_trait]
-impl LinkTrait for UnixSockStream {
+impl LinkTrait for UnixSocketStream {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing UnixSock-Stream link: {}", self);
-        // Close the underlying UnixSock-Stream socket
+        log::trace!("Closing UnixSocketStream link: {}", self);
+        // Close the underlying UnixSocketStream socket
         let res = self.socket.shutdown(Shutdown::Both);
-        log::trace!("UnixSock-Stream link shutdown {}: {:?}", self, res);
+        log::trace!("UnixSocketStream link shutdown {}: {:?}", self, res);
         res.map_err(|e| {
             zerror2!(ZErrorKind::IOError {
                 descr: format!("{}", e),
@@ -118,7 +153,11 @@ impl LinkTrait for UnixSockStream {
         match (&self.socket).write(buffer).await {
             Ok(n) => Ok(n),
             Err(e) => {
-                log::trace!("Transmission error on UnixSock-Stream link {}: {}", self, e);
+                log::trace!(
+                    "Transmission error on UnixSocketStream link {}: {}",
+                    self,
+                    e
+                );
                 zerror!(ZErrorKind::IOError {
                     descr: format!("{}", e)
                 })
@@ -131,7 +170,11 @@ impl LinkTrait for UnixSockStream {
         match (&self.socket).write_all(buffer).await {
             Ok(_) => Ok(()),
             Err(e) => {
-                log::trace!("Transmission error on UnixSock-Stream link {}: {}", self, e);
+                log::trace!(
+                    "Transmission error on UnixSocketStream link {}: {}",
+                    self,
+                    e
+                );
                 zerror!(ZErrorKind::IOError {
                     descr: format!("{}", e)
                 })
@@ -144,7 +187,7 @@ impl LinkTrait for UnixSockStream {
         match (&self.socket).read(buffer).await {
             Ok(n) => Ok(n),
             Err(e) => {
-                log::trace!("Reception error on UnixSock-Stream link {}: {}", self, e);
+                log::trace!("Reception error on UnixSocketStream link {}: {}", self, e);
                 zerror!(ZErrorKind::IOError {
                     descr: format!("{}", e)
                 })
@@ -157,7 +200,7 @@ impl LinkTrait for UnixSockStream {
         match (&self.socket).read_exact(buffer).await {
             Ok(_) => Ok(()),
             Err(e) => {
-                log::trace!("Reception error on UnixSock-Stream link {}: {}", self, e);
+                log::trace!("Reception error on UnixSocketStream link {}: {}", self, e);
                 zerror!(ZErrorKind::IOError {
                     descr: format!("{}", e)
                 })
@@ -167,12 +210,16 @@ impl LinkTrait for UnixSockStream {
 
     #[inline]
     fn get_src(&self) -> Locator {
-        Locator::UnixSockStream(PathBuf::from(self.src_path.clone()))
+        Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
+            self.src_path.clone(),
+        )))
     }
 
     #[inline]
     fn get_dst(&self) -> Locator {
-        Locator::UnixSockStream(PathBuf::from(self.dst_path.clone()))
+        Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
+            self.dst_path.clone(),
+        )))
     }
 
     #[inline]
@@ -191,23 +238,23 @@ impl LinkTrait for UnixSockStream {
     }
 }
 
-impl Drop for UnixSockStream {
+impl Drop for UnixSocketStream {
     fn drop(&mut self) {
-        // Close the underlying UnixSock-Stream socket
+        // Close the underlying UnixSocketStream socket
         let _ = self.socket.shutdown(Shutdown::Both);
     }
 }
 
-impl fmt::Display for UnixSockStream {
+impl fmt::Display for UnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_path, self.dst_path)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for UnixSockStream {
+impl fmt::Debug for UnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("UnixSockStream")
+        f.debug_struct("UnixSocketStream")
             .field("src", &self.src_path)
             .field("dst", &self.dst_path)
             .finish()
@@ -217,21 +264,21 @@ impl fmt::Debug for UnixSockStream {
 /*************************************/
 /*          LISTENER                 */
 /*************************************/
-struct ListenerUnixSockStream {
+struct ListenerUnixSocketStream {
     socket: Arc<UnixListener>,
     sender: Sender<()>,
     receiver: Receiver<()>,
     barrier: Arc<Barrier>,
 }
 
-impl ListenerUnixSockStream {
-    fn new(socket: Arc<UnixListener>) -> ListenerUnixSockStream {
+impl ListenerUnixSocketStream {
+    fn new(socket: Arc<UnixListener>) -> ListenerUnixSocketStream {
         // Create the channel necessary to break the accept loop
         let (sender, receiver) = bounded::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
         let barrier = Arc::new(Barrier::new(2));
         // Update the list of active listeners on the manager
-        ListenerUnixSockStream {
+        ListenerUnixSocketStream {
             socket,
             sender,
             receiver,
@@ -240,14 +287,14 @@ impl ListenerUnixSockStream {
     }
 }
 
-type ListenerHashMap = (Arc<ListenerUnixSockStream>, RawFd);
+type ListenerHashMap = (Arc<ListenerUnixSocketStream>, RawFd);
 
-pub struct LinkManagerUnixSockStream {
+pub struct LinkManagerUnixSocketStream {
     manager: SessionManager,
     listener: Arc<RwLock<HashMap<String, ListenerHashMap>>>,
 }
 
-impl LinkManagerUnixSockStream {
+impl LinkManagerUnixSocketStream {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
@@ -257,16 +304,16 @@ impl LinkManagerUnixSockStream {
 }
 
 #[async_trait]
-impl LinkManagerTrait for LinkManagerUnixSockStream {
-    async fn new_link(&self, locator: &Locator) -> ZResult<Link> {
+impl LinkManagerTrait for LinkManagerUnixSocketStream {
+    async fn new_link(&self, locator: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let path = get_unix_path(locator)?;
 
-        // Create the UnixSock-Stream connection
-        let stream = match UnixStream::connect(path).await {
+        // Create the UnixSocketStream connection
+        let stream = match UnixStream::connect(&path).await {
             Ok(stream) => stream,
             Err(e) => {
                 let e = format!(
-                    "Can not create a new UnixSock-Stream link bound to {:?}: {}",
+                    "Can not create a new UnixSocketStream link bound to {:?}: {}",
                     path, e
                 );
                 log::warn!("{}", e);
@@ -278,7 +325,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Ok(addr) => addr,
             Err(e) => {
                 let e = format!(
-                    "Can not create a new UnixSock-Stream link bound to {:?}: {}",
+                    "Can not create a new UnixSocketStream link bound to {:?}: {}",
                     path, e
                 );
                 log::warn!("{}", e);
@@ -289,7 +336,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
         // We do need the dst_addr value, we just need to check that is valid
         if let Err(e) = stream.peer_addr() {
             let e = format!(
-                "Can not create a new UnixSock-Stream link bound to {:?}: {}",
+                "Can not create a new UnixSocketStream link bound to {:?}: {}",
                 path, e
             );
             log::warn!("{}", e);
@@ -300,7 +347,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Some(path) => PathBuf::from(path),
             None => {
                 let e = format!(
-                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    "Can not create a new UnixSocketStream link bound to {:?}",
                     path
                 );
                 log::warn!("{}", e);
@@ -312,7 +359,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Some(path_str) => path_str.to_string(),
             None => {
                 let e = format!(
-                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    "Can not create a new UnixSocketStream link bound to {:?}",
                     path
                 );
                 log::warn!("{}", e);
@@ -324,7 +371,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Some(path_str) => path_str.to_string(),
             None => {
                 let e = format!(
-                    "Can not create a new UnixSock-Stream link bound to {:?}",
+                    "Can not create a new UnixSocketStream link bound to {:?}",
                     path
                 );
                 log::warn!("{}", e);
@@ -332,12 +379,20 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             }
         };
 
-        let link = Arc::new(UnixSockStream::new(stream, local_path_str, remote_path_str));
+        let link = Arc::new(UnixSocketStream::new(
+            stream,
+            local_path_str,
+            remote_path_str,
+        ));
 
         Ok(Link::new(link))
     }
 
-    async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
+    async fn new_listener(
+        &self,
+        locator: &Locator,
+        _ps: Option<&LocatorProperty>,
+    ) -> ZResult<Locator> {
         let path = get_unix_path_as_string(locator);
 
         // Because of the lack of SO_REUSEADDR we have to check if the
@@ -375,7 +430,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Ok(raw_fd) => raw_fd,
             Err(e) => {
                 let e = format!(
-                        "Can not create a new UnixSock-Stream listener on {} - Unable to open lock file: {}",
+                        "Can not create a new UnixSocketStream listener on {} - Unable to open lock file: {}",
                         path, e
                     );
                 log::warn!("{}", e);
@@ -390,7 +445,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Err(e) => {
                 let _ = nix::unistd::close(lock_fd);
                 let e = format!(
-                    "Can not create a new UnixSock-Stream listener on {} - Unable to acquire look: {}",
+                    "Can not create a new UnixSocketStream listener on {} - Unable to acquire look: {}",
                     path, e
                 );
                 log::warn!("{}", e);
@@ -408,7 +463,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Ok(socket) => Arc::new(socket),
             Err(e) => {
                 let e = format!(
-                    "Can not create a new UnixSock-Stream listener on {}: {}",
+                    "Can not create a new UnixSocketStream listener on {}: {}",
                     path, e
                 );
                 log::warn!("{}", e);
@@ -420,7 +475,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             Ok(addr) => addr,
             Err(e) => {
                 let e = format!(
-                    "Can not create a new UnixSock-Stream listener on {}: {}",
+                    "Can not create a new UnixSocketStream listener on {}: {}",
                     path, e
                 );
                 log::warn!("{}", e);
@@ -431,7 +486,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
         let local_path = match local_addr.as_pathname() {
             Some(path) => PathBuf::from(path),
             None => {
-                let e = format!("Can not create a new UnixSock-Stream listener on {}", path);
+                let e = format!("Can not create a new UnixSocketStream listener on {}", path);
                 log::warn!("{}", e);
                 return zerror!(ZErrorKind::InvalidLink { descr: e });
             }
@@ -442,7 +497,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             None => "None".to_string(),
         };
 
-        let listener = Arc::new(ListenerUnixSockStream::new(socket));
+        let listener = Arc::new(ListenerUnixSocketStream::new(socket));
         // Update the list of active listeners on the manager
         let listener_info = (listener.clone(), lock_fd);
         zasyncwrite!(self.listener).insert(local_path_str.clone(), listener_info);
@@ -458,7 +513,9 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
             zasyncwrite!(c_listeners).remove(&c_path);
         });
 
-        Ok(Locator::UnixSockStream(local_path))
+        Ok(Locator::UnixSocketStream(LocatorUnixSocketStream(
+            local_path,
+        )))
     }
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
@@ -483,7 +540,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
                     Err(e) => {
                         let _ = nix::unistd::close(lock_fd);
                         let e = format!(
-                            "Can not create a new UnixSock-Stream listener on {}: {}",
+                            "Can not create a new UnixSocketStream listener on {}: {}",
                             path, e
                         );
                         log::warn!("{}", e);
@@ -495,12 +552,12 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
 
                 // Remove the Unix Domain Socket file
                 let res = remove_file(lock_file_path);
-                log::trace!("UnixSock-Stream Domain Socket removal result: {:?}", res);
+                log::trace!("UnixSocketStream Domain Socket removal result: {:?}", res);
                 Ok(())
             }
             None => {
                 let e = format!(
-                    "Can not delete the UnixSock-Stream listener because it has not been found: {}",
+                    "Can not delete the UnixSocketStream listener because it has not been found: {}",
                     path
                 );
                 log::trace!("{}", e);
@@ -512,7 +569,7 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
     async fn get_listeners(&self) -> Vec<Locator> {
         zasyncread!(self.listener)
             .keys()
-            .map(|x| Locator::UnixSockStream(PathBuf::from(x)))
+            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(x))))
             .collect()
     }
 
@@ -526,15 +583,18 @@ impl LinkManagerTrait for LinkManagerUnixSockStream {
                 locators.push(PathBuf::from(addr));
             }
         }
-        locators.into_iter().map(Locator::UnixSockStream).collect()
+        locators
+            .into_iter()
+            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream(x)))
+            .collect()
     }
 }
 
-async fn accept_task(listener: Arc<ListenerUnixSockStream>, manager: SessionManager) {
+async fn accept_task(listener: Arc<ListenerUnixSocketStream>, manager: SessionManager) {
     // The accept future
     let accept_loop = async {
         log::trace!(
-            "Ready to accept UnixSock-Stream connections on: {:?}",
+            "Ready to accept UnixSocketStream connections on: {:?}",
             listener.socket.local_addr()
         );
         loop {
@@ -556,18 +616,18 @@ async fn accept_task(listener: Arc<ListenerUnixSockStream>, manager: SessionMana
                     continue;
                 }
             };
-            // Get the source UnixSock-Stream addresses
+            // Get the source UnixSocketStream addresses
             let src_addr = match stream.local_addr() {
                 Ok(addr) => addr,
                 Err(e) => {
-                    let e = format!("Can not accept UnixSock-Stream connection: {}", e);
+                    let e = format!("Can not accept UnixSocketStream connection: {}", e);
                     log::warn!("{}", e);
                     continue;
                 }
             };
             // We do need the dst_addr value, we just need to check that is valid
             if let Err(e) = stream.peer_addr() {
-                let e = format!("Can not accept UnixSock-Stream connection: {}", e);
+                let e = format!("Can not accept UnixSocketStream connection: {}", e);
                 log::warn!("{}", e);
                 continue;
             }
@@ -576,7 +636,7 @@ async fn accept_task(listener: Arc<ListenerUnixSockStream>, manager: SessionMana
                 Some(path) => PathBuf::from(path),
                 None => {
                     let e = format!(
-                        "Can not create a new UnixSock-Stream link bound to {:?}",
+                        "Can not create a new UnixSocketStream link bound to {:?}",
                         src_addr
                     );
                     log::warn!("{}", e);
@@ -587,7 +647,7 @@ async fn accept_task(listener: Arc<ListenerUnixSockStream>, manager: SessionMana
                 Some(path_str) => path_str.to_string(),
                 None => {
                     let e = format!(
-                        "Can not create a new UnixSock-Stream link bound to {:?}",
+                        "Can not create a new UnixSocketStream link bound to {:?}",
                         src_addr
                     );
                     log::warn!("{}", e);
@@ -597,10 +657,10 @@ async fn accept_task(listener: Arc<ListenerUnixSockStream>, manager: SessionMana
 
             let dst_path = format!("{}", Uuid::new_v4());
 
-            log::debug!("Accepted UnixSock-Stream connection on: {:?}", src_addr,);
+            log::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
 
             // Create the new link object
-            let link = Arc::new(UnixSockStream::new(stream, src_path, dst_path));
+            let link = Arc::new(UnixSocketStream::new(stream, src_path, dst_path));
 
             // Communicate the new link to the initial session manager
             manager.handle_new_link(Link::new(link), None).await;

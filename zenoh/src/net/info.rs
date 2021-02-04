@@ -13,7 +13,7 @@
 //
 
 //! Properties returned by the [info](super::Session::info) function and associated constants.
-use zenoh_util::collections::{IntKeyProperties, KeyTranscoder};
+use zenoh_util::properties::{IntKeyProperties, KeyTranscoder};
 
 // Properties returned by info()
 pub const ZN_INFO_PID_KEY: u64 = 0x00;

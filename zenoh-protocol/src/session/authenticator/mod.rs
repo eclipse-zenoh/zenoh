@@ -11,28 +11,50 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub(super) mod properties;
+pub(super) mod attachment;
 mod userpassword;
 
 use crate::core::{PeerId, Property, ZInt};
-use crate::link::{Link, LinkProperties, Locator};
+use crate::link::{Link, Locator, LocatorProperty};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use std::fmt;
+use std::ops::Deref;
 pub use userpassword::*;
 use zenoh_util::core::ZResult;
+use zenoh_util::properties::config::*;
 
 /*************************************/
 /*              LINK                 */
 /*************************************/
-pub type LinkAuthenticator = Arc<dyn LinkAuthenticatorTrait + Send + Sync>;
+pub struct LinkAuthenticator(Arc<dyn LinkAuthenticatorTrait + Send + Sync>);
 
+impl LinkAuthenticator {
+    pub(crate) async fn from_properties(
+        _config: &ConfigProperties,
+    ) -> ZResult<Vec<LinkAuthenticator>> {
+        let las: Vec<LinkAuthenticator> = vec![];
+        Ok(las)
+    }
+}
+
+impl Deref for LinkAuthenticator {
+    type Target = Arc<dyn LinkAuthenticatorTrait + Send + Sync>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/*************************************/
+/*           DUMMY LINK              */
+/*************************************/
 #[async_trait]
 pub trait LinkAuthenticatorTrait {
     async fn handle_new_link(
         &self,
         link: &Link,
-        properties: Option<LinkProperties>,
+        properties: Option<&LocatorProperty>,
     ) -> ZResult<Option<PeerId>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
@@ -48,7 +70,7 @@ pub struct DummyLinkAuthenticator;
 
 impl DummyLinkAuthenticator {
     pub fn make() -> LinkAuthenticator {
-        Arc::new(DummyLinkAuthenticator)
+        LinkAuthenticator(Arc::new(DummyLinkAuthenticator))
     }
 }
 
@@ -57,7 +79,7 @@ impl LinkAuthenticatorTrait for DummyLinkAuthenticator {
     async fn handle_new_link(
         &self,
         _link: &Link,
-        _properties: Option<LinkProperties>,
+        _properties: Option<&LocatorProperty>,
     ) -> ZResult<Option<PeerId>> {
         Ok(None)
     }
@@ -68,14 +90,36 @@ impl LinkAuthenticatorTrait for DummyLinkAuthenticator {
 /*************************************/
 /*              PEER                 */
 /*************************************/
-pub type PeerAuthenticator = Arc<dyn PeerAuthenticatorTrait + Send + Sync>;
+#[derive(Clone)]
+pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait + Send + Sync>);
 
-#[derive(Debug, Clone)]
+impl PeerAuthenticator {
+    pub(crate) async fn from_properties(
+        config: &ConfigProperties,
+    ) -> ZResult<Vec<PeerAuthenticator>> {
+        let mut pas: Vec<PeerAuthenticator> = vec![];
+        let mut res = UserPasswordAuthenticator::from_properties(config).await?;
+        if let Some(pa) = res.take() {
+            pas.push(pa.into());
+        }
+        Ok(pas)
+    }
+}
+
+impl Deref for PeerAuthenticator {
+    type Target = Arc<dyn PeerAuthenticatorTrait + Send + Sync>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
 pub struct AuthenticatedPeerLink {
     pub src: Locator,
     pub dst: Locator,
     pub peer_id: Option<PeerId>,
-    pub properties: Option<LinkProperties>,
+    pub properties: Option<LocatorProperty>,
 }
 
 impl fmt::Display for AuthenticatedPeerLink {
@@ -184,11 +228,14 @@ pub trait PeerAuthenticatorTrait {
     async fn handle_close(&self, peer_id: &PeerId);
 }
 
+/*************************************/
+/*           DUMMY PEER              */
+/*************************************/
 pub struct DummyPeerAuthenticator;
 
 impl DummyPeerAuthenticator {
     pub fn make() -> PeerAuthenticator {
-        Arc::new(DummyPeerAuthenticator)
+        PeerAuthenticator(Arc::new(DummyPeerAuthenticator))
     }
 }
 

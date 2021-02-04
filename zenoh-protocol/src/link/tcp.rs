@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Link, LinkManagerTrait, LinkTrait, Locator};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use crate::session::SessionManager;
 use async_std::channel::{bounded, Receiver, Sender};
-use async_std::net::{SocketAddr, TcpListener, TcpStream};
+use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Barrier, RwLock};
 use async_std::task;
@@ -23,6 +23,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
+use std::str::FromStr;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
@@ -49,16 +50,66 @@ zconfigurable! {
 }
 
 #[allow(unreachable_patterns)]
-fn get_tcp_addr(locator: &Locator) -> ZResult<&SocketAddr> {
+async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
     match locator {
-        Locator::Tcp(addr) => Ok(addr),
+        Locator::Tcp(addr) => match addr {
+            LocatorTcp::SocketAddr(addr) => Ok(*addr),
+            LocatorTcp::DNSName(addr) => match addr.to_socket_addrs().await {
+                Ok(mut addr_iter) => {
+                    if let Some(addr) = addr_iter.next() {
+                        Ok(addr)
+                    } else {
+                        let e = format!("Couldn't resolve TCP locator: {}", addr);
+                        zerror!(ZErrorKind::InvalidLocator { descr: e })
+                    }
+                }
+                Err(e) => {
+                    let e = format!("{}: {}", e, addr);
+                    zerror!(ZErrorKind::InvalidLocator { descr: e })
+                }
+            },
+        },
         _ => {
             let e = format!("Not a TCP locator: {}", locator);
-            log::debug!("{}", e);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }
 }
+
+/*************************************/
+/*             LOCATOR               */
+/*************************************/
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum LocatorTcp {
+    SocketAddr(SocketAddr),
+    DNSName(String),
+}
+
+impl FromStr for LocatorTcp {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse() {
+            Ok(addr) => Ok(LocatorTcp::SocketAddr(addr)),
+            Err(_) => Ok(LocatorTcp::DNSName(s.to_string())),
+        }
+    }
+}
+
+impl fmt::Display for LocatorTcp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LocatorTcp::SocketAddr(addr) => write!(f, "{}", addr)?,
+            LocatorTcp::DNSName(addr) => write!(f, "{}", addr)?,
+        }
+        Ok(())
+    }
+}
+
+/*************************************/
+/*            PROPERTY               */
+/*************************************/
+pub type LocatorPropertyTcp = ();
 
 /*************************************/
 /*              LINK                 */
@@ -176,12 +227,12 @@ impl LinkTrait for Tcp {
 
     #[inline]
     fn get_src(&self) -> Locator {
-        Locator::Tcp(self.src_addr)
+        Locator::Tcp(LocatorTcp::SocketAddr(self.src_addr))
     }
 
     #[inline]
     fn get_dst(&self) -> Locator {
-        Locator::Tcp(self.dst_addr)
+        Locator::Tcp(LocatorTcp::SocketAddr(self.dst_addr))
     }
 
     #[inline]
@@ -227,14 +278,14 @@ impl fmt::Debug for Tcp {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerTcp {
-    socket: Arc<TcpListener>,
+    socket: TcpListener,
     sender: Sender<()>,
     receiver: Receiver<()>,
     barrier: Arc<Barrier>,
 }
 
 impl ListenerTcp {
-    fn new(socket: Arc<TcpListener>) -> ListenerTcp {
+    fn new(socket: TcpListener) -> ListenerTcp {
         // Create the channel necessary to break the accept loop
         let (sender, receiver) = bounded::<()>(1);
         // Create the barrier necessary to detect the termination of the accept loop
@@ -265,62 +316,46 @@ impl LinkManagerTcp {
 
 #[async_trait]
 impl LinkManagerTrait for LinkManagerTcp {
-    async fn new_link(&self, locator: &Locator) -> ZResult<Link> {
-        let dst_addr = get_tcp_addr(locator)?;
+    async fn new_link(&self, locator: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
+        let dst_addr = get_tcp_addr(locator).await?;
 
-        let stream = match TcpStream::connect(dst_addr).await {
-            Ok(stream) => stream,
-            Err(e) => {
-                let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::Other { descr: e });
-            }
-        };
+        let stream = TcpStream::connect(dst_addr).await.map_err(|e| {
+            let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
+            zerror2!(ZErrorKind::Other { descr: e })
+        })?;
 
-        let src_addr = match stream.local_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let src_addr = stream.local_addr().map_err(|e| {
+            let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
-        let dst_addr = match stream.peer_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let dst_addr = stream.peer_addr().map_err(|e| {
+            let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
         let link = Arc::new(Tcp::new(stream, src_addr, dst_addr));
 
         Ok(Link::new(link))
     }
 
-    async fn new_listener(&self, locator: &Locator) -> ZResult<Locator> {
-        let addr = get_tcp_addr(locator)?;
+    async fn new_listener(
+        &self,
+        locator: &Locator,
+        _ps: Option<&LocatorProperty>,
+    ) -> ZResult<Locator> {
+        let addr = get_tcp_addr(locator).await?;
 
         // Bind the TCP socket
-        let socket = match TcpListener::bind(addr).await {
-            Ok(socket) => Arc::new(socket),
-            Err(e) => {
-                let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let socket = TcpListener::bind(addr).await.map_err(|e| {
+            let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
-        let local_addr = match socket.local_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let local_addr = socket.local_addr().map_err(|e| {
+            let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
         let listener = Arc::new(ListenerTcp::new(socket));
         // Update the list of active listeners on the manager
         zasyncwrite!(self.listener).insert(local_addr, listener.clone());
@@ -336,11 +371,11 @@ impl LinkManagerTrait for LinkManagerTcp {
             zasyncwrite!(c_listeners).remove(&c_addr);
         });
 
-        Ok(Locator::Tcp(local_addr))
+        Ok(Locator::Tcp(LocatorTcp::SocketAddr(local_addr)))
     }
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let addr = get_tcp_addr(locator)?;
+        let addr = get_tcp_addr(locator).await?;
 
         // Stop the listener
         match zasyncwrite!(self.listener).remove(&addr) {
@@ -367,7 +402,7 @@ impl LinkManagerTrait for LinkManagerTcp {
     async fn get_listeners(&self) -> Vec<Locator> {
         zasyncread!(self.listener)
             .keys()
-            .map(|x| Locator::Tcp(*x))
+            .map(|x| Locator::Tcp(LocatorTcp::SocketAddr(*x)))
             .collect()
     }
 
@@ -389,7 +424,10 @@ impl LinkManagerTrait for LinkManagerTcp {
                 locators.push(*addr)
             }
         }
-        locators.into_iter().map(Locator::Tcp).collect()
+        locators
+            .into_iter()
+            .map(|x| Locator::Tcp(LocatorTcp::SocketAddr(x)))
+            .collect()
     }
 }
 

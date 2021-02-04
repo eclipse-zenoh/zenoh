@@ -33,24 +33,24 @@ maintenance = { status = "actively-developed" }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zenoh-protocol =  { version = "0.5.0-beta.5", path = "../zenoh-protocol", features = ["transport_tcp", "transport_udp"] }
-zenoh-util =  { version = "0.5.0-beta.5", path = "../zenoh-util" }
 async-std = { version = "=1.9.0", features = ["unstable"] }
 async-trait = "0.1.42"
 futures = "0.3.12"
 rand = "0.8.3"
-uhlc = "0.2.1"
 uuid = { version = "0.8", features = ["v4"] }
 lazy_static = "1.4.0"
 libloading = "0.6.7"
+log = "0.4"
+env_logger = "0.8.2"
+clap = "2"
 serde_json = { version = "1.0", features = ["preserve_order"] }
 socket2 = "0.3.19"
 petgraph = "0.5.1"
 hex = "0.4"
 git-version = "0.3.4"
-clap = "2"
-log = "0.4"
-env_logger = "0.8.2"
+uhlc = "0.2.1"
+zenoh-protocol =  { version = "0.5.0-beta.5", path = "../zenoh-protocol" }
+zenoh-util =  { version = "0.5.0-beta.5", path = "../zenoh-util" }
 
 [build-dependencies]
 rustc_version = "0.3"
@@ -59,7 +59,12 @@ rustc_version = "0.3"
 criterion = "0.3.4"
 
 [features]
-default = []
+transport_tcp = ["zenoh-protocol/transport_tcp"]
+transport_tls = ["zenoh-protocol/transport_tls"]
+transport_udp = ["zenoh-protocol/transport_udp"]
+transport_unixsock-stream = ["zenoh-protocol/transport_unixsock-stream"]
+zero-copy = ["zenoh-protocol/zero-copy"]
+default = ["zero-copy", "transport_tcp", "transport_udp", "transport_tls", "transport_unixsock-stream"]
 
 [[bench]]
 name = "tables_bench"

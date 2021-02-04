@@ -125,6 +125,7 @@ fn main() {
         let info = None;
         let payload = RBuf::from(vec![0u8; payload]);
         let reply_context = None;
+        let routing_context = None;
         let attachment = None;
 
         let message = ZenohMessage::make_data(
@@ -133,6 +134,7 @@ fn main() {
             reliability,
             congestion_control,
             info,
+            routing_context,
             reply_context,
             attachment,
         );

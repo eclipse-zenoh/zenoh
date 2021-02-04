@@ -32,10 +32,12 @@ readme = "../README.md"
 maintenance = { status = "actively-developed" }
 
 [features]
-zero-copy = []
-transport_tcp = []
-transport_udp = []
-default = ["transport_tcp", "transport_udp", "zero-copy"]
+transport_tcp = ["zenoh-router/transport_tcp"]
+transport_tls = ["zenoh-router/transport_tls"]
+transport_udp = ["zenoh-router/transport_udp"]
+transport_unixsock-stream = ["zenoh-router/transport_unixsock-stream"]
+zero-copy = ["zenoh-router/zero-copy"]
+default = ["zero-copy", "transport_tcp", "transport_udp", "transport_tls", "transport_unixsock-stream"]
 
 [dependencies]
 zenoh-protocol = { version = "0.5.0-beta.5", path = "../zenoh-protocol" }
