@@ -12,17 +12,20 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-// pub(crate) mod circular_buffer;
-// pub(crate) use circular_buffer::*;
+pub mod buffer_pool;
+pub use buffer_pool::*;
 
-// pub mod credit_queue;
-// pub use credit_queue::*;
+pub(crate) mod circular_buffer;
+pub(crate) use circular_buffer::*;
 
-// pub mod fifo_queue;
-// pub use fifo_queue::*;
+pub mod fifo_queue;
+pub use fifo_queue::*;
 
 pub mod ordered_queue;
 pub use ordered_queue::*;
+
+// pub mod credit_queue;
+// pub use credit_queue::*;
 
 // pub mod priority_queue;
 // pub use priority_queue::*;

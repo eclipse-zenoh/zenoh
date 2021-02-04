@@ -24,6 +24,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use zenoh_util::collections::{RecyclingBuffer, RecyclingBufferPool};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::Mvar;
 use zenoh_util::{zasynclock, zerror};
@@ -135,8 +136,8 @@ struct UnconnectedUdp {
     links: LinkHashMap,
     status: ListenerUdpStatus,
     signal: Sender<()>,
-    input: Mvar<(Vec<u8>, usize, usize)>,
-    output: Mvar<(Vec<u8>, usize)>,
+    input: Mvar<(RecyclingBuffer, usize)>,
+    leftover: Mutex<Option<(RecyclingBuffer, usize, usize)>>,
 }
 
 pub struct Udp {
@@ -165,37 +166,36 @@ impl Udp {
         }
     }
 
-    async fn received(&self, mut buffer: Vec<u8>, len: usize) -> Vec<u8> {
+    #[inline]
+    async fn received(&self, buffer: RecyclingBuffer, len: usize) {
         let unconnected = self.unconnected.as_ref().unwrap();
-        // Make sure that all bytes are read
-        let mut start: usize = 0;
-        while start < len {
-            unconnected.input.put((buffer, start, len)).await;
-            let tuple = unconnected.output.take().await;
-            buffer = tuple.0;
-            start += tuple.1;
-        }
-        buffer
+        unconnected.input.put((buffer, len)).await;
     }
 
     async fn read_unconnected(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let unconnected = match self.unconnected.as_ref() {
-            Some(unconnected) => unconnected,
-            None => {
-                return zerror!(ZErrorKind::IOError {
-                    descr: "Send error".to_string()
-                });
-            }
+        let unconnected = self.unconnected.as_ref().ok_or_else(|| {
+            zerror2!(ZErrorKind::IOError {
+                descr: "Send error".to_string()
+            })
+        })?;
+
+        let mut guard = zasynclock!(unconnected.leftover);
+        let (slice, start, len) = if let Some(tuple) = guard.take() {
+            tuple
+        } else {
+            let (slice, len) = unconnected.input.take().await;
+            (slice, 0, len)
         };
-        // Get the buffer used in the main loop
-        let (slice, start, len) = unconnected.input.take().await;
         // Copy the read bytes into the target buffer
-        let len = len.min(buffer.len());
-        buffer[0..len].copy_from_slice(&slice[start..start + len]);
-        // Return back the ownership of the buffer used to read from the socket
-        unconnected.output.put((slice, len)).await;
+        let len_min = (len - start).min(buffer.len());
+        let end = start + len_min;
+        buffer[0..len_min].copy_from_slice(&slice[start..end]);
+        if end < len {
+            // Store the leftover
+            *guard = Some((slice, end, len));
+        }
         // Return the amount read
-        Ok(len)
+        Ok(len_min)
     }
 
     async fn read_connected(&self, buffer: &mut [u8]) -> ZResult<usize> {
@@ -216,14 +216,14 @@ impl LinkTrait for Udp {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
         if let Some(unconnected) = self.unconnected.as_ref() {
-            // Bring back the buffer if present in the input
-            if let Some(tuple) = unconnected.input.try_take().await {
-                let (slice, _start, len) = tuple;
-                unconnected.output.put((slice, len)).await;
-            } else if unconnected.output.has_take_waiting() {
-                let slice = vec![0u8; UDP_MAX_MTU];
-                unconnected.output.put((slice, UDP_MAX_MTU)).await;
-            }
+            // // Bring back the buffer if present in the input
+            // if let Some(tuple) = unconnected.input.try_take().await {
+            //     let (slice, _start, len) = tuple;
+            //     unconnected.output.put((slice, len)).await;
+            // } else if unconnected.output.has_take_waiting() {
+            //     let slice = vec![0u8; UDP_MAX_MTU];
+            //     unconnected.output.put((slice, UDP_MAX_MTU)).await;
+            // }
             // Delete the link from the list of links
             let mut guard = zasynclock!(unconnected.links);
             guard.remove(&(self.src_addr, self.dst_addr));
@@ -577,8 +577,9 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
 
         log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
         // Buffers for deserialization
-        let mut buff = vec![0u8; UDP_MAX_MTU];
+        let buff_pool = RecyclingBufferPool::new(1, UDP_MAX_MTU);
         loop {
+            let mut buff = buff_pool.pull().await;
             // Wait for incoming connections
             let (n, dst_addr) = match listener.socket.recv_from(&mut buff).await {
                 Ok((n, dst_addr)) => (n, dst_addr),
@@ -612,7 +613,7 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
                                 status: listener.status.clone(),
                                 signal: listener.sender.clone(),
                                 input: Mvar::new(),
-                                output: Mvar::new(),
+                                leftover: Mutex::new(None),
                             };
                             // Create the new link object
                             let link = Arc::new(Udp::new(
@@ -638,7 +639,7 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
             };
 
             if let Some(link) = link {
-                buff = link.received(buff, n).await;
+                link.received(buff, n).await;
             } else {
                 zdellink!(src_addr, dst_addr);
             }

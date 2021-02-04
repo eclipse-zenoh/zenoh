@@ -292,7 +292,7 @@ async fn open_recv_init_ack(
                     &init_ack_properties,
                 )
                 .await
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
             open_syn_properties.append(&mut ps);
         }
         attachment_from_properties(&open_syn_properties).ok()
@@ -415,7 +415,7 @@ async fn open_recv_open_ack(
         let _ = pa
             .handle_open_ack(&auth_link, &opean_ack_properties)
             .await
-            .map_err(|e| (e, None))?;
+            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
     }
 
     let output = OpenAckOutput {
@@ -617,7 +617,7 @@ async fn accept_recv_init_syn(
                     &init_syn_properties,
                 )
                 .await
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
             init_ack_properties.append(&mut ps);
         }
         attachment_from_properties(&init_ack_properties).ok()
@@ -772,7 +772,7 @@ async fn accept_recv_open_syn(
             let mut ps = pa
                 .handle_open_syn(&auth_link, &open_syn_properties)
                 .await
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
             open_ack_properties.append(&mut ps);
         }
         attachment_from_properties(&open_ack_properties).ok()
