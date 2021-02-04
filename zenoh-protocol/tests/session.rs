@@ -467,21 +467,21 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-fn session_tcp() {
+fn session_tcp_only() {
     let locator = "tcp/127.0.0.1:7447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
-fn session_udp() {
+fn session_udp_only() {
     let locator = "udp/127.0.0.1:7447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
-fn session_unix() {
+fn session_unix_only() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
     let locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
         .parse()
@@ -493,7 +493,7 @@ fn session_unix() {
 
 #[cfg(feature = "transport_tls")]
 #[test]
-fn session_tls() {
+fn session_tls_only() {
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
     //       mapping to any existing domain. The certificate and key

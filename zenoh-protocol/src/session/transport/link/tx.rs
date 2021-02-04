@@ -272,9 +272,11 @@ impl StageIn {
     }
 
     fn try_pull(&mut self) -> Option<SerializationBatch> {
-        if let Some(batch) = self.inner.front() {
+        if let Some(batch) = self.inner.front_mut() {
             if !batch.is_empty() {
                 self.bytes_topull.store(0, Ordering::Release);
+                // Write the batch len before removing the batch
+                batch.write_len();
                 // There is an incomplete batch, pop it
                 return self.inner.pop_front();
             }
@@ -315,9 +317,8 @@ impl StageOut {
     }
 
     fn try_pull(&mut self) -> Option<SerializationBatch> {
-        if let Some(mut batch) = self.inner.pop_front() {
+        if let Some(batch) = self.inner.pop_front() {
             self.batches_out.fetch_sub(1, Ordering::AcqRel);
-            batch.write_len();
             Some(batch)
         } else {
             None
@@ -330,8 +331,7 @@ impl StageOut {
         } else {
             // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
             if let Some(mut in_guard) = self.stage_in.as_ref().unwrap().try_lock() {
-                if let Some(mut batch) = in_guard.try_pull() {
-                    batch.write_len();
+                if let Some(batch) = in_guard.try_pull() {
                     OptionPullStageOut::Some(batch)
                 } else {
                     OptionPullStageOut::None

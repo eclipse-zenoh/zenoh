@@ -103,7 +103,8 @@ impl SessionTransportLink {
     pub(crate) async fn stop_tx(&self) {
         let mut guard = zasynclock!(self.signal_tx);
         if let Some(signal_tx) = guard.take() {
-            let _ = signal_tx.send(Ok(())).await;
+            let _ = signal_tx.try_send(Ok(()));
+            task::yield_now().await;
         }
     }
 
@@ -128,7 +129,7 @@ impl SessionTransportLink {
     pub(crate) async fn stop_rx(&self) {
         let mut guard = zasynclock!(self.signal_rx);
         if let Some(signal_rx) = guard.take() {
-            let _ = signal_rx.send(Ok(())).await;
+            let _ = signal_rx.try_send(Ok(()));
         }
     }
 
@@ -166,7 +167,7 @@ impl SessionTransportLink {
 /*              TASKS                */
 /*************************************/
 async fn tx_task(link: SessionTransportLink, stop: Receiver<ZResult<()>>) -> ZResult<()> {
-    let mut result: ZResult<()> = Ok(());
+    let mut res: ZResult<()> = Ok(());
 
     // Keep draining the queue
     let consume = async {
@@ -176,8 +177,8 @@ async fn tx_task(link: SessionTransportLink, stop: Receiver<ZResult<()>>) -> ZRe
             match link.pipeline.pull().timeout(keep_alive).await {
                 Ok((batch, index)) => {
                     // Send the buffer on the link
-                    result = link.inner.write_all(batch.get_buffer()).await;
-                    if result.is_err() {
+                    res = link.inner.write_all(batch.get_buffer()).await;
+                    if res.is_err() {
                         break Ok(Ok(()));
                     }
                     // Reinsert the batch into the queue
@@ -196,7 +197,7 @@ async fn tx_task(link: SessionTransportLink, stop: Receiver<ZResult<()>>) -> ZRe
     };
     let _ = consume.race(stop.recv()).await;
 
-    result
+    res
 }
 
 async fn read_stream(link: SessionTransportLink) -> ZResult<()> {

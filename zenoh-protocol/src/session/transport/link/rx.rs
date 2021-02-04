@@ -34,8 +34,9 @@ impl SessionTransportLink {
         }
 
         let _ = self.transport.del_link(&self.inner).await;
+
         if !link_only {
-            self.transport.delete().await
+            self.transport.delete().await;
         }
     }
 
