@@ -31,6 +31,9 @@ const SEND_BUF_INITIAL_SIZE: usize = 8;
 const SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
 const SCOUT_MAX_PERIOD: u64 = 8000; //ms
 const SCOUT_PERIOD_INCREASE_FACTOR: u64 = 2;
+const CONNECTION_RETRY_INITIAL_PERIOD: u64 = 1000; //ms
+const CONNECTION_RETRY_MAX_PERIOD: u64 = 4000; //ms
+const CONNECTION_RETRY_PERIOD_INCREASE_FACTOR: u64 = 2;
 const ROUTER_DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
 const PEER_DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
 
@@ -394,6 +397,7 @@ impl SessionOrchestrator {
     // @TODO try to reconnect on disconnection
     async fn connector(&self, peers: Vec<Locator>) {
         futures::future::join_all(peers.into_iter().map(|peer| async move {
+            let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
             loop {
                 log::trace!("Trying to connect to configured peer {}", peer);
                 if self.manager.open_session(&peer).await.is_ok() {
@@ -402,7 +406,10 @@ impl SessionOrchestrator {
                 } else {
                     log::warn!("Unable to connect to configured peer {}", peer);
                 }
-                async_std::task::sleep(Duration::new(5, 0)).await;
+                async_std::task::sleep(Duration::from_millis(delay)).await;
+                if delay * CONNECTION_RETRY_PERIOD_INCREASE_FACTOR <= CONNECTION_RETRY_MAX_PERIOD {
+                    delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+                }
             }
         }))
         .await;
