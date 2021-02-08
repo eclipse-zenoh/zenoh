@@ -24,10 +24,6 @@ members = [
   "backends/traits",
 ]
 
-exclude = [
-  "zenoh-perf"
-]
-
 [profile.release]
 debug=false
 lto="fat"
