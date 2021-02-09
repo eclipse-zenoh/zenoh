@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-util"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.8"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -51,5 +51,5 @@ log = "0.4.14"
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.84"
+libc = "0.2.85"
 pnet = "0.27.2"

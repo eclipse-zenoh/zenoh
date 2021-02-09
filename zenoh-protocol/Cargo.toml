@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-protocol"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.8"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -54,10 +54,10 @@ nix = { version = "0.19.1", optional = true }
 rand = "0.8.3"
 rand_chacha = "0.3.0"
 serde = "1.0.123"
-shared_memory = { git = "https://github.com/elast0ny/shared_memory-rs.git" }
+shared_memory = "0.11.4"
 uhlc = "0.2.1"
 uuid = { version = "0.8.2", features = ["v4"] }
-zenoh-util =  { version = "0.5.0-beta.5", path = "../zenoh-util" }
+zenoh-util =  { version = "0.5.0-beta.8", path = "../zenoh-util" }
 
 [dev-dependencies]
 criterion = "0.3.4"
