@@ -21,7 +21,8 @@ use zenoh_util::{zasynclock, zasyncread};
 /*************************************/
 macro_rules! zcallback {
     ($transport:expr, $msg:expr) => {
-        match zasyncread!($transport.callback).as_ref() {
+        let callback = zasyncread!($transport.callback).clone();
+        match callback.as_ref() {
             Some(callback) => {
                 let _ = callback.handle_message($msg).await;
             }

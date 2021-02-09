@@ -32,7 +32,7 @@ use zenoh_util::core::ZResult;
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: usize = 1_024;
 const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(1);
+const SLEEP: Duration = Duration::from_millis(100);
 
 // Session Handler for the router
 struct SHPeer {
@@ -80,11 +80,8 @@ impl SessionEventHandler for MHPeer {
     }
 
     async fn new_link(&self, _link: Link) {}
-
     async fn del_link(&self, _link: Link) {}
-
     async fn closing(&self) {}
-
     async fn closed(&self) {}
 }
 

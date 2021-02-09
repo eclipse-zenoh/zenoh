@@ -12,42 +12,29 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::prelude::*;
-use async_std::sync::{Arc, Barrier, Mutex};
+use async_std::sync::Arc;
 use async_std::task;
 use async_trait::async_trait;
-use std::collections::HashMap;
 use std::io::Cursor;
 use std::time::Duration;
 use zenoh_protocol::core::{whatami, PeerId};
 use zenoh_protocol::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
-use zenoh_protocol::link::{Link, Locator, LocatorProperty};
-use zenoh_protocol::proto::ZenohMessage;
+use zenoh_protocol::link::{Locator, LocatorProperty};
 use zenoh_protocol::session::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
     SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
-use zenoh_util::zasynclock;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(1);
+const SLEEP: Duration = Duration::from_millis(100);
 
 #[cfg(test)]
-struct SHRouterOpenClose {
-    new_ses_bar: Arc<Barrier>,
-    sessions: Mutex<HashMap<PeerId, Arc<Barrier>>>,
-}
+struct SHRouterOpenClose;
 
 impl SHRouterOpenClose {
-    fn new(barrier: Arc<Barrier>) -> Self {
-        Self {
-            new_ses_bar: barrier,
-            sessions: Mutex::new(HashMap::new()),
-        }
-    }
-
-    async fn get_barrier(&self, peer: &PeerId) -> Arc<Barrier> {
-        zasynclock!(self.sessions).get(peer).unwrap().clone()
+    fn new() -> Self {
+        Self
     }
 }
 
@@ -55,47 +42,9 @@ impl SHRouterOpenClose {
 impl SessionHandler for SHRouterOpenClose {
     async fn new_session(
         &self,
-        session: Session,
+        _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        let barrier = Arc::new(Barrier::new(2));
-        let mh = Arc::new(MHRouterOpenClose::new(barrier.clone()));
-        let peer = session.get_pid()?;
-        zasynclock!(self.sessions).insert(peer, barrier);
-        self.new_ses_bar.wait().await;
-
-        Ok(mh)
-    }
-}
-
-struct MHRouterOpenClose {
-    barrier: Arc<Barrier>,
-}
-
-impl MHRouterOpenClose {
-    fn new(barrier: Arc<Barrier>) -> Self {
-        Self { barrier }
-    }
-}
-
-#[async_trait]
-impl SessionEventHandler for MHRouterOpenClose {
-    async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-        Ok(())
-    }
-
-    async fn new_link(&self, _link: Link) {
-        self.barrier.wait().await;
-    }
-
-    async fn del_link(&self, _link: Link) {}
-
-    async fn closing(&self) {
-        println!("Session Open Close [***]: session is being closed on the router...");
-    }
-
-    async fn closed(&self) {
-        println!("Session Open Close [***]: session has been closed on the router...");
-        self.barrier.wait().await;
+        Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }
 
@@ -122,10 +71,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
-    // Create the barrier to detect when a new session is open
-    let router_new_barrier = Arc::new(Barrier::new(2));
-
-    let router_handler = Arc::new(SHRouterOpenClose::new(router_new_barrier.clone()));
+    let router_handler = Arc::new(SHRouterOpenClose::new());
     // Create the router session manager
     let config = SessionManagerConfig {
         version: 0,
@@ -225,19 +171,26 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(links.len(), 1);
 
     // Verify that the session has been open on the router
-    let res = router_new_barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
     println!("Session Open Close [1f1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [1f2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 1);
-    let r_ses1 = &sessions[0];
-    assert_eq!(r_ses1.get_pid().unwrap(), client01_id);
-    println!("Session Open Close [1g1]");
-    let links = r_ses1.get_links().await.unwrap();
-    println!("Session Open Close [1g2]: {:?}", links);
-    assert_eq!(links.len(), 1);
+    let check = async {
+        loop {
+            let sessions = router_manager.get_sessions().await;
+            let s = sessions
+                .iter()
+                .find(|s| s.get_pid().unwrap() == client01_id);
+
+            match s {
+                Some(s) => {
+                    let links = s.get_links().await.unwrap();
+                    assert_eq!(links.len(), 1);
+                    break;
+                }
+                None => task::sleep(SLEEP).await,
+            }
+        }
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [1f2]: {:?}", res);
 
     /* [2] */
     // Open a second session from the client to the router
@@ -259,20 +212,24 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(c_ses2, c_ses1);
 
     // Verify that the session has been open on the router
-    let barrier = router_handler.get_barrier(&client01_id).await;
-    let res = barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
     println!("Session Open Close [2d1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [2d2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 1);
-    let r_ses1 = &sessions[0];
-    assert_eq!(r_ses1.get_pid().unwrap(), client01_id);
-    println!("Session Open Close [2e1]");
-    let links = r_ses1.get_links().await.unwrap();
-    println!("Session Open Close [2e2]: {:?}", links);
-    assert_eq!(links.len(), 2);
+    let check = async {
+        loop {
+            let sessions = router_manager.get_sessions().await;
+            let s = sessions
+                .iter()
+                .find(|s| s.get_pid().unwrap() == client01_id)
+                .unwrap();
+
+            let links = s.get_links().await.unwrap();
+            if links.len() == 2 {
+                break;
+            }
+            task::sleep(SLEEP).await;
+        }
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [2d2]: {:?}", res);
 
     /* [3] */
     // Open session -> This should be rejected because
@@ -293,15 +250,19 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
 
     // Verify that the session has not been open on the router
     println!("Session Open Close [3d1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [3d2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 1);
-    let r_ses1 = &sessions[0];
-    assert_eq!(r_ses1.get_pid().unwrap(), client01_id);
-    println!("Session Open Close [3e1]");
-    let links = r_ses1.get_links().await.unwrap();
-    println!("Session Open Close [3e2]: {:?}", links);
-    assert_eq!(links.len(), 2);
+    let check = async {
+        task::sleep(SLEEP).await;
+        let sessions = router_manager.get_sessions().await;
+        assert_eq!(sessions.len(), 1);
+        let s = sessions
+            .iter()
+            .find(|s| s.get_pid().unwrap() == client01_id)
+            .unwrap();
+        let links = s.get_links().await.unwrap();
+        assert_eq!(links.len(), 2);
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [3d2]: {:?}", res);
 
     /* [4] */
     // Close the open session on the client
@@ -315,14 +276,21 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(sessions.len(), 0);
 
     // Verify that the session has been closed also on the router
-    let barrier = router_handler.get_barrier(&client01_id).await;
-    let res = barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
     println!("Session Open Close [4c1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [4c2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 0);
+    let check = async {
+        loop {
+            let sessions = router_manager.get_sessions().await;
+            let index = sessions
+                .iter()
+                .find(|s| s.get_pid().unwrap() == client01_id);
+            if index.is_none() {
+                break;
+            }
+            task::sleep(SLEEP).await;
+        }
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [4c2]: {:?}", res);
 
     /* [5] */
     // Open session -> This should be accepted because
@@ -343,19 +311,20 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(links.len(), 1);
 
     // Verify that the session has not been open on the router
-    let res = router_new_barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
     println!("Session Open Close [5d1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [5d2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 1);
-    let r_ses1 = &sessions[0];
-    assert_eq!(r_ses1.get_pid().unwrap(), client01_id);
-    println!("Session Open Close [5e1]");
-    let links = r_ses1.get_links().await.unwrap();
-    println!("Session Open Close [5e2]: {:?}", links);
-    assert_eq!(links.len(), 1);
+    let check = async {
+        task::sleep(SLEEP).await;
+        let sessions = router_manager.get_sessions().await;
+        assert_eq!(sessions.len(), 1);
+        let s = sessions
+            .iter()
+            .find(|s| s.get_pid().unwrap() == client01_id)
+            .unwrap();
+        let links = s.get_links().await.unwrap();
+        assert_eq!(links.len(), 1);
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [5d2]: {:?}", res);
 
     /* [6] */
     // Open session -> This should be rejected because
@@ -371,15 +340,19 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
 
     // Verify that the session has not been open on the router
     println!("Session Open Close [6c1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [6c2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 1);
-    let r_ses1 = &sessions[0];
-    assert_eq!(r_ses1.get_pid().unwrap(), client01_id);
-    println!("Session Open Close [6d1]");
-    let links = r_ses1.get_links().await.unwrap();
-    println!("Session Open Close [6d2]: {:?}", links);
-    assert_eq!(links.len(), 1);
+    let check = async {
+        task::sleep(SLEEP).await;
+        let sessions = router_manager.get_sessions().await;
+        assert_eq!(sessions.len(), 1);
+        let s = sessions
+            .iter()
+            .find(|s| s.get_pid().unwrap() == client01_id)
+            .unwrap();
+        let links = s.get_links().await.unwrap();
+        assert_eq!(links.len(), 1);
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [6c2]: {:?}", res);
 
     /* [7] */
     // Close the open session on the client
@@ -393,14 +366,18 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(sessions.len(), 0);
 
     // Verify that the session has been closed also on the router
-    let barrier = router_handler.get_barrier(&client01_id).await;
-    let res = barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
     println!("Session Open Close [7c1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [7c2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 0);
+    let check = async {
+        loop {
+            let sessions = router_manager.get_sessions().await;
+            if sessions.is_empty() {
+                break;
+            }
+            task::sleep(SLEEP).await;
+        }
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [7c2]: {:?}", res);
 
     /* [8] */
     // Open session -> This should be accepted because
@@ -420,19 +397,25 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(links.len(), 1);
 
     // Verify that the session has been open on the router
-    let res = router_new_barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
     println!("Session Open Close [8d1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [8d2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 1);
-    let r_ses1 = &sessions[0];
-    assert_eq!(r_ses1.get_pid().unwrap(), client02_id);
-    println!("Session Open Close [8e1]");
-    let links = r_ses1.get_links().await.unwrap();
-    println!("Session Open Close [8e2]: {:?}", links);
-    assert_eq!(links.len(), 1);
+    let check = async {
+        loop {
+            let sessions = router_manager.get_sessions().await;
+            let s = sessions
+                .iter()
+                .find(|s| s.get_pid().unwrap() == client02_id);
+            match s {
+                Some(s) => {
+                    let links = s.get_links().await.unwrap();
+                    assert_eq!(links.len(), 1);
+                    break;
+                }
+                None => task::sleep(SLEEP).await,
+            }
+        }
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [8d2]: {:?}", res);
 
     /* [9] */
     // Close the open session on the client
@@ -446,14 +429,18 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(sessions.len(), 0);
 
     // Verify that the session has been closed also on the router
-    let barrier = router_handler.get_barrier(&client02_id).await;
-    let res = barrier.wait().timeout(TIMEOUT).await;
-    assert!(res.is_ok());
-
     println!("Session Open Close [9c1]");
-    let sessions = router_manager.get_sessions().await;
-    println!("Session Open Close [9c2]: {:?}", sessions);
-    assert_eq!(sessions.len(), 0);
+    let check = async {
+        loop {
+            let sessions = router_manager.get_sessions().await;
+            if sessions.is_empty() {
+                break;
+            }
+            task::sleep(SLEEP).await;
+        }
+    };
+    let res = check.timeout(TIMEOUT).await.unwrap();
+    println!("Session Open Close [9c2]: {:?}", res);
 
     /* [10] */
     // Perform clean up of the open locators
