@@ -348,7 +348,6 @@ impl SessionEventHandler for LinkStateInterceptor {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
                 let mut tables = self.tables.write().await;
-                // let tables2 = &mut *(&tables as *mut Tables);
                 let whatami = self.session.get_whatami()?;
                 match (tables.whatami, whatami) {
                     (whatami::ROUTER, whatami::ROUTER) => {

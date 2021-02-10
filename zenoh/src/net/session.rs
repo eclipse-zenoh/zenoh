@@ -303,7 +303,7 @@ impl Session {
     pub async fn info(&self) -> InfoProperties {
         trace!("info()");
         let runtime = self.runtime.read().await;
-        let sessions = runtime.orchestrator.manager.get_sessions().await;
+        let sessions = runtime.orchestrator.manager().await.get_sessions().await;
         let peer_pids = sessions
             .iter()
             .filter(|s| {

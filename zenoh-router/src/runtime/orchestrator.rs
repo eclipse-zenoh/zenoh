@@ -12,6 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::net::UdpSocket;
+use async_std::sync::{Arc, RwLock};
+use async_trait::async_trait;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -19,8 +21,8 @@ use std::time::Duration;
 use zenoh_protocol::core::{whatami, PeerId, WhatAmI};
 use zenoh_protocol::io::{RBuf, WBuf};
 use zenoh_protocol::link::Locator;
-use zenoh_protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
-use zenoh_protocol::session::{Session, SessionManager};
+use zenoh_protocol::proto::{Hello, Scout, SessionBody, SessionMessage, ZenohMessage};
+use zenoh_protocol::session::{Session, SessionEventHandler, SessionHandler, SessionManager};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
 use zenoh_util::zerror;
@@ -44,15 +46,29 @@ pub enum Loop {
 #[derive(Clone)]
 pub struct SessionOrchestrator {
     pub whatami: WhatAmI,
-    pub manager: SessionManager,
+    pub manager: Arc<RwLock<Option<SessionManager>>>,
+    pub sub_handler: Arc<dyn SessionHandler + Send + Sync>,
 }
 
 impl SessionOrchestrator {
-    pub fn new(manager: SessionManager, whatami: WhatAmI) -> SessionOrchestrator {
-        SessionOrchestrator { whatami, manager }
+    pub fn new(
+        whatami: WhatAmI,
+        sub_handler: Arc<dyn SessionHandler + Send + Sync>,
+    ) -> SessionOrchestrator {
+        SessionOrchestrator {
+            whatami,
+            manager: Arc::new(RwLock::new(None)),
+            sub_handler,
+        }
     }
 
-    pub async fn init(&mut self, config: ConfigProperties, peers_autoconnect: bool) -> ZResult<()> {
+    pub async fn init(
+        &mut self,
+        manager: SessionManager,
+        config: ConfigProperties,
+        peers_autoconnect: bool,
+    ) -> ZResult<()> {
+        *self.manager.write().await = Some(manager);
         match self.whatami {
             whatami::CLIENT => self.init_client(config).await,
             whatami::PEER => self.init_peer(config, peers_autoconnect).await,
@@ -64,6 +80,10 @@ impl SessionOrchestrator {
                 })
             }
         }
+    }
+
+    pub async fn manager(&self) -> SessionManager {
+        self.manager.read().await.as_ref().unwrap().clone()
     }
 
     async fn init_client(&mut self, config: ConfigProperties) -> ZResult<()> {
@@ -106,7 +126,7 @@ impl SessionOrchestrator {
             }
             _ => {
                 for locator in &peers {
-                    match self.manager.open_session(&locator).await {
+                    match self.manager().await.open_session(&locator).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -158,8 +178,10 @@ impl SessionOrchestrator {
 
         self.bind_listeners(&listeners).await?;
 
-        let this = self.clone();
-        async_std::task::spawn(async move { this.connector(peers).await });
+        for peer in peers {
+            let this = self.clone();
+            async_std::task::spawn(async move { this.peer_connector(peer).await });
+        }
 
         if scouting {
             let mcast_socket = SessionOrchestrator::bind_mcast_port(&addr).await?;
@@ -215,8 +237,10 @@ impl SessionOrchestrator {
 
         self.bind_listeners(&listeners).await?;
 
-        let this = self.clone();
-        async_std::task::spawn(async move { this.connector(peers).await });
+        for peer in peers {
+            let this = self.clone();
+            async_std::task::spawn(async move { this.peer_connector(peer).await });
+        }
 
         if scouting {
             let mcast_socket = SessionOrchestrator::bind_mcast_port(&addr).await?;
@@ -233,7 +257,7 @@ impl SessionOrchestrator {
 
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
         for listener in listeners {
-            match self.manager.add_listener(&listener).await {
+            match self.manager().await.add_listener(&listener).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", listener, err);
@@ -246,7 +270,7 @@ impl SessionOrchestrator {
                 }
             }
         }
-        for locator in self.manager.get_locators().await {
+        for locator in self.manager().await.get_locators().await {
             log::info!("zenohd can be reached on {}", locator);
         }
         Ok(())
@@ -389,25 +413,30 @@ impl SessionOrchestrator {
         Ok(socket.into_udp_socket().into())
     }
 
-    // @TODO try to reconnect on disconnection
-    async fn connector(&self, peers: Vec<Locator>) {
-        futures::future::join_all(peers.into_iter().map(|peer| async move {
-            let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
-            loop {
-                log::trace!("Trying to connect to configured peer {}", peer);
-                if self.manager.open_session(&peer).await.is_ok() {
-                    log::debug!("Successfully connected to configured peer {}", peer);
-                    break;
-                } else {
-                    log::warn!("Unable to connect to configured peer {}", peer);
+    async fn peer_connector(&self, peer: Locator) {
+        let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
+        loop {
+            log::trace!("Trying to connect to configured peer {}", peer);
+            if let Ok(session) = self.manager().await.open_session(&peer).await {
+                log::debug!("Successfully connected to configured peer {}", peer);
+                unsafe {
+                    let orch_session = Arc::from_raw(Arc::into_raw(
+                        session.get_callback().await.unwrap().unwrap(),
+                    ) as *const OrchSession);
+                    *orch_session.locator.write().await = Some(peer);
                 }
-                async_std::task::sleep(Duration::from_millis(delay)).await;
-                if delay * CONNECTION_RETRY_PERIOD_INCREASE_FACTOR <= CONNECTION_RETRY_MAX_PERIOD {
-                    delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
-                }
+                break;
             }
-        }))
-        .await;
+            log::debug!(
+                "Unable to connect to configured peer {}. Retry in {} ms.",
+                peer,
+                delay
+            );
+            async_std::task::sleep(Duration::from_millis(delay)).await;
+            if delay * CONNECTION_RETRY_PERIOD_INCREASE_FACTOR <= CONNECTION_RETRY_MAX_PERIOD {
+                delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+            }
+        }
     }
 
     pub async fn scout<Fut, F>(socket: &UdpSocket, what: WhatAmI, mcast_addr: &SocketAddr, mut f: F)
@@ -460,7 +489,7 @@ impl SessionOrchestrator {
 
     async fn connect(&self, locators: &[Locator]) -> ZResult<Session> {
         for locator in locators {
-            let session = self.manager.open_session(locator).await;
+            let session = self.manager().await.open_session(locator).await;
             if session.is_ok() {
                 return session;
             }
@@ -471,8 +500,8 @@ impl SessionOrchestrator {
     }
 
     pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
-        if pid != &self.manager.pid() {
-            if self.manager.get_session(pid).await.is_none() {
+        if pid != &self.manager().await.pid() {
+            if self.manager().await.get_session(pid).await.is_none() {
                 let session = self.connect(locators).await;
                 if session.is_ok() {
                     log::debug!("Successfully connected to newly scouted {}", pid);
@@ -559,14 +588,14 @@ impl SessionOrchestrator {
                     if what & self.whatami != 0 {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
                         let pid = if *pid_request {
-                            Some(self.manager.pid())
+                            Some(self.manager().await.pid())
                         } else {
                             None
                         };
                         let hello = SessionMessage::make_hello(
                             pid,
                             Some(self.whatami),
-                            Some(self.manager.get_locators().await.clone()),
+                            Some(self.manager().await.get_locators().await.clone()),
                             None,
                         );
                         log::trace!("Send {:?} to {}", hello, peer);
@@ -585,9 +614,58 @@ impl SessionOrchestrator {
 
     pub async fn close(&mut self) -> ZResult<()> {
         log::trace!("SessionOrchestrator::close())");
-        for session in &mut self.manager.get_sessions().await {
+        for session in &mut self.manager().await.get_sessions().await {
             session.close().await?;
         }
         Ok(())
+    }
+}
+
+#[async_trait]
+impl SessionHandler for SessionOrchestrator {
+    async fn new_session(
+        &self,
+        session: Session,
+    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+        Ok(Arc::new(OrchSession {
+            orchestrator: self.clone(),
+            locator: RwLock::new(None),
+            sub_event_handler: self.sub_handler.new_session(session).await.unwrap(),
+        }))
+    }
+}
+
+pub struct OrchSession {
+    orchestrator: SessionOrchestrator,
+    locator: RwLock<Option<Locator>>,
+    sub_event_handler: Arc<dyn SessionEventHandler + Send + Sync>,
+}
+
+#[async_trait]
+impl SessionEventHandler for OrchSession {
+    async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+        log::trace!("handle_message {:?}", msg);
+        self.sub_event_handler.handle_message(msg).await
+    }
+
+    async fn new_link(&self, link: zenoh_protocol::link::Link) {
+        self.sub_event_handler.new_link(link).await
+    }
+
+    async fn del_link(&self, link: zenoh_protocol::link::Link) {
+        self.sub_event_handler.del_link(link).await
+    }
+
+    async fn closing(&self) {
+        self.sub_event_handler.closing().await;
+        if let Some(locator) = &*self.locator.read().await {
+            let locator = locator.clone();
+            let orchestrator = self.orchestrator.clone();
+            async_std::task::spawn(async move { orchestrator.peer_connector(locator).await });
+        }
+    }
+
+    async fn closed(&self) {
+        self.sub_event_handler.closed().await
     }
 }
