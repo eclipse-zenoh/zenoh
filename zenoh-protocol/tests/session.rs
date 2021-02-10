@@ -455,14 +455,14 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_only() {
-    let locator = "tcp/127.0.0.1:7447".parse().unwrap();
+    let locator = "tcp/127.0.0.1:8447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn session_udp_only() {
-    let locator = "udp/127.0.0.1:7447".parse().unwrap();
+    let locator = "udp/127.0.0.1:8447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }
 
@@ -569,7 +569,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .add_pem_file(&mut Cursor::new(ca.as_bytes()))
         .unwrap();
 
-    let locator = "tls/localhost:7447".parse().unwrap();
+    let locator = "tls/localhost:8448".parse().unwrap();
     let property = vec![(client_config, server_config).into()];
     task::block_on(session_open_close(locator, Some(property)));
 }

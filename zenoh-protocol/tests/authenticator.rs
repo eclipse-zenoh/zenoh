@@ -302,13 +302,13 @@ fn authenticator_udp() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn authenticator_unix() {
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
+    let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-10.sock"
         .parse()
         .unwrap();
     task::block_on(async {
         authenticator_user_password(locator).await;
     });
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");
 }

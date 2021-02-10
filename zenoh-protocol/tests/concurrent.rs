@@ -361,14 +361,14 @@ fn session_tcp_concurrent() {
         "tcp/127.0.0.1:7454".parse().unwrap(),
     ];
     let locator02: Vec<Locator> = vec![
-        "tcp/127.0.0.1:8447".parse().unwrap(),
-        "tcp/127.0.0.1:8448".parse().unwrap(),
-        "tcp/127.0.0.1:8449".parse().unwrap(),
-        "tcp/127.0.0.1:8450".parse().unwrap(),
-        "tcp/127.0.0.1:8451".parse().unwrap(),
-        "tcp/127.0.0.1:8452".parse().unwrap(),
-        "tcp/127.0.0.1:8453".parse().unwrap(),
-        "tcp/127.0.0.1:8454".parse().unwrap(),
+        "tcp/127.0.0.1:7455".parse().unwrap(),
+        "tcp/127.0.0.1:7456".parse().unwrap(),
+        "tcp/127.0.0.1:7457".parse().unwrap(),
+        "tcp/127.0.0.1:7458".parse().unwrap(),
+        "tcp/127.0.0.1:7459".parse().unwrap(),
+        "tcp/127.0.0.1:7460".parse().unwrap(),
+        "tcp/127.0.0.1:7461".parse().unwrap(),
+        "tcp/127.0.0.1:7462".parse().unwrap(),
     ];
 
     task::block_on(async {

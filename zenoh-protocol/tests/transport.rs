@@ -344,7 +344,7 @@ async fn run(
 #[test]
 fn transport_tcp_only() {
     // Define the locators
-    let locators: Vec<Locator> = vec!["tcp/127.0.0.1:7447".parse().unwrap()];
+    let locators: Vec<Locator> = vec!["tcp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::Reliable, Reliability::BestEffort];
@@ -362,7 +362,7 @@ fn transport_tcp_only() {
 #[test]
 fn transport_udp() {
     // Define the locator
-    let locators: Vec<Locator> = vec!["udp/127.0.0.1:7447".parse().unwrap()];
+    let locators: Vec<Locator> = vec!["udp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
     // Define the reliability and congestion control
     let reliability = [Reliability::BestEffort];
@@ -404,8 +404,8 @@ fn transport_unix() {
 fn transport_tcp_udp() {
     // Define the locator
     let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7448".parse().unwrap(),
-        "udp/127.0.0.1:7448".parse().unwrap(),
+        "tcp/127.0.0.1:10448".parse().unwrap(),
+        "udp/127.0.0.1:10448".parse().unwrap(),
     ];
     let properties = None;
     // Define the reliability and congestion control
@@ -430,7 +430,7 @@ fn transport_tcp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7449".parse().unwrap(),
+        "tcp/127.0.0.1:10449".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-6.sock"
             .parse()
             .unwrap(),
@@ -460,7 +460,7 @@ fn transport_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
-        "udp/127.0.0.1:7449".parse().unwrap(),
+        "udp/127.0.0.1:10449".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-7.sock"
             .parse()
             .unwrap(),
@@ -491,8 +491,8 @@ fn transport_tcp_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
-        "tcp/127.0.0.1:7450".parse().unwrap(),
-        "udp/127.0.0.1:7450".parse().unwrap(),
+        "tcp/127.0.0.1:10450".parse().unwrap(),
+        "udp/127.0.0.1:10450".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-8.sock"
             .parse()
             .unwrap(),
@@ -604,7 +604,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .unwrap();
 
     // Define the locator
-    let locators = vec!["tls/localhost:7451".parse().unwrap()];
+    let locators = vec!["tls/localhost:10451".parse().unwrap()];
     let properties = vec![(client_config, server_config).into()];
 
     // Define the reliability and congestion control
