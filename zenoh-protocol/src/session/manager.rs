@@ -24,7 +24,7 @@ use super::Session;
 use super::SessionHandler;
 use crate::core::{PeerId, WhatAmI, ZInt};
 use crate::link::{
-    Link, LinkManager, LinkManagerBuilder, LinkProperties, Locator, LocatorProtocol,
+    Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
 };
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
@@ -34,6 +34,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
+use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::{zasynclock, zerror};
 
 /// # Examples
@@ -91,6 +92,7 @@ use zenoh_util::{zasynclock, zerror};
 ///     max_links: None,            // Allow any number of links in a single session
 ///     peer_authenticator: None,   // Accept any incoming session
 ///     link_authenticator: None,   // Accept any incoming link
+///     locator_property: None,     // No specific link property
 /// };
 /// let manager_opt = SessionManager::new(config, Some(opt_config));
 /// ```
@@ -113,6 +115,44 @@ pub struct SessionManagerOptionalConfig {
     pub max_links: Option<usize>,
     pub peer_authenticator: Option<Vec<PeerAuthenticator>>,
     pub link_authenticator: Option<Vec<LinkAuthenticator>>,
+    pub locator_property: Option<Vec<LocatorProperty>>,
+}
+
+impl SessionManagerOptionalConfig {
+    pub async fn from_properties(
+        config: &ConfigProperties,
+    ) -> ZResult<Option<SessionManagerOptionalConfig>> {
+        let peer_authenticator = PeerAuthenticator::from_properties(config).await?;
+        let link_authenticator = LinkAuthenticator::from_properties(config).await?;
+        let locator_property = LocatorProperty::from_properties(config).await?;
+
+        let opt_config = SessionManagerOptionalConfig {
+            lease: None,
+            keep_alive: None,
+            sn_resolution: None,
+            batch_size: None,
+            timeout: None,
+            retries: None,
+            max_sessions: None,
+            max_links: None,
+            peer_authenticator: if peer_authenticator.is_empty() {
+                None
+            } else {
+                Some(peer_authenticator)
+            },
+            link_authenticator: if link_authenticator.is_empty() {
+                None
+            } else {
+                Some(link_authenticator)
+            },
+            locator_property: if locator_property.is_empty() {
+                None
+            } else {
+                Some(locator_property)
+            },
+        };
+        Ok(Some(opt_config))
+    }
 }
 
 pub(super) struct SessionManagerConfigInner {
@@ -129,6 +169,7 @@ pub(super) struct SessionManagerConfigInner {
     pub(super) max_links: Option<usize>,
     pub(super) peer_authenticator: Vec<PeerAuthenticator>,
     pub(super) link_authenticator: Vec<LinkAuthenticator>,
+    pub(super) locator_property: HashMap<LocatorProtocol, LocatorProperty>,
     pub(super) handler: Arc<dyn SessionHandler + Send + Sync>,
 }
 
@@ -158,7 +199,7 @@ pub struct SessionManager {
 impl SessionManager {
     pub fn new(
         config: SessionManagerConfig,
-        opt_config: Option<SessionManagerOptionalConfig>,
+        mut opt_config: Option<SessionManagerOptionalConfig>,
     ) -> SessionManager {
         // Set default optional values
         let mut lease = *SESSION_LEASE;
@@ -171,34 +212,40 @@ impl SessionManager {
         let mut max_links = None;
         let mut peer_authenticator = vec![DummyPeerAuthenticator::make()];
         let mut link_authenticator = vec![DummyLinkAuthenticator::make()];
+        let mut locator_property = HashMap::new();
 
         // Override default values if provided
-        if let Some(opt) = opt_config {
-            if let Some(v) = opt.lease {
+        if let Some(mut opt) = opt_config.take() {
+            if let Some(v) = opt.lease.take() {
                 lease = v;
             }
-            if let Some(v) = opt.keep_alive {
+            if let Some(v) = opt.keep_alive.take() {
                 keep_alive = v;
             }
-            if let Some(v) = opt.sn_resolution {
+            if let Some(v) = opt.sn_resolution.take() {
                 sn_resolution = v;
             }
-            if let Some(v) = opt.batch_size {
+            if let Some(v) = opt.batch_size.take() {
                 batch_size = v;
             }
-            if let Some(v) = opt.timeout {
+            if let Some(v) = opt.timeout.take() {
                 timeout = v;
             }
-            if let Some(v) = opt.retries {
+            if let Some(v) = opt.retries.take() {
                 retries = v;
             }
             max_sessions = opt.max_sessions;
             max_links = opt.max_links;
-            if let Some(v) = opt.peer_authenticator {
+            if let Some(v) = opt.peer_authenticator.take() {
                 peer_authenticator = v;
             }
-            if let Some(v) = opt.link_authenticator {
+            if let Some(v) = opt.link_authenticator.take() {
                 link_authenticator = v;
+            }
+            if let Some(mut v) = opt.locator_property.take() {
+                for p in v.drain(..) {
+                    locator_property.insert(p.get_proto(), p);
+                }
             }
         }
 
@@ -216,6 +263,7 @@ impl SessionManager {
             max_links,
             peer_authenticator,
             link_authenticator,
+            locator_property,
             handler: config.handler,
         };
 
@@ -245,7 +293,8 @@ impl SessionManager {
     /*************************************/
     pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
-        manager.new_listener(locator).await
+        let ps = self.config.locator_property.get(&locator.get_proto());
+        manager.new_listener(locator, ps).await
     }
 
     pub async fn get_listeners(&self) -> Vec<Locator> {
@@ -427,14 +476,9 @@ impl SessionManager {
         let to = Duration::from_millis(self.config.timeout);
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
+        let ps = self.config.locator_property.get(&locator.get_proto());
         // Create a new link associated by calling the Link Manager
-        let link = match manager.new_link(&locator).await {
-            Ok(link) => link,
-            Err(e) => {
-                log::warn!("Can not to create a link to locator {}: {}", locator, e);
-                return Err(e);
-            }
-        };
+        let link = manager.new_link(&locator, ps).await?;
 
         // Try a maximum number of times to open a session
         let retries = self.config.retries;
@@ -461,7 +505,7 @@ impl SessionManager {
         zerror!(ZErrorKind::Other { descr: e })
     }
 
-    pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LinkProperties>) {
+    pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LocatorProperty>) {
         let mut guard = zasynclock!(self.incoming);
         if guard.len() >= *SESSION_OPEN_MAX_CONCURRENT {
             // We reached the limit of concurrent incoming session, this means two things:
@@ -481,11 +525,10 @@ impl SessionManager {
 
         let mut peer_id: Option<PeerId> = None;
         for la in self.config.link_authenticator.iter() {
-            let res = la.handle_new_link(&link, properties.clone()).await;
+            let res = la.handle_new_link(&link, properties.as_ref()).await;
             match res {
                 Ok(pid) => {
-                    // Check that all the peer authenticators
-                    // eventually return the same PeerId
+                    // Check that all the peer authenticators, eventually return the same PeerId
                     if let Some(pid1) = peer_id.as_ref() {
                         if let Some(pid2) = pid.as_ref() {
                             if pid1 != pid2 {

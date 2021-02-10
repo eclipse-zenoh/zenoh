@@ -16,8 +16,9 @@ use async_std::task;
 use clap::{App, Arg, Values};
 use git_version::git_version;
 use zenoh_router::plugins::PluginsMgr;
-use zenoh_router::runtime::{config, AdminSpace, Runtime, RuntimeProperties};
-use zenoh_util::collections::Properties;
+use zenoh_router::runtime::{AdminSpace, Runtime};
+use zenoh_util::properties::config::*;
+use zenoh_util::properties::Properties;
 use zenoh_util::LibLoader;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -138,10 +139,10 @@ fn main() {
         let mut config = if let Some(conf_file) = args.value_of("config") {
             Properties::from(std::fs::read_to_string(conf_file).unwrap()).into()
         } else {
-            RuntimeProperties::default()
+            ConfigProperties::default()
         };
 
-        config.insert(config::ZN_MODE_KEY, "router".to_string());
+        config.insert(ZN_MODE_KEY, "router".to_string());
 
         let mut peer = args
             .values_of("peer")
@@ -149,11 +150,11 @@ fn main() {
             .unwrap()
             .collect::<Vec<&str>>()
             .join(",");
-        if let Some(val) = config.get(&config::ZN_PEER_KEY) {
+        if let Some(val) = config.get(&ZN_PEER_KEY) {
             peer.push(',');
             peer.push_str(val);
         }
-        config.insert(config::ZN_PEER_KEY, peer);
+        config.insert(ZN_PEER_KEY, peer);
 
         let mut listener = args
             .values_of("listener")
@@ -161,30 +162,30 @@ fn main() {
             .unwrap()
             .collect::<Vec<&str>>()
             .join(",");
-        if let Some(val) = config.get(&config::ZN_LISTENER_KEY) {
+        if let Some(val) = config.get(&ZN_LISTENER_KEY) {
             if listener == DEFAULT_LISTENER {
                 listener.clear();
             }
             listener.push(',');
             listener.push_str(val);
         }
-        config.insert(config::ZN_LISTENER_KEY, listener);
+        config.insert(ZN_LISTENER_KEY, listener);
 
         config.insert(
-            config::ZN_ADD_TIMESTAMP_KEY,
+            ZN_ADD_TIMESTAMP_KEY,
             if args.is_present("no-timestamp") {
-                config::ZN_FALSE.to_string()
+                ZN_FALSE.to_string()
             } else {
-                config::ZN_TRUE.to_string()
+                ZN_TRUE.to_string()
             },
         );
 
         config.insert(
-            config::ZN_MULTICAST_SCOUTING_KEY,
+            ZN_MULTICAST_SCOUTING_KEY,
             if args.is_present("no-multicast-scouting") {
-                config::ZN_FALSE.to_string()
+                ZN_FALSE.to_string()
             } else {
-                config::ZN_TRUE.to_string()
+                ZN_TRUE.to_string()
             },
         );
 

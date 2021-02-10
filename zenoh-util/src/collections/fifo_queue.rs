@@ -11,11 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Mutex, MutexGuard};
-
 use crate::collections::CircularBuffer;
 use crate::sync::Condition;
 use crate::zasynclock;
+use async_std::sync::Mutex;
 
 pub struct FifoQueue<T> {
     buffer: Mutex<CircularBuffer<T>>,
@@ -24,104 +23,59 @@ pub struct FifoQueue<T> {
 }
 
 impl<T> FifoQueue<T> {
-    pub fn new(capacity: usize, concurrency_level: usize) -> FifoQueue<T> {
+    pub fn new(capacity: usize) -> FifoQueue<T> {
         FifoQueue {
             buffer: Mutex::new(CircularBuffer::new(capacity)),
-            not_empty: Condition::new(concurrency_level),
-            not_full: Condition::new(concurrency_level),
+            not_empty: Condition::new(),
+            not_full: Condition::new(),
         }
+    }
+
+    pub fn try_push(&self, x: T) -> Option<T> {
+        if let Some(mut guard) = self.buffer.try_lock() {
+            let res = guard.push(x);
+            if res.is_none() {
+                drop(guard);
+                self.not_empty.notify_one();
+            }
+            return res;
+        }
+        Some(x)
     }
 
     pub async fn push(&self, x: T) {
         loop {
-            let mut q = zasynclock!(self.buffer);
-            if !q.is_full() {
-                q.push(x);
-                if self.not_empty.has_waiting_list() {
-                    self.not_empty.notify(q).await;
-                }
+            let mut guard = zasynclock!(self.buffer);
+            if !guard.is_full() {
+                guard.push(x);
+                drop(guard);
+                self.not_empty.notify_one();
                 return;
             }
-            self.not_full.wait(q).await;
+            self.not_full.wait(guard).await;
         }
     }
 
-    pub async fn pull(&self) -> T {
-        loop {
-            let mut q = zasynclock!(self.buffer);
-            if let Some(e) = q.pull() {
-                if self.not_full.has_waiting_list() {
-                    self.not_full.notify(q).await;
-                }
-                return e;
+    pub fn try_pull(&self) -> Option<T> {
+        if let Some(mut guard) = self.buffer.try_lock() {
+            if let Some(e) = guard.pull() {
+                drop(guard);
+                self.not_full.notify_one();
+                return Some(e);
             }
-            self.not_empty.wait(q).await;
-        }
-    }
-
-    pub async fn drain(&self) -> Drain<'_, T> {
-        // Acquire the guard and wait until the queue is not empty
-        let guard = loop {
-            // Acquire the lock
-            let guard = zasynclock!(self.buffer);
-            // If there are no messages available, we wait
-            if guard.is_empty() {
-                self.not_empty.wait(guard).await;
-            } else {
-                break guard;
-            }
-        };
-        // Return a Drain iterator
-        Drain {
-            queue: self,
-            drained: false,
-            guard,
-        }
-    }
-
-    pub async fn try_drain(&self) -> Drain<'_, T> {
-        // Return a Drain iterator
-        Drain {
-            queue: self,
-            drained: false,
-            guard: zasynclock!(self.buffer),
-        }
-    }
-}
-
-pub struct Drain<'a, T> {
-    queue: &'a FifoQueue<T>,
-    drained: bool,
-    guard: MutexGuard<'a, CircularBuffer<T>>,
-}
-
-impl<'a, T> Drain<'a, T> {
-    // The drop() on Drain object needs to be manually called since an async
-    // destructor is not yet supported in Rust. More information available at:
-    // https://internals.rust-lang.org/t/asynchronous-destructors/11127/47
-    pub async fn drop(self) {
-        if self.drained && self.queue.not_full.has_waiting_list() {
-            self.queue.not_full.notify(self.guard).await;
-        } else {
-            drop(self.guard);
-        }
-    }
-}
-
-impl<'a, T> Iterator for Drain<'_, T> {
-    type Item = T;
-
-    #[inline]
-    fn next(&mut self) -> Option<T> {
-        if let Some(e) = self.guard.pull() {
-            self.drained = true;
-            return Some(e);
         }
         None
     }
 
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.guard.len(), Some(self.guard.len()))
+    pub async fn pull(&self) -> T {
+        loop {
+            let mut guard = zasynclock!(self.buffer);
+            if let Some(e) = guard.pull() {
+                drop(guard);
+                self.not_full.notify_one();
+                return e;
+            }
+            self.not_empty.wait(guard).await;
+        }
     }
 }

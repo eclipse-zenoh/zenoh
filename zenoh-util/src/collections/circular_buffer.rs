@@ -30,14 +30,13 @@ impl<T> CircularBuffer<T> {
     }
 
     #[inline]
-    pub(crate) fn push(&mut self, elem: T) -> bool {
+    pub(crate) fn push(&mut self, elem: T) -> Option<T> {
         if self.n < self.capacity {
             self.buffer.push_back(elem);
             self.n += 1;
-            true
-        } else {
-            false
+            return None;
         }
+        Some(elem)
     }
 
     #[inline]
@@ -49,15 +48,15 @@ impl<T> CircularBuffer<T> {
         x
     }
 
-    #[inline]
     #[allow(dead_code)]
+    #[inline]
     pub(crate) fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     #[inline]
     pub(crate) fn is_full(&self) -> bool {
-        self.n == self.capacity
+        self.len() == self.capacity()
     }
 
     #[inline]

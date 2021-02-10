@@ -124,8 +124,9 @@ async fn authenticator_user_password(locator: Locator) {
         retries: None,
         max_sessions: None,
         max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_router.clone()]),
+        peer_authenticator: Some(vec![peer_authenticator_router.clone().into()]),
         link_authenticator: None,
+        locator_property: None,
     };
     let router_manager = SessionManager::new(config, Some(opt_config));
 
@@ -137,10 +138,8 @@ async fn authenticator_user_password(locator: Locator) {
         handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client01 = Arc::new(UserPasswordAuthenticator::new(
-        lookup,
-        (user01.clone().into(), password01.clone().into()),
-    ));
+    let peer_authenticator_client01 =
+        UserPasswordAuthenticator::new(lookup, (user01.clone().into(), password01.clone().into()));
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
@@ -150,8 +149,9 @@ async fn authenticator_user_password(locator: Locator) {
         retries: None,
         max_sessions: None,
         max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_client01]),
+        peer_authenticator: Some(vec![peer_authenticator_client01.into()]),
         link_authenticator: None,
+        locator_property: None,
     };
     let client01_manager = SessionManager::new(config, Some(opt_config));
 
@@ -163,10 +163,8 @@ async fn authenticator_user_password(locator: Locator) {
         handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client02 = Arc::new(UserPasswordAuthenticator::new(
-        lookup,
-        (user02.clone().into(), password02.clone().into()),
-    ));
+    let peer_authenticator_client02 =
+        UserPasswordAuthenticator::new(lookup, (user02.clone().into(), password02.clone().into()));
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
@@ -176,8 +174,9 @@ async fn authenticator_user_password(locator: Locator) {
         retries: None,
         max_sessions: None,
         max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_client02]),
+        peer_authenticator: Some(vec![peer_authenticator_client02.into()]),
         link_authenticator: None,
+        locator_property: None,
     };
     let client02_manager = SessionManager::new(config, Some(opt_config));
 
@@ -189,10 +188,8 @@ async fn authenticator_user_password(locator: Locator) {
         handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client03 = Arc::new(UserPasswordAuthenticator::new(
-        lookup,
-        (user03.into(), password03.into()),
-    ));
+    let peer_authenticator_client03 =
+        UserPasswordAuthenticator::new(lookup, (user03.into(), password03.into()));
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
@@ -202,8 +199,9 @@ async fn authenticator_user_password(locator: Locator) {
         retries: None,
         max_sessions: None,
         max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_client03]),
+        peer_authenticator: Some(vec![peer_authenticator_client03.into()]),
         link_authenticator: None,
+        locator_property: None,
     };
     let client03_manager = SessionManager::new(config, Some(opt_config));
 

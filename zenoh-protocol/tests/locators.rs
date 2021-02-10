@@ -16,10 +16,12 @@ use async_std::task;
 use async_trait::async_trait;
 use std::time::Duration;
 use zenoh_protocol::core::{whatami, PeerId};
-use zenoh_protocol::link::{Link, Locator};
+use zenoh_protocol::link::tls::{NoClientAuth, ServerConfig};
+use zenoh_protocol::link::{Link, Locator, LocatorProperty};
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 
@@ -70,7 +72,7 @@ impl SessionEventHandler for SC {
     async fn closed(&self) {}
 }
 
-async fn run(locators: Vec<Locator>) {
+async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>>) {
     // Create the session manager
     let config = SessionManagerConfig {
         version: 0,
@@ -78,7 +80,20 @@ async fn run(locators: Vec<Locator>) {
         id: PeerId::new(1, [0u8; PeerId::MAX_SIZE]),
         handler: Arc::new(SH::new()),
     };
-    let sm = SessionManager::new(config, None);
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: None,
+        max_links: None,
+        peer_authenticator: None,
+        link_authenticator: None,
+        locator_property,
+    };
+    let sm = SessionManager::new(config, Some(opt_config));
 
     for _ in 0..RUNS {
         // Create the listeners
@@ -111,7 +126,8 @@ fn locator_tcp() {
         "tcp/127.0.0.1:7447".parse().unwrap(),
         "tcp/localhost:7448".parse().unwrap(),
     ];
-    task::block_on(run(locators));
+    let locator_property = None;
+    task::block_on(run(&locators, locator_property));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -122,7 +138,8 @@ fn locator_udp() {
         "udp/127.0.0.1:7447".parse().unwrap(),
         "udp/localhost:7448".parse().unwrap(),
     ];
-    task::block_on(run(locators));
+    let locator_property = None;
+    task::block_on(run(&locators, locator_property));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -140,7 +157,8 @@ fn locator_unix() {
             .parse()
             .unwrap(),
     ];
-    task::block_on(run(locators));
+    let locator_property = None;
+    task::block_on(run(&locators, locator_property));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock.lock");
@@ -155,7 +173,8 @@ fn locator_tcp_udp() {
         "tcp/127.0.0.1:7449".parse().unwrap(),
         "udp/127.0.0.1:7449".parse().unwrap(),
     ];
-    task::block_on(run(locators));
+    let locator_property = None;
+    task::block_on(run(&locators, locator_property));
 }
 
 #[cfg(all(
@@ -176,7 +195,8 @@ fn locator_tcp_udp_unix() {
             .parse()
             .unwrap(),
     ];
-    task::block_on(run(locators));
+    let locator_property = None;
+    task::block_on(run(&locators, locator_property));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock.lock");
 }
@@ -197,7 +217,8 @@ fn locator_tcp_unix() {
             .parse()
             .unwrap(),
     ];
-    task::block_on(run(locators));
+    let locator_property = None;
+    task::block_on(run(&locators, locator_property));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock.lock");
 }
@@ -218,7 +239,17 @@ fn locator_udp_unix() {
             .parse()
             .unwrap(),
     ];
-    task::block_on(run(locators));
+    let locator_property = None;
+    task::block_on(run(&locators, locator_property));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock.lock");
+}
+
+#[cfg(feature = "transport_tls")]
+#[test]
+fn locator_tls() {
+    // Define the locators
+    let locators = vec!["tls/localhost:7451".parse().unwrap()];
+    let locator_property = vec![ServerConfig::new(NoClientAuth::new()).into()];
+    task::block_on(run(&locators, Some(locator_property)));
 }

@@ -292,7 +292,7 @@ async fn open_recv_init_ack(
                     &init_ack_properties,
                 )
                 .await
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
             open_syn_properties.append(&mut ps);
         }
         attachment_from_properties(&open_syn_properties).ok()
@@ -415,7 +415,7 @@ async fn open_recv_open_ack(
         let _ = pa
             .handle_open_ack(&auth_link, &opean_ack_properties)
             .await
-            .map_err(|e| (e, None))?;
+            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
     }
 
     let output = OpenAckOutput {
@@ -470,42 +470,53 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
     // Retrive the session's transport
     let transport = session.get_transport()?;
 
-    // Compute a suitable keep alive interval based on the lease
-    // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
-    //       set the actual keep_alive timeout to one fourth of the agreed session lease.
-    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
-    //       check which considers a link as failed when no messages are received in 3.5 times the
-    //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
-    //       session lease.
-    let keep_alive = manager.config.keep_alive.min(info.lease / 4);
-    let _ = transport
-        .add_link(
-            link.clone(),
-            manager.config.batch_size,
-            info.lease,
-            keep_alive,
-        )
-        .await?;
+    // Acquire the lock to avoid concurrent new_session and closing/closed notifications
+    let a_guard = transport.get_alive().await;
+    if *a_guard {
+        // Compute a suitable keep alive interval based on the lease
+        // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
+        //       set the actual keep_alive timeout to one fourth of the agreed session lease.
+        //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+        //       check which considers a link as failed when no messages are received in 3.5 times the
+        //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
+        //       session lease.
+        let keep_alive = manager.config.keep_alive.min(info.lease / 4);
+        let _ = transport
+            .add_link(
+                link.clone(),
+                manager.config.batch_size,
+                info.lease,
+                keep_alive,
+            )
+            .await?;
 
-    // Start the TX loop
-    let _ = transport.start_tx(&link).await?;
+        // Start the TX loop
+        let _ = transport.start_tx(&link).await?;
 
-    // Assign a callback if the session is new
-    if let Some(callback) = transport.get_callback().await {
-        // Notify the session handler there is a new link on this session
-        callback.new_link(link.clone()).await;
-    } else {
-        // Notify the session handler that there is a new session and get back a callback
-        // NOTE: the read loop of the link the open message was sent on remains blocked
-        //       until the new_session() returns. The read_loop in the various links
-        //       waits for any eventual transport to associate to.
-        let callback = manager.config.handler.new_session(session.clone()).await?;
-        // Set the callback on the transport
-        let _ = transport.set_callback(callback).await;
+        // Assign a callback if the session is new
+        loop {
+            match transport.get_callback().await {
+                Some(callback) => {
+                    // Notify the session handler there is a new link on this session
+                    callback.new_link(link.clone()).await;
+                    break;
+                }
+                None => {
+                    // Notify the session handler that there is a new session and get back a callback
+                    // NOTE: the read loop of the link the open message was sent on remains blocked
+                    //       until the new_session() returns. The read_loop in the various links
+                    //       waits for any eventual transport to associate to.
+                    let callback = manager.config.handler.new_session(session.clone()).await?;
+                    // Set the callback on the transport
+                    let _ = transport.set_callback(callback).await;
+                }
+            }
+        }
+
+        // Start the RX loop
+        let _ = transport.start_rx(&link).await?;
     }
-
-    // Start the RX loop
-    let _ = transport.start_rx(&link).await?;
+    drop(a_guard);
 
     let mut guard = zasynclock!(manager.opened);
     guard.remove(&info.pid);
@@ -617,7 +628,7 @@ async fn accept_recv_init_syn(
                     &init_syn_properties,
                 )
                 .await
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
             init_ack_properties.append(&mut ps);
         }
         attachment_from_properties(&init_ack_properties).ok()
@@ -772,7 +783,7 @@ async fn accept_recv_open_syn(
             let mut ps = pa
                 .handle_open_syn(&auth_link, &open_syn_properties)
                 .await
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
             open_ack_properties.append(&mut ps);
         }
         attachment_from_properties(&open_ack_properties).ok()
@@ -893,7 +904,7 @@ async fn accept_init_session(
             .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?
     };
 
-    // Retrive the session's transport
+    // Retrieve the session's transport
     let transport = session.get_transport().map_err(|e| (e, None))?;
 
     // Add the link to the session
@@ -963,39 +974,47 @@ async fn accept_finalize_session(
     // Retrive the session's transport
     let transport = input.session.get_transport()?;
 
-    // Start the TX loop
-    let _ = transport.start_tx(&link).await?;
+    // Acquire the lock to avoid concurrent new_session and closing/closed notifications
+    let a_guard = transport.get_alive().await;
+    if *a_guard {
+        // Start the TX loop
+        let _ = transport.start_tx(&link).await?;
 
-    // Assign a callback if the session is new
-    if let Some(callback) = transport.get_callback().await {
-        // Notify the session handler there is a new link on this session
-        callback.new_link(link.clone()).await;
-    } else {
-        // Notify the session handler that there is a new session and get back a callback
-        // NOTE: the read loop of the link the open message was sent on remains blocked
-        //       until the new_session() returns. The read_loop in the various links
-        //       waits for any eventual transport to associate to.
-        let res = manager
-            .config
-            .handler
-            .new_session(input.session.clone())
-            .await;
-        let callback = match res {
-            Ok(cb) => cb,
-            Err(e) => {
-                let e = format!(
-                    "Rejecting OpenSyn on link: {}. New session error: {:?}",
-                    link, e
-                );
-                return zerror!(ZErrorKind::InvalidSession { descr: e });
+        // Assign a callback if the session is new
+        loop {
+            match transport.get_callback().await {
+                Some(callback) => {
+                    // Notify the session handler there is a new link on this session
+                    callback.new_link(link.clone()).await;
+                    break;
+                }
+                None => {
+                    // Notify the session handler that there is a new session and get back a callback
+                    // NOTE: the read loop of the link the open message was sent on remains blocked
+                    //       until the new_session() returns. The read_loop in the various links
+                    //       waits for any eventual transport to associate to.
+                    let callback = manager
+                        .config
+                        .handler
+                        .new_session(input.session.clone())
+                        .await
+                        .map_err(|e| {
+                            let e = format!(
+                                "Rejecting OpenSyn on link: {}. New session error: {:?}",
+                                link, e
+                            );
+                            zerror2!(ZErrorKind::InvalidSession { descr: e })
+                        })?;
+                    // Set the callback on the transport
+                    transport.set_callback(callback).await;
+                }
             }
-        };
-        // Set the callback on the transport
-        transport.set_callback(callback).await;
-    }
+        }
 
-    // Start the RX loop
-    let _ = transport.start_rx(&link).await?;
+        // Start the RX loop
+        let _ = transport.start_rx(&link).await?;
+    }
+    drop(a_guard);
 
     Ok(())
 }

@@ -66,11 +66,8 @@ impl SessionEventHandler for DummySessionEventHandler {
     }
 
     async fn new_link(&self, _link: Link) {}
-
     async fn del_link(&self, _link: Link) {}
-
     async fn closing(&self) {}
-
     async fn closed(&self) {}
 }
 
@@ -121,8 +118,11 @@ impl Session {
     #[inline]
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("{:?}. Close", self);
-        let transport = zweak!(self.0, STR_ERR);
-        transport.close(smsg::close_reason::GENERIC).await
+        // Return Ok if the session has already been closed
+        match self.0.upgrade() {
+            Some(transport) => transport.close(smsg::close_reason::GENERIC).await,
+            None => Ok(()),
+        }
     }
 
     #[inline]

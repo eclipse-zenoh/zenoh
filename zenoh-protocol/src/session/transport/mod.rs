@@ -22,7 +22,7 @@ use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
 use crate::session::defaults::QUEUE_PRIO_DATA;
 use crate::session::{SessionEventHandler, SessionManager};
-use async_std::sync::{Arc, Mutex, RwLock};
+use async_std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use async_trait::async_trait;
 use defragmentation::*;
 use link::*;
@@ -119,6 +119,8 @@ pub(crate) struct SessionTransport {
     pub(super) scheduling: Arc<dyn Scheduling + Send + Sync>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>>,
+    // Mutex for notification
+    pub(super) alive: Arc<Mutex<bool>>,
 }
 
 impl SessionTransport {
@@ -155,6 +157,7 @@ impl SessionTransport {
             links: Arc::new(RwLock::new(Vec::new())),
             scheduling: Arc::new(FirstMatch::new()),
             callback: Arc::new(RwLock::new(None)),
+            alive: Arc::new(Mutex::new(true)),
         }
     }
 
@@ -182,11 +185,20 @@ impl SessionTransport {
         *guard = Some(callback.clone());
     }
 
+    pub(crate) async fn get_alive(&self) -> MutexGuard<'_, bool> {
+        zasynclock!(self.alive)
+    }
+
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) {
         log::debug!("Closing the session with peer: {}", self.pid);
+
+        // Mark the transport as no longer alive and keep the lock
+        // to avoid concurrent new_session and closing/closed notifications
+        let mut a_guard = self.get_alive().await;
+        *a_guard = false;
 
         // Notify the callback that we are going to close the session
         let mut c_guard = zasyncwrite!(self.callback);
@@ -323,16 +335,22 @@ impl SessionTransport {
         // Try to remove the link
         let mut guard = zasyncwrite!(self.links);
         if let Some(index) = zlinkindex!(guard, link) {
-            // Remove and close the link
+            // Remove the link
             let link = guard.remove(index);
-            let is_empty = guard.is_empty();
             drop(guard);
-            if is_empty {
-                self.delete().await;
-                Ok(())
-            } else {
-                link.close().await
+            // Notify the callback
+            if let Some(callback) = zasyncread!(self.callback).as_ref() {
+                callback.del_link(link.get_link().clone()).await;
             }
+            // Close the link
+            let res = link.close().await;
+            // Eventually close the whole session if not links left
+            let guard = zasyncread!(self.links);
+            if guard.is_empty() {
+                drop(guard);
+                self.delete().await;
+            }
+            res
         } else {
             zerror!(ZErrorKind::InvalidLink {
                 descr: format!("Can not delete Link {} with peer: {}", link, self.pid)

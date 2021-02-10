@@ -14,44 +14,7 @@
 
 //! Properties to pass to [open](super::open) and [scout](super::scout) functions as configuration
 //! and associated constants.
-pub use zenoh_router::runtime::config::*;
-
-use zenoh_router::runtime::RuntimeTranscoder;
-use zenoh_util::collections::{IntKeyProperties, KeyTranscoder};
-
-/// Indicates if local writes/queries should reach local subscribers/queryables.
-/// String key : `"local_routing"`.
-/// Accepted values : `"true"`, `"false"`.
-/// Default value : `"true"`.
-pub const ZN_LOCAL_ROUTING_KEY: u64 = 0x60;
-pub const ZN_LOCAL_ROUTING_DEFAULT: &str = "true";
-
-pub const ZN_JOIN_SUBSCRIPTIONS_KEY: u64 = 0x61;
-
-pub const ZN_JOIN_PUBLICATIONS_KEY: u64 = 0x62;
-
-/// A transcoder for [ConfigProperties](ConfigProperties)
-/// able to convert string keys to int keys and reverse.
-pub struct ConfigTranscoder();
-impl KeyTranscoder for ConfigTranscoder {
-    fn encode(key: &str) -> Option<u64> {
-        match &key.to_lowercase()[..] {
-            "local_routing" => Some(ZN_LOCAL_ROUTING_KEY),
-            "join_subscriptions" => Some(ZN_JOIN_SUBSCRIPTIONS_KEY),
-            "join_publications" => Some(ZN_JOIN_PUBLICATIONS_KEY),
-            key => RuntimeTranscoder::encode(key),
-        }
-    }
-
-    fn decode(key: u64) -> Option<String> {
-        match key {
-            ZN_LOCAL_ROUTING_KEY => Some("local_routing".to_string()),
-            ZN_JOIN_SUBSCRIPTIONS_KEY => Some("join_subscriptions".to_string()),
-            ZN_JOIN_PUBLICATIONS_KEY => Some("join_publications".to_string()),
-            key => RuntimeTranscoder::decode(key),
-        }
-    }
-}
+pub use zenoh_util::properties::config::*;
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [open](super::open)  
 /// to configure the zenoh-net [Session](super::super::Session).
@@ -60,7 +23,6 @@ impl KeyTranscoder for ConfigTranscoder {
 ///
 /// The [IntKeyProperties](IntKeyProperties) can be built from (`String`/`String`)
 /// [Properties](super::super::Properties) and reverse.
-pub type ConfigProperties = IntKeyProperties<ConfigTranscoder>;
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> ConfigProperties {

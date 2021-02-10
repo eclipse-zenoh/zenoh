@@ -13,15 +13,22 @@
 #
 [package]
 name = "zenoh_backend_traits"
-version = "0.5.0-beta.5"
+version = "0.5.0-beta.8"
+repository = "https://github.com/eclipse-zenoh/zenoh"
+homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
            "Julien Enoch <julien@enoch.fr>",
            "Olivier Hécart <olivier.hecart@adlinktech.com>",
 		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
 edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming"]
+description = "Zenoh: traits to be implemented by backends libraries"
 
+[badges]
+maintenance = { status = "actively-developed" }
 
 [dependencies]
-zenoh = { version = "0.5.0-beta.5", path = "../../zenoh" }
+zenoh = { version = "0.5.0-beta.8", path = "../../zenoh" }
 async-std = "=1.9.0"
 async-trait = "0.1"

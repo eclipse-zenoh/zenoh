@@ -32,7 +32,7 @@ use zenoh_util::core::ZResult;
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: usize = 1_024;
 const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(1);
+const SLEEP: Duration = Duration::from_millis(100);
 
 // Session Handler for the router
 struct SHPeer {
@@ -80,11 +80,8 @@ impl SessionEventHandler for MHPeer {
     }
 
     async fn new_link(&self, _link: Link) {}
-
     async fn del_link(&self, _link: Link) {}
-
     async fn closing(&self) {}
-
     async fn closed(&self) {}
 }
 
@@ -117,6 +114,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         max_links: None,
         peer_authenticator: None,
         link_authenticator: None,
+        locator_property: None,
     };
     let peer01_manager = SessionManager::new(config, Some(opt_config));
 
@@ -139,6 +137,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         max_links: None,
         peer_authenticator: None,
         link_authenticator: None,
+        locator_property: None,
     };
     let peer02_manager = SessionManager::new(config, Some(opt_config));
 
@@ -351,8 +350,6 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_concurrent() {
-    env_logger::init();
-
     let locator01: Vec<Locator> = vec![
         "tcp/127.0.0.1:7447".parse().unwrap(),
         "tcp/127.0.0.1:7448".parse().unwrap(),
