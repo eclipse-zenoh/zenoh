@@ -116,6 +116,14 @@ impl Session {
     }
 
     #[inline]
+    pub async fn get_callback(
+        &self,
+    ) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.get_callback().await)
+    }
+
+    #[inline]
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("{:?}. Close", self);
         // Return Ok if the session has already been closed

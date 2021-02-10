@@ -81,18 +81,18 @@ impl Runtime {
             None
         };
         let mut router = Arc::new(Router::new(pid.clone(), whatami, hlc));
+        let mut orchestrator = SessionOrchestrator::new(whatami, router.clone());
 
         let sm_config = SessionManagerConfig {
             version,
             whatami,
             id: pid.clone(),
-            handler: router.clone(),
+            handler: Arc::new(orchestrator.clone()),
         };
         let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
 
         let session_manager = SessionManager::new(sm_config, sm_opt_config);
-        let mut orchestrator = SessionOrchestrator::new(session_manager, whatami);
-        let peers_autuconnect = config
+        let peers_autoconnect = config
             .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
             .to_lowercase()
             == ZN_TRUE;
@@ -103,11 +103,14 @@ impl Runtime {
         {
             unsafe {
                 Arc::get_mut_unchecked(&mut router)
-                    .init_link_state(orchestrator.clone(), peers_autuconnect)
+                    .init_link_state(orchestrator.clone(), peers_autoconnect)
                     .await;
             }
         }
-        match orchestrator.init(config, peers_autuconnect).await {
+        match orchestrator
+            .init(session_manager, config, peers_autoconnect)
+            .await
+        {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
                     pid,
