@@ -190,11 +190,12 @@ impl StageIn {
 
         // Acquire the lock on the SN generator to ensure that we have all
         // sequential sequence numbers for the fragments
-        let (ch, mut guard) = if message.is_reliable() {
-            (Channel::Reliable, zasynclock!(self.sn_reliable))
+        let (ch, sn) = if message.is_reliable() {
+            (Channel::Reliable, self.sn_reliable.clone())
         } else {
-            (Channel::BestEffort, zasynclock!(self.sn_best_effort))
+            (Channel::BestEffort, self.sn_best_effort.clone())
         };
+        let mut guard = zasynclock!(sn);
 
         // Fragment the whole message
         let mut to_write = wbuf.len();
@@ -216,7 +217,7 @@ impl StageIn {
             // 0 bytes written means error
             if written != 0 {
                 // Move the serialization batch into the OUT pipeline
-                let batch = self.inner.pop_front().unwrap();
+                let batch = self.try_pull().unwrap();
                 let mut out_guard = zasynclock!(self.stage_out);
                 out_guard[self.priority].push(batch);
                 drop(out_guard);
