@@ -185,7 +185,11 @@ impl Resource {
         result
     }
 
-    pub fn make_resource(from: &mut Arc<Resource>, suffix: &str) -> Arc<Resource> {
+    pub fn make_resource(
+        tables: &mut Tables,
+        from: &mut Arc<Resource>,
+        suffix: &str,
+    ) -> Arc<Resource> {
         unsafe {
             if suffix.is_empty() {
                 from.clone()
@@ -196,13 +200,14 @@ impl Resource {
                 };
 
                 match Arc::get_mut_unchecked(from).childs.get_mut(chunk) {
-                    Some(mut res) => Resource::make_resource(&mut res, rest),
+                    Some(mut res) => Resource::make_resource(tables, &mut res, rest),
                     None => {
                         let mut new = Arc::new(Resource::new(from, chunk));
                         if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                             log::debug!("Register resource {}", new.name());
                         }
-                        let res = Resource::make_resource(&mut new, rest);
+                        tables.compute_routes(&mut new);
+                        let res = Resource::make_resource(tables, &mut new, rest);
                         Arc::get_mut_unchecked(from)
                             .childs
                             .insert(String::from(chunk), new);
@@ -211,9 +216,11 @@ impl Resource {
                 }
             } else {
                 match from.parent.clone() {
-                    Some(mut parent) => {
-                        Resource::make_resource(&mut parent, &[&from.suffix, suffix].concat())
-                    }
+                    Some(mut parent) => Resource::make_resource(
+                        tables,
+                        &mut parent,
+                        &[&from.suffix, suffix].concat(),
+                    ),
                     None => {
                         let (chunk, rest) = match suffix[1..].find('/') {
                             Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
@@ -221,13 +228,14 @@ impl Resource {
                         };
 
                         match Arc::get_mut_unchecked(from).childs.get_mut(chunk) {
-                            Some(mut res) => Resource::make_resource(&mut res, rest),
+                            Some(mut res) => Resource::make_resource(tables, &mut res, rest),
                             None => {
                                 let mut new = Arc::new(Resource::new(from, chunk));
                                 if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                                     log::debug!("Register resource {}", new.name());
                                 }
-                                let res = Resource::make_resource(&mut new, rest);
+                                tables.compute_routes(&mut new);
+                                let res = Resource::make_resource(tables, &mut new, rest);
                                 Arc::get_mut_unchecked(from)
                                     .childs
                                     .insert(String::from(chunk), new);
@@ -445,7 +453,7 @@ pub async fn declare_resource(
                 }
             }
             None => unsafe {
-                let mut res = Resource::make_resource(&mut prefix, suffix);
+                let mut res = Resource::make_resource(tables, &mut prefix, suffix);
                 Resource::match_resource(&tables, &mut res);
                 let mut ctx = Arc::get_mut_unchecked(&mut res)
                     .contexts
