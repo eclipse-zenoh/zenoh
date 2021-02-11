@@ -22,7 +22,7 @@ pub use uhlc::Timestamp;
 use zenoh_util::core::{ZError, ZErrorKind};
 use zenoh_util::zerror;
 
-pub type TimestampID = uhlc::ID;
+pub type TimestampId = uhlc::ID;
 
 pub type ZInt = u64;
 pub type ZiInt = i64;

@@ -61,7 +61,7 @@ async fn get_tls_addr(locator: &Locator) -> ZResult<SocketAddr> {
     match locator {
         Locator::Tls(addr) => match addr {
             LocatorTls::SocketAddr(addr) => Ok(*addr),
-            LocatorTls::DNSName(addr) => match addr.to_socket_addrs().await {
+            LocatorTls::DnsName(addr) => match addr.to_socket_addrs().await {
                 Ok(mut addr_iter) => {
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
@@ -91,7 +91,7 @@ async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
                 let e = format!("Couldn't get domain from SocketAddr: {}", addr);
                 zerror!(ZErrorKind::InvalidLocator { descr: e })
             }
-            LocatorTls::DNSName(addr) => {
+            LocatorTls::DnsName(addr) => {
                 // Separate the domain from the port.
                 // E.g. zenoh.io:7447 returns (zenoh.io, 7447).
                 let split: Vec<&str> = addr.split(':').collect();
@@ -135,7 +135,7 @@ fn get_tls_prop(property: &LocatorProperty) -> ZResult<&LocatorPropertyTls> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LocatorTls {
     SocketAddr(SocketAddr),
-    DNSName(String),
+    DnsName(String),
 }
 
 impl FromStr for LocatorTls {
@@ -144,7 +144,7 @@ impl FromStr for LocatorTls {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse() {
             Ok(addr) => Ok(LocatorTls::SocketAddr(addr)),
-            Err(_) => Ok(LocatorTls::DNSName(s.to_string())),
+            Err(_) => Ok(LocatorTls::DnsName(s.to_string())),
         }
     }
 }
@@ -153,7 +153,7 @@ impl fmt::Display for LocatorTls {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LocatorTls::SocketAddr(addr) => write!(f, "{}", addr)?,
-            LocatorTls::DNSName(addr) => write!(f, "{}", addr)?,
+            LocatorTls::DnsName(addr) => write!(f, "{}", addr)?,
         }
         Ok(())
     }

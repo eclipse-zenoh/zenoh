@@ -111,7 +111,7 @@ pub use values::*;
 // pub mod config;
 pub mod utils;
 
-pub use zenoh_protocol::core::{Timestamp, TimestampID};
+pub use zenoh_protocol::core::{Timestamp, TimestampId};
 pub use zenoh_util::properties::config::ConfigProperties;
 pub use zenoh_util::properties::Properties;
 

@@ -14,7 +14,7 @@
 
 //! Some useful operations for the zenoh API.
 
-use crate::{Properties, Timestamp, TimestampID, Value};
+use crate::{Properties, Timestamp, TimestampId, Value};
 
 /// Generates a reception [`Timestamp`] with id=0x00.  
 /// This operation should be called if a timestamp is required for an incoming [`zenoh::net::Sample`](crate::net::Sample)
@@ -25,7 +25,7 @@ pub fn new_reception_timestamp() -> Timestamp {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     Timestamp::new(
         now.into(),
-        TimestampID::new(1, [0u8; TimestampID::MAX_SIZE]),
+        TimestampId::new(1, [0u8; TimestampId::MAX_SIZE]),
     )
 }
 

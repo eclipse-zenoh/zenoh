@@ -54,7 +54,7 @@ async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
     match locator {
         Locator::Tcp(addr) => match addr {
             LocatorTcp::SocketAddr(addr) => Ok(*addr),
-            LocatorTcp::DNSName(addr) => match addr.to_socket_addrs().await {
+            LocatorTcp::DnsName(addr) => match addr.to_socket_addrs().await {
                 Ok(mut addr_iter) => {
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
@@ -82,7 +82,7 @@ async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LocatorTcp {
     SocketAddr(SocketAddr),
-    DNSName(String),
+    DnsName(String),
 }
 
 impl FromStr for LocatorTcp {
@@ -91,7 +91,7 @@ impl FromStr for LocatorTcp {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse() {
             Ok(addr) => Ok(LocatorTcp::SocketAddr(addr)),
-            Err(_) => Ok(LocatorTcp::DNSName(s.to_string())),
+            Err(_) => Ok(LocatorTcp::DnsName(s.to_string())),
         }
     }
 }
@@ -100,7 +100,7 @@ impl fmt::Display for LocatorTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LocatorTcp::SocketAddr(addr) => write!(f, "{}", addr)?,
-            LocatorTcp::DNSName(addr) => write!(f, "{}", addr)?,
+            LocatorTcp::DnsName(addr) => write!(f, "{}", addr)?,
         }
         Ok(())
     }
