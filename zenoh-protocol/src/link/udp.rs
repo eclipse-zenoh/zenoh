@@ -174,7 +174,7 @@ impl Udp {
 
     async fn read_unconnected(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let unconnected = self.unconnected.as_ref().ok_or_else(|| {
-            zerror2!(ZErrorKind::IOError {
+            zerror2!(ZErrorKind::IoError {
                 descr: "Send error".to_string()
             })
         })?;
@@ -203,7 +203,7 @@ impl Udp {
             Ok(n) => Ok(n),
             Err(e) => {
                 log::trace!("Reception error on UDP link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -245,7 +245,7 @@ impl LinkTrait for Udp {
             Ok(n) => Ok(n),
             Err(e) => {
                 log::trace!("Transmission error on UDP link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }

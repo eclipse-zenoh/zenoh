@@ -261,7 +261,7 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
                     Some(msg) => link.receive_message(msg).await,
                     None => {
                         let e = format!("Decoding error on link: {}", link.inner);
-                        return zerror!(ZErrorKind::IOError { descr: e });
+                        return zerror!(ZErrorKind::IoError { descr: e });
                     }
                 }
             }
@@ -279,7 +279,7 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
                     "Link has expired after {} milliseconds: {}",
                     link.lease, link.inner
                 );
-                return zerror!(ZErrorKind::IOError { descr: e });
+                return zerror!(ZErrorKind::IoError { descr: e });
             }
         };
 
@@ -288,7 +288,7 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
                 if n == 0 {
                     // Reading 0 bytes means error
                     let e = format!("Zero bytes reading on link: {}", link.inner);
-                    return zerror!(ZErrorKind::IOError { descr: e });
+                    return zerror!(ZErrorKind::IoError { descr: e });
                 }
 
                 // If we had a w_pos different from 0, it means we add an incomplete length reading
@@ -410,7 +410,7 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
             }
             Err(e) => {
                 let e = format!("Reading error on link {}: {}", link.inner, e);
-                return zerror!(ZErrorKind::IOError { descr: e });
+                return zerror!(ZErrorKind::IoError { descr: e });
             }
         }
     }
@@ -434,7 +434,7 @@ async fn read_dgram(link: SessionTransportLink) -> ZResult<()> {
                     "Link has expired after {} milliseconds: {}",
                     link.lease, link.inner
                 );
-                return zerror!(ZErrorKind::IOError { descr: e });
+                return zerror!(ZErrorKind::IoError { descr: e });
             }
         };
 
@@ -444,7 +444,7 @@ async fn read_dgram(link: SessionTransportLink) -> ZResult<()> {
                 if n == 0 {
                     // Reading 0 bytes means error
                     let e = format!("Zero bytes reading on link: {}", link.inner);
-                    return zerror!(ZErrorKind::IOError { descr: e });
+                    return zerror!(ZErrorKind::IoError { descr: e });
                 }
 
                 // Add the received bytes to the RBuf for deserialization
@@ -458,14 +458,14 @@ async fn read_dgram(link: SessionTransportLink) -> ZResult<()> {
                         Some(msg) => link.receive_message(msg).await,
                         None => {
                             let e = format!("Decoding error on link: {}", link.inner);
-                            return zerror!(ZErrorKind::IOError { descr: e });
+                            return zerror!(ZErrorKind::IoError { descr: e });
                         }
                     }
                 }
             }
             Err(e) => {
                 let e = format!("Reading error on link {}: {}", link.inner, e);
-                return zerror!(ZErrorKind::IOError { descr: e });
+                return zerror!(ZErrorKind::IoError { descr: e });
             }
         };
     }

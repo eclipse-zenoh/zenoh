@@ -167,7 +167,7 @@ impl LinkTrait for Tcp {
         let res = self.socket.shutdown(Shutdown::Both);
         log::trace!("TCP link shutdown {}: {:?}", self, res);
         res.map_err(|e| {
-            zerror2!(ZErrorKind::IOError {
+            zerror2!(ZErrorKind::IoError {
                 descr: format!("{}", e),
             })
         })
@@ -179,7 +179,7 @@ impl LinkTrait for Tcp {
             Ok(n) => Ok(n),
             Err(e) => {
                 log::trace!("Transmission error on TCP link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -192,7 +192,7 @@ impl LinkTrait for Tcp {
             Ok(_) => Ok(()),
             Err(e) => {
                 log::trace!("Transmission error on TCP link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -205,7 +205,7 @@ impl LinkTrait for Tcp {
             Ok(n) => Ok(n),
             Err(e) => {
                 log::trace!("Reception error on TCP link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -218,7 +218,7 @@ impl LinkTrait for Tcp {
             Ok(_) => Ok(()),
             Err(e) => {
                 log::trace!("Reception error on TCP link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }

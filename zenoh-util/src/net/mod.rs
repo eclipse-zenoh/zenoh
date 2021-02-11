@@ -50,7 +50,7 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
             );
             match ret {
                 0 => Ok(()),
-                err_code => zerror!(ZErrorKind::IOError {
+                err_code => zerror!(ZErrorKind::IoError {
                     descr: format!("setsockopt returned {}", err_code)
                 }),
             }
@@ -86,7 +86,7 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
             );
             match ret {
                 0 => Ok(()),
-                err_code => zerror!(ZErrorKind::IOError {
+                err_code => zerror!(ZErrorKind::IoError {
                     descr: format!("setsockopt returned {}", err_code)
                 }),
             }
@@ -144,7 +144,7 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
             }
 
             if ret != 0 {
-                return zerror!(ZErrorKind::IOError {
+                return zerror!(ZErrorKind::IoError {
                     descr: format!("GetAdaptersAddresses returned {}", ret)
                 });
             }
@@ -247,7 +247,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
             }
 
             if ret != 0 {
-                return zerror!(ZErrorKind::IOError {
+                return zerror!(ZErrorKind::IoError {
                     descr: format!("GetAdaptersAddresses returned {}", ret)
                 });
             }

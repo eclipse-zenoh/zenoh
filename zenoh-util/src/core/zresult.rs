@@ -50,7 +50,7 @@ pub enum ZErrorKind {
     InvalidSelector {
         selector: String,
     },
-    IOError {
+    IoError {
         descr: String,
     },
     Other {
@@ -97,7 +97,7 @@ impl fmt::Display for ZErrorKind {
             ZErrorKind::InvalidSelector { selector } => {
                 write!(f, "Invalid Selector ({})", selector)
             }
-            ZErrorKind::IOError { descr } => write!(f, "IO error ({})", descr),
+            ZErrorKind::IoError { descr } => write!(f, "IO error ({})", descr),
             ZErrorKind::Other { descr } => write!(f, "zenoh error: ({})", descr),
             ZErrorKind::Timeout {} => write!(f, "Timeout"),
             ZErrorKind::UnkownResourceId { rid } => write!(f, "Unkown ResourceId ({})", rid),

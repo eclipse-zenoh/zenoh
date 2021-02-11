@@ -375,7 +375,7 @@ impl LinkTrait for Tls {
         let res = tcp_stream.shutdown(Shutdown::Both);
         log::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| {
-            zerror2!(ZErrorKind::IOError {
+            zerror2!(ZErrorKind::IoError {
                 descr: format!("{}", e),
             })
         })
@@ -387,7 +387,7 @@ impl LinkTrait for Tls {
             Ok(n) => Ok(n),
             Err(e) => {
                 log::trace!("Transmission error on TLS link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -400,7 +400,7 @@ impl LinkTrait for Tls {
             Ok(_) => Ok(()),
             Err(e) => {
                 log::trace!("Transmission error on TLS link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -413,7 +413,7 @@ impl LinkTrait for Tls {
             Ok(n) => Ok(n),
             Err(e) => {
                 log::trace!("Reception error on TLS link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -426,7 +426,7 @@ impl LinkTrait for Tls {
             Ok(_) => Ok(()),
             Err(e) => {
                 log::trace!("Reception error on TLS link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }

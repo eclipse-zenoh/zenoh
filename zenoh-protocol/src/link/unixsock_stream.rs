@@ -142,7 +142,7 @@ impl LinkTrait for UnixSocketStream {
         let res = self.socket.shutdown(Shutdown::Both);
         log::trace!("UnixSocketStream link shutdown {}: {:?}", self, res);
         res.map_err(|e| {
-            zerror2!(ZErrorKind::IOError {
+            zerror2!(ZErrorKind::IoError {
                 descr: format!("{}", e),
             })
         })
@@ -158,7 +158,7 @@ impl LinkTrait for UnixSocketStream {
                     self,
                     e
                 );
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -175,7 +175,7 @@ impl LinkTrait for UnixSocketStream {
                     self,
                     e
                 );
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -188,7 +188,7 @@ impl LinkTrait for UnixSocketStream {
             Ok(n) => Ok(n),
             Err(e) => {
                 log::trace!("Reception error on UnixSocketStream link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }
@@ -201,7 +201,7 @@ impl LinkTrait for UnixSocketStream {
             Ok(_) => Ok(()),
             Err(e) => {
                 log::trace!("Reception error on UnixSocketStream link {}: {}", self, e);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: format!("{}", e)
                 })
             }

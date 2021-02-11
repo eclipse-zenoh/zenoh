@@ -132,7 +132,7 @@ impl SessionOrchestrator {
                     }
                 }
                 log::error!("Unable to connect to any of {:?}! ", peers);
-                zerror!(ZErrorKind::IOError {
+                zerror!(ZErrorKind::IoError {
                     descr: "".to_string()
                 })
             }
@@ -262,7 +262,7 @@ impl SessionOrchestrator {
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", listener, err);
                     return zerror!(
-                        ZErrorKind::IOError {
+                        ZErrorKind::IoError {
                             descr: "".to_string()
                         },
                         err
@@ -295,14 +295,14 @@ impl SessionOrchestrator {
                         Some(addr) => Ok(addr),
                         None => {
                             log::error!("Unable to find interface {}", name);
-                            zerror!(ZErrorKind::IOError {
+                            zerror!(ZErrorKind::IoError {
                                 descr: format!("Unable to find interface {}", name)
                             })
                         }
                     },
                     Err(err) => {
                         log::error!("Unable to find interface {} : {}", name, err);
-                        zerror!(ZErrorKind::IOError {
+                        zerror!(ZErrorKind::IoError {
                             descr: format!("Unable to find interface {} : {}", name, err)
                         })
                     }
@@ -317,7 +317,7 @@ impl SessionOrchestrator {
             Err(err) => {
                 log::error!("Unable to create datagram socket : {}", err);
                 return zerror!(
-                    ZErrorKind::IOError {
+                    ZErrorKind::IoError {
                         descr: "Unable to create datagram socket".to_string()
                     },
                     err
@@ -327,7 +327,7 @@ impl SessionOrchestrator {
         if let Err(err) = socket.set_reuse_address(true) {
             log::error!("Unable to set SO_REUSEADDR option : {}", err);
             return zerror!(
-                ZErrorKind::IOError {
+                ZErrorKind::IoError {
                     descr: "Unable to set SO_REUSEADDR option".to_string()
                 },
                 err
@@ -348,7 +348,7 @@ impl SessionOrchestrator {
             Err(err) => {
                 log::error!("Unable to bind udp port {} : {}", sockaddr, err);
                 return zerror!(
-                    ZErrorKind::IOError {
+                    ZErrorKind::IoError {
                         descr: format!("Unable to bind udp port {}", sockaddr)
                     },
                     err
@@ -364,7 +364,7 @@ impl SessionOrchestrator {
             Err(err) => {
                 log::error!("Unable to join multicast group {} : {}", sockaddr.ip(), err);
                 return zerror!(
-                    ZErrorKind::IOError {
+                    ZErrorKind::IoError {
                         descr: format!("Unable to join multicast group {}", sockaddr.ip())
                     },
                     err
@@ -381,7 +381,7 @@ impl SessionOrchestrator {
             Err(err) => {
                 log::error!("Unable to create datagram socket : {}", err);
                 return zerror!(
-                    ZErrorKind::IOError {
+                    ZErrorKind::IoError {
                         descr: "Unable to create datagram socket".to_string()
                     },
                     err
@@ -403,7 +403,7 @@ impl SessionOrchestrator {
             Err(err) => {
                 log::error!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
                 return zerror!(
-                    ZErrorKind::IOError {
+                    ZErrorKind::IoError {
                         descr: format!("Unable to bind udp port {}:0", addr.to_string())
                     },
                     err
