@@ -173,7 +173,7 @@ pub async fn declare_router_subscription(
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
-            let mut res = Resource::make_resource(&mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_router_subscription(tables, face, &mut res, sub_info, router).await;
 
@@ -219,7 +219,7 @@ pub async fn declare_peer_subscription(
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
-            let mut res = Resource::make_resource(&mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_peer_subscription(tables, face, &mut res, sub_info, peer).await;
 
@@ -290,7 +290,7 @@ pub async fn declare_client_subscription(
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
-            let mut res = Resource::make_resource(&mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
 
             register_client_subscription(tables, face, &mut res, sub_info).await;
@@ -860,7 +860,7 @@ fn compute_matching_pulls(tables: &Tables, prefix: &Arc<Resource>, suffix: &str)
     pull_caches
 }
 
-unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     let mut res_mut = res.clone();
     let res_mut = Arc::get_mut_unchecked(&mut res_mut);
     if tables.whatami == whatami::ROUTER {

@@ -173,8 +173,20 @@ impl Tables {
         }
     }
 
+    pub(crate) unsafe fn compute_routes(&mut self, res: &mut Arc<Resource>) {
+        compute_data_routes(self, res);
+        compute_query_routes(self, res);
+    }
+
     pub(crate) unsafe fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
-        compute_matches_data_routes(self, res);
+        self.compute_routes(res);
+
+        let resclone = res.clone();
+        for match_ in &mut Arc::get_mut_unchecked(res).matches {
+            if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
+                self.compute_routes(&mut match_.upgrade().unwrap());
+            }
+        }
     }
 
     pub(crate) fn schedule_compute_trees(

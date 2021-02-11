@@ -164,7 +164,7 @@ pub async fn declare_router_queryable(
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
-            let mut res = Resource::make_resource(&mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_router_queryable(tables, face, &mut res, router).await;
 
@@ -207,7 +207,7 @@ pub async fn declare_peer_queryable(
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
-            let mut res = Resource::make_resource(&mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_peer_queryable(tables, face, &mut res, peer).await;
 
@@ -258,7 +258,7 @@ pub async fn declare_client_queryable(
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
         Some(mut prefix) => unsafe {
-            let mut res = Resource::make_resource(&mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
 
             register_client_queryable(tables, face, &mut res).await;
@@ -766,7 +766,7 @@ unsafe fn compute_query_route(
     route
 }
 
-unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     let mut res_mut = res.clone();
     let res_mut = Arc::get_mut_unchecked(&mut res_mut);
     if tables.whatami == whatami::ROUTER {
