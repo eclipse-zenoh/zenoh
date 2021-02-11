@@ -33,7 +33,6 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
-const MSG_SIZE: usize = 1_024;
 
 // Session Handler for the router
 struct SHRouter {
@@ -125,11 +124,8 @@ impl SessionEventHandler for SCClient {
     }
 
     async fn new_link(&self, _link: Link) {}
-
     async fn del_link(&self, _link: Link) {}
-
     async fn closing(&self) {}
-
     async fn closed(&self) {}
 }
 
@@ -189,24 +185,24 @@ async fn open_session(
     // Create the listener on the router
     for l in locators.iter() {
         println!("Add locator: {}", l);
-        let res = router_manager
+        let _ = router_manager
             .add_listener(l)
             .timeout(TIMEOUT)
             .await
+            .unwrap()
             .unwrap();
-        assert!(res.is_ok());
     }
 
     // Create an empty session with the client
     // Open session -> This should be accepted
     for l in locators.iter() {
         println!("Opening session with {}", l);
-        let res = client_manager
+        let _ = client_manager
             .open_session(l)
             .timeout(TIMEOUT)
             .await
+            .unwrap()
             .unwrap();
-        assert_eq!(res.is_ok(), true);
     }
 
     let client_session = client_manager
@@ -231,18 +227,25 @@ async fn close_session(
         ll.push_str(&format!("{} ", l));
     }
     println!("Closing session with {}", ll);
-    let res = client_session.close().timeout(TIMEOUT).await.unwrap();
-    assert!(res.is_ok());
+    let _ = client_session
+        .close()
+        .timeout(TIMEOUT)
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Wait a little bit
+    task::sleep(SLEEP).await;
 
     // Stop the locators on the manager
     for l in locators.iter() {
         println!("Del locator: {}", l);
-        let res = router_manager
+        let _ = router_manager
             .del_listener(l)
             .timeout(TIMEOUT)
             .await
+            .unwrap()
             .unwrap();
-        assert!(res.is_ok());
     }
 
     // Wait a little bit
@@ -254,10 +257,11 @@ async fn single_run(
     client_session: Session,
     reliability: Reliability,
     congestion_control: CongestionControl,
+    msg_size: usize,
 ) {
     // Create the message to send
     let key = ResKey::RName("/test".to_string());
-    let payload = RBuf::from(vec![0u8; MSG_SIZE]);
+    let payload = RBuf::from(vec![0u8; msg_size]);
     let data_info = None;
     let routing_context = None;
     let reply_context = None;
@@ -274,8 +278,8 @@ async fn single_run(
     );
 
     println!(
-        "Sending {} messages... {:?} {:?}",
-        MSG_COUNT, reliability, congestion_control
+        "Sending {} messages... {:?} {:?} {}",
+        MSG_COUNT, reliability, congestion_control, msg_size
     );
     for _ in 0..MSG_COUNT {
         client_session.schedule(message.clone()).await.unwrap();
@@ -289,8 +293,7 @@ async fn single_run(
                     task::sleep(SLEEP).await;
                 }
             };
-            let res = count.timeout(TIMEOUT).await;
-            assert!(res.is_ok());
+            let _ = count.timeout(TIMEOUT).await.unwrap();
         };
     }
 
@@ -302,8 +305,7 @@ async fn single_run(
                     task::sleep(SLEEP).await;
                 }
             };
-            let res = count.timeout(TIMEOUT).await;
-            assert!(res.is_ok());
+            let _ = count.timeout(TIMEOUT).await.unwrap();
         };
     }
 
@@ -331,13 +333,24 @@ async fn run(
     reliability: &[Reliability],
     congestion_control: &[CongestionControl],
 ) {
-    let (router_manager, router_handler, client_session) = open_session(locators, properties).await;
+    let msg_size: [usize; 2] = [1_024, 131_072];
     for rl in reliability.iter() {
         for cc in congestion_control.iter() {
-            single_run(router_handler.clone(), client_session.clone(), *rl, *cc).await;
+            for ms in msg_size.iter() {
+                let (router_manager, router_handler, client_session) =
+                    open_session(locators, properties.clone()).await;
+                single_run(
+                    router_handler.clone(),
+                    client_session.clone(),
+                    *rl,
+                    *cc,
+                    *ms,
+                )
+                .await;
+                close_session(router_manager, client_session, locators).await;
+            }
         }
     }
-    close_session(router_manager, client_session, locators).await;
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -360,7 +373,7 @@ fn transport_tcp_only() {
 
 #[cfg(feature = "transport_udp")]
 #[test]
-fn transport_udp() {
+fn transport_udp_only() {
     // Define the locator
     let locators: Vec<Locator> = vec!["udp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
@@ -378,7 +391,7 @@ fn transport_udp() {
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
-fn transport_unix() {
+fn transport_unix_only() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
     let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
