@@ -193,6 +193,9 @@ impl Udp {
         if end < len {
             // Store the leftover
             *guard = Some((slice, end, len));
+        } else {
+            // Recycle the buffer
+            slice.recycle().await;
         }
         // Return the amount read
         Ok(len_min)

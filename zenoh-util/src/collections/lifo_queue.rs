@@ -11,21 +11,21 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::collections::RingBuffer;
+use crate::collections::StackBuffer;
 use crate::sync::Condition;
 use crate::zasynclock;
 use async_std::sync::Mutex;
 
-pub struct FifoQueue<T> {
-    buffer: Mutex<RingBuffer<T>>,
+pub struct LifoQueue<T> {
+    buffer: Mutex<StackBuffer<T>>,
     not_empty: Condition,
     not_full: Condition,
 }
 
-impl<T> FifoQueue<T> {
-    pub fn new(capacity: usize) -> FifoQueue<T> {
-        FifoQueue {
-            buffer: Mutex::new(RingBuffer::new(capacity)),
+impl<T> LifoQueue<T> {
+    pub fn new(capacity: usize) -> LifoQueue<T> {
+        LifoQueue {
+            buffer: Mutex::new(StackBuffer::new(capacity)),
             not_empty: Condition::new(),
             not_full: Condition::new(),
         }
@@ -58,7 +58,7 @@ impl<T> FifoQueue<T> {
 
     pub fn try_pull(&self) -> Option<T> {
         if let Some(mut guard) = self.buffer.try_lock() {
-            if let Some(e) = guard.pull() {
+            if let Some(e) = guard.pop() {
                 drop(guard);
                 self.not_full.notify_one();
                 return Some(e);
@@ -70,7 +70,7 @@ impl<T> FifoQueue<T> {
     pub async fn pull(&self) -> T {
         loop {
             let mut guard = zasynclock!(self.buffer);
-            if let Some(e) = guard.pull() {
+            if let Some(e) = guard.pop() {
                 drop(guard);
                 self.not_full.notify_one();
                 return e;

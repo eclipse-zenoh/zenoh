@@ -13,16 +13,16 @@
 //
 use std::collections::VecDeque;
 
-pub(crate) struct CircularBuffer<T> {
+pub(crate) struct RingBuffer<T> {
     buffer: VecDeque<T>,
     capacity: usize,
     n: usize,
 }
 
-impl<T> CircularBuffer<T> {
-    pub(crate) fn new(capacity: usize) -> CircularBuffer<T> {
+impl<T> RingBuffer<T> {
+    pub(crate) fn new(capacity: usize) -> RingBuffer<T> {
         let buffer = VecDeque::<T>::with_capacity(capacity);
-        CircularBuffer {
+        RingBuffer {
             buffer,
             capacity,
             n: 0,

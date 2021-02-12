@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::FifoQueue;
+use super::LifoQueue;
 use async_std::sync::{Arc, Weak};
 use async_std::task;
 use std::fmt;
@@ -20,12 +20,12 @@ use std::ops::{Deref, DerefMut, Drop};
 /// Provides a pool of pre-allocated buffers that are automaticlaly reinserted into
 /// the pool when dropped.
 pub struct RecyclingBufferPool {
-    inner: Arc<FifoQueue<Vec<u8>>>,
+    inner: Arc<LifoQueue<Vec<u8>>>,
 }
 
 impl RecyclingBufferPool {
     pub fn new(num: usize, size: usize) -> RecyclingBufferPool {
-        let inner: Arc<FifoQueue<Vec<u8>>> = Arc::new(FifoQueue::new(num));
+        let inner: Arc<LifoQueue<Vec<u8>>> = Arc::new(LifoQueue::new(num));
         for _ in 0..num {
             let buffer = vec![0u8; size];
             inner.try_push(buffer);
@@ -42,14 +42,21 @@ impl RecyclingBufferPool {
 #[derive(Clone)]
 pub struct RecyclingBuffer {
     buffer: Option<Vec<u8>>,
-    pool: Weak<FifoQueue<Vec<u8>>>,
+    pool: Weak<LifoQueue<Vec<u8>>>,
 }
 
 impl RecyclingBuffer {
-    pub fn new(buffer: Vec<u8>, pool: Weak<FifoQueue<Vec<u8>>>) -> RecyclingBuffer {
+    pub fn new(buffer: Vec<u8>, pool: Weak<LifoQueue<Vec<u8>>>) -> RecyclingBuffer {
         RecyclingBuffer {
             buffer: Some(buffer),
             pool,
+        }
+    }
+
+    pub async fn recycle(mut self) {
+        if let Some(pool) = self.pool.upgrade() {
+            let buffer = self.buffer.take().unwrap();
+            pool.push(buffer).await;
         }
     }
 }
@@ -71,9 +78,10 @@ impl DerefMut for RecyclingBuffer {
 
 impl Drop for RecyclingBuffer {
     fn drop(&mut self) {
-        if let Some(pool) = self.pool.upgrade() {
-            let buffer = self.buffer.take().unwrap();
-            task::block_on(pool.push(buffer));
+        if let Some(buffer) = self.buffer.take() {
+            if let Some(pool) = self.pool.upgrade() {
+                task::block_on(pool.push(buffer));
+            }
         }
     }
 }
