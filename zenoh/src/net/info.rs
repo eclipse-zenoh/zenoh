@@ -25,7 +25,7 @@ pub const ZN_INFO_ROUTER_PID_KEY: u64 = 0x02;
 pub struct InfoTranscoder();
 impl KeyTranscoder for InfoTranscoder {
     fn encode(key: &str) -> Option<u64> {
-        match &key[..] {
+        match key {
             "info_pid" => Some(ZN_INFO_PID_KEY),
             "info_peer_pid" => Some(ZN_INFO_PEER_PID_KEY),
             "info_router_pid" => Some(ZN_INFO_ROUTER_PID_KEY),
