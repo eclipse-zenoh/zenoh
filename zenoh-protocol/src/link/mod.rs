@@ -62,7 +62,7 @@ impl Link {
         Self(link)
     }
 
-    pub async fn write_session_message(&self, msg: SessionMessage) -> ZResult<()> {
+    pub(crate) async fn write_session_message(&self, msg: SessionMessage) -> ZResult<()> {
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         if self.is_streamed() {
@@ -84,7 +84,7 @@ impl Link {
         self.write_all(&buffer).await
     }
 
-    pub async fn read_session_message(&self) -> ZResult<Vec<SessionMessage>> {
+    pub(crate) async fn read_session_message(&self) -> ZResult<Vec<SessionMessage>> {
         // Read from the link
         let buffer = if self.is_streamed() {
             // Read and decode the message length

@@ -33,6 +33,8 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
+const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
+const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
 // Session Handler for the router
 struct SHRouter {
@@ -81,11 +83,8 @@ impl SessionEventHandler for SCRouter {
     }
 
     async fn new_link(&self, _link: Link) {}
-
     async fn del_link(&self, _link: Link) {}
-
     async fn closing(&self) {}
-
     async fn closed(&self) {}
 }
 
@@ -332,8 +331,8 @@ async fn run(
     properties: Option<Vec<LocatorProperty>>,
     reliability: &[Reliability],
     congestion_control: &[CongestionControl],
+    msg_size: &[usize],
 ) {
-    let msg_size: [usize; 2] = [1_024, 131_072];
     for rl in reliability.iter() {
         for cc in congestion_control.iter() {
             for ms in msg_size.iter() {
@@ -368,6 +367,7 @@ fn transport_tcp_only() {
         properties,
         &reliability,
         &congestion_control,
+        &MSG_SIZE_ALL,
     ));
 }
 
@@ -386,6 +386,7 @@ fn transport_udp_only() {
         properties,
         &reliability,
         &congestion_control,
+        &MSG_SIZE_NOFRAG,
     ));
 }
 
@@ -407,6 +408,7 @@ fn transport_unix_only() {
         properties,
         &reliability,
         &congestion_control,
+        &MSG_SIZE_ALL,
     ));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
@@ -430,6 +432,7 @@ fn transport_tcp_udp() {
         properties,
         &reliability,
         &congestion_control,
+        &MSG_SIZE_NOFRAG,
     ));
 }
 
@@ -458,6 +461,7 @@ fn transport_tcp_unix() {
         properties,
         &reliability,
         &congestion_control,
+        &MSG_SIZE_ALL,
     ));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
@@ -488,6 +492,7 @@ fn transport_udp_unix() {
         properties,
         &reliability,
         &congestion_control,
+        &MSG_SIZE_NOFRAG,
     ));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
@@ -520,6 +525,7 @@ fn transport_tcp_udp_unix() {
         properties,
         &reliability,
         &congestion_control,
+        &MSG_SIZE_NOFRAG,
     ));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
@@ -629,5 +635,6 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         Some(properties),
         &reliability,
         &congestion_control,
+        &MSG_SIZE_ALL,
     ));
 }
