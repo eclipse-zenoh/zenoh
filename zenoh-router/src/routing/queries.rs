@@ -948,40 +948,39 @@ pub async fn route_query(
                 },
             };
 
-            match route.len() {
-                0 => {
-                    log::debug!(
-                        "Send final reply {}:{} (no matching queryables)",
-                        face.id,
-                        qid
-                    );
-                    face.primitives.clone().reply_final(qid).await
-                }
-                _ => {
-                    let query = Arc::new(Query {
-                        src_face: face.clone(),
-                        src_qid: qid,
-                    });
+            if route.is_empty()
+                || (route.len() == 1 && route.iter().next().unwrap().1 .0.id == face.id)
+            {
+                log::debug!(
+                    "Send final reply {}:{} (no matching queryables)",
+                    face.id,
+                    qid
+                );
+                face.primitives.clone().reply_final(qid).await
+            } else {
+                let query = Arc::new(Query {
+                    src_face: face.clone(),
+                    src_qid: qid,
+                });
 
-                    for (_id, (mut outface, reskey, context)) in route {
-                        if face.id != outface.id {
-                            let outface_mut = Arc::get_mut_unchecked(&mut outface);
-                            outface_mut.next_qid += 1;
-                            let qid = outface_mut.next_qid;
-                            outface_mut.pending_queries.insert(qid, query.clone());
+                for (_id, (mut outface, reskey, context)) in route {
+                    if face.id != outface.id {
+                        let outface_mut = Arc::get_mut_unchecked(&mut outface);
+                        outface_mut.next_qid += 1;
+                        let qid = outface_mut.next_qid;
+                        outface_mut.pending_queries.insert(qid, query.clone());
 
-                            outface
-                                .primitives
-                                .query(
-                                    &reskey,
-                                    predicate,
-                                    qid,
-                                    target.clone(),
-                                    consolidation.clone(),
-                                    context,
-                                )
-                                .await
-                        }
+                        outface
+                            .primitives
+                            .query(
+                                &reskey,
+                                predicate,
+                                qid,
+                                target.clone(),
+                                consolidation.clone(),
+                                context,
+                            )
+                            .await
                     }
                 }
             }
