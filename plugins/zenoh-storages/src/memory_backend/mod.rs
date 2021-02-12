@@ -155,17 +155,17 @@ impl Storage for MemoryStorage {
         trace!("on_sample for {}", sample.res_name);
         let (kind, timestamp) = if let Some(ref info) = sample.data_info {
             (
-                info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+                info.kind.map_or(ChangeKind::Put, ChangeKind::from),
                 match &info.timestamp {
                     Some(ts) => ts.clone(),
                     None => utils::new_reception_timestamp(),
                 },
             )
         } else {
-            (ChangeKind::PUT, utils::new_reception_timestamp())
+            (ChangeKind::Put, utils::new_reception_timestamp())
         };
         match kind {
-            ChangeKind::PUT => match self.map.write().await.entry(sample.res_name.clone()) {
+            ChangeKind::Put => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
                     v.insert(Present {
                         sample,
@@ -192,7 +192,7 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            ChangeKind::DELETE => match self.map.write().await.entry(sample.res_name.clone()) {
+            ChangeKind::Delete => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
                     // NOTE: even if path is not known yet, we need to store the removal time:
                     // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
@@ -224,7 +224,7 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            ChangeKind::PATCH => {
+            ChangeKind::Patch => {
                 warn!("Received PATCH for {}: not yet supported", sample.res_name);
             }
         }

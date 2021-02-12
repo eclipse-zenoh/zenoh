@@ -70,7 +70,7 @@ fn value_to_json(value: Value) -> String {
             let (_, _, s) = value.encode_to_string();
             format!(r#""{}""#, s)
         }
-        StringUTF8(s) => {
+        StringUtf8(s) => {
             // convert to Json string for special characters escaping
             let js = serde_json::json!(s);
             js.to_string()

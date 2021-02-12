@@ -130,7 +130,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         while let Some(change) = backends_admin.next().await {
             debug!("Received change: {:?}", change);
             match change.kind {
-                ChangeKind::PUT => {
+                ChangeKind::Put => {
                     #[allow(clippy::map_entry)]
                     // Disable clippy check because no way to log the warn using map.entry().or_insert()
                     if !backend_handles.contains_key(&change.path) {
@@ -155,11 +155,11 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                         warn!("Backend {} already exists", change.path);
                     }
                 }
-                ChangeKind::DELETE => {
+                ChangeKind::Delete => {
                     debug!("Delete backend {}", change.path);
                     let _ = backend_handles.remove(&change.path);
                 }
-                ChangeKind::PATCH => warn!("PATCH not supported on {}", change.path),
+                ChangeKind::Patch => warn!("PATCH not supported on {}", change.path),
             }
         }
     } else {

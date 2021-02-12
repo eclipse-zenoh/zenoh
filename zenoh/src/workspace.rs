@@ -362,7 +362,7 @@ impl Workspace<'_> {
     ///        get_request.selector
     ///    );
     ///    // return the Value as a result of this evaluation function :
-    ///    let v = Value::StringUTF8(format!("Result for get on {}", get_request.selector));
+    ///    let v = Value::StringUtf8(format!("Result for get on {}", get_request.selector));
     ///    get_request.reply("/demo/example/eval".try_into().unwrap(), v).await;
     /// }
     /// # })
@@ -452,19 +452,19 @@ impl Stream for DataStream {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChangeKind {
     /// if the [`Change`] was caused by a `put` operation.
-    PUT = data_kind::PUT as isize,
+    Put = data_kind::PUT as isize,
     /// if the [`Change`] was caused by a `patch` operation.
-    PATCH = data_kind::PATCH as isize,
+    Patch = data_kind::PATCH as isize,
     /// if the [`Change`] was caused by a `delete` operation.
-    DELETE = data_kind::DELETE as isize,
+    Delete = data_kind::DELETE as isize,
 }
 
 impl fmt::Display for ChangeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ChangeKind::PUT => write!(f, "PUT"),
-            ChangeKind::PATCH => write!(f, "PATCH"),
-            ChangeKind::DELETE => write!(f, "DELETE"),
+            ChangeKind::Put => write!(f, "PUT"),
+            ChangeKind::Patch => write!(f, "PATCH"),
+            ChangeKind::Delete => write!(f, "DELETE"),
         }
     }
 }
@@ -472,16 +472,16 @@ impl fmt::Display for ChangeKind {
 impl From<ZInt> for ChangeKind {
     fn from(kind: ZInt) -> Self {
         match kind {
-            data_kind::PUT => ChangeKind::PUT,
-            data_kind::PATCH => ChangeKind::PATCH,
-            data_kind::DELETE => ChangeKind::DELETE,
+            data_kind::PUT => ChangeKind::Put,
+            data_kind::PATCH => ChangeKind::Patch,
+            data_kind::DELETE => ChangeKind::Delete,
             _ => {
                 warn!(
                     "Received DataInfo with kind={} which doesn't correspond to a ChangeKind. \
                        Assume a PUT with RAW encoding",
                     kind
                 );
-                ChangeKind::PUT
+                ChangeKind::Put
             }
         }
     }
@@ -511,18 +511,18 @@ impl Change {
         let path = sample.res_name.try_into()?;
         let (kind, encoding, timestamp) = if let Some(info) = sample.data_info {
             (
-                info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+                info.kind.map_or(ChangeKind::Put, ChangeKind::from),
                 info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
                 info.timestamp.unwrap_or_else(new_reception_timestamp),
             )
         } else {
             (
-                ChangeKind::PUT,
+                ChangeKind::Put,
                 encoding::APP_OCTET_STREAM,
                 new_reception_timestamp(),
             )
         };
-        let value = if kind == ChangeKind::DELETE {
+        let value = if kind == ChangeKind::Delete {
             None
         } else if decode_value {
             Some(Value::decode(encoding, sample.payload)?)

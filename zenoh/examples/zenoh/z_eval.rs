@@ -63,7 +63,7 @@ async fn main() {
                 match workspace.get(&selector).await.unwrap().next().await {
                     Some(Data {
                         path: _,
-                        value: Value::StringUTF8(s),
+                        value: Value::StringUtf8(s),
                         timestamp: _,
                     }) => name = s,
                     Some(_) => println!("Failed to get name from '{}' : not a UTF-8 String", name),

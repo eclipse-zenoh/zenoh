@@ -95,32 +95,32 @@
 //!         // extract ChangeKind and Timestamp from sample.data_info
 //!         let (kind, _timestamp) = if let Some(ref info) = sample.data_info {
 //!             (
-//!                 info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+//!                 info.kind.map_or(ChangeKind::Put, ChangeKind::from),
 //!                 match &info.timestamp {
 //!                     Some(ts) => ts.clone(),
 //!                     None => zenoh::utils::new_reception_timestamp(),
 //!                 },
 //!             )
 //!         } else {
-//!             (ChangeKind::PUT, zenoh::utils::new_reception_timestamp())
+//!             (ChangeKind::Put, zenoh::utils::new_reception_timestamp())
 //!         };
 //!         // Store or delete the sample depending the ChangeKind
 //!         match kind {
-//!             ChangeKind::PUT => {
+//!             ChangeKind::Put => {
 //!                 let _key = sample.res_name;
 //!                 // TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: store (key, sample)
 //!                 //  - if not: drop the sample
 //!             }
-//!             ChangeKind::DELETE => {
+//!             ChangeKind::Delete => {
 //!                 let _key = sample.res_name;
 //!                 // TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
 //!                 //  - if not: drop the sample
 //!             }
-//!             ChangeKind::PATCH => {
+//!             ChangeKind::Patch => {
 //!                 println!("Received PATCH for {}: not yet supported", sample.res_name);
 //!             }
 //!         }

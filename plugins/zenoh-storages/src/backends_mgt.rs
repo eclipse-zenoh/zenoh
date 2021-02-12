@@ -95,7 +95,7 @@ pub(crate) async fn start_backend(
                     let change = change.unwrap();
                     trace!("{} received change for {}", admin_path, change.path);
                     match change.kind {
-                        ChangeKind::PUT => {
+                        ChangeKind::Put => {
                             if let Some(value) = change.value {
                                 match create_and_start_storage(change.path.clone(), value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
                                     Ok(handle) => {
@@ -107,11 +107,11 @@ pub(crate) async fn start_backend(
                                 warn!("Received a PUT on {} with invalid value: {:?}", change.path, change.value);
                             }
                         }
-                        ChangeKind::DELETE =>  {
+                        ChangeKind::Delete =>  {
                             debug!("Delete storage {}", change.path);
                             let _ = storages_handles.remove(&change.path);
                         }
-                        ChangeKind::PATCH => warn!("PATCH not supported on {}", change.path),
+                        ChangeKind::Patch => warn!("PATCH not supported on {}", change.path),
                     }
                 },
                 _ = stop_rx.recv().fuse() => {

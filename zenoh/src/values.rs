@@ -29,7 +29,7 @@ pub enum Value {
     Custom { encoding_descr: String, data: RBuf },
     /// A String value.  
     /// Note: this is equivalent to `Raw(STRING, buf)` where buf contains the String
-    StringUTF8(String),
+    StringUtf8(String),
     /// A Properties value.  
     /// Note: this is equivalent to `Raw(APP_PROPERTIES, buf)` where buf contains the Properties encoded as a String
     Properties(Properties),
@@ -54,7 +54,7 @@ impl Value {
                 encoding_descr: _,
                 data: _,
             } => APP_CUSTOM,
-            StringUTF8(_) => STRING,
+            StringUtf8(_) => STRING,
             Properties(_) => APP_PROPERTIES,
             Json(_) => APP_JSON,
             Integer(_) => APP_INTEGER,
@@ -90,7 +90,7 @@ impl Value {
                 }
                 (APP_CUSTOM, buf.into())
             }
-            StringUTF8(s) => (STRING, RBuf::from(s.as_bytes())),
+            StringUtf8(s) => (STRING, RBuf::from(s.as_bytes())),
             Properties(props) => (APP_PROPERTIES, RBuf::from(props.to_string().as_bytes())),
             Json(s) => (APP_JSON, RBuf::from(s.as_bytes())),
             Integer(i) => (APP_INTEGER, RBuf::from(i.to_string().as_bytes())),
@@ -119,11 +119,11 @@ impl Value {
                 }
             }
             STRING => String::from_utf8(payload.read_vec())
-                .map(StringUTF8)
+                .map(StringUtf8)
                 .map_err(|e| {
                     zerror2!(
                         ZErrorKind::ValueDecodingFailed {
-                            descr: "Failed to decode StringUTF8 Value".to_string()
+                            descr: "Failed to decode StringUtf8 Value".to_string()
                         },
                         e
                     )
@@ -223,7 +223,7 @@ impl Value {
                     ),
                 }
             }
-            StringUTF8(s) => (STRING, false, s),
+            StringUtf8(s) => (STRING, false, s),
             Properties(props) => (APP_PROPERTIES, false, props.to_string()),
             Json(s) => (APP_JSON, false, s),
             Integer(i) => (APP_INTEGER, false, i.to_string()),
@@ -263,7 +263,7 @@ impl Value {
                     })
                 }
             }
-            STRING => Ok(StringUTF8(s)),
+            STRING => Ok(StringUtf8(s)),
             APP_PROPERTIES => Ok(Properties(crate::Properties::from(s))),
             APP_JSON | TEXT_JSON => Ok(Json(s)),
             APP_INTEGER => s.parse::<i64>().map(Integer).map_err(|e| {
@@ -307,13 +307,13 @@ impl Value {
     pub fn from_sample(sample: &Sample, decode_value: bool) -> ZResult<Option<Value>> {
         let (kind, encoding) = if let Some(info) = &sample.data_info {
             (
-                info.kind.map_or(ChangeKind::PUT, ChangeKind::from),
+                info.kind.map_or(ChangeKind::Put, ChangeKind::from),
                 info.encoding.unwrap_or(APP_OCTET_STREAM),
             )
         } else {
-            (ChangeKind::PUT, APP_OCTET_STREAM)
+            (ChangeKind::Put, APP_OCTET_STREAM)
         };
-        if kind == ChangeKind::DELETE {
+        if kind == ChangeKind::Delete {
             Ok(None)
         } else if decode_value {
             Ok(Some(Value::decode(encoding, sample.payload.clone())?))
@@ -343,7 +343,7 @@ impl From<&[u8]> for Value {
 
 impl From<String> for Value {
     fn from(s: String) -> Self {
-        Value::StringUTF8(s)
+        Value::StringUtf8(s)
     }
 }
 
