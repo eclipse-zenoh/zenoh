@@ -20,9 +20,7 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let mut config: Properties = parse_args();
-    config.insert("user".to_string(), "user".to_string());
-    config.insert("password".to_string(), "password".to_string());
+    let config: Properties = parse_args();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
