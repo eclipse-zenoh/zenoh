@@ -69,6 +69,6 @@ zconfigurable! {
     pub static ref QUEUE_SIZE_RETX: usize = 1;
     pub static ref QUEUE_SIZE_DATA: usize = 4;
 
-    // The default backoff time in microseconds to allow the batching to potentially progress
-    pub static ref QUEUE_PULL_BACKOFF: u64 = 1;
+    // The default backoff time in nanoseconds to allow the batching to potentially progress
+    pub static ref QUEUE_PULL_BACKOFF: u64 = 100;
 }

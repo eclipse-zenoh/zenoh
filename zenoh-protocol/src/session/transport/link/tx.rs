@@ -515,6 +515,7 @@ impl TransmissionPipeline {
 
     #[allow(clippy::comparison_chain)]
     pub(super) async fn try_pull_queue(&self, priority: usize) -> Option<SerializationBatch> {
+        let mut backoff = Duration::from_nanos(*QUEUE_PULL_BACKOFF);
         let mut bytes_in_pre: usize = 0;
         loop {
             // Check first if we have complete batches available for transmission
@@ -539,8 +540,8 @@ impl TransmissionPipeline {
                             OptionPullStageOut::Unsure => {
                                 drop(out_guard);
                                 // Batch is being filled up, let's backoff and retry
-                                let backoff = Duration::from_micros(*QUEUE_PULL_BACKOFF);
                                 task::sleep(backoff).await;
+                                backoff = 2 * backoff;
                                 continue;
                             }
                             OptionPullStageOut::None => break,
@@ -548,8 +549,8 @@ impl TransmissionPipeline {
                     } else {
                         // Batch is being filled up, let's backoff and retry
                         bytes_in_pre = bytes_in_now;
-                        let backoff = Duration::from_micros(*QUEUE_PULL_BACKOFF);
                         task::sleep(backoff).await;
+                        backoff = 2 * backoff;
                         continue;
                     }
                 } else {
@@ -562,6 +563,7 @@ impl TransmissionPipeline {
     }
 
     pub(super) async fn pull(&self) -> (SerializationBatch, usize) {
+        let mut backoff = Duration::from_micros(*QUEUE_PULL_BACKOFF);
         loop {
             for priority in 0..QUEUE_NUM {
                 if let Some(batch) = self.try_pull_queue(priority).await {
@@ -585,8 +587,8 @@ impl TransmissionPipeline {
             } else {
                 drop(out_guard);
                 // Batches are being filled up, let's backoff and retry
-                let backoff = Duration::from_micros(*QUEUE_PULL_BACKOFF);
                 task::sleep(backoff).await;
+                backoff = 2 * backoff;
             }
         }
     }
