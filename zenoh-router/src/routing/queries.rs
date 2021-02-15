@@ -694,7 +694,7 @@ unsafe fn compute_query_route(
     suffix: &str,
     source: Option<usize>,
     source_type: whatami::Type,
-) -> Route {
+) -> Arc<Route> {
     let mut route = HashMap::new();
     let resname = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
@@ -763,7 +763,7 @@ unsafe fn compute_query_route(
             }
         }
     }
-    route
+    Arc::new(route)
 }
 
 pub(crate) unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
@@ -781,7 +781,7 @@ pub(crate) unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Res
         res_mut.routers_query_routes.clear();
         res_mut
             .routers_query_routes
-            .resize_with(max_idx.index() + 1, HashMap::new);
+            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
         for idx in &indexes {
             res_mut.routers_query_routes[idx.index()] =
@@ -800,7 +800,7 @@ pub(crate) unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Res
         res_mut.peers_query_routes.clear();
         res_mut
             .peers_query_routes
-            .resize_with(max_idx.index() + 1, HashMap::new);
+            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
         for idx in &indexes {
             res_mut.peers_query_routes[idx.index()] =
@@ -948,40 +948,40 @@ pub async fn route_query(
                 },
             };
 
-            match route.len() {
-                0 => {
-                    log::debug!(
-                        "Send final reply {}:{} (no matching queryables)",
-                        face.id,
-                        qid
-                    );
-                    face.primitives.clone().reply_final(qid).await
-                }
-                _ => {
-                    let query = Arc::new(Query {
-                        src_face: face.clone(),
-                        src_qid: qid,
-                    });
+            if route.is_empty()
+                || (route.len() == 1 && route.iter().next().unwrap().1 .0.id == face.id)
+            {
+                log::debug!(
+                    "Send final reply {}:{} (no matching queryables)",
+                    face.id,
+                    qid
+                );
+                face.primitives.clone().reply_final(qid).await
+            } else {
+                let query = Arc::new(Query {
+                    src_face: face.clone(),
+                    src_qid: qid,
+                });
 
-                    for (_id, (mut outface, reskey, context)) in route {
-                        if face.id != outface.id {
-                            let outface_mut = Arc::get_mut_unchecked(&mut outface);
-                            outface_mut.next_qid += 1;
-                            let qid = outface_mut.next_qid;
-                            outface_mut.pending_queries.insert(qid, query.clone());
+                for (outface, reskey, context) in route.values() {
+                    if face.id != outface.id {
+                        let mut outface = outface.clone();
+                        let outface_mut = Arc::get_mut_unchecked(&mut outface);
+                        outface_mut.next_qid += 1;
+                        let qid = outface_mut.next_qid;
+                        outface_mut.pending_queries.insert(qid, query.clone());
 
-                            outface
-                                .primitives
-                                .query(
-                                    &reskey,
-                                    predicate,
-                                    qid,
-                                    target.clone(),
-                                    consolidation.clone(),
-                                    context,
-                                )
-                                .await
-                        }
+                        outface
+                            .primitives
+                            .query(
+                                &reskey,
+                                predicate,
+                                qid,
+                                target.clone(),
+                                consolidation.clone(),
+                                *context,
+                            )
+                            .await
                     }
                 }
             }

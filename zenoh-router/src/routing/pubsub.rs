@@ -760,7 +760,7 @@ unsafe fn compute_data_route(
     suffix: &str,
     source: Option<usize>,
     source_type: whatami::Type,
-) -> Route {
+) -> Arc<Route> {
     let mut route = HashMap::new();
     let res = Resource::get_resource(prefix, suffix);
     let matches = match res.as_ref() {
@@ -834,10 +834,14 @@ unsafe fn compute_data_route(
             }
         }
     }
-    route
+    Arc::new(route)
 }
 
-fn compute_matching_pulls(tables: &Tables, prefix: &Arc<Resource>, suffix: &str) -> PullCaches {
+fn compute_matching_pulls(
+    tables: &Tables,
+    prefix: &Arc<Resource>,
+    suffix: &str,
+) -> Arc<PullCaches> {
     let mut pull_caches = vec![];
     let res = Resource::get_resource(prefix, suffix);
     let matches = match res.as_ref() {
@@ -857,7 +861,7 @@ fn compute_matching_pulls(tables: &Tables, prefix: &Arc<Resource>, suffix: &str)
             }
         }
     }
-    pull_caches
+    Arc::new(pull_caches)
 }
 
 pub(crate) unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
@@ -875,7 +879,7 @@ pub(crate) unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Reso
         res_mut.routers_data_routes.clear();
         res_mut
             .routers_data_routes
-            .resize_with(max_idx.index() + 1, HashMap::new);
+            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
         for idx in &indexes {
             res_mut.routers_data_routes[idx.index()] =
@@ -894,7 +898,7 @@ pub(crate) unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Reso
         res_mut.peers_data_routes.clear();
         res_mut
             .peers_data_routes
-            .resize_with(max_idx.index() + 1, HashMap::new);
+            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
         for idx in &indexes {
             res_mut.peers_data_routes[idx.index()] =
@@ -1060,7 +1064,7 @@ pub async fn route_data(
                     None => info,
                 };
 
-                for (_id, (outface, reskey, context)) in route {
+                for (outface, reskey, context) in route.values() {
                     if face.id != outface.id {
                         outface
                             .primitives
@@ -1070,17 +1074,19 @@ pub async fn route_data(
                                 Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
                                 congestion_control,
                                 data_info.clone(),
-                                context,
+                                *context,
                             )
                             .await
                     }
                 }
 
-                for mut context in matching_pulls {
-                    Arc::get_mut_unchecked(&mut context).last_values.insert(
-                        [&prefix.name(), suffix].concat(),
-                        (data_info.clone(), payload.clone()),
-                    );
+                for context in matching_pulls.iter() {
+                    Arc::get_mut_unchecked(&mut context.clone())
+                        .last_values
+                        .insert(
+                            [&prefix.name(), suffix].concat(),
+                            (data_info.clone(), payload.clone()),
+                        );
                 }
             }
         },
