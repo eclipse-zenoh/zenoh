@@ -34,7 +34,6 @@ crate-type = ["cdylib"]
 [dependencies]
 async-std = "=1.9.0"
 zenoh = { version = "0.5.0-beta.8", path = "../../zenoh" }
-zenoh-router = { version = "0.5.0-beta.8", path = "../../zenoh-router" }
 zenoh-util = { version = "0.5.0-beta.8", path = "../../zenoh-util" }
 zenoh_backend_traits = { version = "0.5.0-beta.8", path = "../../backends/traits" }
 async-trait = "0.1"

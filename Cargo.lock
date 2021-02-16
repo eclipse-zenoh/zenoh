@@ -1956,7 +1956,6 @@ version = "1.0.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea1c6153794552ea7cf7cf63b1231a25de00ec90db326ba6264440fa08e31486"
 dependencies = [
- "indexmap",
  "itoa",
  "ryu",
  "serde",
@@ -2686,45 +2685,31 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 name = "zenoh"
 version = "0.5.0-beta.8"
 dependencies = [
+ "async-rustls",
  "async-std",
  "async-trait",
  "base64 0.13.0",
+ "bincode",
  "clap",
+ "criterion",
  "env_logger",
  "futures",
  "git-version",
  "hex",
+ "http-types",
  "lazy_static",
+ "libloading",
  "log 0.4.14",
+ "nix",
+ "petgraph",
  "pin-project-lite 0.2.4",
  "rand 0.8.3",
  "regex",
- "serde_json",
- "zenoh-protocol",
- "zenoh-router",
- "zenoh-util",
-]
-
-[[package]]
-name = "zenoh-protocol"
-version = "0.5.0-beta.8"
-dependencies = [
- "aes-soft",
- "async-rustls",
- "async-std",
- "async-trait",
- "bincode",
- "criterion",
- "env_logger",
- "hex",
- "http-types",
- "lazy_static",
- "log 0.4.14",
- "nix",
- "rand 0.8.3",
- "rand_chacha 0.3.0",
+ "rustc_version 0.3.3",
  "serde",
+ "serde_json",
  "shared_memory",
+ "socket2",
  "uhlc",
  "uuid",
  "zenoh-util",
@@ -2743,34 +2728,6 @@ dependencies = [
  "serde_json",
  "tide",
  "zenoh",
- "zenoh-protocol",
- "zenoh-router",
-]
-
-[[package]]
-name = "zenoh-router"
-version = "0.5.0-beta.8"
-dependencies = [
- "async-std",
- "async-trait",
- "clap",
- "criterion",
- "env_logger",
- "futures",
- "git-version",
- "hex",
- "lazy_static",
- "libloading",
- "log 0.4.14",
- "petgraph",
- "rand 0.8.3",
- "rustc_version 0.3.3",
- "serde_json",
- "socket2",
- "uhlc",
- "uuid",
- "zenoh-protocol",
- "zenoh-util",
 ]
 
 [[package]]
@@ -2786,7 +2743,6 @@ dependencies = [
  "libloading",
  "log 0.4.14",
  "zenoh",
- "zenoh-router",
  "zenoh-util",
  "zenoh_backend_traits",
 ]
@@ -2836,5 +2792,4 @@ dependencies = [
  "futures",
  "log 0.4.14",
  "zenoh",
- "zenoh-router",
 ]

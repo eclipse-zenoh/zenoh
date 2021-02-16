@@ -83,18 +83,26 @@
 )]
 #![feature(async_closure)]
 #![feature(bool_to_option)]
+#![feature(get_mut_unchecked)]
+#![feature(map_into_keys_values)]
 
 #[macro_use]
 extern crate lazy_static;
+
+#[macro_use]
+extern crate zenoh_util;
+
+extern crate async_std;
+extern crate uuid;
 
 use log::debug;
 
 pub mod net;
 
 use net::info::ZN_INFO_ROUTER_PID_KEY;
+use net::runtime::Runtime;
 use net::Session;
 pub use net::{ZError, ZErrorKind, ZResult};
-use zenoh_router::runtime::Runtime;
 
 mod workspace;
 pub use workspace::*;
@@ -111,7 +119,7 @@ pub use values::*;
 // pub mod config;
 pub mod utils;
 
-pub use zenoh_protocol::core::{Timestamp, TimestampId};
+pub use net::protocol::core::{Timestamp, TimestampId};
 pub use zenoh_util::properties::config::ConfigProperties;
 pub use zenoh_util::properties::Properties;
 

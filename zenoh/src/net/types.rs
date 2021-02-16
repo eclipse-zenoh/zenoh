@@ -21,70 +21,70 @@ use std::collections::HashMap;
 use std::fmt;
 
 /// A read-only bytes buffer.
-pub use zenoh_protocol::io::RBuf;
+pub use super::protocol::io::RBuf;
 
 /// A writable bytes buffer.
-pub use zenoh_protocol::io::WBuf;
+pub use super::protocol::io::WBuf;
 
 // Shared memory with zero-copy support
 #[cfg(feature = "zero-copy")]
-pub use zenoh_protocol::io::SharedMemoryBuf;
+pub use super::protocol::io::SharedMemoryBuf;
 #[cfg(feature = "zero-copy")]
-pub use zenoh_protocol::io::SharedMemoryBufInfo;
+pub use super::protocol::io::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
-pub use zenoh_protocol::io::SharedMemoryManager;
+pub use super::protocol::io::SharedMemoryManager;
 
 /// A numerical Id mapped to a resource name with [declare_resource](Session::declare_resource).
-pub use zenoh_protocol::core::ResourceId;
+pub use super::protocol::core::ResourceId;
 
 /// Informations to configure a subscription.
-pub use zenoh_protocol::core::SubInfo;
+pub use super::protocol::core::SubInfo;
 
 /// The global unique id of a zenoh peer.
-pub use zenoh_protocol::core::PeerId;
+pub use super::protocol::core::PeerId;
 
 /// A time period.
-pub use zenoh_protocol::core::Period;
+pub use super::protocol::core::Period;
 
 /// The [Queryable](Queryable)s that should be target of a [query](Session::query).
-pub use zenoh_protocol::core::Target;
+pub use super::protocol::core::Target;
 
 /// The [Queryable](Queryable)s that should be target of a [query](Session::query).
-pub use zenoh_protocol::core::QueryTarget;
+pub use super::protocol::core::QueryTarget;
 
 /// The kind of consolidation.
-pub use zenoh_protocol::core::ConsolidationMode;
+pub use super::protocol::core::ConsolidationMode;
 
 /// The kind of consolidation that should be applied on replies to a [query](Session::query)
 /// at different stages of the reply process.
-pub use zenoh_protocol::core::QueryConsolidation;
+pub use super::protocol::core::QueryConsolidation;
 
 /// The kind of congestion control.
-pub use zenoh_protocol::core::CongestionControl;
+pub use super::protocol::core::CongestionControl;
 
 /// The kind of reliability.
-pub use zenoh_protocol::core::Reliability;
+pub use super::protocol::core::Reliability;
 
 /// A resource key.
-pub use zenoh_protocol::core::ResKey;
+pub use super::protocol::core::ResKey;
 
 /// The subscription mode.
-pub use zenoh_protocol::core::SubMode;
+pub use super::protocol::core::SubMode;
 
 /// A zenoh integer.
-pub use zenoh_protocol::core::ZInt;
+pub use super::protocol::core::ZInt;
 
-pub use zenoh_protocol::core::whatami;
+pub use super::protocol::core::whatami;
 
 /// A zenoh Hello message.
-pub use zenoh_protocol::proto::Hello;
+pub use super::protocol::proto::Hello;
 
 /// Some informations about the associated data.
 ///
 /// # Examples
 /// ```
-/// # use zenoh_protocol::io::RBuf;
-/// # use zenoh_protocol::proto::DataInfo;
+/// # use zenoh::net::protocol::io::RBuf;
+/// # use zenoh::net::protocol::proto::DataInfo;
 /// # let sample = zenoh::net::Sample { res_name: "".to_string(), payload: RBuf::new(), data_info: None };
 /// if let Some(info) = sample.data_info {
 ///     match info.timestamp {
@@ -93,7 +93,7 @@ pub use zenoh_protocol::proto::Hello;
 ///     }
 /// }
 /// ```
-pub use zenoh_protocol::proto::DataInfo;
+pub use super::protocol::proto::DataInfo;
 
 /// A zenoh error.
 pub use zenoh_util::core::ZError;

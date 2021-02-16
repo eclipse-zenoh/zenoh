@@ -33,8 +33,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 zenoh = { version = "0.5.0-beta.8", path = "../../zenoh" }
-zenoh-router = { version = "0.5.0-beta.8", path = "../../zenoh-router" }
-zenoh-protocol = { version = "0.5.0-beta.8", path = "../../zenoh-protocol" }
 async-std = "=1.9.0"
 futures = "0.3.12"
 tide = "0.16.0"

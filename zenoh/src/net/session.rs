@@ -19,20 +19,20 @@ use async_std::sync::RwLock;
 use async_std::task;
 use async_trait::async_trait;
 use log::{error, trace, warn};
-use std::collections::HashMap;
-use std::fmt;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
-use zenoh_protocol::{
+use protocol::{
     core::{
         queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget, ResKey,
-        ResourceId,
+        ResourceId, ZInt,
     },
     io::RBuf,
     proto::RoutingContext,
     session::Primitives,
 };
-use zenoh_router::runtime::Runtime;
+use runtime::Runtime;
+use std::collections::HashMap;
+use std::fmt;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zconfigurable, zerror};
 
@@ -881,7 +881,7 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
-        let info = zenoh_protocol::proto::DataInfo {
+        let info = protocol::proto::DataInfo {
             source_id: None,
             source_sn: None,
             first_router_id: None,

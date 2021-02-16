@@ -15,8 +15,6 @@
 
 members = [
   "zenoh",
-  "zenoh-protocol",
-  "zenoh-router",
   "zenoh-util",
   "plugins/example-plugin",
   "plugins/zenoh-rest",

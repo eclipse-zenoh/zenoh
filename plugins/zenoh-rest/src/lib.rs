@@ -17,6 +17,7 @@ use async_std::channel::Receiver;
 use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
+use runtime::Runtime;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
@@ -24,7 +25,6 @@ use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::*;
 use zenoh::{Change, Selector, Value};
-use zenoh_router::runtime::Runtime;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";

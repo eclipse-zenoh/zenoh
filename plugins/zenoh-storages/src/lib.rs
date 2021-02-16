@@ -21,9 +21,9 @@ use libloading::Symbol;
 use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use zenoh::net::runtime::Runtime;
 use zenoh::{ChangeKind, Path, Properties, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
 use zenoh_backend_traits::{Backend, PROP_STORAGE_PATH_EXPR};
-use zenoh_router::runtime::Runtime;
 use zenoh_util::{zerror, LibLoader};
 
 mod backends_mgt;
