@@ -12,12 +12,16 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 pub(super) mod attachment;
+#[cfg(feature = "zero-copy")]
+mod shm;
 mod userpassword;
 
 use crate::core::{PeerId, Property, ZInt};
 use crate::link::{Link, Locator, LocatorProperty};
 use async_std::sync::Arc;
 use async_trait::async_trait;
+#[cfg(feature = "zero-copy")]
+pub use shm::*;
 use std::fmt;
 use std::ops::Deref;
 pub use userpassword::*;
@@ -98,10 +102,20 @@ impl PeerAuthenticator {
         config: &ConfigProperties,
     ) -> ZResult<Vec<PeerAuthenticator>> {
         let mut pas: Vec<PeerAuthenticator> = vec![];
+
         let mut res = UserPasswordAuthenticator::from_properties(config).await?;
         if let Some(pa) = res.take() {
             pas.push(pa.into());
         }
+
+        #[cfg(feature = "zero-copy")]
+        {
+            let mut res = SharedMemoryAuthenticator::from_properties(config).await?;
+            if let Some(pa) = res.take() {
+                pas.push(pa.into());
+            }
+        }
+
         Ok(pas)
     }
 }
@@ -114,6 +128,7 @@ impl Deref for PeerAuthenticator {
     }
 }
 
+// Authenticated peer link
 #[derive(Debug)]
 pub struct AuthenticatedPeerLink {
     pub src: Locator,
@@ -125,6 +140,49 @@ pub struct AuthenticatedPeerLink {
 impl fmt::Display for AuthenticatedPeerLink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src, self.dst)
+    }
+}
+
+// Authenticated peer session
+pub struct AuthenticatedPeerSession {
+    pub is_local: bool,
+}
+
+impl AuthenticatedPeerSession {
+    pub fn merge(self, other: Self) -> Self {
+        Self {
+            is_local: self.is_local || other.is_local,
+        }
+    }
+}
+
+impl Default for AuthenticatedPeerSession {
+    fn default() -> Self {
+        Self { is_local: false }
+    }
+}
+
+pub struct PeerAuthenticatorOutput {
+    pub properties: Vec<Property>,
+    pub session: AuthenticatedPeerSession,
+}
+
+impl PeerAuthenticatorOutput {
+    pub fn merge(mut self, mut other: Self) -> Self {
+        self.properties.append(&mut other.properties);
+        Self {
+            properties: self.properties,
+            session: self.session.merge(other.session),
+        }
+    }
+}
+
+impl Default for PeerAuthenticatorOutput {
+    fn default() -> Self {
+        Self {
+            properties: vec![],
+            session: AuthenticatedPeerSession::default(),
+        }
     }
 }
 
@@ -142,17 +200,19 @@ pub trait PeerAuthenticatorTrait {
         &self,
         link: &AuthenticatedPeerLink,
         peer_id: &PeerId,
-    ) -> ZResult<Vec<Property>>;
+    ) -> ZResult<PeerAuthenticatorOutput>;
 
     /// Return the attachment to be included in the InitAck message to be sent
     /// in response of the authenticated InitSyn.
     ///
     /// # Arguments
-    /// * `link`        - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the InitSyn message was received on
+    /// * `link`            - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the InitSyn message was received on
     ///
-    /// * `peer_id`     - The [`PeerId`][PeerId] of the sender of the InitSyn message
+    /// * `peer_id`         - The [`PeerId`][PeerId] of the sender of the InitSyn message
     ///
-    /// * `attachment`  - The optional [`Attachment`][Attachment] included in the InitSyn message
+    /// * `sn_resolution`   - The sn_resolution negotiated by the sender of the InitSyn message
+    ///
+    /// * `properties`      - The optional [`Property`][property] included in the InitSyn message
     ///
     async fn handle_init_syn(
         &self,
@@ -160,7 +220,7 @@ pub trait PeerAuthenticatorTrait {
         peer_id: &PeerId,
         sn_resolution: ZInt,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>>;
+    ) -> ZResult<PeerAuthenticatorOutput>;
 
     /// Return the attachment to be included in the OpenSyn message to be sent
     /// in response of the authenticated InitAck.
@@ -170,7 +230,9 @@ pub trait PeerAuthenticatorTrait {
     ///
     /// * `peer_id` - The [`PeerId`][PeerId] of the sender of the InitAck message
     ///
-    /// * `attachment`  - The optional [`Attachment`][Attachment] included in the InitAck message
+    /// * `sn_resolution`   - The sn_resolution negotiated by the sender of the InitAck message
+    ///
+    /// * `properties`      - The optional [`Property`][property] included in the InitAck message
     ///
     async fn handle_init_ack(
         &self,
@@ -178,7 +240,7 @@ pub trait PeerAuthenticatorTrait {
         peer_id: &PeerId,
         sn_resolution: ZInt,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>>;
+    ) -> ZResult<PeerAuthenticatorOutput>;
 
     /// Return the attachment to be included in the OpenAck message to be sent
     /// in response of the authenticated OpenSyn.
@@ -186,30 +248,26 @@ pub trait PeerAuthenticatorTrait {
     /// # Arguments
     /// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the OpenSyn message was received on
     ///
-    /// * `peer_id` - The [`PeerId`][PeerId] of the sender of the OpenSyn message
-    ///
-    /// * `attachment`  - The optional [`Attachment`][Attachment] included in the OpenSyn message
+    /// * `properties`      - The optional [`Property`][property] included in the OpenSyn message
     ///
     async fn handle_open_syn(
         &self,
         link: &AuthenticatedPeerLink,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>>;
+    ) -> ZResult<PeerAuthenticatorOutput>;
 
     /// Auhtenticate the OpenAck. No message is sent back in response to an OpenAck
     ///
     /// # Arguments
     /// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the OpenAck message was received on
     ///
-    /// * `peer_id` - The [`PeerId`][PeerId] of the sender of the OpenAck message
-    ///
-    /// * `attachment`  - The optional [`Attachment`][Attachment] included in the OpenAck message
+    /// * `properties`      - The optional [`Property`][property] included in the OpenAck message
     ///
     async fn handle_open_ack(
         &self,
         link: &AuthenticatedPeerLink,
         properties: &[Property],
-    ) -> ZResult<()>;
+    ) -> ZResult<PeerAuthenticatorOutput>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
     /// of the authenticator in such a way no unnecessary data is left around
@@ -245,8 +303,8 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<Vec<Property>> {
-        Ok(vec![])
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_init_syn(
@@ -255,8 +313,8 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
         _properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
-        Ok(vec![])
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_init_ack(
@@ -265,24 +323,24 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
         _properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
-        Ok(vec![])
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_open_syn(
         &self,
         _link: &AuthenticatedPeerLink,
         _properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
-        Ok(vec![])
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
         _properties: &[Property],
-    ) -> ZResult<()> {
-        Ok(())
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}

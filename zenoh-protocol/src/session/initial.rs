@@ -11,7 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::authenticator::AuthenticatedPeerLink;
+use super::authenticator::{
+    AuthenticatedPeerLink, AuthenticatedPeerSession, PeerAuthenticatorOutput,
+};
 use super::defaults::SESSION_SEQ_NUM_RESOLUTION;
 use super::{Opened, Session, SessionManager};
 use crate::core::{PeerId, Property, WhatAmI, ZInt};
@@ -136,24 +138,21 @@ async fn close_link(
 /*************************************/
 struct OpenInitSynOutput {
     sn_resolution: ZInt,
+    auth_session: AuthenticatedPeerSession,
 }
 async fn open_send_init_syn(
     manager: &SessionManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<OpenInitSynOutput> {
-    // Build the InitSyn attachment
-    let init_syn_attachment = {
-        let mut init_syn_properties: Vec<Property> = vec![];
-        for pa in manager.config.peer_authenticator.iter() {
-            let mut ps = pa
-                .get_init_syn_properties(&auth_link, &manager.config.pid)
-                .await
-                .map_err(|e| (e, None))?;
-            init_syn_properties.append(&mut ps);
-        }
-        attachment_from_properties(&init_syn_properties).ok()
-    };
+    let mut auth = PeerAuthenticatorOutput::default();
+    for pa in manager.config.peer_authenticator.iter() {
+        let ps = pa
+            .get_init_syn_properties(&auth_link, &manager.config.pid)
+            .await
+            .map_err(|e| (e, None))?;
+        auth = auth.merge(ps);
+    }
 
     // Build and send an InitSyn Message
     let init_syn_version = manager.config.version;
@@ -164,6 +163,7 @@ async fn open_send_init_syn(
     } else {
         Some(manager.config.sn_resolution)
     };
+    let init_syn_attachment = attachment_from_properties(&auth.properties).ok();
 
     // Build and send the InitSyn message
     let message = SessionMessage::make_init_syn(
@@ -180,6 +180,7 @@ async fn open_send_init_syn(
 
     let output = OpenInitSynOutput {
         sn_resolution: manager.config.sn_resolution,
+        auth_session: auth.session,
     };
     Ok(output)
 }
@@ -191,6 +192,7 @@ struct OpenInitAckOutput {
     initial_sn_tx: ZInt,
     cookie: RBuf,
     open_syn_attachment: Option<Attachment>,
+    auth_session: AuthenticatedPeerSession,
 }
 async fn open_recv_init_ack(
     manager: &SessionManager,
@@ -281,22 +283,23 @@ async fn open_recv_init_ack(
         }
         None => vec![],
     };
-    let mut open_syn_properties: Vec<Property> = vec![];
-    let open_syn_attachment = {
-        for pa in manager.config.peer_authenticator.iter() {
-            let mut ps = pa
-                .handle_init_ack(
-                    &auth_link,
-                    &init_ack_pid,
-                    sn_resolution,
-                    &init_ack_properties,
-                )
-                .await
-                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
-            open_syn_properties.append(&mut ps);
-        }
-        attachment_from_properties(&open_syn_properties).ok()
+
+    let mut auth = PeerAuthenticatorOutput {
+        session: input.auth_session,
+        ..Default::default()
     };
+    for pa in manager.config.peer_authenticator.iter() {
+        let ps = pa
+            .handle_init_ack(
+                &auth_link,
+                &init_ack_pid,
+                sn_resolution,
+                &init_ack_properties,
+            )
+            .await
+            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+        auth = auth.merge(ps);
+    }
 
     if !is_opened {
         // Store the data
@@ -317,7 +320,8 @@ async fn open_recv_init_ack(
         sn_resolution,
         initial_sn_tx,
         cookie: init_ack_cookie,
-        open_syn_attachment,
+        open_syn_attachment: attachment_from_properties(&auth.properties).ok(),
+        auth_session: auth.session,
     };
     Ok(output)
 }
@@ -327,6 +331,7 @@ struct OpenOpenSynOutput {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     initial_sn_tx: ZInt,
+    auth_session: AuthenticatedPeerSession,
 }
 async fn open_send_open_syn(
     manager: &SessionManager,
@@ -352,6 +357,7 @@ async fn open_send_open_syn(
         whatami: input.whatami,
         sn_resolution: input.sn_resolution,
         initial_sn_tx: input.initial_sn_tx,
+        auth_session: input.auth_session,
     };
     Ok(output)
 }
@@ -363,6 +369,7 @@ struct OpenAckOutput {
     initial_sn_tx: ZInt,
     initial_sn_rx: ZInt,
     lease: ZInt,
+    auth_session: AuthenticatedPeerSession,
 }
 async fn open_recv_open_ack(
     manager: &SessionManager,
@@ -425,6 +432,7 @@ async fn open_recv_open_ack(
         initial_sn_tx: input.initial_sn_tx,
         initial_sn_rx,
         lease,
+        auth_session: input.auth_session,
     };
     Ok(output)
 }
@@ -464,6 +472,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
             info.sn_resolution,
             info.initial_sn_tx,
             info.initial_sn_rx,
+            info.auth_session.is_local,
         )
         .await;
 
@@ -533,6 +542,7 @@ struct AcceptInitSynOutput {
     pid: PeerId,
     sn_resolution: ZInt,
     init_ack_attachment: Option<Attachment>,
+    auth_session: AuthenticatedPeerSession,
 }
 async fn accept_recv_init_syn(
     manager: &SessionManager,
@@ -617,33 +627,33 @@ async fn accept_recv_init_syn(
         }
         None => vec![],
     };
-    let mut init_ack_properties: Vec<Property> = vec![];
-    let init_ack_attachment = {
-        for pa in manager.config.peer_authenticator.iter() {
-            let mut ps = pa
-                .handle_init_syn(
-                    &auth_link,
-                    &init_syn_pid,
-                    init_syn_sn_resolution,
-                    &init_syn_properties,
-                )
-                .await
-                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
-            init_ack_properties.append(&mut ps);
-        }
-        attachment_from_properties(&init_ack_properties).ok()
-    };
+    let mut auth = PeerAuthenticatorOutput::default();
+    for pa in manager.config.peer_authenticator.iter() {
+        let ps = pa
+            .handle_init_syn(
+                &auth_link,
+                &init_syn_pid,
+                init_syn_sn_resolution,
+                &init_syn_properties,
+            )
+            .await
+            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+        auth = auth.merge(ps);
+    }
 
     let output = AcceptInitSynOutput {
         whatami: init_syn_whatami,
         pid: init_syn_pid,
         sn_resolution: init_syn_sn_resolution,
-        init_ack_attachment,
+        init_ack_attachment: attachment_from_properties(&auth.properties).ok(),
+        auth_session: auth.session,
     };
     Ok(output)
 }
 
-struct AcceptInitAckOutput {}
+struct AcceptInitAckOutput {
+    auth_session: AuthenticatedPeerSession,
+}
 async fn accept_send_init_ack(
     manager: &SessionManager,
     link: &Link,
@@ -695,7 +705,9 @@ async fn accept_send_init_ack(
         .await
         .map_err(|e| (e, None))?;
 
-    let output = AcceptInitAckOutput {};
+    let output = AcceptInitAckOutput {
+        auth_session: input.auth_session,
+    };
     Ok(output)
 }
 
@@ -704,12 +716,13 @@ struct AcceptOpenSynOutput {
     initial_sn: ZInt,
     lease: ZInt,
     open_ack_attachment: Option<Attachment>,
+    auth_session: AuthenticatedPeerSession,
 }
 async fn accept_recv_open_syn(
     manager: &SessionManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
-    _input: AcceptInitAckOutput,
+    input: AcceptInitAckOutput,
 ) -> IResult<AcceptOpenSynOutput> {
     // Wait to read an OpenSyn
     let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
@@ -777,23 +790,24 @@ async fn accept_recv_open_syn(
         }
         None => vec![],
     };
-    let mut open_ack_properties: Vec<Property> = vec![];
-    let open_ack_attachment = {
-        for pa in manager.config.peer_authenticator.iter() {
-            let mut ps = pa
-                .handle_open_syn(&auth_link, &open_syn_properties)
-                .await
-                .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
-            open_ack_properties.append(&mut ps);
-        }
-        attachment_from_properties(&open_ack_properties).ok()
+    let mut auth = PeerAuthenticatorOutput {
+        session: input.auth_session,
+        ..Default::default()
     };
+    for pa in manager.config.peer_authenticator.iter() {
+        let ps = pa
+            .handle_open_syn(&auth_link, &open_syn_properties)
+            .await
+            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+        auth = auth.merge(ps);
+    }
 
     let output = AcceptOpenSynOutput {
         cookie,
         initial_sn: open_syn_initial_sn,
         lease: open_syn_lease,
-        open_ack_attachment,
+        open_ack_attachment: attachment_from_properties(&auth.properties).ok(),
+        auth_session: auth.session,
     };
     Ok(output)
 }
@@ -899,6 +913,7 @@ async fn accept_init_session(
                 input.cookie.sn_resolution,
                 open_ack_initial_sn,
                 input.initial_sn,
+                input.auth_session.is_local,
             )
             .await
             .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?

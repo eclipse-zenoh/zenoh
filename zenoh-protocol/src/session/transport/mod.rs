@@ -121,6 +121,8 @@ pub(crate) struct SessionTransport {
     pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>>,
     // Mutex for notification
     pub(super) alive: Arc<Mutex<bool>>,
+    // The session transport is local or not
+    pub(super) is_local: bool,
 }
 
 impl SessionTransport {
@@ -132,6 +134,7 @@ impl SessionTransport {
         sn_resolution: ZInt,
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
+        is_local: bool,
     ) -> SessionTransport {
         SessionTransport {
             manager,
@@ -158,24 +161,13 @@ impl SessionTransport {
             scheduling: Arc::new(FirstMatch::new()),
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(Mutex::new(true)),
+            is_local,
         }
     }
 
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_pid(&self) -> PeerId {
-        self.pid.clone()
-    }
-
-    pub(crate) fn get_whatami(&self) -> WhatAmI {
-        self.whatami
-    }
-
-    pub(crate) fn get_sn_resolution(&self) -> ZInt {
-        self.sn_resolution
-    }
-
     pub(crate) async fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler + Send + Sync>> {
         zasyncread!(self.callback).clone()
     }

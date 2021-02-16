@@ -28,14 +28,17 @@ impl ChunkHeader {
             (*ptr).prev = prev;
         }
     }
+
     fn ref_count(ptr: *const ChunkHeader) -> usize {
         unsafe { (*ptr).ref_count.load(Ordering::SeqCst) }
     }
+
     fn inc_ref_count(ptr: *mut ChunkHeader) {
         unsafe {
             (*ptr).ref_count.fetch_add(1, Ordering::SeqCst);
         }
     }
+
     fn dec_ref_count(ptr: *mut ChunkHeader) {
         unsafe {
             (*ptr).ref_count.fetch_sub(1, Ordering::SeqCst);
@@ -97,6 +100,7 @@ impl ChunkList {
             }
         }
     }
+
     fn append(&mut self, e: *mut ChunkHeader) {
         unsafe {
             (*e).next = std::ptr::null_mut();
@@ -113,6 +117,7 @@ impl ChunkList {
             self.elems += 1;
         }
     }
+
     fn remove(&mut self, e: *mut ChunkHeader) {
         let oh = self.head();
         unsafe {
@@ -133,6 +138,7 @@ impl ChunkList {
     fn elems(&self) -> usize {
         self.elems
     }
+
     fn next(e: *mut ChunkHeader) -> *mut ChunkHeader {
         unsafe { (*e).next }
     }
@@ -145,6 +151,7 @@ impl ChunkList {
             (*ne).next = next;
         }
     }
+
     fn insert_before(e: *mut ChunkHeader, ne: *mut ChunkHeader) {
         unsafe {
             let prev = (*e).prev;
@@ -162,6 +169,7 @@ impl ChunkList {
     fn is_head(lst: *mut ChunkList, e: *mut ChunkHeader) -> bool {
         unsafe { (*lst).head() == e }
     }
+
     fn is_tail(lst: *mut ChunkList, e: *mut ChunkHeader) -> bool {
         unsafe { (*lst).tail() == e }
     }
@@ -352,7 +360,7 @@ pub struct SharedMemoryManager {
 unsafe impl Send for SharedMemoryManager {}
 
 impl SharedMemoryManager {
-    /// Creates a new SharedMemoryManager managing allocatioins of a region of the
+    /// Creates a new SharedMemoryManager managing allocations of a region of the
     /// given size.
     pub fn new(id: String, size: usize) -> Result<SharedMemoryManager, ShmemError> {
         let mut temp_dir = std::env::temp_dir();
@@ -399,6 +407,7 @@ impl SharedMemoryManager {
             header,
         })
     }
+
     pub fn alloc(&mut self, len: usize) -> Option<SharedMemoryBuf> {
         let available = self.size - self.offset;
         if available > len {

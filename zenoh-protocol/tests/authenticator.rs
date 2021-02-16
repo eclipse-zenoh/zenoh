@@ -15,15 +15,20 @@ use async_std::sync::Arc;
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
+use std::time::Duration;
 use zenoh_protocol::core::{whatami, PeerId};
 use zenoh_protocol::link::{Link, Locator};
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol::session::authenticator::UserPasswordAuthenticator;
+use zenoh_protocol::session::authenticator::{
+    SharedMemoryAuthenticator, UserPasswordAuthenticator,
+};
 use zenoh_protocol::session::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
     SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
+
+const SLEEP: Duration = Duration::from_millis(100);
 
 #[cfg(test)]
 struct SHRouterAuthenticator;
@@ -206,45 +211,45 @@ async fn authenticator_user_password(locator: Locator) {
     let client03_manager = SessionManager::new(config, Some(opt_config));
 
     /* [1] */
-    println!("\nSession Authenticator [1a1]");
+    println!("\nSession Authenticator UserPassword [1a1]");
     // Add the locator on the router
     let res = router_manager.add_listener(&locator).await;
-    println!("Session Authenticator [1a1]: {:?}", res);
+    println!("Session Authenticator UserPassword [1a1]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Authenticator [1a2]");
+    println!("Session Authenticator UserPassword [1a2]");
     let locators = router_manager.get_listeners().await;
-    println!("Session Authenticator [1a2]: {:?}", locators);
+    println!("Session Authenticator UserPassword [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     /* [2] */
     // Open a first session from the client to the router
     // -> This should be accepted
-    println!("Session Authenticator [2a1]");
+    println!("Session Authenticator UserPassword [2a1]");
     let res = client01_manager.open_session(&locator).await;
-    println!("Session Authenticator [2a1]: {:?}", res);
+    println!("Session Authenticator UserPassword [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
 
     /* [3] */
-    println!("Session Authenticator [3a1]");
+    println!("Session Authenticator UserPassword [3a1]");
     let res = c_ses1.close().await;
-    println!("Session Authenticator [3a1]: {:?}", res);
+    println!("Session Authenticator UserPassword [3a1]: {:?}", res);
     assert!(res.is_ok());
 
     /* [4] */
     // Open a second session from the client to the router
     // -> This should be rejected
-    println!("Session Authenticator [4a1]");
+    println!("Session Authenticator UserPassword [4a1]");
     let res = client02_manager.open_session(&locator).await;
-    println!("Session Authenticator [4a1]: {:?}", res);
+    println!("Session Authenticator UserPassword [4a1]: {:?}", res);
     assert!(res.is_err());
 
     /* [5] */
     // Open a third session from the client to the router
     // -> This should be accepted
-    println!("Session Authenticator [5a1]");
+    println!("Session Authenticator UserPassword [5a1]");
     let res = client01_manager.open_session(&locator).await;
-    println!("Session Authenticator [5a1]: {:?}", res);
+    println!("Session Authenticator UserPassword [5a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
 
@@ -256,46 +261,151 @@ async fn authenticator_user_password(locator: Locator) {
     assert!(res.is_ok());
     // Open a fourth session from the client to the router
     // -> This should be accepted
-    println!("Session Authenticator [6a1]");
+    println!("Session Authenticator UserPassword [6a1]");
     let res = client02_manager.open_session(&locator).await;
-    println!("Session Authenticator [6a1]: {:?}", res);
+    println!("Session Authenticator UserPassword [6a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
 
     /* [7] */
     // Open a fourth session from the client to the router
     // -> This should be rejected
-    println!("Session Authenticator [7a1]");
+    println!("Session Authenticator UserPassword [7a1]");
     let res = client03_manager.open_session(&locator).await;
-    println!("Session Authenticator [7a1]: {:?}", res);
+    println!("Session Authenticator UserPassword [7a1]: {:?}", res);
     assert!(res.is_err());
 
-    /* [7] */
-    println!("Session Authenticator [8a1]");
+    /* [8] */
+    println!("Session Authenticator UserPassword [8a1]");
     let res = c_ses1.close().await;
-    println!("Session Authenticator [8a1]: {:?}", res);
+    println!("Session Authenticator UserPassword [8a1]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Authenticator [8a2]");
+    println!("Session Authenticator UserPassword [8a2]");
     let res = c_ses2.close().await;
-    println!("Session Authenticator [8a2]: {:?}", res);
+    println!("Session Authenticator UserPassword [8a2]: {:?}", res);
     assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+
+    /* [9] */
+    // Perform clean up of the open locators
+    println!("Session Authenticator UserPassword [9a1]");
+    let res = router_manager.del_listener(&locator).await;
+    println!("Session Authenticator UserPassword [9a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+}
+
+async fn authenticator_shared_memory(locator: Locator) {
+    /* [CLIENT] */
+    let client_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+
+    /* [ROUTER] */
+    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_handler = Arc::new(SHRouterAuthenticator::new());
+    // Create the router session manager
+    let config = SessionManagerConfig {
+        version: 0,
+        whatami: whatami::ROUTER,
+        id: router_id.clone(),
+        handler: router_handler.clone(),
+    };
+
+    let peer_authenticator_router = SharedMemoryAuthenticator::new();
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: None,
+        max_links: None,
+        peer_authenticator: Some(vec![peer_authenticator_router.into()]),
+        link_authenticator: None,
+        locator_property: None,
+    };
+    let router_manager = SessionManager::new(config, Some(opt_config));
+
+    // Create the transport session manager for the first client
+    let config = SessionManagerConfig {
+        version: 0,
+        whatami: whatami::CLIENT,
+        id: client_id.clone(),
+        handler: Arc::new(SHClientAuthenticator::new()),
+    };
+    let peer_authenticator_client = SharedMemoryAuthenticator::new();
+    let opt_config = SessionManagerOptionalConfig {
+        lease: None,
+        keep_alive: None,
+        sn_resolution: None,
+        batch_size: None,
+        timeout: None,
+        retries: None,
+        max_sessions: None,
+        max_links: None,
+        peer_authenticator: Some(vec![peer_authenticator_client.into()]),
+        link_authenticator: None,
+        locator_property: None,
+    };
+    let client_manager = SessionManager::new(config, Some(opt_config));
+
+    /* [1] */
+    println!("\nSession Authenticator SharedMemory [1a1]");
+    // Add the locator on the router
+    let res = router_manager.add_listener(&locator).await;
+    println!("Session Authenticator SharedMemory [1a1]: {:?}", res);
+    assert!(res.is_ok());
+    println!("Session Authenticator SharedMemory [1a2]");
+    let locators = router_manager.get_listeners().await;
+    println!("Session Authenticator SharedMemory 1a2]: {:?}", locators);
+    assert_eq!(locators.len(), 1);
+
+    /* [2] */
+    // Open a session from the client to the router
+    // -> This should be accepted
+    println!("Session Authenticator SharedMemory [2a1]");
+    let res = client_manager.open_session(&locator).await;
+    println!("Session Authenticator SharedMemory [2a1]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+
+    /* [3] */
+    println!("Session Authenticator SharedMemory [3a1]");
+    let res = c_ses1.close().await;
+    println!("Session Authenticator SharedMemory [3a1]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+
+    /* [4] */
+    // Perform clean up of the open locators
+    println!("Session Authenticator SharedMemory [4a1]");
+    let res = router_manager.del_listener(&locator).await;
+    println!("Session Authenticator SharedMemory [4a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
 }
 
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn authenticator_tcp() {
-    let locator: Locator = "tcp/127.0.0.1:7447".parse().unwrap();
+    let locator: Locator = "tcp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
-        authenticator_user_password(locator).await;
+        authenticator_user_password(locator.clone()).await;
+        authenticator_shared_memory(locator).await;
     });
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn authenticator_udp() {
-    let locator: Locator = "udp/127.0.0.1:7447".parse().unwrap();
+    let locator: Locator = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
-        authenticator_user_password(locator).await;
+        authenticator_user_password(locator.clone()).await;
+        authenticator_shared_memory(locator).await;
     });
 }
 
@@ -307,7 +417,8 @@ fn authenticator_unix() {
         .parse()
         .unwrap();
     task::block_on(async {
-        authenticator_user_password(locator).await;
+        authenticator_user_password(locator.clone()).await;
+        authenticator_shared_memory(locator).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");

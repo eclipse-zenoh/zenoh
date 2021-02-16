@@ -100,19 +100,19 @@ impl Session {
     #[inline]
     pub fn get_pid(&self) -> ZResult<PeerId> {
         let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.get_pid())
+        Ok(transport.pid.clone())
     }
 
     #[inline]
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
         let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.get_whatami())
+        Ok(transport.whatami)
     }
 
     #[inline]
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
         let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.get_sn_resolution())
+        Ok(transport.sn_resolution)
     }
 
     #[inline]
@@ -183,8 +183,9 @@ impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(transport) = self.0.upgrade() {
             f.debug_struct("Session")
-                .field("peer", &transport.get_pid())
-                .field("sn_resolution", &transport.get_sn_resolution())
+                .field("peer", &transport.pid)
+                .field("sn_resolution", &transport.sn_resolution)
+                .field("is_local", &transport.is_local)
                 .finish()
         } else {
             write!(f, "{}", STR_ERR)

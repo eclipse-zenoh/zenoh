@@ -11,7 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorTrait};
+use super::{
+    attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
+    PeerAuthenticatorTrait,
+};
 use crate::core::{PeerId, Property, ZInt};
 use crate::io::{RBuf, WBuf};
 use crate::link::Locator;
@@ -46,7 +49,6 @@ const USRPWD_VERSION: ZInt = 0;
 ///
 /// ENC values:
 /// - 0x00 => Zenoh Properties
-/// - 0x20 => UserPassword authentication
 /// ```
 
 /*************************************/
@@ -54,7 +56,7 @@ const USRPWD_VERSION: ZInt = 0;
 /*************************************/
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |0 0 1|  ATTCH  |
+/// |0 0 0|  ATTCH  |
 /// +-+-+-+---------+
 /// ~    version    ~
 /// +---------------+
@@ -63,13 +65,13 @@ struct InitSynProperty {
 }
 
 impl WBuf {
-    fn write_init_syn_property(&mut self, init_syn_property: &InitSynProperty) -> bool {
+    fn write_init_syn_property_usrpwd(&mut self, init_syn_property: &InitSynProperty) -> bool {
         self.write_zint(init_syn_property.version)
     }
 }
 
 impl RBuf {
-    fn read_init_syn_property(&mut self) -> Option<InitSynProperty> {
+    fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
         Some(InitSynProperty { version })
     }
@@ -80,7 +82,7 @@ impl RBuf {
 /*************************************/
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |0 0 1|  ATTCH  |
+/// |0 0 0|  ATTCH  |
 /// +-+-+-+---------+
 /// ~     nonce     ~
 /// +---------------+
@@ -89,13 +91,13 @@ struct InitAckProperty {
 }
 
 impl WBuf {
-    fn write_init_ack_property(&mut self, init_ack_property: &InitAckProperty) -> bool {
+    fn write_init_ack_property_usrpwd(&mut self, init_ack_property: &InitAckProperty) -> bool {
         self.write_zint(init_ack_property.nonce)
     }
 }
 
 impl RBuf {
-    fn read_init_ack_property(&mut self) -> Option<InitAckProperty> {
+    fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty> {
         let nonce = self.read_zint()?;
         Some(InitAckProperty { nonce })
     }
@@ -106,7 +108,7 @@ impl RBuf {
 /*************************************/
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |0 0 1|  ATTCH  |
+/// |0 0 0|  ATTCH  |
 /// +-+-+-+---------+
 /// ~     user      ~
 /// +---------------+
@@ -118,14 +120,14 @@ struct OpenSynProperty {
 }
 
 impl WBuf {
-    fn write_open_syn_property(&mut self, open_syn_property: &OpenSynProperty) -> bool {
+    fn write_open_syn_property_usrpwd(&mut self, open_syn_property: &OpenSynProperty) -> bool {
         zcheck!(self.write_bytes_array(&open_syn_property.user));
         self.write_bytes_array(&open_syn_property.hmac)
     }
 }
 
 impl RBuf {
-    fn read_open_syn_property(&mut self) -> Option<OpenSynProperty> {
+    fn read_open_syn_property_usrpwd(&mut self) -> Option<OpenSynProperty> {
         let user = self.read_bytes_array()?;
         let hmac = self.read_bytes_array()?;
         Some(OpenSynProperty { user, hmac })
@@ -223,19 +225,21 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<Vec<Property>> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
         let init_syn_property = InitSynProperty {
             version: USRPWD_VERSION,
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_init_syn_property(&init_syn_property);
+        wbuf.write_init_syn_property_usrpwd(&init_syn_property);
         let rbuf: RBuf = wbuf.into();
 
         let prop = Property {
             key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
-        Ok(vec![prop])
+        let mut res = PeerAuthenticatorOutput::default();
+        res.properties.push(prop);
+        Ok(res)
     }
 
     async fn handle_init_syn(
@@ -244,7 +248,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         peer_id: &PeerId,
         sn_resolution: ZInt,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::USRPWD);
@@ -256,7 +260,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let init_syn_property = match rbuf.read_init_syn_property() {
+        let init_syn_property = match rbuf.read_init_syn_property_usrpwd() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -265,7 +269,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         };
 
-        if init_syn_property.version != USRPWD_VERSION {
+        if init_syn_property.version > USRPWD_VERSION {
             return zerror!(ZErrorKind::InvalidMessage {
                 descr: format!("Rejected InitSyn with invalid attachment on link: {}", link),
             });
@@ -276,7 +280,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let init_ack_property = InitAckProperty { nonce };
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_init_ack_property(&init_ack_property);
+        wbuf.write_init_ack_property_usrpwd(&init_ack_property);
         let rbuf: RBuf = wbuf.into();
         let prop = Property {
             key: attachment::authorization::USRPWD,
@@ -289,7 +293,9 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             (peer_id.clone(), nonce),
         );
 
-        Ok(vec![prop])
+        let mut res = PeerAuthenticatorOutput::default();
+        res.properties.push(prop);
+        Ok(res)
     }
 
     async fn handle_init_ack(
@@ -298,7 +304,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::USRPWD);
@@ -310,7 +316,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let init_ack_property = match rbuf.read_init_ack_property() {
+        let init_ack_property = match rbuf.read_init_ack_property_usrpwd() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -329,21 +335,23 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         };
         // Encode the InitAck attachment
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_open_syn_property(&open_syn_property);
+        wbuf.write_open_syn_property_usrpwd(&open_syn_property);
         let rbuf: RBuf = wbuf.into();
         let prop = Property {
             key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
 
-        Ok(vec![prop])
+        let mut res = PeerAuthenticatorOutput::default();
+        res.properties.push(prop);
+        Ok(res)
     }
 
     async fn handle_open_syn(
         &self,
         link: &AuthenticatedPeerLink,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
         let (peer_id, nonce) =
             match zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone())) {
                 Some(tuple) => tuple,
@@ -368,7 +376,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let open_syn_property = match rbuf.read_open_syn_property() {
+        let open_syn_property = match rbuf.read_open_syn_property_usrpwd() {
             Some(osp) => osp,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -420,15 +428,15 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         }
 
-        Ok(vec![])
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
         _properties: &[Property],
-    ) -> ZResult<()> {
-        Ok(())
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {
