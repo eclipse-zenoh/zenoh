@@ -1,4 +1,3 @@
-use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use shared_memory::{Shmem, ShmemConf, ShmemError};
 use std::collections::HashMap;
@@ -375,17 +374,14 @@ impl SharedMemoryManager {
         let file_name: String = format!("{}_{}", ZENOH_SHM_PREFIX, id);
         temp_dir.push(file_name);
         let path: String = temp_dir.to_str().unwrap().to_string();
-        debug!("Creating file at: {}", path);
+        log::trace!("Creating file at: {}", path);
         let shmem = match ShmemConf::new().size(size).flink(path.clone()).create() {
             Ok(m) => m,
             Err(ShmemError::LinkExists) => {
-                debug!("Shared Memory already exists, opening it");
+                log::trace!("Shared Memory already exists, opening it");
                 ShmemConf::new().flink(path.clone()).open()?
             }
-            Err(e) => {
-                error!("Error while mapping memory to file {} - \n{:?}\n", path, e);
-                return Err(e);
-            }
+            Err(e) => return Err(e),
         };
         let chunk_header_size = std::mem::size_of::<ChunkHeader>();
         let base_ptr = shmem.as_ptr();
@@ -405,7 +401,7 @@ impl SharedMemoryManager {
         );
         header.free_list.append(chunk);
 
-        debug!("Creating SharedMemoryManager for {:?}", base_ptr);
+        log::trace!("Creating SharedMemoryManager for {:?}", base_ptr);
         Ok(SharedMemoryManager {
             segment_path: path,
             size,
@@ -487,7 +483,7 @@ impl SharedMemoryManager {
             }
             None => match ShmemConf::new().flink(&info.shm_manager).open() {
                 Ok(shm) => {
-                    debug!("Binding shared buffer to: {}", info.shm_manager);
+                    log::trace!("Binding shared buffer to: {}", info.shm_manager);
                     let base_ptr = shm.as_ptr();
                     let chunk_header =
                         unsafe { base_ptr.add(info.header_offset) as *mut ChunkHeader };
@@ -502,9 +498,10 @@ impl SharedMemoryManager {
                     })
                 }
                 Err(e) => {
-                    error!(
+                    log::trace!(
                         "Unable to bind shared segment: {} -- {:?}",
-                        info.shm_manager, e
+                        info.shm_manager,
+                        e
                     );
                     None
                 }
@@ -514,12 +511,12 @@ impl SharedMemoryManager {
 
     /// Returns the amount of memory freed
     pub fn garbage_collect(&mut self) -> usize {
-        debug!("Running Garbage Collector");
+        log::debug!("Running Garbage Collector");
         let mut current = self.header.used_list.head();
         let mut reclaimed = 0;
         loop {
             if current.is_null() {
-                debug!("Collected {} bytes.", reclaimed);
+                log::debug!("Collected {} bytes.", reclaimed);
                 return reclaimed;
             }
             unsafe {
