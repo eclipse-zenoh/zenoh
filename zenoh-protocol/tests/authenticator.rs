@@ -116,10 +116,7 @@ async fn authenticator_user_password(locator: Locator) {
     lookup.insert(user01.clone().into(), password01.clone().into());
     lookup.insert(user03.clone().into(), password03.clone().into());
 
-    let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(
-        lookup,
-        ("foo".into(), "foo".into()),
-    ));
+    let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
@@ -143,8 +140,10 @@ async fn authenticator_user_password(locator: Locator) {
         handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client01 =
-        UserPasswordAuthenticator::new(lookup, (user01.clone().into(), password01.clone().into()));
+    let peer_authenticator_client01 = UserPasswordAuthenticator::new(
+        lookup,
+        Some((user01.clone().into(), password01.clone().into())),
+    );
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
@@ -168,8 +167,10 @@ async fn authenticator_user_password(locator: Locator) {
         handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client02 =
-        UserPasswordAuthenticator::new(lookup, (user02.clone().into(), password02.clone().into()));
+    let peer_authenticator_client02 = UserPasswordAuthenticator::new(
+        lookup,
+        Some((user02.clone().into(), password02.clone().into())),
+    );
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
@@ -194,7 +195,7 @@ async fn authenticator_user_password(locator: Locator) {
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client03 =
-        UserPasswordAuthenticator::new(lookup, (user03.into(), password03.into()));
+        UserPasswordAuthenticator::new(lookup, Some((user03.into(), password03.into())));
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,

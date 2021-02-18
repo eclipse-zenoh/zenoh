@@ -149,7 +149,7 @@ struct Authenticated {
 
 pub struct UserPasswordAuthenticator {
     lookup: RwLock<HashMap<Vec<u8>, Vec<u8>>>,
-    credentials: Credentials,
+    credentials: Option<Credentials>,
     nonces: Mutex<HashMap<(Locator, Locator), (PeerId, ZInt)>>,
     authenticated: Mutex<HashMap<PeerId, Authenticated>>,
     prng: Mutex<PseudoRng>,
@@ -158,14 +158,18 @@ pub struct UserPasswordAuthenticator {
 impl UserPasswordAuthenticator {
     pub fn new(
         lookup: HashMap<Vec<u8>, Vec<u8>>,
-        credentials: (Vec<u8>, Vec<u8>),
+        mut credentials: Option<(Vec<u8>, Vec<u8>)>,
     ) -> UserPasswordAuthenticator {
+        let credentials = match credentials.take() {
+            Some(cr) => Some(Credentials {
+                user: cr.0,
+                password: cr.1,
+            }),
+            None => None,
+        };
         UserPasswordAuthenticator {
             lookup: RwLock::new(lookup),
-            credentials: Credentials {
-                user: credentials.0,
-                password: credentials.1,
-            },
+            credentials,
             nonces: Mutex::new(HashMap::new()),
             authenticated: Mutex::new(HashMap::new()),
             prng: Mutex::new(PseudoRng::from_entropy()),
@@ -187,35 +191,35 @@ impl UserPasswordAuthenticator {
     pub async fn from_properties(
         config: &ConfigProperties,
     ) -> ZResult<Option<UserPasswordAuthenticator>> {
+        let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+        if let Some(dict) = config.get(&ZN_USER_PASSWORD_DICTIONARY_KEY) {
+            let content = fs::read_to_string(dict).await.map_err(|e| {
+                zerror2!(ZErrorKind::Other {
+                    descr: format!("Invalid user-password dictionary file: {}", e)
+                })
+            })?;
+            // Populate the user-password dictionary
+            let mut ps = Properties::from(content);
+            for (user, password) in ps.drain() {
+                lookup.insert(user.into(), password.into());
+            }
+            log::debug!("User-password dictionary has been configured");
+        }
+
+        let mut credentials: Option<(Vec<u8>, Vec<u8>)> = None;
         if let Some(user) = config.get(&ZN_USER_KEY) {
             if let Some(password) = config.get(&ZN_PASSWORD_KEY) {
-                // We have both user password parameter defined. Check if we
-                // need to build the user-password lookup dictionary for incoming
-                // connections, e.g. on the router.
-                let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-                if let Some(dict) = config.get(&ZN_USER_PASSWORD_DICTIONARY_KEY) {
-                    let content = fs::read_to_string(dict).await.map_err(|e| {
-                        zerror2!(ZErrorKind::Other {
-                            descr: format!("Invalid user-password dictionary file: {}", e)
-                        })
-                    })?;
-                    // Populate the user-password dictionary
-                    let mut ps = Properties::from(content);
-                    for (user, password) in ps.drain() {
-                        lookup.insert(user.into(), password.into());
-                    }
-                }
-                // Create the UserPassword Authenticator based on provided info
-                let upa = UserPasswordAuthenticator::new(
-                    lookup,
-                    (user.to_string().into(), password.to_string().into()),
-                );
-                log::debug!("User-password authentication is enabled");
-
-                return Ok(Some(upa));
+                log::debug!("User and password have been configured");
+                credentials = Some((user.to_string().into(), password.to_string().into()));
             }
         }
-        Ok(None)
+
+        if !lookup.is_empty() || credentials.is_some() {
+            log::debug!("User-password authentication is enabled");
+            Ok(Some(UserPasswordAuthenticator::new(lookup, credentials)))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -226,6 +230,12 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
     ) -> ZResult<PeerAuthenticatorOutput> {
+        let mut res = PeerAuthenticatorOutput::default();
+        // If credentials are not configured, don't initiate the USRPWD authentication
+        if self.credentials.is_none() {
+            return Ok(res);
+        }
+
         let init_syn_property = InitSynProperty {
             version: USRPWD_VERSION,
         };
@@ -237,7 +247,6 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
-        let mut res = PeerAuthenticatorOutput::default();
         res.properties.push(prop);
         Ok(res)
     }
@@ -305,10 +314,17 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         _sn_resolution: ZInt,
         properties: &[Property],
     ) -> ZResult<PeerAuthenticatorOutput> {
-        let res = properties
+        let mut res = PeerAuthenticatorOutput::default();
+        // If credentials are not configured, don't continue the USRPWD authentication
+        let credentials = match self.credentials.as_ref() {
+            Some(cr) => cr,
+            None => return Ok(res),
+        };
+
+        let tmp = properties
             .iter()
             .find(|p| p.key == attachment::authorization::USRPWD);
-        let mut rbuf: RBuf = match res {
+        let mut rbuf: RBuf = match tmp {
             Some(p) => p.value.clone().into(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -327,10 +343,10 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         // Create the HMAC of the password using the nonce received as a key (it's a challenge)
         let key = init_ack_property.nonce.to_le_bytes();
-        let hmac = hmac::sign(&key, &self.credentials.password)?;
+        let hmac = hmac::sign(&key, &credentials.password)?;
         // Create the OpenSyn attachment
         let open_syn_property = OpenSynProperty {
-            user: self.credentials.user.clone(),
+            user: credentials.user.clone(),
             hmac,
         };
         // Encode the InitAck attachment
@@ -341,8 +357,6 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
-
-        let mut res = PeerAuthenticatorOutput::default();
         res.properties.push(prop);
         Ok(res)
     }
