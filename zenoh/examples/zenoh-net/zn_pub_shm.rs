@@ -35,36 +35,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut shm = SharedMemoryManager::new(id, 8_192).unwrap();
     println!("{:?}", &shm);
 
+    println!("Allocating a Shared Memory Buffer...");
+    // Request a shared memory buffer to the SharedMemoryManager
+    // NOTE: this operation does not allocate memory. It assisgnes
+    //       an already allocated memory region to the requester.
+    let mut sbuf = shm.alloc(1_024).unwrap();
+
+    // We reserve a small space at the beginning of the buffer to include the iteration index
+    // of the write. This is simply to have the same format as zn_pub.
+    let mut prefix = format!("[{:4}] ", 0);
+    let prefix_len = prefix.as_bytes().len();
+
+    // Retrive a mutable slice from the SharedMemoryBuf.
+    //
+    // This operation is marked unsafe since we cannot guarantee a single mutable reference
+    // across multiple processes. Thus if you use it, and you'll inevitable have to use it,
+    // you have to keep in mind that if you have multiple process retrieving a mutable slice
+    // you may get into concurrent writes. That said, if you have a serial pipeline and
+    // the buffer is flowing through the pipeline this will not create any issues.
+    //
+    // In short, whilst this operation is marked as unsafe, you are safe if you can
+    // guarantee that your in applications only one process at the time will actually write.
+    //
+    // In case of this example, we are the only one that writes on the SharedMemoryBuf, so
+    // we are actually safe.
+    let slice = unsafe { sbuf.as_mut_slice() };
+    let slice_len = prefix_len + value.as_bytes().len();
+    slice[prefix_len..slice_len].copy_from_slice(&value.as_bytes());
+    drop(slice);
+
     for idx in 0..std::u32::MAX {
         sleep(Duration::from_secs(1)).await;
-        // Request a shared memory buffer to the SharedMemoryManager
-        // NOTE: this operation does not allocate memory. It assisgnes
-        //       an already allocated memory region to the requester.
-        let mut sbuf = shm.alloc(1_024).unwrap();
+        // Update the prefix in the SharedMemoryBuf
         let slice = unsafe { sbuf.as_mut_slice() };
-        let mut start = 0;
-        // Fill the content in the SharedMemoryBuf
-        let count = format!("[{:4}] ", idx);
-        let size = count.as_bytes().len();
-        slice[start..start + size].copy_from_slice(&count.as_bytes());
-        start += size;
-
-        let size = value.as_bytes().len();
-        slice[start..start + size].copy_from_slice(&value.as_bytes());
-        start += size;
+        prefix = format!("[{:4}] ", idx);
+        slice[0..prefix_len].copy_from_slice(&prefix.as_bytes());
 
         // Write the data
         println!(
             "Writing SHM Data ('{}': '{}')...",
             path,
-            String::from_utf8_lossy(&slice[0..start])
+            String::from_utf8_lossy(&slice[0..slice_len])
         );
-        session.write(&path.clone().into(), sbuf.into()).await?;
-
-        // Signal the SharedMemoryManager to mark as free the region
-        // of memory previously assigned.
-        let _freed = shm.garbage_collect();
+        session
+            .write(&path.clone().into(), sbuf.clone().into())
+            .await?;
     }
+
+    // Dropping the SharedMemoryBuf means to free it.
+    drop(sbuf);
+    // Signal the SharedMemoryManager to garbage collect all the freed SharedMemoryBuf.
+    let _freed = shm.garbage_collect();
 
     Ok(())
 }
