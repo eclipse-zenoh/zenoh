@@ -370,6 +370,7 @@ async fn authenticator_shared_memory(locator: Locator) {
     println!("Session Authenticator SharedMemory [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
+    assert!(c_ses1.is_shm().unwrap());
 
     /* [3] */
     println!("Session Authenticator SharedMemory [3a1]");

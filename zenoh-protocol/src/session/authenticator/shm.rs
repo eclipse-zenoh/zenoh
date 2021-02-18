@@ -143,9 +143,11 @@ impl RBuf {
 /*          Authenticator            */
 /*************************************/
 pub struct SharedMemoryAuthenticator {
-    manager: Mutex<SharedMemoryManager>,
-    buffer: Option<SharedMemoryBuf>,
     challenge: ZInt,
+    // Rust guarantees that fields are dropped in the order of declaration.
+    // Buffer needs to be dropped before the manager.
+    buffer: SharedMemoryBuf,
+    manager: Mutex<SharedMemoryManager>,
 }
 
 impl SharedMemoryAuthenticator {
@@ -164,38 +166,42 @@ impl SharedMemoryAuthenticator {
         slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
         SharedMemoryAuthenticator {
-            manager: Mutex::new(manager),
-            buffer: Some(buffer),
             challenge,
+            buffer,
+            manager: Mutex::new(manager),
         }
     }
 
     pub async fn from_properties(
-        _config: &ConfigProperties,
+        config: &ConfigProperties,
     ) -> ZResult<Option<SharedMemoryAuthenticator>> {
-        let mut prng = PseudoRng::from_entropy();
-        let challenge = prng.gen::<ZInt>();
+        let zero_copy = config.get_or(&ZN_ZERO_COPY_KEY, ZN_ZERO_COPY_DEFAULT);
+        if zero_copy == ZN_TRUE {
+            let mut prng = PseudoRng::from_entropy();
+            let challenge = prng.gen::<ZInt>();
 
-        let mut manager = SharedMemoryManager::new(
-            format!("{}.{}", SHM_NAME, challenge),
-            std::mem::size_of::<ChunkHeader>() + SHM_SIZE,
-        )
-        .map_err(|e| {
-            zerror2!(ZErrorKind::Other {
-                descr: e.to_string()
-            })
-        })?;
+            let mut manager = SharedMemoryManager::new(
+                format!("{}.{}", SHM_NAME, challenge),
+                std::mem::size_of::<ChunkHeader>() + SHM_SIZE,
+            )
+            .map_err(|e| {
+                zerror2!(ZErrorKind::Other {
+                    descr: e.to_string()
+                })
+            })?;
 
-        let mut buffer = manager.alloc(SHM_SIZE).unwrap();
-        let slice = unsafe { buffer.as_mut_slice() };
-        slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
+            let mut buffer = manager.alloc(SHM_SIZE).unwrap();
+            let slice = unsafe { buffer.as_mut_slice() };
+            slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
-        let sma = SharedMemoryAuthenticator {
-            manager: Mutex::new(manager),
-            buffer: Some(buffer),
-            challenge,
-        };
-        Ok(Some(sma))
+            let sma = SharedMemoryAuthenticator {
+                challenge,
+                buffer,
+                manager: Mutex::new(manager),
+            };
+            return Ok(Some(sma));
+        }
+        Ok(None)
     }
 }
 
@@ -217,7 +223,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     ) -> ZResult<PeerAuthenticatorOutput> {
         let init_syn_property = InitSynProperty {
             version: SHM_VERSION,
-            shm: self.buffer.as_ref().unwrap().clone().into(),
+            shm: self.buffer.clone().into(),
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_syn_property_shm(&init_syn_property);
@@ -286,7 +292,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Create the InitAck attachment
         let init_ack_property = InitAckProperty {
             challenge,
-            shm: self.buffer.as_ref().unwrap().clone().into(),
+            shm: self.buffer.clone().into(),
         };
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
@@ -409,14 +415,6 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}
 
     async fn handle_close(&self, _peer_id: &PeerId) {}
-}
-
-impl Drop for SharedMemoryAuthenticator {
-    fn drop(&mut self) {
-        // Make sure to drop the SharedMemoryBuf before the SharedMemoryManager
-        let _ = self.buffer.take().unwrap();
-        self.manager.try_lock().unwrap().garbage_collect();
-    }
 }
 
 impl From<Arc<SharedMemoryAuthenticator>> for PeerAuthenticator {

@@ -12,10 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::msg::*;
-
 use crate::core::*;
 use crate::io::WBuf;
-
 use zenoh_util::zcheck;
 
 impl WBuf {

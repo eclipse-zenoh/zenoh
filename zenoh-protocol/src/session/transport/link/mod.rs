@@ -17,7 +17,7 @@ mod tx;
 
 use super::{SeqNumGenerator, SessionTransport};
 use crate::core::ZInt;
-use crate::io::{ArcSlice, RBuf};
+use crate::io::RBuf;
 use crate::link::Link;
 use crate::proto::{SessionMessage, ZenohMessage};
 use crate::session::defaults::QUEUE_PRIO_CTRL;
@@ -248,7 +248,7 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
             let tot = $end - $start;
             let mut slice = Vec::with_capacity(tot);
             slice.extend_from_slice(&buffer[$start..$end]);
-            rbuf.add_slice(ArcSlice::new(Arc::new(slice), 0, tot));
+            rbuf.add_slice(slice.into());
         };
     }
 
@@ -450,7 +450,7 @@ async fn read_dgram(link: SessionTransportLink) -> ZResult<()> {
                 // Add the received bytes to the RBuf for deserialization
                 let mut slice = Vec::with_capacity(n);
                 slice.extend_from_slice(&buffer[..n]);
-                rbuf.add_slice(ArcSlice::new(Arc::new(slice), 0, n));
+                rbuf.add_slice(slice.into());
 
                 // Deserialize all the messages from the current RBuf
                 while rbuf.can_read() {

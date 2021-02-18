@@ -18,6 +18,8 @@ mod consts {
     pub const ZN_TRUE: &str = "true";
     /// `"false"`
     pub const ZN_FALSE: &str = "false";
+    /// `"auto"`
+    pub const ZN_AUTO: &str = "auto";
 
     /// The library mode.
     /// String key : `"mode"`.
@@ -63,7 +65,7 @@ mod consts {
     /// Default value : `"true"`.
     pub const ZN_MULTICAST_SCOUTING_KEY: u64 = 0x45;
     pub const ZN_MULTICAST_SCOUTING_STR: &str = "multicast_scouting";
-    pub const ZN_MULTICAST_SCOUTING_DEFAULT: &str = "true";
+    pub const ZN_MULTICAST_SCOUTING_DEFAULT: &str = ZN_TRUE;
 
     /// The network interface to use for multicast scouting.
     /// String key : `"multicast_interface"`.
@@ -71,7 +73,7 @@ mod consts {
     /// Default value : `"auto"`.
     pub const ZN_MULTICAST_INTERFACE_KEY: u64 = 0x46;
     pub const ZN_MULTICAST_INTERFACE_STR: &str = "multicast_interface";
-    pub const ZN_MULTICAST_INTERFACE_DEFAULT: &str = "auto";
+    pub const ZN_MULTICAST_INTERFACE_DEFAULT: &str = ZN_AUTO;
 
     /// The multicast address and ports to use for multicast scouting.
     /// String key : `"multicast_address"`.
@@ -103,7 +105,7 @@ mod consts {
     /// Default value : `"false"`.
     pub const ZN_ADD_TIMESTAMP_KEY: u64 = 0x4A;
     pub const ZN_ADD_TIMESTAMP_STR: &str = "add_timestamp";
-    pub const ZN_ADD_TIMESTAMP_DEFAULT: &str = "false";
+    pub const ZN_ADD_TIMESTAMP_DEFAULT: &str = ZN_FALSE;
 
     /// Indicates if the link state protocol should run.
     /// String key : `"link_state"`.
@@ -111,7 +113,7 @@ mod consts {
     /// Default value : `"true"`.
     pub const ZN_LINK_STATE_KEY: u64 = 0x4B;
     pub const ZN_LINK_STATE_STR: &str = "link_state";
-    pub const ZN_LINK_STATE_DEFAULT: &str = "true";
+    pub const ZN_LINK_STATE_DEFAULT: &str = ZN_TRUE;
 
     /// The file path containing the user password dictionary.
     /// String key : `"user_password_dictionary"`.
@@ -128,7 +130,7 @@ mod consts {
     /// Default value : `"true"`.
     pub const ZN_PEERS_AUTOCONNECT_KEY: u64 = 0x4D;
     pub const ZN_PEERS_AUTOCONNECT_STR: &str = "peers_autoconnect";
-    pub const ZN_PEERS_AUTOCONNECT_DEFAULT: &str = "true";
+    pub const ZN_PEERS_AUTOCONNECT_DEFAULT: &str = ZN_TRUE;
 
     /// The file path containing the TLS server private key.
     /// String key : `"tls_private_key"`.
@@ -151,13 +153,21 @@ mod consts {
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_KEY: u64 = 0x50;
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_STR: &str = "tls_root_ca_certificate";
 
+    /// Indicates if the zero-copy features should be used.
+    /// String key : `"ser_copy"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"true"`.
+    pub const ZN_ZERO_COPY_KEY: u64 = 0x51;
+    pub const ZN_ZERO_COPY_STR: &str = "zero_copy";
+    pub const ZN_ZERO_COPY_DEFAULT: &str = ZN_TRUE;
+
     /// Indicates if local writes/queries should reach local subscribers/queryables.
     /// String key : `"local_routing"`.
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"true"`.
     pub const ZN_LOCAL_ROUTING_KEY: u64 = 0x60;
     pub const ZN_LOCAL_ROUTING_STR: &str = "local_routing";
-    pub const ZN_LOCAL_ROUTING_DEFAULT: &str = "true";
+    pub const ZN_LOCAL_ROUTING_DEFAULT: &str = ZN_TRUE;
 
     pub const ZN_JOIN_SUBSCRIPTIONS_KEY: u64 = 0x61;
     pub const ZN_JOIN_SUBSCRIPTIONS_STR: &str = "join_subscriptions";
@@ -192,6 +202,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_TLS_SERVER_PRIVATE_KEY_STR => Some(ZN_TLS_SERVER_PRIVATE_KEY_KEY),
             ZN_TLS_SERVER_CERTIFICATE_STR => Some(ZN_TLS_SERVER_CERTIFICATE_KEY),
             ZN_TLS_ROOT_CA_CERTIFICATE_STR => Some(ZN_TLS_ROOT_CA_CERTIFICATE_KEY),
+            ZN_ZERO_COPY_STR => Some(ZN_ZERO_COPY_KEY),
             ZN_LOCAL_ROUTING_STR => Some(ZN_LOCAL_ROUTING_KEY),
             ZN_JOIN_SUBSCRIPTIONS_STR => Some(ZN_JOIN_SUBSCRIPTIONS_KEY),
             ZN_JOIN_PUBLICATIONS_STR => Some(ZN_JOIN_PUBLICATIONS_KEY),
@@ -218,6 +229,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_TLS_SERVER_PRIVATE_KEY_KEY => Some(ZN_TLS_SERVER_PRIVATE_KEY_STR.to_string()),
             ZN_TLS_SERVER_CERTIFICATE_KEY => Some(ZN_TLS_SERVER_CERTIFICATE_STR.to_string()),
             ZN_TLS_ROOT_CA_CERTIFICATE_KEY => Some(ZN_TLS_ROOT_CA_CERTIFICATE_STR.to_string()),
+            ZN_ZERO_COPY_KEY => Some(ZN_ZERO_COPY_STR.to_string()),
             ZN_LOCAL_ROUTING_KEY => Some(ZN_LOCAL_ROUTING_STR.to_string()),
             ZN_JOIN_SUBSCRIPTIONS_KEY => Some(ZN_JOIN_SUBSCRIPTIONS_STR.to_string()),
             ZN_JOIN_PUBLICATIONS_KEY => Some(ZN_JOIN_PUBLICATIONS_STR.to_string()),

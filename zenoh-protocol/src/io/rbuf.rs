@@ -11,13 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::ArcSlice;
-use async_std::sync::Arc;
-use std::fmt;
-use std::io::IoSlice;
-
 #[cfg(feature = "zero-copy")]
 use super::shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
+use super::ArcSlice;
+use std::fmt;
+use std::io::IoSlice;
 
 #[derive(Clone, Default)]
 pub struct RBuf {
@@ -260,10 +258,15 @@ impl RBuf {
     pub fn into_shm(self, m: &mut SharedMemoryManager) -> Option<SharedMemoryBuf> {
         match bincode::deserialize::<SharedMemoryBufInfo>(&self.to_vec()) {
             Ok(info) => m.from_info(info),
-            Err(_) => {
-                println!("INTO SHM WITH NONE");
-                None
-            }
+            Err(_) => None,
+        }
+    }
+
+    #[cfg(feature = "zero-copy")]
+    pub fn flatten_shm(&mut self) {
+        if let Some(shm) = self.shm_buf.take() {
+            self.slices.clear();
+            self.add_slice(shm.into());
         }
     }
 }
@@ -308,7 +311,7 @@ impl From<ArcSlice> for RBuf {
 impl From<Vec<u8>> for RBuf {
     fn from(buf: Vec<u8>) -> RBuf {
         let len = buf.len();
-        RBuf::from(ArcSlice::new(Arc::new(buf), 0, len))
+        RBuf::from(ArcSlice::new(buf.into(), 0, len))
     }
 }
 
@@ -372,7 +375,7 @@ impl From<SharedMemoryBuf> for RBuf {
     fn from(smb: SharedMemoryBuf) -> RBuf {
         let bs = bincode::serialize(&smb.info).unwrap();
         let len = bs.len();
-        let slice = ArcSlice::new(Arc::new(bs), 0, len);
+        let slice = ArcSlice::new(bs.into(), 0, len);
         RBuf {
             slices: vec![slice],
             pos: (0, 0),

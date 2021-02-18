@@ -121,8 +121,8 @@ pub(crate) struct SessionTransport {
     pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>>,
     // Mutex for notification
     pub(super) alive: Arc<Mutex<bool>>,
-    // The session transport is local or not
-    pub(super) is_local: bool,
+    // The session transport can do shm
+    pub(super) is_shm: bool,
 }
 
 impl SessionTransport {
@@ -134,7 +134,7 @@ impl SessionTransport {
         sn_resolution: ZInt,
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
-        is_local: bool,
+        is_shm: bool,
     ) -> SessionTransport {
         SessionTransport {
             manager,
@@ -161,7 +161,7 @@ impl SessionTransport {
             scheduling: Arc::new(FirstMatch::new()),
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(Mutex::new(true)),
-            is_local,
+            is_shm,
         }
     }
 
@@ -269,7 +269,11 @@ impl SessionTransport {
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue
     #[inline]
-    pub(crate) async fn schedule(&self, message: ZenohMessage) {
+    pub(crate) async fn schedule(&self, mut message: ZenohMessage) {
+        #[cfg(feature = "zero-copy")]
+        if !self.is_shm {
+            message.flatten_shm();
+        }
         self.scheduling.schedule(message, &self.links).await;
     }
 

@@ -11,19 +11,132 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "zero-copy")]
+use super::SharedMemoryBuf;
 use async_std::sync::Arc;
 use std::fmt;
 use std::io::IoSlice;
+use std::ops::{
+    Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
+};
 
+/*************************************/
+/*         ARC SLICE BUFFER          */
+/*************************************/
+#[derive(Clone)]
+pub enum ArcSliceBuffer {
+    OwnedBuffer(Arc<Vec<u8>>),
+    #[cfg(feature = "zero-copy")]
+    SharedBuffer(SharedMemoryBuf),
+}
+
+impl Deref for ArcSliceBuffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::OwnedBuffer(buf) => buf.as_slice(),
+            #[cfg(feature = "zero-copy")]
+            Self::SharedBuffer(buf) => buf.as_slice(),
+        }
+    }
+}
+
+// Index traits
+impl Index<usize> for ArcSliceBuffer {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &(&self.deref())[index]
+    }
+}
+
+impl Index<Range<usize>> for ArcSliceBuffer {
+    type Output = [u8];
+
+    fn index(&self, range: Range<usize>) -> &Self::Output {
+        &(&self.deref())[range]
+    }
+}
+
+impl Index<RangeFrom<usize>> for ArcSliceBuffer {
+    type Output = [u8];
+
+    fn index(&self, range: RangeFrom<usize>) -> &Self::Output {
+        &(&self.deref())[range]
+    }
+}
+
+impl Index<RangeFull> for ArcSliceBuffer {
+    type Output = [u8];
+
+    fn index(&self, range: RangeFull) -> &Self::Output {
+        &(&self.deref())[range]
+    }
+}
+
+impl Index<RangeInclusive<usize>> for ArcSliceBuffer {
+    type Output = [u8];
+
+    fn index(&self, range: RangeInclusive<usize>) -> &Self::Output {
+        &(&self.deref())[range]
+    }
+}
+
+impl Index<RangeTo<usize>> for ArcSliceBuffer {
+    type Output = [u8];
+
+    fn index(&self, range: RangeTo<usize>) -> &Self::Output {
+        &(&self.deref())[range]
+    }
+}
+
+impl Index<RangeToInclusive<usize>> for ArcSliceBuffer {
+    type Output = [u8];
+
+    fn index(&self, range: RangeToInclusive<usize>) -> &Self::Output {
+        &(&self.deref())[range]
+    }
+}
+
+// From traits
+impl From<Arc<Vec<u8>>> for ArcSliceBuffer {
+    fn from(buf: Arc<Vec<u8>>) -> ArcSliceBuffer {
+        ArcSliceBuffer::OwnedBuffer(buf)
+    }
+}
+
+impl From<Vec<u8>> for ArcSliceBuffer {
+    fn from(buf: Vec<u8>) -> ArcSliceBuffer {
+        ArcSliceBuffer::from(Arc::new(buf))
+    }
+}
+
+impl From<&[u8]> for ArcSliceBuffer {
+    fn from(buf: &[u8]) -> ArcSliceBuffer {
+        ArcSliceBuffer::from(buf.to_vec())
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<SharedMemoryBuf> for ArcSliceBuffer {
+    fn from(buf: SharedMemoryBuf) -> ArcSliceBuffer {
+        ArcSliceBuffer::SharedBuffer(buf)
+    }
+}
+
+/*************************************/
+/*             ARC SLICE             */
+/*************************************/
 #[derive(Clone)]
 pub struct ArcSlice {
-    buf: Arc<Vec<u8>>,
+    buf: ArcSliceBuffer,
     start: usize,
     end: usize,
 }
 
 impl ArcSlice {
-    pub fn new(buf: Arc<Vec<u8>>, start: usize, end: usize) -> ArcSlice {
+    pub fn new(buf: ArcSliceBuffer, start: usize, end: usize) -> ArcSlice {
         assert!(end <= buf.len());
         ArcSlice { buf, start, end }
     }
@@ -63,11 +176,11 @@ impl ArcSlice {
     }
 }
 
-impl std::ops::Index<usize> for ArcSlice {
+impl Index<usize> for ArcSlice {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
-        std::ops::Index::index(&**self.buf, index + self.start)
+        &self.buf[self.start + index]
     }
 }
 
@@ -92,7 +205,7 @@ impl fmt::Debug for ArcSlice {
 impl From<Arc<Vec<u8>>> for ArcSlice {
     fn from(buf: Arc<Vec<u8>>) -> ArcSlice {
         let len = buf.len();
-        ArcSlice::new(buf, 0, len)
+        ArcSlice::new(buf.into(), 0, len)
     }
 }
 
@@ -105,6 +218,14 @@ impl From<Vec<u8>> for ArcSlice {
 impl From<&[u8]> for ArcSlice {
     fn from(buf: &[u8]) -> ArcSlice {
         ArcSlice::from(buf.to_vec())
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<SharedMemoryBuf> for ArcSlice {
+    fn from(buf: SharedMemoryBuf) -> ArcSlice {
+        let len = buf.len();
+        ArcSlice::new(buf.into(), 0, len)
     }
 }
 
