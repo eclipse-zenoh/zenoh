@@ -19,7 +19,7 @@ use zenoh::Properties;
 
 #[async_std::main]
 async fn main() {
-    // initiate logging
+    // Initiate logging
     env_logger::init();
 
     let (config, selector) = parse_args();
