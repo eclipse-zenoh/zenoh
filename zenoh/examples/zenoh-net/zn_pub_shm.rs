@@ -62,7 +62,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let slice = unsafe { sbuf.as_mut_slice() };
     let slice_len = prefix_len + value.as_bytes().len();
     slice[prefix_len..slice_len].copy_from_slice(&value.as_bytes());
-    drop(slice);
 
     for idx in 0..std::u32::MAX {
         sleep(Duration::from_secs(1)).await;
