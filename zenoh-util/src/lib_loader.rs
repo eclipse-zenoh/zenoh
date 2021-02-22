@@ -117,18 +117,16 @@ impl LibLoader {
         for dir in &self.search_paths {
             match dir.read_dir() {
                 Ok(read_dir) => {
-                    for entry in read_dir {
-                        if let Ok(entry) = entry {
-                            if entry.file_name() == filename_ostr {
-                                let path = entry.path();
-                                return Library::new(path.clone())
-                                    .map_err(|e| {
-                                        zerror2!(ZErrorKind::Other {
-                                            descr: e.to_string()
-                                        })
+                    for entry in read_dir.flatten() {
+                        if entry.file_name() == filename_ostr {
+                            let path = entry.path();
+                            return Library::new(path.clone())
+                                .map_err(|e| {
+                                    zerror2!(ZErrorKind::Other {
+                                        descr: e.to_string()
                                     })
-                                    .map(|lib| (lib, path));
-                            }
+                                })
+                                .map(|lib| (lib, path));
                         }
                     }
                 }
