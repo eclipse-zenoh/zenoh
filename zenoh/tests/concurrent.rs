@@ -23,8 +23,8 @@ use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
+    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 
 use zenoh_util::core::ZResult;
@@ -101,7 +101,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_id01.clone(),
-        handler: peer_sh01.clone(),
+        handler: SessionDispatcher::SessionHandler(peer_sh01.clone()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: Some(lease),
@@ -124,7 +124,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_id02.clone(),
-        handler: peer_sh02.clone(),
+        handler: SessionDispatcher::SessionHandler(peer_sh02.clone()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: Some(lease),

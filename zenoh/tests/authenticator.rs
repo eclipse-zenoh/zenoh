@@ -20,8 +20,8 @@ use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::authenticator::UserPasswordAuthenticator;
 use zenoh::net::protocol::session::{
-    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    DummySessionEventHandler, Session, SessionDispatcher, SessionEventHandler, SessionHandler,
+    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 
@@ -104,7 +104,7 @@ async fn authenticator_user_password(locator: Locator) {
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: router_handler.clone(),
+        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
     };
 
     let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
@@ -135,7 +135,7 @@ async fn authenticator_user_password(locator: Locator) {
         version: 0,
         whatami: whatami::CLIENT,
         id: client01_id.clone(),
-        handler: Arc::new(SHClientAuthenticator::new()),
+        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client01 =
@@ -160,7 +160,7 @@ async fn authenticator_user_password(locator: Locator) {
         version: 0,
         whatami: whatami::CLIENT,
         id: client02_id.clone(),
-        handler: Arc::new(SHClientAuthenticator::new()),
+        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client02 =
@@ -185,7 +185,7 @@ async fn authenticator_user_password(locator: Locator) {
         version: 0,
         whatami: whatami::CLIENT,
         id: client03_id.clone(),
-        handler: Arc::new(SHClientAuthenticator::new()),
+        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client03 =

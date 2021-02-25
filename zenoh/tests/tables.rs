@@ -23,8 +23,9 @@ use zenoh::net::protocol::core::{
 };
 use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
-use zenoh::net::protocol::session::{DummySessionEventHandler, Mux, Primitives};
+use zenoh::net::protocol::session::Primitives;
 use zenoh::net::routing::router::*;
+use zenoh::net::routing::OutSession;
 
 #[test]
 fn base_test() {
@@ -34,9 +35,13 @@ fn base_test() {
             whatami::CLIENT,
             Some(HLC::default()),
         );
-        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
+        let primitives = Arc::new(ClientPrimitives::new());
         let face = tables
-            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .open_face(
+                PeerId::new(0, [0; 16]),
+                whatami::CLIENT,
+                OutSession::Primitives(primitives.clone()),
+            )
             .await;
         declare_resource(
             &mut tables,
@@ -136,9 +141,13 @@ fn match_test() {
             whatami::CLIENT,
             Some(HLC::default()),
         );
-        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
+        let primitives = Arc::new(ClientPrimitives::new());
         let face = tables
-            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .open_face(
+                PeerId::new(0, [0; 16]),
+                whatami::CLIENT,
+                OutSession::Primitives(primitives.clone()),
+            )
             .await;
         for (i, rname) in rnames.iter().enumerate() {
             declare_resource(
@@ -177,9 +186,13 @@ fn clean_test() {
             Some(HLC::default()),
         );
 
-        let primitives = Arc::new(Mux::new(Arc::new(DummySessionEventHandler::new())));
+        let primitives = Arc::new(ClientPrimitives::new());
         let face0 = tables
-            .open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone())
+            .open_face(
+                PeerId::new(0, [0; 16]),
+                whatami::CLIENT,
+                OutSession::Primitives(primitives.clone()),
+            )
             .await;
         assert!(face0.upgrade().is_some());
 
@@ -410,7 +423,7 @@ impl ClientPrimitives {
 
 #[async_trait]
 impl Primitives for ClientPrimitives {
-    async fn resource(&self, rid: ZInt, reskey: &ResKey) {
+    async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let name = self.get_name(reskey);
         self.mapping.lock().unwrap().insert(rid, name);
     }
@@ -418,10 +431,10 @@ impl Primitives for ClientPrimitives {
         self.mapping.lock().unwrap().remove(&rid);
     }
 
-    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    async fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
     async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn subscriber(
+    async fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
@@ -430,10 +443,10 @@ impl Primitives for ClientPrimitives {
     }
     async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    async fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
     async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn data(
+    async fn send_data(
         &self,
         reskey: &ResKey,
         _payload: RBuf,
@@ -444,7 +457,7 @@ impl Primitives for ClientPrimitives {
     ) {
         *self.data.lock().unwrap() = Some(reskey.clone());
     }
-    async fn query(
+    async fn send_query(
         &self,
         _reskey: &ResKey,
         _predicate: &str,
@@ -454,7 +467,7 @@ impl Primitives for ClientPrimitives {
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    async fn reply_data(
+    async fn send_reply_data(
         &self,
         _qid: ZInt,
         _source_kind: ZInt,
@@ -464,8 +477,8 @@ impl Primitives for ClientPrimitives {
         _payload: RBuf,
     ) {
     }
-    async fn reply_final(&self, _qid: ZInt) {}
-    async fn pull(
+    async fn send_reply_final(&self, _qid: ZInt) {}
+    async fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -474,7 +487,7 @@ impl Primitives for ClientPrimitives {
     ) {
     }
 
-    async fn close(&self) {}
+    async fn send_close(&self) {}
 }
 
 #[test]
@@ -496,7 +509,7 @@ fn client_test() {
             .open_face(
                 PeerId::new(0, [0; 16]),
                 whatami::CLIENT,
-                primitives0.clone(),
+                OutSession::Primitives(primitives0.clone()),
             )
             .await;
         declare_resource(
@@ -508,7 +521,7 @@ fn client_test() {
         )
         .await;
         primitives0
-            .resource(11, &ResKey::RName("/test/client".to_string()))
+            .decl_resource(11, &ResKey::RName("/test/client".to_string()))
             .await;
         declare_client_subscription(
             &mut tables,
@@ -527,7 +540,7 @@ fn client_test() {
         )
         .await;
         primitives0
-            .resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".to_string()))
+            .decl_resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".to_string()))
             .await;
 
         let primitives1 = Arc::new(ClientPrimitives::new());
@@ -535,7 +548,7 @@ fn client_test() {
             .open_face(
                 PeerId::new(0, [0; 16]),
                 whatami::CLIENT,
-                primitives1.clone(),
+                OutSession::Primitives(primitives1.clone()),
             )
             .await;
         declare_resource(
@@ -547,7 +560,7 @@ fn client_test() {
         )
         .await;
         primitives1
-            .resource(21, &ResKey::RName("/test/client".to_string()))
+            .decl_resource(21, &ResKey::RName("/test/client".to_string()))
             .await;
         declare_client_subscription(
             &mut tables,
@@ -566,7 +579,7 @@ fn client_test() {
         )
         .await;
         primitives1
-            .resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".to_string()))
+            .decl_resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".to_string()))
             .await;
 
         let primitives2 = Arc::new(ClientPrimitives::new());
@@ -574,7 +587,7 @@ fn client_test() {
             .open_face(
                 PeerId::new(0, [0; 16]),
                 whatami::CLIENT,
-                primitives2.clone(),
+                OutSession::Primitives(primitives2.clone()),
             )
             .await;
         declare_resource(
@@ -586,7 +599,7 @@ fn client_test() {
         )
         .await;
         primitives2
-            .resource(31, &ResKey::RName("/test/client".to_string()))
+            .decl_resource(31, &ResKey::RName("/test/client".to_string()))
             .await;
         declare_client_subscription(
             &mut tables,

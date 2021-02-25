@@ -16,10 +16,11 @@ pub mod orchestrator;
 
 use super::plugins;
 use super::protocol;
+use super::routing;
 
 use super::protocol::core::{whatami, PeerId};
 use super::protocol::session::{
-    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
+    SessionDispatcher, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use super::routing::router::Router;
 pub use adminspace::AdminSpace;
@@ -92,7 +93,7 @@ impl Runtime {
             version,
             whatami,
             id: pid.clone(),
-            handler: Arc::new(orchestrator.clone()),
+            handler: SessionDispatcher::SessionOrchestrator(Arc::new(orchestrator.clone())),
         };
         let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
 

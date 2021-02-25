@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
+use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_rustls::{rustls::internal::pemfile, TlsAcceptor, TlsConnector, TlsStream};
@@ -298,7 +298,7 @@ impl From<(Option<ClientConfig>, Option<ServerConfig>)> for LocatorProperty {
 /*************************************/
 /*              LINK                 */
 /*************************************/
-pub struct Tls {
+pub struct LinkTls {
     // The underlying socket as returned from the async-rustls library
     // NOTE: TlsStream requires &mut for read and write operations. This means
     //       that concurrent reads and writes are not possible. To achieve that,
@@ -314,8 +314,11 @@ pub struct Tls {
     dst_addr: SocketAddr,
 }
 
-impl Tls {
-    fn new(socket: TlsStream<TcpStream>, src_addr: SocketAddr, dst_addr: SocketAddr) -> Tls {
+unsafe impl Send for LinkTls {}
+unsafe impl Sync for LinkTls {}
+
+impl LinkTls {
+    fn new(socket: TlsStream<TcpStream>, src_addr: SocketAddr, dst_addr: SocketAddr) -> LinkTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
         if let Err(err) = tcp_stream.set_nodelay(true) {
@@ -343,7 +346,7 @@ impl Tls {
         }
 
         // Build the Tls object
-        Tls {
+        LinkTls {
             inner: UnsafeCell::new(socket),
             src_addr,
             dst_addr,
@@ -357,14 +360,8 @@ impl Tls {
     fn get_sock_mut(&self) -> &mut TlsStream<TcpStream> {
         unsafe { &mut *self.inner.get() }
     }
-}
 
-unsafe impl Send for Tls {}
-unsafe impl Sync for Tls {}
-
-#[async_trait]
-impl LinkTrait for Tls {
-    async fn close(&self) -> ZResult<()> {
+    pub(crate) async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
         let tls_stream = self.get_sock_mut();
@@ -382,7 +379,7 @@ impl LinkTrait for Tls {
     }
 
     #[inline]
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match self.get_sock_mut().write(buffer).await {
             Ok(n) => Ok(n),
             Err(e) => {
@@ -395,7 +392,7 @@ impl LinkTrait for Tls {
     }
 
     #[inline]
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         match self.get_sock_mut().write_all(buffer).await {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -408,7 +405,7 @@ impl LinkTrait for Tls {
     }
 
     #[inline]
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match self.get_sock_mut().read(buffer).await {
             Ok(n) => Ok(n),
             Err(e) => {
@@ -421,7 +418,7 @@ impl LinkTrait for Tls {
     }
 
     #[inline]
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         match self.get_sock_mut().read_exact(buffer).await {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -434,32 +431,32 @@ impl LinkTrait for Tls {
     }
 
     #[inline]
-    fn get_src(&self) -> Locator {
+    pub(crate) fn get_src(&self) -> Locator {
         Locator::Tls(LocatorTls::SocketAddr(self.src_addr))
     }
 
     #[inline]
-    fn get_dst(&self) -> Locator {
+    pub(crate) fn get_dst(&self) -> Locator {
         Locator::Tls(LocatorTls::SocketAddr(self.dst_addr))
     }
 
     #[inline]
-    fn get_mtu(&self) -> usize {
+    pub(crate) fn get_mtu(&self) -> usize {
         *TLS_DEFAULT_MTU
     }
 
     #[inline]
-    fn is_reliable(&self) -> bool {
+    pub(crate) fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline]
-    fn is_streamed(&self) -> bool {
+    pub(crate) fn is_streamed(&self) -> bool {
         true
     }
 }
 
-impl Drop for Tls {
+impl Drop for LinkTls {
     fn drop(&mut self) {
         // Close the underlying TCP stream
         let (tcp_stream, _) = self.get_sock_mut().get_ref();
@@ -467,14 +464,14 @@ impl Drop for Tls {
     }
 }
 
-impl fmt::Display for Tls {
+impl fmt::Display for LinkTls {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_addr, self.dst_addr)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for Tls {
+impl fmt::Debug for LinkTls {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tls")
             .field("src", &self.src_addr)
@@ -569,9 +566,9 @@ impl LinkManagerTrait for LinkManagerTls {
             })?;
         let tls_stream = TlsStream::Client(tls_stream);
 
-        let link = Arc::new(Tls::new(tls_stream, src_addr, dst_addr));
+        let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
 
-        Ok(Link::new(link))
+        Ok(Link::Tls(link))
     }
 
     async fn new_listener(
@@ -742,10 +739,10 @@ async fn accept_task(listener: Arc<ListenerTls>, manager: SessionManager) {
 
             log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
             // Create the new link object
-            let link = Arc::new(Tls::new(tls_stream, src_addr, dst_addr));
+            let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
 
             // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::new(link), None).await;
+            manager.handle_new_link(Link::Tls(link), None).await;
         }
     };
 

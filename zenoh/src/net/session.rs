@@ -12,12 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::info::*;
+use super::routing::face::Face;
 use super::*;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task;
-use async_trait::async_trait;
 use log::{error, trace, warn};
 use protocol::{
     core::{
@@ -26,8 +26,8 @@ use protocol::{
     },
     io::RBuf,
     proto::RoutingContext,
-    session::Primitives,
 };
+use routing::OutSession;
 use runtime::Runtime;
 use std::collections::HashMap;
 use std::fmt;
@@ -45,8 +45,8 @@ zconfigurable! {
 }
 
 pub(crate) struct SessionState {
-    primitives: Option<Arc<dyn Primitives + Send + Sync>>, // @TODO replace with MaybeUninit ??
-    rid_counter: AtomicUsize,                              // @TODO: manage rollover and uniqueness
+    primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
+    rid_counter: AtomicUsize,      // @TODO: manage rollover and uniqueness
     qid_counter: AtomicZInt,
     decl_id_counter: AtomicUsize,
     local_resources: HashMap<ResourceId, Resource>,
@@ -248,7 +248,11 @@ impl Session {
             state: state.clone(),
             alive: true,
         };
-        let primitives = Some(router.new_primitives(Arc::new(session.clone())).await);
+        let primitives = Some(
+            router
+                .new_primitives(OutSession::User(Arc::new(session.clone())))
+                .await,
+        );
         state.write().await.primitives = primitives;
         session
     }
@@ -390,7 +394,7 @@ impl Session {
 
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
-                primitives.resource(rid, resource).await;
+                primitives.decl_resource(rid, resource).await;
 
                 Ok(rid)
             }
@@ -479,7 +483,7 @@ impl Session {
         if let Some(res) = declared_pub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.publisher(&res, None).await;
+            primitives.decl_publisher(&res, None).await;
         }
 
         Ok(Publisher {
@@ -594,7 +598,7 @@ impl Session {
                 reskey => reskey,
             };
 
-            primitives.subscriber(&reskey, info, None).await;
+            primitives.decl_subscriber(&reskey, info, None).await;
         }
 
         Ok(sub_state)
@@ -782,7 +786,7 @@ impl Session {
         if !twin_qable {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.queryable(resource, None).await;
+            primitives.decl_queryable(resource, None).await;
         }
 
         Ok(Queryable {
@@ -834,7 +838,7 @@ impl Session {
         let local_routing = state.local_routing;
         drop(state);
         primitives
-            .data(
+            .send_data(
                 resource,
                 payload.clone(),
                 Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
@@ -892,7 +896,7 @@ impl Session {
         };
         let data_info = Some(info);
         primitives
-            .data(
+            .send_data(
                 resource,
                 payload.clone(),
                 Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
@@ -1113,11 +1117,7 @@ impl Session {
                         .map(|qable| (qable.kind, qable.q_sender.clone()))
                         .collect::<Vec<(ZInt, Sender<Query>)>>();
                     (
-                        if local {
-                            Arc::new(self.clone())
-                        } else {
-                            state.primitives.as_ref().unwrap().clone()
-                        },
+                        state.primitives.as_ref().unwrap().clone(),
                         resname,
                         kinds_and_senders,
                     )
@@ -1148,10 +1148,12 @@ impl Session {
         drop(rep_sender); // all senders need to be dropped for the channel to close
 
         // router is not re-entrant
-        task::spawn(async move {
-            while let Some((kind, sample)) = rep_receiver.next().await {
-                primitives
-                    .reply_data(
+
+        if local {
+            let this = self.clone();
+            task::spawn(async move {
+                while let Some((kind, sample)) = rep_receiver.next().await {
+                    this.send_reply_data(
                         qid,
                         kind,
                         pid.clone(),
@@ -1160,16 +1162,30 @@ impl Session {
                         sample.payload,
                     )
                     .await;
-            }
-            primitives.reply_final(qid).await;
-        });
+                }
+                this.send_reply_final(qid).await;
+            });
+        } else {
+            task::spawn(async move {
+                while let Some((kind, sample)) = rep_receiver.next().await {
+                    primitives
+                        .send_reply_data(
+                            qid,
+                            kind,
+                            pid.clone(),
+                            ResKey::RName(sample.res_name),
+                            sample.data_info,
+                            sample.payload,
+                        )
+                        .await;
+                }
+                primitives.send_reply_final(qid).await;
+            });
+        }
     }
-}
 
-#[async_trait]
-impl Primitives for Session {
-    async fn resource(&self, rid: ZInt, reskey: &ResKey) {
-        trace!("recv Resource {} {:?}", rid, reskey);
+    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+        trace!("recv Decl Resource {} {:?}", rid, reskey);
         let state = &mut self.state.write().await;
         match state.remotekey_to_resname(reskey) {
             Ok(resname) => {
@@ -1186,40 +1202,60 @@ impl Primitives for Session {
         }
     }
 
-    async fn forget_resource(&self, _rid: ZInt) {
+    pub(crate) async fn forget_resource(&self, _rid: ZInt) {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Publisher {:?}", _reskey);
+    pub(crate) async fn decl_publisher(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
+        trace!("recv Decl Publisher {:?}", _reskey);
     }
 
-    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_publisher(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    async fn subscriber(
+    pub(crate) async fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
-        trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
+        trace!("recv Decl Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_subscriber(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    async fn queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Queryable {:?}", _reskey);
+    pub(crate) async fn decl_queryable(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
+        trace!("recv Decl Queryable {:?}", _reskey);
     }
 
-    async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(
+    pub(crate) async fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -1239,7 +1275,7 @@ impl Primitives for Session {
         self.handle_data(false, reskey, info, payload).await
     }
 
-    async fn query(
+    pub(crate) async fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -1259,7 +1295,7 @@ impl Primitives for Session {
             .await
     }
 
-    async fn reply_data(
+    pub(crate) async fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -1361,7 +1397,7 @@ impl Primitives for Session {
         }
     }
 
-    async fn reply_final(&self, qid: ZInt) {
+    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
         let mut state = self.state.write().await;
         match state.queries.get_mut(&qid) {
@@ -1382,7 +1418,7 @@ impl Primitives for Session {
         }
     }
 
-    async fn pull(
+    pub(crate) async fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -1398,7 +1434,7 @@ impl Primitives for Session {
         );
     }
 
-    async fn close(&self) {
+    pub(crate) async fn send_close(&self) {
         trace!("recv Close");
     }
 }

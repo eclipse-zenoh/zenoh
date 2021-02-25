@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
+use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::{Path, PathBuf};
@@ -115,7 +115,7 @@ pub type LocatorPropertyUnixSocketStream = ();
 /*************************************/
 /*              LINK                 */
 /*************************************/
-pub struct UnixSocketStream {
+pub struct LinkUnixSocketStream {
     // The underlying socket as returned from the async-std library
     socket: UnixStream,
     // The Unix domain socket source path
@@ -124,19 +124,16 @@ pub struct UnixSocketStream {
     dst_path: String,
 }
 
-impl UnixSocketStream {
-    fn new(socket: UnixStream, src_path: String, dst_path: String) -> UnixSocketStream {
-        UnixSocketStream {
+impl LinkUnixSocketStream {
+    fn new(socket: UnixStream, src_path: String, dst_path: String) -> LinkUnixSocketStream {
+        LinkUnixSocketStream {
             socket,
             src_path,
             dst_path,
         }
     }
-}
 
-#[async_trait]
-impl LinkTrait for UnixSocketStream {
-    async fn close(&self) -> ZResult<()> {
+    pub(crate) async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UnixSocketStream link: {}", self);
         // Close the underlying UnixSocketStream socket
         let res = self.socket.shutdown(Shutdown::Both);
@@ -149,7 +146,7 @@ impl LinkTrait for UnixSocketStream {
     }
 
     #[inline]
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match (&self.socket).write(buffer).await {
             Ok(n) => Ok(n),
             Err(e) => {
@@ -166,7 +163,7 @@ impl LinkTrait for UnixSocketStream {
     }
 
     #[inline]
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         match (&self.socket).write_all(buffer).await {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -183,7 +180,7 @@ impl LinkTrait for UnixSocketStream {
     }
 
     #[inline]
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match (&self.socket).read(buffer).await {
             Ok(n) => Ok(n),
             Err(e) => {
@@ -196,7 +193,7 @@ impl LinkTrait for UnixSocketStream {
     }
 
     #[inline]
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         match (&self.socket).read_exact(buffer).await {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -209,50 +206,50 @@ impl LinkTrait for UnixSocketStream {
     }
 
     #[inline]
-    fn get_src(&self) -> Locator {
+    pub(crate) fn get_src(&self) -> Locator {
         Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
             self.src_path.clone(),
         )))
     }
 
     #[inline]
-    fn get_dst(&self) -> Locator {
+    pub(crate) fn get_dst(&self) -> Locator {
         Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
             self.dst_path.clone(),
         )))
     }
 
     #[inline]
-    fn get_mtu(&self) -> usize {
+    pub(crate) fn get_mtu(&self) -> usize {
         *UNIXSOCKSTREAM_DEFAULT_MTU
     }
 
     #[inline]
-    fn is_reliable(&self) -> bool {
+    pub(crate) fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline]
-    fn is_streamed(&self) -> bool {
+    pub(crate) fn is_streamed(&self) -> bool {
         true
     }
 }
 
-impl Drop for UnixSocketStream {
+impl Drop for LinkUnixSocketStream {
     fn drop(&mut self) {
         // Close the underlying UnixSocketStream socket
         let _ = self.socket.shutdown(Shutdown::Both);
     }
 }
 
-impl fmt::Display for UnixSocketStream {
+impl fmt::Display for LinkUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_path, self.dst_path)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for UnixSocketStream {
+impl fmt::Debug for LinkUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UnixSocketStream")
             .field("src", &self.src_path)
@@ -379,13 +376,13 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
             }
         };
 
-        let link = Arc::new(UnixSocketStream::new(
+        let link = Arc::new(LinkUnixSocketStream::new(
             stream,
             local_path_str,
             remote_path_str,
         ));
 
-        Ok(Link::new(link))
+        Ok(Link::UnixSocketStream(link))
     }
 
     async fn new_listener(
@@ -660,10 +657,12 @@ async fn accept_task(listener: Arc<ListenerUnixSocketStream>, manager: SessionMa
             log::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
 
             // Create the new link object
-            let link = Arc::new(UnixSocketStream::new(stream, src_path, dst_path));
+            let link = Arc::new(LinkUnixSocketStream::new(stream, src_path, dst_path));
 
             // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::new(link), None).await;
+            manager
+                .handle_new_link(Link::UnixSocketStream(link), None)
+                .await;
         }
     };
 

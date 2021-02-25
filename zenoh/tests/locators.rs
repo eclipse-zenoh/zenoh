@@ -20,8 +20,8 @@ use zenoh::net::protocol::link::tls::{NoClientAuth, ServerConfig};
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
+    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 
@@ -78,7 +78,7 @@ async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>
         version: 0,
         whatami: whatami::PEER,
         id: PeerId::new(1, [0u8; PeerId::MAX_SIZE]),
-        handler: Arc::new(SH::new()),
+        handler: SessionDispatcher::SessionHandler(Arc::new(SH::new())),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,

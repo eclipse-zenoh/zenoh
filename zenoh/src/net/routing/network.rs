@@ -19,7 +19,7 @@ use std::convert::TryInto;
 use super::protocol::core::{whatami, PeerId, ZInt};
 use super::protocol::link::Locator;
 use super::protocol::proto::{LinkState, ZenohMessage};
-use super::protocol::session::{Session, SessionEventHandler};
+use super::protocol::session::Session;
 
 use super::runtime::orchestrator::SessionOrchestrator;
 

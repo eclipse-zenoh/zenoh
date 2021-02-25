@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::{Arc, RwLock};
-use async_trait::async_trait;
 use std::collections::HashMap;
 
 use super::protocol::core::{
@@ -21,14 +20,14 @@ use super::protocol::core::{
 };
 use super::protocol::io::RBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
-use super::protocol::session::Primitives;
 use super::router::*;
+use super::OutSession;
 
 pub struct FaceState {
     pub(super) id: usize,
     pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
-    pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
+    pub(super) primitives: OutSession,
     pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) local_subs: Vec<Arc<Resource>>,
@@ -44,7 +43,7 @@ impl FaceState {
         id: usize,
         pid: PeerId,
         whatami: WhatAmI,
-        primitives: Arc<dyn Primitives + Send + Sync>,
+        primitives: OutSession,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
@@ -87,20 +86,19 @@ pub struct Face {
     pub(super) state: Arc<FaceState>,
 }
 
-#[async_trait]
-impl Primitives for Face {
-    async fn resource(&self, rid: ZInt, reskey: &ResKey) {
+impl Face {
+    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix).await;
     }
 
-    async fn forget_resource(&self, rid: ZInt) {
+    pub(crate) async fn forget_resource(&self, rid: ZInt) {
         let mut tables = self.tables.write().await;
         undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
     }
 
-    async fn subscriber(
+    pub(crate) async fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
@@ -199,7 +197,11 @@ impl Primitives for Face {
         }
     }
 
-    async fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_subscriber(
+        &self,
+        reskey: &ResKey,
+        routing_context: Option<RoutingContext>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         match (tables.whatami, self.state.whatami) {
@@ -285,11 +287,25 @@ impl Primitives for Face {
         }
     }
 
-    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    pub(crate) async fn decl_publisher(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
+    }
 
-    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    pub(crate) async fn forget_publisher(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
+    }
 
-    async fn queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    pub(crate) async fn decl_queryable(
+        &self,
+        reskey: &ResKey,
+        routing_context: Option<RoutingContext>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         match (tables.whatami, self.state.whatami) {
@@ -375,7 +391,11 @@ impl Primitives for Face {
         }
     }
 
-    async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_queryable(
+        &self,
+        reskey: &ResKey,
+        routing_context: Option<RoutingContext>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         match (tables.whatami, self.state.whatami) {
@@ -461,7 +481,7 @@ impl Primitives for Face {
         }
     }
 
-    async fn data(
+    pub(crate) async fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -485,7 +505,7 @@ impl Primitives for Face {
         .await;
     }
 
-    async fn query(
+    pub(crate) async fn query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -510,7 +530,7 @@ impl Primitives for Face {
         .await;
     }
 
-    async fn reply_data(
+    pub(crate) async fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -520,7 +540,7 @@ impl Primitives for Face {
         payload: RBuf,
     ) {
         let mut tables = self.tables.write().await;
-        route_reply_data(
+        route_send_reply_data(
             &mut tables,
             &mut self.state.clone(),
             qid,
@@ -533,12 +553,12 @@ impl Primitives for Face {
         .await;
     }
 
-    async fn reply_final(&self, qid: ZInt) {
+    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
         let mut tables = self.tables.write().await;
-        route_reply_final(&mut tables, &mut self.state.clone(), qid).await;
+        route_send_reply_final(&mut tables, &mut self.state.clone(), qid).await;
     }
 
-    async fn pull(
+    pub(crate) async fn pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
@@ -559,7 +579,7 @@ impl Primitives for Face {
         .await;
     }
 
-    async fn close(&self) {
+    pub(crate) async fn close(&self) {
         self.tables
             .write()
             .await

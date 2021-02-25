@@ -54,7 +54,7 @@ async fn send_sourced_subscription_to_net_childs(
 
                         someface
                             .primitives
-                            .subscriber(&reskey, sub_info, routing_context)
+                            .decl_subscriber(&reskey, sub_info, routing_context)
                             .await;
                     }
                 }
@@ -88,7 +88,7 @@ async fn propagate_simple_subscription(
                 let reskey = Resource::decl_key(res, dst_face).await;
                 dst_face
                     .primitives
-                    .subscriber(&reskey, sub_info, None)
+                    .decl_subscriber(&reskey, sub_info, None)
                     .await;
             }
         }
@@ -630,7 +630,9 @@ pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<F
         unsafe {
             Arc::get_mut_unchecked(face).local_subs.push(sub.clone());
             let reskey = Resource::decl_key(&sub, face).await;
-            face.primitives.subscriber(&reskey, &sub_info, None).await;
+            face.primitives
+                .decl_subscriber(&reskey, &sub_info, None)
+                .await;
         }
     }
 }
@@ -1068,7 +1070,7 @@ pub async fn route_data(
                     if face.id != outface.id {
                         outface
                             .primitives
-                            .data(
+                            .send_data(
                                 &reskey,
                                 payload.clone(),
                                 Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
@@ -1146,7 +1148,7 @@ pub async fn pull_data(
                                 let reskey =
                                     Resource::get_best_key(&tables.root_res, name, face.id);
                                 face.primitives
-                                    .data(
+                                    .send_data(
                                         &reskey,
                                         data.clone(),
                                         subinfo.reliability,

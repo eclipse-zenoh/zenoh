@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
+use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use async_std::prelude::*;
@@ -130,7 +130,7 @@ pub type LocatorPropertyUdp = ();
 /*************************************/
 /*              LINK                 */
 /*************************************/
-type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<Udp>>>>;
+type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUdp>>>>;
 
 struct UnconnectedUdp {
     links: LinkHashMap,
@@ -140,7 +140,7 @@ struct UnconnectedUdp {
     leftover: Mutex<Option<(RecyclingBuffer, usize, usize)>>,
 }
 
-pub struct Udp {
+pub struct LinkUdp {
     // The underlying socket as returned from the async-std library
     socket: Arc<UdpSocket>,
     // The source socket address of this link (address used on the local host)
@@ -151,14 +151,14 @@ pub struct Udp {
     unconnected: Option<UnconnectedUdp>,
 }
 
-impl Udp {
+impl LinkUdp {
     fn new(
         socket: Arc<UdpSocket>,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
         unconnected: Option<UnconnectedUdp>,
-    ) -> Udp {
-        Udp {
+    ) -> LinkUdp {
+        LinkUdp {
             socket,
             src_addr,
             dst_addr,
@@ -212,11 +212,8 @@ impl Udp {
             }
         }
     }
-}
 
-#[async_trait]
-impl LinkTrait for Udp {
-    async fn close(&self) -> ZResult<()> {
+    pub(crate) async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
         if let Some(unconnected) = self.unconnected.as_ref() {
             // Delete the link from the list of links
@@ -230,7 +227,7 @@ impl LinkTrait for Udp {
     }
 
     #[inline]
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let res = if self.unconnected.is_some() {
             (&self.socket).send_to(buffer, &self.dst_addr).await
         } else {
@@ -248,7 +245,7 @@ impl LinkTrait for Udp {
     }
 
     #[inline]
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut written: usize = 0;
         while written < buffer.len() {
             written += self.write(&buffer[written..]).await?;
@@ -257,7 +254,7 @@ impl LinkTrait for Udp {
     }
 
     #[inline]
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         if self.unconnected.is_some() {
             self.read_unconnected(buffer).await
         } else {
@@ -266,7 +263,7 @@ impl LinkTrait for Udp {
     }
 
     #[inline]
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let mut read: usize = 0;
         loop {
             let n = self.read(&mut buffer[read..]).await?;
@@ -278,39 +275,39 @@ impl LinkTrait for Udp {
     }
 
     #[inline]
-    fn get_src(&self) -> Locator {
+    pub(crate) fn get_src(&self) -> Locator {
         Locator::Udp(LocatorUdp::SocketAddr(self.src_addr))
     }
 
     #[inline]
-    fn get_dst(&self) -> Locator {
+    pub(crate) fn get_dst(&self) -> Locator {
         Locator::Udp(LocatorUdp::SocketAddr(self.dst_addr))
     }
 
     #[inline]
-    fn get_mtu(&self) -> usize {
+    pub(crate) fn get_mtu(&self) -> usize {
         *UDP_DEFAULT_MTU
     }
 
     #[inline]
-    fn is_reliable(&self) -> bool {
+    pub(crate) fn is_reliable(&self) -> bool {
         false
     }
 
     #[inline]
-    fn is_streamed(&self) -> bool {
+    pub(crate) fn is_streamed(&self) -> bool {
         false
     }
 }
 
-impl fmt::Display for Udp {
+impl fmt::Display for LinkUdp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_addr, self.dst_addr)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for Udp {
+impl fmt::Debug for LinkUdp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Udp")
             .field("src", &self.src_addr)
@@ -387,8 +384,8 @@ impl LinkManagerTrait for LinkManagerUdp {
         };
 
         // Create UDP link
-        let link = Arc::new(Udp::new(Arc::new(socket), src_addr, dst_addr, None));
-        let lobj = Link::new(link);
+        let link = Arc::new(LinkUdp::new(Arc::new(socket), src_addr, dst_addr, None));
+        let lobj = Link::Udp(link);
 
         Ok(lobj)
     }
@@ -611,7 +608,7 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
                                 leftover: Mutex::new(None),
                             };
                             // Create the new link object
-                            let link = Arc::new(Udp::new(
+                            let link = Arc::new(LinkUdp::new(
                                 listener.socket.clone(),
                                 src_addr,
                                 dst_addr,
@@ -620,7 +617,7 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
                             // Add the new link to the set of connected peers
                             zaddlink!(src_addr, dst_addr, Arc::downgrade(&link));
 
-                            manager.handle_new_link(Link::new(link), None).await;
+                            manager.handle_new_link(Link::Udp(link), None).await;
                         } else {
                             log::debug!(
                                 "Rejected UDP connection from {}: listerner {} is not active",

@@ -31,13 +31,13 @@ pub use mux::*;
 
 #[async_trait]
 pub trait Primitives {
-    async fn resource(&self, rid: ZInt, reskey: &ResKey);
+    async fn decl_resource(&self, rid: ZInt, reskey: &ResKey);
     async fn forget_resource(&self, rid: ZInt);
 
-    async fn publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    async fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
     async fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn subscriber(
+    async fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
@@ -45,10 +45,10 @@ pub trait Primitives {
     );
     async fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    async fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
     async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn data(
+    async fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -58,7 +58,7 @@ pub trait Primitives {
         routing_context: Option<RoutingContext>,
     );
 
-    async fn query(
+    async fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -68,7 +68,7 @@ pub trait Primitives {
         routing_context: Option<RoutingContext>,
     );
 
-    async fn reply_data(
+    async fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -78,9 +78,9 @@ pub trait Primitives {
         payload: RBuf,
     );
 
-    async fn reply_final(&self, qid: ZInt);
+    async fn send_reply_final(&self, qid: ZInt);
 
-    async fn pull(
+    async fn send_pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
@@ -88,5 +88,5 @@ pub trait Primitives {
         max_samples: &Option<ZInt>,
     );
 
-    async fn close(&self);
+    async fn send_close(&self);
 }

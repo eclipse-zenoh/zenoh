@@ -15,10 +15,10 @@ use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::io::{RBuf, WBuf};
 use super::protocol::link::{Link, Locator};
 use super::protocol::proto::{Hello, Scout, SessionBody, SessionMessage, ZenohMessage};
-use super::protocol::session::{Session, SessionEventHandler, SessionHandler, SessionManager};
+use super::protocol::session::{Session, SessionEventDispatcher, SessionManager};
+use super::routing::router::{LinkStateInterceptor, Router};
 use async_std::net::UdpSocket;
 use async_std::sync::{Arc, RwLock};
-use async_trait::async_trait;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -47,14 +47,11 @@ pub enum Loop {
 pub struct SessionOrchestrator {
     pub whatami: WhatAmI,
     pub manager: Arc<RwLock<Option<SessionManager>>>,
-    pub sub_handler: Arc<dyn SessionHandler + Send + Sync>,
+    pub sub_handler: Arc<Router>,
 }
 
 impl SessionOrchestrator {
-    pub fn new(
-        whatami: WhatAmI,
-        sub_handler: Arc<dyn SessionHandler + Send + Sync>,
-    ) -> SessionOrchestrator {
+    pub fn new(whatami: WhatAmI, sub_handler: Arc<Router>) -> SessionOrchestrator {
         SessionOrchestrator {
             whatami,
             manager: Arc::new(RwLock::new(None)),
@@ -419,10 +416,9 @@ impl SessionOrchestrator {
             log::trace!("Trying to connect to configured peer {}", peer);
             if let Ok(session) = self.manager().await.open_session(&peer).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
-                unsafe {
-                    let orch_session = Arc::from_raw(Arc::into_raw(
-                        session.get_callback().await.unwrap().unwrap(),
-                    ) as *const OrchSession);
+                if let SessionEventDispatcher::OrchSession(orch_session) =
+                    session.get_callback().await.unwrap().unwrap()
+                {
                     *orch_session.locator.write().await = Some(peer);
                 }
                 break;
@@ -619,14 +615,8 @@ impl SessionOrchestrator {
         }
         Ok(())
     }
-}
 
-#[async_trait]
-impl SessionHandler for SessionOrchestrator {
-    async fn new_session(
-        &self,
-        session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    pub(crate) async fn new_session(&self, session: Session) -> ZResult<Arc<OrchSession>> {
         Ok(Arc::new(OrchSession {
             orchestrator: self.clone(),
             locator: RwLock::new(None),
@@ -638,25 +628,24 @@ impl SessionHandler for SessionOrchestrator {
 pub struct OrchSession {
     orchestrator: SessionOrchestrator,
     locator: RwLock<Option<Locator>>,
-    sub_event_handler: Arc<dyn SessionEventHandler + Send + Sync>,
+    sub_event_handler: Arc<LinkStateInterceptor>,
 }
 
-#[async_trait]
-impl SessionEventHandler for OrchSession {
-    async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+impl OrchSession {
+    pub(crate) async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         log::trace!("handle_message {:?}", msg);
         self.sub_event_handler.handle_message(msg).await
     }
 
-    async fn new_link(&self, link: Link) {
+    pub(crate) async fn new_link(&self, link: Link) {
         self.sub_event_handler.new_link(link).await
     }
 
-    async fn del_link(&self, link: Link) {
+    pub(crate) async fn del_link(&self, link: Link) {
         self.sub_event_handler.del_link(link).await
     }
 
-    async fn closing(&self) {
+    pub(crate) async fn closing(&self) {
         self.sub_event_handler.closing().await;
         if let Some(locator) = &*self.locator.read().await {
             let locator = locator.clone();
@@ -665,7 +654,7 @@ impl SessionEventHandler for OrchSession {
         }
     }
 
-    async fn closed(&self) {
+    pub(crate) async fn closed(&self) {
         self.sub_event_handler.closed().await
     }
 }

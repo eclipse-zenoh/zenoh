@@ -54,7 +54,7 @@ async fn send_sourced_queryable_to_net_childs(
 
                         someface
                             .primitives
-                            .queryable(&reskey, routing_context)
+                            .decl_queryable(&reskey, routing_context)
                             .await;
                     }
                 }
@@ -85,7 +85,7 @@ async fn propagate_simple_queryable(
                     .local_qabls
                     .push(res.clone());
                 let reskey = Resource::decl_key(res, dst_face).await;
-                dst_face.primitives.queryable(&reskey, None).await;
+                dst_face.primitives.decl_queryable(&reskey, None).await;
             }
         }
     }
@@ -570,7 +570,7 @@ pub(crate) async fn queries_new_client_face(tables: &mut Tables, face: &mut Arc<
         unsafe {
             Arc::get_mut_unchecked(face).local_qabls.push(qabl.clone());
             let reskey = Resource::decl_key(&qabl, face).await;
-            face.primitives.queryable(&reskey, None).await;
+            face.primitives.decl_queryable(&reskey, None).await;
         }
     }
 }
@@ -956,7 +956,7 @@ pub async fn route_query(
                     face.id,
                     qid
                 );
-                face.primitives.clone().reply_final(qid).await
+                face.primitives.clone().send_reply_final(qid).await
             } else {
                 let query = Arc::new(Query {
                     src_face: face.clone(),
@@ -973,7 +973,7 @@ pub async fn route_query(
 
                         outface
                             .primitives
-                            .query(
+                            .send_query(
                                 &reskey,
                                 predicate,
                                 qid,
@@ -988,13 +988,13 @@ pub async fn route_query(
         },
         None => {
             log::error!("Route query with unknown rid {}! Send final reply.", rid);
-            face.primitives.clone().reply_final(qid).await
+            face.primitives.clone().send_reply_final(qid).await
         }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn route_reply_data(
+pub(crate) async fn route_send_reply_data(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     qid: ZInt,
@@ -1010,7 +1010,7 @@ pub(crate) async fn route_reply_data(
                 .src_face
                 .primitives
                 .clone()
-                .reply_data(
+                .send_reply_data(
                     query.src_qid,
                     source_kind,
                     replier_id,
@@ -1024,7 +1024,11 @@ pub(crate) async fn route_reply_data(
     }
 }
 
-pub(crate) async fn route_reply_final(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt) {
+pub(crate) async fn route_send_reply_final(
+    _tables: &mut Tables,
+    face: &mut Arc<FaceState>,
+    qid: ZInt,
+) {
     match face.pending_queries.get(&qid) {
         Some(query) => unsafe {
             log::debug!(
@@ -1039,7 +1043,7 @@ pub(crate) async fn route_reply_final(_tables: &mut Tables, face: &mut Arc<FaceS
                     .src_face
                     .primitives
                     .clone()
-                    .reply_final(query.src_qid)
+                    .send_reply_final(query.src_qid)
                     .await;
             }
             Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
@@ -1066,7 +1070,7 @@ pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Ar
                 .src_face
                 .primitives
                 .clone()
-                .reply_final(query.src_qid)
+                .send_reply_final(query.src_qid)
                 .await;
         }
     }

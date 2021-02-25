@@ -11,47 +11,45 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_trait::async_trait;
-
+use super::super::super::super::routing::face::Face;
 use super::link::Link;
 use super::proto::{
     zmsg, Data, Declaration, Declare, LinkStateList, Pull, Query, ZenohBody, ZenohMessage,
 };
-use super::session::SessionEventHandler;
-use super::Primitives;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
-pub struct DeMux<P: Primitives + Send + Sync> {
-    primitives: P,
+pub struct DeMux {
+    primitives: Face,
 }
 
-impl<P: Primitives + Send + Sync> DeMux<P> {
-    pub fn new(primitives: P) -> DeMux<P> {
+impl DeMux {
+    pub fn new(primitives: Face) -> DeMux {
         DeMux { primitives }
     }
-}
 
-#[async_trait]
-impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
-    async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+    pub async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         match msg.body {
             ZenohBody::Declare(Declare { declarations, .. }) => {
                 for declaration in declarations {
                     match declaration {
                         Declaration::Resource { rid, key } => {
-                            self.primitives.resource(rid, &key).await;
+                            self.primitives.decl_resource(rid, &key).await;
                         }
                         Declaration::Publisher { key } => {
-                            self.primitives.publisher(&key, msg.routing_context).await;
+                            self.primitives
+                                .decl_publisher(&key, msg.routing_context)
+                                .await;
                         }
                         Declaration::Subscriber { key, info } => {
                             self.primitives
-                                .subscriber(&key, &info, msg.routing_context)
+                                .decl_subscriber(&key, &info, msg.routing_context)
                                 .await;
                         }
                         Declaration::Queryable { key } => {
-                            self.primitives.queryable(&key, msg.routing_context).await;
+                            self.primitives
+                                .decl_queryable(&key, msg.routing_context)
+                                .await;
                         }
                         Declaration::ForgetResource { rid } => {
                             self.primitives.forget_resource(rid).await;
@@ -82,7 +80,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
             }) => match msg.reply_context {
                 None => {
                     self.primitives
-                        .data(
+                        .send_data(
                             &key,
                             payload,
                             msg.reliability,
@@ -95,7 +93,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 Some(rep) => match rep.replier_id {
                     Some(replier_id) => {
                         self.primitives
-                            .reply_data(
+                            .send_reply_data(
                                 rep.qid,
                                 rep.source_kind,
                                 replier_id,
@@ -116,7 +114,7 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
             ZenohBody::Unit { .. } => {
                 if let Some(rep) = msg.reply_context {
                     if rep.is_final {
-                        self.primitives.reply_final(rep.qid).await
+                        self.primitives.send_reply_final(rep.qid).await
                     }
                 }
             }
@@ -163,13 +161,13 @@ impl<P: Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
         Ok(())
     }
 
-    async fn new_link(&self, _link: Link) {}
+    pub async fn new_link(&self, _link: Link) {}
 
-    async fn del_link(&self, _link: Link) {}
+    pub async fn del_link(&self, _link: Link) {}
 
-    async fn closing(&self) {
+    pub async fn closing(&self) {
         self.primitives.close().await;
     }
 
-    async fn closed(&self) {}
+    pub async fn closed(&self) {}
 }

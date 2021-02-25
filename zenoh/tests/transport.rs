@@ -26,8 +26,8 @@ use zenoh::net::protocol::link::tls::{
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
+    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 
@@ -144,7 +144,7 @@ async fn open_session(
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: router_handler.clone(),
+        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -166,7 +166,7 @@ async fn open_session(
         version: 0,
         whatami: whatami::CLIENT,
         id: client_id,
-        handler: Arc::new(SHClient::new()),
+        handler: SessionDispatcher::SessionHandler(Arc::new(SHClient::new())),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,

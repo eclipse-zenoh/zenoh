@@ -26,7 +26,7 @@ use super::core::{PeerId, Reliability, WhatAmI, ZInt};
 use super::link::Link;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session::defaults::QUEUE_PRIO_DATA;
-use super::session::{SessionEventHandler, SessionManager};
+use super::session::{SessionEventDispatcher, SessionManager};
 use async_std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use async_trait::async_trait;
 use defragmentation::*;
@@ -123,7 +123,7 @@ pub(crate) struct SessionTransport {
     // The scehduling function
     pub(super) scheduling: Arc<dyn Scheduling + Send + Sync>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>>,
+    pub(super) callback: Arc<RwLock<Option<SessionEventDispatcher>>>,
     // Mutex for notification
     pub(super) alive: Arc<Mutex<bool>>,
 }
@@ -181,11 +181,11 @@ impl SessionTransport {
         self.sn_resolution
     }
 
-    pub(crate) async fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler + Send + Sync>> {
+    pub(crate) async fn get_callback(&self) -> Option<SessionEventDispatcher> {
         zasyncread!(self.callback).clone()
     }
 
-    pub(crate) async fn set_callback(&self, callback: Arc<dyn SessionEventHandler + Send + Sync>) {
+    pub(crate) async fn set_callback(&self, callback: SessionEventDispatcher) {
         let mut guard = zasyncwrite!(self.callback);
         *guard = Some(callback.clone());
     }

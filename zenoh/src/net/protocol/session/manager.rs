@@ -24,8 +24,7 @@ use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
 };
 use super::transport::SessionTransport;
-use super::Session;
-use super::SessionHandler;
+use super::{Session, SessionDispatcher};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
@@ -42,7 +41,7 @@ use zenoh_util::{zasynclock, zerror};
 /// use async_std::sync::Arc;
 /// use async_trait::async_trait;
 /// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
-/// use zenoh::net::protocol::session::{DummySessionEventHandler, SessionEventHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
+/// use zenoh::net::protocol::session::{DummySessionEventHandler, SessionEventHandler, Session, SessionDispatcher, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 ///
 /// use zenoh_util::core::ZResult;
 ///
@@ -69,7 +68,7 @@ use zenoh_util::{zasynclock, zerror};
 ///     version: 0,
 ///     whatami: whatami::PEER,
 ///     id: PeerId::from(uuid::Uuid::new_v4()),
-///     handler: Arc::new(MySH::new())
+///     handler: SessionDispatcher::SessionHandler(Arc::new(MySH::new()))
 /// };
 /// let manager = SessionManager::new(config, None);
 ///
@@ -78,7 +77,7 @@ use zenoh_util::{zasynclock, zerror};
 ///     version: 0,
 ///     whatami: whatami::PEER,
 ///     id: PeerId::from(uuid::Uuid::new_v4()),
-///     handler: Arc::new(MySH::new())
+///     handler: SessionDispatcher::SessionHandler(Arc::new(MySH::new()))
 /// };
 /// // Setting a value to None means to use the default value
 /// let opt_config = SessionManagerOptionalConfig {
@@ -101,7 +100,7 @@ pub struct SessionManagerConfig {
     pub version: u8,
     pub whatami: WhatAmI,
     pub id: PeerId,
-    pub handler: Arc<dyn SessionHandler + Send + Sync>,
+    pub handler: SessionDispatcher,
 }
 
 pub struct SessionManagerOptionalConfig {
@@ -170,7 +169,7 @@ pub(super) struct SessionManagerConfigInner {
     pub(super) peer_authenticator: Vec<PeerAuthenticator>,
     pub(super) link_authenticator: Vec<LinkAuthenticator>,
     pub(super) locator_property: HashMap<LocatorProtocol, LocatorProperty>,
-    pub(super) handler: Arc<dyn SessionHandler + Send + Sync>,
+    pub(super) handler: SessionDispatcher,
 }
 
 pub(super) struct Opened {
@@ -471,38 +470,48 @@ impl SessionManager {
         Ok(session)
     }
 
-    pub async fn open_session(&self, locator: &Locator) -> ZResult<Session> {
-        // Create the timeout duration
-        let to = Duration::from_millis(self.config.timeout);
-        // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
-        let ps = self.config.locator_property.get(&locator.get_proto());
-        // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(&locator, ps).await?;
+    pub fn open_session<'async_trait>(
+        &'async_trait self,
+        locator: &'async_trait Locator,
+    ) -> async_std::pin::Pin<
+        Box<dyn std::future::Future<Output = ZResult<Session>> + Send + 'async_trait>,
+    >
+    where
+        Self: Sync + 'async_trait,
+    {
+        Box::pin(async move {
+            // Create the timeout duration
+            let to = Duration::from_millis(self.config.timeout);
+            // Automatically create a new link manager for the protocol if it does not exist
+            let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
+            let ps = self.config.locator_property.get(&locator.get_proto());
+            // Create a new link associated by calling the Link Manager
+            let link = manager.new_link(&locator, ps).await?;
 
-        // Try a maximum number of times to open a session
-        let retries = self.config.retries;
-        for i in 0..retries {
-            // Check the future result
-            match super::initial::open_link(self, &link).timeout(to).await {
-                Ok(res) => return res,
-                Err(e) => log::debug!(
-                    "Can not open a session to {}: {}. Timeout: {:?}. Attempt: {}/{}",
-                    locator,
-                    e,
-                    to,
-                    i + 1,
-                    retries
-                ),
+            // Try a maximum number of times to open a session
+            let retries = self.config.retries;
+            for i in 0..retries {
+                // Check the future result
+                match super::initial::open_link(self, &link).timeout(to).await {
+                    Ok(res) => return res,
+                    Err(e) => log::debug!(
+                        "Can not open a session to {}: {}. Timeout: {:?}. Attempt: {}/{}",
+                        locator,
+                        e,
+                        to,
+                        i + 1,
+                        retries
+                    ),
+                }
             }
-        }
 
-        let e = format!(
-            "Can not open a session to {}: maximum number of attemps reached ({})",
-            locator, retries
-        );
-        log::warn!("{}", e);
-        zerror!(ZErrorKind::Other { descr: e })
+            let e = format!(
+                "Can not open a session to {}: maximum number of attemps reached ({})",
+                locator, retries
+            );
+            log::warn!("{}", e);
+            zerror!(ZErrorKind::Other { descr: e })
+        })
     }
 
     pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LocatorProperty>) {

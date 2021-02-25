@@ -321,7 +321,7 @@ impl Resource {
                             .local_mappings
                             .insert(rid, nonwild_prefix.clone());
                         face.primitives
-                            .resource(rid, &nonwild_prefix.name().into())
+                            .decl_resource(rid, &nonwild_prefix.name().into())
                             .await;
                         rid
                     }
@@ -479,7 +479,7 @@ pub async fn declare_resource(
                         .insert(local_rid, res.clone());
 
                     face.primitives
-                        .resource(local_rid, &res.name().into())
+                        .decl_resource(local_rid, &res.name().into())
                         .await;
                 }
 

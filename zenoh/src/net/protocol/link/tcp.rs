@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
+use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use async_std::prelude::*;
@@ -114,7 +114,7 @@ pub type LocatorPropertyTcp = ();
 /*************************************/
 /*              LINK                 */
 /*************************************/
-pub struct Tcp {
+pub struct LinkTcp {
     // The underlying socket as returned from the async-std library
     socket: TcpStream,
     // The source socket address of this link (address used on the local host)
@@ -123,8 +123,8 @@ pub struct Tcp {
     dst_addr: SocketAddr,
 }
 
-impl Tcp {
-    fn new(socket: TcpStream, src_addr: SocketAddr, dst_addr: SocketAddr) -> Tcp {
+impl LinkTcp {
+    fn new(socket: TcpStream, src_addr: SocketAddr, dst_addr: SocketAddr) -> LinkTcp {
         // Set the TCP nodelay option
         if let Err(err) = socket.set_nodelay(true) {
             log::warn!(
@@ -151,17 +151,14 @@ impl Tcp {
         }
 
         // Build the Tcp object
-        Tcp {
+        LinkTcp {
             socket,
             src_addr,
             dst_addr,
         }
     }
-}
 
-#[async_trait]
-impl LinkTrait for Tcp {
-    async fn close(&self) -> ZResult<()> {
+    pub(crate) async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TCP link: {}", self);
         // Close the underlying TCP socket
         let res = self.socket.shutdown(Shutdown::Both);
@@ -174,7 +171,7 @@ impl LinkTrait for Tcp {
     }
 
     #[inline]
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match (&self.socket).write(buffer).await {
             Ok(n) => Ok(n),
             Err(e) => {
@@ -187,7 +184,7 @@ impl LinkTrait for Tcp {
     }
 
     #[inline]
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         match (&self.socket).write_all(buffer).await {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -200,7 +197,7 @@ impl LinkTrait for Tcp {
     }
 
     #[inline]
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match (&self.socket).read(buffer).await {
             Ok(n) => Ok(n),
             Err(e) => {
@@ -213,7 +210,7 @@ impl LinkTrait for Tcp {
     }
 
     #[inline]
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         match (&self.socket).read_exact(buffer).await {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -226,46 +223,46 @@ impl LinkTrait for Tcp {
     }
 
     #[inline]
-    fn get_src(&self) -> Locator {
+    pub(crate) fn get_src(&self) -> Locator {
         Locator::Tcp(LocatorTcp::SocketAddr(self.src_addr))
     }
 
     #[inline]
-    fn get_dst(&self) -> Locator {
+    pub(crate) fn get_dst(&self) -> Locator {
         Locator::Tcp(LocatorTcp::SocketAddr(self.dst_addr))
     }
 
     #[inline]
-    fn get_mtu(&self) -> usize {
+    pub(crate) fn get_mtu(&self) -> usize {
         *TCP_DEFAULT_MTU
     }
 
     #[inline]
-    fn is_reliable(&self) -> bool {
+    pub(crate) fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline]
-    fn is_streamed(&self) -> bool {
+    pub(crate) fn is_streamed(&self) -> bool {
         true
     }
 }
 
-impl Drop for Tcp {
+impl Drop for LinkTcp {
     fn drop(&mut self) {
         // Close the underlying TCP socket
         let _ = self.socket.shutdown(Shutdown::Both);
     }
 }
 
-impl fmt::Display for Tcp {
+impl fmt::Display for LinkTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_addr, self.dst_addr)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for Tcp {
+impl fmt::Debug for LinkTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tcp")
             .field("src", &self.src_addr)
@@ -334,9 +331,9 @@ impl LinkManagerTrait for LinkManagerTcp {
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
 
-        let link = Arc::new(Tcp::new(stream, src_addr, dst_addr));
+        let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
 
-        Ok(Link::new(link))
+        Ok(Link::Tcp(link))
     }
 
     async fn new_listener(
@@ -477,10 +474,10 @@ async fn accept_task(listener: Arc<ListenerTcp>, manager: SessionManager) {
 
             log::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
             // Create the new link object
-            let link = Arc::new(Tcp::new(stream, src_addr, dst_addr));
+            let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
 
             // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::new(link), None).await;
+            manager.handle_new_link(Link::Tcp(link), None).await;
         }
     };
 

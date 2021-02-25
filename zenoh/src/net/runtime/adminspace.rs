@@ -18,12 +18,12 @@ use super::protocol::{
     },
     io::RBuf,
     proto::{encoding, DataInfo, RoutingContext},
-    session::Primitives,
 };
+use super::routing::face::Face;
+use super::routing::OutSession;
 use super::Runtime;
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
-use async_trait::async_trait;
 use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
@@ -41,7 +41,7 @@ type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (RBuf, ZInt)> + Send +
 
 pub struct AdminSpace {
     pid: PeerId,
-    primitives: Mutex<Option<Arc<dyn Primitives + Send + Sync>>>,
+    primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ZInt, String>>,
     handlers: HashMap<String, Arc<Handler>>,
     context: Arc<AdminContext>,
@@ -83,12 +83,12 @@ impl AdminSpace {
             .read()
             .await
             .router
-            .new_primitives(admin.clone())
+            .new_primitives(OutSession::Admin(admin.clone()))
             .await;
         admin.primitives.lock().await.replace(primitives.clone());
 
         primitives
-            .queryable(&[&root_path, "/**"].concat().into(), None)
+            .decl_queryable(&[&root_path, "/**"].concat().into(), None)
             .await;
     }
 
@@ -104,11 +104,8 @@ impl AdminSpace {
             ResKey::RName(name) => Some(name.clone()),
         }
     }
-}
 
-#[async_trait]
-impl Primitives for AdminSpace {
-    async fn resource(&self, rid: ZInt, reskey: &ResKey) {
+    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
         match self.reskey_to_string(reskey).await {
             Some(s) => {
@@ -118,19 +115,27 @@ impl Primitives for AdminSpace {
         }
     }
 
-    async fn forget_resource(&self, _rid: ZInt) {
+    pub(crate) async fn forget_resource(&self, _rid: ZInt) {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    async fn publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub(crate) async fn decl_publisher(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Publisher {:?}", _reskey);
     }
 
-    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_publisher(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    async fn subscriber(
+    pub(crate) async fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
@@ -139,19 +144,31 @@ impl Primitives for AdminSpace {
         trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_subscriber(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    async fn queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub(crate) async fn decl_queryable(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    async fn data(
+    pub(crate) async fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -170,7 +187,7 @@ impl Primitives for AdminSpace {
         );
     }
 
-    async fn query(
+    pub(crate) async fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -216,7 +233,7 @@ impl Primitives for AdminSpace {
                     encoding: Some(encoding),
                 };
                 primitives
-                    .reply_data(
+                    .send_reply_data(
                         qid,
                         EVAL,
                         pid.clone(),
@@ -227,11 +244,11 @@ impl Primitives for AdminSpace {
                     .await;
             }
 
-            primitives.reply_final(qid).await;
+            primitives.send_reply_final(qid).await;
         });
     }
 
-    async fn reply_data(
+    pub(crate) async fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -251,11 +268,11 @@ impl Primitives for AdminSpace {
         );
     }
 
-    async fn reply_final(&self, qid: ZInt) {
+    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 
-    async fn pull(
+    pub(crate) async fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -271,7 +288,7 @@ impl Primitives for AdminSpace {
         );
     }
 
-    async fn close(&self) {
+    pub(crate) async fn send_close(&self) {
         trace!("recv Close");
     }
 }

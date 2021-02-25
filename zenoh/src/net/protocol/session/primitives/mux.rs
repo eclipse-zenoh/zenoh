@@ -15,25 +15,20 @@ use super::core::{CongestionControl, PeerId, Reliability, ResKey, ZInt};
 use super::core::{QueryConsolidation, QueryTarget, SubInfo};
 use super::io::RBuf;
 use super::proto::{zmsg, DataInfo, Declaration, ReplyContext, RoutingContext, ZenohMessage};
-use super::session::SessionEventHandler;
-use super::Primitives;
-use async_std::sync::Arc;
-use async_trait::async_trait;
+use super::session::Session;
 
-pub struct Mux<T: SessionEventHandler + Send + Sync + ?Sized> {
-    handler: Arc<T>,
-}
-
-impl<T: SessionEventHandler + Send + Sync + ?Sized> Mux<T> {
-    pub fn new(handler: Arc<T>) -> Mux<T> {
-        Mux { handler }
-    }
+pub struct Mux {
+    handler: Session,
 }
 
 #[allow(unused_must_use)] // TODO
-#[async_trait]
-impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
-    async fn resource(&self, rid: ZInt, reskey: &ResKey) {
+#[allow(dead_code)]
+impl Mux {
+    pub(crate) fn new(handler: Session) -> Mux {
+        Mux { handler }
+    }
+
+    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let d = Declaration::Resource {
             rid,
             key: reskey.clone(),
@@ -44,7 +39,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn forget_resource(&self, rid: ZInt) {
+    pub(crate) async fn forget_resource(&self, rid: ZInt) {
         let d = Declaration::ForgetResource { rid };
         let decls = vec![d];
         self.handler
@@ -52,7 +47,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn subscriber(
+    pub(crate) async fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
@@ -68,7 +63,11 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_subscriber(
+        &self,
+        reskey: &ResKey,
+        routing_context: Option<RoutingContext>,
+    ) {
         let d = Declaration::ForgetSubscriber {
             key: reskey.clone(),
         };
@@ -78,7 +77,11 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    pub(crate) async fn decl_publisher(
+        &self,
+        reskey: &ResKey,
+        routing_context: Option<RoutingContext>,
+    ) {
         let d = Declaration::Publisher {
             key: reskey.clone(),
         };
@@ -88,7 +91,11 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_publisher(
+        &self,
+        reskey: &ResKey,
+        routing_context: Option<RoutingContext>,
+    ) {
         let d = Declaration::ForgetPublisher {
             key: reskey.clone(),
         };
@@ -98,7 +105,11 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    pub(crate) async fn decl_queryable(
+        &self,
+        reskey: &ResKey,
+        routing_context: Option<RoutingContext>,
+    ) {
         let d = Declaration::Queryable {
             key: reskey.clone(),
         };
@@ -108,7 +119,11 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    pub(crate) async fn forget_queryable(
+        &self,
+        reskey: &ResKey,
+        routing_context: Option<RoutingContext>,
+    ) {
         let d = Declaration::ForgetQueryable {
             key: reskey.clone(),
         };
@@ -118,7 +133,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn data(
+    pub(crate) async fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -141,7 +156,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn query(
+    pub(crate) async fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -168,7 +183,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn reply_data(
+    pub(crate) async fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -191,7 +206,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn reply_final(&self, qid: ZInt) {
+    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
         self.handler
             .handle_message(ZenohMessage::make_unit(
                 zmsg::default_reliability::REPLY,
@@ -202,7 +217,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn pull(
+    pub(crate) async fn send_pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
@@ -220,7 +235,7 @@ impl<T: SessionEventHandler + Send + Sync + ?Sized> Primitives for Mux<T> {
             .await;
     }
 
-    async fn close(&self) {
-        self.handler.closing().await;
+    pub(crate) async fn send_close(&self) {
+        // self.handler.closing().await;
     }
 }

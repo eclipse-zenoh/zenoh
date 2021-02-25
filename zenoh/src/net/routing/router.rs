@@ -13,7 +13,6 @@
 //
 use async_std::sync::{Arc, RwLock, Weak};
 use async_std::task::{sleep, JoinHandle};
-use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use uhlc::HLC;
@@ -21,9 +20,8 @@ use uhlc::HLC;
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::protocol::link::Link;
 use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::protocol::session::{
-    DeMux, Mux, Primitives, Session, SessionEventHandler, SessionHandler,
-};
+use super::protocol::session::{DeMux, Mux, Session};
+use super::OutSession;
 
 use zenoh_util::core::ZResult;
 use zenoh_util::zconfigurable;
@@ -121,7 +119,7 @@ impl Tables {
         &mut self,
         pid: PeerId,
         whatami: WhatAmI,
-        primitives: Arc<dyn Primitives + Send + Sync>,
+        primitives: OutSession,
     ) -> Weak<FaceState> {
         unsafe {
             let fid = self.face_counter;
@@ -262,10 +260,7 @@ impl Router {
         );
     }
 
-    pub async fn new_primitives(
-        &self,
-        primitives: Arc<dyn Primitives + Send + Sync>,
-    ) -> Arc<dyn Primitives + Send + Sync> {
+    pub(crate) async fn new_primitives(&self, primitives: OutSession) -> Arc<Face> {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
@@ -279,90 +274,69 @@ impl Router {
             },
         })
     }
-}
 
-#[async_trait]
-impl SessionHandler for Router {
-    async fn new_session(
-        &self,
-        session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    pub async fn new_session(&self, session: Session) -> ZResult<Arc<LinkStateInterceptor>> {
         let mut tables = self.tables.write().await;
         let whatami = session.get_whatami()?;
-        if whatami != whatami::CLIENT && tables.peers_net.is_some() {
-            let handler = Arc::new(LinkStateInterceptor::new(
-                session.clone(),
-                self.tables.clone(),
-                DeMux::new(Face {
-                    tables: self.tables.clone(),
-                    state: tables
-                        .open_face(
-                            session.get_pid().unwrap(),
-                            whatami,
-                            Arc::new(Mux::new(Arc::new(session.clone()))),
-                        )
-                        .await
-                        .upgrade()
-                        .unwrap(),
-                }),
-            ));
 
-            match (self.whatami, whatami) {
-                (whatami::ROUTER, whatami::ROUTER) => {
-                    let net = tables.routers_net.as_mut().unwrap();
-                    net.add_link(session.clone()).await;
-                    tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
-                }
-                _ => {
-                    let net = tables.peers_net.as_mut().unwrap();
-                    net.add_link(session.clone()).await;
-                    tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
-                }
-            };
-
-            Ok(handler)
-        } else {
-            Ok(Arc::new(DeMux::new(Face {
+        let handler = Arc::new(LinkStateInterceptor::new(
+            session.clone(),
+            self.tables.clone(),
+            DeMux::new(Face {
                 tables: self.tables.clone(),
                 state: tables
                     .open_face(
                         session.get_pid().unwrap(),
                         whatami,
-                        Arc::new(Mux::new(Arc::new(session.clone()))),
+                        OutSession::Transport(Arc::new(Mux::new(session.clone()))),
                     )
                     .await
                     .upgrade()
                     .unwrap(),
-            })))
-        }
+            }),
+        ));
+
+        match (self.whatami, whatami) {
+            (whatami::CLIENT, _) => (),
+            (whatami::ROUTER, whatami::ROUTER) => {
+                let net = tables.routers_net.as_mut().unwrap();
+                net.add_link(session.clone()).await;
+                tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
+            }
+            _ => {
+                let net = tables.peers_net.as_mut().unwrap();
+                net.add_link(session.clone()).await;
+                tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
+            }
+        };
+
+        Ok(handler)
     }
 }
 
 pub struct LinkStateInterceptor {
     session: Session,
     tables: Arc<RwLock<Tables>>,
-    demux: DeMux<Face>,
+    demux: DeMux,
 }
 
 impl LinkStateInterceptor {
-    fn new(session: Session, tables: Arc<RwLock<Tables>>, demux: DeMux<Face>) -> Self {
+    fn new(session: Session, tables: Arc<RwLock<Tables>>, demux: DeMux) -> Self {
         LinkStateInterceptor {
             session,
             tables,
             demux,
         }
     }
-}
 
-#[async_trait]
-impl SessionEventHandler for LinkStateInterceptor {
-    async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+    pub(crate) async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
                 let mut tables = self.tables.write().await;
                 let whatami = self.session.get_whatami()?;
                 match (tables.whatami, whatami) {
+                    (whatami::CLIENT, _) => (),
                     (whatami::ROUTER, whatami::ROUTER) => {
                         for (_, removed_node) in tables
                             .routers_net
@@ -400,11 +374,11 @@ impl SessionEventHandler for LinkStateInterceptor {
         }
     }
 
-    async fn new_link(&self, _link: Link) {}
+    pub(crate) async fn new_link(&self, _link: Link) {}
 
-    async fn del_link(&self, _link: Link) {}
+    pub(crate) async fn del_link(&self, _link: Link) {}
 
-    async fn closing(&self) {
+    pub(crate) async fn closing(&self) {
         self.demux.closing().await;
         sleep(Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
         let mut tables = self.tables.write().await;
@@ -441,5 +415,5 @@ impl SessionEventHandler for LinkStateInterceptor {
         };
     }
 
-    async fn closed(&self) {}
+    pub(crate) async fn closed(&self) {}
 }

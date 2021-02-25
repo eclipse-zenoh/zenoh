@@ -32,37 +32,45 @@ pub use manager::*;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::ops::Deref;
+#[cfg(feature = "transport_tcp")]
+use tcp::LinkTcp;
+#[cfg(feature = "transport_tls")]
+use tls::LinkTls;
+#[cfg(feature = "transport_udp")]
+use udp::LinkUdp;
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+use unixsock_stream::LinkUnixSocketStream;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*************************************/
 /*              LINK                 */
 /*************************************/
-#[async_trait]
-pub trait LinkTrait {
+const WBUF_SIZE: usize = 64;
+
+zenoh_util::dispatcher!(
+Link(
+    #[cfg(feature = "transport_tcp")]
+    Tcp(Arc<LinkTcp>),
+    #[cfg(feature = "transport_udp")]
+    Udp(Arc<LinkUdp>),
+    #[cfg(feature = "transport_tls")]
+    Tls(Arc<LinkTls>),
+    #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+    UnixSocketStream(Arc<LinkUnixSocketStream>),
+) {
     fn get_mtu(&self) -> usize;
     fn get_src(&self) -> Locator;
     fn get_dst(&self) -> Locator;
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
-
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
-}
-
-const WBUF_SIZE: usize = 64;
-
-#[derive(Clone)]
-pub struct Link(Arc<dyn LinkTrait + Send + Sync>);
+});
 
 impl Link {
-    fn new(link: Arc<dyn LinkTrait + Send + Sync>) -> Link {
-        Self(link)
-    }
-
     pub(crate) async fn write_session_message(&self, msg: SessionMessage) -> ZResult<()> {
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
@@ -120,43 +128,35 @@ impl Link {
     }
 }
 
-impl Deref for Link {
-    type Target = Arc<dyn LinkTrait + Send + Sync>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl Eq for Link {}
 
 impl PartialEq for Link {
     fn eq(&self, other: &Self) -> bool {
-        (self.0.get_src() == other.0.get_src()) && (self.0.get_dst() == other.0.get_dst())
+        (self.get_src() == other.get_src()) && (self.get_dst() == other.get_dst())
     }
 }
 
 impl Hash for Link {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.get_src().hash(state);
-        self.0.get_dst().hash(state);
+        self.get_src().hash(state);
+        self.get_dst().hash(state);
     }
 }
 
 impl fmt::Display for Link {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} => {}", self.0.get_src(), self.0.get_dst())
+        write!(f, "{} => {}", self.get_src(), self.get_dst())
     }
 }
 
 impl fmt::Debug for Link {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Link")
-            .field("src", &self.0.get_src())
-            .field("dst", &self.0.get_dst())
-            .field("mtu", &self.0.get_mtu())
-            .field("is_reliable", &self.0.is_reliable())
-            .field("is_streamed", &self.0.is_streamed())
+            .field("src", &self.get_src())
+            .field("dst", &self.get_dst())
+            .field("mtu", &self.get_mtu())
+            .field("is_reliable", &self.is_reliable())
+            .field("is_streamed", &self.is_streamed())
             .finish()
     }
 }
