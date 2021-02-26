@@ -260,7 +260,7 @@ impl Router {
         );
     }
 
-    pub(crate) async fn new_primitives(&self, primitives: OutSession) -> Arc<Face> {
+    pub async fn new_primitives(&self, primitives: OutSession) -> Arc<Face> {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
