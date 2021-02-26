@@ -505,7 +505,7 @@ impl Face {
         .await;
     }
 
-    pub(crate) async fn query(
+    pub(crate) async fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -558,7 +558,7 @@ impl Face {
         route_send_reply_final(&mut tables, &mut self.state.clone(), qid).await;
     }
 
-    pub(crate) async fn pull(
+    pub(crate) async fn send_pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
@@ -579,7 +579,7 @@ impl Face {
         .await;
     }
 
-    pub(crate) async fn close(&self) {
+    pub(crate) async fn send_close(&self) {
         self.tables
             .write()
             .await

@@ -269,7 +269,7 @@ impl Session {
             .as_ref()
             .unwrap()
             .clone();
-        primitives.close().await;
+        primitives.send_close().await;
 
         Ok(())
     }
@@ -998,7 +998,7 @@ impl Session {
         let state = self.state.read().await;
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.pull(true, reskey, 0, &None).await;
+        primitives.send_pull(true, reskey, 0, &None).await;
         Ok(())
     }
 
@@ -1064,7 +1064,7 @@ impl Session {
         let local_routing = state.local_routing;
         drop(state);
         primitives
-            .query(
+            .send_query(
                 resource,
                 predicate,
                 qid,

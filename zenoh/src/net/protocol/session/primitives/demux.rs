@@ -128,7 +128,7 @@ impl DeMux {
                 ..
             }) => {
                 self.primitives
-                    .query(
+                    .send_query(
                         &key,
                         &predicate,
                         qid,
@@ -146,7 +146,7 @@ impl DeMux {
                 ..
             }) => {
                 self.primitives
-                    .pull(
+                    .send_pull(
                         zmsg::has_flag(msg.header, zmsg::flag::F),
                         &key,
                         pull_id,
@@ -166,7 +166,7 @@ impl DeMux {
     pub async fn del_link(&self, _link: Link) {}
 
     pub async fn closing(&self) {
-        self.primitives.close().await;
+        self.primitives.send_close().await;
     }
 
     pub async fn closed(&self) {}
