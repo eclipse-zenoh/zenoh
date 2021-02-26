@@ -87,18 +87,18 @@ pub struct Face {
 }
 
 impl Face {
-    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+    pub async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix).await;
     }
 
-    pub(crate) async fn forget_resource(&self, rid: ZInt) {
+    pub async fn forget_resource(&self, rid: ZInt) {
         let mut tables = self.tables.write().await;
         undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
     }
 
-    pub(crate) async fn decl_subscriber(
+    pub async fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
@@ -197,7 +197,7 @@ impl Face {
         }
     }
 
-    pub(crate) async fn forget_subscriber(
+    pub async fn forget_subscriber(
         &self,
         reskey: &ResKey,
         routing_context: Option<RoutingContext>,
@@ -287,25 +287,17 @@ impl Face {
         }
     }
 
-    pub(crate) async fn decl_publisher(
+    pub async fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    }
+
+    pub async fn forget_publisher(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
     ) {
     }
 
-    pub(crate) async fn forget_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
-
-    pub(crate) async fn decl_queryable(
-        &self,
-        reskey: &ResKey,
-        routing_context: Option<RoutingContext>,
-    ) {
+    pub async fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         match (tables.whatami, self.state.whatami) {
@@ -391,11 +383,7 @@ impl Face {
         }
     }
 
-    pub(crate) async fn forget_queryable(
-        &self,
-        reskey: &ResKey,
-        routing_context: Option<RoutingContext>,
-    ) {
+    pub async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = self.tables.write().await;
         match (tables.whatami, self.state.whatami) {
@@ -481,7 +469,7 @@ impl Face {
         }
     }
 
-    pub(crate) async fn send_data(
+    pub async fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -505,7 +493,7 @@ impl Face {
         .await;
     }
 
-    pub(crate) async fn send_query(
+    pub async fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -530,7 +518,7 @@ impl Face {
         .await;
     }
 
-    pub(crate) async fn send_reply_data(
+    pub async fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -553,12 +541,12 @@ impl Face {
         .await;
     }
 
-    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
+    pub async fn send_reply_final(&self, qid: ZInt) {
         let mut tables = self.tables.write().await;
         route_send_reply_final(&mut tables, &mut self.state.clone(), qid).await;
     }
 
-    pub(crate) async fn send_pull(
+    pub async fn send_pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
@@ -579,7 +567,7 @@ impl Face {
         .await;
     }
 
-    pub(crate) async fn send_close(&self) {
+    pub async fn send_close(&self) {
         self.tables
             .write()
             .await
