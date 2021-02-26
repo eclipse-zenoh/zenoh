@@ -23,7 +23,7 @@ use zenoh::net::protocol::core::{
 };
 use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
-use zenoh::net::protocol::session::Primitives;
+use zenoh::net::protocol::session::{DummyPrimitives, Primitives};
 use zenoh::net::routing::router::*;
 use zenoh::net::routing::OutSession;
 
@@ -35,7 +35,7 @@ fn base_test() {
             whatami::CLIENT,
             Some(HLC::default()),
         );
-        let primitives = Arc::new(ClientPrimitives::new());
+        let primitives = Arc::new(DummyPrimitives::new());
         let face = tables
             .open_face(
                 PeerId::new(0, [0; 16]),
@@ -141,7 +141,7 @@ fn match_test() {
             whatami::CLIENT,
             Some(HLC::default()),
         );
-        let primitives = Arc::new(ClientPrimitives::new());
+        let primitives = Arc::new(DummyPrimitives::new());
         let face = tables
             .open_face(
                 PeerId::new(0, [0; 16]),
@@ -186,7 +186,7 @@ fn clean_test() {
             Some(HLC::default()),
         );
 
-        let primitives = Arc::new(ClientPrimitives::new());
+        let primitives = Arc::new(DummyPrimitives::new());
         let face0 = tables
             .open_face(
                 PeerId::new(0, [0; 16]),
