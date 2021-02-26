@@ -160,13 +160,10 @@ impl UserPasswordAuthenticator {
         lookup: HashMap<Vec<u8>, Vec<u8>>,
         mut credentials: Option<(Vec<u8>, Vec<u8>)>,
     ) -> UserPasswordAuthenticator {
-        let credentials = match credentials.take() {
-            Some(cr) => Some(Credentials {
-                user: cr.0,
-                password: cr.1,
-            }),
-            None => None,
-        };
+        let credentials = credentials.take().map(|cr| Credentials {
+            user: cr.0,
+            password: cr.1,
+        });
         UserPasswordAuthenticator {
             lookup: RwLock::new(lookup),
             credentials,
