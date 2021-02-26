@@ -563,7 +563,7 @@ impl TransmissionPipeline {
     }
 
     pub(super) async fn pull(&self) -> (SerializationBatch, usize) {
-        let mut backoff = Duration::from_micros(*QUEUE_PULL_BACKOFF);
+        let mut backoff = Duration::from_nanos(*QUEUE_PULL_BACKOFF);
         loop {
             for priority in 0..QUEUE_NUM {
                 if let Some(batch) = self.try_pull_queue(priority).await {
