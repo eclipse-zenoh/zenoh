@@ -14,7 +14,7 @@
 pub mod config;
 
 use std::collections::HashMap;
-use std::convert::From;
+use std::convert::{From, TryFrom};
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -128,8 +128,8 @@ impl<T: KeyTranscoder> From<&[(u64, &str)]> for IntKeyProperties<T> {
 
 static PROP_SEPS: &[&str] = &["\r\n", "\n", ";"];
 const DEFAULT_PROP_SEP: char = ';';
-
 const KV_SEP: &[char] = &['=', ':'];
+const COMMENT_PREFIX: char = '#';
 
 #[derive(Clone, Debug, PartialEq)]
 /// A map of key/value (String,String) properties.
@@ -195,7 +195,7 @@ impl From<&str> for Properties {
             props
                 .iter()
                 .filter_map(|prop| {
-                    if prop.is_empty() {
+                    if prop.is_empty() || prop.starts_with(COMMENT_PREFIX) {
                         None
                     } else {
                         let mut it = prop.splitn(2, KV_SEP);
@@ -241,6 +241,13 @@ impl From<&[(&str, &str)]> for Properties {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
         )
+    }
+}
+
+impl TryFrom<&std::path::Path> for Properties {
+    type Error = std::io::Error;
+    fn try_from(p: &std::path::Path) -> Result<Self, Self::Error> {
+        std::fs::read_to_string(p).map(|s| Self::from(s))
     }
 }
 
