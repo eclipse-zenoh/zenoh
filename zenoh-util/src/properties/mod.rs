@@ -247,7 +247,7 @@ impl From<&[(&str, &str)]> for Properties {
 impl TryFrom<&std::path::Path> for Properties {
     type Error = std::io::Error;
     fn try_from(p: &std::path::Path) -> Result<Self, Self::Error> {
-        std::fs::read_to_string(p).map(|s| Self::from(s))
+        std::fs::read_to_string(p).map(Self::from)
     }
 }
 
