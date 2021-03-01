@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use futures::prelude::*;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use zenoh::*;
 
 #[async_std::main]
