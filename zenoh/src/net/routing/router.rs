@@ -89,6 +89,7 @@ impl Tables {
         Resource::print_tree(&self.root_res)
     }
 
+    #[inline]
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn get_mapping<'a>(
         &'a self,
