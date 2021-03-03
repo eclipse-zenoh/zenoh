@@ -922,23 +922,25 @@ impl Session {
         let state = self.state.read().await;
         if let ResKey::RId(rid) = reskey {
             match state.get_res(rid, local) {
-                Some(res) => {
-                    for sub in &res.subscribers {
+                Some(res) => match res.subscribers.len() {
+                    0 => (),
+                    1 => {
+                        let sub = res.subscribers.get(0).unwrap();
                         match &sub.invoker {
                             SubscriberInvoker::Handler(handler) => {
                                 let handler = &mut *handler.write().await;
                                 handler(Sample {
                                     res_name: res.name.clone(),
-                                    payload: payload.clone(),
-                                    data_info: info.clone(),
+                                    payload,
+                                    data_info: info,
                                 });
                             }
                             SubscriberInvoker::Sender(sender) => {
                                 if let Err(e) = sender
                                     .send(Sample {
                                         res_name: res.name.clone(),
-                                        payload: payload.clone(),
-                                        data_info: info.clone(),
+                                        payload,
+                                        data_info: info,
                                     })
                                     .await
                                 {
@@ -948,7 +950,34 @@ impl Session {
                             }
                         }
                     }
-                }
+                    _ => {
+                        for sub in &res.subscribers {
+                            match &sub.invoker {
+                                SubscriberInvoker::Handler(handler) => {
+                                    let handler = &mut *handler.write().await;
+                                    handler(Sample {
+                                        res_name: res.name.clone(),
+                                        payload: payload.clone(),
+                                        data_info: info.clone(),
+                                    });
+                                }
+                                SubscriberInvoker::Sender(sender) => {
+                                    if let Err(e) = sender
+                                        .send(Sample {
+                                            res_name: res.name.clone(),
+                                            payload: payload.clone(),
+                                            data_info: info.clone(),
+                                        })
+                                        .await
+                                    {
+                                        error!("SubscriberInvoker error: {}", e);
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 None => {
                     error!("Received Data for unkown rid: {}", rid);
                     return;
