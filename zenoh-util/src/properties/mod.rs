@@ -65,7 +65,7 @@ impl<T: KeyTranscoder> DerefMut for IntKeyProperties<T> {
 
 impl<T: KeyTranscoder> fmt::Display for IntKeyProperties<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&Properties::from(self.clone()).0, f)
+        fmt::Display::fmt(&Properties::from(self.clone()), f)
     }
 }
 
