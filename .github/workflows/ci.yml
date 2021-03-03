@@ -15,9 +15,9 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ '**' ]
   pull_request:
-    branches: [ master ]
+    branches: [ '**' ]
 
 jobs:
   build:
@@ -35,8 +35,6 @@ jobs:
     - name: Install latest nightly
       uses: actions-rs/toolchain@v1
       with:
-          toolchain: nightly
-          override: true
           components: rustfmt, clippy
 
     - name: Code format check
