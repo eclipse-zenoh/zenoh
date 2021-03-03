@@ -73,6 +73,7 @@ use zenoh_protocol::core::WhatAmI;
 use zenoh_router::runtime::orchestrator::{Loop, SessionOrchestrator};
 use zenoh_util::properties::config::*;
 // Shared memory and zero-copy
+#[cfg(feature = "zero-copy")]
 pub use zenoh_protocol::io::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 
 mod types;

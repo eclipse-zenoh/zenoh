@@ -267,13 +267,19 @@ impl SessionTransport {
     /*************************************/
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
-    /// Schedule a Zenoh message on the transmission queue
+    /// Schedule a Zenoh message on the transmission queue    
+    #[cfg(feature = "zero-copy")]
     #[inline]
     pub(crate) async fn schedule(&self, mut message: ZenohMessage) {
-        #[cfg(feature = "zero-copy")]
         if !self.is_shm {
             message.flatten_shm();
         }
+        self.scheduling.schedule(message, &self.links).await;
+    }
+
+    #[cfg(not(feature = "zero-copy"))]
+    #[inline]
+    pub(crate) async fn schedule(&self, message: ZenohMessage) {
         self.scheduling.schedule(message, &self.links).await;
     }
 

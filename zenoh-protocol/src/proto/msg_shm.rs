@@ -14,6 +14,7 @@
 use super::msg::*;
 
 impl ZenohMessage {
+    #[cfg(feature = "zero-copy")]
     pub(crate) fn flatten_shm(&mut self) {
         if let Some(at) = self.attachment.as_mut() {
             at.buffer.flatten_shm();
@@ -27,8 +28,9 @@ impl ZenohMessage {
 
 impl SessionMessage {
     // This function is not used at the moment but it might be used in the future.
-    // It's good to keep the messages definition aligned.
+    // It's good to keep the message definitions aligned.
     #[allow(dead_code)]
+    #[cfg(feature = "zero-copy")]
     pub(crate) fn flatten_shm(&mut self) {
         if let Some(at) = self.attachment.as_mut() {
             at.buffer.flatten_shm();

@@ -27,7 +27,7 @@ use std::ops::{
 pub enum ArcSliceBuffer {
     OwnedBuffer(Arc<Vec<u8>>),
     #[cfg(feature = "zero-copy")]
-    SharedBuffer(SharedMemoryBuf),
+    SharedBuffer(Arc<SharedMemoryBuf>),
 }
 
 impl Deref for ArcSliceBuffer {
@@ -119,9 +119,16 @@ impl From<&[u8]> for ArcSliceBuffer {
 }
 
 #[cfg(feature = "zero-copy")]
+impl From<Arc<SharedMemoryBuf>> for ArcSliceBuffer {
+    fn from(buf: Arc<SharedMemoryBuf>) -> ArcSliceBuffer {
+        ArcSliceBuffer::SharedBuffer(buf)
+    }
+}
+
+#[cfg(feature = "zero-copy")]
 impl From<SharedMemoryBuf> for ArcSliceBuffer {
     fn from(buf: SharedMemoryBuf) -> ArcSliceBuffer {
-        ArcSliceBuffer::SharedBuffer(buf)
+        ArcSliceBuffer::from(Arc::new(buf))
     }
 }
 
