@@ -14,8 +14,11 @@
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::io::{RBuf, WBuf};
 use super::protocol::link::{Link, Locator};
-use super::protocol::proto::{Hello, Scout, SessionBody, SessionMessage, ZenohMessage};
+use super::protocol::proto::{
+    Data, Hello, Scout, SessionBody, SessionMessage, ZenohBody, ZenohMessage,
+};
 use super::protocol::session::{Session, SessionEventDispatcher, SessionManager};
+use super::routing::pubsub::route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use async_std::net::UdpSocket;
 use async_std::sync::{Arc, RwLock};
@@ -633,8 +636,35 @@ pub struct OrchSession {
 
 impl OrchSession {
     pub(crate) async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
-        log::trace!("handle_message {:?}", msg);
-        self.sub_event_handler.handle_message(msg).await
+        // critical path shortcut
+        if msg.reply_context.is_none() {
+            if let ZenohBody::Data(Data {
+                key,
+                data_info,
+                payload,
+            }) = msg.body
+            {
+                let (rid, suffix) = (&key).into();
+                let mut tables = self.sub_event_handler.tables.write().await;
+                let face = &self.sub_event_handler.demux.primitives.state;
+                route_data(
+                    &mut tables,
+                    face,
+                    rid,
+                    suffix,
+                    msg.congestion_control,
+                    data_info,
+                    payload,
+                    msg.routing_context,
+                )
+                .await;
+                Ok(())
+            } else {
+                self.sub_event_handler.handle_message(msg).await
+            }
+        } else {
+            self.sub_event_handler.handle_message(msg).await
+        }
     }
 
     pub(crate) async fn new_link(&self, link: Link) {

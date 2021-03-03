@@ -20,7 +20,7 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
 pub struct DeMux {
-    primitives: Face,
+    pub(crate) primitives: Face,
 }
 
 impl DeMux {

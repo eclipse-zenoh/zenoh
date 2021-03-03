@@ -86,8 +86,8 @@ impl FaceState {
 }
 
 pub struct Face {
-    pub(super) tables: Arc<RwLock<Tables>>,
-    pub(super) state: Arc<FaceState>,
+    pub(crate) tables: Arc<RwLock<Tables>>,
+    pub(crate) state: Arc<FaceState>,
 }
 
 impl Face {

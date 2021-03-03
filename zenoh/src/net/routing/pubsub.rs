@@ -933,6 +933,7 @@ pub(crate) unsafe fn compute_matches_data_routes(tables: &mut Tables, res: &mut 
     }
 }
 
+#[inline]
 #[allow(clippy::too_many_arguments)]
 pub async fn route_data(
     tables: &mut Tables,

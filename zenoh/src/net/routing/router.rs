@@ -342,9 +342,9 @@ impl Router {
 }
 
 pub struct LinkStateInterceptor {
-    session: Session,
-    tables: Arc<RwLock<Tables>>,
-    demux: DeMux,
+    pub(crate) session: Session,
+    pub(crate) tables: Arc<RwLock<Tables>>,
+    pub(crate) demux: DeMux,
 }
 
 impl LinkStateInterceptor {
