@@ -210,8 +210,7 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
 /// # })
 /// ```
 pub async fn open(config: ConfigProperties) -> ZResult<Session> {
-    trace!("open({})", &config);
     debug!("Zenoh Rust API {}", GIT_VERSION);
-    debug!("Config: {}", &config);
+    debug!("Config: {:?}", &config);
     Session::new(config).await
 }

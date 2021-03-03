@@ -25,7 +25,7 @@ pub trait KeyTranscoder {
     fn decode(key: u64) -> Option<String>;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub struct IntKeyProperties<T>(pub HashMap<u64, String>, PhantomData<T>)
 where
     T: KeyTranscoder;
@@ -66,6 +66,12 @@ impl<T: KeyTranscoder> DerefMut for IntKeyProperties<T> {
 impl<T: KeyTranscoder> fmt::Display for IntKeyProperties<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&Properties::from(self.clone()), f)
+    }
+}
+
+impl<T: KeyTranscoder> fmt::Debug for IntKeyProperties<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&Properties::from(self.clone()), f)
     }
 }
 
@@ -132,7 +138,7 @@ const DEFAULT_PROP_SEP: char = ';';
 const KV_SEP: &[char] = &['=', ':'];
 const COMMENT_PREFIX: char = '#';
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 /// A map of key/value (String,String) properties.
 ///
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
@@ -160,6 +166,12 @@ impl DerefMut for Properties {
 }
 
 impl fmt::Display for Properties {
+    /// Format the Properties as a string, using `'='` for key/value separator
+    /// and `';'` for separator between each keys/values.
+    ///
+    /// **WARNING**: the passwords are displayed in clear. This is required for the result
+    /// of the [`trait@ToString`] automatic implementation that must preserve all the properties.
+    /// To display the properties, hidding the passwords, rather use the [`Debug`](core::fmt::Debug) trait implementation.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut it = self.0.iter();
         if let Some((k, v)) = it.next() {
@@ -171,6 +183,36 @@ impl fmt::Display for Properties {
             for (k, v) in it {
                 if v.is_empty() {
                     write!(f, "{}{}", DEFAULT_PROP_SEP, k)?
+                } else {
+                    write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP[0], v)?
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Properties {
+    /// Format the Properties as a string, using `'='` for key/value separator
+    /// and `';'` for separator between each keys/values.
+    ///
+    /// **NOTE**: for each key containing `"password"` as sub-string,
+    /// the value is replaced by `"*****"`.
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut it = self.0.iter();
+        if let Some((k, v)) = it.next() {
+            if v.is_empty() {
+                write!(f, "{}", k)?
+            } else if k.contains("password") {
+                write!(f, "{}{}*****", k, KV_SEP[0])?
+            } else {
+                write!(f, "{}{}{}", k, KV_SEP[0], v)?
+            }
+            for (k, v) in it {
+                if v.is_empty() {
+                    write!(f, "{}{}", DEFAULT_PROP_SEP, k)?
+                } else if k.contains("password") {
+                    write!(f, "{}{}{}*****", DEFAULT_PROP_SEP, k, KV_SEP[0])?
                 } else {
                     write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP[0], v)?
                 }
