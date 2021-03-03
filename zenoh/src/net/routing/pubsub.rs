@@ -1066,29 +1066,46 @@ pub async fn route_data(
                     None => info,
                 };
 
-                for (outface, reskey, context) in route.values() {
+                if route.len() == 1 && matching_pulls.len() == 0 {
+                    let (outface, reskey, context) = route.values().next().unwrap();
                     if face.id != outface.id {
                         outface
                             .primitives
                             .send_data(
                                 &reskey,
-                                payload.clone(),
+                                payload,
                                 Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
                                 congestion_control,
-                                data_info.clone(),
+                                data_info,
                                 *context,
                             )
                             .await
                     }
-                }
+                } else {
+                    for (outface, reskey, context) in route.values() {
+                        if face.id != outface.id {
+                            outface
+                                .primitives
+                                .send_data(
+                                    &reskey,
+                                    payload.clone(),
+                                    Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                                    congestion_control,
+                                    data_info.clone(),
+                                    *context,
+                                )
+                                .await
+                        }
+                    }
 
-                for context in matching_pulls.iter() {
-                    Arc::get_mut_unchecked(&mut context.clone())
-                        .last_values
-                        .insert(
-                            [&prefix.name(), suffix].concat(),
-                            (data_info.clone(), payload.clone()),
-                        );
+                    for context in matching_pulls.iter() {
+                        Arc::get_mut_unchecked(&mut context.clone())
+                            .last_values
+                            .insert(
+                                [&prefix.name(), suffix].concat(),
+                                (data_info.clone(), payload.clone()),
+                            );
+                    }
                 }
             }
         },
