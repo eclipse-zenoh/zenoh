@@ -965,7 +965,7 @@ pub async fn route_data(
                             )
                             .unwrap()
                             .index();
-                        match Resource::get_resource(prefix, suffix) {
+                        match &res {
                             Some(res) => res.routers_data_routes[local_context].clone(),
                             None => compute_data_route(
                                 tables,
