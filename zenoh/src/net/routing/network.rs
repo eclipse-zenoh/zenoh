@@ -39,7 +39,8 @@ impl std::fmt::Debug for Node {
 
 pub(crate) struct Link {
     pub(crate) session: Session,
-    pub(crate) mappings: VecMap<PeerId>,
+    mappings: VecMap<PeerId>,
+    local_mappings: VecMap<ZInt>,
 }
 
 impl Link {
@@ -47,6 +48,7 @@ impl Link {
         Link {
             session,
             mappings: VecMap::new(),
+            local_mappings: VecMap::new(),
         }
     }
 
@@ -58,6 +60,17 @@ impl Link {
     #[inline]
     pub(crate) fn get_pid(&self, psid: &ZInt) -> Option<&PeerId> {
         self.mappings.get((*psid).try_into().unwrap())
+    }
+
+    #[inline]
+    pub(crate) fn set_local_psid_mapping(&mut self, psid: ZInt, local_psid: ZInt) {
+        self.local_mappings
+            .insert(psid.try_into().unwrap(), local_psid);
+    }
+
+    #[inline]
+    pub(crate) fn get_local_psid(&self, psid: &ZInt) -> Option<&ZInt> {
+        self.local_mappings.get((*psid).try_into().unwrap())
     }
 }
 
@@ -116,22 +129,41 @@ impl Network {
         )
     }
 
+    #[inline]
     pub(crate) fn get_idx(&self, pid: &PeerId) -> Option<NodeIndex> {
         self.graph
             .node_indices()
             .find(|idx| self.graph[*idx].pid == *pid)
     }
 
-    pub(crate) fn get_link(&self, pid: &PeerId) -> Option<&Link> {
+    #[inline]
+    pub(crate) fn get_link(&self, id: usize) -> &Link {
+        &self.links[id]
+    }
+
+    #[inline]
+    pub(crate) fn get_link_from_pid(&self, pid: &PeerId) -> Option<&Link> {
         self.links
             .iter()
             .find(|link| link.session.get_pid().unwrap() == *pid)
     }
 
-    pub(crate) fn get_link_mut(&mut self, pid: &PeerId) -> Option<&mut Link> {
-        self.links
-            .iter_mut()
-            .find(|link| link.session.get_pid().unwrap() == *pid)
+    #[inline]
+    pub(crate) fn get_local_context(&self, context: ZInt, link_id: usize) -> usize {
+        (*self.get_link(link_id).get_local_psid(&context).unwrap())
+            .try_into()
+            .unwrap()
+    }
+
+    fn add_node(&mut self, node: Node) -> NodeIndex {
+        let pid = node.pid.clone();
+        let idx = self.graph.add_node(node);
+        for link in &mut self.links {
+            if let Some((psid, _)) = link.mappings.iter().find(|(_, p)| **p == pid) {
+                link.local_mappings.insert(psid, idx.index() as ZInt);
+            }
+        }
+        idx
     }
 
     async fn make_link_state(&self, idx: NodeIndex, details: bool) -> LinkState {
@@ -231,7 +263,13 @@ impl Network {
     ) -> Vec<(NodeIndex, Node)> {
         log::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
 
-        let src_link = match self.get_link_mut(&src) {
+        let graph = &self.graph;
+        let links = &mut self.links;
+
+        let src_link = match links
+            .iter_mut()
+            .find(|link| link.session.get_pid().unwrap() == src)
+        {
             Some(link) => link,
             None => {
                 log::error!(
@@ -249,6 +287,9 @@ impl Network {
             .filter_map(|link_state| {
                 if let Some(pid) = link_state.pid {
                     src_link.set_pid_mapping(link_state.psid, pid.clone());
+                    if let Some(idx) = graph.node_indices().find(|idx| graph[*idx].pid == pid) {
+                        src_link.set_local_psid_mapping(link_state.psid, idx.index() as u64);
+                    }
                     Some((
                         pid,
                         link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
@@ -279,7 +320,7 @@ impl Network {
             .collect::<Vec<(PeerId, whatami::Type, Option<Vec<Locator>>, ZInt, Vec<ZInt>)>>();
 
         // apply psid<->pid mapping to links
-        let src_link = self.get_link(&src).unwrap();
+        let src_link = self.get_link_from_pid(&src).unwrap();
         let link_states = link_states
             .into_iter()
             .map(|(pid, wai, locs, sn, links)| {
@@ -356,7 +397,7 @@ impl Network {
                             links: links.clone(),
                         };
                         log::debug!("{} Add node (state) {}", self.name, pid);
-                        let idx = self.graph.add_node(node);
+                        let idx = self.add_node(node);
                         Some((links, idx, true))
                     }
                 },
@@ -386,7 +427,7 @@ impl Network {
                         links: vec![],
                     };
                     log::debug!("{} Add node (reintroduced) {}", self.name, link.clone());
-                    let idx = self.graph.add_node(node);
+                    let idx = self.add_node(node);
                     reintroduced_nodes.push((vec![], idx, true));
                 }
             }
@@ -475,7 +516,7 @@ impl Network {
         removed
     }
 
-    pub(crate) async fn add_link(&mut self, session: Session) {
+    pub(crate) async fn add_link(&mut self, session: Session) -> usize {
         self.links.push(Link::new(session.clone()));
 
         let pid = session.get_pid().unwrap();
@@ -485,7 +526,7 @@ impl Network {
             None => {
                 log::debug!("{} Add node (link) {}", self.name, pid);
                 (
-                    self.graph.add_node(Node {
+                    self.add_node(Node {
                         pid: pid.clone(),
                         whatami,
                         locators: None,
@@ -517,6 +558,7 @@ impl Network {
 
         let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
         self.send_on_link(idxs, &session).await;
+        self.links.len() - 1
     }
 
     pub(crate) async fn remove_link(&mut self, session: &Session) -> Vec<(NodeIndex, Node)> {

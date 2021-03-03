@@ -954,16 +954,8 @@ pub async fn route_data(
                 whatami::ROUTER => match face.whatami {
                     whatami::ROUTER => {
                         let routers_net = tables.routers_net.as_ref().unwrap();
-                        let local_context = routers_net
-                            .get_idx(
-                                &routers_net
-                                    .get_link(&face.pid)
-                                    .unwrap()
-                                    .get_pid(&routing_context.unwrap())
-                                    .unwrap(),
-                            )
-                            .unwrap()
-                            .index();
+                        let local_context =
+                            routers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match &res {
                             Some(res) => res.routers_data_routes[local_context].clone(),
                             None => compute_data_route(
@@ -977,16 +969,8 @@ pub async fn route_data(
                     }
                     whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context = peers_net
-                            .get_idx(
-                                &peers_net
-                                    .get_link(&face.pid)
-                                    .unwrap()
-                                    .get_pid(&routing_context.unwrap())
-                                    .unwrap(),
-                            )
-                            .unwrap()
-                            .index();
+                        let local_context =
+                            peers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match &res {
                             Some(res) => res.peers_data_routes[local_context].clone(),
                             None => compute_data_route(
@@ -1006,16 +990,8 @@ pub async fn route_data(
                 whatami::PEER => match face.whatami {
                     whatami::ROUTER | whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context = peers_net
-                            .get_idx(
-                                &peers_net
-                                    .get_link(&face.pid)
-                                    .unwrap()
-                                    .get_pid(&routing_context.unwrap())
-                                    .unwrap(),
-                            )
-                            .unwrap()
-                            .index();
+                        let local_context =
+                            peers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match &res {
                             Some(res) => res.peers_data_routes[local_context].clone(),
                             None => compute_data_route(

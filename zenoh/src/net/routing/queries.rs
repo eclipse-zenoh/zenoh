@@ -858,16 +858,8 @@ pub async fn route_query(
                 whatami::ROUTER => match face.whatami {
                     whatami::ROUTER => {
                         let routers_net = tables.routers_net.as_ref().unwrap();
-                        let local_context = routers_net
-                            .get_idx(
-                                &routers_net
-                                    .get_link(&face.pid)
-                                    .unwrap()
-                                    .get_pid(&routing_context.unwrap())
-                                    .unwrap(),
-                            )
-                            .unwrap()
-                            .index();
+                        let local_context =
+                            routers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match Resource::get_resource(prefix, suffix) {
                             Some(res) => res.routers_query_routes[local_context].clone(),
                             None => compute_query_route(
@@ -881,16 +873,8 @@ pub async fn route_query(
                     }
                     whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context = peers_net
-                            .get_idx(
-                                &peers_net
-                                    .get_link(&face.pid)
-                                    .unwrap()
-                                    .get_pid(&routing_context.unwrap())
-                                    .unwrap(),
-                            )
-                            .unwrap()
-                            .index();
+                        let local_context =
+                            peers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match Resource::get_resource(prefix, suffix) {
                             Some(res) => res.peers_query_routes[local_context].clone(),
                             None => compute_query_route(
@@ -910,16 +894,8 @@ pub async fn route_query(
                 whatami::PEER => match face.whatami {
                     whatami::ROUTER | whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context = peers_net
-                            .get_idx(
-                                &peers_net
-                                    .get_link(&face.pid)
-                                    .unwrap()
-                                    .get_pid(&routing_context.unwrap())
-                                    .unwrap(),
-                            )
-                            .unwrap()
-                            .index();
+                        let local_context =
+                            peers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match Resource::get_resource(prefix, suffix) {
                             Some(res) => res.peers_query_routes[local_context].clone(),
                             None => compute_query_route(

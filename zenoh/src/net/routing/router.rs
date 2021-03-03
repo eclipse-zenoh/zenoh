@@ -116,11 +116,12 @@ impl Tables {
         self.faces.values().find(|face| face.pid == *pid)
     }
 
-    pub async fn open_face(
+    async fn open_net_face(
         &mut self,
         pid: PeerId,
         whatami: WhatAmI,
         primitives: OutSession,
+        link_id: usize,
     ) -> Weak<FaceState> {
         unsafe {
             let fid = self.face_counter;
@@ -129,7 +130,7 @@ impl Tables {
             let mut newface = self
                 .faces
                 .entry(fid)
-                .or_insert_with(|| FaceState::new(fid, pid, whatami, primitives.clone()))
+                .or_insert_with(|| FaceState::new(fid, pid, whatami, primitives.clone(), link_id))
                 .clone();
 
             if whatami == whatami::CLIENT {
@@ -138,6 +139,15 @@ impl Tables {
             }
             Arc::downgrade(&newface)
         }
+    }
+
+    pub async fn open_face(
+        &mut self,
+        pid: PeerId,
+        whatami: WhatAmI,
+        primitives: OutSession,
+    ) -> Weak<FaceState> {
+        self.open_net_face(pid, whatami, primitives, 0).await
     }
 
     pub async fn close_face(&mut self, face: &Weak<FaceState>) {
@@ -280,16 +290,37 @@ impl Router {
         let mut tables = self.tables.write().await;
         let whatami = session.get_whatami()?;
 
+        let link_id = match (self.whatami, whatami) {
+            (whatami::CLIENT, _) => 0,
+            (whatami::ROUTER, whatami::ROUTER) => {
+                tables
+                    .routers_net
+                    .as_mut()
+                    .unwrap()
+                    .add_link(session.clone())
+                    .await
+            }
+            _ => {
+                tables
+                    .peers_net
+                    .as_mut()
+                    .unwrap()
+                    .add_link(session.clone())
+                    .await
+            }
+        };
+
         let handler = Arc::new(LinkStateInterceptor::new(
             session.clone(),
             self.tables.clone(),
             DeMux::new(Face {
                 tables: self.tables.clone(),
                 state: tables
-                    .open_face(
+                    .open_net_face(
                         session.get_pid().unwrap(),
                         whatami,
                         OutSession::Transport(Arc::new(Mux::new(session.clone()))),
+                        link_id,
                     )
                     .await
                     .upgrade()
@@ -300,17 +331,12 @@ impl Router {
         match (self.whatami, whatami) {
             (whatami::CLIENT, _) => (),
             (whatami::ROUTER, whatami::ROUTER) => {
-                let net = tables.routers_net.as_mut().unwrap();
-                net.add_link(session.clone()).await;
                 tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
             }
             _ => {
-                let net = tables.peers_net.as_mut().unwrap();
-                net.add_link(session.clone()).await;
                 tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
             }
-        };
-
+        }
         Ok(handler)
     }
 }

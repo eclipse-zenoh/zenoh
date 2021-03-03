@@ -28,6 +28,7 @@ pub struct FaceState {
     pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
     pub(super) primitives: OutSession,
+    pub(super) link_id: usize,
     pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) local_subs: Vec<Arc<Resource>>,
@@ -44,12 +45,14 @@ impl FaceState {
         pid: PeerId,
         whatami: WhatAmI,
         primitives: OutSession,
+        link_id: usize,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
             pid,
             whatami,
             primitives,
+            link_id,
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
             local_subs: Vec::new(),
@@ -114,20 +117,15 @@ impl Face {
                         .routers_net
                         .as_ref()
                         .unwrap()
-                        .get_link(&self.state.pid)
+                        .get_link(self.state.link_id)
+                        .get_pid(&routing_context)
                     {
-                        Some(link) => match link.get_pid(&routing_context) {
-                            Some(router) => router.clone(),
-                            None => {
-                                log::error!(
-                                        "Received router subscription with unknown routing context id {}",
-                                        routing_context
-                                    );
-                                return;
-                            }
-                        },
+                        Some(router) => router.clone(),
                         None => {
-                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            log::error!(
+                                "Received router subscription with unknown routing context id {}",
+                                routing_context
+                            );
                             return;
                         }
                     };
@@ -152,19 +150,19 @@ impl Face {
             | (whatami::PEER, whatami::ROUTER)
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
-                    let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
-                        Some(link) => match link.get_pid(&routing_context) {
-                            Some(peer) => peer.clone(),
-                            None => {
-                                log::error!(
-                                    "Received peer subscription with unknown routing context id {}",
-                                    routing_context
-                                );
-                                return;
-                            }
-                        },
+                    let peer = match tables
+                        .peers_net
+                        .as_ref()
+                        .unwrap()
+                        .get_link(self.state.link_id)
+                        .get_pid(&routing_context)
+                    {
+                        Some(peer) => peer.clone(),
                         None => {
-                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            log::error!(
+                                "Received peer subscription with unknown routing context id {}",
+                                routing_context
+                            );
                             return;
                         }
                     };
@@ -212,20 +210,15 @@ impl Face {
                         .routers_net
                         .as_ref()
                         .unwrap()
-                        .get_link(&self.state.pid)
+                        .get_link(self.state.link_id)
+                        .get_pid(&routing_context)
                     {
-                        Some(link) => match link.get_pid(&routing_context) {
-                            Some(router) => router.clone(),
-                            None => {
-                                log::error!(
-                                        "Received router forget subscription with unknown routing context id {}",
-                                        routing_context
-                                    );
-                                return;
-                            }
-                        },
+                        Some(router) => router.clone(),
                         None => {
-                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            log::error!(
+                                "Received router forget subscription with unknown routing context id {}",
+                                routing_context
+                            );
                             return;
                         }
                     };
@@ -249,19 +242,19 @@ impl Face {
             | (whatami::PEER, whatami::ROUTER)
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
-                    let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
-                        Some(link) => match link.get_pid(&routing_context) {
-                            Some(peer) => peer.clone(),
-                            None => {
-                                log::error!(
-                                    "Received peer forget subscription with unknown routing context id {}",
-                                    routing_context
-                                );
-                                return;
-                            }
-                        },
+                    let peer = match tables
+                        .peers_net
+                        .as_ref()
+                        .unwrap()
+                        .get_link(self.state.link_id)
+                        .get_pid(&routing_context)
+                    {
+                        Some(peer) => peer.clone(),
                         None => {
-                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            log::error!(
+                                "Received peer forget subscription with unknown routing context id {}",
+                                routing_context
+                            );
                             return;
                         }
                     };
@@ -308,20 +301,15 @@ impl Face {
                         .routers_net
                         .as_ref()
                         .unwrap()
-                        .get_link(&self.state.pid)
+                        .get_link(self.state.link_id)
+                        .get_pid(&routing_context)
                     {
-                        Some(link) => match link.get_pid(&routing_context) {
-                            Some(router) => router.clone(),
-                            None => {
-                                log::error!(
-                                    "Received router queryable with unknown routing context id {}",
-                                    routing_context
-                                );
-                                return;
-                            }
-                        },
+                        Some(router) => router.clone(),
                         None => {
-                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            log::error!(
+                                "Received router queryable with unknown routing context id {}",
+                                routing_context
+                            );
                             return;
                         }
                     };
@@ -345,19 +333,19 @@ impl Face {
             | (whatami::PEER, whatami::ROUTER)
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
-                    let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
-                        Some(link) => match link.get_pid(&routing_context) {
-                            Some(peer) => peer.clone(),
-                            None => {
-                                log::error!(
-                                    "Received peer queryable with unknown routing context id {}",
-                                    routing_context
-                                );
-                                return;
-                            }
-                        },
+                    let peer = match tables
+                        .peers_net
+                        .as_ref()
+                        .unwrap()
+                        .get_link(self.state.link_id)
+                        .get_pid(&routing_context)
+                    {
+                        Some(peer) => peer.clone(),
                         None => {
-                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            log::error!(
+                                "Received peer queryable with unknown routing context id {}",
+                                routing_context
+                            );
                             return;
                         }
                     };
@@ -394,20 +382,15 @@ impl Face {
                         .routers_net
                         .as_ref()
                         .unwrap()
-                        .get_link(&self.state.pid)
+                        .get_link(self.state.link_id)
+                        .get_pid(&routing_context)
                     {
-                        Some(link) => match link.get_pid(&routing_context) {
-                            Some(router) => router.clone(),
-                            None => {
-                                log::error!(
-                                        "Received router forget queryable with unknown routing context id {}",
-                                        routing_context
-                                    );
-                                return;
-                            }
-                        },
+                        Some(router) => router.clone(),
                         None => {
-                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            log::error!(
+                                "Received router forget queryable with unknown routing context id {}",
+                                routing_context
+                            );
                             return;
                         }
                     };
@@ -431,19 +414,19 @@ impl Face {
             | (whatami::PEER, whatami::ROUTER)
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
-                    let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
-                        Some(link) => match link.get_pid(&routing_context) {
-                            Some(peer) => peer.clone(),
-                            None => {
-                                log::error!(
-                                    "Received peer forget queryable with unknown routing context id {}",
-                                    routing_context
-                                );
-                                return;
-                            }
-                        },
+                    let peer = match tables
+                        .peers_net
+                        .as_ref()
+                        .unwrap()
+                        .get_link(self.state.link_id)
+                        .get_pid(&routing_context)
+                    {
+                        Some(peer) => peer.clone(),
                         None => {
-                            log::error!("Cannot find net context for face {}", self.state.pid);
+                            log::error!(
+                                "Received peer forget queryable with unknown routing context id {}",
+                                routing_context
+                            );
                             return;
                         }
                     };
