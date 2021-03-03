@@ -116,7 +116,7 @@ impl Face {
                         .unwrap()
                         .get_link(&self.state.pid)
                     {
-                        Some(link) => match link.mappings.get(&routing_context) {
+                        Some(link) => match link.get_pid(&routing_context) {
                             Some(router) => router.clone(),
                             None => {
                                 log::error!(
@@ -153,7 +153,7 @@ impl Face {
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
                     let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
-                        Some(link) => match link.mappings.get(&routing_context) {
+                        Some(link) => match link.get_pid(&routing_context) {
                             Some(peer) => peer.clone(),
                             None => {
                                 log::error!(
@@ -214,7 +214,7 @@ impl Face {
                         .unwrap()
                         .get_link(&self.state.pid)
                     {
-                        Some(link) => match link.mappings.get(&routing_context) {
+                        Some(link) => match link.get_pid(&routing_context) {
                             Some(router) => router.clone(),
                             None => {
                                 log::error!(
@@ -250,7 +250,7 @@ impl Face {
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
                     let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
-                        Some(link) => match link.mappings.get(&routing_context) {
+                        Some(link) => match link.get_pid(&routing_context) {
                             Some(peer) => peer.clone(),
                             None => {
                                 log::error!(
@@ -310,7 +310,7 @@ impl Face {
                         .unwrap()
                         .get_link(&self.state.pid)
                     {
-                        Some(link) => match link.mappings.get(&routing_context) {
+                        Some(link) => match link.get_pid(&routing_context) {
                             Some(router) => router.clone(),
                             None => {
                                 log::error!(
@@ -346,7 +346,7 @@ impl Face {
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
                     let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
-                        Some(link) => match link.mappings.get(&routing_context) {
+                        Some(link) => match link.get_pid(&routing_context) {
                             Some(peer) => peer.clone(),
                             None => {
                                 log::error!(
@@ -396,7 +396,7 @@ impl Face {
                         .unwrap()
                         .get_link(&self.state.pid)
                     {
-                        Some(link) => match link.mappings.get(&routing_context) {
+                        Some(link) => match link.get_pid(&routing_context) {
                             Some(router) => router.clone(),
                             None => {
                                 log::error!(
@@ -432,7 +432,7 @@ impl Face {
             | (whatami::PEER, whatami::PEER) => match routing_context {
                 Some(routing_context) => {
                     let peer = match tables.peers_net.as_ref().unwrap().get_link(&self.state.pid) {
-                        Some(link) => match link.mappings.get(&routing_context) {
+                        Some(link) => match link.get_pid(&routing_context) {
                             Some(peer) => peer.clone(),
                             None => {
                                 log::error!(

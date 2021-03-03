@@ -13,8 +13,8 @@
 //
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{VisitMap, Visitable};
-use std::collections::HashMap;
 use std::convert::TryInto;
+use vec_map::VecMap;
 
 use super::protocol::core::{whatami, PeerId, ZInt};
 use super::protocol::link::Locator;
@@ -39,15 +39,25 @@ impl std::fmt::Debug for Node {
 
 pub(crate) struct Link {
     pub(crate) session: Session,
-    pub(crate) mappings: HashMap<ZInt, PeerId>,
+    pub(crate) mappings: VecMap<PeerId>,
 }
 
 impl Link {
     fn new(session: Session) -> Self {
         Link {
             session,
-            mappings: HashMap::new(),
+            mappings: VecMap::new(),
         }
+    }
+
+    #[inline]
+    pub(crate) fn set_pid_mapping(&mut self, psid: ZInt, pid: PeerId) {
+        self.mappings.insert(psid.try_into().unwrap(), pid);
+    }
+
+    #[inline]
+    pub(crate) fn get_pid(&self, psid: &ZInt) -> Option<&PeerId> {
+        self.mappings.get((*psid).try_into().unwrap())
     }
 }
 
@@ -238,7 +248,7 @@ impl Network {
             .into_iter()
             .filter_map(|link_state| {
                 if let Some(pid) = link_state.pid {
-                    src_link.mappings.insert(link_state.psid, pid.clone());
+                    src_link.set_pid_mapping(link_state.psid, pid.clone());
                     Some((
                         pid,
                         link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
@@ -247,7 +257,7 @@ impl Network {
                         link_state.links,
                     ))
                 } else {
-                    match src_link.mappings.get(&link_state.psid) {
+                    match src_link.get_pid(&link_state.psid) {
                         Some(pid) => Some((
                             pid.clone(),
                             link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
@@ -276,7 +286,7 @@ impl Network {
                 let links: Vec<PeerId> = links
                     .iter()
                     .filter_map(|l| {
-                        if let Some(pid) = src_link.mappings.get(&l) {
+                        if let Some(pid) = src_link.get_pid(&l) {
                             Some(pid.clone())
                         } else {
                             log::error!(

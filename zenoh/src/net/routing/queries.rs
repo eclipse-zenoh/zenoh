@@ -863,8 +863,7 @@ pub async fn route_query(
                                 &routers_net
                                     .get_link(&face.pid)
                                     .unwrap()
-                                    .mappings
-                                    .get(&routing_context.unwrap())
+                                    .get_pid(&routing_context.unwrap())
                                     .unwrap(),
                             )
                             .unwrap()
@@ -887,8 +886,7 @@ pub async fn route_query(
                                 &peers_net
                                     .get_link(&face.pid)
                                     .unwrap()
-                                    .mappings
-                                    .get(&routing_context.unwrap())
+                                    .get_pid(&routing_context.unwrap())
                                     .unwrap(),
                             )
                             .unwrap()
@@ -917,8 +915,7 @@ pub async fn route_query(
                                 &peers_net
                                     .get_link(&face.pid)
                                     .unwrap()
-                                    .mappings
-                                    .get(&routing_context.unwrap())
+                                    .get_pid(&routing_context.unwrap())
                                     .unwrap(),
                             )
                             .unwrap()
