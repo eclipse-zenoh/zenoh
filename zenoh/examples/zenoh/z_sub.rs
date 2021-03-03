@@ -65,7 +65,7 @@ fn parse_args() -> (Properties, String) {
     let args = App::new("zenoh subscriber example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
-                .possible_values(&["peer", "client"])
+                .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
             "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
