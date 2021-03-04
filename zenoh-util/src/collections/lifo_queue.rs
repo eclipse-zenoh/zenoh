@@ -17,17 +17,17 @@ use crate::zasynclock;
 use async_std::sync::Mutex;
 
 pub struct LifoQueue<T> {
-    buffer: Mutex<StackBuffer<T>>,
     not_empty: Condition,
     not_full: Condition,
+    buffer: Mutex<StackBuffer<T>>,
 }
 
 impl<T> LifoQueue<T> {
     pub fn new(capacity: usize) -> LifoQueue<T> {
         LifoQueue {
-            buffer: Mutex::new(StackBuffer::new(capacity)),
             not_empty: Condition::new(),
             not_full: Condition::new(),
+            buffer: Mutex::new(StackBuffer::new(capacity)),
         }
     }
 

@@ -14,26 +14,26 @@
 use std::collections::VecDeque;
 
 pub(crate) struct StackBuffer<T> {
-    buffer: VecDeque<T>,
     capacity: usize,
-    n: usize,
+    len: usize,
+    buffer: VecDeque<T>,
 }
 
 impl<T> StackBuffer<T> {
     pub(crate) fn new(capacity: usize) -> StackBuffer<T> {
         let buffer = VecDeque::<T>::with_capacity(capacity);
         StackBuffer {
-            buffer,
             capacity,
-            n: 0,
+            len: 0,
+            buffer,
         }
     }
 
     #[inline]
     pub(crate) fn push(&mut self, elem: T) -> Option<T> {
-        if self.n < self.capacity {
+        if self.len < self.capacity {
             self.buffer.push_front(elem);
-            self.n += 1;
+            self.len += 1;
             return None;
         }
         Some(elem)
@@ -43,7 +43,7 @@ impl<T> StackBuffer<T> {
     pub(crate) fn pop(&mut self) -> Option<T> {
         let x = self.buffer.pop_front();
         if x.is_some() {
-            self.n -= 1;
+            self.len -= 1;
         }
         x
     }
@@ -61,7 +61,7 @@ impl<T> StackBuffer<T> {
 
     #[inline]
     pub(crate) fn len(&self) -> usize {
-        self.n
+        self.len
     }
 
     #[inline]

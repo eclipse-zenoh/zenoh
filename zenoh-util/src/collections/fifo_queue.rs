@@ -17,17 +17,17 @@ use crate::zasynclock;
 use async_std::sync::Mutex;
 
 pub struct FifoQueue<T> {
-    buffer: Mutex<RingBuffer<T>>,
     not_empty: Condition,
     not_full: Condition,
+    buffer: Mutex<RingBuffer<T>>,
 }
 
 impl<T> FifoQueue<T> {
     pub fn new(capacity: usize) -> FifoQueue<T> {
         FifoQueue {
-            buffer: Mutex::new(RingBuffer::new(capacity)),
             not_empty: Condition::new(),
             not_full: Condition::new(),
+            buffer: Mutex::new(RingBuffer::new(capacity)),
         }
     }
 

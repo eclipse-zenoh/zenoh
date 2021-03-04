@@ -18,22 +18,22 @@ use crate::sync::Condition;
 use crate::zasynclock;
 
 pub struct PriorityQueue<T> {
-    state: Mutex<Vec<CircularBuffer<T>>>,
     not_full: Condition,
     not_empty: Condition,
+    state: Mutex<Vec<CircularBuffer<T>>>,
 }
 
 impl<T> PriorityQueue<T> {
-    pub fn new(capacity: Vec<usize>, concurrency_level: usize) -> PriorityQueue<T> {
+    pub fn new(capacity: Vec<usize>) -> PriorityQueue<T> {
         let mut state = Vec::with_capacity(capacity.len());
         for c in capacity.iter() {
             state.push(CircularBuffer::new(*c));
         }
 
         PriorityQueue {
+            not_full: Condition::new(),
+            not_empty: Condition::new(),
             state: Mutex::new(state),
-            not_full: Condition::new(concurrency_level),
-            not_empty: Condition::new(concurrency_level),
         }
     }
 
