@@ -947,7 +947,7 @@ pub async fn route_data(
 ) {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => unsafe {
-            log::debug!("Route data for res {}{}", prefix.name(), suffix,);
+            log::trace!("Route data for res {}{}", prefix.name(), suffix,);
 
             let res = Resource::get_resource(prefix, suffix);
 

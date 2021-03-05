@@ -14,7 +14,7 @@
 use async_std::future;
 use async_std::stream::StreamExt;
 use clap::{App, Arg};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use zenoh::*;
 
 #[async_std::main]
@@ -50,9 +50,8 @@ async fn main() {
 fn parse_args() -> Properties {
     let args = App::new("zenoh-net delay sub example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
+                .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
             "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
@@ -61,11 +60,18 @@ fn parse_args() -> Properties {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(Arg::from_usage(
+            "-c, --config=[FILE]      'A configuration file.'",
+        ))
+        .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .get_matches();
 
-    let mut config = Properties::default();
+    let mut config = if let Some(conf_file) = args.value_of("config") {
+        Properties::try_from(std::path::Path::new(conf_file)).unwrap()
+    } else {
+        Properties::default()
+    };
     for key in ["mode", "peer", "listener"].iter() {
         if let Some(value) = args.values_of(key) {
             config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));

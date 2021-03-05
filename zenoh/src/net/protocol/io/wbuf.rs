@@ -129,10 +129,10 @@ impl WBuf {
                 .map(|s| match s {
                     Slice::External(arcs) => arcs.clone(),
                     Slice::Internal(start, Some(end)) => {
-                        ArcSlice::new(arc_buf.clone(), *start, *end)
+                        ArcSlice::new(arc_buf.clone().into(), *start, *end)
                     }
                     Slice::Internal(start, None) => {
-                        ArcSlice::new(arc_buf.clone(), *start, arc_buf.len())
+                        ArcSlice::new(arc_buf.clone().into(), *start, arc_buf.len())
                     }
                 })
                 .filter(|s| !s.is_empty())

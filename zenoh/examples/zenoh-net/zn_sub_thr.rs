@@ -73,9 +73,8 @@ fn print_stats(start: Instant, n: u128) {
 fn parse_args() -> (Properties, u32, u128) {
     let args = App::new("zenoh-net throughput sub example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
+                .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
             "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",

@@ -397,12 +397,20 @@ impl SessionManager {
         sn_resolution: ZInt,
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
+        is_local: bool,
     ) -> Session {
         loop {
             match self.get_session(peer).await {
                 Some(session) => return session,
                 None => match self
-                    .new_session(peer, whatami, sn_resolution, initial_sn_tx, initial_sn_rx)
+                    .new_session(
+                        peer,
+                        whatami,
+                        sn_resolution,
+                        initial_sn_tx,
+                        initial_sn_rx,
+                        is_local,
+                    )
                     .await
                 {
                     Ok(session) => return session,
@@ -435,6 +443,7 @@ impl SessionManager {
         sn_resolution: ZInt,
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
+        is_local: bool,
     ) -> ZResult<Session> {
         let mut w_guard = zasynclock!(self.sessions);
         if w_guard.contains_key(peer) {
@@ -451,6 +460,7 @@ impl SessionManager {
             sn_resolution,
             initial_sn_tx,
             initial_sn_rx,
+            is_local,
         ));
 
         // Create a weak reference to the session
@@ -459,12 +469,13 @@ impl SessionManager {
         w_guard.insert(peer.clone(), a_ch);
 
         log::debug!(
-            "New session opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}",
+            "New session opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}, is_local: {}",
             peer,
             whatami,
             sn_resolution,
             initial_sn_tx,
-            initial_sn_rx
+            initial_sn_rx,
+            is_local
         );
 
         Ok(session)

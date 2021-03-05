@@ -15,11 +15,13 @@
 mod constants;
 mod msg;
 mod msg_reader;
+mod msg_shm;
 mod msg_writer;
 
 pub use constants::*;
 pub use msg::*;
 pub use msg_reader::*;
+pub use msg_shm::*;
 pub use msg_writer::*;
 
 use super::core;

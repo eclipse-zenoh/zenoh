@@ -117,18 +117,16 @@ impl LibLoader {
         for dir in &self.search_paths {
             match dir.read_dir() {
                 Ok(read_dir) => {
-                    for entry in read_dir {
-                        if let Ok(entry) = entry {
-                            if entry.file_name() == filename_ostr {
-                                let path = entry.path();
-                                return Library::new(path.clone())
-                                    .map_err(|e| {
-                                        zerror2!(ZErrorKind::Other {
-                                            descr: e.to_string()
-                                        })
+                    for entry in read_dir.flatten() {
+                        if entry.file_name() == filename_ostr {
+                            let path = entry.path();
+                            return Library::new(path.clone())
+                                .map_err(|e| {
+                                    zerror2!(ZErrorKind::Other {
+                                        descr: e.to_string()
                                     })
-                                    .map(|lib| (lib, path));
-                            }
+                                })
+                                .map(|lib| (lib, path));
                         }
                     }
                 }
@@ -161,26 +159,23 @@ impl LibLoader {
         for dir in &self.search_paths {
             match dir.read_dir() {
                 Ok(read_dir) => {
-                    for entry in read_dir {
-                        if let Ok(entry) = entry {
-                            if let Ok(filename) = entry.file_name().into_string() {
-                                if filename.starts_with(&lib_prefix)
-                                    && filename.ends_with(&*LIB_SUFFIX)
-                                {
-                                    let name = &filename
-                                        [(lib_prefix.len())..(filename.len() - LIB_SUFFIX.len())];
-                                    let path = entry.path();
-                                    if !result.iter().any(|(_, _, n)| n == name) {
-                                        match Library::new(path.as_os_str()) {
-                                            Ok(lib) => result.push((lib, path, name.to_string())),
-                                            Err(err) => warn!("{}", err),
-                                        }
-                                    } else {
-                                        debug!(
-                                            "Do not load plugin {} from {:?} : already loaded.",
-                                            name, path
-                                        );
+                    for entry in read_dir.flatten() {
+                        if let Ok(filename) = entry.file_name().into_string() {
+                            if filename.starts_with(&lib_prefix) && filename.ends_with(&*LIB_SUFFIX)
+                            {
+                                let name = &filename
+                                    [(lib_prefix.len())..(filename.len() - LIB_SUFFIX.len())];
+                                let path = entry.path();
+                                if !result.iter().any(|(_, _, n)| n == name) {
+                                    match Library::new(path.as_os_str()) {
+                                        Ok(lib) => result.push((lib, path, name.to_string())),
+                                        Err(err) => warn!("{}", err),
                                     }
+                                } else {
+                                    debug!(
+                                        "Do not load plugin {} from {:?} : already loaded.",
+                                        name, path
+                                    );
                                 }
                             }
                         }

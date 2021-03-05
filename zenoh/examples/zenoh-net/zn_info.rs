@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
+use std::convert::TryFrom;
 use zenoh::net::*;
 use zenoh::Properties;
 
@@ -34,9 +35,8 @@ async fn main() {
 fn parse_args() -> Properties {
     let args = App::new("zenoh-net info example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
+                .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
             "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
@@ -50,7 +50,7 @@ fn parse_args() -> Properties {
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.value_of("config") {
-        Properties::from(std::fs::read_to_string(conf_file).unwrap())
+        Properties::try_from(std::path::Path::new(conf_file)).unwrap()
     } else {
         Properties::default()
     };

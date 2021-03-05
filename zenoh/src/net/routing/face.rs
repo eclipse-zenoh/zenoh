@@ -69,10 +69,7 @@ impl FaceState {
     pub(super) fn get_mapping(&self, prefixid: &ZInt) -> Option<&std::sync::Arc<Resource>> {
         match self.remote_mappings.get(prefixid) {
             Some(prefix) => Some(prefix),
-            None => match self.local_mappings.get(prefixid) {
-                Some(prefix) => Some(prefix),
-                None => None,
-            },
+            None => self.local_mappings.get(prefixid),
         }
     }
 

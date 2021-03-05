@@ -533,8 +533,8 @@ impl Change {
         Ok(Change {
             path,
             value,
-            kind,
             timestamp,
+            kind,
         })
     }
 

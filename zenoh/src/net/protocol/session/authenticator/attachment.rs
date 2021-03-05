@@ -23,4 +23,5 @@ pub mod authorization {
 
     pub const RESERVED: ZInt = 0;
     pub const USRPWD: ZInt = 1;
+    pub const SHM: ZInt = 2;
 }

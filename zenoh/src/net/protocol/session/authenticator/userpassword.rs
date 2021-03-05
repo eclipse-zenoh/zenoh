@@ -11,10 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::Locator;
-use super::{attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorTrait};
-use super::{PeerId, Property, ZInt};
-use super::{RBuf, WBuf};
+use super::{
+    attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
+    PeerAuthenticatorTrait,
+};
+use super::{Locator, PeerId, Property, RBuf, WBuf, ZInt};
 use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
@@ -46,7 +47,6 @@ const USRPWD_VERSION: ZInt = 0;
 ///
 /// ENC values:
 /// - 0x00 => Zenoh Properties
-/// - 0x20 => UserPassword authentication
 /// ```
 
 /*************************************/
@@ -54,7 +54,7 @@ const USRPWD_VERSION: ZInt = 0;
 /*************************************/
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |0 0 1|  ATTCH  |
+/// |0 0 0|  ATTCH  |
 /// +-+-+-+---------+
 /// ~    version    ~
 /// +---------------+
@@ -63,13 +63,13 @@ struct InitSynProperty {
 }
 
 impl WBuf {
-    fn write_init_syn_property(&mut self, init_syn_property: &InitSynProperty) -> bool {
+    fn write_init_syn_property_usrpwd(&mut self, init_syn_property: &InitSynProperty) -> bool {
         self.write_zint(init_syn_property.version)
     }
 }
 
 impl RBuf {
-    fn read_init_syn_property(&mut self) -> Option<InitSynProperty> {
+    fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
         Some(InitSynProperty { version })
     }
@@ -80,7 +80,7 @@ impl RBuf {
 /*************************************/
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |0 0 1|  ATTCH  |
+/// |0 0 0|  ATTCH  |
 /// +-+-+-+---------+
 /// ~     nonce     ~
 /// +---------------+
@@ -89,13 +89,13 @@ struct InitAckProperty {
 }
 
 impl WBuf {
-    fn write_init_ack_property(&mut self, init_ack_property: &InitAckProperty) -> bool {
+    fn write_init_ack_property_usrpwd(&mut self, init_ack_property: &InitAckProperty) -> bool {
         self.write_zint(init_ack_property.nonce)
     }
 }
 
 impl RBuf {
-    fn read_init_ack_property(&mut self) -> Option<InitAckProperty> {
+    fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty> {
         let nonce = self.read_zint()?;
         Some(InitAckProperty { nonce })
     }
@@ -106,7 +106,7 @@ impl RBuf {
 /*************************************/
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |0 0 1|  ATTCH  |
+/// |0 0 0|  ATTCH  |
 /// +-+-+-+---------+
 /// ~     user      ~
 /// +---------------+
@@ -118,14 +118,14 @@ struct OpenSynProperty {
 }
 
 impl WBuf {
-    fn write_open_syn_property(&mut self, open_syn_property: &OpenSynProperty) -> bool {
+    fn write_open_syn_property_usrpwd(&mut self, open_syn_property: &OpenSynProperty) -> bool {
         zcheck!(self.write_bytes_array(&open_syn_property.user));
         self.write_bytes_array(&open_syn_property.hmac)
     }
 }
 
 impl RBuf {
-    fn read_open_syn_property(&mut self) -> Option<OpenSynProperty> {
+    fn read_open_syn_property_usrpwd(&mut self) -> Option<OpenSynProperty> {
         let user = self.read_bytes_array()?;
         let hmac = self.read_bytes_array()?;
         Some(OpenSynProperty { user, hmac })
@@ -147,7 +147,7 @@ struct Authenticated {
 
 pub struct UserPasswordAuthenticator {
     lookup: RwLock<HashMap<Vec<u8>, Vec<u8>>>,
-    credentials: Credentials,
+    credentials: Option<Credentials>,
     nonces: Mutex<HashMap<(Locator, Locator), (PeerId, ZInt)>>,
     authenticated: Mutex<HashMap<PeerId, Authenticated>>,
     prng: Mutex<PseudoRng>,
@@ -156,14 +156,15 @@ pub struct UserPasswordAuthenticator {
 impl UserPasswordAuthenticator {
     pub fn new(
         lookup: HashMap<Vec<u8>, Vec<u8>>,
-        credentials: (Vec<u8>, Vec<u8>),
+        mut credentials: Option<(Vec<u8>, Vec<u8>)>,
     ) -> UserPasswordAuthenticator {
+        let credentials = credentials.take().map(|cr| Credentials {
+            user: cr.0,
+            password: cr.1,
+        });
         UserPasswordAuthenticator {
             lookup: RwLock::new(lookup),
-            credentials: Credentials {
-                user: credentials.0,
-                password: credentials.1,
-            },
+            credentials,
             nonces: Mutex::new(HashMap::new()),
             authenticated: Mutex::new(HashMap::new()),
             prng: Mutex::new(PseudoRng::from_entropy()),
@@ -185,35 +186,35 @@ impl UserPasswordAuthenticator {
     pub async fn from_properties(
         config: &ConfigProperties,
     ) -> ZResult<Option<UserPasswordAuthenticator>> {
+        let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+        if let Some(dict) = config.get(&ZN_USER_PASSWORD_DICTIONARY_KEY) {
+            let content = fs::read_to_string(dict).await.map_err(|e| {
+                zerror2!(ZErrorKind::Other {
+                    descr: format!("Invalid user-password dictionary file: {}", e)
+                })
+            })?;
+            // Populate the user-password dictionary
+            let mut ps = Properties::from(content);
+            for (user, password) in ps.drain() {
+                lookup.insert(user.into(), password.into());
+            }
+            log::debug!("User-password dictionary has been configured");
+        }
+
+        let mut credentials: Option<(Vec<u8>, Vec<u8>)> = None;
         if let Some(user) = config.get(&ZN_USER_KEY) {
             if let Some(password) = config.get(&ZN_PASSWORD_KEY) {
-                // We have both user password parameter defined. Check if we
-                // need to build the user-password lookup dictionary for incoming
-                // connections, e.g. on the router.
-                let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-                if let Some(dict) = config.get(&ZN_USER_PASSWORD_DICTIONARY_KEY) {
-                    let content = fs::read_to_string(dict).await.map_err(|e| {
-                        zerror2!(ZErrorKind::Other {
-                            descr: format!("Invalid user-password dictionary file: {}", e)
-                        })
-                    })?;
-                    // Populate the user-password dictionary
-                    let mut ps = Properties::from(content);
-                    for (user, password) in ps.drain() {
-                        lookup.insert(user.into(), password.into());
-                    }
-                }
-                // Create the UserPassword Authenticator based on provided info
-                let upa = UserPasswordAuthenticator::new(
-                    lookup,
-                    (user.to_string().into(), password.to_string().into()),
-                );
-                log::debug!("User-password authentication is enabled");
-
-                return Ok(Some(upa));
+                log::debug!("User and password have been configured");
+                credentials = Some((user.to_string().into(), password.to_string().into()));
             }
         }
-        Ok(None)
+
+        if !lookup.is_empty() || credentials.is_some() {
+            log::debug!("User-password authentication is enabled");
+            Ok(Some(UserPasswordAuthenticator::new(lookup, credentials)))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -223,19 +224,26 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<Vec<Property>> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        let mut res = PeerAuthenticatorOutput::default();
+        // If credentials are not configured, don't initiate the USRPWD authentication
+        if self.credentials.is_none() {
+            return Ok(res);
+        }
+
         let init_syn_property = InitSynProperty {
             version: USRPWD_VERSION,
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_init_syn_property(&init_syn_property);
+        wbuf.write_init_syn_property_usrpwd(&init_syn_property);
         let rbuf: RBuf = wbuf.into();
 
         let prop = Property {
             key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
-        Ok(vec![prop])
+        res.properties.push(prop);
+        Ok(res)
     }
 
     async fn handle_init_syn(
@@ -244,7 +252,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         peer_id: &PeerId,
         sn_resolution: ZInt,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::USRPWD);
@@ -256,7 +264,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let init_syn_property = match rbuf.read_init_syn_property() {
+        let init_syn_property = match rbuf.read_init_syn_property_usrpwd() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -265,7 +273,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         };
 
-        if init_syn_property.version != USRPWD_VERSION {
+        if init_syn_property.version > USRPWD_VERSION {
             return zerror!(ZErrorKind::InvalidMessage {
                 descr: format!("Rejected InitSyn with invalid attachment on link: {}", link),
             });
@@ -276,7 +284,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let init_ack_property = InitAckProperty { nonce };
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_init_ack_property(&init_ack_property);
+        wbuf.write_init_ack_property_usrpwd(&init_ack_property);
         let rbuf: RBuf = wbuf.into();
         let prop = Property {
             key: attachment::authorization::USRPWD,
@@ -289,7 +297,9 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             (peer_id.clone(), nonce),
         );
 
-        Ok(vec![prop])
+        let mut res = PeerAuthenticatorOutput::default();
+        res.properties.push(prop);
+        Ok(res)
     }
 
     async fn handle_init_ack(
@@ -298,11 +308,18 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
-        let res = properties
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        let mut res = PeerAuthenticatorOutput::default();
+        // If credentials are not configured, don't continue the USRPWD authentication
+        let credentials = match self.credentials.as_ref() {
+            Some(cr) => cr,
+            None => return Ok(res),
+        };
+
+        let tmp = properties
             .iter()
             .find(|p| p.key == attachment::authorization::USRPWD);
-        let mut rbuf: RBuf = match res {
+        let mut rbuf: RBuf = match tmp {
             Some(p) => p.value.clone().into(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -310,7 +327,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let init_ack_property = match rbuf.read_init_ack_property() {
+        let init_ack_property = match rbuf.read_init_ack_property_usrpwd() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -321,29 +338,29 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         // Create the HMAC of the password using the nonce received as a key (it's a challenge)
         let key = init_ack_property.nonce.to_le_bytes();
-        let hmac = hmac::sign(&key, &self.credentials.password)?;
+        let hmac = hmac::sign(&key, &credentials.password)?;
         // Create the OpenSyn attachment
         let open_syn_property = OpenSynProperty {
-            user: self.credentials.user.clone(),
+            user: credentials.user.clone(),
             hmac,
         };
         // Encode the InitAck attachment
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_open_syn_property(&open_syn_property);
+        wbuf.write_open_syn_property_usrpwd(&open_syn_property);
         let rbuf: RBuf = wbuf.into();
         let prop = Property {
             key: attachment::authorization::USRPWD,
             value: rbuf.to_vec(),
         };
-
-        Ok(vec![prop])
+        res.properties.push(prop);
+        Ok(res)
     }
 
     async fn handle_open_syn(
         &self,
         link: &AuthenticatedPeerLink,
         properties: &[Property],
-    ) -> ZResult<Vec<Property>> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
         let (peer_id, nonce) =
             match zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone())) {
                 Some(tuple) => tuple,
@@ -368,7 +385,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let open_syn_property = match rbuf.read_open_syn_property() {
+        let open_syn_property = match rbuf.read_open_syn_property_usrpwd() {
             Some(osp) => osp,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -420,15 +437,15 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         }
 
-        Ok(vec![])
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
         _properties: &[Property],
-    ) -> ZResult<()> {
-        Ok(())
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        Ok(PeerAuthenticatorOutput::default())
     }
 
     async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {

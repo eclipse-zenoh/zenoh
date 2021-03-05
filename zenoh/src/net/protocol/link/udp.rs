@@ -551,10 +551,9 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
 
         macro_rules! zgetlink {
             ($src:expr, $dst:expr) => {
-                match zasynclock!(listener.links).get(&($src, $dst)) {
-                    Some(link) => Some(link.clone()),
-                    None => None,
-                }
+                zasynclock!(listener.links)
+                    .get(&($src, $dst))
+                    .map(|link| link.clone())
             };
         }
 

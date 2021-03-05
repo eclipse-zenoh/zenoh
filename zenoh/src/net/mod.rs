@@ -77,6 +77,7 @@ use protocol::core::WhatAmI;
 use runtime::orchestrator::{Loop, SessionOrchestrator};
 use zenoh_util::properties::config::*;
 // Shared memory and zero-copy
+#[cfg(feature = "zero-copy")]
 pub use protocol::io::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 
 mod types;
@@ -213,8 +214,7 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
 /// # })
 /// ```
 pub async fn open(config: ConfigProperties) -> ZResult<Session> {
-    trace!("open({})", &config);
     debug!("Zenoh Rust API {}", GIT_VERSION);
-    debug!("Config: {}", &config);
+    debug!("Config: {:?}", &config);
     Session::new(config).await
 }

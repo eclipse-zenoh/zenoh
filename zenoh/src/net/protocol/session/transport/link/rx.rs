@@ -43,7 +43,7 @@ impl SessionTransportLink {
     pub(super) async fn receive_message(&self, message: SessionMessage) {
         log::trace!(
             "Received from peer {} on link {}: {:?}",
-            self.transport.get_pid(),
+            self.transport.pid,
             self.inner,
             message
         );

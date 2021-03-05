@@ -102,10 +102,11 @@ impl Runtime {
             .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
             .to_lowercase()
             == ZN_TRUE;
-        if config
-            .get_or(&ZN_LINK_STATE_KEY, ZN_LINK_STATE_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE
+        if whatami != whatami::CLIENT
+            && config
+                .get_or(&ZN_LINK_STATE_KEY, ZN_LINK_STATE_DEFAULT)
+                .to_lowercase()
+                == ZN_TRUE
         {
             unsafe {
                 Arc::get_mut_unchecked(&mut router)

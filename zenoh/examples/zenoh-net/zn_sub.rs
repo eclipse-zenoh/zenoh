@@ -19,7 +19,7 @@ use zenoh::Properties;
 
 #[async_std::main]
 async fn main() {
-    // initiate logging
+    // Initiate logging
     env_logger::init();
 
     let (config, selector) = parse_args();
@@ -60,9 +60,8 @@ async fn main() {
 fn parse_args() -> (Properties, String) {
     let args = App::new("zenoh-net sub example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode.")
-                .possible_values(&["peer", "client"])
-                .default_value("peer"),
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
+                .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
             "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
