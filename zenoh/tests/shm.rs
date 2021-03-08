@@ -17,13 +17,13 @@ use async_std::task;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh_protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
-use zenoh_protocol::io::{RBuf, SharedMemoryManager};
-use zenoh_protocol::link::{Link, Locator};
-use zenoh_protocol::proto::{Data, ZenohBody, ZenohMessage};
-use zenoh_protocol::session::authenticator::SharedMemoryAuthenticator;
-use zenoh_protocol::session::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
+use zenoh::net::protocol::io::{RBuf, SharedMemoryManager};
+use zenoh::net::protocol::link::{Link, Locator};
+use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
+use zenoh::net::protocol::session::authenticator::SharedMemoryAuthenticator;
+use zenoh::net::protocol::session::{
+    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
     SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
@@ -130,7 +130,7 @@ async fn run(locator: &Locator) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_shm01.clone(),
-        handler: peer_shm01_handler.clone(),
+        handler: SessionDispatcher::SessionHandler(peer_shm01_handler.clone()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -153,7 +153,7 @@ async fn run(locator: &Locator) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_shm02.clone(),
-        handler: peer_shm02_handler.clone(),
+        handler: SessionDispatcher::SessionHandler(peer_shm02_handler.clone()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -176,7 +176,7 @@ async fn run(locator: &Locator) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_net01.clone(),
-        handler: peer_net01_handler.clone(),
+        handler: SessionDispatcher::SessionHandler(peer_net01_handler.clone()),
     };
     let peer_net01_manager = SessionManager::new(config, None);
 

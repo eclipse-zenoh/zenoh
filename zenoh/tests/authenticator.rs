@@ -16,13 +16,13 @@ use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
-use zenoh_protocol::core::{whatami, PeerId};
-use zenoh_protocol::link::{Link, Locator};
-use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol::session::authenticator::{
+use zenoh::net::protocol::core::{whatami, PeerId};
+use zenoh::net::protocol::link::{Link, Locator};
+use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::session::authenticator::{
     SharedMemoryAuthenticator, UserPasswordAuthenticator,
 };
-use zenoh_protocol::session::{
+use zenoh::net::protocol::session::{
     DummySessionEventHandler, Session, SessionDispatcher, SessionEventHandler, SessionHandler,
     SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
 };
@@ -310,7 +310,7 @@ async fn authenticator_shared_memory(locator: Locator) {
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: router_handler.clone(),
+        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
     };
 
     let peer_authenticator_router = SharedMemoryAuthenticator::new();
@@ -334,7 +334,7 @@ async fn authenticator_shared_memory(locator: Locator) {
         version: 0,
         whatami: whatami::CLIENT,
         id: client_id.clone(),
-        handler: Arc::new(SHClientAuthenticator::new()),
+        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
     };
     let peer_authenticator_client = SharedMemoryAuthenticator::new();
     let opt_config = SessionManagerOptionalConfig {
