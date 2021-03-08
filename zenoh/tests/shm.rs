@@ -23,8 +23,8 @@ use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
 use zenoh::net::protocol::session::authenticator::SharedMemoryAuthenticator;
 use zenoh::net::protocol::session::{
-    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
+    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 
