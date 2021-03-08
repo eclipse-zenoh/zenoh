@@ -33,30 +33,47 @@ impl RecyclingBufferPool {
         RecyclingBufferPool { inner }
     }
 
-    pub async fn pull(&self) -> RecyclingBuffer {
+    pub fn alloc(&self, size: usize) -> RecyclingBuffer {
+        RecyclingBuffer::new(vec![0u8; size], None)
+    }
+
+    pub fn try_take(&self) -> Option<RecyclingBuffer> {
+        if let Some(buffer) = self.inner.try_pull() {
+            Some(RecyclingBuffer::new(
+                buffer,
+                Some(Arc::downgrade(&self.inner)),
+            ))
+        } else {
+            None
+        }
+    }
+
+    pub async fn take(&self) -> RecyclingBuffer {
         let buffer = self.inner.pull().await;
-        RecyclingBuffer::new(buffer, Arc::downgrade(&self.inner))
+        RecyclingBuffer::new(buffer, Some(Arc::downgrade(&self.inner)))
     }
 }
 
 #[derive(Clone)]
 pub struct RecyclingBuffer {
+    pool: Option<Weak<LifoQueue<Vec<u8>>>>,
     buffer: Option<Vec<u8>>,
-    pool: Weak<LifoQueue<Vec<u8>>>,
 }
 
 impl RecyclingBuffer {
-    pub fn new(buffer: Vec<u8>, pool: Weak<LifoQueue<Vec<u8>>>) -> RecyclingBuffer {
+    pub fn new(buffer: Vec<u8>, pool: Option<Weak<LifoQueue<Vec<u8>>>>) -> RecyclingBuffer {
         RecyclingBuffer {
-            buffer: Some(buffer),
             pool,
+            buffer: Some(buffer),
         }
     }
 
     pub async fn recycle(mut self) {
-        if let Some(pool) = self.pool.upgrade() {
-            let buffer = self.buffer.take().unwrap();
-            pool.push(buffer).await;
+        if let Some(pool) = self.pool.take() {
+            if let Some(pool) = pool.upgrade() {
+                let buffer = self.buffer.take().unwrap();
+                pool.push(buffer).await;
+            }
         }
     }
 }
@@ -78,8 +95,9 @@ impl DerefMut for RecyclingBuffer {
 
 impl Drop for RecyclingBuffer {
     fn drop(&mut self) {
-        if let Some(buffer) = self.buffer.take() {
-            if let Some(pool) = self.pool.upgrade() {
+        if let Some(pool) = self.pool.take() {
+            if let Some(pool) = pool.upgrade() {
+                let buffer = self.buffer.take().unwrap();
                 task::block_on(pool.push(buffer));
             }
         }

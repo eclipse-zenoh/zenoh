@@ -22,9 +22,9 @@ use super::session;
 
 use super::super::super::link::Link;
 use super::core::ZInt;
-use super::io::RBuf;
+use super::io::{ArcSlice, RBuf};
 use super::proto::{SessionMessage, ZenohMessage};
-use super::session::defaults::QUEUE_PRIO_CTRL;
+use super::session::defaults::{QUEUE_PRIO_CTRL, RX_BUFF_POOL_SIZE};
 use super::{SeqNumGenerator, SessionTransport};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
@@ -34,6 +34,7 @@ use batch::*;
 use std::convert::TryInto;
 use std::time::Duration;
 use tx::*;
+use zenoh_util::collections::RecyclingBufferPool;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasynclock, zerror};
 
@@ -206,78 +207,29 @@ async fn tx_task(link: SessionTransportLink, stop: Receiver<ZResult<()>>) -> ZRe
 }
 
 async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
+    let lease = Duration::from_millis(link.lease);
     // The RBuf to read a message batch onto
     let mut rbuf = RBuf::new();
-    // The buffer allocated to read from a single syscall
-    let mut buffer = vec![0u8; link.inner.get_mtu()];
 
-    // An example of the received buffer and the correspoding indexes is:
-    //
-    //  0 1 2 3 4 5 6 7  ..  n 0 1 2 3 4 5 6 7      k 0 1 2 3 4 5 6 7      x
-    // +-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+
-    // | L | First batch      | L | Second batch     | L | Incomplete batch |
-    // +-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+-+-+-+-+-+-+-+-+ .. +-+
-    //
-    // - Decoding Iteration 0:
-    //      r_l_pos = 0; r_s_pos = 2; r_e_pos = n;
-    //
-    // - Decoding Iteration 1:
-    //      r_l_pos = n; r_s_pos = n+2; r_e_pos = n+k;
-    //
-    // - Decoding Iteration 2:
-    //      r_l_pos = n+k; r_s_pos = n+k+2; r_e_pos = n+k+x;
-    //
-    // In this example, Iteration 2 will fail since the batch is incomplete and
-    // fewer bytes than the ones indicated in the length are read. The incomplete
-    // batch is hence stored in a RBuf in order to read more bytes from the socket
-    // and deserialize a complete batch. In case it is not possible to read at once
-    // the 2 bytes indicating the message batch length (i.e., only the first byte is
-    // available), the first byte is copied at the beginning of the buffer and more
-    // bytes are read in the next iteration.
-
-    // The read position of the length bytes in the buffer
-    let mut r_l_pos: usize;
-    // The start read position of the message bytes in the buffer
-    let mut r_s_pos: usize;
-    // The end read position of the messages bytes in the buffer
-    let mut r_e_pos: usize;
-    // The write position in the buffer
-    let mut w_pos: usize = 0;
-
-    // Keep track of the number of bytes still to read for incomplete message batches
-    let mut left_to_read: usize = 0;
-
-    // Macro to add a slice to the RBuf
-    macro_rules! zaddslice {
-        ($start:expr, $end:expr) => {
-            let tot = $end - $start;
-            let mut slice = Vec::with_capacity(tot);
-            slice.extend_from_slice(&buffer[$start..$end]);
-            rbuf.add_slice(slice.into());
-        };
-    }
-
-    // Macro for deserializing the messages
-    macro_rules! zdeserialize {
-        () => {
-            // Deserialize all the messages from the current RBuf
-            while rbuf.can_read() {
-                match rbuf.read_session_message() {
-                    Some(msg) => link.receive_message(msg).await,
-                    None => {
-                        let e = format!("Decoding error on link: {}", link.inner);
-                        return zerror!(ZErrorKind::IoError { descr: e });
-                    }
-                }
-            }
-        };
-    }
-
-    let lease = Duration::from_millis(link.lease);
+    let pool = RecyclingBufferPool::new(*RX_BUFF_POOL_SIZE, link.inner.get_mtu());
     loop {
+        // Clear the RBuf
+        rbuf.clear();
+        // Retrieve one buffer
+        let mut buffer = if let Some(buffer) = pool.try_take() {
+            buffer
+        } else {
+            pool.alloc(link.inner.get_mtu())
+        };
+
         // Async read from the underlying link
-        let res = match link.inner.read(&mut buffer[w_pos..]).timeout(lease).await {
-            Ok(res) => res,
+        let _ = match link
+            .inner
+            .read_exact(&mut buffer[0..2])
+            .timeout(lease)
+            .await
+        {
+            Ok(res) => res?,
             Err(_) => {
                 // Link lease has expired
                 let e = format!(
@@ -288,148 +240,56 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
             }
         };
 
-        match res {
-            Ok(mut n) => {
-                if n == 0 {
-                    // Reading 0 bytes means error
-                    let e = format!("Zero bytes reading on link: {}", link.inner);
+        let length: [u8; 2] = buffer[0..2].try_into().unwrap();
+        let to_read = u16::from_le_bytes(length) as usize;
+
+        let _ = match link
+            .inner
+            .read_exact(&mut buffer[0..to_read])
+            .timeout(lease)
+            .await
+        {
+            Ok(res) => res?,
+            Err(_) => {
+                // Link lease has expired
+                let e = format!(
+                    "Link has expired after {} milliseconds: {}",
+                    link.lease, link.inner
+                );
+                return zerror!(ZErrorKind::IoError { descr: e });
+            }
+        };
+
+        rbuf.add_slice(ArcSlice::new(buffer.into(), 0, to_read));
+
+        while rbuf.can_read() {
+            match rbuf.read_session_message() {
+                Some(msg) => link.receive_message(msg).await,
+                None => {
+                    let e = format!("Decoding error on link: {}", link.inner);
                     return zerror!(ZErrorKind::IoError { descr: e });
                 }
-
-                // If we had a w_pos different from 0, it means we add an incomplete length reading
-                // in the previous iteration: we have only read 1 byte instead of 2.
-                if w_pos != 0 {
-                    // Update the number of read bytes by adding the bytes we have already read in
-                    // the previous iteration. "n" now is the index pointing to the last valid
-                    // position in the buffer.
-                    n += w_pos;
-                    // Reset the write index
-                    w_pos = 0;
-                }
-
-                // Reset the read length index
-                r_l_pos = 0;
-
-                // Check if we had an incomplete message batch
-                if left_to_read > 0 {
-                    // Check if still we haven't read enough bytes
-                    if n < left_to_read {
-                        // Update the number of bytes still to read;
-                        left_to_read -= n;
-                        // Copy the relevant buffer slice in the RBuf
-                        zaddslice!(0, n);
-                        // Keep reading from the socket
-                        continue;
-                    }
-                    // We are ready to decode a complete message batch
-                    // Copy the relevant buffer slice in the RBuf
-                    zaddslice!(0, left_to_read);
-                    // Read the batch
-                    zdeserialize!();
-                    // Update the read length index
-                    r_l_pos = left_to_read;
-                    // Reset the remaining bytes to read
-                    left_to_read = 0;
-
-                    // Check if we have completely read the batch
-                    if buffer[r_l_pos..n].is_empty() {
-                        // Reset the RBuf
-                        rbuf.clear();
-                        // Keep reading from the socket
-                        continue;
-                    }
-                }
-
-                // Loop over all the buffer which may contain multiple message batches
-                loop {
-                    // Compute the total number of bytes we have read
-                    let read = buffer[r_l_pos..n].len();
-                    // Check if we have read the 2 bytes necessary to decode the message length
-                    if read < 2 {
-                        // Copy the bytes at the beginning of the buffer
-                        buffer.copy_within(r_l_pos..n, 0);
-                        // Update the write index
-                        w_pos = read;
-                        // Keep reading from the socket
-                        break;
-                    }
-                    // We have read at least two bytes in the buffer, update the read start index
-                    r_s_pos = r_l_pos + 2;
-                    // Read the length as litlle endian from the buffer (array of 2 bytes)
-                    let length: [u8; 2] = buffer[r_l_pos..r_s_pos].try_into().unwrap();
-                    // Decode the total amount of bytes that we are expected to read
-                    let to_read = u16::from_le_bytes(length) as usize;
-
-                    // Check if we have really something to read
-                    if to_read == 0 {
-                        // Keep reading from the socket
-                        break;
-                    }
-                    // Compute the number of useful bytes we have actually read
-                    let read = buffer[r_s_pos..n].len();
-
-                    if read == 0 {
-                        // The buffer might be empty in case of having read only the two bytes
-                        // of the length and no additional bytes are left in the reading buffer
-                        left_to_read = to_read;
-                        // Keep reading from the socket
-                        break;
-                    } else if read < to_read {
-                        // We haven't read enough bytes for a complete batch, so
-                        // we need to store the bytes read so far and keep reading
-
-                        // Update the number of bytes we still have to read to
-                        // obtain a complete message batch for decoding
-                        left_to_read = to_read - read;
-
-                        // Copy the buffer in the RBuf if not empty
-                        zaddslice!(r_s_pos, n);
-
-                        // Keep reading from the socket
-                        break;
-                    }
-
-                    // We have at least one complete message batch we can deserialize
-                    // Compute the read end index of the message batch in the buffer
-                    r_e_pos = r_s_pos + to_read;
-
-                    // Copy the relevant buffer slice in the RBuf
-                    zaddslice!(r_s_pos, r_e_pos);
-                    // Deserialize the batch
-                    zdeserialize!();
-
-                    // Reset the current RBuf
-                    rbuf.clear();
-                    // Reset the remaining bytes to read
-                    left_to_read = 0;
-
-                    // Check if we are done with the current reading buffer
-                    if buffer[r_e_pos..n].is_empty() {
-                        // Keep reading from the socket
-                        break;
-                    }
-
-                    // Update the read length index to read the next message batch
-                    r_l_pos = r_e_pos;
-                }
-            }
-            Err(e) => {
-                let e = format!("Reading error on link {}: {}", link.inner, e);
-                return zerror!(ZErrorKind::IoError { descr: e });
             }
         }
     }
 }
 
 async fn read_dgram(link: SessionTransportLink) -> ZResult<()> {
-    // Buffers for deserialization
-    let mut buffer = vec![0; link.inner.get_mtu()];
+    let lease = Duration::from_millis(link.lease);
+    // The RBuf to read a message batch onto
     let mut rbuf = RBuf::new();
 
-    let lease = Duration::from_millis(link.lease);
+    let pool = RecyclingBufferPool::new(*RX_BUFF_POOL_SIZE, link.inner.get_mtu());
     loop {
         // Clear the rbuf
         rbuf.clear();
+        // Retrieve one buffer
+        let mut buffer = if let Some(buffer) = pool.try_take() {
+            buffer
+        } else {
+            pool.alloc(link.inner.get_mtu())
+        };
+
         // Async read from the underlying link
         let res = match link.inner.read(&mut buffer).timeout(lease).await {
             Ok(res) => res,
@@ -453,9 +313,7 @@ async fn read_dgram(link: SessionTransportLink) -> ZResult<()> {
                 }
 
                 // Add the received bytes to the RBuf for deserialization
-                let mut slice = Vec::with_capacity(n);
-                slice.extend_from_slice(&buffer[..n]);
-                rbuf.add_slice(slice.into());
+                rbuf.add_slice(ArcSlice::new(buffer.into(), 0, n));
 
                 // Deserialize all the messages from the current RBuf
                 while rbuf.can_read() {

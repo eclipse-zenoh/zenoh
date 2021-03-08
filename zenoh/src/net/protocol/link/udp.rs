@@ -568,9 +568,9 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
 
         log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
         // Buffers for deserialization
-        let buff_pool = RecyclingBufferPool::new(1, UDP_MAX_MTU);
+        let pool = RecyclingBufferPool::new(1, UDP_MAX_MTU);
         loop {
-            let mut buff = buff_pool.pull().await;
+            let mut buff = pool.take().await;
             // Wait for incoming connections
             let (n, dst_addr) = match listener.socket.recv_from(&mut buff).await {
                 Ok((n, dst_addr)) => (n, dst_addr),
