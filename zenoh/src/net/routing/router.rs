@@ -291,7 +291,6 @@ impl Router {
         let whatami = session.get_whatami()?;
 
         let link_id = match (self.whatami, whatami) {
-            (whatami::CLIENT, _) => 0,
             (whatami::ROUTER, whatami::ROUTER) => {
                 tables
                     .routers_net
@@ -300,7 +299,9 @@ impl Router {
                     .add_link(session.clone())
                     .await
             }
-            _ => {
+            (whatami::ROUTER, whatami::PEER)
+            | (whatami::PEER, whatami::ROUTER)
+            | (whatami::PEER, whatami::PEER) => {
                 tables
                     .peers_net
                     .as_mut()
@@ -308,6 +309,7 @@ impl Router {
                     .add_link(session.clone())
                     .await
             }
+            _ => 0,
         };
 
         let handler = Arc::new(LinkStateInterceptor::new(
@@ -329,13 +331,15 @@ impl Router {
         ));
 
         match (self.whatami, whatami) {
-            (whatami::CLIENT, _) => (),
             (whatami::ROUTER, whatami::ROUTER) => {
                 tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
             }
-            _ => {
+            (whatami::ROUTER, whatami::PEER)
+            | (whatami::PEER, whatami::ROUTER)
+            | (whatami::PEER, whatami::PEER) => {
                 tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
             }
+            _ => (),
         }
         Ok(handler)
     }
@@ -363,7 +367,6 @@ impl LinkStateInterceptor {
                 let mut tables = self.tables.write().await;
                 let whatami = self.session.get_whatami()?;
                 match (tables.whatami, whatami) {
-                    (whatami::CLIENT, _) => (),
                     (whatami::ROUTER, whatami::ROUTER) => {
                         for (_, removed_node) in tables
                             .routers_net
@@ -379,7 +382,9 @@ impl LinkStateInterceptor {
                         }
                         tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
                     }
-                    _ => {
+                    (whatami::ROUTER, whatami::PEER)
+                    | (whatami::PEER, whatami::ROUTER)
+                    | (whatami::PEER, whatami::PEER) => {
                         for (_, removed_node) in tables
                             .peers_net
                             .as_mut()
@@ -393,6 +398,7 @@ impl LinkStateInterceptor {
                         }
                         tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
                     }
+                    _ => (),
                 };
 
                 Ok(())
