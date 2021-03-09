@@ -424,7 +424,9 @@ impl LinkStateInterceptor {
                     }
                     tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
                 }
-                _ => {
+                (whatami::ROUTER, whatami::PEER)
+                | (whatami::PEER, whatami::ROUTER)
+                | (whatami::PEER, whatami::PEER) => {
                     for (_, removed_node) in tables
                         .peers_net
                         .as_mut()
@@ -437,6 +439,7 @@ impl LinkStateInterceptor {
                     }
                     tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
                 }
+                _ => (),
             },
             Err(_) => log::error!("Unable to get whatami closing session!"),
         };
