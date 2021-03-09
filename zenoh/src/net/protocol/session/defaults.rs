@@ -72,7 +72,6 @@ zconfigurable! {
     // The default backoff time in nanoseconds to allow the batching to potentially progress
     pub static ref QUEUE_PULL_BACKOFF: u64 = 100;
 
-    // The default number of buffers allocated at RX side. The size of each buffer is automatically
-    // selected equal to the link mtu.
-    pub static ref RX_BUFF_POOL_SIZE: usize = 4;
+    // The total size of buffers allocated at RX side
+    pub static ref RX_BUFF_SIZE: usize = 16_777_216;
 }

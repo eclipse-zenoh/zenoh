@@ -24,14 +24,13 @@ use super::super::super::link::Link;
 use super::core::ZInt;
 use super::io::{ArcSlice, RBuf};
 use super::proto::{SessionMessage, ZenohMessage};
-use super::session::defaults::{QUEUE_PRIO_CTRL, RX_BUFF_POOL_SIZE};
+use super::session::defaults::{QUEUE_PRIO_CTRL, RX_BUFF_SIZE};
 use super::{SeqNumGenerator, SessionTransport};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use async_std::task;
 use batch::*;
-use std::convert::TryInto;
 use std::time::Duration;
 use tx::*;
 use zenoh_util::collections::RecyclingBufferPool;
@@ -210,25 +209,17 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
     let lease = Duration::from_millis(link.lease);
     // The RBuf to read a message batch onto
     let mut rbuf = RBuf::new();
-
-    let pool = RecyclingBufferPool::new(*RX_BUFF_POOL_SIZE, link.inner.get_mtu());
+    // 16 bits for reading the batch length
+    let mut length = [0u8, 0u8];
+    // The pool of buffers
+    let n = 1 + (*RX_BUFF_SIZE / link.inner.get_mtu());
+    let pool = RecyclingBufferPool::new(n, link.inner.get_mtu());
     loop {
         // Clear the RBuf
         rbuf.clear();
-        // Retrieve one buffer
-        let mut buffer = if let Some(buffer) = pool.try_take() {
-            buffer
-        } else {
-            pool.alloc(link.inner.get_mtu())
-        };
 
         // Async read from the underlying link
-        let _ = match link
-            .inner
-            .read_exact(&mut buffer[0..2])
-            .timeout(lease)
-            .await
-        {
+        let _ = match link.inner.read_exact(&mut length).timeout(lease).await {
             Ok(res) => res?,
             Err(_) => {
                 // Link lease has expired
@@ -240,8 +231,14 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
             }
         };
 
-        let length: [u8; 2] = buffer[0..2].try_into().unwrap();
         let to_read = u16::from_le_bytes(length) as usize;
+
+        // Retrieve one buffer
+        let mut buffer = if let Some(buffer) = pool.try_take() {
+            buffer
+        } else {
+            pool.alloc(to_read)
+        };
 
         let _ = match link
             .inner
@@ -278,8 +275,9 @@ async fn read_dgram(link: SessionTransportLink) -> ZResult<()> {
     let lease = Duration::from_millis(link.lease);
     // The RBuf to read a message batch onto
     let mut rbuf = RBuf::new();
-
-    let pool = RecyclingBufferPool::new(*RX_BUFF_POOL_SIZE, link.inner.get_mtu());
+    // The pool of buffers
+    let n = 1 + (*RX_BUFF_SIZE / link.inner.get_mtu());
+    let pool = RecyclingBufferPool::new(n, link.inner.get_mtu());
     loop {
         // Clear the rbuf
         rbuf.clear();
