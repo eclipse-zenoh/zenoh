@@ -349,15 +349,17 @@ impl SessionTransport {
             if let Some(callback) = zasyncread!(self.callback).as_ref() {
                 callback.del_link(link.get_link().clone()).await;
             }
-            // Close the link
-            let res = link.close().await;
             // Eventually close the whole session if not links left
             let guard = zasyncread!(self.links);
             if guard.is_empty() {
                 drop(guard);
                 self.delete().await;
+                Ok(())
+            } else {
+                drop(guard);
+                // Close the link
+                link.close().await
             }
-            res
         } else {
             zerror!(ZErrorKind::InvalidLink {
                 descr: format!("Can not delete Link {} with peer: {}", link, self.pid)
