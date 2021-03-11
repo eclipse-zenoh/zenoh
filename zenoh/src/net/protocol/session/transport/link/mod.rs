@@ -109,7 +109,6 @@ impl SessionTransportLink {
         let mut guard = zasynclock!(self.signal_tx);
         if let Some(signal_tx) = guard.take() {
             let _ = signal_tx.try_send(Ok(()));
-            task::yield_now().await;
         }
     }
 

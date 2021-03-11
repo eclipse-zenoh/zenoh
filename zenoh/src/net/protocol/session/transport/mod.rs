@@ -342,22 +342,20 @@ impl SessionTransport {
         // Try to remove the link
         let mut guard = zasyncwrite!(self.links);
         if let Some(index) = zlinkindex!(guard, link) {
-            // Remove the link
-            let link = guard.remove(index);
-            drop(guard);
-            // Notify the callback
-            if let Some(callback) = zasyncread!(self.callback).as_ref() {
-                callback.del_link(link.get_link().clone()).await;
-            }
-            // Eventually close the whole session if not links left
-            let guard = zasyncread!(self.links);
-            if guard.is_empty() {
+            let is_last = guard.len() == 1;
+            if is_last {
+                // Close the whole session
                 drop(guard);
                 self.delete().await;
                 Ok(())
             } else {
+                // Remove the link
+                let link = guard.remove(index);
                 drop(guard);
-                // Close the link
+                // Notify the callback
+                if let Some(callback) = zasyncread!(self.callback).as_ref() {
+                    callback.del_link(link.get_link().clone()).await;
+                }
                 link.close().await
             }
         } else {
