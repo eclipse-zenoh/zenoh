@@ -664,6 +664,18 @@ pub(crate) async fn pubsub_remove_node(
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_peer_subscription(tables, &mut res, node).await;
+
+                if tables.whatami == whatami::ROUTER
+                    && !res.contexts.values().any(|ctx| ctx.subs.is_some())
+                    && !tables
+                        .peer_subs
+                        .iter()
+                        .any(|res| res.peer_subs.iter().any(|peer| peer != &tables.pid))
+                {
+                    undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone())
+                        .await;
+                }
+
                 Resource::clean(&mut res)
             }
         },

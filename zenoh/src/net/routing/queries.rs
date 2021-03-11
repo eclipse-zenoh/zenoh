@@ -602,6 +602,17 @@ pub(crate) async fn queries_remove_node(
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_peer_queryable(tables, &mut res, node).await;
+
+                if tables.whatami == whatami::ROUTER
+                    && !res.contexts.values().any(|ctx| ctx.qabl)
+                    && !tables
+                        .peer_qabls
+                        .iter()
+                        .any(|res| res.peer_qabls.iter().any(|peer| peer != &tables.pid))
+                {
+                    undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone()).await;
+                }
+
                 Resource::clean(&mut res)
             }
         },

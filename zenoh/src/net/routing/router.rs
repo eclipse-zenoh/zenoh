@@ -175,6 +175,7 @@ impl Tables {
                 }
                 while let Some(mut res) = face.remote_qabls.pop() {
                     Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
+                    undeclare_client_queryable(self, &mut face_clone, &mut res).await;
                     Resource::clean(&mut res);
                 }
                 self.faces.remove(&face.id);
