@@ -15,15 +15,14 @@ mod batch;
 mod rx;
 mod tx;
 
-use super::core;
-use super::io;
-use super::proto;
-use super::session;
-
 use super::super::super::link::Link;
+use super::core;
 use super::core::ZInt;
+use super::io;
 use super::io::{ArcSlice, RBuf};
+use super::proto;
 use super::proto::{SessionMessage, ZenohMessage};
+use super::session;
 use super::session::defaults::{QUEUE_PRIO_CTRL, RX_BUFF_SIZE};
 use super::{SeqNumGenerator, SessionTransport};
 use async_std::channel::{bounded, Receiver, Sender};

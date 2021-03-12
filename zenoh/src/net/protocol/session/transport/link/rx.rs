@@ -14,6 +14,7 @@
 use super::core::PeerId;
 use super::proto::{Close, SessionBody, SessionMessage};
 use super::SessionTransportLink;
+use async_std::task;
 
 /*************************************/
 /*              LINK RX              */
@@ -33,11 +34,20 @@ impl SessionTransportLink {
             }
         }
 
-        let _ = self.transport.del_link(&self.inner).await;
-
-        if !link_only {
-            self.transport.delete().await;
-        }
+        // Spawn a new task to close the link or the session. This is necessary to
+        // avoid that the future reading from the link will be cancelled while doing
+        // the necessary cleanup.
+        let transport = self.transport.clone();
+        let inner = self.inner.clone();
+        task::spawn(async move {
+            if link_only {
+                let _ = transport.del_link(&inner).await;
+            } else {
+                transport.delete().await;
+            }
+        });
+        // Give priority to the recently spawned task
+        task::yield_now().await;
     }
 
     pub(super) async fn receive_message(&self, message: SessionMessage) {
