@@ -68,7 +68,7 @@ impl SessionOrchestrator {
         config: ConfigProperties,
         peers_autoconnect: bool,
     ) -> ZResult<()> {
-        *self.manager.write().await = Some(manager);
+        *zasyncwrite!(self.manager) = Some(manager);
         match self.whatami {
             whatami::CLIENT => self.init_client(config).await,
             whatami::PEER => self.init_peer(config, peers_autoconnect).await,
@@ -83,7 +83,7 @@ impl SessionOrchestrator {
     }
 
     pub async fn manager(&self) -> SessionManager {
-        self.manager.read().await.as_ref().unwrap().clone()
+        zasyncread!(self.manager).as_ref().unwrap().clone()
     }
 
     async fn init_client(&mut self, config: ConfigProperties) -> ZResult<()> {
@@ -422,7 +422,7 @@ impl SessionOrchestrator {
                 if let SessionEventDispatcher::OrchSession(orch_session) =
                     session.get_callback().await.unwrap().unwrap()
                 {
-                    *orch_session.locator.write().await = Some(peer);
+                    *zasyncwrite!(orch_session.locator) = Some(peer);
                 }
                 break;
             }
@@ -645,7 +645,7 @@ impl OrchSession {
             }) = msg.body
             {
                 let (rid, suffix) = (&key).into();
-                let mut tables = self.sub_event_handler.tables.write().await;
+                let mut tables = zasyncwrite!(self.sub_event_handler.tables);
                 let face = &self.sub_event_handler.demux.primitives.state;
                 route_data(
                     &mut tables,
@@ -677,7 +677,7 @@ impl OrchSession {
 
     pub(crate) async fn closing(&self) {
         self.sub_event_handler.closing().await;
-        if let Some(locator) = &*self.locator.read().await {
+        if let Some(locator) = &*zasyncread!(self.locator) {
             let locator = locator.clone();
             let orchestrator = self.orchestrator.clone();
             async_std::task::spawn(async move { orchestrator.peer_connector(locator).await });

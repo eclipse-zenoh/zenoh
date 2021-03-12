@@ -13,6 +13,7 @@
 //
 use async_std::sync::{Arc, RwLock};
 use std::collections::HashMap;
+use zenoh_util::zasyncwrite;
 
 use super::protocol::core::{
     whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
@@ -90,12 +91,12 @@ pub struct Face {
 impl Face {
     pub async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix).await;
     }
 
     pub async fn forget_resource(&self, rid: ZInt) {
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
     }
 
@@ -106,7 +107,7 @@ impl Face {
         routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (whatami::ROUTER, whatami::ROUTER) => match routing_context {
                 Some(routing_context) => {
@@ -199,7 +200,7 @@ impl Face {
         routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (whatami::ROUTER, whatami::ROUTER) => match routing_context {
                 Some(routing_context) => {
@@ -290,7 +291,7 @@ impl Face {
 
     pub async fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (whatami::ROUTER, whatami::ROUTER) => match routing_context {
                 Some(routing_context) => {
@@ -371,7 +372,7 @@ impl Face {
 
     pub async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (whatami::ROUTER, whatami::ROUTER) => match routing_context {
                 Some(routing_context) => {
@@ -460,7 +461,7 @@ impl Face {
         routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         route_data(
             &mut tables,
             &self.state,
@@ -484,7 +485,7 @@ impl Face {
         routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         route_query(
             &mut tables,
             &self.state,
@@ -508,7 +509,7 @@ impl Face {
         info: Option<DataInfo>,
         payload: RBuf,
     ) {
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         route_send_reply_data(
             &mut tables,
             &mut self.state.clone(),
@@ -523,7 +524,7 @@ impl Face {
     }
 
     pub async fn send_reply_final(&self, qid: ZInt) {
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         route_send_reply_final(&mut tables, &mut self.state.clone(), qid).await;
     }
 
@@ -535,7 +536,7 @@ impl Face {
         max_samples: &Option<ZInt>,
     ) {
         let (prefixid, suffix) = reskey.into();
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         pull_data(
             &mut tables,
             &self.state.clone(),
@@ -549,9 +550,7 @@ impl Face {
     }
 
     pub async fn send_close(&self) {
-        self.tables
-            .write()
-            .await
+        zasyncwrite!(self.tables)
             .close_face(&Arc::downgrade(&self.state))
             .await;
     }

@@ -211,7 +211,7 @@ impl Tables {
             let task = Some(async_std::task::spawn(async move {
                 async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
                     .await;
-                let mut tables = tables_ref.write().await;
+                let mut tables = zasyncwrite!(tables_ref);
                 let new_childs = match net_type {
                     whatami::ROUTER => tables.routers_net.as_mut().unwrap().compute_trees().await,
                     _ => tables.peers_net.as_mut().unwrap().compute_trees().await,
@@ -249,7 +249,7 @@ impl Router {
         orchestrator: SessionOrchestrator,
         peers_autoconnect: bool,
     ) {
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         if orchestrator.whatami == whatami::ROUTER {
             tables.routers_net = Some(
                 Network::new(
@@ -276,7 +276,7 @@ impl Router {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
-                let mut tables = self.tables.write().await;
+                let mut tables = zasyncwrite!(self.tables);
                 let pid = tables.pid.clone();
                 tables
                     .open_face(pid, whatami::CLIENT, primitives)
@@ -288,7 +288,7 @@ impl Router {
     }
 
     pub async fn new_session(&self, session: Session) -> ZResult<Arc<LinkStateInterceptor>> {
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         let whatami = session.get_whatami()?;
 
         let link_id = match (self.whatami, whatami) {
@@ -365,7 +365,7 @@ impl LinkStateInterceptor {
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
-                let mut tables = self.tables.write().await;
+                let mut tables = zasyncwrite!(self.tables);
                 let whatami = self.session.get_whatami()?;
                 match (tables.whatami, whatami) {
                     (whatami::ROUTER, whatami::ROUTER) => {
@@ -415,7 +415,7 @@ impl LinkStateInterceptor {
     pub(crate) async fn closing(&self) {
         self.demux.closing().await;
         sleep(Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         match self.session.get_whatami() {
             Ok(whatami) => match (tables.whatami, whatami) {
                 (whatami::ROUTER, whatami::ROUTER) => {
