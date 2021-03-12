@@ -18,7 +18,7 @@ use super::protocol::proto::{
     Data, Hello, Scout, SessionBody, SessionMessage, ZenohBody, ZenohMessage,
 };
 use super::protocol::session::{Session, SessionEventDispatcher, SessionManager};
-use super::routing::pubsub::route_data;
+use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use async_std::net::UdpSocket;
 use async_std::sync::{Arc, RwLock};
@@ -645,10 +645,9 @@ impl OrchSession {
             }) = msg.body
             {
                 let (rid, suffix) = (&key).into();
-                let tables = zasyncread!(self.sub_event_handler.tables);
                 let face = &self.sub_event_handler.demux.primitives.state;
-                route_data(
-                    &tables,
+                full_reentrant_route_data(
+                    &self.sub_event_handler.tables,
                     face,
                     rid,
                     suffix,

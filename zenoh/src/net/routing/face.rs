@@ -461,9 +461,8 @@ impl Face {
         routing_context: Option<RoutingContext>,
     ) {
         let (prefixid, suffix) = reskey.into();
-        let tables = zasyncread!(self.tables);
-        route_data(
-            &tables,
+        full_reentrant_route_data(
+            &self.tables,
             &self.state,
             prefixid,
             suffix,

@@ -248,6 +248,7 @@ impl Resource {
         }
     }
 
+    #[inline]
     pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
         if suffix.is_empty() {
             Some(from.clone())
