@@ -14,6 +14,7 @@
 use super::ArcSlice;
 use async_std::sync::Arc;
 use std::fmt;
+use std::io;
 use std::io::IoSlice;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::ops::RangeBounds;
@@ -331,6 +332,51 @@ impl WBuf {
         } else {
             false
         }
+    }
+}
+
+impl io::Write for WBuf {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if self.write_bytes(buf) {
+            Ok(buf.len())
+        } else {
+            Ok(0)
+        }
+    }
+
+    #[inline]
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        if self.write_bytes(buf) {
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "failed to write whole buffer",
+            ))
+        }
+    }
+
+    #[inline]
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        let mut nwritten = 0;
+        for buf in bufs {
+            if self.write_slice(buf.into()) {
+                nwritten += buf.len();
+            } else {
+                break;
+            }
+        }
+        Ok(nwritten)
+    }
+
+    #[inline]
+    fn is_write_vectored(&self) -> bool {
+        true
+    }
+
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
