@@ -992,7 +992,7 @@ macro_rules! treat_timestamp {
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub async fn route_data(
-    tables: &mut Tables,
+    tables: &Tables,
     face: &Arc<FaceState>,
     rid: u64,
     suffix: &str,
@@ -1114,13 +1114,17 @@ pub async fn route_data(
                         }
                     }
 
-                    for context in matching_pulls.iter() {
-                        Arc::get_mut_unchecked(&mut context.clone())
-                            .last_values
-                            .insert(
-                                [&prefix.name(), suffix].concat(),
-                                (data_info.clone(), payload.clone()),
-                            );
+                    if !matching_pulls.is_empty() {
+                        let lock = zasynclock!(tables.pull_caches_lock);
+                        for context in matching_pulls.iter() {
+                            Arc::get_mut_unchecked(&mut context.clone())
+                                .last_values
+                                .insert(
+                                    [&prefix.name(), suffix].concat(),
+                                    (data_info.clone(), payload.clone()),
+                                );
+                        }
+                        drop(lock)
                     }
                 }
             }
@@ -1147,6 +1151,7 @@ pub async fn pull_data(
                 match res.contexts.get_mut(&face.id) {
                     Some(mut ctx) => match &ctx.subs {
                         Some(subinfo) => {
+                            let lock = zasynclock!(tables.pull_caches_lock);
                             for (name, (info, data)) in &ctx.last_values {
                                 let reskey =
                                     Resource::get_best_key(&tables.root_res, name, face.id);
@@ -1162,6 +1167,7 @@ pub async fn pull_data(
                                     .await;
                             }
                             Arc::get_mut_unchecked(&mut ctx).last_values.clear();
+                            drop(lock);
                         }
                         None => {
                             log::error!(

@@ -645,10 +645,10 @@ impl OrchSession {
             }) = msg.body
             {
                 let (rid, suffix) = (&key).into();
-                let mut tables = zasyncwrite!(self.sub_event_handler.tables);
+                let tables = zasyncread!(self.sub_event_handler.tables);
                 let face = &self.sub_event_handler.demux.primitives.state;
                 route_data(
-                    &mut tables,
+                    &tables,
                     face,
                     rid,
                     suffix,

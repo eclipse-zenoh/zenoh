@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, RwLock, Weak};
+use async_std::sync::{Arc, Mutex, RwLock, Weak};
 use async_std::task::{sleep, JoinHandle};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -45,6 +45,7 @@ pub struct Tables {
     pub(crate) hlc: Option<HLC>,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
+    pub(crate) pull_caches_lock: Mutex<()>,
     pub(crate) router_subs: HashSet<Arc<Resource>>,
     pub(crate) peer_subs: HashSet<Arc<Resource>>,
     pub(crate) router_qabls: HashSet<Arc<Resource>>,
@@ -64,6 +65,7 @@ impl Tables {
             hlc,
             root_res: Resource::root(),
             faces: HashMap::new(),
+            pull_caches_lock: Mutex::new(()),
             router_subs: HashSet::new(),
             peer_subs: HashSet::new(),
             router_qabls: HashSet::new(),
