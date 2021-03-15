@@ -1121,7 +1121,6 @@ macro_rules! send_to_all {
     }
 }
 
-#[inline]
 macro_rules! cache_data {
     (
         $matching_pulls:expr,
