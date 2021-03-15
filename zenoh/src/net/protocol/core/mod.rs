@@ -75,6 +75,7 @@ pub enum ResKey {
 use ResKey::*;
 
 impl ResKey {
+    #[inline(always)]
     pub fn rid(&self) -> ResourceId {
         match self {
             RName(_) => NO_RESOURCE_ID,
@@ -82,6 +83,7 @@ impl ResKey {
         }
     }
 
+    #[inline(always)]
     pub fn is_numerical(&self) -> bool {
         matches!(self, RId(_))
     }
@@ -104,24 +106,28 @@ impl fmt::Display for ResKey {
 }
 
 impl From<ResourceId> for ResKey {
+    #[inline]
     fn from(rid: ResourceId) -> ResKey {
         RId(rid)
     }
 }
 
 impl From<&str> for ResKey {
+    #[inline]
     fn from(name: &str) -> ResKey {
         RName(name.to_string())
     }
 }
 
 impl From<String> for ResKey {
+    #[inline]
     fn from(name: String) -> ResKey {
         RName(name)
     }
 }
 
 impl From<(ResourceId, &str)> for ResKey {
+    #[inline]
     fn from(tuple: (ResourceId, &str)) -> ResKey {
         if tuple.1.is_empty() {
             RId(tuple.0)
@@ -134,6 +140,7 @@ impl From<(ResourceId, &str)> for ResKey {
 }
 
 impl From<(ResourceId, String)> for ResKey {
+    #[inline]
     fn from(tuple: (ResourceId, String)) -> ResKey {
         if tuple.1.is_empty() {
             RId(tuple.0)
@@ -146,6 +153,7 @@ impl From<(ResourceId, String)> for ResKey {
 }
 
 impl<'a> From<&'a ResKey> for (ResourceId, &'a str) {
+    #[inline]
     fn from(key: &'a ResKey) -> (ResourceId, &'a str) {
         match key {
             RId(rid) => (*rid, ""),

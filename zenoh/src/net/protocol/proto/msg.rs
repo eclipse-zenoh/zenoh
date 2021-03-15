@@ -614,6 +614,7 @@ impl ZenohMessage {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[inline(always)]
     pub fn make_data(
         key: ResKey,
         payload: RBuf,
@@ -706,6 +707,7 @@ impl ZenohMessage {
         }
     }
 
+    #[inline(always)]
     pub fn make_query(
         key: ResKey,
         predicate: String,
