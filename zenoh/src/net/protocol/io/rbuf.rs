@@ -15,6 +15,7 @@
 use super::shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 use super::ArcSlice;
 use std::fmt;
+use std::io;
 use std::io::IoSlice;
 
 #[derive(Clone, Default)]
@@ -268,6 +269,49 @@ impl RBuf {
             self.slices.clear();
             self.add_slice(shm.into());
         }
+    }
+}
+
+impl io::Read for RBuf {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let remaining = self.readable();
+        if remaining > buf.len() {
+            self.read_bytes(buf);
+            Ok(buf.len())
+        } else {
+            self.read_bytes(&mut buf[..remaining]);
+            Ok(remaining)
+        }
+    }
+
+    #[inline]
+    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        if self.read_bytes(buf) {
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ))
+        }
+    }
+
+    #[inline]
+    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
+        let mut nread = 0;
+        for buf in bufs {
+            nread += (self as &mut dyn io::Read).read(buf)?;
+            if self.is_empty() {
+                break;
+            }
+        }
+        Ok(nread)
+    }
+
+    #[inline]
+    fn is_read_vectored(&self) -> bool {
+        true
     }
 }
 

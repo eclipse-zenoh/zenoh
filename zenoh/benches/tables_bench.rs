@@ -97,7 +97,7 @@ fn tables_bench(c: &mut Criterion) {
                 b.iter(|| {
                     task::block_on(async {
                         route_data(
-                            &mut tables,
+                            &tables,
                             &face0,
                             2 as u64,
                             "",
@@ -115,7 +115,7 @@ fn tables_bench(c: &mut Criterion) {
                 b.iter(|| {
                     task::block_on(async {
                         route_data(
-                            &mut tables,
+                            &tables,
                             &face0,
                             0 as u64,
                             "/bench/tables/*",
@@ -133,7 +133,7 @@ fn tables_bench(c: &mut Criterion) {
                 b.iter(|| {
                     task::block_on(async {
                         route_data(
-                            &mut tables,
+                            &tables,
                             &face0,
                             0 as u64,
                             "/bench/tables/A*",

@@ -614,8 +614,8 @@ fn client_test() {
         primitives1.clear_data();
         primitives2.clear_data();
         route_data(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
+            &tables,
+            &face0.upgrade().unwrap(),
             0,
             "/test/client/z1_wr1",
             CongestionControl::Block,
@@ -641,8 +641,8 @@ fn client_test() {
         primitives1.clear_data();
         primitives2.clear_data();
         route_data(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
+            &tables,
+            &face0.upgrade().unwrap(),
             11,
             "/z1_wr2",
             CongestionControl::Block,
@@ -668,8 +668,8 @@ fn client_test() {
         primitives1.clear_data();
         primitives2.clear_data();
         route_data(
-            &mut tables,
-            &mut face1.upgrade().unwrap(),
+            &tables,
+            &face1.upgrade().unwrap(),
             0,
             "/test/client/**",
             CongestionControl::Block,
@@ -695,8 +695,8 @@ fn client_test() {
         primitives1.clear_data();
         primitives2.clear_data();
         route_data(
-            &mut tables,
-            &mut face0.upgrade().unwrap(),
+            &tables,
+            &face0.upgrade().unwrap(),
             12,
             "",
             CongestionControl::Block,
@@ -722,8 +722,8 @@ fn client_test() {
         primitives1.clear_data();
         primitives2.clear_data();
         route_data(
-            &mut tables,
-            &mut face1.upgrade().unwrap(),
+            &tables,
+            &face1.upgrade().unwrap(),
             22,
             "",
             CongestionControl::Block,

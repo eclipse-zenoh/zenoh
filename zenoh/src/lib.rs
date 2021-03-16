@@ -85,6 +85,7 @@
 #![feature(bool_to_option)]
 #![feature(get_mut_unchecked)]
 #![feature(map_into_keys_values)]
+#![feature(can_vector)]
 #![recursion_limit = "256"]
 
 #[macro_use]

@@ -29,7 +29,7 @@ use orchestrator::SessionOrchestrator;
 use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
-use zenoh_util::{zerror, zerror2};
+use zenoh_util::{zasyncwrite, zerror, zerror2};
 
 pub struct RuntimeState {
     pub pid: PeerId,
@@ -130,11 +130,11 @@ impl Runtime {
     }
 
     pub async fn read(&self) -> RwLockReadGuard<'_, RuntimeState> {
-        self.state.read().await
+        zasyncread!(self.state)
     }
 
     pub async fn write(&self) -> RwLockWriteGuard<'_, RuntimeState> {
-        self.state.write().await
+        zasyncwrite!(self.state)
     }
 
     pub async fn close(&self) -> ZResult<()> {

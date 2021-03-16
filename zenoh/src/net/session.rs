@@ -253,7 +253,7 @@ impl Session {
                 .new_primitives(OutSession::User(Arc::new(session.clone())))
                 .await,
         );
-        state.write().await.primitives = primitives;
+        zasyncwrite!(state).primitives = primitives;
         session
     }
 
@@ -261,10 +261,7 @@ impl Session {
         trace!("close()");
         self.runtime.close().await?;
 
-        let primitives = self
-            .state
-            .write()
-            .await
+        let primitives = zasyncwrite!(self.state)
             .primitives
             .as_ref()
             .unwrap()
@@ -372,7 +369,7 @@ impl Session {
     /// ```
     pub async fn declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
         trace!("declare_resource({:?})", resource);
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         let resname = state.localkey_to_resname(resource)?;
 
         match state
@@ -420,7 +417,7 @@ impl Session {
     /// ```
     pub async fn undeclare_resource(&self, rid: ResourceId) -> ZResult<()> {
         trace!("undeclare_resource({:?})", rid);
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         state.local_resources.remove(&rid);
 
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -451,7 +448,7 @@ impl Session {
     /// ```
     pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher<'_>> {
         trace!("declare_publisher({:?})", resource);
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = state.localkey_to_resname(resource)?;
         let pub_state = Arc::new(PublisherState {
@@ -494,7 +491,7 @@ impl Session {
     }
 
     pub(crate) async fn undeclare_publisher(&self, pid: usize) -> ZResult<()> {
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         if let Some(pub_state) = state.publishers.remove(&pid) {
             trace!("undeclare_publisher({:?})", pub_state);
             // Note: there might be several Publishers on the same ResKey.
@@ -538,7 +535,7 @@ impl Session {
         invoker: SubscriberInvoker,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = state.localkey_to_resname(reskey)?;
         let sub_state = Arc::new(SubscriberState {
@@ -695,7 +692,7 @@ impl Session {
     }
 
     pub(crate) async fn undeclare_subscriber(&self, sid: usize) -> ZResult<()> {
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
             for res in state.local_resources.values_mut() {
@@ -767,7 +764,7 @@ impl Session {
     /// ```
     pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable<'_>> {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (q_sender, q_receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {
@@ -798,7 +795,7 @@ impl Session {
     }
 
     pub(crate) async fn undeclare_queryable(&self, qid: usize) -> ZResult<()> {
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
             // Note: there might be several Queryables on the same ResKey.
@@ -833,7 +830,7 @@ impl Session {
     /// ```
     pub async fn write(&self, resource: &ResKey, payload: RBuf) -> ZResult<()> {
         trace!("write({:?}, [...])", resource);
-        let state = self.state.read().await;
+        let state = zasyncread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
@@ -881,7 +878,7 @@ impl Session {
         congestion_control: CongestionControl,
     ) -> ZResult<()> {
         trace!("write_ext({:?}, [...])", resource);
-        let state = self.state.read().await;
+        let state = zasyncread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
@@ -919,7 +916,7 @@ impl Session {
         info: Option<DataInfo>,
         payload: RBuf,
     ) {
-        let state = self.state.read().await;
+        let state = zasyncread!(self.state);
         if let ResKey::RId(rid) = reskey {
             match state.get_res(rid, local) {
                 Some(res) => match res.subscribers.len() {
@@ -928,7 +925,7 @@ impl Session {
                         let sub = res.subscribers.get(0).unwrap();
                         match &sub.invoker {
                             SubscriberInvoker::Handler(handler) => {
-                                let handler = &mut *handler.write().await;
+                                let handler = &mut *zasyncwrite!(handler);
                                 handler(Sample {
                                     res_name: res.name.clone(),
                                     payload,
@@ -954,7 +951,7 @@ impl Session {
                         for sub in &res.subscribers {
                             match &sub.invoker {
                                 SubscriberInvoker::Handler(handler) => {
-                                    let handler = &mut *handler.write().await;
+                                    let handler = &mut *zasyncwrite!(handler);
                                     handler(Sample {
                                         res_name: res.name.clone(),
                                         payload: payload.clone(),
@@ -990,7 +987,7 @@ impl Session {
                         if rname::matches(&sub.resname, &resname) {
                             match &sub.invoker {
                                 SubscriberInvoker::Handler(handler) => {
-                                    let handler = &mut *handler.write().await;
+                                    let handler = &mut *zasyncwrite!(handler);
                                     handler(Sample {
                                         res_name: resname.clone(),
                                         payload: payload.clone(),
@@ -1024,7 +1021,7 @@ impl Session {
 
     pub(crate) async fn pull(&self, reskey: &ResKey) -> ZResult<()> {
         trace!("pull({:?})", reskey);
-        let state = self.state.read().await;
+        let state = zasyncread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_pull(true, reskey, 0, &None).await;
@@ -1072,7 +1069,7 @@ impl Session {
             target,
             consolidation
         );
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE);
         state.queries.insert(
@@ -1120,7 +1117,7 @@ impl Session {
         _consolidation: QueryConsolidation,
     ) {
         let (primitives, resname, kinds_and_senders) = {
-            let state = self.state.read().await;
+            let state = zasyncread!(self.state);
             match state.reskey_to_resname(reskey, local) {
                 Ok(resname) => {
                     let kinds_and_senders = state
@@ -1215,7 +1212,7 @@ impl Session {
 
     pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Decl Resource {} {:?}", rid, reskey);
-        let state = &mut self.state.write().await;
+        let state = &mut zasyncwrite!(self.state);
         match state.remotekey_to_resname(reskey) {
             Ok(resname) => {
                 let mut res = Resource::new(resname.clone());
@@ -1342,7 +1339,7 @@ impl Session {
             data_info,
             payload
         );
-        let state = &mut self.state.write().await;
+        let state = &mut zasyncwrite!(self.state);
         let res_name = match state.remotekey_to_resname(&reskey) {
             Ok(name) => name,
             Err(e) => {
@@ -1428,7 +1425,7 @@ impl Session {
 
     pub(crate) async fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
-        let mut state = self.state.write().await;
+        let mut state = zasyncwrite!(self.state);
         match state.queries.get_mut(&qid) {
             Some(mut query) => {
                 query.nb_final -= 1;

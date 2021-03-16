@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, RwLock, Weak};
+use async_std::sync::{Arc, Mutex, RwLock, Weak};
 use async_std::task::{sleep, JoinHandle};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -45,6 +45,7 @@ pub struct Tables {
     pub(crate) hlc: Option<HLC>,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
+    pub(crate) pull_caches_lock: Mutex<()>,
     pub(crate) router_subs: HashSet<Arc<Resource>>,
     pub(crate) peer_subs: HashSet<Arc<Resource>>,
     pub(crate) router_qabls: HashSet<Arc<Resource>>,
@@ -64,6 +65,7 @@ impl Tables {
             hlc,
             root_res: Resource::root(),
             faces: HashMap::new(),
+            pull_caches_lock: Mutex::new(()),
             router_subs: HashSet::new(),
             peer_subs: HashSet::new(),
             router_qabls: HashSet::new(),
@@ -211,7 +213,7 @@ impl Tables {
             let task = Some(async_std::task::spawn(async move {
                 async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
                     .await;
-                let mut tables = tables_ref.write().await;
+                let mut tables = zasyncwrite!(tables_ref);
                 let new_childs = match net_type {
                     whatami::ROUTER => tables.routers_net.as_mut().unwrap().compute_trees().await,
                     _ => tables.peers_net.as_mut().unwrap().compute_trees().await,
@@ -249,7 +251,7 @@ impl Router {
         orchestrator: SessionOrchestrator,
         peers_autoconnect: bool,
     ) {
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         if orchestrator.whatami == whatami::ROUTER {
             tables.routers_net = Some(
                 Network::new(
@@ -276,7 +278,7 @@ impl Router {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
-                let mut tables = self.tables.write().await;
+                let mut tables = zasyncwrite!(self.tables);
                 let pid = tables.pid.clone();
                 tables
                     .open_face(pid, whatami::CLIENT, primitives)
@@ -288,7 +290,7 @@ impl Router {
     }
 
     pub async fn new_session(&self, session: Session) -> ZResult<Arc<LinkStateInterceptor>> {
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         let whatami = session.get_whatami()?;
 
         let link_id = match (self.whatami, whatami) {
@@ -365,7 +367,7 @@ impl LinkStateInterceptor {
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
-                let mut tables = self.tables.write().await;
+                let mut tables = zasyncwrite!(self.tables);
                 let whatami = self.session.get_whatami()?;
                 match (tables.whatami, whatami) {
                     (whatami::ROUTER, whatami::ROUTER) => {
@@ -415,7 +417,7 @@ impl LinkStateInterceptor {
     pub(crate) async fn closing(&self) {
         self.demux.closing().await;
         sleep(Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
-        let mut tables = self.tables.write().await;
+        let mut tables = zasyncwrite!(self.tables);
         match self.session.get_whatami() {
             Ok(whatami) => match (tables.whatami, whatami) {
                 (whatami::ROUTER, whatami::ROUTER) => {
