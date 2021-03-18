@@ -85,7 +85,7 @@ pub(crate) struct Network {
     pub(crate) name: String,
     pub(crate) peers_autoconnect: bool,
     pub(crate) idx: NodeIndex,
-    pub(crate) links: Vec<Link>,
+    pub(crate) links: VecMap<Link>,
     pub(crate) trees: Vec<Tree>,
     pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
     pub(crate) orchestrator: SessionOrchestrator,
@@ -111,7 +111,7 @@ impl Network {
             name,
             peers_autoconnect,
             idx,
-            links: vec![],
+            links: VecMap::new(),
             trees: vec![Tree {
                 parent: None,
                 childs: vec![],
@@ -152,7 +152,7 @@ impl Network {
     #[inline]
     pub(crate) fn get_link_from_pid(&self, pid: &PeerId) -> Option<&Link> {
         self.links
-            .iter()
+            .values()
             .find(|link| link.session.get_pid().unwrap() == *pid)
     }
 
@@ -166,7 +166,7 @@ impl Network {
     fn add_node(&mut self, node: Node) -> NodeIndex {
         let pid = node.pid.clone();
         let idx = self.graph.add_node(node);
-        for link in &mut self.links {
+        for link in self.links.values_mut() {
             if let Some((psid, _)) = link.mappings.iter().find(|(_, p)| **p == pid) {
                 link.local_mappings.insert(psid, idx.index() as ZInt);
             }
@@ -235,7 +235,7 @@ impl Network {
         P: FnMut(&Link) -> bool,
     {
         let msg = self.make_msg(idxs).await;
-        for link in &self.links {
+        for link in self.links.values() {
             if predicate(link) {
                 log::trace!(
                     "{} Send to {} {:?}",
@@ -275,7 +275,7 @@ impl Network {
         let links = &mut self.links;
 
         let src_link = match links
-            .iter_mut()
+            .values_mut()
             .find(|link| link.session.get_pid().unwrap() == src)
         {
             Some(link) => link,
@@ -495,7 +495,7 @@ impl Network {
                 .into_iter()
                 .map(|(_, idx1, _new_node)| (idx1, true))
                 .collect::<Vec<(NodeIndex, bool)>>();
-            for link in &self.links {
+            for link in self.links.values() {
                 let link_pid = link.session.get_pid().unwrap();
                 if link_pid != src {
                     let updated_idxs: Vec<(NodeIndex, bool)> = updated_idxs
@@ -525,7 +525,14 @@ impl Network {
     }
 
     pub(crate) async fn add_link(&mut self, session: Session) -> usize {
-        self.links.push(Link::new(session.clone()));
+        let free_index = {
+            let mut i = 0;
+            while self.links.contains_key(i) {
+                i += 1;
+            }
+            i
+        };
+        self.links.insert(free_index, Link::new(session.clone()));
 
         let pid = session.get_pid().unwrap();
         let whatami = session.get_whatami().unwrap();
@@ -566,14 +573,14 @@ impl Network {
 
         let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
         self.send_on_link(idxs, &session).await;
-        self.links.len() - 1
+        free_index
     }
 
     pub(crate) async fn remove_link(&mut self, session: &Session) -> Vec<(NodeIndex, Node)> {
         let pid = session.get_pid().unwrap();
         log::trace!("{} remove_link {}", self.name, pid);
         self.links
-            .retain(|link| link.session.get_pid().unwrap() != pid);
+            .retain(|_, link| link.session.get_pid().unwrap() != pid);
         self.graph[self.idx].links.retain(|link| *link != pid);
 
         let idx = self.get_idx(&pid).unwrap();
@@ -586,7 +593,7 @@ impl Network {
 
         let links = self
             .links
-            .iter()
+            .values()
             .map(|link| {
                 self.get_idx(&link.session.get_pid().unwrap())
                     .unwrap()
@@ -608,7 +615,7 @@ impl Network {
             None,
         );
 
-        for link in &self.links {
+        for link in self.links.values() {
             if let Err(e) = link.session.handle_message(msg.clone()).await {
                 log::error!("{} Error sending LinkStateList: {}", self.name, e);
             }
