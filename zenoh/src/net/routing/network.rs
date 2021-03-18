@@ -130,6 +130,14 @@ impl Network {
     }
 
     #[inline]
+    pub(crate) fn get_pids(&self, whatami: whatami::Type) -> Vec<&PeerId> {
+        self.graph
+            .node_indices()
+            .filter_map(|idx| (self.graph[idx].whatami == whatami).then_some(&self.graph[idx].pid))
+            .collect()
+    }
+
+    #[inline]
     pub(crate) fn get_idx(&self, pid: &PeerId) -> Option<NodeIndex> {
         self.graph
             .node_indices()

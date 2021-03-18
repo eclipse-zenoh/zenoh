@@ -13,6 +13,7 @@
 //
 use async_std::sync::Arc;
 use petgraph::graph::NodeIndex;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use super::protocol::core::{whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt};
@@ -21,7 +22,7 @@ use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;
-use super::resource::{Context, Resource, Route};
+use super::resource::{elect_router, Context, Resource, Route};
 use super::router::Tables;
 
 pub(crate) struct Query {
@@ -707,45 +708,56 @@ unsafe fn compute_query_route(
     source_type: whatami::Type,
 ) -> Arc<Route> {
     let mut route = HashMap::new();
-    let resname = [&prefix.name(), suffix].concat();
+    let res_name = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
     let matches = match res.as_ref() {
-        Some(res) => std::borrow::Cow::from(&res.matches),
-        None => std::borrow::Cow::from(Resource::get_matches(tables, &resname)),
+        Some(res) => Cow::from(&res.matches),
+        None => Cow::from(Resource::get_matches(tables, &res_name)),
     };
+
+    let master = tables.whatami != whatami::ROUTER
+        || *elect_router(
+            &res_name,
+            &tables.peers_net.as_ref().unwrap().get_pids(whatami::ROUTER)[..],
+        ) == tables.pid;
 
     for mres in matches.iter() {
         let mut mres = mres.upgrade().unwrap();
         let mres = Arc::get_mut_unchecked(&mut mres);
         if tables.whatami == whatami::ROUTER {
-            let net = tables.routers_net.as_ref().unwrap();
-            let router_source = match source_type {
-                whatami::ROUTER => source.unwrap(),
-                _ => net.idx.index(),
-            };
-            insert_faces_for_qabls(
-                &mut route,
-                prefix,
-                suffix,
-                tables,
-                net,
-                router_source,
-                &mres.router_qabls,
-            );
-            let net = tables.peers_net.as_ref().unwrap();
-            let peer_source = match source_type {
-                whatami::PEER => source.unwrap(),
-                _ => net.idx.index(),
-            };
-            insert_faces_for_qabls(
-                &mut route,
-                prefix,
-                suffix,
-                tables,
-                net,
-                peer_source,
-                &mres.peer_qabls,
-            );
+            if master || source_type == whatami::ROUTER {
+                let net = tables.routers_net.as_ref().unwrap();
+                let router_source = match source_type {
+                    whatami::ROUTER => source.unwrap(),
+                    _ => net.idx.index(),
+                };
+                insert_faces_for_qabls(
+                    &mut route,
+                    prefix,
+                    suffix,
+                    tables,
+                    net,
+                    router_source,
+                    &mres.router_qabls,
+                );
+            }
+
+            if master || source_type != whatami::ROUTER {
+                let net = tables.peers_net.as_ref().unwrap();
+                let peer_source = match source_type {
+                    whatami::PEER => source.unwrap(),
+                    _ => net.idx.index(),
+                };
+                insert_faces_for_qabls(
+                    &mut route,
+                    prefix,
+                    suffix,
+                    tables,
+                    net,
+                    peer_source,
+                    &mres.peer_qabls,
+                );
+            }
         }
 
         if tables.whatami == whatami::PEER {
@@ -765,12 +777,14 @@ unsafe fn compute_query_route(
             );
         }
 
-        for (sid, context) in &mut mres.contexts {
-            if context.qabl {
-                route.entry(*sid).or_insert_with(|| {
-                    let reskey = Resource::get_best_key(prefix, suffix, *sid);
-                    (context.face.clone(), reskey, None)
-                });
+        if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
+            for (sid, context) in &mut mres.contexts {
+                if context.qabl {
+                    route.entry(*sid).or_insert_with(|| {
+                        let reskey = Resource::get_best_key(prefix, suffix, *sid);
+                        (context.face.clone(), reskey, None)
+                    });
+                }
             }
         }
     }

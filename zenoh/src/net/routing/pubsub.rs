@@ -25,7 +25,7 @@ use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;
-use super::resource::{Context, PullCaches, Resource, Route};
+use super::resource::{elect_router, Context, PullCaches, Resource, Route};
 use super::router::Tables;
 
 #[inline]
@@ -776,48 +776,56 @@ unsafe fn compute_data_route(
     source_type: whatami::Type,
 ) -> Arc<Route> {
     let mut route = HashMap::new();
+    let res_name = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
     let matches = match res.as_ref() {
         Some(res) => Cow::from(&res.matches),
-        None => Cow::from(Resource::get_matches(
-            tables,
-            &[&prefix.name(), suffix].concat(),
-        )),
+        None => Cow::from(Resource::get_matches(tables, &res_name)),
     };
+
+    let master = tables.whatami != whatami::ROUTER
+        || *elect_router(
+            &res_name,
+            &tables.peers_net.as_ref().unwrap().get_pids(whatami::ROUTER)[..],
+        ) == tables.pid;
 
     for mres in matches.iter() {
         let mut mres = mres.upgrade().unwrap();
         let mres = Arc::get_mut_unchecked(&mut mres);
         if tables.whatami == whatami::ROUTER {
-            let net = tables.routers_net.as_ref().unwrap();
-            let router_source = match source_type {
-                whatami::ROUTER => source.unwrap(),
-                _ => net.idx.index(),
-            };
-            insert_faces_for_subs(
-                &mut route,
-                prefix,
-                suffix,
-                tables,
-                net,
-                router_source,
-                &mres.router_subs,
-            );
+            if master || source_type == whatami::ROUTER {
+                let net = tables.routers_net.as_ref().unwrap();
+                let router_source = match source_type {
+                    whatami::ROUTER => source.unwrap(),
+                    _ => net.idx.index(),
+                };
+                insert_faces_for_subs(
+                    &mut route,
+                    prefix,
+                    suffix,
+                    tables,
+                    net,
+                    router_source,
+                    &mres.router_subs,
+                );
+            }
 
-            let net = tables.peers_net.as_ref().unwrap();
-            let peer_source = match source_type {
-                whatami::PEER => source.unwrap(),
-                _ => net.idx.index(),
-            };
-            insert_faces_for_subs(
-                &mut route,
-                prefix,
-                suffix,
-                tables,
-                net,
-                peer_source,
-                &mres.peer_subs,
-            );
+            if master || source_type != whatami::ROUTER {
+                let net = tables.peers_net.as_ref().unwrap();
+                let peer_source = match source_type {
+                    whatami::PEER => source.unwrap(),
+                    _ => net.idx.index(),
+                };
+                insert_faces_for_subs(
+                    &mut route,
+                    prefix,
+                    suffix,
+                    tables,
+                    net,
+                    peer_source,
+                    &mres.peer_subs,
+                );
+            }
         }
 
         if tables.whatami == whatami::PEER {
@@ -837,13 +845,15 @@ unsafe fn compute_data_route(
             );
         }
 
-        for (sid, context) in &mut mres.contexts {
-            if let Some(subinfo) = &context.subs {
-                if subinfo.mode == SubMode::Push {
-                    route.entry(*sid).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, *sid);
-                        (context.face.clone(), reskey, None)
-                    });
+        if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
+            for (sid, context) in &mut mres.contexts {
+                if let Some(subinfo) = &context.subs {
+                    if subinfo.mode == SubMode::Push {
+                        route.entry(*sid).or_insert_with(|| {
+                            let reskey = Resource::get_best_key(prefix, suffix, *sid);
+                            (context.face.clone(), reskey, None)
+                        });
+                    }
                 }
             }
         }
