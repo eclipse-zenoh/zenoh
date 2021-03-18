@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use petgraph::graph::NodeIndex;
-use petgraph::visit::{VisitMap, Visitable};
+use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
 
@@ -127,14 +127,6 @@ impl Network {
             "{:?}",
             petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
         )
-    }
-
-    #[inline]
-    pub(crate) fn get_pids(&self, whatami: whatami::Type) -> Vec<&PeerId> {
-        self.graph
-            .node_indices()
-            .filter_map(|idx| (self.graph[idx].whatami == whatami).then_some(&self.graph[idx].pid))
-            .collect()
     }
 
     #[inline]
@@ -745,4 +737,17 @@ impl Network {
 
         new_childs
     }
+}
+
+#[inline]
+pub(super) fn common_nodes<'a>(net1: &'a Network, net2: &'a Network) -> Vec<&'a PeerId> {
+    net1.graph
+        .node_references()
+        .filter_map(|(_, node1)| {
+            net2.graph
+                .node_references()
+                .any(|(_, node2)| node1.pid == node2.pid)
+                .then_some(&node1.pid)
+        })
+        .collect()
 }

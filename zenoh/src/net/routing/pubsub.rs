@@ -24,7 +24,7 @@ use super::protocol::io::RBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
-use super::network::Network;
+use super::network::{common_nodes, Network};
 use super::resource::{elect_router, Context, PullCaches, Resource, Route};
 use super::router::Tables;
 
@@ -786,7 +786,10 @@ unsafe fn compute_data_route(
     let master = tables.whatami != whatami::ROUTER
         || *elect_router(
             &res_name,
-            &tables.peers_net.as_ref().unwrap().get_pids(whatami::ROUTER)[..],
+            &common_nodes(
+                &tables.peers_net.as_ref().unwrap(),
+                &tables.routers_net.as_ref().unwrap(),
+            )[..],
         ) == tables.pid;
 
     for mres in matches.iter() {
