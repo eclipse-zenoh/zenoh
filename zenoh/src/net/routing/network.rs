@@ -191,7 +191,7 @@ impl Network {
             } else {
                 None
             },
-            whatami: None,
+            whatami: Some(self.graph[idx].whatami),
             locators: if idx == self.idx {
                 Some(self.orchestrator.manager().await.get_locators().await)
             } else {
@@ -593,7 +593,7 @@ impl Network {
                 psid: self.idx.index().try_into().unwrap(),
                 sn: self.graph[self.idx].sn,
                 pid: None,
-                whatami: None,
+                whatami: Some(self.graph[self.idx].whatami),
                 locators: Some(self.orchestrator.manager().await.get_locators().await),
                 links,
             }],
