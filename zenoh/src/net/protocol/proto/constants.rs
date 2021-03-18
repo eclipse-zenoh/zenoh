@@ -53,7 +53,7 @@ pub mod encoding {
         /*  9 */ Mime::from_str("application/xhtml+xml").unwrap(),
         /* 10 */ Mime::from_str("application/x-www-form-urlencoded").unwrap(),
         /* 11 */ Mime::from_str("text/json").unwrap(), // non iana standard - if readable from casual users
-        /* 12 */ Mime::from_str("text/htlm").unwrap(),
+        /* 12 */ Mime::from_str("text/html").unwrap(),
         /* 13 */ Mime::from_str("text/xml").unwrap(), // if readable from casual users (RFC 3023, section 3)
         /* 14 */ Mime::from_str("text/css").unwrap(),
         /* 15 */ Mime::from_str("text/csv").unwrap(),
@@ -96,7 +96,7 @@ pub mod encoding {
             "application/xhtml+xml" => Ok(9),
             "application/x-www-form-urlencoded" => Ok(10),
             "text/json" => Ok(11),
-            "text/htlm" => Ok(12),
+            "text/html" => Ok(12),
             "text/xml" => Ok(13),
             "text/css" => Ok(14),
             "text/csv" => Ok(15),
