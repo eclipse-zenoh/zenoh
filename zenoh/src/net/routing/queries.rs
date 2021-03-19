@@ -875,7 +875,18 @@ pub async fn route_query(
                         let local_context =
                             routers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match Resource::get_resource(prefix, suffix) {
-                            Some(res) => res.routers_query_routes[local_context].clone(),
+                            Some(res) => {
+                                res.routers_query_route(local_context).unwrap_or_else(|| {
+                                    // precomputed route is not yet ready
+                                    compute_query_route(
+                                        tables,
+                                        prefix,
+                                        suffix,
+                                        Some(local_context),
+                                        whatami::ROUTER,
+                                    )
+                                })
+                            }
                             None => compute_query_route(
                                 tables,
                                 prefix,
@@ -890,7 +901,18 @@ pub async fn route_query(
                         let local_context =
                             peers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match Resource::get_resource(prefix, suffix) {
-                            Some(res) => res.peers_query_routes[local_context].clone(),
+                            Some(res) => {
+                                res.peers_query_route(local_context).unwrap_or_else(|| {
+                                    // precomputed route is not yet ready
+                                    compute_query_route(
+                                        tables,
+                                        prefix,
+                                        suffix,
+                                        Some(local_context),
+                                        whatami::PEER,
+                                    )
+                                })
+                            }
                             None => compute_query_route(
                                 tables,
                                 prefix,
@@ -911,7 +933,18 @@ pub async fn route_query(
                         let local_context =
                             peers_net.get_local_context(routing_context.unwrap(), face.link_id);
                         match Resource::get_resource(prefix, suffix) {
-                            Some(res) => res.peers_query_routes[local_context].clone(),
+                            Some(res) => {
+                                res.peers_query_route(local_context).unwrap_or_else(|| {
+                                    // precomputed route is not yet ready
+                                    compute_query_route(
+                                        tables,
+                                        prefix,
+                                        suffix,
+                                        Some(local_context),
+                                        whatami::PEER,
+                                    )
+                                })
+                            }
                             None => compute_query_route(
                                 tables,
                                 prefix,

@@ -126,6 +126,42 @@ impl Resource {
         !self.contexts.is_empty()
     }
 
+    #[inline(always)]
+    pub fn routers_data_route(&self, context: usize) -> Option<Arc<Route>> {
+        if self.routers_data_routes.len() > context {
+            Some(self.routers_data_routes[context].clone())
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
+        if self.peers_data_routes.len() > context {
+            Some(self.peers_data_routes[context].clone())
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn routers_query_route(&self, context: usize) -> Option<Arc<Route>> {
+        if self.routers_query_routes.len() > context {
+            Some(self.routers_query_routes[context].clone())
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn peers_query_route(&self, context: usize) -> Option<Arc<Route>> {
+        if self.peers_query_routes.len() > context {
+            Some(self.peers_query_routes[context].clone())
+        } else {
+            None
+        }
+    }
+
     pub fn root() -> Arc<Resource> {
         Arc::new(Resource {
             parent: None,

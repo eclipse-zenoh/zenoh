@@ -1006,7 +1006,16 @@ fn get_data_route(
                     let local_context =
                         routers_net.get_local_context(routing_context.unwrap(), face.link_id);
                     match res {
-                        Some(res) => res.routers_data_routes[local_context].clone(),
+                        Some(res) => res.routers_data_route(local_context).unwrap_or_else(|| {
+                            // precomputed route is not yet ready
+                            compute_data_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                Some(local_context),
+                                whatami::ROUTER,
+                            )
+                        }),
                         None => compute_data_route(
                             tables,
                             prefix,
@@ -1021,7 +1030,16 @@ fn get_data_route(
                     let local_context =
                         peers_net.get_local_context(routing_context.unwrap(), face.link_id);
                     match res {
-                        Some(res) => res.peers_data_routes[local_context].clone(),
+                        Some(res) => res.peers_data_route(local_context).unwrap_or_else(|| {
+                            // precomputed route is not yet ready
+                            compute_data_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                Some(local_context),
+                                whatami::PEER,
+                            )
+                        }),
                         None => compute_data_route(
                             tables,
                             prefix,
@@ -1042,7 +1060,16 @@ fn get_data_route(
                     let local_context =
                         peers_net.get_local_context(routing_context.unwrap(), face.link_id);
                     match res {
-                        Some(res) => res.peers_data_routes[local_context].clone(),
+                        Some(res) => res.peers_data_route(local_context).unwrap_or_else(|| {
+                            // precomputed route is not yet ready
+                            compute_data_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                Some(local_context),
+                                whatami::PEER,
+                            )
+                        }),
                         None => compute_data_route(
                             tables,
                             prefix,
