@@ -541,7 +541,7 @@ pub async fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>,
 }
 
 #[inline]
-pub(super) fn elect_router<'a>(res_name: &str, routers: &'a [&'a PeerId]) -> &'a PeerId {
+pub(super) fn elect_router<'a>(res_name: &str, routers: &'a [PeerId]) -> &'a PeerId {
     if routers.len() == 1 {
         &routers[0]
     } else {

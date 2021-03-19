@@ -27,7 +27,7 @@ use zenoh_util::core::ZResult;
 use zenoh_util::zconfigurable;
 
 use super::face::{Face, FaceState};
-use super::network::Network;
+use super::network::{shared_nodes, Network};
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
@@ -52,6 +52,7 @@ pub struct Tables {
     pub(crate) peer_qabls: HashSet<Arc<Resource>>,
     pub(crate) routers_net: Option<Network>,
     pub(crate) peers_net: Option<Network>,
+    pub(crate) shared_nodes: Vec<PeerId>,
     pub(crate) routers_trees_task: Option<JoinHandle<()>>,
     pub(crate) peers_trees_task: Option<JoinHandle<()>>,
 }
@@ -72,6 +73,7 @@ impl Tables {
             peer_qabls: HashSet::new(),
             routers_net: None,
             peers_net: None,
+            shared_nodes: vec![],
             routers_trees_task: None,
             peers_trees_task: None,
         }
@@ -252,6 +254,15 @@ impl Router {
         peers_autoconnect: bool,
     ) {
         let mut tables = zasyncwrite!(self.tables);
+        tables.peers_net = Some(
+            Network::new(
+                "[Peers network]".to_string(),
+                tables.pid.clone(),
+                orchestrator.clone(),
+                peers_autoconnect,
+            )
+            .await,
+        );
         if orchestrator.whatami == whatami::ROUTER {
             tables.routers_net = Some(
                 Network::new(
@@ -262,16 +273,11 @@ impl Router {
                 )
                 .await,
             );
+            tables.shared_nodes = shared_nodes(
+                tables.routers_net.as_ref().unwrap(),
+                tables.peers_net.as_ref().unwrap(),
+            );
         }
-        tables.peers_net = Some(
-            Network::new(
-                "[Peers network]".to_string(),
-                tables.pid.clone(),
-                orchestrator,
-                peers_autoconnect,
-            )
-            .await,
-        );
     }
 
     pub async fn new_primitives(&self, primitives: OutSession) -> Arc<Face> {
@@ -314,6 +320,13 @@ impl Router {
             }
             _ => 0,
         };
+
+        if tables.whatami == whatami::ROUTER {
+            tables.shared_nodes = shared_nodes(
+                tables.routers_net.as_ref().unwrap(),
+                tables.peers_net.as_ref().unwrap(),
+            );
+        }
 
         let handler = Arc::new(LinkStateInterceptor::new(
             session.clone(),
@@ -383,6 +396,12 @@ impl LinkStateInterceptor {
                             queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER)
                                 .await;
                         }
+
+                        tables.shared_nodes = shared_nodes(
+                            tables.routers_net.as_ref().unwrap(),
+                            tables.peers_net.as_ref().unwrap(),
+                        );
+
                         tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
                     }
                     (whatami::ROUTER, whatami::PEER)
@@ -399,6 +418,14 @@ impl LinkStateInterceptor {
                             queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER)
                                 .await;
                         }
+
+                        if tables.whatami == whatami::ROUTER {
+                            tables.shared_nodes = shared_nodes(
+                                tables.routers_net.as_ref().unwrap(),
+                                tables.peers_net.as_ref().unwrap(),
+                            );
+                        }
+
                         tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
                     }
                     _ => (),
@@ -431,6 +458,12 @@ impl LinkStateInterceptor {
                         pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
                         queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
                     }
+
+                    tables.shared_nodes = shared_nodes(
+                        tables.routers_net.as_ref().unwrap(),
+                        tables.peers_net.as_ref().unwrap(),
+                    );
+
                     tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
                 }
                 (whatami::ROUTER, whatami::PEER)
@@ -446,6 +479,14 @@ impl LinkStateInterceptor {
                         pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
                         queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
                     }
+
+                    if tables.whatami == whatami::ROUTER {
+                        tables.shared_nodes = shared_nodes(
+                            tables.routers_net.as_ref().unwrap(),
+                            tables.peers_net.as_ref().unwrap(),
+                        );
+                    }
+
                     tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
                 }
                 _ => (),

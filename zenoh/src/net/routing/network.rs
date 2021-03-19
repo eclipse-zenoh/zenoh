@@ -740,14 +740,14 @@ impl Network {
 }
 
 #[inline]
-pub(super) fn common_nodes<'a>(net1: &'a Network, net2: &'a Network) -> Vec<&'a PeerId> {
+pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<PeerId> {
     net1.graph
         .node_references()
         .filter_map(|(_, node1)| {
             net2.graph
                 .node_references()
                 .any(|(_, node2)| node1.pid == node2.pid)
-                .then_some(&node1.pid)
+                .then_some(node1.pid.clone())
         })
         .collect()
 }
