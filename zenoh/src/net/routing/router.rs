@@ -127,13 +127,13 @@ impl Tables {
     ) -> Weak<FaceState> {
         unsafe {
             let fid = self.face_counter;
-            log::debug!("New face {}", fid);
             self.face_counter += 1;
             let mut newface = self
                 .faces
                 .entry(fid)
                 .or_insert_with(|| FaceState::new(fid, pid, whatami, primitives.clone(), link_id))
                 .clone();
+            log::debug!("New {}", newface);
 
             if whatami == whatami::CLIENT {
                 pubsub_new_client_face(self, &mut newface).await;
@@ -155,7 +155,7 @@ impl Tables {
     pub async fn close_face(&mut self, face: &Weak<FaceState>) {
         match face.upgrade() {
             Some(mut face) => unsafe {
-                log::debug!("Close face {}", face.id);
+                log::debug!("Close {}", face);
                 finalize_pending_queries(self, &mut face).await;
 
                 let mut face_clone = face.clone();

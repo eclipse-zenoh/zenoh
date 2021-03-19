@@ -46,12 +46,7 @@ async fn send_sourced_queryable_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let reskey = Resource::decl_key(res, &mut someface).await;
 
-                        log::debug!(
-                            "Send queryable {} on face {} {}",
-                            res.name(),
-                            someface.id,
-                            someface.pid,
-                        );
+                        log::debug!("Send queryable {} on {}", res.name(), someface);
 
                         someface
                             .primitives
@@ -230,7 +225,7 @@ async unsafe fn register_client_queryable(
     // Register queryable
     {
         let res = Arc::get_mut_unchecked(res);
-        log::debug!("Register queryable {} for face {}", res.name(), face.id);
+        log::debug!("Register queryable {} for {}", res.name(), face);
         match res.contexts.get_mut(&face.id) {
             Some(mut ctx) => Arc::get_mut_unchecked(&mut ctx).qabl = true,
             None => {
@@ -297,12 +292,7 @@ async fn send_forget_sourced_queryable_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let reskey = Resource::decl_key(res, &mut someface).await;
 
-                        log::debug!(
-                            "Send forget queryable {} on face {} {}",
-                            res.name(),
-                            someface.id,
-                            someface.pid,
-                        );
+                        log::debug!("Send forget queryable {} on {}", res.name(), someface);
 
                         someface
                             .primitives
@@ -474,11 +464,7 @@ pub(crate) async unsafe fn undeclare_client_queryable(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
-    log::debug!(
-        "Unregister client queryable {} for face {}",
-        res.name(),
-        face.id
-    );
+    log::debug!("Unregister client queryable {} for  {}", res.name(), face);
     if let Some(mut ctx) = Arc::get_mut_unchecked(res).contexts.get_mut(&face.id) {
         Arc::get_mut_unchecked(&mut ctx).qabl = false;
     }
@@ -876,7 +862,7 @@ pub async fn route_query(
         Some(prefix) => unsafe {
             log::debug!(
                 "Route query {}:{} for res {}{}",
-                face.id,
+                face,
                 qid,
                 prefix.name(),
                 suffix,
@@ -952,11 +938,7 @@ pub async fn route_query(
             if route.is_empty()
                 || (route.len() == 1 && route.iter().next().unwrap().1 .0.id == face.id)
             {
-                log::debug!(
-                    "Send final reply {}:{} (no matching queryables)",
-                    face.id,
-                    qid
-                );
+                log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
                 face.primitives.clone().send_reply_final(qid).await
             } else {
                 let query = Arc::new(Query {
@@ -971,6 +953,8 @@ pub async fn route_query(
                         outface_mut.next_qid += 1;
                         let qid = outface_mut.next_qid;
                         outface_mut.pending_queries.insert(qid, query.clone());
+
+                        log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
                         outface
                             .primitives
@@ -1033,13 +1017,13 @@ pub(crate) async fn route_send_reply_final(
     match face.pending_queries.get(&qid) {
         Some(query) => unsafe {
             log::debug!(
-                "Received final reply {}:{} from face {}",
-                query.src_face.id,
+                "Received final reply {}:{} from {}",
+                query.src_face,
                 qid,
-                face.id
+                face
             );
             if Arc::strong_count(&query) == 1 {
-                log::debug!("Propagate final reply {}:{}", query.src_face.id, qid);
+                log::debug!("Propagate final reply {}:{}", query.src_face, qid);
                 query
                     .src_face
                     .primitives
@@ -1056,17 +1040,13 @@ pub(crate) async fn route_send_reply_final(
 pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
     for query in face.pending_queries.values() {
         log::debug!(
-            "Finalize reply {}:{} for closing face {}",
-            query.src_face.id,
+            "Finalize reply {}:{} for closing {}",
+            query.src_face,
             query.src_qid,
-            face.id
+            face
         );
         if Arc::strong_count(&query) == 1 {
-            log::debug!(
-                "Propagate final reply {}:{}",
-                query.src_face.id,
-                query.src_qid
-            );
+            log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
             query
                 .src_face
                 .primitives

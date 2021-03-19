@@ -13,6 +13,7 @@
 //
 use async_std::sync::{Arc, RwLock};
 use std::collections::HashMap;
+use std::fmt;
 use zenoh_util::zasyncwrite;
 
 use super::protocol::core::{
@@ -80,6 +81,12 @@ impl FaceState {
             id += 1;
         }
         id
+    }
+}
+
+impl fmt::Display for FaceState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Face{{{}, {}}}", self.id, self.pid)
     }
 }
 
@@ -552,5 +559,11 @@ impl Face {
         zasyncwrite!(self.tables)
             .close_face(&Arc::downgrade(&self.state))
             .await;
+    }
+}
+
+impl fmt::Display for Face {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.state.fmt(f)
     }
 }

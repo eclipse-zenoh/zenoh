@@ -45,12 +45,7 @@ async fn send_sourced_subscription_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let reskey = Resource::decl_key(res, &mut someface).await;
 
-                        log::debug!(
-                            "Send subscription {} on face {} {}",
-                            res.name(),
-                            someface.id,
-                            someface.pid,
-                        );
+                        log::debug!("Send subscription {} on {}", res.name(), someface);
 
                         someface
                             .primitives
@@ -251,7 +246,7 @@ async unsafe fn register_client_subscription(
     // Register subscription
     {
         let res = Arc::get_mut_unchecked(res);
-        log::debug!("Register subscription {} for face {}", res.name(), face.id);
+        log::debug!("Register subscription {} for {}", res.name(), face);
         match res.contexts.get_mut(&face.id) {
             Some(mut ctx) => match &ctx.subs {
                 Some(info) => {
@@ -346,12 +341,7 @@ async fn send_forget_sourced_subscription_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let reskey = Resource::decl_key(res, &mut someface).await;
 
-                        log::debug!(
-                            "Send forget subscription {} on face {} {}",
-                            res.name(),
-                            someface.id,
-                            someface.pid,
-                        );
+                        log::debug!("Send forget subscription {} on {}", res.name(), someface);
 
                         someface
                             .primitives
@@ -528,11 +518,7 @@ pub(crate) async unsafe fn undeclare_client_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
-    log::debug!(
-        "Unregister client subscription {} for face {}",
-        res.name(),
-        face.id
-    );
+    log::debug!("Unregister client subscription {} for {}", res.name(), face);
     if let Some(mut ctx) = Arc::get_mut_unchecked(res).contexts.get_mut(&face.id) {
         Arc::get_mut_unchecked(&mut ctx).subs = None;
     }
