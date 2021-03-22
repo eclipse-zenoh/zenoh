@@ -312,7 +312,7 @@ impl SessionOrchestrator {
     }
 
     pub async fn bind_mcast_port(sockaddr: &SocketAddr) -> ZResult<UdpSocket> {
-        let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
+        let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
                 log::error!("Unable to create datagram socket : {}", err);
@@ -372,11 +372,11 @@ impl SessionOrchestrator {
             }
         }
         log::info!("zenohd listening scout messages on {}", sockaddr);
-        Ok(socket.into_udp_socket().into())
+        Ok(std::net::UdpSocket::from(socket).into())
     }
 
     pub async fn bind_ucast_port(addr: IpAddr) -> ZResult<UdpSocket> {
-        let socket = match Socket::new(Domain::ipv4(), Type::dgram(), None) {
+        let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
                 log::error!("Unable to create datagram socket : {}", err);
@@ -395,7 +395,7 @@ impl SessionOrchestrator {
                     .local_addr()
                     .or::<std::io::Error>(Ok(SocketAddr::new(addr, 0).into()))
                     .unwrap()
-                    .as_std()
+                    .as_socket()
                     .or(Some(SocketAddr::new(addr, 0)))
                     .unwrap();
                 log::debug!("UDP port bound to {}", local_addr);
@@ -410,7 +410,7 @@ impl SessionOrchestrator {
                 );
             }
         }
-        Ok(socket.into_udp_socket().into())
+        Ok(std::net::UdpSocket::from(socket).into())
     }
 
     async fn peer_connector(&self, peer: Locator) {
