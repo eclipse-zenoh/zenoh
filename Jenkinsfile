@@ -360,8 +360,6 @@ pipeline {
       steps {
         sh '''
         cd zenoh-util && cargo publish && cd - && sleep 30
-        cd zenoh-protocol && cargo publish && cd - && sleep 30
-        cd zenoh-router && cargo publish && cd - && sleep 30
         cd zenoh && cargo publish && cd - && sleep 30
         cd backends/traits && cargo publish && cd -
         '''
