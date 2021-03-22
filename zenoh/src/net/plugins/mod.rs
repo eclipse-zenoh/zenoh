@@ -37,7 +37,7 @@ impl PluginsMgr {
     }
 
     pub async fn search_and_load_plugins(&mut self) {
-        let libs = self.lib_loader.load_all_with_prefix(Some(&*PLUGIN_PREFIX));
+        let libs = unsafe { self.lib_loader.load_all_with_prefix(Some(&*PLUGIN_PREFIX)) };
         for lib in libs {
             match Plugin::new(lib.0, lib.1, lib.2) {
                 Ok(plugin) => {
@@ -56,7 +56,7 @@ impl PluginsMgr {
     pub fn load_plugins(&mut self, paths: Vec<String>) -> ZResult<()> {
         log::debug!("Plugins to load: {:?}", paths);
         for path in paths {
-            let (lib, p) = LibLoader::load_file(&path)?;
+            let (lib, p) = unsafe { LibLoader::load_file(&path)? };
             let filename = p.file_name().unwrap().to_str().unwrap();
             let prefix = format!("{}{}", *zenoh_util::LIB_PREFIX, *PLUGIN_PREFIX);
             let suffix = &*zenoh_util::LIB_SUFFIX;

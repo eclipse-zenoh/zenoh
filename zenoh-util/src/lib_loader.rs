@@ -80,7 +80,7 @@ impl LibLoader {
     }
 
     /// Load a library from the specified path.
-    pub fn load_file(path: &str) -> ZResult<(Library, PathBuf)> {
+    pub unsafe fn load_file(path: &str) -> ZResult<(Library, PathBuf)> {
         let path = Self::str_to_canonical_path(path)?;
 
         if !path.exists() {
@@ -106,7 +106,7 @@ impl LibLoader {
     /// The result is a tuple with:
     ///    * the [Library]
     ///    * its full path
-    pub fn search_and_load(&self, name: &str) -> ZResult<(Library, PathBuf)> {
+    pub unsafe fn search_and_load(&self, name: &str) -> ZResult<(Library, PathBuf)> {
         let filename = format!("{}{}{}", *LIB_PREFIX, name, *LIB_SUFFIX);
         let filename_ostr = OsString::from(&filename);
         log::debug!(
@@ -146,7 +146,7 @@ impl LibLoader {
     ///    * the [Library]
     ///    * its full path
     ///    * its short name (i.e. filename stripped of prefix and suffix)
-    pub fn load_all_with_prefix(&self, prefix: Option<&str>) -> Vec<(Library, PathBuf, String)> {
+    pub unsafe fn load_all_with_prefix(&self, prefix: Option<&str>) -> Vec<(Library, PathBuf, String)> {
         let lib_prefix = format!("{}{}", *LIB_PREFIX, prefix.unwrap_or(""));
         log::debug!(
             "Search for libraries {}*{} to load in {:?}",

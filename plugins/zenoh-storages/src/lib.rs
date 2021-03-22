@@ -180,10 +180,12 @@ async fn load_and_start_backend(
 ) -> ZResult<Sender<bool>> {
     if let Value::Properties(props) = value {
         let name = path.last_segment();
-        let (lib, lib_path) = if let Some(filename) = props.get("lib") {
-            LibLoader::load_file(filename)?
-        } else {
-            lib_loader.search_and_load(&format!("{}{}", BACKEND_LIB_PREFIX, name))?
+        let (lib, lib_path) = unsafe {
+            if let Some(filename) = props.get("lib") {
+                LibLoader::load_file(filename)?
+            } else {
+                lib_loader.search_and_load(&format!("{}{}", BACKEND_LIB_PREFIX, name))?
+            }
         };
 
         debug!("Create backend {} using {}", name, lib_path.display());
