@@ -38,14 +38,9 @@ impl RecyclingBufferPool {
     }
 
     pub fn try_take(&self) -> Option<RecyclingBuffer> {
-        if let Some(buffer) = self.inner.try_pull() {
-            Some(RecyclingBuffer::new(
-                buffer,
-                Some(Arc::downgrade(&self.inner)),
-            ))
-        } else {
-            None
-        }
+        self.inner
+            .try_pull()
+            .map(|buffer| RecyclingBuffer::new(buffer, Some(Arc::downgrade(&self.inner))))
     }
 
     pub async fn take(&self) -> RecyclingBuffer {

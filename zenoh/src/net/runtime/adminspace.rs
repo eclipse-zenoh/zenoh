@@ -329,7 +329,7 @@ pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
         json!({
             "peer": session.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
             "links": session.get_links().await.map_or_else(
-                |_| vec!(),
+                |_| Vec::new(),
                 |links| links.iter().map(|link| link.get_dst().to_string()).collect()
             )
         })
