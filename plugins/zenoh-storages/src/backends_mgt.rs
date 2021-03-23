@@ -97,11 +97,15 @@ pub(crate) async fn start_backend(
                     match change.kind {
                         ChangeKind::Put => {
                             if let Some(value) = change.value {
-                                match create_and_start_storage(change.path.clone(), value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
-                                    Ok(handle) => {
-                                        let _ = storages_handles.insert(change.path, handle);
+                                if !storages_handles.contains_key(&change.path) {
+                                    match create_and_start_storage(change.path.clone(), value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
+                                        Ok(handle) => {
+                                            let _ = storages_handles.insert(change.path, handle);
+                                        }
+                                        Err(e) => warn!("{}", e),
                                     }
-                                    Err(e) => warn!("{}", e),
+                                } else {
+                                    warn!("Storage {} already exists", change.path);
                                 }
                             } else {
                                 warn!("Received a PUT on {} with invalid value: {:?}", change.path, change.value);
