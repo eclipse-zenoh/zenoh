@@ -18,6 +18,7 @@ use async_std::task;
 use futures::prelude::*;
 use futures::select;
 use log::{debug, error, trace, warn};
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use zenoh::{ChangeKind, Path, PathExpr, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
@@ -97,15 +98,17 @@ pub(crate) async fn start_backend(
                     match change.kind {
                         ChangeKind::Put => {
                             if let Some(value) = change.value {
-                                if !storages_handles.contains_key(&change.path) {
-                                    match create_and_start_storage(change.path.clone(), value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
-                                        Ok(handle) => {
-                                            let _ = storages_handles.insert(change.path, handle);
+                                match storages_handles.entry(change.path.clone()) {
+                                    Entry::Vacant(entry) => {
+                                        match create_and_start_storage(change.path, value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
+                                            Ok(handle) => {
+                                                entry.insert(handle);
+                                            }
+                                            Err(e) => warn!("{}", e),
                                         }
-                                        Err(e) => warn!("{}", e),
+
                                     }
-                                } else {
-                                    warn!("Storage {} already exists", change.path);
+                                    Entry::Occupied(_) => warn!("Storage {} already exists", change.path),
                                 }
                             } else {
                                 warn!("Received a PUT on {} with invalid value: {:?}", change.path, change.value);
