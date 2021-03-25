@@ -163,22 +163,26 @@ impl Tables {
                 let mut face_clone = face.clone();
                 let face = Arc::get_mut_unchecked(&mut face);
                 for mut res in face.remote_mappings.values_mut() {
-                    Arc::get_mut_unchecked(res).contexts.remove(&face.id);
+                    Arc::get_mut_unchecked(res).session_ctxs.remove(&face.id);
                     Resource::clean(&mut res);
                 }
                 face.remote_mappings.clear();
                 for mut res in face.local_mappings.values_mut() {
-                    Arc::get_mut_unchecked(res).contexts.remove(&face.id);
+                    Arc::get_mut_unchecked(res).session_ctxs.remove(&face.id);
                     Resource::clean(&mut res);
                 }
                 face.local_mappings.clear();
                 while let Some(mut res) = face.remote_subs.pop() {
-                    Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
+                    Arc::get_mut_unchecked(&mut res)
+                        .session_ctxs
+                        .remove(&face.id);
                     undeclare_client_subscription(self, &mut face_clone, &mut res).await;
                     Resource::clean(&mut res);
                 }
                 while let Some(mut res) = face.remote_qabls.pop() {
-                    Arc::get_mut_unchecked(&mut res).contexts.remove(&face.id);
+                    Arc::get_mut_unchecked(&mut res)
+                        .session_ctxs
+                        .remove(&face.id);
                     undeclare_client_queryable(self, &mut face_clone, &mut res).await;
                     Resource::clean(&mut res);
                 }
@@ -188,18 +192,21 @@ impl Tables {
         }
     }
 
-    pub(crate) unsafe fn compute_routes(&mut self, res: &mut Arc<Resource>) {
+    unsafe fn compute_routes(&mut self, res: &mut Arc<Resource>) {
         compute_data_routes(self, res);
         compute_query_routes(self, res);
     }
 
     pub(crate) unsafe fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
-        self.compute_routes(res);
+        if res.context.is_some() {
+            self.compute_routes(res);
 
-        let resclone = res.clone();
-        for match_ in &mut Arc::get_mut_unchecked(res).matches {
-            if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
-                self.compute_routes(&mut match_.upgrade().unwrap());
+            let resclone = res.clone();
+            for match_ in &mut Arc::get_mut_unchecked(res).context_mut().matches {
+                let match_ = &mut match_.upgrade().unwrap();
+                if !Arc::ptr_eq(match_, &resclone) && match_.context.is_some() {
+                    self.compute_routes(match_);
+                }
             }
         }
     }

@@ -23,9 +23,9 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
 pub(super) type Route = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
-pub(super) type PullCaches = Vec<Arc<Context>>;
+pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
-pub(super) struct Context {
+pub(super) struct SessionContext {
     pub(super) face: Arc<FaceState>,
     pub(super) local_rid: Option<ZInt>,
     pub(super) remote_rid: Option<ZInt>,
@@ -35,16 +35,11 @@ pub(super) struct Context {
     pub(super) last_values: HashMap<String, (Option<DataInfo>, RBuf)>,
 }
 
-pub struct Resource {
-    pub(super) parent: Option<Arc<Resource>>,
-    pub(super) suffix: String,
-    pub(super) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(super) childs: HashMap<String, Arc<Resource>>,
+pub(super) struct ResourceContext {
     pub(super) router_subs: HashSet<PeerId>,
     pub(super) peer_subs: HashSet<PeerId>,
     pub(super) router_qabls: HashSet<PeerId>,
     pub(super) peer_qabls: HashSet<PeerId>,
-    pub(super) contexts: HashMap<usize, Arc<Context>>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
@@ -53,6 +48,34 @@ pub struct Resource {
     pub(super) routers_query_routes: Vec<Arc<Route>>,
     pub(super) peers_query_routes: Vec<Arc<Route>>,
     pub(super) client_query_route: Option<Arc<Route>>,
+}
+
+impl ResourceContext {
+    fn new() -> ResourceContext {
+        ResourceContext {
+            router_subs: HashSet::new(),
+            peer_subs: HashSet::new(),
+            router_qabls: HashSet::new(),
+            peer_qabls: HashSet::new(),
+            matches: Vec::new(),
+            matching_pulls: Arc::new(Vec::new()),
+            routers_data_routes: Vec::new(),
+            peers_data_routes: Vec::new(),
+            client_data_route: None,
+            routers_query_routes: Vec::new(),
+            peers_query_routes: Vec::new(),
+            client_query_route: None,
+        }
+    }
+}
+
+pub struct Resource {
+    pub(super) parent: Option<Arc<Resource>>,
+    pub(super) suffix: String,
+    pub(super) nonwild_prefix: Option<(Arc<Resource>, String)>,
+    pub(super) childs: HashMap<String, Arc<Resource>>,
+    pub(super) context: Option<ResourceContext>,
+    pub(super) session_ctxs: HashMap<usize, Arc<SessionContext>>,
 }
 
 impl PartialEq for Resource {
@@ -69,7 +92,7 @@ impl Hash for Resource {
 }
 
 impl Resource {
-    fn new(parent: &Arc<Resource>, suffix: &str) -> Resource {
+    fn new(parent: &Arc<Resource>, suffix: &str, context: Option<ResourceContext>) -> Resource {
         let nonwild_prefix = match &parent.nonwild_prefix {
             None => {
                 if suffix.contains('*') {
@@ -86,19 +109,8 @@ impl Resource {
             suffix: String::from(suffix),
             nonwild_prefix,
             childs: HashMap::new(),
-            router_subs: HashSet::new(),
-            peer_subs: HashSet::new(),
-            router_qabls: HashSet::new(),
-            peer_qabls: HashSet::new(),
-            contexts: HashMap::new(),
-            matches: Vec::new(),
-            matching_pulls: Arc::new(Vec::new()),
-            routers_data_routes: Vec::new(),
-            peers_data_routes: Vec::new(),
-            client_data_route: None,
-            routers_query_routes: Vec::new(),
-            peers_query_routes: Vec::new(),
-            client_query_route: None,
+            context,
+            session_ctxs: HashMap::new(),
         }
     }
 
@@ -107,6 +119,16 @@ impl Resource {
             Some(parent) => [&parent.name() as &str, &self.suffix].concat(),
             None => String::from(""),
         }
+    }
+
+    #[inline(always)]
+    pub(super) fn context(&self) -> &ResourceContext {
+        self.context.as_ref().unwrap()
+    }
+
+    #[inline(always)]
+    pub(super) fn context_mut(&mut self) -> &mut ResourceContext {
+        self.context.as_mut().unwrap()
     }
 
     pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
@@ -122,43 +144,55 @@ impl Resource {
         }
     }
 
-    pub fn is_key(&self) -> bool {
-        !self.contexts.is_empty()
-    }
-
     #[inline(always)]
     pub fn routers_data_route(&self, context: usize) -> Option<Arc<Route>> {
-        if self.routers_data_routes.len() > context {
-            Some(self.routers_data_routes[context].clone())
-        } else {
-            None
+        match &self.context {
+            Some(ctx) => (ctx.routers_data_routes.len() > context)
+                .then(|| ctx.routers_data_routes[context].clone()),
+            None => None,
         }
     }
 
     #[inline(always)]
     pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
-        if self.peers_data_routes.len() > context {
-            Some(self.peers_data_routes[context].clone())
-        } else {
-            None
+        match &self.context {
+            Some(ctx) => (ctx.peers_data_routes.len() > context)
+                .then(|| ctx.peers_data_routes[context].clone()),
+            None => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn client_data_route(&self) -> Option<Arc<Route>> {
+        match &self.context {
+            Some(ctx) => ctx.client_data_route.clone(),
+            None => None,
         }
     }
 
     #[inline(always)]
     pub fn routers_query_route(&self, context: usize) -> Option<Arc<Route>> {
-        if self.routers_query_routes.len() > context {
-            Some(self.routers_query_routes[context].clone())
-        } else {
-            None
+        match &self.context {
+            Some(ctx) => (ctx.routers_query_routes.len() > context)
+                .then(|| ctx.routers_query_routes[context].clone()),
+            None => None,
         }
     }
 
     #[inline(always)]
     pub fn peers_query_route(&self, context: usize) -> Option<Arc<Route>> {
-        if self.peers_query_routes.len() > context {
-            Some(self.peers_query_routes[context].clone())
-        } else {
-            None
+        match &self.context {
+            Some(ctx) => (ctx.peers_query_routes.len() > context)
+                .then(|| ctx.peers_query_routes[context].clone()),
+            None => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn client_query_route(&self) -> Option<Arc<Route>> {
+        match &self.context {
+            Some(ctx) => ctx.client_query_route.clone(),
+            None => None,
         }
     }
 
@@ -168,19 +202,8 @@ impl Resource {
             suffix: String::from(""),
             nonwild_prefix: None,
             childs: HashMap::new(),
-            router_subs: HashSet::new(),
-            peer_subs: HashSet::new(),
-            router_qabls: HashSet::new(),
-            peer_qabls: HashSet::new(),
-            contexts: HashMap::new(),
-            matches: Vec::new(),
-            matching_pulls: Arc::new(Vec::new()),
-            routers_data_routes: Vec::new(),
-            peers_data_routes: Vec::new(),
-            client_data_route: None,
-            routers_query_routes: Vec::new(),
-            peers_query_routes: Vec::new(),
-            client_query_route: None,
+            context: None,
+            session_ctxs: HashMap::new(),
         })
     }
 
@@ -191,12 +214,16 @@ impl Resource {
             if let Some(ref mut parent) = mutres.parent {
                 if Arc::strong_count(res) <= 3 && res.childs.is_empty() {
                     log::debug!("Unregister resource {}", res.name());
-                    for match_ in &mut mutres.matches {
-                        let mut match_ = match_.upgrade().unwrap();
-                        if !Arc::ptr_eq(&match_, res) {
-                            Arc::get_mut_unchecked(&mut match_)
-                                .matches
-                                .retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
+                    if let Some(context) = mutres.context.as_mut() {
+                        for match_ in &mut context.matches {
+                            let mut match_ = match_.upgrade().unwrap();
+                            if !Arc::ptr_eq(&match_, res) {
+                                let mutmatch = Arc::get_mut_unchecked(&mut match_);
+                                if let Some(ctx) = mutmatch.context.as_mut() {
+                                    ctx.matches
+                                        .retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
+                                }
+                            }
                         }
                     }
                     {
@@ -211,11 +238,6 @@ impl Resource {
     pub fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.name();
         result.push('\n');
-        for match_ in &from.matches {
-            result.push_str("  -> ");
-            result.push_str(&match_.upgrade().unwrap().name());
-            result.push('\n');
-        }
         for child in from.childs.values() {
             result.push_str(&Resource::print_tree(&child));
         }
@@ -229,6 +251,7 @@ impl Resource {
     ) -> Arc<Resource> {
         unsafe {
             if suffix.is_empty() {
+                Resource::upgrade_resource(from);
                 from.clone()
             } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
                 let (chunk, rest) = match stripped_suffix.find('/') {
@@ -239,11 +262,10 @@ impl Resource {
                 match Arc::get_mut_unchecked(from).childs.get_mut(chunk) {
                     Some(mut res) => Resource::make_resource(tables, &mut res, rest),
                     None => {
-                        let mut new = Arc::new(Resource::new(from, chunk));
+                        let mut new = Arc::new(Resource::new(from, chunk, None));
                         if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                             log::debug!("Register resource {}", new.name());
                         }
-                        tables.compute_routes(&mut new);
                         let res = Resource::make_resource(tables, &mut new, rest);
                         Arc::get_mut_unchecked(from)
                             .childs
@@ -267,11 +289,10 @@ impl Resource {
                         match Arc::get_mut_unchecked(from).childs.get_mut(chunk) {
                             Some(mut res) => Resource::make_resource(tables, &mut res, rest),
                             None => {
-                                let mut new = Arc::new(Resource::new(from, chunk));
+                                let mut new = Arc::new(Resource::new(from, chunk, None));
                                 if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                                     log::debug!("Register resource {}", new.name());
                                 }
-                                tables.compute_routes(&mut new);
                                 let res = Resource::make_resource(tables, &mut new, rest);
                                 Arc::get_mut_unchecked(from)
                                     .childs
@@ -337,10 +358,10 @@ impl Resource {
         match nonwild_prefix {
             Some(mut nonwild_prefix) => unsafe {
                 let mut ctx = Arc::get_mut_unchecked(&mut nonwild_prefix)
-                    .contexts
+                    .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| {
-                        Arc::new(Context {
+                        Arc::new(SessionContext {
                             face: face.clone(),
                             local_rid: None,
                             remote_rid: None,
@@ -384,7 +405,7 @@ impl Resource {
                     return get_best_key_(child, rest, sid, true);
                 }
             }
-            if let Some(ctx) = prefix.contexts.get(&sid) {
+            if let Some(ctx) = prefix.session_ctxs.get(&sid) {
                 if let Some(rid) = ctx.local_rid {
                     return (rid, suffix).into();
                 } else if let Some(rid) = ctx.remote_rid {
@@ -416,7 +437,9 @@ impl Resource {
             }
             if rname.is_empty() {
                 if from.suffix == "/**" || from.suffix == "/" {
-                    if is_admin == from.name().starts_with(rname::ADMIN_PREFIX) {
+                    if from.context.is_some()
+                        && is_admin == from.name().starts_with(rname::ADMIN_PREFIX)
+                    {
                         matches.push(Arc::downgrade(from));
                     }
                     for child in from.childs.values() {
@@ -428,7 +451,9 @@ impl Resource {
             let (chunk, rest) = Resource::fst_chunk(rname);
             if rname::intersect(chunk, &from.suffix) {
                 if rest.is_empty() || rest == "/" || rest == "/**" {
-                    if is_admin == from.name().starts_with(rname::ADMIN_PREFIX) {
+                    if from.context.is_some()
+                        && is_admin == from.name().starts_with(rname::ADMIN_PREFIX)
+                    {
                         matches.push(Arc::downgrade(from));
                     }
                 } else if chunk == "/**" || from.suffix == "/**" {
@@ -452,26 +477,39 @@ impl Resource {
 
     pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
         unsafe {
-            let mut matches = Resource::get_matches(tables, &res.name());
+            if res.context.is_some() {
+                let mut matches = Resource::get_matches(tables, &res.name());
 
-            fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
-                for match_ in matches {
-                    if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
-                        return true;
+                fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
+                    for match_ in matches {
+                        if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
+                            return true;
+                        }
+                    }
+                    false
+                }
+
+                for match_ in &mut matches {
+                    let mut match_ = match_.upgrade().unwrap();
+                    if !matches_contain(&match_.context().matches, &res) {
+                        Arc::get_mut_unchecked(&mut match_)
+                            .context_mut()
+                            .matches
+                            .push(Arc::downgrade(&res));
                     }
                 }
-                false
+                Arc::get_mut_unchecked(res).context_mut().matches = matches;
+            } else {
+                log::error!("Call match_resource() on context less res {}", res.name());
             }
+        }
+    }
 
-            for match_ in &mut matches {
-                let mut match_ = match_.upgrade().unwrap();
-                if !matches_contain(&match_.matches, &res) {
-                    Arc::get_mut_unchecked(&mut match_)
-                        .matches
-                        .push(Arc::downgrade(&res));
-                }
+    pub fn upgrade_resource(res: &mut Arc<Resource>) {
+        unsafe {
+            if res.context.is_none() {
+                Arc::get_mut_unchecked(res).context = Some(ResourceContext::new());
             }
-            Arc::get_mut_unchecked(res).matches = matches;
         }
     }
 }
@@ -494,10 +532,10 @@ pub async fn declare_resource(
                 let mut res = Resource::make_resource(tables, &mut prefix, suffix);
                 Resource::match_resource(&tables, &mut res);
                 let mut ctx = Arc::get_mut_unchecked(&mut res)
-                    .contexts
+                    .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| {
-                        Arc::new(Context {
+                        Arc::new(SessionContext {
                             face: face.clone(),
                             local_rid: None,
                             remote_rid: Some(rid),

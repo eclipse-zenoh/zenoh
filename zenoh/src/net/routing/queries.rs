@@ -22,7 +22,7 @@ use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;
-use super::resource::{elect_router, Context, Resource, Route};
+use super::resource::{elect_router, Resource, Route, SessionContext};
 use super::router::Tables;
 
 pub(crate) struct Query {
@@ -125,16 +125,18 @@ async unsafe fn register_router_queryable(
     res: &mut Arc<Resource>,
     router: PeerId,
 ) {
-    if !res.router_qabls.contains(&router) {
+    if !res.context().router_qabls.contains(&router) {
         // Register router queryable
         {
-            let res_mut = Arc::get_mut_unchecked(res);
             log::debug!(
                 "Register router queryable {} (router: {})",
-                res_mut.name(),
+                res.name(),
                 router
             );
-            res_mut.router_qabls.insert(router.clone());
+            Arc::get_mut_unchecked(res)
+                .context_mut()
+                .router_qabls
+                .insert(router.clone());
             tables.router_qabls.insert(res.clone());
         }
 
@@ -176,16 +178,14 @@ async unsafe fn register_peer_queryable(
     res: &mut Arc<Resource>,
     peer: PeerId,
 ) {
-    if !res.peer_qabls.contains(&peer) {
+    if !res.context().peer_qabls.contains(&peer) {
         // Register peer queryable
         {
-            let res_mut = Arc::get_mut_unchecked(res);
-            log::debug!(
-                "Register peer queryable {} (peer: {})",
-                res_mut.name(),
-                peer
-            );
-            res_mut.peer_qabls.insert(peer.clone());
+            log::debug!("Register peer queryable {} (peer: {})", res.name(), peer);
+            Arc::get_mut_unchecked(res)
+                .context_mut()
+                .peer_qabls
+                .insert(peer.clone());
             tables.peer_qabls.insert(res.clone());
         }
 
@@ -226,12 +226,12 @@ async unsafe fn register_client_queryable(
     {
         let res = Arc::get_mut_unchecked(res);
         log::debug!("Register queryable {} for {}", res.name(), face);
-        match res.contexts.get_mut(&face.id) {
+        match res.session_ctxs.get_mut(&face.id) {
             Some(mut ctx) => Arc::get_mut_unchecked(&mut ctx).qabl = true,
             None => {
-                res.contexts.insert(
+                res.session_ctxs.insert(
                     face.id,
-                    Arc::new(Context {
+                    Arc::new(SessionContext {
                         face: face.clone(),
                         local_rid: None,
                         remote_rid: None,
@@ -360,10 +360,11 @@ async unsafe fn unregister_router_queryable(
         router
     );
     Arc::get_mut_unchecked(res)
+        .context_mut()
         .router_qabls
         .retain(|qabl| qabl != router);
 
-    if res.router_qabls.is_empty() {
+    if res.context().router_qabls.is_empty() {
         tables.router_qabls.retain(|qabl| !Arc::ptr_eq(qabl, &res));
 
         undeclare_peer_queryable(tables, None, res, &tables.pid.clone()).await;
@@ -377,7 +378,7 @@ async unsafe fn undeclare_router_queryable(
     res: &mut Arc<Resource>,
     router: &PeerId,
 ) {
-    if res.router_qabls.contains(router) {
+    if res.context().router_qabls.contains(router) {
         unregister_router_queryable(tables, res, router).await;
         propagate_forget_sourced_queryable(tables, res, face, router, whatami::ROUTER).await;
     }
@@ -409,10 +410,11 @@ async unsafe fn unregister_peer_queryable(
 ) {
     log::debug!("Unregister peer queryable {} (peer: {})", res.name(), peer);
     Arc::get_mut_unchecked(res)
+        .context_mut()
         .peer_qabls
         .retain(|qabl| qabl != peer);
 
-    if res.peer_qabls.is_empty() {
+    if res.context().peer_qabls.is_empty() {
         tables.peer_qabls.retain(|qabl| !Arc::ptr_eq(qabl, &res));
     }
 }
@@ -423,7 +425,7 @@ async unsafe fn undeclare_peer_queryable(
     res: &mut Arc<Resource>,
     peer: &PeerId,
 ) {
-    if res.peer_qabls.contains(&peer) {
+    if res.context().peer_qabls.contains(&peer) {
         unregister_peer_queryable(tables, res, peer).await;
         propagate_forget_sourced_queryable(tables, res, face, peer, whatami::PEER).await;
     }
@@ -442,11 +444,13 @@ pub async fn forget_peer_queryable(
                 undeclare_peer_queryable(tables, Some(face), &mut res, peer).await;
 
                 if tables.whatami == whatami::ROUTER
-                    && !res.contexts.values().any(|ctx| ctx.qabl)
-                    && !tables
-                        .peer_qabls
-                        .iter()
-                        .any(|res| res.peer_qabls.iter().any(|peer| peer != &tables.pid))
+                    && !res.session_ctxs.values().any(|ctx| ctx.qabl)
+                    && !tables.peer_qabls.iter().any(|res| {
+                        res.context()
+                            .peer_qabls
+                            .iter()
+                            .any(|peer| peer != &tables.pid)
+                    })
                 {
                     undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone()).await;
                 }
@@ -465,7 +469,7 @@ pub(crate) async unsafe fn undeclare_client_queryable(
     res: &mut Arc<Resource>,
 ) {
     log::debug!("Unregister client queryable {} for  {}", res.name(), face);
-    if let Some(mut ctx) = Arc::get_mut_unchecked(res).contexts.get_mut(&face.id) {
+    if let Some(mut ctx) = Arc::get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         Arc::get_mut_unchecked(&mut ctx).qabl = false;
     }
     Arc::get_mut_unchecked(face)
@@ -474,34 +478,38 @@ pub(crate) async unsafe fn undeclare_client_queryable(
 
     match tables.whatami {
         whatami::ROUTER => {
-            if !res.contexts.values().any(|ctx| ctx.qabl)
-                && !tables
-                    .peer_qabls
-                    .iter()
-                    .any(|res| res.peer_qabls.iter().any(|peer| *peer != tables.pid))
+            if !res.session_ctxs.values().any(|ctx| ctx.qabl)
+                && !tables.peer_qabls.iter().any(|res| {
+                    res.context()
+                        .peer_qabls
+                        .iter()
+                        .any(|peer| *peer != tables.pid)
+                })
             {
                 undeclare_router_queryable(tables, None, res, &tables.pid.clone()).await;
             }
         }
         whatami::PEER => {
-            if !res.contexts.values().any(|ctx| ctx.qabl)
-                && !tables
-                    .peer_qabls
-                    .iter()
-                    .any(|res| res.peer_qabls.iter().any(|peer| *peer != tables.pid))
+            if !res.session_ctxs.values().any(|ctx| ctx.qabl)
+                && !tables.peer_qabls.iter().any(|res| {
+                    res.context()
+                        .peer_qabls
+                        .iter()
+                        .any(|peer| *peer != tables.pid)
+                })
             {
                 undeclare_peer_queryable(tables, None, res, &tables.pid.clone()).await;
             }
         }
         _ => {
-            if !res.contexts.values().any(|ctx| ctx.qabl) {
+            if !res.session_ctxs.values().any(|ctx| ctx.qabl) {
                 propagate_forget_simple_queryable(tables, res).await;
             }
         }
     }
 
     let mut client_qabls: Vec<Arc<FaceState>> = res
-        .contexts
+        .session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.qabl {
@@ -512,14 +520,18 @@ pub(crate) async unsafe fn undeclare_client_queryable(
         })
         .collect();
     if client_qabls.len() == 1
-        && !tables
-            .router_qabls
-            .iter()
-            .any(|res| res.peer_qabls.iter().any(|peer| *peer != tables.pid))
-        && !tables
-            .peer_qabls
-            .iter()
-            .any(|res| res.peer_qabls.iter().any(|peer| *peer != tables.pid))
+        && !tables.router_qabls.iter().any(|res| {
+            res.context()
+                .peer_qabls
+                .iter()
+                .any(|peer| *peer != tables.pid)
+        })
+        && !tables.peer_qabls.iter().any(|res| {
+            res.context()
+                .peer_qabls
+                .iter()
+                .any(|peer| *peer != tables.pid)
+        })
     {
         let face = &mut client_qabls[0];
         if face.local_qabls.contains(&res) {
@@ -572,7 +584,7 @@ pub(crate) async fn queries_remove_node(
             for mut res in tables
                 .router_qabls
                 .iter()
-                .filter(|res| res.router_qabls.contains(node))
+                .filter(|res| res.context().router_qabls.contains(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
@@ -584,18 +596,20 @@ pub(crate) async fn queries_remove_node(
             for mut res in tables
                 .peer_qabls
                 .iter()
-                .filter(|res| res.peer_qabls.contains(node))
+                .filter(|res| res.context().peer_qabls.contains(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_peer_queryable(tables, &mut res, node).await;
 
                 if tables.whatami == whatami::ROUTER
-                    && !res.contexts.values().any(|ctx| ctx.qabl)
-                    && !tables
-                        .peer_qabls
-                        .iter()
-                        .any(|res| res.peer_qabls.iter().any(|peer| peer != &tables.pid))
+                    && !res.session_ctxs.values().any(|ctx| ctx.qabl)
+                    && !tables.peer_qabls.iter().any(|res| {
+                        res.context()
+                            .peer_qabls
+                            .iter()
+                            .any(|peer| peer != &tables.pid)
+                    })
                 {
                     undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone()).await;
                 }
@@ -627,8 +641,8 @@ pub(crate) async fn queries_tree_change(
 
                 for res in qabls_res {
                     let qabls = match net_type {
-                        whatami::ROUTER => &res.router_qabls,
-                        _ => &res.peer_qabls,
+                        whatami::ROUTER => &res.context().router_qabls,
+                        _ => &res.context().peer_qabls,
                     };
                     for qabl in qabls {
                         if *qabl == tree_id {
@@ -697,7 +711,10 @@ unsafe fn compute_query_route(
     let res_name = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
     let matches = match res.as_ref() {
-        Some(res) => Cow::from(&res.matches),
+        Some(res) => match res.context.as_ref() {
+            Some(ctx) => Cow::from(&ctx.matches),
+            None => Cow::from(Resource::get_matches(tables, &res_name)),
+        },
         None => Cow::from(Resource::get_matches(tables, &res_name)),
     };
 
@@ -721,7 +738,7 @@ unsafe fn compute_query_route(
                     tables,
                     net,
                     router_source,
-                    &mres.router_qabls,
+                    &mres.context().router_qabls,
                 );
             }
 
@@ -738,7 +755,7 @@ unsafe fn compute_query_route(
                     tables,
                     net,
                     peer_source,
-                    &mres.peer_qabls,
+                    &mres.context().peer_qabls,
                 );
             }
         }
@@ -756,12 +773,12 @@ unsafe fn compute_query_route(
                 tables,
                 net,
                 peer_source,
-                &mres.peer_qabls,
+                &mres.context().peer_qabls,
             );
         }
 
         if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
-            for (sid, context) in &mut mres.contexts {
+            for (sid, context) in &mut mres.session_ctxs {
                 if context.qabl {
                     route.entry(*sid).or_insert_with(|| {
                         let reskey = Resource::get_best_key(prefix, suffix, *sid);
@@ -775,49 +792,49 @@ unsafe fn compute_query_route(
 }
 
 pub(crate) unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
-    let mut res_mut = res.clone();
-    let res_mut = Arc::get_mut_unchecked(&mut res_mut);
-    if tables.whatami == whatami::ROUTER {
-        let indexes = tables
-            .routers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        res_mut.routers_query_routes.clear();
-        res_mut
-            .routers_query_routes
-            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+    if res.context.is_some() {
+        let mut res_mut = res.clone();
+        let res_mut = Arc::get_mut_unchecked(&mut res_mut);
+        if tables.whatami == whatami::ROUTER {
+            let indexes = tables
+                .routers_net
+                .as_ref()
+                .unwrap()
+                .graph
+                .node_indices()
+                .collect::<Vec<NodeIndex>>();
+            let max_idx = indexes.iter().max().unwrap();
+            let routers_query_routes = &mut res_mut.context_mut().routers_query_routes;
+            routers_query_routes.clear();
+            routers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
-        for idx in &indexes {
-            res_mut.routers_query_routes[idx.index()] =
-                compute_query_route(tables, res, "", Some(idx.index()), whatami::ROUTER);
+            for idx in &indexes {
+                routers_query_routes[idx.index()] =
+                    compute_query_route(tables, res, "", Some(idx.index()), whatami::ROUTER);
+            }
         }
-    }
-    if tables.whatami == whatami::ROUTER || tables.whatami == whatami::PEER {
-        let indexes = tables
-            .peers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        res_mut.peers_query_routes.clear();
-        res_mut
-            .peers_query_routes
-            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+        if tables.whatami == whatami::ROUTER || tables.whatami == whatami::PEER {
+            let indexes = tables
+                .peers_net
+                .as_ref()
+                .unwrap()
+                .graph
+                .node_indices()
+                .collect::<Vec<NodeIndex>>();
+            let max_idx = indexes.iter().max().unwrap();
+            let peers_query_routes = &mut res_mut.context_mut().peers_query_routes;
+            peers_query_routes.clear();
+            peers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
-        for idx in &indexes {
-            res_mut.peers_query_routes[idx.index()] =
-                compute_query_route(tables, res, "", Some(idx.index()), whatami::PEER);
+            for idx in &indexes {
+                peers_query_routes[idx.index()] =
+                    compute_query_route(tables, res, "", Some(idx.index()), whatami::PEER);
+            }
         }
-    }
-    if tables.whatami == whatami::CLIENT {
-        res_mut.client_query_route =
-            Some(compute_query_route(tables, res, "", None, whatami::CLIENT));
+        if tables.whatami == whatami::CLIENT {
+            res_mut.context_mut().client_query_route =
+                Some(compute_query_route(tables, res, "", None, whatami::CLIENT));
+        }
     }
 }
 
@@ -830,12 +847,14 @@ unsafe fn compute_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>
 }
 
 pub(crate) unsafe fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
-    compute_query_routes(tables, res);
+    if res.context.is_some() {
+        compute_query_routes(tables, res);
 
-    let resclone = res.clone();
-    for match_ in &mut Arc::get_mut_unchecked(res).matches {
-        if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
-            compute_query_routes(tables, &mut match_.upgrade().unwrap());
+        let resclone = res.clone();
+        for match_ in &mut Arc::get_mut_unchecked(res).context_mut().matches {
+            if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
+                compute_query_routes(tables, &mut match_.upgrade().unwrap());
+            }
         }
     }
 }
@@ -917,7 +936,9 @@ pub async fn route_query(
                         }
                     }
                     _ => match Resource::get_resource(prefix, suffix) {
-                        Some(res) => res.routers_query_routes[0].clone(),
+                        Some(res) => res.routers_query_route(0).unwrap_or_else(|| {
+                            compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
+                        }),
                         None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
                     },
                 },
@@ -949,12 +970,14 @@ pub async fn route_query(
                         }
                     }
                     _ => match Resource::get_resource(prefix, suffix) {
-                        Some(res) => res.peers_query_routes[0].clone(),
+                        Some(res) => res.peers_query_route(0).unwrap_or_else(|| {
+                            compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
+                        }),
                         None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
                     },
                 },
                 _ => match Resource::get_resource(prefix, suffix) {
-                    Some(res) => match &res.client_query_route {
+                    Some(res) => match &res.client_query_route() {
                         Some(route) => route.clone(),
                         None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
                     },

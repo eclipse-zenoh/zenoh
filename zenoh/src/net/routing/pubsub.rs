@@ -25,7 +25,7 @@ use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;
-use super::resource::{elect_router, Context, PullCaches, Resource, Route};
+use super::resource::{elect_router, PullCaches, Resource, Route, SessionContext};
 use super::router::Tables;
 
 #[inline]
@@ -131,16 +131,18 @@ async unsafe fn register_router_subscription(
     sub_info: &SubInfo,
     router: PeerId,
 ) {
-    if !res.router_subs.contains(&router) {
+    if !res.context().router_subs.contains(&router) {
         // Register router subscription
         {
-            let res_mut = Arc::get_mut_unchecked(res);
             log::debug!(
                 "Register router subscription {} (router: {})",
-                res_mut.name(),
+                res.name(),
                 router
             );
-            res_mut.router_subs.insert(router.clone());
+            Arc::get_mut_unchecked(res)
+                .context_mut()
+                .router_subs
+                .insert(router.clone());
             tables.router_subs.insert(res.clone());
         }
 
@@ -185,16 +187,14 @@ async unsafe fn register_peer_subscription(
     sub_info: &SubInfo,
     peer: PeerId,
 ) {
-    if !res.peer_subs.contains(&peer) {
+    if !res.context().peer_subs.contains(&peer) {
         // Register peer subscription
         {
-            let res_mut = Arc::get_mut_unchecked(res);
-            log::debug!(
-                "Register peer subscription {} (peer: {})",
-                res_mut.name(),
-                peer
-            );
-            res_mut.peer_subs.insert(peer.clone());
+            log::debug!("Register peer subscription {} (peer: {})", res.name(), peer);
+            Arc::get_mut_unchecked(res)
+                .context_mut()
+                .peer_subs
+                .insert(peer.clone());
             tables.peer_subs.insert(res.clone());
         }
 
@@ -247,7 +247,7 @@ async unsafe fn register_client_subscription(
     {
         let res = Arc::get_mut_unchecked(res);
         log::debug!("Register subscription {} for {}", res.name(), face);
-        match res.contexts.get_mut(&face.id) {
+        match res.session_ctxs.get_mut(&face.id) {
             Some(mut ctx) => match &ctx.subs {
                 Some(info) => {
                     if SubMode::Pull == info.mode {
@@ -259,9 +259,9 @@ async unsafe fn register_client_subscription(
                 }
             },
             None => {
-                res.contexts.insert(
+                res.session_ctxs.insert(
                     face.id,
-                    Arc::new(Context {
+                    Arc::new(SessionContext {
                         face: face.clone(),
                         local_rid: None,
                         remote_rid: None,
@@ -409,10 +409,11 @@ async unsafe fn unregister_router_subscription(
         router
     );
     Arc::get_mut_unchecked(res)
+        .context_mut()
         .router_subs
         .retain(|sub| sub != router);
 
-    if res.router_subs.is_empty() {
+    if res.context().router_subs.is_empty() {
         tables.router_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
 
         undeclare_peer_subscription(tables, None, res, &tables.pid.clone()).await;
@@ -426,7 +427,7 @@ async unsafe fn undeclare_router_subscription(
     res: &mut Arc<Resource>,
     router: &PeerId,
 ) {
-    if res.router_subs.contains(router) {
+    if res.context().router_subs.contains(router) {
         unregister_router_subscription(tables, res, router).await;
         propagate_forget_sourced_subscription(tables, res, face, router, whatami::ROUTER).await;
     }
@@ -462,10 +463,11 @@ async unsafe fn unregister_peer_subscription(
         peer
     );
     Arc::get_mut_unchecked(res)
+        .context_mut()
         .peer_subs
         .retain(|sub| sub != peer);
 
-    if res.peer_subs.is_empty() {
+    if res.context().peer_subs.is_empty() {
         tables.peer_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
     }
 }
@@ -476,7 +478,7 @@ async unsafe fn undeclare_peer_subscription(
     res: &mut Arc<Resource>,
     peer: &PeerId,
 ) {
-    if res.peer_subs.contains(&peer) {
+    if res.context().peer_subs.contains(&peer) {
         unregister_peer_subscription(tables, res, peer).await;
         propagate_forget_sourced_subscription(tables, res, face, peer, whatami::PEER).await;
     }
@@ -495,11 +497,13 @@ pub async fn forget_peer_subscription(
                 undeclare_peer_subscription(tables, Some(face), &mut res, peer).await;
 
                 if tables.whatami == whatami::ROUTER
-                    && !res.contexts.values().any(|ctx| ctx.subs.is_some())
-                    && !tables
-                        .peer_subs
-                        .iter()
-                        .any(|res| res.peer_subs.iter().any(|peer| peer != &tables.pid))
+                    && !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
+                    && !tables.peer_subs.iter().any(|res| {
+                        res.context()
+                            .peer_subs
+                            .iter()
+                            .any(|peer| peer != &tables.pid)
+                    })
                 {
                     undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone())
                         .await;
@@ -519,7 +523,7 @@ pub(crate) async unsafe fn undeclare_client_subscription(
     res: &mut Arc<Resource>,
 ) {
     log::debug!("Unregister client subscription {} for {}", res.name(), face);
-    if let Some(mut ctx) = Arc::get_mut_unchecked(res).contexts.get_mut(&face.id) {
+    if let Some(mut ctx) = Arc::get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         Arc::get_mut_unchecked(&mut ctx).subs = None;
     }
     Arc::get_mut_unchecked(face)
@@ -528,34 +532,38 @@ pub(crate) async unsafe fn undeclare_client_subscription(
 
     match tables.whatami {
         whatami::ROUTER => {
-            if !res.contexts.values().any(|ctx| ctx.subs.is_some())
-                && !tables
-                    .peer_subs
-                    .iter()
-                    .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
+            if !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
+                && !tables.peer_subs.iter().any(|res| {
+                    res.context()
+                        .peer_subs
+                        .iter()
+                        .any(|peer| *peer != tables.pid)
+                })
             {
                 undeclare_router_subscription(tables, None, res, &tables.pid.clone()).await;
             }
         }
         whatami::PEER => {
-            if !res.contexts.values().any(|ctx| ctx.subs.is_some())
-                && !tables
-                    .peer_subs
-                    .iter()
-                    .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
+            if !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
+                && !tables.peer_subs.iter().any(|res| {
+                    res.context()
+                        .peer_subs
+                        .iter()
+                        .any(|peer| *peer != tables.pid)
+                })
             {
                 undeclare_peer_subscription(tables, None, res, &tables.pid.clone()).await;
             }
         }
         _ => {
-            if !res.contexts.values().any(|ctx| ctx.subs.is_some()) {
+            if !res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) {
                 propagate_forget_simple_subscription(tables, res).await;
             }
         }
     }
 
     let mut client_subs: Vec<Arc<FaceState>> = res
-        .contexts
+        .session_ctxs
         .values()
         .filter_map(|ctx| {
             if ctx.subs.is_some() {
@@ -566,14 +574,18 @@ pub(crate) async unsafe fn undeclare_client_subscription(
         })
         .collect();
     if client_subs.len() == 1
-        && !tables
-            .router_subs
-            .iter()
-            .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
-        && !tables
-            .peer_subs
-            .iter()
-            .any(|res| res.peer_subs.iter().any(|peer| *peer != tables.pid))
+        && !tables.router_subs.iter().any(|res| {
+            res.context()
+                .peer_subs
+                .iter()
+                .any(|peer| *peer != tables.pid)
+        })
+        && !tables.peer_subs.iter().any(|res| {
+            res.context()
+                .peer_subs
+                .iter()
+                .any(|peer| *peer != tables.pid)
+        })
     {
         let face = &mut client_subs[0];
         if face.local_subs.contains(&res) {
@@ -633,7 +645,7 @@ pub(crate) async fn pubsub_remove_node(
             for mut res in tables
                 .router_subs
                 .iter()
-                .filter(|res| res.router_subs.contains(node))
+                .filter(|res| res.context().router_subs.contains(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
@@ -645,18 +657,20 @@ pub(crate) async fn pubsub_remove_node(
             for mut res in tables
                 .peer_subs
                 .iter()
-                .filter(|res| res.peer_subs.contains(node))
+                .filter(|res| res.context().peer_subs.contains(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_peer_subscription(tables, &mut res, node).await;
 
                 if tables.whatami == whatami::ROUTER
-                    && !res.contexts.values().any(|ctx| ctx.subs.is_some())
-                    && !tables
-                        .peer_subs
-                        .iter()
-                        .any(|res| res.peer_subs.iter().any(|peer| peer != &tables.pid))
+                    && !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
+                    && !tables.peer_subs.iter().any(|res| {
+                        res.context()
+                            .peer_subs
+                            .iter()
+                            .any(|peer| peer != &tables.pid)
+                    })
                 {
                     undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone())
                         .await;
@@ -689,8 +703,8 @@ pub(crate) async fn pubsub_tree_change(
 
                 for res in subs_res {
                     let subs = match net_type {
-                        whatami::ROUTER => &res.router_subs,
-                        _ => &res.peer_subs,
+                        whatami::ROUTER => &res.context().router_subs,
+                        _ => &res.context().peer_subs,
                     };
                     for sub in subs {
                         if *sub == tree_id {
@@ -765,7 +779,10 @@ unsafe fn compute_data_route(
     let res_name = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
     let matches = match res.as_ref() {
-        Some(res) => Cow::from(&res.matches),
+        Some(res) => match res.context.as_ref() {
+            Some(ctx) => Cow::from(&ctx.matches),
+            None => Cow::from(Resource::get_matches(tables, &res_name)),
+        },
         None => Cow::from(Resource::get_matches(tables, &res_name)),
     };
 
@@ -789,7 +806,7 @@ unsafe fn compute_data_route(
                     tables,
                     net,
                     router_source,
-                    &mres.router_subs,
+                    &mres.context().router_subs,
                 );
             }
 
@@ -806,7 +823,7 @@ unsafe fn compute_data_route(
                     tables,
                     net,
                     peer_source,
-                    &mres.peer_subs,
+                    &mres.context().peer_subs,
                 );
             }
         }
@@ -824,12 +841,12 @@ unsafe fn compute_data_route(
                 tables,
                 net,
                 peer_source,
-                &mres.peer_subs,
+                &mres.context().peer_subs,
             );
         }
 
         if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
-            for (sid, context) in &mut mres.contexts {
+            for (sid, context) in &mut mres.session_ctxs {
                 if let Some(subinfo) = &context.subs {
                     if subinfo.mode == SubMode::Push {
                         route.entry(*sid).or_insert_with(|| {
@@ -852,7 +869,13 @@ fn compute_matching_pulls(
     let mut pull_caches = vec![];
     let res = Resource::get_resource(prefix, suffix);
     let matches = match res.as_ref() {
-        Some(res) => Cow::from(&res.matches),
+        Some(res) => match res.context.as_ref() {
+            Some(ctx) => Cow::from(&ctx.matches),
+            None => Cow::from(Resource::get_matches(
+                tables,
+                &[&prefix.name(), suffix].concat(),
+            )),
+        },
         None => Cow::from(Resource::get_matches(
             tables,
             &[&prefix.name(), suffix].concat(),
@@ -860,7 +883,7 @@ fn compute_matching_pulls(
     };
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
-        for context in mres.contexts.values() {
+        for context in mres.session_ctxs.values() {
             if let Some(subinfo) = &context.subs {
                 if subinfo.mode == SubMode::Pull {
                     pull_caches.push(context.clone());
@@ -872,51 +895,51 @@ fn compute_matching_pulls(
 }
 
 pub(crate) unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
-    let mut res_mut = res.clone();
-    let res_mut = Arc::get_mut_unchecked(&mut res_mut);
-    if tables.whatami == whatami::ROUTER {
-        let indexes = tables
-            .routers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        res_mut.routers_data_routes.clear();
-        res_mut
-            .routers_data_routes
-            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+    if res.context.is_some() {
+        let mut res_mut = res.clone();
+        let res_mut = Arc::get_mut_unchecked(&mut res_mut);
+        if tables.whatami == whatami::ROUTER {
+            let indexes = tables
+                .routers_net
+                .as_ref()
+                .unwrap()
+                .graph
+                .node_indices()
+                .collect::<Vec<NodeIndex>>();
+            let max_idx = indexes.iter().max().unwrap();
+            let routers_data_routes = &mut res_mut.context_mut().routers_data_routes;
+            routers_data_routes.clear();
+            routers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
-        for idx in &indexes {
-            res_mut.routers_data_routes[idx.index()] =
-                compute_data_route(tables, res, "", Some(idx.index()), whatami::ROUTER);
+            for idx in &indexes {
+                routers_data_routes[idx.index()] =
+                    compute_data_route(tables, res, "", Some(idx.index()), whatami::ROUTER);
+            }
         }
-    }
-    if tables.whatami == whatami::ROUTER || tables.whatami == whatami::PEER {
-        let indexes = tables
-            .peers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        res_mut.peers_data_routes.clear();
-        res_mut
-            .peers_data_routes
-            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+        if tables.whatami == whatami::ROUTER || tables.whatami == whatami::PEER {
+            let indexes = tables
+                .peers_net
+                .as_ref()
+                .unwrap()
+                .graph
+                .node_indices()
+                .collect::<Vec<NodeIndex>>();
+            let max_idx = indexes.iter().max().unwrap();
+            let peers_data_routes = &mut res_mut.context_mut().peers_data_routes;
+            peers_data_routes.clear();
+            peers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
-        for idx in &indexes {
-            res_mut.peers_data_routes[idx.index()] =
-                compute_data_route(tables, res, "", Some(idx.index()), whatami::PEER);
+            for idx in &indexes {
+                peers_data_routes[idx.index()] =
+                    compute_data_route(tables, res, "", Some(idx.index()), whatami::PEER);
+            }
         }
+        if tables.whatami == whatami::CLIENT {
+            res_mut.context_mut().client_data_route =
+                Some(compute_data_route(tables, res, "", None, whatami::CLIENT));
+        }
+        res_mut.context_mut().matching_pulls = compute_matching_pulls(tables, res, "");
     }
-    if tables.whatami == whatami::CLIENT {
-        res_mut.client_data_route =
-            Some(compute_data_route(tables, res, "", None, whatami::CLIENT));
-    }
-    res_mut.matching_pulls = compute_matching_pulls(tables, res, "");
 }
 
 unsafe fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
@@ -928,12 +951,14 @@ unsafe fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>)
 }
 
 pub(crate) unsafe fn compute_matches_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
-    compute_data_routes(tables, res);
+    if res.context.is_some() {
+        compute_data_routes(tables, res);
 
-    let resclone = res.clone();
-    for match_ in &mut Arc::get_mut_unchecked(res).matches {
-        if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
-            compute_data_routes(tables, &mut match_.upgrade().unwrap());
+        let resclone = res.clone();
+        for match_ in &mut Arc::get_mut_unchecked(res).context_mut().matches {
+            if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
+                compute_data_routes(tables, &mut match_.upgrade().unwrap());
+            }
         }
     }
 }
@@ -1044,7 +1069,9 @@ fn get_data_route(
                     }
                 }
                 _ => match res {
-                    Some(res) => res.routers_data_routes[0].clone(),
+                    Some(res) => res.routers_data_route(0).unwrap_or_else(|| {
+                        compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
+                    }),
                     None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
                 },
             },
@@ -1074,12 +1101,14 @@ fn get_data_route(
                     }
                 }
                 _ => match res {
-                    Some(res) => res.peers_data_routes[0].clone(),
+                    Some(res) => res.peers_data_route(0).unwrap_or_else(|| {
+                        compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
+                    }),
                     None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
                 },
             },
             _ => match res {
-                Some(res) => match &res.client_data_route {
+                Some(res) => match &res.client_data_route() {
                     Some(route) => route.clone(),
                     None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
                 },
@@ -1097,7 +1126,10 @@ fn get_matching_pulls(
     suffix: &str,
 ) -> Arc<PullCaches> {
     match res {
-        Some(res) => res.matching_pulls.clone(),
+        Some(res) => match &res.context {
+            Some(ctx) => ctx.matching_pulls.clone(),
+            None => compute_matching_pulls(tables, prefix, suffix),
+        },
         None => compute_matching_pulls(tables, prefix, suffix),
     }
 }
@@ -1258,7 +1290,7 @@ pub async fn pull_data(
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => unsafe {
                 let res = Arc::get_mut_unchecked(&mut res);
-                match res.contexts.get_mut(&face.id) {
+                match res.session_ctxs.get_mut(&face.id) {
                     Some(mut ctx) => match &ctx.subs {
                         Some(subinfo) => {
                             let lock = zasynclock!(tables.pull_caches_lock);
