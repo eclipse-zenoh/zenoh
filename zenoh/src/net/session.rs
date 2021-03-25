@@ -464,14 +464,14 @@ impl Session {
                 let joined_pub = state.publishers.values().any(|p| {
                     rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
                 });
-                (!joined_pub).then_some(join_pub.clone().into())
+                (!joined_pub).then(|| join_pub.clone().into())
             }
             None => {
                 let twin_pub = state.publishers.values().any(|p| {
                     state.localkey_to_resname(&p.reskey).unwrap()
                         == state.localkey_to_resname(&pub_state.reskey).unwrap()
                 });
-                (!twin_pub).then_some(resource.clone())
+                (!twin_pub).then(|| resource.clone())
             }
         };
 
@@ -553,14 +553,14 @@ impl Session {
                 let joined_sub = state.subscribers.values().any(|s| {
                     rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
                 });
-                (!joined_sub).then_some(join_sub.clone().into())
+                (!joined_sub).then(|| join_sub.clone().into())
             }
             None => {
                 let twin_sub = state.subscribers.values().any(|s| {
                     state.localkey_to_resname(&s.reskey).unwrap()
                         == state.localkey_to_resname(&sub_state.reskey).unwrap()
                 });
-                (!twin_sub).then_some(sub_state.reskey.clone())
+                (!twin_sub).then(|| sub_state.reskey.clone())
             }
         };
 
