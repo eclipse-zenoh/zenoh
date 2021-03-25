@@ -710,13 +710,12 @@ unsafe fn compute_query_route(
     let mut route = HashMap::new();
     let res_name = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
-    let matches = match res.as_ref() {
-        Some(res) => match res.context.as_ref() {
-            Some(ctx) => Cow::from(&ctx.matches),
-            None => Cow::from(Resource::get_matches(tables, &res_name)),
-        },
-        None => Cow::from(Resource::get_matches(tables, &res_name)),
-    };
+    let matches = res
+        .as_ref()
+        .map(|res| res.context.as_ref())
+        .flatten()
+        .map(|ctx| Cow::from(&ctx.matches))
+        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &res_name)));
 
     let master = tables.whatami != whatami::ROUTER
         || *elect_router(&res_name, &tables.shared_nodes) == tables.pid;
@@ -887,102 +886,74 @@ pub async fn route_query(
                         let routers_net = tables.routers_net.as_ref().unwrap();
                         let local_context =
                             routers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                        match Resource::get_resource(prefix, suffix) {
-                            Some(res) => {
-                                res.routers_query_route(local_context).unwrap_or_else(|| {
-                                    // precomputed route is not yet ready
-                                    compute_query_route(
-                                        tables,
-                                        prefix,
-                                        suffix,
-                                        Some(local_context),
-                                        whatami::ROUTER,
-                                    )
-                                })
-                            }
-                            None => compute_query_route(
-                                tables,
-                                prefix,
-                                suffix,
-                                Some(local_context),
-                                whatami::ROUTER,
-                            ),
-                        }
+                        Resource::get_resource(prefix, suffix)
+                            .map(|res| res.routers_query_route(local_context))
+                            .flatten()
+                            .unwrap_or_else(|| {
+                                compute_query_route(
+                                    tables,
+                                    prefix,
+                                    suffix,
+                                    Some(local_context),
+                                    whatami::ROUTER,
+                                )
+                            })
                     }
                     whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context =
                             peers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                        match Resource::get_resource(prefix, suffix) {
-                            Some(res) => {
-                                res.peers_query_route(local_context).unwrap_or_else(|| {
-                                    // precomputed route is not yet ready
-                                    compute_query_route(
-                                        tables,
-                                        prefix,
-                                        suffix,
-                                        Some(local_context),
-                                        whatami::PEER,
-                                    )
-                                })
-                            }
-                            None => compute_query_route(
-                                tables,
-                                prefix,
-                                suffix,
-                                Some(local_context),
-                                whatami::PEER,
-                            ),
-                        }
+                        Resource::get_resource(prefix, suffix)
+                            .map(|res| res.peers_query_route(local_context))
+                            .flatten()
+                            .unwrap_or_else(|| {
+                                compute_query_route(
+                                    tables,
+                                    prefix,
+                                    suffix,
+                                    Some(local_context),
+                                    whatami::PEER,
+                                )
+                            })
                     }
-                    _ => match Resource::get_resource(prefix, suffix) {
-                        Some(res) => res.routers_query_route(0).unwrap_or_else(|| {
+                    _ => Resource::get_resource(prefix, suffix)
+                        .map(|res| res.routers_query_route(0))
+                        .flatten()
+                        .unwrap_or_else(|| {
                             compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
                         }),
-                        None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
-                    },
                 },
                 whatami::PEER => match face.whatami {
                     whatami::ROUTER | whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context =
                             peers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                        match Resource::get_resource(prefix, suffix) {
-                            Some(res) => {
-                                res.peers_query_route(local_context).unwrap_or_else(|| {
-                                    // precomputed route is not yet ready
-                                    compute_query_route(
-                                        tables,
-                                        prefix,
-                                        suffix,
-                                        Some(local_context),
-                                        whatami::PEER,
-                                    )
-                                })
-                            }
-                            None => compute_query_route(
-                                tables,
-                                prefix,
-                                suffix,
-                                Some(local_context),
-                                whatami::PEER,
-                            ),
-                        }
+                        Resource::get_resource(prefix, suffix)
+                            .map(|res| res.peers_query_route(local_context))
+                            .flatten()
+                            .unwrap_or_else(|| {
+                                compute_query_route(
+                                    tables,
+                                    prefix,
+                                    suffix,
+                                    Some(local_context),
+                                    whatami::PEER,
+                                )
+                            })
                     }
-                    _ => match Resource::get_resource(prefix, suffix) {
-                        Some(res) => res.peers_query_route(0).unwrap_or_else(|| {
+                    _ => Resource::get_resource(prefix, suffix)
+                        .map(|res| res.peers_query_route(0))
+                        .flatten()
+                        .unwrap_or_else(|| {
                             compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
                         }),
-                        None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
-                    },
                 },
-                _ => match Resource::get_resource(prefix, suffix) {
-                    Some(res) => match &res.client_query_route() {
-                        Some(route) => route.clone(),
-                        None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
-                    },
-                    None => compute_query_route(tables, prefix, suffix, None, whatami::CLIENT),
-                },
+                _ => Resource::get_resource(prefix, suffix)
+                    .map(|res| res.client_query_route())
+                    .flatten()
+                    .unwrap_or_else(|| {
+                        compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
+                    }),
             };
 
             if route.is_empty()

@@ -778,13 +778,12 @@ unsafe fn compute_data_route(
     let mut route = HashMap::new();
     let res_name = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
-    let matches = match res.as_ref() {
-        Some(res) => match res.context.as_ref() {
-            Some(ctx) => Cow::from(&ctx.matches),
-            None => Cow::from(Resource::get_matches(tables, &res_name)),
-        },
-        None => Cow::from(Resource::get_matches(tables, &res_name)),
-    };
+    let matches = res
+        .as_ref()
+        .map(|res| res.context.as_ref())
+        .flatten()
+        .map(|ctx| Cow::from(&ctx.matches))
+        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &res_name)));
 
     let master = tables.whatami != whatami::ROUTER
         || *elect_router(&res_name, &tables.shared_nodes) == tables.pid;
@@ -868,19 +867,18 @@ fn compute_matching_pulls(
 ) -> Arc<PullCaches> {
     let mut pull_caches = vec![];
     let res = Resource::get_resource(prefix, suffix);
-    let matches = match res.as_ref() {
-        Some(res) => match res.context.as_ref() {
-            Some(ctx) => Cow::from(&ctx.matches),
-            None => Cow::from(Resource::get_matches(
+    let matches = res
+        .as_ref()
+        .map(|res| res.context.as_ref())
+        .flatten()
+        .map(|ctx| Cow::from(&ctx.matches))
+        .unwrap_or_else(|| {
+            Cow::from(Resource::get_matches(
                 tables,
                 &[&prefix.name(), suffix].concat(),
-            )),
-        },
-        None => Cow::from(Resource::get_matches(
-            tables,
-            &[&prefix.name(), suffix].concat(),
-        )),
-    };
+            ))
+        });
+
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
         for context in mres.session_ctxs.values() {
@@ -1024,9 +1022,10 @@ fn get_data_route(
                     let routers_net = tables.routers_net.as_ref().unwrap();
                     let local_context =
                         routers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                    match res {
-                        Some(res) => res.routers_data_route(local_context).unwrap_or_else(|| {
-                            // precomputed route is not yet ready
+                    res.as_ref()
+                        .map(|res| res.routers_data_route(local_context))
+                        .flatten()
+                        .unwrap_or_else(|| {
                             compute_data_route(
                                 tables,
                                 prefix,
@@ -1034,23 +1033,16 @@ fn get_data_route(
                                 Some(local_context),
                                 whatami::ROUTER,
                             )
-                        }),
-                        None => compute_data_route(
-                            tables,
-                            prefix,
-                            suffix,
-                            Some(local_context),
-                            whatami::ROUTER,
-                        ),
-                    }
+                        })
                 }
                 whatami::PEER => {
                     let peers_net = tables.peers_net.as_ref().unwrap();
                     let local_context =
                         peers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                    match res {
-                        Some(res) => res.peers_data_route(local_context).unwrap_or_else(|| {
-                            // precomputed route is not yet ready
+                    res.as_ref()
+                        .map(|res| res.peers_data_route(local_context))
+                        .flatten()
+                        .unwrap_or_else(|| {
                             compute_data_route(
                                 tables,
                                 prefix,
@@ -1058,31 +1050,25 @@ fn get_data_route(
                                 Some(local_context),
                                 whatami::PEER,
                             )
-                        }),
-                        None => compute_data_route(
-                            tables,
-                            prefix,
-                            suffix,
-                            Some(local_context),
-                            whatami::PEER,
-                        ),
-                    }
+                        })
                 }
-                _ => match res {
-                    Some(res) => res.routers_data_route(0).unwrap_or_else(|| {
+                _ => res
+                    .as_ref()
+                    .map(|res| res.routers_data_route(0))
+                    .flatten()
+                    .unwrap_or_else(|| {
                         compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
                     }),
-                    None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
-                },
             },
             whatami::PEER => match face.whatami {
                 whatami::ROUTER | whatami::PEER => {
                     let peers_net = tables.peers_net.as_ref().unwrap();
                     let local_context =
                         peers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                    match res {
-                        Some(res) => res.peers_data_route(local_context).unwrap_or_else(|| {
-                            // precomputed route is not yet ready
+                    res.as_ref()
+                        .map(|res| res.peers_data_route(local_context))
+                        .flatten()
+                        .unwrap_or_else(|| {
                             compute_data_route(
                                 tables,
                                 prefix,
@@ -1090,30 +1076,23 @@ fn get_data_route(
                                 Some(local_context),
                                 whatami::PEER,
                             )
-                        }),
-                        None => compute_data_route(
-                            tables,
-                            prefix,
-                            suffix,
-                            Some(local_context),
-                            whatami::PEER,
-                        ),
-                    }
+                        })
                 }
-                _ => match res {
-                    Some(res) => res.peers_data_route(0).unwrap_or_else(|| {
+                _ => res
+                    .as_ref()
+                    .map(|res| res.peers_data_route(0))
+                    .flatten()
+                    .unwrap_or_else(|| {
                         compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
                     }),
-                    None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
-                },
             },
-            _ => match res {
-                Some(res) => match &res.client_data_route() {
-                    Some(route) => route.clone(),
-                    None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
-                },
-                None => compute_data_route(tables, prefix, suffix, None, whatami::CLIENT),
-            },
+            _ => res
+                .as_ref()
+                .map(|res| res.client_data_route())
+                .flatten()
+                .unwrap_or_else(|| {
+                    compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
+                }),
         }
     }
 }
@@ -1125,13 +1104,11 @@ fn get_matching_pulls(
     prefix: &Arc<Resource>,
     suffix: &str,
 ) -> Arc<PullCaches> {
-    match res {
-        Some(res) => match &res.context {
-            Some(ctx) => ctx.matching_pulls.clone(),
-            None => compute_matching_pulls(tables, prefix, suffix),
-        },
-        None => compute_matching_pulls(tables, prefix, suffix),
-    }
+    res.as_ref()
+        .map(|res| res.context.as_ref())
+        .flatten()
+        .map(|ctx| ctx.matching_pulls.clone())
+        .unwrap_or_else(|| compute_matching_pulls(tables, prefix, suffix))
 }
 
 macro_rules! send_to_first {
