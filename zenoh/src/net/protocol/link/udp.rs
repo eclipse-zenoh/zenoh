@@ -166,12 +166,13 @@ impl LinkUdp {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     async fn received(&self, buffer: RecyclingBuffer, len: usize) {
         let unconnected = self.unconnected.as_ref().unwrap();
         unconnected.input.put((buffer, len)).await;
     }
 
+    #[inline(always)]
     async fn read_unconnected(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let unconnected = self.unconnected.as_ref().ok_or_else(|| {
             zerror2!(ZErrorKind::IoError {
@@ -201,6 +202,7 @@ impl LinkUdp {
         Ok(len_min)
     }
 
+    #[inline(always)]
     async fn read_connected(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match (&self.socket).recv(buffer).await {
             Ok(n) => Ok(n),
@@ -226,7 +228,7 @@ impl LinkUdp {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let res = if self.unconnected.is_some() {
             (&self.socket).send_to(buffer, &self.dst_addr).await
@@ -244,7 +246,7 @@ impl LinkUdp {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut written: usize = 0;
         while written < buffer.len() {
@@ -253,7 +255,7 @@ impl LinkUdp {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         if self.unconnected.is_some() {
             self.read_unconnected(buffer).await
@@ -262,7 +264,7 @@ impl LinkUdp {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let mut read: usize = 0;
         loop {
@@ -274,27 +276,27 @@ impl LinkUdp {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_src(&self) -> Locator {
         Locator::Udp(LocatorUdp::SocketAddr(self.src_addr))
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_dst(&self) -> Locator {
         Locator::Udp(LocatorUdp::SocketAddr(self.dst_addr))
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_mtu(&self) -> usize {
         *UDP_DEFAULT_MTU
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn is_reliable(&self) -> bool {
         false
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn is_streamed(&self) -> bool {
         false
     }

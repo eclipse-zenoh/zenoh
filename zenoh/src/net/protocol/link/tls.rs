@@ -453,7 +453,7 @@ impl LinkTls {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn is_streamed(&self) -> bool {
         true
     }

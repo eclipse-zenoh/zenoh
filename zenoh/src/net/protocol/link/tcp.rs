@@ -170,7 +170,7 @@ impl LinkTcp {
         })
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match (&self.socket).write(buffer).await {
             Ok(n) => Ok(n),
@@ -183,7 +183,7 @@ impl LinkTcp {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         match (&self.socket).write_all(buffer).await {
             Ok(_) => Ok(()),
@@ -196,7 +196,7 @@ impl LinkTcp {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match (&self.socket).read(buffer).await {
             Ok(n) => Ok(n),
@@ -209,7 +209,7 @@ impl LinkTcp {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         match (&self.socket).read_exact(buffer).await {
             Ok(_) => Ok(()),
@@ -222,27 +222,27 @@ impl LinkTcp {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_src(&self) -> Locator {
         Locator::Tcp(LocatorTcp::SocketAddr(self.src_addr))
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_dst(&self) -> Locator {
         Locator::Tcp(LocatorTcp::SocketAddr(self.dst_addr))
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_mtu(&self) -> usize {
         *TCP_DEFAULT_MTU
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn is_reliable(&self) -> bool {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn is_streamed(&self) -> bool {
         true
     }

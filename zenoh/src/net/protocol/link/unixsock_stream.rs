@@ -145,7 +145,7 @@ impl LinkUnixSocketStream {
         })
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match (&self.socket).write(buffer).await {
             Ok(n) => Ok(n),
@@ -162,7 +162,7 @@ impl LinkUnixSocketStream {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         match (&self.socket).write_all(buffer).await {
             Ok(_) => Ok(()),
@@ -179,7 +179,7 @@ impl LinkUnixSocketStream {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match (&self.socket).read(buffer).await {
             Ok(n) => Ok(n),
@@ -192,7 +192,7 @@ impl LinkUnixSocketStream {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         match (&self.socket).read_exact(buffer).await {
             Ok(_) => Ok(()),
@@ -205,31 +205,31 @@ impl LinkUnixSocketStream {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_src(&self) -> Locator {
         Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
             self.src_path.clone(),
         )))
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_dst(&self) -> Locator {
         Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
             self.dst_path.clone(),
         )))
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get_mtu(&self) -> usize {
         *UNIXSOCKSTREAM_DEFAULT_MTU
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn is_reliable(&self) -> bool {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn is_streamed(&self) -> bool {
         true
     }
