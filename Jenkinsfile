@@ -129,7 +129,7 @@ pipeline {
             rustup default ${RUST_TOOLCHAIN} && \
             cargo build --release --bins --lib --examples && \
             if [[ ${GIT_TAG} != origin/* ]]; then \
-              cargo deb -p zenoh-router && \
+              cargo deb -p zenoh && \
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh x86_64-unknown-linux-gnu amd64 \
@@ -157,7 +157,7 @@ pipeline {
             rustup default ${RUST_TOOLCHAIN} && \
             cargo build --release --bins --lib --examples && \
             if [[ ${GIT_TAG} != origin/* ]]; then \
-              cargo deb -p zenoh-router && \
+              cargo deb -p zenoh && \
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh i686-unknown-linux-gnu i386 \
@@ -185,7 +185,7 @@ pipeline {
             rustup default ${RUST_TOOLCHAIN} && \
             cargo build --release --bins --lib --examples && \
             if [[ ${GIT_TAG} != origin/* ]]; then
-              cargo deb -p zenoh-router && \
+              cargo deb -p zenoh && \
               cargo deb -p zenoh-rest && \
               cargo deb -p zenoh-storages && \
               ./gen_zenoh_deb.sh aarch64-unknown-linux-gnu aarch64 \
