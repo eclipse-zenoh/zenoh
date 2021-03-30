@@ -11,27 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, RwLock};
-
 use super::proto::ZenohMessage;
 use super::session::defaults::QUEUE_PRIO_DATA;
-use super::{Scheduling, SessionTransportLink};
-
-use async_trait::async_trait;
+use super::SessionTransport;
 use zenoh_util::zasyncread;
 
-pub(crate) struct FirstMatch;
-
-impl FirstMatch {
-    pub(crate) fn new() -> FirstMatch {
-        FirstMatch
-    }
-}
-
-#[async_trait]
-impl Scheduling for FirstMatch {
-    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<SessionTransportLink>>>) {
-        let guard = zasyncread!(links);
+impl SessionTransport {
+    pub(super) async fn schedule_first_fit(&self, msg: ZenohMessage) {
+        let guard = zasyncread!(self.links);
         for cl in guard.iter() {
             let link = cl.get_link();
             if msg.is_reliable() && link.is_reliable() {

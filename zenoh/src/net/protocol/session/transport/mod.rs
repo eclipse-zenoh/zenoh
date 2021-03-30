@@ -28,18 +28,11 @@ use super::proto::{SessionMessage, ZenohMessage};
 use super::session::defaults::QUEUE_PRIO_DATA;
 use super::session::{SessionEventDispatcher, SessionManager};
 use async_std::sync::{Arc, Mutex, MutexGuard, RwLock};
-use async_trait::async_trait;
 use defragmentation::*;
 use link::*;
 pub(super) use seq_num::*;
-use tx::*;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zasyncread, zasyncwrite, zerror};
-
-#[async_trait]
-pub(crate) trait Scheduling {
-    async fn schedule(&self, msg: ZenohMessage, links: &Arc<RwLock<Vec<SessionTransportLink>>>);
-}
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
@@ -120,8 +113,6 @@ pub(crate) struct SessionTransport {
     pub(super) rx_best_effort: Arc<Mutex<SessionTransportRxBestEffort>>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Vec<SessionTransportLink>>>,
-    // The scehduling function
-    pub(super) scheduling: Arc<dyn Scheduling + Send + Sync>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<SessionEventDispatcher>>>,
     // Mutex for notification
@@ -163,7 +154,6 @@ impl SessionTransport {
                 sn_resolution,
             ))),
             links: Arc::new(RwLock::new(Vec::new())),
-            scheduling: Arc::new(FirstMatch::new()),
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(Mutex::new(true)),
             is_shm,
@@ -279,13 +269,13 @@ impl SessionTransport {
         if !self.is_shm {
             message.flatten_shm();
         }
-        self.scheduling.schedule(message, &self.links).await;
+        self.schedule_first_fit(message).await;
     }
 
     #[cfg(not(feature = "zero-copy"))]
     #[inline]
     pub(crate) async fn schedule(&self, message: ZenohMessage) {
-        self.scheduling.schedule(message, &self.links).await;
+        self.schedule_first_fit(message).await;
     }
 
     /*************************************/
