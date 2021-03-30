@@ -121,6 +121,7 @@ impl SessionTransport {
         zreceiveframe!(self, guard, sn, payload);
     }
 
+    #[inline(always)]
     pub(super) async fn receive_message(&self, message: SessionMessage) {
         // Process the received message
         match message.body {

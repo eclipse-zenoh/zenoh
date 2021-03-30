@@ -264,7 +264,6 @@ impl SessionTransport {
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
     #[cfg(feature = "zero-copy")]
-    #[inline]
     pub(crate) async fn schedule(&self, mut message: ZenohMessage) {
         if !self.is_shm {
             message.flatten_shm();
@@ -273,7 +272,6 @@ impl SessionTransport {
     }
 
     #[cfg(not(feature = "zero-copy"))]
-    #[inline]
     pub(crate) async fn schedule(&self, message: ZenohMessage) {
         self.schedule_first_fit(message).await;
     }

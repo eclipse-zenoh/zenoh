@@ -59,12 +59,12 @@ impl SeqNum {
         sn
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn get(&self) -> ZInt {
         self.value
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn set(&mut self, value: ZInt) -> ZResult<()> {
         if value >= self.resolution {
             return zerror!(ZErrorKind::InvalidResolution {
@@ -76,7 +76,7 @@ impl SeqNum {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn increment(&mut self) {
         self.value = (self.value + 1) % self.resolution;
     }
@@ -174,12 +174,14 @@ impl SeqNumGenerator {
     }
 
     /// Generates the next sequence number
+    #[inline(always)]
     pub(crate) fn get(&mut self) -> ZInt {
         let now = self.0.get();
         self.0.increment();
         now
     }
 
+    #[inline(always)]
     pub(crate) fn set(&mut self, sn: ZInt) {
         self.0.set(sn).unwrap();
     }

@@ -126,7 +126,7 @@ impl Session {
     /*************************************/
     /*         SESSION ACCESSORS         */
     /*************************************/
-    #[inline]
+    #[inline(always)]
     pub(super) fn get_transport(&self) -> ZResult<Arc<SessionTransport>> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport)
@@ -135,42 +135,42 @@ impl Session {
     /*************************************/
     /*          PUBLIC ACCESSORS         */
     /*************************************/
-    #[inline]
+    #[inline(always)]
     pub fn get_pid(&self) -> ZResult<PeerId> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.pid.clone())
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.whatami)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.sn_resolution)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.is_shm)
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn get_callback(&self) -> ZResult<Option<SessionEventDispatcher>> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.get_callback().await)
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
         self.schedule(message).await
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the session has already been closed
         match self.0.upgrade() {
@@ -179,7 +179,7 @@ impl Session {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn close_link(&self, link: &Link) -> ZResult<()> {
         let transport = zweak!(self.0, STR_ERR);
         transport
@@ -188,14 +188,14 @@ impl Session {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn get_links(&self) -> ZResult<Vec<Link>> {
         log::trace!("{:?}. Get links", self);
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.get_links().await)
     }
 
-    #[inline]
+    #[inline(always)]
     pub async fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
         log::trace!("{:?}. Schedule: {:?}", self, message);
         let transport = zweak!(self.0, STR_ERR);
@@ -203,19 +203,6 @@ impl Session {
         Ok(())
     }
 }
-
-// #[async_trait]
-// impl SessionEventHandler for Session {
-//     #[inline]
-//     async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-//         self.schedule(message).await
-//     }
-
-//     async fn new_link(&self, _link: Link) {}
-//     async fn del_link(&self, _link: Link) {}
-//     async fn closing(&self) {}
-//     async fn closed(&self) {}
-// }
 
 impl Eq for Session {}
 

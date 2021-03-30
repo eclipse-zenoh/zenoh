@@ -38,17 +38,17 @@ impl DefragBuffer {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(super) fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
-    #[inline]
+    #[inline(always)]
     pub(super) fn clear(&mut self) {
         self.buffer.clear()
     }
 
-    #[inline]
+    #[inline(always)]
     pub(super) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
         self.sn.set(sn)
     }
@@ -67,7 +67,7 @@ impl DefragBuffer {
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     pub(super) fn defragment(&mut self) -> Option<ZenohMessage> {
         let res = self.buffer.read_zenoh_message(self.reliability);
         self.clear();

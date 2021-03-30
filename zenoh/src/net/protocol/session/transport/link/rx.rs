@@ -50,6 +50,7 @@ impl SessionTransportLink {
         task::yield_now().await;
     }
 
+    #[inline(always)]
     pub(super) async fn receive_message(&self, message: SessionMessage) {
         log::trace!(
             "Received from peer {} on link {}: {:?}",

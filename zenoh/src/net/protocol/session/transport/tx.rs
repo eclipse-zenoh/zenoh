@@ -17,6 +17,7 @@ use super::SessionTransport;
 use zenoh_util::zasyncread;
 
 impl SessionTransport {
+    #[inline(always)]
     pub(super) async fn schedule_first_fit(&self, msg: ZenohMessage) {
         let guard = zasyncread!(self.links);
         for cl in guard.iter() {
