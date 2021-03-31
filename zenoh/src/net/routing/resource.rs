@@ -21,6 +21,7 @@ use async_std::sync::{Arc, Weak};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
+use zenoh_util::sync::get_mut_unchecked;
 
 pub(super) type Route = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
 pub(super) type PullCaches = Vec<Arc<SessionContext>>;
@@ -208,29 +209,27 @@ impl Resource {
     }
 
     pub fn clean(res: &mut Arc<Resource>) {
-        unsafe {
-            let mut resclone = res.clone();
-            let mutres = Arc::get_mut_unchecked(&mut resclone);
-            if let Some(ref mut parent) = mutres.parent {
-                if Arc::strong_count(res) <= 3 && res.childs.is_empty() {
-                    log::debug!("Unregister resource {}", res.name());
-                    if let Some(context) = mutres.context.as_mut() {
-                        for match_ in &mut context.matches {
-                            let mut match_ = match_.upgrade().unwrap();
-                            if !Arc::ptr_eq(&match_, res) {
-                                let mutmatch = Arc::get_mut_unchecked(&mut match_);
-                                if let Some(ctx) = mutmatch.context.as_mut() {
-                                    ctx.matches
-                                        .retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
-                                }
+        let mut resclone = res.clone();
+        let mutres = get_mut_unchecked(&mut resclone);
+        if let Some(ref mut parent) = mutres.parent {
+            if Arc::strong_count(res) <= 3 && res.childs.is_empty() {
+                log::debug!("Unregister resource {}", res.name());
+                if let Some(context) = mutres.context.as_mut() {
+                    for match_ in &mut context.matches {
+                        let mut match_ = match_.upgrade().unwrap();
+                        if !Arc::ptr_eq(&match_, res) {
+                            let mutmatch = get_mut_unchecked(&mut match_);
+                            if let Some(ctx) = mutmatch.context.as_mut() {
+                                ctx.matches
+                                    .retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
                             }
                         }
                     }
-                    {
-                        Arc::get_mut_unchecked(parent).childs.remove(&res.suffix);
-                    }
-                    Resource::clean(parent);
                 }
+                {
+                    get_mut_unchecked(parent).childs.remove(&res.suffix);
+                }
+                Resource::clean(parent);
             }
         }
     }
@@ -249,56 +248,52 @@ impl Resource {
         from: &mut Arc<Resource>,
         suffix: &str,
     ) -> Arc<Resource> {
-        unsafe {
-            if suffix.is_empty() {
-                Resource::upgrade_resource(from);
-                from.clone()
-            } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
-                let (chunk, rest) = match stripped_suffix.find('/') {
-                    Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                    None => (suffix, ""),
-                };
+        if suffix.is_empty() {
+            Resource::upgrade_resource(from);
+            from.clone()
+        } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
+            let (chunk, rest) = match stripped_suffix.find('/') {
+                Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
+                None => (suffix, ""),
+            };
 
-                match Arc::get_mut_unchecked(from).childs.get_mut(chunk) {
-                    Some(mut res) => Resource::make_resource(tables, &mut res, rest),
-                    None => {
-                        let mut new = Arc::new(Resource::new(from, chunk, None));
-                        if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
-                            log::debug!("Register resource {}", new.name());
-                        }
-                        let res = Resource::make_resource(tables, &mut new, rest);
-                        Arc::get_mut_unchecked(from)
-                            .childs
-                            .insert(String::from(chunk), new);
-                        res
+            match get_mut_unchecked(from).childs.get_mut(chunk) {
+                Some(mut res) => Resource::make_resource(tables, &mut res, rest),
+                None => {
+                    let mut new = Arc::new(Resource::new(from, chunk, None));
+                    if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
+                        log::debug!("Register resource {}", new.name());
                     }
+                    let res = Resource::make_resource(tables, &mut new, rest);
+                    get_mut_unchecked(from)
+                        .childs
+                        .insert(String::from(chunk), new);
+                    res
                 }
-            } else {
-                match from.parent.clone() {
-                    Some(mut parent) => Resource::make_resource(
-                        tables,
-                        &mut parent,
-                        &[&from.suffix, suffix].concat(),
-                    ),
-                    None => {
-                        let (chunk, rest) = match suffix[1..].find('/') {
-                            Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
-                            None => (suffix, ""),
-                        };
+            }
+        } else {
+            match from.parent.clone() {
+                Some(mut parent) => {
+                    Resource::make_resource(tables, &mut parent, &[&from.suffix, suffix].concat())
+                }
+                None => {
+                    let (chunk, rest) = match suffix[1..].find('/') {
+                        Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
+                        None => (suffix, ""),
+                    };
 
-                        match Arc::get_mut_unchecked(from).childs.get_mut(chunk) {
-                            Some(mut res) => Resource::make_resource(tables, &mut res, rest),
-                            None => {
-                                let mut new = Arc::new(Resource::new(from, chunk, None));
-                                if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
-                                    log::debug!("Register resource {}", new.name());
-                                }
-                                let res = Resource::make_resource(tables, &mut new, rest);
-                                Arc::get_mut_unchecked(from)
-                                    .childs
-                                    .insert(String::from(chunk), new);
-                                res
+                    match get_mut_unchecked(from).childs.get_mut(chunk) {
+                        Some(mut res) => Resource::make_resource(tables, &mut res, rest),
+                        None => {
+                            let mut new = Arc::new(Resource::new(from, chunk, None));
+                            if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
+                                log::debug!("Register resource {}", new.name());
                             }
+                            let res = Resource::make_resource(tables, &mut new, rest);
+                            get_mut_unchecked(from)
+                                .childs
+                                .insert(String::from(chunk), new);
+                            res
                         }
                     }
                 }
@@ -356,8 +351,8 @@ impl Resource {
     pub async fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
-            Some(mut nonwild_prefix) => unsafe {
-                let mut ctx = Arc::get_mut_unchecked(&mut nonwild_prefix)
+            Some(mut nonwild_prefix) => {
+                let mut ctx = get_mut_unchecked(&mut nonwild_prefix)
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| {
@@ -375,8 +370,8 @@ impl Resource {
                     Some(rid) => rid,
                     None => {
                         let rid = face.get_next_local_id();
-                        Arc::get_mut_unchecked(&mut ctx).local_rid = Some(rid);
-                        Arc::get_mut_unchecked(face)
+                        get_mut_unchecked(&mut ctx).local_rid = Some(rid);
+                        get_mut_unchecked(face)
                             .local_mappings
                             .insert(rid, nonwild_prefix.clone());
                         face.primitives
@@ -386,7 +381,7 @@ impl Resource {
                     }
                 };
                 (rid, wildsuffix).into()
-            },
+            }
             None => wildsuffix.into(),
         }
     }
@@ -476,40 +471,36 @@ impl Resource {
     }
 
     pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
-        unsafe {
-            if res.context.is_some() {
-                let mut matches = Resource::get_matches(tables, &res.name());
+        if res.context.is_some() {
+            let mut matches = Resource::get_matches(tables, &res.name());
 
-                fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
-                    for match_ in matches {
-                        if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
-                            return true;
-                        }
-                    }
-                    false
-                }
-
-                for match_ in &mut matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !matches_contain(&match_.context().matches, &res) {
-                        Arc::get_mut_unchecked(&mut match_)
-                            .context_mut()
-                            .matches
-                            .push(Arc::downgrade(&res));
+            fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
+                for match_ in matches {
+                    if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
+                        return true;
                     }
                 }
-                Arc::get_mut_unchecked(res).context_mut().matches = matches;
-            } else {
-                log::error!("Call match_resource() on context less res {}", res.name());
+                false
             }
+
+            for match_ in &mut matches {
+                let mut match_ = match_.upgrade().unwrap();
+                if !matches_contain(&match_.context().matches, &res) {
+                    get_mut_unchecked(&mut match_)
+                        .context_mut()
+                        .matches
+                        .push(Arc::downgrade(&res));
+                }
+            }
+            get_mut_unchecked(res).context_mut().matches = matches;
+        } else {
+            log::error!("Call match_resource() on context less res {}", res.name());
         }
     }
 
     pub fn upgrade_resource(res: &mut Arc<Resource>) {
-        unsafe {
-            if res.context.is_none() {
-                Arc::get_mut_unchecked(res).context = Some(ResourceContext::new());
-            }
+        if res.context.is_none() {
+            get_mut_unchecked(res).context = Some(ResourceContext::new());
         }
     }
 }
@@ -528,10 +519,10 @@ pub async fn declare_resource(
                     log::error!("Resource {} remapped. Remapping unsupported!", rid);
                 }
             }
-            None => unsafe {
+            None => {
                 let mut res = Resource::make_resource(tables, &mut prefix, suffix);
                 Resource::match_resource(&tables, &mut res);
-                let mut ctx = Arc::get_mut_unchecked(&mut res)
+                let mut ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| {
@@ -547,10 +538,10 @@ pub async fn declare_resource(
                     .clone();
 
                 if face.local_mappings.get(&rid).is_some() && ctx.local_rid == None {
-                    let local_rid = Arc::get_mut_unchecked(face).get_next_local_id();
-                    Arc::get_mut_unchecked(&mut ctx).local_rid = Some(local_rid);
+                    let local_rid = get_mut_unchecked(face).get_next_local_id();
+                    get_mut_unchecked(&mut ctx).local_rid = Some(local_rid);
 
-                    Arc::get_mut_unchecked(face)
+                    get_mut_unchecked(face)
                         .local_mappings
                         .insert(local_rid, res.clone());
 
@@ -559,22 +550,20 @@ pub async fn declare_resource(
                         .await;
                 }
 
-                Arc::get_mut_unchecked(face)
+                get_mut_unchecked(face)
                     .remote_mappings
                     .insert(rid, res.clone());
                 tables.compute_matches_routes(&mut res);
-            },
+            }
         },
         None => log::error!("Declare resource with unknown prefix {}!", prefixid),
     }
 }
 
 pub async fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
-    unsafe {
-        match Arc::get_mut_unchecked(face).remote_mappings.remove(&rid) {
-            Some(mut res) => Resource::clean(&mut res),
-            None => log::error!("Undeclare unknown resource!"),
-        }
+    match get_mut_unchecked(face).remote_mappings.remove(&rid) {
+        Some(mut res) => Resource::clean(&mut res),
+        None => log::error!("Undeclare unknown resource!"),
     }
 }
 

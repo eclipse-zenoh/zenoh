@@ -29,6 +29,7 @@ use orchestrator::SessionOrchestrator;
 use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
+use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::{zasyncwrite, zerror, zerror2};
 
 pub struct RuntimeState {
@@ -108,11 +109,9 @@ impl Runtime {
                 .to_lowercase()
                 == ZN_TRUE
         {
-            unsafe {
-                Arc::get_mut_unchecked(&mut router)
-                    .init_link_state(orchestrator.clone(), peers_autoconnect)
-                    .await;
-            }
+            get_mut_unchecked(&mut router)
+                .init_link_state(orchestrator.clone(), peers_autoconnect)
+                .await;
         }
         match orchestrator
             .init(session_manager, config, peers_autoconnect)
