@@ -15,6 +15,7 @@ use async_std::sync::{Arc, RwLock};
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::zasyncread;
 
 use super::protocol::core::{
@@ -76,16 +77,12 @@ async fn propagate_simple_subscription(
                 _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
             }
         {
-            unsafe {
-                Arc::get_mut_unchecked(dst_face)
-                    .local_subs
-                    .push(res.clone());
-                let reskey = Resource::decl_key(res, dst_face).await;
-                dst_face
-                    .primitives
-                    .decl_subscriber(&reskey, sub_info, None)
-                    .await;
-            }
+            get_mut_unchecked(dst_face).local_subs.push(res.clone());
+            let reskey = Resource::decl_key(res, dst_face).await;
+            dst_face
+                .primitives
+                .decl_subscriber(&reskey, sub_info, None)
+                .await;
         }
     }
 }
@@ -124,7 +121,7 @@ async fn propagate_sourced_subscription(
     }
 }
 
-async unsafe fn register_router_subscription(
+async fn register_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -139,7 +136,7 @@ async unsafe fn register_router_subscription(
                 res.name(),
                 router
             );
-            Arc::get_mut_unchecked(res)
+            get_mut_unchecked(res)
                 .context_mut()
                 .router_subs
                 .insert(router.clone());
@@ -169,18 +166,18 @@ pub async fn declare_router_subscription(
     router: PeerId,
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
-        Some(mut prefix) => unsafe {
+        Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_router_subscription(tables, face, &mut res, sub_info, router).await;
 
             compute_matches_data_routes(tables, &mut res);
-        },
+        }
         None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
     }
 }
 
-async unsafe fn register_peer_subscription(
+async fn register_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -191,7 +188,7 @@ async unsafe fn register_peer_subscription(
         // Register peer subscription
         {
             log::debug!("Register peer subscription {} (peer: {})", res.name(), peer);
-            Arc::get_mut_unchecked(res)
+            get_mut_unchecked(res)
                 .context_mut()
                 .peer_subs
                 .insert(peer.clone());
@@ -213,7 +210,7 @@ pub async fn declare_peer_subscription(
     peer: PeerId,
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
-        Some(mut prefix) => unsafe {
+        Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_peer_subscription(tables, face, &mut res, sub_info, peer).await;
@@ -232,12 +229,12 @@ pub async fn declare_peer_subscription(
             }
 
             compute_matches_data_routes(tables, &mut res);
-        },
+        }
         None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
     }
 }
 
-async unsafe fn register_client_subscription(
+async fn register_client_subscription(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -245,17 +242,17 @@ async unsafe fn register_client_subscription(
 ) {
     // Register subscription
     {
-        let res = Arc::get_mut_unchecked(res);
+        let res = get_mut_unchecked(res);
         log::debug!("Register subscription {} for {}", res.name(), face);
         match res.session_ctxs.get_mut(&face.id) {
             Some(mut ctx) => match &ctx.subs {
                 Some(info) => {
                     if SubMode::Pull == info.mode {
-                        Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
+                        get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
                     }
                 }
                 None => {
-                    Arc::get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
+                    get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
                 }
             },
             None => {
@@ -273,7 +270,7 @@ async unsafe fn register_client_subscription(
             }
         }
     }
-    Arc::get_mut_unchecked(face).remote_subs.push(res.clone());
+    get_mut_unchecked(face).remote_subs.push(res.clone());
 }
 
 pub async fn declare_client_subscription(
@@ -284,7 +281,7 @@ pub async fn declare_client_subscription(
     sub_info: &SubInfo,
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
-        Some(mut prefix) => unsafe {
+        Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
 
@@ -320,7 +317,7 @@ pub async fn declare_client_subscription(
             }
 
             compute_matches_data_routes(tables, &mut res);
-        },
+        }
         None => log::error!("Declare subscription for unknown rid {}!", prefixid),
     }
 }
@@ -357,15 +354,13 @@ async fn send_forget_sourced_subscription_to_net_childs(
     }
 }
 
-async unsafe fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
+async fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
     for face in tables.faces.values_mut() {
         if face.local_subs.contains(res) {
             let reskey = Resource::get_best_key(res, "", face.id);
             face.primitives.forget_subscriber(&reskey, None).await;
 
-            Arc::get_mut_unchecked(face)
-                .local_subs
-                .retain(|sub| sub != res);
+            get_mut_unchecked(face).local_subs.retain(|sub| sub != res);
         }
     }
 }
@@ -398,7 +393,7 @@ async fn propagate_forget_sourced_subscription(
     }
 }
 
-async unsafe fn unregister_router_subscription(
+async fn unregister_router_subscription(
     tables: &mut Tables,
     res: &mut Arc<Resource>,
     router: &PeerId,
@@ -408,7 +403,7 @@ async unsafe fn unregister_router_subscription(
         res.name(),
         router
     );
-    Arc::get_mut_unchecked(res)
+    get_mut_unchecked(res)
         .context_mut()
         .router_subs
         .retain(|sub| sub != router);
@@ -421,7 +416,7 @@ async unsafe fn unregister_router_subscription(
     }
 }
 
-async unsafe fn undeclare_router_subscription(
+async fn undeclare_router_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
@@ -442,27 +437,23 @@ pub async fn forget_router_subscription(
 ) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
-            Some(mut res) => unsafe {
+            Some(mut res) => {
                 undeclare_router_subscription(tables, Some(face), &mut res, router).await;
                 Resource::clean(&mut res)
-            },
+            }
             None => log::error!("Undeclare unknown router subscription!"),
         },
         None => log::error!("Undeclare router subscription with unknown prefix!"),
     }
 }
 
-async unsafe fn unregister_peer_subscription(
-    tables: &mut Tables,
-    res: &mut Arc<Resource>,
-    peer: &PeerId,
-) {
+async fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &PeerId) {
     log::debug!(
         "Unregister peer subscription {} (peer: {})",
         res.name(),
         peer
     );
-    Arc::get_mut_unchecked(res)
+    get_mut_unchecked(res)
         .context_mut()
         .peer_subs
         .retain(|sub| sub != peer);
@@ -472,7 +463,7 @@ async unsafe fn unregister_peer_subscription(
     }
 }
 
-async unsafe fn undeclare_peer_subscription(
+async fn undeclare_peer_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
@@ -493,7 +484,7 @@ pub async fn forget_peer_subscription(
 ) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
-            Some(mut res) => unsafe {
+            Some(mut res) => {
                 undeclare_peer_subscription(tables, Some(face), &mut res, peer).await;
 
                 if tables.whatami == whatami::ROUTER
@@ -510,23 +501,23 @@ pub async fn forget_peer_subscription(
                 }
 
                 Resource::clean(&mut res)
-            },
+            }
             None => log::error!("Undeclare unknown peer subscription!"),
         },
         None => log::error!("Undeclare peer subscription with unknown prefix!"),
     }
 }
 
-pub(crate) async unsafe fn undeclare_client_subscription(
+pub(crate) async fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
     log::debug!("Unregister client subscription {} for {}", res.name(), face);
-    if let Some(mut ctx) = Arc::get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-        Arc::get_mut_unchecked(&mut ctx).subs = None;
+    if let Some(mut ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        get_mut_unchecked(&mut ctx).subs = None;
     }
-    Arc::get_mut_unchecked(face)
+    get_mut_unchecked(face)
         .remote_subs
         .retain(|x| !Arc::ptr_eq(&x, &res));
 
@@ -592,7 +583,7 @@ pub(crate) async unsafe fn undeclare_client_subscription(
             let reskey = Resource::get_best_key(&res, "", face.id);
             face.primitives.forget_subscriber(&reskey, None).await;
 
-            Arc::get_mut_unchecked(face)
+            get_mut_unchecked(face)
                 .local_subs
                 .retain(|sub| sub != &(*res));
         }
@@ -609,9 +600,9 @@ pub async fn forget_client_subscription(
 ) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
-            Some(mut res) => unsafe {
+            Some(mut res) => {
                 undeclare_client_subscription(tables, face, &mut res).await;
-            },
+            }
             None => log::error!("Undeclare unknown subscription!"),
         },
         None => log::error!("Undeclare subscription with unknown prefix!"),
@@ -625,13 +616,11 @@ pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<F
         period: None,
     };
     for sub in &tables.router_subs {
-        unsafe {
-            Arc::get_mut_unchecked(face).local_subs.push(sub.clone());
-            let reskey = Resource::decl_key(&sub, face).await;
-            face.primitives
-                .decl_subscriber(&reskey, &sub_info, None)
-                .await;
-        }
+        get_mut_unchecked(face).local_subs.push(sub.clone());
+        let reskey = Resource::decl_key(&sub, face).await;
+        face.primitives
+            .decl_subscriber(&reskey, &sub_info, None)
+            .await;
     }
 }
 
@@ -641,7 +630,7 @@ pub(crate) async fn pubsub_remove_node(
     net_type: whatami::Type,
 ) {
     match net_type {
-        whatami::ROUTER => unsafe {
+        whatami::ROUTER => {
             for mut res in tables
                 .router_subs
                 .iter()
@@ -652,8 +641,8 @@ pub(crate) async fn pubsub_remove_node(
                 unregister_router_subscription(tables, &mut res, node).await;
                 Resource::clean(&mut res)
             }
-        },
-        whatami::PEER => unsafe {
+        }
+        whatami::PEER => {
             for mut res in tables
                 .peer_subs
                 .iter()
@@ -678,7 +667,7 @@ pub(crate) async fn pubsub_remove_node(
 
                 Resource::clean(&mut res)
             }
-        },
+        }
         _ => (),
     }
 }
@@ -731,9 +720,7 @@ pub(crate) async fn pubsub_tree_change(
     }
 
     // recompute routes
-    unsafe {
-        compute_data_routes_from(tables, &mut tables.root_res.clone());
-    }
+    compute_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 #[inline]
@@ -891,10 +878,10 @@ fn compute_matching_pulls(
     Arc::new(pull_caches)
 }
 
-pub(crate) unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         let mut res_mut = res.clone();
-        let res_mut = Arc::get_mut_unchecked(&mut res_mut);
+        let res_mut = get_mut_unchecked(&mut res_mut);
         if tables.whatami == whatami::ROUTER {
             let indexes = tables
                 .routers_net
@@ -939,20 +926,20 @@ pub(crate) unsafe fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Reso
     }
 }
 
-unsafe fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     compute_data_routes(tables, res);
-    let res = Arc::get_mut_unchecked(res);
+    let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
         compute_data_routes_from(tables, child);
     }
 }
 
-pub(crate) unsafe fn compute_matches_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) fn compute_matches_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         compute_data_routes(tables, res);
 
         let resclone = res.clone();
-        for match_ in &mut Arc::get_mut_unchecked(res).context_mut().matches {
+        for match_ in &mut get_mut_unchecked(res).context_mut().matches {
             if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
                 compute_data_routes(tables, &mut match_.upgrade().unwrap());
             }
@@ -1154,12 +1141,10 @@ macro_rules! cache_data {
         $info:expr
     ) => {
         for context in $matching_pulls.iter() {
-            Arc::get_mut_unchecked(&mut context.clone())
-                .last_values
-                .insert(
-                    [&$prefix.name(), $suffix].concat(),
-                    ($info.clone(), $payload.clone()),
-                );
+            get_mut_unchecked(&mut context.clone()).last_values.insert(
+                [&$prefix.name(), $suffix].concat(),
+                ($info.clone(), $payload.clone()),
+            );
         }
     };
 }
@@ -1177,7 +1162,7 @@ pub async fn route_data(
     routing_context: Option<RoutingContext>,
 ) {
     match tables.get_mapping(&face, &rid).cloned() {
-        Some(prefix) => unsafe {
+        Some(prefix) => {
             log::trace!("Route data for res {}{}", prefix.name(), suffix,);
 
             let res = Resource::get_resource(&prefix, suffix);
@@ -1198,7 +1183,7 @@ pub async fn route_data(
                     send_to_all!(route, face, payload, congestion_control, data_info);
                 }
             }
-        },
+        }
         None => {
             log::error!("Route data with unknown rid {}!", rid);
         }
@@ -1219,7 +1204,7 @@ pub async fn full_reentrant_route_data(
 ) {
     let tables = zasyncread!(tables_ref);
     match tables.get_mapping(&face, &rid).cloned() {
-        Some(prefix) => unsafe {
+        Some(prefix) => {
             log::trace!("Route data for res {}{}", prefix.name(), suffix,);
 
             let res = Resource::get_resource(&prefix, suffix);
@@ -1242,7 +1227,7 @@ pub async fn full_reentrant_route_data(
                     send_to_all!(route, face, payload, congestion_control, data_info);
                 }
             }
-        },
+        }
         None => {
             log::error!("Route data with unknown rid {}!", rid);
         }
@@ -1260,8 +1245,8 @@ pub async fn pull_data(
 ) {
     match tables.get_mapping(&face, &rid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
-            Some(mut res) => unsafe {
-                let res = Arc::get_mut_unchecked(&mut res);
+            Some(mut res) => {
+                let res = get_mut_unchecked(&mut res);
                 match res.session_ctxs.get_mut(&face.id) {
                     Some(mut ctx) => match &ctx.subs {
                         Some(subinfo) => {
@@ -1280,7 +1265,7 @@ pub async fn pull_data(
                                     )
                                     .await;
                             }
-                            Arc::get_mut_unchecked(&mut ctx).last_values.clear();
+                            get_mut_unchecked(&mut ctx).last_values.clear();
                             drop(lock);
                         }
                         None => {
@@ -1297,7 +1282,7 @@ pub async fn pull_data(
                         );
                     }
                 }
-            },
+            }
             None => {
                 log::error!(
                     "Pull data for unknown subscription {} (no resource)!",

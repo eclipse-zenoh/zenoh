@@ -16,6 +16,7 @@ use async_std::task::{sleep, JoinHandle};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use uhlc::HLC;
+use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::protocol::link::Link;
@@ -84,11 +85,6 @@ impl Tables {
         &self.root_res
     }
 
-    // pub(crate) unsafe fn split_mut(self) -> (Self, &mut Self) {
-    //     let r = &mut self as *mut Self;
-    //     (self, &mut *r)
-    // }
-
     pub async fn print(&self) -> String {
         Resource::print_tree(&self.root_res)
     }
@@ -127,22 +123,20 @@ impl Tables {
         primitives: OutSession,
         link_id: usize,
     ) -> Weak<FaceState> {
-        unsafe {
-            let fid = self.face_counter;
-            self.face_counter += 1;
-            let mut newface = self
-                .faces
-                .entry(fid)
-                .or_insert_with(|| FaceState::new(fid, pid, whatami, primitives.clone(), link_id))
-                .clone();
-            log::debug!("New {}", newface);
+        let fid = self.face_counter;
+        self.face_counter += 1;
+        let mut newface = self
+            .faces
+            .entry(fid)
+            .or_insert_with(|| FaceState::new(fid, pid, whatami, primitives.clone(), link_id))
+            .clone();
+        log::debug!("New {}", newface);
 
-            if whatami == whatami::CLIENT {
-                pubsub_new_client_face(self, &mut newface).await;
-                queries_new_client_face(self, &mut newface).await;
-            }
-            Arc::downgrade(&newface)
+        if whatami == whatami::CLIENT {
+            pubsub_new_client_face(self, &mut newface).await;
+            queries_new_client_face(self, &mut newface).await;
         }
+        Arc::downgrade(&newface)
     }
 
     pub async fn open_face(
@@ -156,53 +150,49 @@ impl Tables {
 
     pub async fn close_face(&mut self, face: &Weak<FaceState>) {
         match face.upgrade() {
-            Some(mut face) => unsafe {
+            Some(mut face) => {
                 log::debug!("Close {}", face);
                 finalize_pending_queries(self, &mut face).await;
 
                 let mut face_clone = face.clone();
-                let face = Arc::get_mut_unchecked(&mut face);
+                let face = get_mut_unchecked(&mut face);
                 for mut res in face.remote_mappings.values_mut() {
-                    Arc::get_mut_unchecked(res).session_ctxs.remove(&face.id);
+                    get_mut_unchecked(res).session_ctxs.remove(&face.id);
                     Resource::clean(&mut res);
                 }
                 face.remote_mappings.clear();
                 for mut res in face.local_mappings.values_mut() {
-                    Arc::get_mut_unchecked(res).session_ctxs.remove(&face.id);
+                    get_mut_unchecked(res).session_ctxs.remove(&face.id);
                     Resource::clean(&mut res);
                 }
                 face.local_mappings.clear();
                 while let Some(mut res) = face.remote_subs.pop() {
-                    Arc::get_mut_unchecked(&mut res)
-                        .session_ctxs
-                        .remove(&face.id);
+                    get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
                     undeclare_client_subscription(self, &mut face_clone, &mut res).await;
                     Resource::clean(&mut res);
                 }
                 while let Some(mut res) = face.remote_qabls.pop() {
-                    Arc::get_mut_unchecked(&mut res)
-                        .session_ctxs
-                        .remove(&face.id);
+                    get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
                     undeclare_client_queryable(self, &mut face_clone, &mut res).await;
                     Resource::clean(&mut res);
                 }
                 self.faces.remove(&face.id);
-            },
+            }
             None => log::error!("Face already closed!"),
         }
     }
 
-    unsafe fn compute_routes(&mut self, res: &mut Arc<Resource>) {
+    fn compute_routes(&mut self, res: &mut Arc<Resource>) {
         compute_data_routes(self, res);
         compute_query_routes(self, res);
     }
 
-    pub(crate) unsafe fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
+    pub(crate) fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
         if res.context.is_some() {
             self.compute_routes(res);
 
             let resclone = res.clone();
-            for match_ in &mut Arc::get_mut_unchecked(res).context_mut().matches {
+            for match_ in &mut get_mut_unchecked(res).context_mut().matches {
                 let match_ = &mut match_.upgrade().unwrap();
                 if !Arc::ptr_eq(match_, &resclone) && match_.context.is_some() {
                     self.compute_routes(match_);

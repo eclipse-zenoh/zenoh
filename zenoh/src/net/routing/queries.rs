@@ -15,6 +15,7 @@ use async_std::sync::Arc;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt};
 use super::protocol::io::RBuf;
@@ -76,13 +77,9 @@ async fn propagate_simple_queryable(
                 _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
             }
         {
-            unsafe {
-                Arc::get_mut_unchecked(dst_face)
-                    .local_qabls
-                    .push(res.clone());
-                let reskey = Resource::decl_key(res, dst_face).await;
-                dst_face.primitives.decl_queryable(&reskey, None).await;
-            }
+            get_mut_unchecked(dst_face).local_qabls.push(res.clone());
+            let reskey = Resource::decl_key(res, dst_face).await;
+            dst_face.primitives.decl_queryable(&reskey, None).await;
         }
     }
 }
@@ -119,7 +116,7 @@ async fn propagate_sourced_queryable(
     }
 }
 
-async unsafe fn register_router_queryable(
+async fn register_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -133,7 +130,7 @@ async unsafe fn register_router_queryable(
                 res.name(),
                 router
             );
-            Arc::get_mut_unchecked(res)
+            get_mut_unchecked(res)
                 .context_mut()
                 .router_qabls
                 .insert(router.clone());
@@ -161,18 +158,18 @@ pub async fn declare_router_queryable(
     router: PeerId,
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
-        Some(mut prefix) => unsafe {
+        Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_router_queryable(tables, face, &mut res, router).await;
 
             compute_matches_query_routes(tables, &mut res);
-        },
+        }
         None => log::error!("Declare router queryable for unknown rid {}!", prefixid),
     }
 }
 
-async unsafe fn register_peer_queryable(
+async fn register_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -182,7 +179,7 @@ async unsafe fn register_peer_queryable(
         // Register peer queryable
         {
             log::debug!("Register peer queryable {} (peer: {})", res.name(), peer);
-            Arc::get_mut_unchecked(res)
+            get_mut_unchecked(res)
                 .context_mut()
                 .peer_qabls
                 .insert(peer.clone());
@@ -202,7 +199,7 @@ pub async fn declare_peer_queryable(
     peer: PeerId,
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
-        Some(mut prefix) => unsafe {
+        Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
             register_peer_queryable(tables, face, &mut res, peer).await;
@@ -212,22 +209,22 @@ pub async fn declare_peer_queryable(
             }
 
             compute_matches_query_routes(tables, &mut res);
-        },
+        }
         None => log::error!("Declare router queryable for unknown rid {}!", prefixid),
     }
 }
 
-async unsafe fn register_client_queryable(
+async fn register_client_queryable(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
     // Register queryable
     {
-        let res = Arc::get_mut_unchecked(res);
+        let res = get_mut_unchecked(res);
         log::debug!("Register queryable {} for {}", res.name(), face);
         match res.session_ctxs.get_mut(&face.id) {
-            Some(mut ctx) => Arc::get_mut_unchecked(&mut ctx).qabl = true,
+            Some(mut ctx) => get_mut_unchecked(&mut ctx).qabl = true,
             None => {
                 res.session_ctxs.insert(
                     face.id,
@@ -243,7 +240,7 @@ async unsafe fn register_client_queryable(
             }
         }
     }
-    Arc::get_mut_unchecked(face).remote_qabls.push(res.clone());
+    get_mut_unchecked(face).remote_qabls.push(res.clone());
 }
 
 pub async fn declare_client_queryable(
@@ -253,7 +250,7 @@ pub async fn declare_client_queryable(
     suffix: &str,
 ) {
     match tables.get_mapping(&face, &prefixid).cloned() {
-        Some(mut prefix) => unsafe {
+        Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
 
@@ -271,7 +268,7 @@ pub async fn declare_client_queryable(
             }
 
             compute_matches_query_routes(tables, &mut res);
-        },
+        }
         None => log::error!("Declare queryable for unknown rid {}!", prefixid),
     }
 }
@@ -308,13 +305,13 @@ async fn send_forget_sourced_queryable_to_net_childs(
     }
 }
 
-async unsafe fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
+async fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
     for face in tables.faces.values_mut() {
         if face.local_qabls.contains(res) {
             let reskey = Resource::get_best_key(res, "", face.id);
             face.primitives.forget_queryable(&reskey, None).await;
 
-            Arc::get_mut_unchecked(face)
+            get_mut_unchecked(face)
                 .local_qabls
                 .retain(|qabl| qabl != res);
         }
@@ -349,7 +346,7 @@ async fn propagate_forget_sourced_queryable(
     }
 }
 
-async unsafe fn unregister_router_queryable(
+async fn unregister_router_queryable(
     tables: &mut Tables,
     res: &mut Arc<Resource>,
     router: &PeerId,
@@ -359,7 +356,7 @@ async unsafe fn unregister_router_queryable(
         res.name(),
         router
     );
-    Arc::get_mut_unchecked(res)
+    get_mut_unchecked(res)
         .context_mut()
         .router_qabls
         .retain(|qabl| qabl != router);
@@ -372,7 +369,7 @@ async unsafe fn unregister_router_queryable(
     }
 }
 
-async unsafe fn undeclare_router_queryable(
+async fn undeclare_router_queryable(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
@@ -393,23 +390,19 @@ pub async fn forget_router_queryable(
 ) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
-            Some(mut res) => unsafe {
+            Some(mut res) => {
                 undeclare_router_queryable(tables, Some(face), &mut res, router).await;
                 Resource::clean(&mut res)
-            },
+            }
             None => log::error!("Undeclare unknown router queryable!"),
         },
         None => log::error!("Undeclare router queryable with unknown prefix!"),
     }
 }
 
-async unsafe fn unregister_peer_queryable(
-    tables: &mut Tables,
-    res: &mut Arc<Resource>,
-    peer: &PeerId,
-) {
+async fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer: &PeerId) {
     log::debug!("Unregister peer queryable {} (peer: {})", res.name(), peer);
-    Arc::get_mut_unchecked(res)
+    get_mut_unchecked(res)
         .context_mut()
         .peer_qabls
         .retain(|qabl| qabl != peer);
@@ -419,7 +412,7 @@ async unsafe fn unregister_peer_queryable(
     }
 }
 
-async unsafe fn undeclare_peer_queryable(
+async fn undeclare_peer_queryable(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
@@ -440,7 +433,7 @@ pub async fn forget_peer_queryable(
 ) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
-            Some(mut res) => unsafe {
+            Some(mut res) => {
                 undeclare_peer_queryable(tables, Some(face), &mut res, peer).await;
 
                 if tables.whatami == whatami::ROUTER
@@ -456,23 +449,23 @@ pub async fn forget_peer_queryable(
                 }
 
                 Resource::clean(&mut res)
-            },
+            }
             None => log::error!("Undeclare unknown peer queryable!"),
         },
         None => log::error!("Undeclare peer queryable with unknown prefix!"),
     }
 }
 
-pub(crate) async unsafe fn undeclare_client_queryable(
+pub(crate) async fn undeclare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
     log::debug!("Unregister client queryable {} for  {}", res.name(), face);
-    if let Some(mut ctx) = Arc::get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-        Arc::get_mut_unchecked(&mut ctx).qabl = false;
+    if let Some(mut ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        get_mut_unchecked(&mut ctx).qabl = false;
     }
-    Arc::get_mut_unchecked(face)
+    get_mut_unchecked(face)
         .remote_qabls
         .retain(|x| !Arc::ptr_eq(&x, &res));
 
@@ -538,7 +531,7 @@ pub(crate) async unsafe fn undeclare_client_queryable(
             let reskey = Resource::get_best_key(&res, "", face.id);
             face.primitives.forget_queryable(&reskey, None).await;
 
-            Arc::get_mut_unchecked(face)
+            get_mut_unchecked(face)
                 .local_qabls
                 .retain(|qabl| qabl != &(*res));
         }
@@ -555,9 +548,9 @@ pub async fn forget_client_queryable(
 ) {
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
-            Some(mut res) => unsafe {
+            Some(mut res) => {
                 undeclare_client_queryable(tables, face, &mut res).await;
-            },
+            }
             None => log::error!("Undeclare unknown queryable!"),
         },
         None => log::error!("Undeclare queryable with unknown prefix!"),
@@ -566,11 +559,9 @@ pub async fn forget_client_queryable(
 
 pub(crate) async fn queries_new_client_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     for qabl in &tables.router_qabls {
-        unsafe {
-            Arc::get_mut_unchecked(face).local_qabls.push(qabl.clone());
-            let reskey = Resource::decl_key(&qabl, face).await;
-            face.primitives.decl_queryable(&reskey, None).await;
-        }
+        get_mut_unchecked(face).local_qabls.push(qabl.clone());
+        let reskey = Resource::decl_key(&qabl, face).await;
+        face.primitives.decl_queryable(&reskey, None).await;
     }
 }
 
@@ -580,7 +571,7 @@ pub(crate) async fn queries_remove_node(
     net_type: whatami::Type,
 ) {
     match net_type {
-        whatami::ROUTER => unsafe {
+        whatami::ROUTER => {
             for mut res in tables
                 .router_qabls
                 .iter()
@@ -591,8 +582,8 @@ pub(crate) async fn queries_remove_node(
                 unregister_router_queryable(tables, &mut res, node).await;
                 Resource::clean(&mut res)
             }
-        },
-        whatami::PEER => unsafe {
+        }
+        whatami::PEER => {
             for mut res in tables
                 .peer_qabls
                 .iter()
@@ -616,7 +607,7 @@ pub(crate) async fn queries_remove_node(
 
                 Resource::clean(&mut res)
             }
-        },
+        }
         _ => (),
     }
 }
@@ -663,9 +654,7 @@ pub(crate) async fn queries_tree_change(
     }
 
     // recompute routes
-    unsafe {
-        compute_query_routes_from(tables, &mut tables.root_res.clone());
-    }
+    compute_query_routes_from(tables, &mut tables.root_res.clone());
 }
 
 #[inline]
@@ -789,10 +778,10 @@ fn compute_query_route(
     Arc::new(route)
 }
 
-pub(crate) unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         let mut res_mut = res.clone();
-        let res_mut = Arc::get_mut_unchecked(&mut res_mut);
+        let res_mut = get_mut_unchecked(&mut res_mut);
         if tables.whatami == whatami::ROUTER {
             let indexes = tables
                 .routers_net
@@ -836,20 +825,20 @@ pub(crate) unsafe fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Res
     }
 }
 
-unsafe fn compute_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+fn compute_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     compute_query_routes(tables, res);
-    let res = Arc::get_mut_unchecked(res);
+    let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
         compute_query_routes_from(tables, child);
     }
 }
 
-pub(crate) unsafe fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         compute_query_routes(tables, res);
 
         let resclone = res.clone();
-        for match_ in &mut Arc::get_mut_unchecked(res).context_mut().matches {
+        for match_ in &mut get_mut_unchecked(res).context_mut().matches {
             if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
                 compute_query_routes(tables, &mut match_.upgrade().unwrap());
             }
@@ -870,7 +859,7 @@ pub async fn route_query(
     routing_context: Option<RoutingContext>,
 ) {
     match tables.get_mapping(&face, &rid) {
-        Some(prefix) => unsafe {
+        Some(prefix) => {
             log::debug!(
                 "Route query {}:{} for res {}{}",
                 face,
@@ -969,7 +958,7 @@ pub async fn route_query(
                 for (outface, reskey, context) in route.values() {
                     if face.id != outface.id {
                         let mut outface = outface.clone();
-                        let outface_mut = Arc::get_mut_unchecked(&mut outface);
+                        let outface_mut = get_mut_unchecked(&mut outface);
                         outface_mut.next_qid += 1;
                         let qid = outface_mut.next_qid;
                         outface_mut.pending_queries.insert(qid, query.clone());
@@ -990,7 +979,7 @@ pub async fn route_query(
                     }
                 }
             }
-        },
+        }
         None => {
             log::error!("Route query with unknown rid {}! Send final reply.", rid);
             face.primitives.clone().send_reply_final(qid).await
@@ -1035,7 +1024,7 @@ pub(crate) async fn route_send_reply_final(
     qid: ZInt,
 ) {
     match face.pending_queries.get(&qid) {
-        Some(query) => unsafe {
+        Some(query) => {
             log::debug!(
                 "Received final reply {}:{} from {}",
                 query.src_face,
@@ -1051,8 +1040,8 @@ pub(crate) async fn route_send_reply_final(
                     .send_reply_final(query.src_qid)
                     .await;
             }
-            Arc::get_mut_unchecked(face).pending_queries.remove(&qid);
-        },
+            get_mut_unchecked(face).pending_queries.remove(&qid);
+        }
         None => log::error!("Route reply for unknown query!"),
     }
 }
@@ -1075,7 +1064,5 @@ pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Ar
                 .await;
         }
     }
-    unsafe {
-        Arc::get_mut_unchecked(face).pending_queries.clear();
-    }
+    get_mut_unchecked(face).pending_queries.clear();
 }
