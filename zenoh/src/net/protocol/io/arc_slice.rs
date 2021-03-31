@@ -37,7 +37,7 @@ impl Deref for ArcSliceBuffer {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::RecyclingBuffer(buf) => buf.as_slice(),
+            Self::RecyclingBuffer(buf) => buf,
             Self::OwnedBuffer(buf) => buf.as_slice(),
             #[cfg(feature = "zero-copy")]
             Self::SharedBuffer(buf) => buf.as_slice(),

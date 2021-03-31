@@ -112,7 +112,7 @@ pub(crate) struct SessionTransport {
     // The RX best effort channel
     pub(super) rx_best_effort: Arc<Mutex<SessionTransportRxBestEffort>>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Vec<SessionTransportLink>>>,
+    pub(super) links: Arc<RwLock<Box<[SessionTransportLink]>>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<SessionEventDispatcher>>>,
     // Mutex for notification
@@ -153,7 +153,7 @@ impl SessionTransport {
                 initial_sn_rx,
                 sn_resolution,
             ))),
-            links: Arc::new(RwLock::new(Vec::new())),
+            links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(Mutex::new(true)),
             is_shm,
@@ -198,9 +198,12 @@ impl SessionTransport {
 
         // Close all the links
         let mut l_guard = zasyncwrite!(self.links);
-        for l in l_guard.drain(..) {
+        let mut links = l_guard.to_vec();
+        for l in links.drain(..) {
             let _ = l.close().await;
         }
+        *l_guard = vec![].into_boxed_slice();
+        drop(l_guard);
 
         // Notify the callback that we have closed the session
         if let Some(callback) = c_guard.take() {
@@ -247,11 +250,12 @@ impl SessionTransport {
         let attachment = None; // No attachment here
         let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-        let mut links = zasyncread!(self.links).clone();
-        for link in links.drain(..) {
+        let guard = zasyncread!(self.links);
+        for link in guard.iter() {
             link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA)
                 .await;
         }
+        drop(guard);
 
         // Terminate and clean up the session
         self.delete().await;
@@ -305,7 +309,10 @@ impl SessionTransport {
         );
 
         // Add the link to the channel
-        guard.push(link);
+        let mut links = Vec::with_capacity(guard.len() + 1);
+        links.extend_from_slice(&guard);
+        links.push(link);
+        *guard = links.into_boxed_slice();
 
         Ok(())
     }
@@ -338,7 +345,9 @@ impl SessionTransport {
                 Ok(())
             } else {
                 // Remove the link
-                let link = guard.remove(index);
+                let mut links = guard.to_vec();
+                let link = links.remove(index);
+                *guard = links.into_boxed_slice();
                 drop(guard);
                 // Notify the callback
                 if let Some(callback) = zasyncread!(self.callback).as_ref() {

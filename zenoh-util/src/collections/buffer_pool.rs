@@ -20,21 +20,21 @@ use std::ops::{Deref, DerefMut, Drop};
 /// Provides a pool of pre-allocated buffers that are automaticlaly reinserted into
 /// the pool when dropped.
 pub struct RecyclingBufferPool {
-    inner: Arc<LifoQueue<Vec<u8>>>,
+    inner: Arc<LifoQueue<Box<[u8]>>>,
 }
 
 impl RecyclingBufferPool {
     pub fn new(num: usize, size: usize) -> RecyclingBufferPool {
-        let inner: Arc<LifoQueue<Vec<u8>>> = Arc::new(LifoQueue::new(num));
+        let inner: Arc<LifoQueue<Box<[u8]>>> = Arc::new(LifoQueue::new(num));
         for _ in 0..num {
             let buffer = vec![0u8; size];
-            inner.try_push(buffer);
+            inner.try_push(buffer.into_boxed_slice());
         }
         RecyclingBufferPool { inner }
     }
 
     pub fn alloc(&self, size: usize) -> RecyclingBuffer {
-        RecyclingBuffer::new(vec![0u8; size], None)
+        RecyclingBuffer::new(vec![0u8; size].into_boxed_slice(), None)
     }
 
     pub fn try_take(&self) -> Option<RecyclingBuffer> {
@@ -51,12 +51,12 @@ impl RecyclingBufferPool {
 
 #[derive(Clone)]
 pub struct RecyclingBuffer {
-    pool: Option<Weak<LifoQueue<Vec<u8>>>>,
-    buffer: Option<Vec<u8>>,
+    pool: Option<Weak<LifoQueue<Box<[u8]>>>>,
+    buffer: Option<Box<[u8]>>,
 }
 
 impl RecyclingBuffer {
-    pub fn new(buffer: Vec<u8>, pool: Option<Weak<LifoQueue<Vec<u8>>>>) -> RecyclingBuffer {
+    pub fn new(buffer: Box<[u8]>, pool: Option<Weak<LifoQueue<Box<[u8]>>>>) -> RecyclingBuffer {
         RecyclingBuffer {
             pool,
             buffer: Some(buffer),
@@ -74,7 +74,7 @@ impl RecyclingBuffer {
 }
 
 impl Deref for RecyclingBuffer {
-    type Target = Vec<u8>;
+    type Target = [u8];
     #[inline]
     fn deref(&self) -> &Self::Target {
         self.buffer.as_ref().unwrap()

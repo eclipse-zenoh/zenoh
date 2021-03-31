@@ -178,18 +178,18 @@ pub(crate) struct TransmissionPipeline {
     // The sn generator for the best effor channel
     sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
     // Each priority queue has its own Mutex
-    stage_in: Vec<Arc<Mutex<StageIn>>>,
+    stage_in: Box<[Arc<Mutex<StageIn>>]>,
     // Amount of bytes available in each stage IN priority queue
-    bytes_in: Vec<Arc<AtomicUsize>>,
+    bytes_in: Box<[Arc<AtomicUsize>]>,
     // A single Mutex for all the priority queues
-    stage_out: Arc<Mutex<Vec<StageOut>>>,
+    stage_out: Arc<Mutex<Box<[StageOut]>>>,
     // Number of batches in each stage OUT priority queue
-    batches_out: Vec<Arc<AtomicUsize>>,
+    batches_out: Box<[Arc<AtomicUsize>]>,
     // Each priority queue has its own Mutex
-    stage_refill: Vec<Arc<Mutex<StageRefill>>>,
+    stage_refill: Box<[Arc<Mutex<StageRefill>>]>,
     // Each priority queue has its own Conditional variable
     // The conditional variable requires a MutexGuard from stage_refill
-    cond_canrefill: Vec<Arc<Condition>>,
+    cond_canrefill: Box<[Arc<Condition>]>,
     // A single conditional variable for all the priority queues
     // The conditional variable requires a MutexGuard from stage_out
     cond_canpull: Condition,
@@ -231,7 +231,7 @@ impl TransmissionPipeline {
             *QUEUE_SIZE_DATA,
             batches_out[QUEUE_PRIO_DATA].clone(),
         ));
-        let stage_out = Arc::new(Mutex::new(stage_out));
+        let stage_out = Arc::new(Mutex::new(stage_out.into_boxed_slice()));
 
         // Bytes to be pulled from stage IN
         let mut bytes_in = vec![];
@@ -267,12 +267,12 @@ impl TransmissionPipeline {
             batch_size,
             sn_reliable,
             sn_best_effort,
-            stage_in,
-            bytes_in,
+            stage_in: stage_in.into_boxed_slice(),
+            bytes_in: bytes_in.into_boxed_slice(),
             stage_out,
-            batches_out,
-            stage_refill,
-            cond_canrefill,
+            batches_out: batches_out.into_boxed_slice(),
+            stage_refill: stage_refill.into_boxed_slice(),
+            cond_canrefill: cond_canrefill.into_boxed_slice(),
             cond_canpull,
         }
     }
