@@ -700,7 +700,7 @@ fn insert_faces_for_qabls(
     }
 }
 
-unsafe fn compute_query_route(
+fn compute_query_route(
     tables: &Tables,
     prefix: &Arc<Resource>,
     suffix: &str,
@@ -721,8 +721,7 @@ unsafe fn compute_query_route(
         || *elect_router(&res_name, &tables.shared_nodes) == tables.pid;
 
     for mres in matches.iter() {
-        let mut mres = mres.upgrade().unwrap();
-        let mres = Arc::get_mut_unchecked(&mut mres);
+        let mres = mres.upgrade().unwrap();
         if tables.whatami == whatami::ROUTER {
             if master || source_type == whatami::ROUTER {
                 let net = tables.routers_net.as_ref().unwrap();
@@ -777,7 +776,7 @@ unsafe fn compute_query_route(
         }
 
         if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
-            for (sid, context) in &mut mres.session_ctxs {
+            for (sid, context) in &mres.session_ctxs {
                 if context.qabl {
                     route.entry(*sid).or_insert_with(|| {
                         let reskey = Resource::get_best_key(prefix, suffix, *sid);

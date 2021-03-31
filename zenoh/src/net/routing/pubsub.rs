@@ -768,7 +768,7 @@ fn insert_faces_for_subs(
     }
 }
 
-unsafe fn compute_data_route(
+fn compute_data_route(
     tables: &Tables,
     prefix: &Arc<Resource>,
     suffix: &str,
@@ -789,8 +789,7 @@ unsafe fn compute_data_route(
         || *elect_router(&res_name, &tables.shared_nodes) == tables.pid;
 
     for mres in matches.iter() {
-        let mut mres = mres.upgrade().unwrap();
-        let mres = Arc::get_mut_unchecked(&mut mres);
+        let mres = mres.upgrade().unwrap();
         if tables.whatami == whatami::ROUTER {
             if master || source_type == whatami::ROUTER {
                 let net = tables.routers_net.as_ref().unwrap();
@@ -845,7 +844,7 @@ unsafe fn compute_data_route(
         }
 
         if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
-            for (sid, context) in &mut mres.session_ctxs {
+            for (sid, context) in &mres.session_ctxs {
                 if let Some(subinfo) = &context.subs {
                     if subinfo.mode == SubMode::Push {
                         route.entry(*sid).or_insert_with(|| {
@@ -1015,85 +1014,81 @@ fn get_data_route(
     suffix: &str,
     routing_context: Option<RoutingContext>,
 ) -> Arc<Route> {
-    unsafe {
-        match tables.whatami {
-            whatami::ROUTER => match face.whatami {
-                whatami::ROUTER => {
-                    let routers_net = tables.routers_net.as_ref().unwrap();
-                    let local_context =
-                        routers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                    res.as_ref()
-                        .map(|res| res.routers_data_route(local_context))
-                        .flatten()
-                        .unwrap_or_else(|| {
-                            compute_data_route(
-                                tables,
-                                prefix,
-                                suffix,
-                                Some(local_context),
-                                whatami::ROUTER,
-                            )
-                        })
-                }
-                whatami::PEER => {
-                    let peers_net = tables.peers_net.as_ref().unwrap();
-                    let local_context =
-                        peers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                    res.as_ref()
-                        .map(|res| res.peers_data_route(local_context))
-                        .flatten()
-                        .unwrap_or_else(|| {
-                            compute_data_route(
-                                tables,
-                                prefix,
-                                suffix,
-                                Some(local_context),
-                                whatami::PEER,
-                            )
-                        })
-                }
-                _ => res
-                    .as_ref()
-                    .map(|res| res.routers_data_route(0))
+    match tables.whatami {
+        whatami::ROUTER => match face.whatami {
+            whatami::ROUTER => {
+                let routers_net = tables.routers_net.as_ref().unwrap();
+                let local_context =
+                    routers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                res.as_ref()
+                    .map(|res| res.routers_data_route(local_context))
                     .flatten()
                     .unwrap_or_else(|| {
-                        compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
-                    }),
-            },
-            whatami::PEER => match face.whatami {
-                whatami::ROUTER | whatami::PEER => {
-                    let peers_net = tables.peers_net.as_ref().unwrap();
-                    let local_context =
-                        peers_net.get_local_context(routing_context.unwrap(), face.link_id);
-                    res.as_ref()
-                        .map(|res| res.peers_data_route(local_context))
-                        .flatten()
-                        .unwrap_or_else(|| {
-                            compute_data_route(
-                                tables,
-                                prefix,
-                                suffix,
-                                Some(local_context),
-                                whatami::PEER,
-                            )
-                        })
-                }
-                _ => res
-                    .as_ref()
-                    .map(|res| res.peers_data_route(0))
+                        compute_data_route(
+                            tables,
+                            prefix,
+                            suffix,
+                            Some(local_context),
+                            whatami::ROUTER,
+                        )
+                    })
+            }
+            whatami::PEER => {
+                let peers_net = tables.peers_net.as_ref().unwrap();
+                let local_context =
+                    peers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                res.as_ref()
+                    .map(|res| res.peers_data_route(local_context))
                     .flatten()
                     .unwrap_or_else(|| {
-                        compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
-                    }),
-            },
+                        compute_data_route(
+                            tables,
+                            prefix,
+                            suffix,
+                            Some(local_context),
+                            whatami::PEER,
+                        )
+                    })
+            }
             _ => res
                 .as_ref()
-                .map(|res| res.client_data_route())
+                .map(|res| res.routers_data_route(0))
                 .flatten()
                 .unwrap_or_else(|| {
                     compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
                 }),
-        }
+        },
+        whatami::PEER => match face.whatami {
+            whatami::ROUTER | whatami::PEER => {
+                let peers_net = tables.peers_net.as_ref().unwrap();
+                let local_context =
+                    peers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                res.as_ref()
+                    .map(|res| res.peers_data_route(local_context))
+                    .flatten()
+                    .unwrap_or_else(|| {
+                        compute_data_route(
+                            tables,
+                            prefix,
+                            suffix,
+                            Some(local_context),
+                            whatami::PEER,
+                        )
+                    })
+            }
+            _ => res
+                .as_ref()
+                .map(|res| res.peers_data_route(0))
+                .flatten()
+                .unwrap_or_else(|| {
+                    compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)
+                }),
+        },
+        _ => res
+            .as_ref()
+            .map(|res| res.client_data_route())
+            .flatten()
+            .unwrap_or_else(|| compute_data_route(tables, prefix, suffix, None, whatami::CLIENT)),
     }
 }
 
