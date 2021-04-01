@@ -203,7 +203,7 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
     #[cfg(windows)]
     {
         // On windows, bind to 0.0.0.0, the system will select the default interface
-        Some(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
+        vec![IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))]
     }
 }
 
