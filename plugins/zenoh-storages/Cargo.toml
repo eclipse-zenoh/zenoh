@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-storages"
-version = "0.5.0-beta.9"
+version = "0.5.0-dev"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -50,4 +50,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2020 ADLINK Technology Inc."
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.5.0~beta.9)"
+depends = "zenohd (=0.5.0~dev)"

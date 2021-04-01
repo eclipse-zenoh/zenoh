@@ -18,7 +18,7 @@
 project = 'zenoh-rust'
 copyright = '2017, 2020 ADLINK Technology Inc'
 author = 'ADLINK zenoh team'
-release = '0.5.O-beta1'
+release = '0.5.O-dev'
 
 # -- General configuration ---------------------------------------------------
 master_doc = 'index'
