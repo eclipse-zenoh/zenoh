@@ -184,19 +184,27 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
 
 /// Get the network interface to bind the UDP sending port to when not specified by user
 pub fn get_multicast_interfaces() -> Vec<IpAddr> {
-    pnet::datalink::interfaces()
-        .iter()
-        .filter_map(|iface| {
-            if iface.is_up() && iface.is_multicast() {
-                for ipaddr in &iface.ips {
-                    if ipaddr.is_ipv4() {
-                        return Some(ipaddr.ip());
+    #[cfg(unix)]
+    {
+        pnet::datalink::interfaces()
+            .iter()
+            .filter_map(|iface| {
+                if iface.is_up() && iface.is_multicast() {
+                    for ipaddr in &iface.ips {
+                        if ipaddr.is_ipv4() {
+                            return Some(ipaddr.ip());
+                        }
                     }
                 }
-            }
-            None
-        })
-        .collect()
+                None
+            })
+            .collect()
+    }
+    #[cfg(windows)]
+    {
+        // On windows, bind to 0.0.0.0, the system will select the default interface
+        Some(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
+    }
 }
 
 pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
