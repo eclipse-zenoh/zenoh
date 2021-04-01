@@ -71,6 +71,7 @@ pub mod routing;
 pub mod runtime;
 
 use async_std::channel::bounded;
+use async_std::net::UdpSocket;
 use futures::prelude::*;
 use log::{debug, trace};
 use protocol::core::WhatAmI;
@@ -138,24 +139,32 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
         .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
         .parse()
         .unwrap();
-    let iface = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+    let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
 
     let (hello_sender, hello_receiver) = bounded::<Hello>(1);
     let (stop_sender, mut stop_receiver) = bounded::<()>(1);
-    let iface = SessionOrchestrator::get_interface(iface).unwrap();
-    let socket = SessionOrchestrator::bind_ucast_port(iface).await.unwrap();
-    async_std::task::spawn(async move {
-        let hello_sender = &hello_sender;
-        let scout = SessionOrchestrator::scout(&socket, what, &addr, async move |hello| {
-            let _ = hello_sender.send(hello).await;
-            Loop::Continue
-        });
-        let stop = async move {
-            stop_receiver.next().await;
-            trace!("stop scout({}, {})", what, iface);
-        };
-        async_std::prelude::FutureExt::race(scout, stop).await;
-    });
+
+    let ifaces = SessionOrchestrator::get_interfaces(ifaces);
+    if !ifaces.is_empty() {
+        let sockets: Vec<UdpSocket> = ifaces
+            .into_iter()
+            .filter_map(|iface| SessionOrchestrator::bind_ucast_port(iface).ok())
+            .collect();
+        if !sockets.is_empty() {
+            async_std::task::spawn(async move {
+                let hello_sender = &hello_sender;
+                let scout = SessionOrchestrator::scout(&sockets, what, &addr, async move |hello| {
+                    let _ = hello_sender.send(hello).await;
+                    Loop::Continue
+                });
+                let stop = async move {
+                    stop_receiver.next().await;
+                    trace!("stop scout({}, {})", what, &config);
+                };
+                async_std::prelude::FutureExt::race(scout, stop).await;
+            });
+        }
+    }
 
     HelloStream {
         hello_receiver,
