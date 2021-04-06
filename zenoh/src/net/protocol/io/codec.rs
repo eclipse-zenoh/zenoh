@@ -175,10 +175,12 @@ impl WBuf {
 
     // Writes all the slices of a given RBuf
     pub fn write_rbuf_slices(&mut self, rbuf: &RBuf) -> bool {
-        for slice in rbuf.get_slices() {
+        let mut idx = 0;
+        while let Some(slice) = rbuf.get_slice(idx) {
             if !self.write_slice(slice.clone()) {
                 return false;
             }
+            idx += 1;
         }
         true
     }

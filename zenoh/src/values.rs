@@ -85,9 +85,7 @@ impl Value {
             } => {
                 let mut buf = WBuf::new(64, false);
                 buf.write_string(&encoding_descr);
-                for slice in data.get_slices() {
-                    buf.write_slice(slice.clone());
-                }
+                buf.write_rbuf_slices(&data);
                 (APP_CUSTOM, buf.into())
             }
             StringUtf8(s) => (STRING, RBuf::from(s.as_bytes())),

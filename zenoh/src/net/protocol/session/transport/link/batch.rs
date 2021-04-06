@@ -518,7 +518,7 @@ mod tests {
 
                     assert!(!batches.is_empty());
 
-                    let mut fragments = RBuf::new();
+                    let mut fragments = WBuf::new(0, false);
                     for batch in batches.iter() {
                         // Convert the buffer into an RBuf
                         let mut rbuf: RBuf = batch.get_serialized_messages().into();
@@ -529,9 +529,7 @@ mod tests {
                             SessionBody::Frame(Frame { payload, .. }) => match payload {
                                 FramePayload::Fragment { buffer, is_final } => {
                                     assert!(!buffer.is_empty());
-                                    for s in buffer.drain_slices().drain(..) {
-                                        fragments.add_slice(s)
-                                    }
+                                    fragments.write_rbuf_slices(&buffer);
                                     if is_final {
                                         break;
                                     }
@@ -541,6 +539,7 @@ mod tests {
                             _ => assert!(false),
                         }
                     }
+                    let mut fragments: RBuf = fragments.into();
 
                     assert!(!fragments.is_empty());
 
