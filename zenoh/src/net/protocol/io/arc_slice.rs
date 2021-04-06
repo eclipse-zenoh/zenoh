@@ -32,20 +32,6 @@ pub enum ArcSliceBuffer {
     SharedBuffer(Arc<SharedMemoryBuf>),
 }
 
-impl ArcSliceBuffer {
-    // @TODO: Replace this method with an implementation of std::slice::SliceIndex trait.
-    //        However, SliceIndex requires rust nightly for the time being.
-    //        We implement it ourselves.
-    fn get(&self, index: usize) -> Option<u8> {
-        match self {
-            Self::RecyclingObject(buf) => buf.get(index).copied(),
-            Self::OwnedBuffer(buf) => buf.get(index).copied(),
-            #[cfg(feature = "zero-copy")]
-            Self::SharedBuffer(buf) => buf.as_slice().get(index).copied(),
-        }
-    }
-}
-
 impl Deref for ArcSliceBuffer {
     type Target = [u8];
 
@@ -221,9 +207,16 @@ impl ArcSlice {
     // @TODO: Replace this method with an implementation of std::slice::SliceIndex trait.
     //        However, SliceIndex requires rust nightly for the time being.
     //        We implement it ourselves.
+    // NOTE:  Avoid calling self.as_slice() to not incur in additional code being generated
+    //        to handle eventual panics.
     #[inline]
     pub fn get(&self, index: usize) -> Option<u8> {
-        self.buf.get(index)
+        let index = self.start + index;
+        if index < self.end {
+            (&self.buf).get(index).copied()
+        } else {
+            None
+        }
     }
 }
 

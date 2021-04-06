@@ -225,7 +225,7 @@ impl RBuf {
     pub fn read_bytes(&mut self, bs: &mut [u8]) -> bool {
         if !self.copy_bytes(bs, self.pos) {
             return false;
-        };
+        }
         self.skip_bytes(bs.len())
     }
 
@@ -260,18 +260,21 @@ impl RBuf {
     // Read 'len' bytes from 'self' and add those to 'dest'
     // This is 0-copy, only ArcSlices from 'self' are added to 'dest', without cloning the original buffer.
     pub fn read_into_rbuf(&mut self, dest: &mut RBuf, mut len: usize) -> bool {
-        let dst_pos = dest.get_pos();
         while len > 0 {
             let pos_1 = self.pos.1;
             if let Some(current) = self.curr_slice_mut() {
                 let slice_len = current.len();
+
                 let remain_in_slice = slice_len - pos_1;
+
                 let l = len.min(remain_in_slice);
+
                 dest.add_slice(current.new_sub_slice(pos_1, pos_1 + l));
+
                 self.skip_bytes(l);
+
                 len -= l;
             } else {
-                dest.set_pos(dst_pos);
                 return false;
             }
         }
@@ -432,20 +435,22 @@ impl From<super::WBuf> for RBuf {
 
 impl PartialEq for RBuf {
     fn eq(&self, other: &Self) -> bool {
-        if self.len() != other.len() {
-            false
-        } else {
-            let mut b1 = self.clone();
-            b1.reset_pos();
-            let mut b2 = other.clone();
-            b2.reset_pos();
-            for _ in 0..b1.len() {
-                if b1.read().unwrap() != b2.read().unwrap() {
+        let mut rbuf1 = self.clone();
+        rbuf1.reset_pos();
+        let mut rbuf2 = other.clone();
+        rbuf2.reset_pos();
+
+        while let Some(b1) = rbuf1.read() {
+            if let Some(b2) = rbuf2.read() {
+                if b1 != b2 {
                     return false;
                 }
+            } else {
+                return false;
             }
-            true
         }
+        // Check there are no bytes left in rbuf2
+        rbuf2.read().is_none()
     }
 }
 

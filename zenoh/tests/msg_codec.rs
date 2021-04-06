@@ -231,7 +231,7 @@ fn test_write_read_zenoh_message(msg: ZenohMessage) {
 /*************************************/
 
 #[test]
-fn scout_tests() {
+fn codec_scout() {
     for _ in 0..NUM_ITER {
         let wami = [None, Some(gen!(ZInt))];
         let pid_req = [true, false];
@@ -249,7 +249,7 @@ fn scout_tests() {
 }
 
 #[test]
-fn hello_tests() {
+fn codec_hello() {
     for _ in 0..NUM_ITER {
         let pid = [None, Some(gen_pid())];
         let wami = [None, Some(gen!(ZInt))];
@@ -277,7 +277,7 @@ fn hello_tests() {
 }
 
 #[test]
-fn init_tests() {
+fn codec_init() {
     for _ in 0..NUM_ITER {
         let wami = [whatami::ROUTER, whatami::CLIENT];
         let sn_resolution = [None, Some(gen!(ZInt))];
@@ -310,7 +310,7 @@ fn init_tests() {
 }
 
 #[test]
-fn open_tests() {
+fn codec_open() {
     for _ in 0..NUM_ITER {
         let attachment = [None, Some(gen_attachment())];
 
@@ -332,7 +332,7 @@ fn open_tests() {
 }
 
 #[test]
-fn close_tests() {
+fn codec_close() {
     for _ in 0..NUM_ITER {
         let pid = [None, Some(gen_pid())];
         let link_only = [true, false];
@@ -350,7 +350,7 @@ fn close_tests() {
 }
 
 #[test]
-fn sync_tests() {
+fn codec_sync() {
     for _ in 0..NUM_ITER {
         let ch = [Channel::Reliable, Channel::BestEffort];
         let count = [None, Some(gen!(ZInt))];
@@ -368,7 +368,7 @@ fn sync_tests() {
 }
 
 #[test]
-fn ack_nack_tests() {
+fn codec_ack_nack() {
     for _ in 0..NUM_ITER {
         let mask = [None, Some(gen!(ZInt))];
         let attachment = [None, Some(gen_attachment())];
@@ -383,7 +383,7 @@ fn ack_nack_tests() {
 }
 
 #[test]
-fn keep_alive_tests() {
+fn codec_keep_alive() {
     for _ in 0..NUM_ITER {
         let pid = [None, Some(gen_pid())];
         let attachment = [None, Some(gen_attachment())];
@@ -398,7 +398,7 @@ fn keep_alive_tests() {
 }
 
 #[test]
-fn ping_tests() {
+fn codec_ping() {
     for _ in 0..NUM_ITER {
         let attachment = [None, Some(gen_attachment())];
 
@@ -410,7 +410,7 @@ fn ping_tests() {
 }
 
 #[test]
-fn pong_tests() {
+fn codec_pong() {
     for _ in 0..NUM_ITER {
         let attachment = [None, Some(gen_attachment())];
 
@@ -422,7 +422,7 @@ fn pong_tests() {
 }
 
 #[test]
-fn frame_tests() {
+fn codec_frame() {
     let msg_payload_count = 4;
 
     for _ in 0..NUM_ITER {
@@ -496,7 +496,7 @@ fn frame_tests() {
 }
 
 #[test]
-fn frame_batching_tests() {
+fn codec_frame_batching() {
     for _ in 0..NUM_ITER {
         // Contigous batch
         let mut wbuf = WBuf::new(64, true);
@@ -590,7 +590,7 @@ fn frame_batching_tests() {
 /*************************************/
 
 #[test]
-fn declare_tests() {
+fn codec_declare() {
     for _ in 0..NUM_ITER {
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
@@ -605,7 +605,7 @@ fn declare_tests() {
 }
 
 #[test]
-fn data_tests() {
+fn codec_data() {
     for _ in 0..NUM_ITER {
         let reliability = [Reliability::Reliable, Reliability::BestEffort];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
@@ -645,7 +645,7 @@ fn data_tests() {
 }
 
 #[test]
-fn unit_tests() {
+fn codec_unit() {
     for _ in 0..NUM_ITER {
         let reliability = [Reliability::Reliable, Reliability::BestEffort];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
@@ -670,7 +670,7 @@ fn unit_tests() {
 }
 
 #[test]
-fn pull_tests() {
+fn codec_pull() {
     for _ in 0..NUM_ITER {
         let is_final = [false, true];
         let max_samples = [None, Some(gen!(ZInt))];
@@ -689,7 +689,7 @@ fn pull_tests() {
 }
 
 #[test]
-fn query_tests() {
+fn codec_query() {
     for _ in 0..NUM_ITER {
         let predicate = [String::default(), "my_predicate".to_string()];
         let target = [None, Some(gen_query_target())];
