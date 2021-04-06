@@ -69,12 +69,10 @@ impl RBuf {
     }
 
     pub fn len(&self) -> usize {
-        let mut l = 0;
-        if let Some(z) = self.zero.as_ref() {
-            l += z.len();
-            l += self.slices.iter().fold(0, |tot, s| tot + s.len());
+        match self.zero.as_ref() {
+            Some(z) => z.len() + self.slices.iter().fold(0, |tot, s| tot + s.len()),
+            None => 0,
         }
-        l
     }
 
     #[inline]
@@ -405,7 +403,11 @@ impl From<&[u8]> for RBuf {
 impl From<Vec<ArcSlice>> for RBuf {
     fn from(mut slices: Vec<ArcSlice>) -> RBuf {
         RBuf {
-            zero: Some(slices.remove(0)),
+            zero: if !slices.is_empty() {
+                Some(slices.remove(0))
+            } else {
+                None
+            },
             slices,
             pos: (0, 0),
             #[cfg(feature = "zero-copy")]
