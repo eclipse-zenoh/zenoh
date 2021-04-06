@@ -155,6 +155,13 @@ impl From<Arc<SharedMemoryBuf>> for ArcSliceBuffer {
 }
 
 #[cfg(feature = "zero-copy")]
+impl From<Box<SharedMemoryBuf>> for ArcSliceBuffer {
+    fn from(buf: Box<SharedMemoryBuf>) -> ArcSliceBuffer {
+        ArcSliceBuffer::SharedBuffer(buf.into())
+    }
+}
+
+#[cfg(feature = "zero-copy")]
 impl From<SharedMemoryBuf> for ArcSliceBuffer {
     fn from(buf: SharedMemoryBuf) -> ArcSliceBuffer {
         ArcSliceBuffer::from(Arc::new(buf))
@@ -214,6 +221,7 @@ impl ArcSlice {
     // @TODO: Replace this method with an implementation of std::slice::SliceIndex trait.
     //        However, SliceIndex requires rust nightly for the time being.
     //        We implement it ourselves.
+    #[inline]
     pub fn get(&self, index: usize) -> Option<u8> {
         self.buf.get(index)
     }
@@ -267,6 +275,14 @@ impl From<&[u8]> for ArcSlice {
 #[cfg(feature = "zero-copy")]
 impl From<Arc<SharedMemoryBuf>> for ArcSlice {
     fn from(buf: Arc<SharedMemoryBuf>) -> ArcSlice {
+        let len = buf.len();
+        ArcSlice::new(buf.into(), 0, len)
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<Box<SharedMemoryBuf>> for ArcSlice {
+    fn from(buf: Box<SharedMemoryBuf>) -> ArcSlice {
         let len = buf.len();
         ArcSlice::new(buf.into(), 0, len)
     }

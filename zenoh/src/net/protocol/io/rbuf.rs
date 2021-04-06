@@ -14,8 +14,6 @@
 #[cfg(feature = "zero-copy")]
 use super::shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 use super::ArcSlice;
-#[cfg(feature = "zero-copy")]
-use async_std::sync::Arc;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
@@ -26,7 +24,7 @@ pub struct RBuf {
     slices: Vec<ArcSlice>,
     pos: (usize, usize),
     #[cfg(feature = "zero-copy")]
-    shm_buf: Option<Arc<SharedMemoryBuf>>,
+    shm_buf: Option<Box<SharedMemoryBuf>>,
 }
 
 impl RBuf {
@@ -452,8 +450,8 @@ impl PartialEq for RBuf {
 }
 
 #[cfg(feature = "zero-copy")]
-impl From<Arc<SharedMemoryBuf>> for RBuf {
-    fn from(smb: Arc<SharedMemoryBuf>) -> RBuf {
+impl From<Box<SharedMemoryBuf>> for RBuf {
+    fn from(smb: Box<SharedMemoryBuf>) -> RBuf {
         let bs = bincode::serialize(&smb.info).unwrap();
         let len = bs.len();
         let slice = ArcSlice::new(bs.into(), 0, len);
@@ -470,7 +468,7 @@ impl From<Arc<SharedMemoryBuf>> for RBuf {
 #[cfg(feature = "zero-copy")]
 impl From<SharedMemoryBuf> for RBuf {
     fn from(smb: SharedMemoryBuf) -> RBuf {
-        RBuf::from(Arc::new(smb))
+        RBuf::from(Box::new(smb))
     }
 }
 
