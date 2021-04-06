@@ -24,7 +24,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use zenoh_util::collections::{RecyclingBuffer, RecyclingBufferPool};
+use zenoh_util::collections::{RecyclingObject, RecyclingObjectPool};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::Mvar;
 use zenoh_util::{zasynclock, zerror};
@@ -131,13 +131,15 @@ pub type LocatorPropertyUdp = ();
 /*              LINK                 */
 /*************************************/
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUdp>>>>;
+type LinkInput = (RecyclingObject<Box<[u8]>>, usize);
+type LinkLeftOver = (RecyclingObject<Box<[u8]>>, usize, usize);
 
 struct UnconnectedUdp {
     links: LinkHashMap,
     status: ListenerUdpStatus,
     signal: Sender<()>,
-    input: Mvar<(RecyclingBuffer, usize)>,
-    leftover: Mutex<Option<(RecyclingBuffer, usize, usize)>>,
+    input: Mvar<LinkInput>,
+    leftover: Mutex<Option<LinkLeftOver>>,
 }
 
 pub struct LinkUdp {
@@ -167,7 +169,7 @@ impl LinkUdp {
     }
 
     #[inline(always)]
-    async fn received(&self, buffer: RecyclingBuffer, len: usize) {
+    async fn received(&self, buffer: RecyclingObject<Box<[u8]>>, len: usize) {
         let unconnected = self.unconnected.as_ref().unwrap();
         unconnected.input.put((buffer, len)).await;
     }
@@ -570,7 +572,7 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
 
         log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
         // Buffers for deserialization
-        let pool = RecyclingBufferPool::new(1, UDP_MAX_MTU);
+        let pool = RecyclingObjectPool::new(1, || vec![0u8; UDP_MAX_MTU].into_boxed_slice());
         loop {
             let mut buff = pool.take().await;
             // Wait for incoming connections

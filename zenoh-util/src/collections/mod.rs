@@ -11,15 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-
-pub mod buffer_pool;
-pub use buffer_pool::*;
-
 pub mod fifo_queue;
 pub use fifo_queue::*;
 
 pub mod lifo_queue;
 pub use lifo_queue::*;
+
+pub mod object_pool;
+pub use object_pool::*;
 
 pub mod ordered_queue;
 pub use ordered_queue::*;

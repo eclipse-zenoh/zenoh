@@ -19,14 +19,14 @@ use std::io::IoSlice;
 use std::ops::{
     Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
-use zenoh_util::collections::RecyclingBuffer;
+use zenoh_util::collections::RecyclingObject;
 
 /*************************************/
 /*         ARC SLICE BUFFER          */
 /*************************************/
 #[derive(Clone)]
 pub enum ArcSliceBuffer {
-    RecyclingBuffer(Arc<RecyclingBuffer>),
+    RecyclingObject(Arc<RecyclingObject<Box<[u8]>>>),
     OwnedBuffer(Arc<Vec<u8>>),
     #[cfg(feature = "zero-copy")]
     SharedBuffer(Arc<SharedMemoryBuf>),
@@ -37,7 +37,7 @@ impl Deref for ArcSliceBuffer {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::RecyclingBuffer(buf) => buf,
+            Self::RecyclingObject(buf) => buf,
             Self::OwnedBuffer(buf) => buf.as_slice(),
             #[cfg(feature = "zero-copy")]
             Self::SharedBuffer(buf) => buf.as_slice(),
@@ -103,14 +103,14 @@ impl Index<RangeToInclusive<usize>> for ArcSliceBuffer {
 }
 
 // From traits
-impl From<Arc<RecyclingBuffer>> for ArcSliceBuffer {
-    fn from(buf: Arc<RecyclingBuffer>) -> ArcSliceBuffer {
-        ArcSliceBuffer::RecyclingBuffer(buf)
+impl From<Arc<RecyclingObject<Box<[u8]>>>> for ArcSliceBuffer {
+    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> ArcSliceBuffer {
+        ArcSliceBuffer::RecyclingObject(buf)
     }
 }
 
-impl From<RecyclingBuffer> for ArcSliceBuffer {
-    fn from(buf: RecyclingBuffer) -> ArcSliceBuffer {
+impl From<RecyclingObject<Box<[u8]>>> for ArcSliceBuffer {
+    fn from(buf: RecyclingObject<Box<[u8]>>) -> ArcSliceBuffer {
         ArcSliceBuffer::from(Arc::new(buf))
     }
 }
