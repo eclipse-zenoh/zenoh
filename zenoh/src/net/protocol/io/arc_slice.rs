@@ -244,10 +244,17 @@ impl From<&[u8]> for ArcSlice {
 }
 
 #[cfg(feature = "zero-copy")]
-impl From<SharedMemoryBuf> for ArcSlice {
-    fn from(buf: SharedMemoryBuf) -> ArcSlice {
+impl From<Arc<SharedMemoryBuf>> for ArcSlice {
+    fn from(buf: Arc<SharedMemoryBuf>) -> ArcSlice {
         let len = buf.len();
         ArcSlice::new(buf.into(), 0, len)
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<SharedMemoryBuf> for ArcSlice {
+    fn from(buf: SharedMemoryBuf) -> ArcSlice {
+        ArcSlice::from(Arc::new(buf))
     }
 }
 
