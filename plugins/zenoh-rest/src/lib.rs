@@ -146,10 +146,12 @@ fn enc_from_mime(mime: Option<Mime>) -> ZInt {
 }
 
 fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
-    let mut res = Response::new(status);
-    res.set_content_type(content_type);
-    res.set_body(body);
-    res
+    Response::builder(status)
+        .header("content-length", body.len().to_string())
+        .header("Access-Control-Allow-Origin", "*")
+        .content_type(content_type)
+        .body(body)
+        .build()
 }
 
 #[no_mangle]

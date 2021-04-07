@@ -147,7 +147,7 @@
 
    Typical Subscriber usage:
    ```bash
-      z_sub_shm
+      zn_sub_shm
    ```
 
    Typical Publisher usage:
@@ -163,12 +163,12 @@
 
    Typical Subscriber usage:
    ```bash
-      z_sub_thr
+      zn_sub_thr
    ```
 
    Typical Publisher usage:
    ```bash
-      z_pub_thr 1024
+      zn_pub_thr 1024
    ```
 
 ### zn_ping & zn_pong
