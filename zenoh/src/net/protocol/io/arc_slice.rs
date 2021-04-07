@@ -203,21 +203,6 @@ impl ArcSlice {
             end: self.start + end,
         }
     }
-
-    // @TODO: Replace this method with an implementation of std::slice::SliceIndex trait.
-    //        However, SliceIndex requires rust nightly for the time being.
-    //        We implement it ourselves.
-    // NOTE:  Avoid calling self.as_slice() to not incur in additional code being generated
-    //        to handle eventual panics.
-    #[inline]
-    pub fn get(&self, index: usize) -> Option<u8> {
-        let index = self.start + index;
-        if index < self.end {
-            (&self.buf).get(index).copied()
-        } else {
-            None
-        }
-    }
 }
 
 impl Index<usize> for ArcSlice {
