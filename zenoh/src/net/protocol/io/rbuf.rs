@@ -37,11 +37,6 @@ impl RBufPos {
         self.reset();
         self.len = 0;
     }
-
-    #[cfg(test)]
-    fn get_read(&self) -> usize {
-        self.read
-    }
 }
 
 impl Default for RBufPos {
@@ -516,7 +511,7 @@ mod tests {
         let mut buf1 = RBuf::new();
         assert!(buf1.is_empty());
         assert!(!buf1.can_read());
-        assert_eq!(0, buf1.get_pos().get_read());
+        assert_eq!(0, buf1.get_pos().read);
         assert_eq!(0, buf1.readable());
         assert_eq!(0, buf1.len());
         assert_eq!(0, buf1.as_ioslices().len());
@@ -525,7 +520,7 @@ mod tests {
         println!("[01] {:?}", buf1);
         assert!(!buf1.is_empty());
         assert!(buf1.can_read());
-        assert_eq!(0, buf1.get_pos().get_read());
+        assert_eq!(0, buf1.get_pos().read);
         assert_eq!(10, buf1.readable());
         assert_eq!(10, buf1.len());
         assert_eq!(1, buf1.as_ioslices().len());
@@ -538,7 +533,7 @@ mod tests {
         println!("[02] {:?}", buf1);
         assert!(!buf1.is_empty());
         assert!(buf1.can_read());
-        assert_eq!(0, buf1.get_pos().get_read());
+        assert_eq!(0, buf1.get_pos().read);
         assert_eq!(20, buf1.readable());
         assert_eq!(20, buf1.len());
         assert_eq!(2, buf1.as_ioslices().len());
@@ -551,7 +546,7 @@ mod tests {
         println!("[03] {:?}", buf1);
         assert!(!buf1.is_empty());
         assert!(buf1.can_read());
-        assert_eq!(0, buf1.get_pos().get_read());
+        assert_eq!(0, buf1.get_pos().read);
         assert_eq!(30, buf1.readable());
         assert_eq!(30, buf1.len());
         assert_eq!(3, buf1.as_ioslices().len());
@@ -594,6 +589,19 @@ mod tests {
         assert_eq!(10, buf1.readable());
         assert!(buf1.set_pos(pos));
         assert_eq!(20, buf1.readable());
+        assert!(buf1.read_bytes(&mut bytes));
+        assert_eq!(10, buf1.readable());
+        assert!(buf1.read_bytes(&mut bytes));
+        assert_eq!(0, buf1.readable());
+        let pos = buf1.get_pos();
+        assert!(buf1.set_pos(pos));
+        let pos = RBufPos {
+            slice: 4,
+            byte: 128,
+            len: 0,
+            read: 0,
+        };
+        assert!(!buf1.set_pos(pos));
 
         // test read_bytes
         buf1.reset_pos();
@@ -616,7 +624,7 @@ mod tests {
         println!("[07] {:?}", buf1);
         assert!(!buf2.is_empty());
         assert!(buf2.can_read());
-        assert_eq!(0, buf2.get_pos().get_read());
+        assert_eq!(0, buf2.get_pos().read);
         assert_eq!(20, buf2.readable());
         assert_eq!(20, buf2.len());
         assert_eq!(2, buf2.as_ioslices().len());
@@ -628,7 +636,7 @@ mod tests {
         println!("[08] {:?}", buf1);
         assert!(!buf3.is_empty());
         assert!(buf3.can_read());
-        assert_eq!(0, buf3.get_pos().get_read());
+        assert_eq!(0, buf3.get_pos().read);
         assert_eq!(10, buf3.readable());
         assert_eq!(10, buf3.len());
         assert_eq!(1, buf3.as_ioslices().len());
