@@ -414,7 +414,7 @@ impl SessionOrchestrator {
                                 sockaddr.ip(),
                                 iface_addr,
                             ),
-                            Err(err) => log::error!(
+                            Err(err) => log::warn!(
                                 "Unable to join multicast group {} on interface {} : {}",
                                 sockaddr.ip(),
                                 iface_addr,
@@ -422,7 +422,7 @@ impl SessionOrchestrator {
                             ),
                         }
                     } else {
-                        log::error!(
+                        log::warn!(
                             "Cannot join IpV4 multicast group {} on IpV6 iface {}",
                             sockaddr.ip(),
                             iface
@@ -439,7 +439,7 @@ impl SessionOrchestrator {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
-                log::error!("Unable to create datagram socket : {}", err);
+                log::warn!("Unable to create datagram socket : {}", err);
                 return zerror!(
                     ZErrorKind::IoError {
                         descr: "Unable to create datagram socket".to_string()
@@ -461,7 +461,7 @@ impl SessionOrchestrator {
                 log::debug!("UDP port bound to {}", local_addr);
             }
             Err(err) => {
-                log::error!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
+                log::warn!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
                 return zerror!(
                     ZErrorKind::IoError {
                         descr: format!("Unable to bind udp port {}:0", addr.to_string())
@@ -527,7 +527,7 @@ impl SessionOrchestrator {
                         .send_to(&RBuf::from(&wbuf).to_vec(), mcast_addr.to_string())
                         .await
                     {
-                        log::error!(
+                        log::warn!(
                             "Unable to send {:?} to {} on interface {} : {}",
                             scout.get_body(),
                             mcast_addr,
