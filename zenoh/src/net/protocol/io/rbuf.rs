@@ -174,11 +174,20 @@ impl RBuf {
     }
 
     #[inline]
-    pub(super) fn get_slice_mut(&mut self, index: usize) -> Option<&mut ArcSlice> {
+    fn get_slice_no_check(&self, index: usize) -> &ArcSlice {
         if index == 0 {
-            self.zero.as_mut()
+            self.zero.as_ref().unwrap()
         } else {
-            self.slices.get_mut(index - 1)
+            &self.slices[index - 1]
+        }
+    }
+
+    #[inline]
+    fn get_slice_mut_no_check(&mut self, index: usize) -> &mut ArcSlice {
+        if index == 0 {
+            self.zero.as_mut().unwrap()
+        } else {
+            &mut self.slices[index - 1]
         }
     }
 
@@ -188,13 +197,18 @@ impl RBuf {
     }
 
     #[inline(always)]
-    fn curr_slice_mut(&mut self) -> Option<&mut ArcSlice> {
-        self.get_slice_mut(self.pos.slice)
+    fn curr_slice_no_check(&self) -> &ArcSlice {
+        self.get_slice_no_check(self.pos.slice)
+    }
+
+    #[inline(always)]
+    fn curr_slice_mut_no_check(&mut self) -> &mut ArcSlice {
+        self.get_slice_mut_no_check(self.pos.slice)
     }
 
     fn skip_bytes_no_check(&mut self, mut n: usize) {
         while n > 0 {
-            let current = self.curr_slice().unwrap();
+            let current = self.curr_slice_no_check();
             let len = current.len();
             if self.pos.byte + n < len {
                 self.pos.read += n;
@@ -241,7 +255,7 @@ impl RBuf {
 
         let mut written = 0;
         while written < len {
-            let slice = self.get_slice(pos.0).unwrap();
+            let slice = self.get_slice_no_check(pos.0);
             let remaining = slice.len() - pos.1;
             let to_read = remaining.min(bs.len() - written);
             bs[written..written + to_read]
@@ -299,7 +313,7 @@ impl RBuf {
         let mut n = len;
         while n > 0 {
             let pos_1 = self.pos.byte;
-            let current = self.curr_slice_mut().unwrap();
+            let current = self.curr_slice_mut_no_check();
             let slice_len = current.len();
             let remain_in_slice = slice_len - pos_1;
             let l = n.min(remain_in_slice);
