@@ -30,124 +30,147 @@ fn criterion_benchmark(c: &mut Criterion) {
         current *= 2;
     }
 
+    let res_key_set = [
+        ResKey::RId(1),
+        ResKey::RIdWithSuffix(1, String::from("/frame/bench")),
+    ];
+
     for p in &pld {
-        let channel = Channel::Reliable;
-        let reliability = Reliability::Reliable;
-        let congestion_control = CongestionControl::Block;
+        for r in &res_key_set {
+            let channel = Channel::Reliable;
+            let reliability = Reliability::Reliable;
+            let congestion_control = CongestionControl::Block;
 
-        let res_key = ResKey::RIdWithSuffix(18, String::from("/frame/bench"));
-        let info = None;
-        let payload = RBuf::from(vec![0; *p]);
+            let res_key = r.clone();
+            let info = None;
+            let payload = RBuf::from(vec![0; *p]);
 
-        let msg = ZenohMessage::make_data(
-            res_key,
-            payload,
-            reliability,
-            congestion_control,
-            info,
-            None,
-            None,
-            None,
-        );
+            let msg = ZenohMessage::make_data(
+                res_key,
+                payload,
+                reliability,
+                congestion_control,
+                info,
+                None,
+                None,
+                None,
+            );
 
-        let mut wbuf = WBuf::new(batch_size, true);
-        let mut num = 0;
-        while wbuf.write_zenoh_message(&msg) {
-            num += 1;
+            let mut wbuf = WBuf::new(batch_size, true);
+            let mut num = 0;
+            while wbuf.write_zenoh_message(&msg) {
+                num += 1;
+            }
+            drop(wbuf);
+
+            c.bench_function(
+                format!("frame_creation {} {} {} {}", batch_size, p, num, r).as_str(),
+                |b| {
+                    let mut wbuf = WBuf::new(batch_size, true);
+                    b.iter(|| {
+                        wbuf.write_frame_header(channel, 1, None, None);
+                        for _ in 0..num {
+                            let reliability = Reliability::Reliable;
+                            let congestion_control = CongestionControl::Block;
+                            let res_key = r.clone();
+                            let info = None;
+                            let payload = RBuf::from(vec![0; *p]);
+
+                            let msg = ZenohMessage::make_data(
+                                res_key,
+                                payload,
+                                reliability,
+                                congestion_control,
+                                info,
+                                None,
+                                None,
+                                None,
+                            );
+                            wbuf.write_zenoh_message(&msg);
+                            drop(msg);
+                        }
+                    })
+                },
+            );
+
+            c.bench_function(
+                format!(
+                    "frame_encoding_yes_contigous {} {} {} {}",
+                    batch_size, p, num, r
+                )
+                .as_str(),
+                |b| {
+                    let mut wbuf = WBuf::new(batch_size, true);
+                    b.iter(|| {
+                        wbuf.write_frame_header(channel, 1, None, None);
+                        for _ in 0..num {
+                            wbuf.write_zenoh_message(&msg);
+                        }
+                    })
+                },
+            );
+
+            c.bench_function(
+                format!(
+                    "frame_encoding_no_contigous {} {} {} {}",
+                    batch_size, p, num, r
+                )
+                .as_str(),
+                |b| {
+                    let mut wbuf = WBuf::new(*p, false);
+                    b.iter(|| {
+                        wbuf.write_frame_header(channel, 1, None, None);
+                        for _ in 0..num {
+                            wbuf.write_zenoh_message(&msg);
+                        }
+                    })
+                },
+            );
+
+            c.bench_function(
+                format!(
+                    "frame_decoding_yes_contigous {} {} {} {}",
+                    batch_size, p, num, r
+                )
+                .as_str(),
+                |b| {
+                    let mut wbuf = WBuf::new(batch_size, true);
+                    wbuf.write_frame_header(channel, 1, None, None);
+
+                    for _ in 0..num {
+                        wbuf.write_zenoh_message(&msg);
+                    }
+
+                    let mut rbuf = RBuf::from(&wbuf);
+                    b.iter(|| {
+                        rbuf.reset_pos();
+                        let _ = rbuf.read_session_message().unwrap();
+                    })
+                },
+            );
+
+            c.bench_function(
+                format!(
+                    "frame_decoding_no_contigous {} {} {} {}",
+                    batch_size, p, num, r
+                )
+                .as_str(),
+                |b| {
+                    let mut wbuf = WBuf::new(*p, false);
+                    wbuf.write_frame_header(channel, 1, None, None);
+
+                    for _ in 0..num {
+                        wbuf.write_zenoh_message(&msg);
+                    }
+
+                    let mut rbuf = RBuf::from(&wbuf);
+                    b.iter(|| {
+                        rbuf.reset_pos();
+                        let _ = rbuf.read_session_message().unwrap();
+                    })
+                },
+            );
         }
-        drop(wbuf);
-
-        c.bench_function(
-            format!("frame_creation {} {} {}", batch_size, p, num).as_str(),
-            |b| {
-                let mut wbuf = WBuf::new(batch_size, true);
-                b.iter(|| {
-                    wbuf.write_frame_header(channel, 1, None, None);
-                    for _ in 0..num {
-                        let reliability = Reliability::Reliable;
-                        let congestion_control = CongestionControl::Block;
-                        let res_key = ResKey::RIdWithSuffix(18, String::from("/frame/bench"));
-                        let info = None;
-                        let payload = RBuf::from(vec![0; *p]);
-
-                        let msg = ZenohMessage::make_data(
-                            res_key,
-                            payload,
-                            reliability,
-                            congestion_control,
-                            info,
-                            None,
-                            None,
-                            None,
-                        );
-                        wbuf.write_zenoh_message(&msg);
-                        drop(msg);
-                    }
-                })
-            },
-        );
-
-        c.bench_function(
-            format!("frame_encoding_yes_contigous {} {} {}", batch_size, p, num).as_str(),
-            |b| {
-                let mut wbuf = WBuf::new(batch_size, true);
-                b.iter(|| {
-                    wbuf.write_frame_header(channel, 1, None, None);
-                    for _ in 0..num {
-                        wbuf.write_zenoh_message(&msg);
-                    }
-                })
-            },
-        );
-
-        c.bench_function(
-            format!("frame_encoding_no_contigous {} {} {}", batch_size, p, num).as_str(),
-            |b| {
-                let mut wbuf = WBuf::new(*p, false);
-                b.iter(|| {
-                    wbuf.write_frame_header(channel, 1, None, None);
-                    for _ in 0..num {
-                        wbuf.write_zenoh_message(&msg);
-                    }
-                })
-            },
-        );
-
-        c.bench_function(
-            format!("frame_decoding_yes_contigous {} {} {}", batch_size, p, num).as_str(),
-            |b| {
-                let mut wbuf = WBuf::new(batch_size, true);
-                wbuf.write_frame_header(channel, 1, None, None);
-
-                for _ in 0..num {
-                    wbuf.write_zenoh_message(&msg);
-                }
-
-                let mut rbuf = RBuf::from(&wbuf);
-                b.iter(|| {
-                    rbuf.reset_pos();
-                    let _ = rbuf.read_session_message().unwrap();
-                })
-            },
-        );
-
-        c.bench_function(
-            format!("frame_decoding_no_contigous {} {} {}", batch_size, p, num).as_str(),
-            |b| {
-                let mut wbuf = WBuf::new(*p, false);
-                wbuf.write_frame_header(channel, 1, None, None);
-
-                for _ in 0..num {
-                    wbuf.write_zenoh_message(&msg);
-                }
-
-                let mut rbuf = RBuf::from(&wbuf);
-                b.iter(|| {
-                    rbuf.reset_pos();
-                    let _ = rbuf.read_session_message().unwrap();
-                })
-            },
-        );
     }
 }
 
