@@ -37,7 +37,8 @@ transport_tls = ["async-rustls"]
 transport_udp = []
 transport_unixsock-stream = ["nix"]
 zero-copy = []
-default = ["zero-copy", "transport_tcp", "transport_udp", "transport_tls", "transport_unixsock-stream"]
+# default = ["zero-copy", "transport_tcp", "transport_udp", "transport_tls", "transport_unixsock-stream"]
+default = ["transport_tcp", "transport_udp", "transport_tls", "transport_unixsock-stream"]
 
 [dependencies]
 zenoh-util = { path = "../zenoh-util" }

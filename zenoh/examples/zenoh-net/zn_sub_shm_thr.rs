@@ -11,15 +11,22 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "zero-copy")]
 use async_std::future;
+#[cfg(feature = "zero-copy")]
 use clap::{App, Arg};
-use std::sync::Arc;
-use std::sync::Mutex;
+#[cfg(feature = "zero-copy")]
+use std::sync::{Arc, Mutex};
+#[cfg(feature = "zero-copy")]
 use std::time::Instant;
+#[cfg(feature = "zero-copy")]
 use zenoh::net::ResKey::*;
+#[cfg(feature = "zero-copy")]
 use zenoh::net::*;
+#[cfg(feature = "zero-copy")]
 use zenoh::Properties;
 
+#[cfg(feature = "zero-copy")]
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -69,12 +76,22 @@ async fn main() {
     future::pending::<()>().await;
 }
 
+#[cfg(not(feature = "zero-copy"))]
+fn main() {
+    println!(
+        "Please, enable zero-copy feature by rebuilding as follows:\
+            \n\n\t$ cargo build --release --features \"zero-copy\"\n"
+    );
+}
+
+#[cfg(feature = "zero-copy")]
 fn print_stats(start: Instant, n: u128) {
     let elapsed = start.elapsed().as_secs_f64();
     let thpt = (n as f64) / elapsed;
     println!("{} msg/s", thpt);
 }
 
+#[cfg(feature = "zero-copy")]
 fn parse_args() -> (Properties, u32, u128) {
     let args = App::new("zenoh-net zero-copy throughput sub example")
         .arg(

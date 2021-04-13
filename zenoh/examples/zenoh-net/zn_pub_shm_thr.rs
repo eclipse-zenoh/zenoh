@@ -11,11 +11,16 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "zero-copy")]
 use clap::{App, Arg};
+#[cfg(feature = "zero-copy")]
 use zenoh::net::ResKey::*;
+#[cfg(feature = "zero-copy")]
 use zenoh::net::*;
+#[cfg(feature = "zero-copy")]
 use zenoh::Properties;
 
+#[cfg(feature = "zero-copy")]
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -50,6 +55,15 @@ async fn main() {
     }
 }
 
+#[cfg(not(feature = "zero-copy"))]
+fn main() {
+    println!(
+        "Please, enable zero-copy feature by rebuilding as follows:\
+            \n\n\t$ cargo build --release --features \"zero-copy\"\n"
+    );
+}
+
+#[cfg(feature = "zero-copy")]
 fn parse_args() -> (Properties, usize, usize) {
     let args = App::new("zenoh-net zero-copy throughput pub example")
         .arg(

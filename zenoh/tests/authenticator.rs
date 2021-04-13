@@ -19,9 +19,9 @@ use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
-use zenoh::net::protocol::session::authenticator::{
-    SharedMemoryAuthenticator, UserPasswordAuthenticator,
-};
+#[cfg(feature = "zero-copy")]
+use zenoh::net::protocol::session::authenticator::SharedMemoryAuthenticator;
+use zenoh::net::protocol::session::authenticator::UserPasswordAuthenticator;
 use zenoh::net::protocol::session::{
     DummySessionEventHandler, Session, SessionDispatcher, SessionEventHandler, SessionHandler,
     SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
@@ -298,6 +298,7 @@ async fn authenticator_user_password(locator: Locator) {
     task::sleep(SLEEP).await;
 }
 
+#[cfg(feature = "zero-copy")]
 async fn authenticator_shared_memory(locator: Locator) {
     /* [CLIENT] */
     let client_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -397,6 +398,7 @@ fn authenticator_tcp() {
     let locator: Locator = "tcp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(locator.clone()).await;
+        #[cfg(feature = "zero-copy")]
         authenticator_shared_memory(locator).await;
     });
 }
@@ -407,6 +409,7 @@ fn authenticator_udp() {
     let locator: Locator = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(locator.clone()).await;
+        #[cfg(feature = "zero-copy")]
         authenticator_shared_memory(locator).await;
     });
 }
@@ -420,6 +423,7 @@ fn authenticator_unix() {
         .unwrap();
     task::block_on(async {
         authenticator_user_password(locator.clone()).await;
+        #[cfg(feature = "zero-copy")]
         authenticator_shared_memory(locator).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
