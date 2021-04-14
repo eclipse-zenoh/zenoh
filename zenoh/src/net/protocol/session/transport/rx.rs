@@ -27,7 +27,11 @@ macro_rules! zcallback {
                 let _ = callback.handle_message($msg).await;
             }
             None => {
-                log::trace!("No callback available, dropping message: {}", $msg);
+                log::trace!(
+                    "Session: {}. No callback available, dropping message: {}",
+                    $transport.pid,
+                    $msg
+                );
             }
         }
     };
@@ -39,9 +43,9 @@ macro_rules! zreceiveframe {
             Ok(precedes) => precedes,
             Err(e) => {
                 log::warn!(
-                    "Invalid SN in frame: {}. Closing the session with peer: {}",
-                    e,
-                    $transport.pid
+                    "Session: {}. Invalid SN in frame: {}. Closing the session.",
+                    $transport.pid,
+                    e
                 );
                 // Drop the guard before closing the session
                 drop($guard);
@@ -53,7 +57,8 @@ macro_rules! zreceiveframe {
         };
         if !precedes {
             log::warn!(
-                "Frame with invalid SN dropped: {}. Expected: {}",
+                "Session: {}. Frame with invalid SN dropped: {}. Expected: {}.",
+                $transport.pid,
                 $sn,
                 $guard.sn.get()
             );
@@ -130,14 +135,20 @@ impl SessionTransport {
                 Channel::BestEffort => self.handle_best_effort_frame(sn, payload).await,
             },
             SessionBody::Hello { .. } => {
-                log::trace!("Handling of Hello Messages not yet implemented!");
+                log::trace!(
+                    "Session: {}. Handling of Hello Messages not yet implemented!",
+                    self.pid
+                );
             }
             SessionBody::Scout { .. } => {
-                log::trace!("Handling of Scout Messages not yet implemented!");
+                log::trace!(
+                    "Session: {}. Handling of Scout Messages not yet implemented!",
+                    self.pid
+                );
             }
             _ => {
                 log::trace!(
-                    "Unexpected message received in session with peer {}: {:?}",
+                    "Session: {}. Unexpected message received: {:?}",
                     self.pid,
                     message
                 );
