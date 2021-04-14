@@ -86,7 +86,6 @@ macro_rules! zreceiveframe {
                         e
                     );
                     $guard.defrag_buffer.clear();
-                    // return Action::Read;
                     return;
                 }
 
@@ -95,7 +94,6 @@ macro_rules! zreceiveframe {
                         Some(msg) => msg,
                         None => {
                             log::trace!("Session: {}. Defragmentation error.", $transport.pid);
-                            // return Action::Read;
                             return;
                         }
                     };
