@@ -234,6 +234,7 @@ impl RBuf {
     }
 
     // same than read() but not moving read position (allow not mutable self)
+    #[inline(always)]
     pub fn get(&self) -> Option<u8> {
         self.curr_slice().map(|current| current[self.pos.byte])
     }
@@ -325,6 +326,7 @@ impl RBuf {
     }
 
     // Read all the bytes from 'self' and add those to 'dest'
+    #[inline(always)]
     pub fn drain_into_rbuf(&mut self, dest: &mut RBuf) -> bool {
         self.read_into_rbuf(dest, self.readable())
     }
@@ -338,10 +340,19 @@ impl RBuf {
     }
 
     #[cfg(feature = "zero-copy")]
-    pub fn flatten_shm(&mut self) {
+    #[inline]
+    pub(crate) fn flatten_shm(&mut self) {
         if let Some(shm) = self.shm_buf.take() {
             self.clear();
             self.add_slice(shm.into());
+        }
+    }
+
+    #[cfg(feature = "zero-copy")]
+    #[inline]
+    pub(crate) fn inc_ref_shm(&mut self) {
+        if let Some(shm) = self.shm_buf.as_mut() {
+            shm.inc_ref_count();
         }
     }
 }

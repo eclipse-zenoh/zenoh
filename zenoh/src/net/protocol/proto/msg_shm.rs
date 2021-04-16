@@ -24,6 +24,17 @@ impl ZenohMessage {
             payload.flatten_shm();
         }
     }
+
+    #[cfg(feature = "zero-copy")]
+    pub(crate) fn inc_ref_shm(&mut self) {
+        if let Some(at) = self.attachment.as_mut() {
+            at.buffer.inc_ref_shm();
+        }
+
+        if let ZenohBody::Data(Data { payload, .. }) = &mut self.body {
+            payload.inc_ref_shm();
+        }
+    }
 }
 
 impl SessionMessage {
@@ -52,6 +63,34 @@ impl SessionMessage {
             }
             SessionBody::OpenSyn(OpenSyn { cookie, .. }) => {
                 cookie.flatten_shm();
+            }
+            _ => {}
+        }
+    }
+
+    #[allow(dead_code)]
+    #[cfg(feature = "zero-copy")]
+    pub(crate) fn inc_ref_shm(&mut self) {
+        if let Some(at) = self.attachment.as_mut() {
+            at.buffer.inc_ref_shm();
+        }
+
+        match &mut self.body {
+            SessionBody::Frame(Frame { payload, .. }) => match payload {
+                FramePayload::Fragment { buffer, .. } => {
+                    buffer.inc_ref_shm();
+                }
+                FramePayload::Messages { messages } => {
+                    for m in messages {
+                        m.inc_ref_shm();
+                    }
+                }
+            },
+            SessionBody::InitAck(InitAck { cookie, .. }) => {
+                cookie.inc_ref_shm();
+            }
+            SessionBody::OpenSyn(OpenSyn { cookie, .. }) => {
+                cookie.inc_ref_shm();
             }
             _ => {}
         }
