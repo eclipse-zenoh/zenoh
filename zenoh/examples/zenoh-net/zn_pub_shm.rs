@@ -11,8 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "zero-copy")]
 use async_std::task::sleep;
+#[cfg(feature = "zero-copy")]
 use clap::{App, Arg};
+#[cfg(feature = "zero-copy")]
 use std::time::Duration;
 #[cfg(feature = "zero-copy")]
 use zenoh::net::*;
@@ -97,6 +100,7 @@ fn main() {
     );
 }
 
+#[cfg(feature = "zero-copy")]
 fn parse_args() -> (Properties, String, String) {
     let args = App::new("zenoh-net pub example")
         .arg(
