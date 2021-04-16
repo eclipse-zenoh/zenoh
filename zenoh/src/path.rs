@@ -168,6 +168,10 @@ impl From<&Path> for ResKey {
     }
 }
 
+pub fn path(path: impl AsRef<str>) -> Path {
+    Path::try_from(path.as_ref()).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

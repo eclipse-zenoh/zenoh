@@ -169,6 +169,10 @@ impl From<&PathExpr> for ResKey {
     }
 }
 
+pub fn pathexpr(path: impl AsRef<str>) -> PathExpr {
+    PathExpr::try_from(path.as_ref()).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

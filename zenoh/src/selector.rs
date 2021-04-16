@@ -171,6 +171,10 @@ impl TryFrom<&Query> for Selector {
     }
 }
 
+pub fn selector(selector: impl AsRef<str>) -> Selector {
+    Selector::try_from(selector.as_ref()).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
