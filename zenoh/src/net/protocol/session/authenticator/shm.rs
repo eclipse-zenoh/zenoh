@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{PeerId, Property, ZInt};
-use super::io::{ChunkHeader, RBuf, SharedMemoryBuf, SharedMemoryManager, WBuf};
+use super::io::{RBuf, SharedMemoryBuf, SharedMemoryManager, WBuf};
 use super::{
     attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
@@ -155,11 +155,8 @@ impl SharedMemoryAuthenticator {
         let mut prng = PseudoRng::from_entropy();
         let challenge = prng.gen::<ZInt>();
 
-        let mut manager = SharedMemoryManager::new(
-            format!("{}.{}", SHM_NAME, challenge),
-            std::mem::size_of::<ChunkHeader>() + SHM_SIZE,
-        )
-        .unwrap();
+        let mut manager =
+            SharedMemoryManager::new(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE).unwrap();
 
         let mut buffer = manager.alloc(SHM_SIZE).unwrap();
         let slice = unsafe { buffer.as_mut_slice() };
@@ -180,15 +177,14 @@ impl SharedMemoryAuthenticator {
             let mut prng = PseudoRng::from_entropy();
             let challenge = prng.gen::<ZInt>();
 
-            let mut manager = SharedMemoryManager::new(
-                format!("{}.{}", SHM_NAME, challenge),
-                std::mem::size_of::<ChunkHeader>() + SHM_SIZE,
-            )
-            .map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: e.to_string()
-                })
-            })?;
+            let mut manager =
+                SharedMemoryManager::new(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE).map_err(
+                    |e| {
+                        zerror2!(ZErrorKind::Other {
+                            descr: e.to_string()
+                        })
+                    },
+                )?;
 
             let mut buffer = manager.alloc(SHM_SIZE).unwrap();
             let slice = unsafe { buffer.as_mut_slice() };
@@ -245,6 +241,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         _sn_resolution: ZInt,
         properties: &[Property],
     ) -> ZResult<PeerAuthenticatorOutput> {
+        log::debug!("Authenticator::handle_init_syn(...)");
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::SHM);
@@ -280,7 +277,13 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         };
 
-        let bytes: [u8; SHM_SIZE] = match sbuf.as_slice().try_into() {
+        log::debug!("Authenticating Shared Memory Access...");
+
+        let xs = sbuf.as_slice();
+        log::debug!("Extracted Slice creating array... printing content:");
+        log::debug!("Slice: {:?}", xs);
+
+        let bytes: [u8; SHM_SIZE] = match xs.try_into() {
             Ok(bytes) => bytes,
             Err(e) => {
                 log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);

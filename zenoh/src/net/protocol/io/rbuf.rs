@@ -640,7 +640,7 @@ mod tests {
                 buf1,
                 hex::encode_upper(bytes)
             );
-            assert_eq!([i * 3 as u8, i * 3 + 1, i * 3 + 2], bytes);
+            assert_eq!([i * 3, i * 3 + 1, i * 3 + 2], bytes);
         }
 
         // test other buffers sharing the same vecs
