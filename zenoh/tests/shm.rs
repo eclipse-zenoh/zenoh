@@ -85,14 +85,14 @@ impl SCPeer {
 #[async_trait]
 impl SessionEventHandler for SCPeer {
     async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        let len = match self.shm.as_ref() {
+        let payload = match self.shm.as_ref() {
             Some(shm) => {
                 let mut shm = shm.lock().await;
                 match message.body {
                     ZenohBody::Data(Data { payload, .. }) => {
                         print!("s");
                         let sbuf = payload.into_shm(&mut shm).unwrap();
-                        sbuf.as_slice().len()
+                        sbuf.as_slice().to_vec()
                     }
                     _ => panic!("Unsolicited message"),
                 }
@@ -100,13 +100,20 @@ impl SessionEventHandler for SCPeer {
             None => match message.body {
                 ZenohBody::Data(Data { payload, .. }) => {
                     print!("n");
-                    payload.len()
+                    payload.to_vec()
                 }
                 _ => panic!("Unsolicited message"),
             },
         };
-        assert_eq!(len, MSG_SIZE);
-        self.count.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(payload.len(), MSG_SIZE);
+
+        let mut count_bytes = [0u8; 8];
+        count_bytes.copy_from_slice(&payload[0..8]);
+        let msg_count = u64::from_le_bytes(count_bytes) as usize;
+        let sex_count = self.count.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(msg_count, sex_count);
+        print!("{} ", msg_count);
+
         Ok(())
     }
 
@@ -228,6 +235,8 @@ async fn run(locator: &Locator) {
 
     // Send the message
     println!("Session SHM [3a]");
+    // The msg count
+    let mut msg_count: u64 = 0;
     for _ in 0..MSG_COUNT {
         // Create the message to send
         let mut sbuf = async {
@@ -242,7 +251,7 @@ async fn run(locator: &Locator) {
         .await
         .unwrap();
         let bs = unsafe { sbuf.as_mut_slice() };
-        bs.fill(0u8);
+        bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
         let key = ResKey::RName("/test".to_string());
         let payload: RBuf = sbuf.into();
@@ -267,6 +276,8 @@ async fn run(locator: &Locator) {
             .handle_message(message.clone())
             .await
             .unwrap();
+
+        msg_count += 1;
     }
 
     // Wait a little bit
@@ -283,6 +294,8 @@ async fn run(locator: &Locator) {
 
     // Send the message
     println!("Session SHM [4a]");
+    // The msg count
+    let mut msg_count: u64 = 0;
     for _ in 0..MSG_COUNT {
         // Create the message to send
         let mut sbuf = async {
@@ -297,7 +310,7 @@ async fn run(locator: &Locator) {
         .await
         .unwrap();
         let bs = unsafe { sbuf.as_mut_slice() };
-        bs.fill(0u8);
+        bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
         let key = ResKey::RName("/test".to_string());
         let payload: RBuf = sbuf.into();
@@ -322,6 +335,8 @@ async fn run(locator: &Locator) {
             .handle_message(message.clone())
             .await
             .unwrap();
+
+        msg_count += 1;
     }
 
     // Wait a little bit
