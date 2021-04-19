@@ -250,6 +250,7 @@ impl SharedMemoryManager {
         );
         Ok(shm)
     }
+
     fn free_chunk_to_shmbuf(&self, chunk: &Chunk) -> SharedMemoryBuf {
         let info = SharedMemoryBufInfo {
             offset: chunk.offset,
@@ -267,6 +268,7 @@ impl SharedMemoryManager {
             info,
         }
     }
+
     pub fn alloc(&mut self, len: usize) -> Option<SharedMemoryBuf> {
         log::debug!("SharedMemoryManager::alloc({})", len);
         // Always allocate a size that will keep the proper alignment requirements
@@ -409,7 +411,6 @@ impl std::fmt::Debug for SharedMemoryManager {
             .field("segment_path", &self.segment_path)
             .field("size", &self.size)
             .field("offset", &self.offset)
-            // .field("header", &self.header)
             .finish();
         f.debug_list()
             .entries(self.segments.keys().into_iter())
