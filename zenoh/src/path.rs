@@ -15,6 +15,7 @@ use crate::net::ResKey;
 use regex::Regex;
 use std::convert::TryFrom;
 use std::fmt;
+use std::ops::Div;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
@@ -103,6 +104,38 @@ impl Path {
     }
 }
 
+impl Div<String> for Path {
+    type Output = Path;
+
+    fn div(self, rhs: String) -> Self::Output {
+        &self / rhs
+    }
+}
+
+impl Div<&str> for Path {
+    type Output = Path;
+
+    fn div(self, rhs: &str) -> Self::Output {
+        &self / rhs
+    }
+}
+
+impl Div<String> for &Path {
+    type Output = Path;
+
+    fn div(self, rhs: String) -> Self::Output {
+        Path::try_from(format!("{}/{}", self, rhs)).unwrap()
+    }
+}
+
+impl Div<&str> for &Path {
+    type Output = Path;
+
+    fn div(self, rhs: &str) -> Self::Output {
+        Path::try_from(format!("{}/{}", self, rhs)).unwrap()
+    }
+}
+
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.p)
@@ -135,10 +168,27 @@ impl From<&Path> for ResKey {
     }
 }
 
+/// Creates a [`Path`] from a string.
+///
+/// # Panics
+/// Panics if the string contains forbidden characters `'?'`, `'#'`, `'['`, `']'`, `'*'`.
+pub fn path(path: impl AsRef<str>) -> Path {
+    Path::try_from(path.as_ref()).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::convert::TryInto;
+
+    #[test]
+    fn path_div() {
+        assert_eq!(Path::try_from("a").unwrap() / "b", Path { p: "a/b".into() });
+        assert_eq!(
+            Path::try_from("a").unwrap() / String::from("b"),
+            Path { p: "a/b".into() }
+        );
+    }
 
     #[test]
     fn test_path() {

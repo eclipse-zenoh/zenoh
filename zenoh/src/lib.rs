@@ -108,11 +108,11 @@ mod workspace;
 pub use workspace::*;
 
 mod path;
-pub use path::Path;
+pub use path::{path, Path};
 mod pathexpr;
-pub use pathexpr::PathExpr;
+pub use pathexpr::{pathexpr, PathExpr};
 mod selector;
-pub use selector::Selector;
+pub use selector::{selector, Selector};
 mod values;
 pub use values::*;
 

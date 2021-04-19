@@ -15,7 +15,7 @@ use crate::net::utils::resource_name;
 use crate::net::ResKey;
 use crate::Path;
 use std::convert::{From, TryFrom};
-use std::fmt;
+use std::{fmt, ops::Div};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
@@ -91,6 +91,38 @@ impl PathExpr {
     }
 }
 
+impl Div<String> for PathExpr {
+    type Output = PathExpr;
+
+    fn div(self, rhs: String) -> Self::Output {
+        &self / rhs
+    }
+}
+
+impl Div<&str> for PathExpr {
+    type Output = PathExpr;
+
+    fn div(self, rhs: &str) -> Self::Output {
+        &self / rhs
+    }
+}
+
+impl Div<String> for &PathExpr {
+    type Output = PathExpr;
+
+    fn div(self, rhs: String) -> Self::Output {
+        PathExpr::try_from(format!("{}/{}", self, rhs)).unwrap()
+    }
+}
+
+impl Div<&str> for &PathExpr {
+    type Output = PathExpr;
+
+    fn div(self, rhs: &str) -> Self::Output {
+        PathExpr::try_from(format!("{}/{}", self, rhs)).unwrap()
+    }
+}
+
 impl fmt::Display for PathExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.p)
@@ -134,5 +166,30 @@ impl From<PathExpr> for ResKey {
 impl From<&PathExpr> for ResKey {
     fn from(path: &PathExpr) -> Self {
         ResKey::from(path.p.as_str())
+    }
+}
+
+/// Creates a [`PathExpr`] from a string.
+///
+/// # Panics
+/// Panics if the string contains forbidden characters `'?'`, `'#'`, `'['`, `']'`.
+pub fn pathexpr(path: impl AsRef<str>) -> PathExpr {
+    PathExpr::try_from(path.as_ref()).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pathexpr_div() {
+        assert_eq!(
+            PathExpr::try_from("a").unwrap() / "b",
+            PathExpr::try_from("a/b").unwrap()
+        );
+        assert_eq!(
+            PathExpr::try_from("a").unwrap() / String::from("b"),
+            PathExpr::try_from("a/b").unwrap()
+        );
     }
 }
