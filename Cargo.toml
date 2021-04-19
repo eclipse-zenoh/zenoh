@@ -22,8 +22,13 @@ members = [
   "backends/traits",
 ]
 
+[profile.dev]
+debug=true
+opt-level = 0
+
+
 [profile.release]
-debug=false
+debug=true
 lto="fat"
 codegen-units=1
 opt-level=3
