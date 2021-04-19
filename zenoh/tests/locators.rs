@@ -16,7 +16,6 @@ use async_std::task;
 use async_trait::async_trait;
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
-use zenoh::net::protocol::link::tls::{NoClientAuth, ServerConfig};
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
@@ -62,13 +61,9 @@ impl SessionEventHandler for SC {
     async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
-
     async fn new_link(&self, _link: Link) {}
-
     async fn del_link(&self, _link: Link) {}
-
     async fn closing(&self) {}
-
     async fn closed(&self) {}
 }
 
@@ -248,8 +243,21 @@ fn locator_udp_unix() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn locator_tls() {
+    use zenoh::net::protocol::link::tls::{NoClientAuth, ServerConfig};
+
     // Define the locators
     let locators = vec!["tls/localhost:9452".parse().unwrap()];
     let locator_property = vec![ServerConfig::new(NoClientAuth::new()).into()];
+    task::block_on(run(&locators, Some(locator_property)));
+}
+
+#[cfg(feature = "transport_quic")]
+#[test]
+fn locator_quic() {
+    use zenoh::net::protocol::link::quic::ServerConfigBuilder;
+
+    // Define the locators
+    let locators = vec!["quic/localhost:9453".parse().unwrap()];
+    let locator_property = vec![ServerConfigBuilder::default().into()];
     task::block_on(run(&locators, Some(locator_property)));
 }

@@ -111,7 +111,7 @@ async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
             }
         },
         _ => {
-            let e = format!("Not a TCP locator: {}", locator);
+            let e = format!("Not a TLS locator: {}", locator);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }
@@ -280,10 +280,24 @@ impl From<(Option<Arc<ClientConfig>>, Option<Arc<ServerConfig>>)> for LocatorPro
     }
 }
 
+impl From<(Option<Arc<ServerConfig>>, Option<Arc<ClientConfig>>)> for LocatorProperty {
+    fn from(tuple: (Option<Arc<ServerConfig>>, Option<Arc<ClientConfig>>)) -> LocatorProperty {
+        Self::from(LocatorPropertyTls::new(tuple.1, tuple.0))
+    }
+}
+
 impl From<(Option<ClientConfig>, Option<ServerConfig>)> for LocatorProperty {
     fn from(mut tuple: (Option<ClientConfig>, Option<ServerConfig>)) -> LocatorProperty {
         let client_config = tuple.0.take().map(Arc::new);
         let server_config = tuple.1.take().map(Arc::new);
+        Self::from((client_config, server_config))
+    }
+}
+
+impl From<(Option<ServerConfig>, Option<ClientConfig>)> for LocatorProperty {
+    fn from(mut tuple: (Option<ServerConfig>, Option<ClientConfig>)) -> LocatorProperty {
+        let client_config = tuple.1.take().map(Arc::new);
+        let server_config = tuple.0.take().map(Arc::new);
         Self::from((client_config, server_config))
     }
 }

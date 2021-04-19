@@ -11,6 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "transport_quic")]
+use super::quic::LinkManagerQuic;
 use super::session::SessionManager;
 #[cfg(feature = "transport_tcp")]
 use super::tcp::LinkManagerTcp;
@@ -34,6 +36,8 @@ impl LinkManagerBuilder {
             LocatorProtocol::Udp => Arc::new(LinkManagerUdp::new(manager)),
             #[cfg(feature = "transport_tls")]
             LocatorProtocol::Tls => Arc::new(LinkManagerTls::new(manager)),
+            #[cfg(feature = "transport_quic")]
+            LocatorProtocol::Quic => Arc::new(LinkManagerQuic::new(manager)),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LocatorProtocol::UnixSocketStream => {
                 Arc::new(LinkManagerUnixSocketStream::new(manager))

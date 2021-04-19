@@ -13,14 +13,16 @@
 //
 mod locator;
 mod manager;
+#[cfg(feature = "transport_quic")]
+pub mod quic;
 #[cfg(feature = "transport_tcp")]
-mod tcp;
+pub mod tcp;
 #[cfg(feature = "transport_tls")]
 pub mod tls;
 #[cfg(feature = "transport_udp")]
-mod udp;
+pub mod udp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-mod unixsock_stream;
+pub mod unixsock_stream;
 
 use super::io::{RBuf, WBuf};
 use super::proto::SessionMessage;
@@ -29,6 +31,8 @@ use async_std::sync::Arc;
 use async_trait::async_trait;
 pub use locator::*;
 pub use manager::*;
+#[cfg(feature = "transport_quic")]
+use quic::LinkQuic;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -55,6 +59,8 @@ Link(
     Udp(Arc<LinkUdp>),
     #[cfg(feature = "transport_tls")]
     Tls(Arc<LinkTls>),
+    #[cfg(feature = "transport_quic")]
+    Quic(Arc<LinkQuic>),
     #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     UnixSocketStream(Arc<LinkUnixSocketStream>),
 ) {

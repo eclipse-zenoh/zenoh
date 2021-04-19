@@ -11,6 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "transport_quic")]
+use super::quic::{LocatorPropertyQuic, LocatorQuic};
 #[cfg(feature = "transport_tcp")]
 use super::tcp::{LocatorPropertyTcp, LocatorTcp};
 #[cfg(feature = "transport_tls")]
@@ -38,6 +40,8 @@ pub const STR_TCP: &str = "tcp";
 pub const STR_UDP: &str = "udp";
 #[cfg(feature = "transport_tls")]
 pub const STR_TLS: &str = "tls";
+#[cfg(feature = "transport_quic")]
+pub const STR_QUIC: &str = "quic";
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 pub const STR_UNIXSOCK_STREAM: &str = "unixsock-stream";
 
@@ -49,6 +53,8 @@ pub enum LocatorProtocol {
     Udp,
     #[cfg(feature = "transport_tls")]
     Tls,
+    #[cfg(feature = "transport_quic")]
+    Quic,
     #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     UnixSocketStream,
 }
@@ -62,6 +68,8 @@ impl fmt::Display for LocatorProtocol {
             LocatorProtocol::Udp => write!(f, "{}", STR_UDP)?,
             #[cfg(feature = "transport_tls")]
             LocatorProtocol::Tls => write!(f, "{}", STR_TLS)?,
+            #[cfg(feature = "transport_quic")]
+            LocatorProtocol::Quic => write!(f, "{}", STR_QUIC)?,
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LocatorProtocol::UnixSocketStream => write!(f, "{}", STR_UNIXSOCK_STREAM)?,
         }
@@ -80,6 +88,8 @@ pub enum Locator {
     Udp(LocatorUdp),
     #[cfg(feature = "transport_tls")]
     Tls(LocatorTls),
+    #[cfg(feature = "transport_quic")]
+    Quic(LocatorQuic),
     #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     UnixSocketStream(LocatorUnixSocketStream),
 }
@@ -110,6 +120,8 @@ impl FromStr for Locator {
             STR_UDP => addr.parse().map(Locator::Udp),
             #[cfg(feature = "transport_tls")]
             STR_TLS => addr.parse().map(Locator::Tls),
+            #[cfg(feature = "transport_quic")]
+            STR_QUIC => addr.parse().map(Locator::Quic),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             STR_UNIXSOCK_STREAM => addr.parse().map(Locator::UnixSocketStream),
             _ => {
@@ -129,6 +141,8 @@ impl Locator {
             Locator::Udp(..) => LocatorProtocol::Udp,
             #[cfg(feature = "transport_tls")]
             Locator::Tls(..) => LocatorProtocol::Tls,
+            #[cfg(feature = "transport_quic")]
+            Locator::Quic(..) => LocatorProtocol::Quic,
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             Locator::UnixSocketStream(..) => LocatorProtocol::UnixSocketStream,
         }
@@ -144,6 +158,8 @@ impl fmt::Display for Locator {
             Locator::Udp(addr) => write!(f, "{}/{}", STR_UDP, addr)?,
             #[cfg(feature = "transport_tls")]
             Locator::Tls(addr) => write!(f, "{}/{}", STR_TLS, addr)?,
+            #[cfg(feature = "transport_quic")]
+            Locator::Quic(addr) => write!(f, "{}/{}", STR_QUIC, addr)?,
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             Locator::UnixSocketStream(addr) => write!(f, "{}/{}", STR_UNIXSOCK_STREAM, addr)?,
         }
@@ -162,6 +178,8 @@ pub enum LocatorProperty {
     Udp(LocatorPropertyUdp),
     #[cfg(feature = "transport_tls")]
     Tls(LocatorPropertyTls),
+    #[cfg(feature = "transport_quic")]
+    Quic(LocatorPropertyQuic),
     #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     UnixSocketStream(LocatorPropertyUnixSocketStream),
 }
@@ -175,6 +193,8 @@ impl LocatorProperty {
             LocatorProperty::Udp(..) => LocatorProtocol::Udp,
             #[cfg(feature = "transport_tls")]
             LocatorProperty::Tls(..) => LocatorProtocol::Tls,
+            #[cfg(feature = "transport_quic")]
+            LocatorProperty::Quic(..) => LocatorProtocol::Quic,
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LocatorProperty::UnixSocketStream(..) => LocatorProtocol::UnixSocketStream,
         }
@@ -185,6 +205,13 @@ impl LocatorProperty {
         #[cfg(feature = "transport_tls")]
         {
             let mut res = LocatorPropertyTls::from_properties(config).await?;
+            if let Some(p) = res.take() {
+                ps.push(p);
+            }
+        }
+        #[cfg(feature = "transport_quic")]
+        {
+            let mut res = LocatorPropertyQuic::from_properties(config).await?;
             if let Some(p) = res.take() {
                 ps.push(p);
             }
@@ -202,6 +229,8 @@ impl fmt::Display for LocatorProperty {
             LocatorProperty::Udp(..) => write!(f, "{}", STR_UDP)?,
             #[cfg(feature = "transport_tls")]
             LocatorProperty::Tls(..) => write!(f, "{}", STR_TLS)?,
+            #[cfg(feature = "transport_quic")]
+            LocatorProperty::Quic(..) => write!(f, "{}", STR_QUIC)?,
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LocatorProperty::UnixSocketStream(..) => write!(f, "{}", STR_UNIXSOCK_STREAM)?,
         }
