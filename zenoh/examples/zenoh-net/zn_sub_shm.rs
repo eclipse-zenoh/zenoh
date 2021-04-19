@@ -53,6 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
+
     loop {
         select!(
             sample = subscriber.stream().next().fuse() => {
