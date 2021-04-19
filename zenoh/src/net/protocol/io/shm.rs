@@ -337,7 +337,7 @@ impl SharedMemoryManager {
                 let shm_buf = SharedMemoryBuf {
                     rc_ptr,
                     buf: AtomicPtr::new(buf),
-                    len: info.length,
+                    len: info.length - self.chunk_header_size,
                     info,
                 };
                 Some(shm_buf)
