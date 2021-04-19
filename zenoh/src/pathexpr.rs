@@ -169,6 +169,10 @@ impl From<&PathExpr> for ResKey {
     }
 }
 
+/// Creates a [`PathExpr`] from a string.
+///
+/// # Panics
+/// Panics if the string contains forbidden characters `'?'`, `'#'`, `'['`, `']'`.
 pub fn pathexpr(path: impl AsRef<str>) -> PathExpr {
     PathExpr::try_from(path.as_ref()).unwrap()
 }

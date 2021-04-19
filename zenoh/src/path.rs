@@ -168,6 +168,10 @@ impl From<&Path> for ResKey {
     }
 }
 
+/// Creates a [`Path`] from a string.
+///
+/// # Panics
+/// Panics if the string contains forbidden characters `'?'`, `'#'`, `'['`, `']'`, `'*'`.
 pub fn path(path: impl AsRef<str>) -> Path {
     Path::try_from(path.as_ref()).unwrap()
 }
