@@ -190,7 +190,6 @@ pub struct SharedMemoryManager {
     size: usize,
     available: usize,
     chunk_header_size: usize,
-    offset: usize,
     own_segment: Shmem,
     segments: HashMap<String, Shmem>,
     free_list: BinaryHeap<Chunk>,
@@ -237,7 +236,6 @@ impl SharedMemoryManager {
             size,
             available: real_size,
             chunk_header_size: std::mem::size_of::<AtomicUsize>(),
-            offset: 0,
             own_segment: shmem,
             segments: HashMap::new(),
             free_list,
@@ -410,7 +408,7 @@ impl std::fmt::Debug for SharedMemoryManager {
             .debug_struct("SharedMemoryManager")
             .field("segment_path", &self.segment_path)
             .field("size", &self.size)
-            .field("offset", &self.offset)
+            .field("available", &self.available)
             .finish();
         f.debug_list()
             .entries(self.segments.keys().into_iter())
