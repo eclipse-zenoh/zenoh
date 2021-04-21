@@ -17,6 +17,8 @@ use super::ArcSlice;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror;
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct RBufPos {
@@ -332,10 +334,12 @@ impl RBuf {
     }
 
     #[cfg(feature = "zero-copy")]
-    pub fn into_shm(self, m: &mut SharedMemoryManager) -> Option<SharedMemoryBuf> {
+    pub fn into_shm(self, m: &mut SharedMemoryManager) -> ZResult<SharedMemoryBuf> {
         match bincode::deserialize::<SharedMemoryBufInfo>(&self.to_vec()) {
-            Ok(info) => m.from_info(info),
-            Err(_) => None,
+            Ok(info) => m.try_make_buf(info),
+            _ => zerror!(ZErrorKind::ValueDecodingFailed {
+                descr: String::from("Unable to deserialize ShareMemoryInfo"),
+            }),
         }
     }
 

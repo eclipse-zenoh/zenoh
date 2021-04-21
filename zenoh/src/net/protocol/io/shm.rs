@@ -19,6 +19,8 @@ use std::collections::HashMap;
 use std::mem::align_of;
 use std::sync::atomic;
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror;
 
 const MIN_FREE_CHUNK_SIZE: usize = 1024;
 const ACCOUNTED_OVERHEAD: usize = 4096;
@@ -325,7 +327,7 @@ impl SharedMemoryManager {
         }
     }
 
-    pub fn from_info(&mut self, info: SharedMemoryBufInfo) -> Option<SharedMemoryBuf> {
+    pub fn try_make_buf(&mut self, info: SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
         // From info does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented for us.
         match self.segments.get(&info.shm_manager) {
@@ -340,7 +342,7 @@ impl SharedMemoryManager {
                     len: info.length - self.chunk_header_size,
                     info,
                 };
-                Some(shm_buf)
+                Ok(shm_buf)
             }
             None => match ShmemConf::new().flink(&info.shm_manager).open() {
                 Ok(shm) => {
@@ -356,7 +358,7 @@ impl SharedMemoryManager {
                         len: info.length - self.chunk_header_size,
                         info,
                     };
-                    Some(shm_buf)
+                    Ok(shm_buf)
                 }
                 Err(e) => {
                     log::trace!(
@@ -364,7 +366,9 @@ impl SharedMemoryManager {
                         info.shm_manager,
                         e
                     );
-                    None
+                    zerror!(ZErrorKind::SharedMemoryError {
+                        descr: format!("Unable to open shared memory @ {}", info.shm_manager),
+                    })
                 }
             },
         }

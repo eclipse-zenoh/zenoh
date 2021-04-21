@@ -270,8 +270,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Try to read from the shared memory
         let mut manager = zasynclock!(self.manager);
         let sbuf = match init_syn_property.shm.into_shm(&mut manager) {
-            Some(sbuf) => sbuf,
-            None => {
+            Ok(sbuf) => sbuf,
+            Err(_) => {
                 log::debug!("Peer {} can not operate over shared memory", peer_id);
                 return Ok(PeerAuthenticatorOutput::default());
             }
@@ -340,8 +340,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Try to read from the shared memory
         let mut manager = zasynclock!(self.manager);
         let sbuf = match init_ack_property.shm.into_shm(&mut manager) {
-            Some(sbuf) => sbuf,
-            None => {
+            Ok(sbuf) => sbuf,
+            Err(_) => {
                 log::debug!("Peer {} can not operate over shared memory", peer_id);
                 return Ok(PeerAuthenticatorOutput::default());
             }
