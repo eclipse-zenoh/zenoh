@@ -17,6 +17,7 @@ use async_std::channel::Receiver;
 use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
+use http_types::Method;
 use runtime::Runtime;
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -145,6 +146,15 @@ fn enc_from_mime(mime: Option<Mime>) -> ZInt {
     }
 }
 
+fn method_to_kind(method: Method) -> ZInt {
+    match method {
+        Method::Put => data_kind::PUT,
+        Method::Patch => data_kind::PATCH,
+        Method::Delete => data_kind::DELETE,
+        _ => data_kind::DEFAULT,
+    }
+}
+
 fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
     Response::builder(status)
         .header("content-length", body.len().to_string())
@@ -167,244 +177,143 @@ pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
     async_std::task::spawn(run(runtime, args));
 }
 
-async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    env_logger::init();
+async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
+    log::trace!("REST: {:?}", req);
+    // Reconstruct Selector from req.url() (no easier way...)
+    let url = req.url();
+    let mut s = String::with_capacity(url.as_str().len());
+    s.push_str(url.path());
+    if let Some(q) = url.query() {
+        s.push('?');
+        s.push_str(q);
+    }
+    let selector = match Selector::try_from(s) {
+        Ok(sel) => sel,
+        Err(e) => {
+            return Ok(response(
+                StatusCode::BadRequest,
+                Mime::from_str("text/plain").unwrap(),
+                &e.to_string(),
+            ))
+        }
+    };
 
-    let http_port = parse_http_port(args.value_of("rest-http-port").unwrap());
-
-    let pid = runtime.get_pid_str().await;
-    let session = Session::init(runtime, true, vec![], vec![]).await;
-
-    let mut app = Server::with_state((Arc::new(session), pid));
-
-    app.at("*")
-        .get(async move |req: Request<(Arc<Session>, String)>| {
-            log::trace!("REST: {:?}", req);
-            // Reconstruct Selector from req.url() (no easier way...)
-            let url = req.url();
-            let mut s = String::with_capacity(url.as_str().len());
-            s.push_str(url.path());
-            if let Some(q) = url.query() {
-                s.push('?');
-                s.push_str(q);
-            }
-            let selector = match Selector::try_from(s) {
-                Ok(sel) => sel,
-                Err(e) => {
-                    return Ok(response(
-                        StatusCode::BadRequest,
-                        Mime::from_str("text/plain").unwrap(),
-                        &e.to_string(),
-                    ))
-                }
-            };
-
-            let first_accept = match req.header("accept") {
-                Some(accept) => accept[0]
-                    .to_string()
-                    .split(';')
-                    .next()
-                    .unwrap()
-                    .split(',')
-                    .next()
-                    .unwrap()
-                    .to_string(),
-                None => "application/json".to_string(),
-            };
-            match &first_accept[..] {
-                "text/event-stream" => Ok(tide::sse::upgrade(
-                    req,
-                    async move |req: Request<(Arc<Session>, String)>, sender: Sender| {
-                        let resource = path_to_resource(req.url().path(), &req.state().1);
-                        async_std::task::spawn(async move {
+    let first_accept = match req.header("accept") {
+        Some(accept) => accept[0]
+            .to_string()
+            .split(';')
+            .next()
+            .unwrap()
+            .split(',')
+            .next()
+            .unwrap()
+            .to_string(),
+        None => "application/json".to_string(),
+    };
+    if first_accept == "text/event-stream" {
+        Ok(tide::sse::upgrade(
+            req,
+            async move |req: Request<(Arc<Session>, String)>, sender: Sender| {
+                let resource = path_to_resource(req.url().path(), &req.state().1);
+                async_std::task::spawn(async move {
+                    log::debug!(
+                        "Subscribe to {} for SSE stream (task {})",
+                        resource,
+                        async_std::task::current().id()
+                    );
+                    let sender = &sender;
+                    let mut sub = req
+                        .state()
+                        .0
+                        .declare_subscriber(&resource, &SSE_SUB_INFO)
+                        .await
+                        .unwrap();
+                    loop {
+                        let sample = sub.stream().next().await.unwrap();
+                        let send = async {
+                            if let Err(e) = sender
+                                .send(&get_kind_str(&sample), sample_to_json(sample), None)
+                                .await
+                            {
+                                log::warn!("Error sending data from the SSE stream: {}", e);
+                            }
+                            true
+                        };
+                        let wait = async {
+                            async_std::task::sleep(std::time::Duration::new(10, 0)).await;
+                            false
+                        };
+                        if !async_std::prelude::FutureExt::race(send, wait).await {
                             log::debug!(
-                                "Subscribe to {} for SSE stream (task {})",
-                                resource,
+                                "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            let sender = &sender;
-                            let mut sub = req
-                                .state()
-                                .0
-                                .declare_subscriber(&resource, &SSE_SUB_INFO)
-                                .await
-                                .unwrap();
-                            loop {
-                                let sample = sub.stream().next().await.unwrap();
-                                let send = async {
-                                    if let Err(e) = sender
-                                        .send(&get_kind_str(&sample), sample_to_json(sample), None)
-                                        .await
-                                    {
-                                        log::warn!("Error sending data from the SSE stream: {}", e);
-                                    }
-                                    true
-                                };
-                                let wait = async {
-                                    async_std::task::sleep(std::time::Duration::new(10, 0)).await;
-                                    false
-                                };
-                                if !async_std::prelude::FutureExt::race(send, wait).await {
-                                    log::debug!(
-                                        "SSE timeout! Unsubscribe and terminate (task {})",
-                                        async_std::task::current().id()
-                                    );
-                                    if let Err(e) = sub.undeclare().await {
-                                        log::error!("Error undeclaring subscriber: {}", e);
-                                    }
-                                    break;
-                                }
+                            if let Err(e) = sub.undeclare().await {
+                                log::error!("Error undeclaring subscriber: {}", e);
                             }
-                        });
-                        Ok(())
-                    },
-                )),
-
-                "text/html" => {
-                    let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
-                    let consolidation = if selector.has_time_range() {
-                        QueryConsolidation::none()
-                    } else {
-                        QueryConsolidation::default()
-                    };
-                    match req
-                        .state()
-                        .0
-                        .query(
-                            &resource,
-                            &selector.predicate,
-                            QueryTarget::default(),
-                            consolidation,
-                        )
-                        .await
-                    {
-                        Ok(stream) => Ok(response(
-                            StatusCode::Ok,
-                            Mime::from_str("text/html").unwrap(),
-                            &to_html(stream).await,
-                        )),
-                        Err(e) => Ok(response(
-                            StatusCode::InternalServerError,
-                            Mime::from_str("text/plain").unwrap(),
-                            &e.to_string(),
-                        )),
+                            break;
+                        }
                     }
-                }
-
-                _ => {
-                    let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
-                    let consolidation = if selector.has_time_range() {
-                        QueryConsolidation::none()
-                    } else {
-                        QueryConsolidation::default()
-                    };
-                    match req
-                        .state()
-                        .0
-                        .query(
-                            &resource,
-                            &selector.predicate,
-                            QueryTarget::default(),
-                            consolidation,
-                        )
-                        .await
-                    {
-                        Ok(stream) => Ok(response(
-                            StatusCode::Ok,
-                            Mime::from_str("application/json").unwrap(),
-                            &to_json(stream).await,
-                        )),
-                        Err(e) => Ok(response(
-                            StatusCode::InternalServerError,
-                            Mime::from_str("text/plain").unwrap(),
-                            &e.to_string(),
-                        )),
-                    }
+                });
+                Ok(())
+            },
+        ))
+    } else {
+        let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
+        let consolidation = if selector.has_time_range() {
+            QueryConsolidation::none()
+        } else {
+            QueryConsolidation::default()
+        };
+        match req
+            .state()
+            .0
+            .query(
+                &resource,
+                &selector.predicate,
+                QueryTarget::default(),
+                consolidation,
+            )
+            .await
+        {
+            Ok(stream) => {
+                if first_accept == "text/html" {
+                    Ok(response(
+                        StatusCode::Ok,
+                        Mime::from_str("text/html").unwrap(),
+                        &to_html(stream).await,
+                    ))
+                } else {
+                    Ok(response(
+                        StatusCode::Ok,
+                        Mime::from_str("application/json").unwrap(),
+                        &to_json(stream).await,
+                    ))
                 }
             }
-        });
+            Err(e) => Ok(response(
+                StatusCode::InternalServerError,
+                Mime::from_str("text/plain").unwrap(),
+                &e.to_string(),
+            )),
+        }
+    }
+}
 
-    app.at("*")
-        .put(async move |mut req: Request<(Arc<Session>, String)>| {
-            log::trace!("REST: {:?}", req);
-            match req.body_bytes().await {
-                Ok(bytes) => {
-                    let resource = path_to_resource(req.url().path(), &req.state().1);
-                    match req
-                        .state()
-                        .0
-                        .write_ext(
-                            &resource,
-                            bytes.into(),
-                            enc_from_mime(req.content_type()),
-                            data_kind::PUT,
-                            CongestionControl::Drop, // TODO: Define the right congestion control value for the put
-                        )
-                        .await
-                    {
-                        Ok(_) => Ok(Response::new(StatusCode::Ok)),
-                        Err(e) => Ok(response(
-                            StatusCode::InternalServerError,
-                            Mime::from_str("text/plain").unwrap(),
-                            &e.to_string(),
-                        )),
-                    }
-                }
-                Err(e) => Ok(response(
-                    StatusCode::NoContent,
-                    Mime::from_str("text/plain").unwrap(),
-                    &e.to_string(),
-                )),
-            }
-        });
-
-    app.at("*")
-        .patch(async move |mut req: Request<(Arc<Session>, String)>| {
-            log::trace!("REST: {:?}", req);
-            match req.body_bytes().await {
-                Ok(bytes) => {
-                    let resource = path_to_resource(req.url().path(), &req.state().1);
-                    match req
-                        .state()
-                        .0
-                        .write_ext(
-                            &resource,
-                            bytes.into(),
-                            enc_from_mime(req.content_type()),
-                            data_kind::PATCH,
-                            CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
-                        )
-                        .await
-                    {
-                        Ok(_) => Ok(Response::new(StatusCode::Ok)),
-                        Err(e) => Ok(response(
-                            StatusCode::InternalServerError,
-                            Mime::from_str("text/plain").unwrap(),
-                            &e.to_string(),
-                        )),
-                    }
-                }
-                Err(e) => Ok(response(
-                    StatusCode::NoContent,
-                    Mime::from_str("text/plain").unwrap(),
-                    &e.to_string(),
-                )),
-            }
-        });
-
-    app.at("*")
-        .delete(async move |req: Request<(Arc<Session>, String)>| {
-            log::trace!("REST: {:?}", req);
+async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
+    log::trace!("REST: {:?}", req);
+    match req.body_bytes().await {
+        Ok(bytes) => {
             let resource = path_to_resource(req.url().path(), &req.state().1);
             match req
                 .state()
                 .0
                 .write_ext(
                     &resource,
-                    RBuf::new(),
+                    bytes.into(),
                     enc_from_mime(req.content_type()),
-                    data_kind::DELETE,
-                    CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
+                    method_to_kind(req.method()),
+                    CongestionControl::Drop, // TODO: Define the right congestion control value
                 )
                 .await
             {
@@ -415,7 +324,36 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     &e.to_string(),
                 )),
             }
-        });
+        }
+        Err(e) => Ok(response(
+            StatusCode::NoContent,
+            Mime::from_str("text/plain").unwrap(),
+            &e.to_string(),
+        )),
+    }
+}
+
+async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
+    env_logger::init();
+
+    let http_port = parse_http_port(args.value_of("rest-http-port").unwrap());
+
+    let pid = runtime.get_pid_str().await;
+    let session = Session::init(runtime, true, vec![], vec![]).await;
+
+    let mut app = Server::with_state((Arc::new(session), pid));
+
+    app.at("/").get(query);
+    app.at("*").get(query);
+
+    app.at("/").put(write);
+    app.at("*").put(write);
+
+    app.at("/").patch(write);
+    app.at("*").patch(write);
+
+    app.at("/").delete(write);
+    app.at("*").delete(write);
 
     if let Err(e) = app.listen(http_port).await {
         log::error!("Unable to start http server for REST : {:?}", e);

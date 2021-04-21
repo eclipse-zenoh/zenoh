@@ -2959,6 +2959,7 @@ dependencies = [
  "clap",
  "env_logger",
  "futures",
+ "http-types",
  "log 0.4.14",
  "serde_json",
  "tide",
