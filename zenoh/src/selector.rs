@@ -179,6 +179,54 @@ pub fn selector(selector: impl AsRef<str>) -> Selector {
     Selector::try_from(selector.as_ref()).unwrap()
 }
 
+impl From<&PathExpr> for Selector {
+    fn from(from: &PathExpr) -> Self {
+        Self {
+            path_expr: from.to_owned(),
+            predicate: "".to_string(),
+            filter: None,
+            fragment: None,
+            properties: Default::default(),
+        }
+    }
+}
+
+impl From<PathExpr> for Selector {
+    fn from(from: PathExpr) -> Self {
+        Self {
+            path_expr: from,
+            predicate: "".to_string(),
+            filter: None,
+            fragment: None,
+            properties: Default::default(),
+        }
+    }
+}
+
+impl From<&Path> for Selector {
+    fn from(from: &Path) -> Self {
+        Self {
+            path_expr: from.into(),
+            predicate: "".to_string(),
+            filter: None,
+            fragment: None,
+            properties: Default::default(),
+        }
+    }
+}
+
+impl From<Path> for Selector {
+    fn from(from: Path) -> Self {
+        Self {
+            path_expr: from.into(),
+            predicate: "".to_string(),
+            filter: None,
+            fragment: None,
+            properties: Default::default(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
