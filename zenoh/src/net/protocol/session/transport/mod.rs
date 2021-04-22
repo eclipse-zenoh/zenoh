@@ -27,12 +27,13 @@ use super::link::Link;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session::defaults::QUEUE_PRIO_DATA;
 use super::session::{SessionEventDispatcher, SessionManager};
-use async_std::sync::{Arc, Mutex, MutexGuard, RwLock};
+use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use defragmentation::*;
 use link::*;
 pub(super) use seq_num::*;
+use std::sync::{Arc, Mutex, RwLock};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zasyncread, zasyncwrite, zerror};
+use zenoh_util::zerror;
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
@@ -116,7 +117,7 @@ pub(crate) struct SessionTransport {
     // The callback
     pub(super) callback: Arc<RwLock<Option<SessionEventDispatcher>>>,
     // Mutex for notification
-    pub(super) alive: Arc<Mutex<bool>>,
+    pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The session transport can do shm
     pub(super) is_shm: bool,
 }
@@ -155,7 +156,7 @@ impl SessionTransport {
             ))),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
-            alive: Arc::new(Mutex::new(true)),
+            alive: AsyncArc::new(AsyncMutex::new(true)),
             is_shm,
         }
     }
@@ -163,16 +164,16 @@ impl SessionTransport {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) async fn get_callback(&self) -> Option<SessionEventDispatcher> {
-        zasyncread!(self.callback).clone()
+    pub(crate) fn get_callback(&self) -> Option<SessionEventDispatcher> {
+        zread!(self.callback).clone()
     }
 
-    pub(crate) async fn set_callback(&self, callback: SessionEventDispatcher) {
-        let mut guard = zasyncwrite!(self.callback);
+    pub(crate) fn set_callback(&self, callback: SessionEventDispatcher) {
+        let mut guard = zwrite!(self.callback);
         *guard = Some(callback.clone());
     }
 
-    pub(crate) async fn get_alive(&self) -> MutexGuard<'_, bool> {
+    pub(crate) async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
         zasynclock!(self.alive)
     }
 
@@ -188,33 +189,33 @@ impl SessionTransport {
         *a_guard = false;
 
         // Notify the callback that we are going to close the session
-        let mut c_guard = zasyncwrite!(self.callback);
+        let mut c_guard = zwrite!(self.callback);
         if let Some(callback) = c_guard.as_ref() {
-            callback.closing().await;
+            callback.closing();
         }
 
         // Delete the session on the manager
-        let _ = self.manager.del_session(&self.pid).await;
+        let _ = self.manager.del_session(&self.pid);
 
         // Close all the links
-        let mut l_guard = zasyncwrite!(self.links);
+        let mut l_guard = zwrite!(self.links);
         let mut links = l_guard.to_vec();
-        for l in links.drain(..) {
-            let _ = l.close().await;
-        }
         *l_guard = vec![].into_boxed_slice();
         drop(l_guard);
+        for l in links.drain(..) {
+            let _ = l.close();
+        }
 
         // Notify the callback that we have closed the session
         if let Some(callback) = c_guard.take() {
-            callback.closed().await;
+            callback.closed();
         }
     }
 
     pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.pid);
 
-        let guard = zasyncread!(self.links);
+        let guard = zread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
             let c_l = l.clone();
             // Drop the guard
@@ -228,10 +229,10 @@ impl SessionTransport {
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
             // Schedule the close message for transmission
-            c_l.schedule_session_message(msg, QUEUE_PRIO_DATA).await;
+            c_l.schedule_session_message(msg, QUEUE_PRIO_DATA);
 
             // Remove the link from the channel
-            self.del_link(&link).await?;
+            self.del_link(&link)?;
         }
 
         Ok(())
@@ -239,24 +240,22 @@ impl SessionTransport {
 
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing session with peer: {}", self.pid);
+        {
+            // Close message to be sent on all the links
+            let peer_id = Some(self.manager.pid());
+            let reason_id = reason;
+            // link_only should always be false for user-triggered close. However, in case of
+            // multiple links, it is safer to close all the links first. When no links are left,
+            // the session is then considered closed.
+            let link_only = true;
+            let attachment = None; // No attachment here
+            let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-        // Close message to be sent on all the links
-        let peer_id = Some(self.manager.pid());
-        let reason_id = reason;
-        // link_only should always be false for user-triggered close. However, in case of
-        // multiple links, it is safer to close all the links first. When no links are left,
-        // the session is then considered closed.
-        let link_only = true;
-        let attachment = None; // No attachment here
-        let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-        let guard = zasyncread!(self.links);
-        for link in guard.iter() {
-            link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA)
-                .await;
+            let guard = zread!(self.links);
+            for link in guard.iter() {
+                link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA);
+            }
         }
-        drop(guard);
-
         // Terminate and clean up the session
         self.delete().await;
 
@@ -268,31 +267,31 @@ impl SessionTransport {
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
     #[cfg(feature = "zero-copy")]
-    pub(crate) async fn schedule(&self, mut message: ZenohMessage) {
+    pub(crate) fn schedule(&self, mut message: ZenohMessage) {
         if self.is_shm {
             message.inc_ref_shm();
         } else {
             message.flatten_shm();
         }
-        self.schedule_first_fit(message).await;
+        self.schedule_first_fit(message);
     }
 
     #[cfg(not(feature = "zero-copy"))]
-    pub(crate) async fn schedule(&self, message: ZenohMessage) {
-        self.schedule_first_fit(message).await;
+    pub(crate) fn schedule(&self, message: ZenohMessage) {
+        self.schedule_first_fit(message);
     }
 
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(crate) async fn add_link(
+    pub(crate) fn add_link(
         &self,
         link: Link,
         batch_size: usize,
         lease: ZInt,
         keep_alive: ZInt,
     ) -> ZResult<()> {
-        let mut guard = zasyncwrite!(self.links);
+        let mut guard = zwrite!(self.links);
         if zlinkget!(guard, &link).is_some() {
             return zerror!(ZErrorKind::InvalidLink {
                 descr: format!("Can not add Link {} with peer: {}", link, self.pid)
@@ -319,31 +318,31 @@ impl SessionTransport {
         Ok(())
     }
 
-    pub(crate) async fn start_tx(&self, link: &Link) -> ZResult<()> {
-        let guard = zasyncread!(self.links);
+    pub(crate) fn start_tx(&self, link: &Link) -> ZResult<()> {
+        let guard = zread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
-            l.start_tx().await;
+            l.start_tx();
         }
         Ok(())
     }
 
-    pub(crate) async fn start_rx(&self, link: &Link) -> ZResult<()> {
-        let guard = zasyncread!(self.links);
+    pub(crate) fn start_rx(&self, link: &Link) -> ZResult<()> {
+        let guard = zread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
-            l.start_rx().await;
+            l.start_rx();
         }
         Ok(())
     }
 
-    pub(crate) async fn del_link(&self, link: &Link) -> ZResult<()> {
+    pub(crate) fn del_link(&self, link: &Link) -> ZResult<()> {
         // Try to remove the link
-        let mut guard = zasyncwrite!(self.links);
+        let mut guard = zwrite!(self.links);
         if let Some(index) = zlinkindex!(guard, link) {
             let is_last = guard.len() == 1;
             if is_last {
                 // Close the whole session
                 drop(guard);
-                self.delete().await;
+                self.delete();
                 Ok(())
             } else {
                 // Remove the link
@@ -352,10 +351,11 @@ impl SessionTransport {
                 *guard = links.into_boxed_slice();
                 drop(guard);
                 // Notify the callback
-                if let Some(callback) = zasyncread!(self.callback).as_ref() {
-                    callback.del_link(link.get_link().clone()).await;
+                if let Some(callback) = zread!(self.callback).as_ref() {
+                    callback.del_link(link.get_link().clone());
                 }
-                link.close().await
+                link.close();
+                Ok(())
             }
         } else {
             zerror!(ZErrorKind::InvalidLink {
@@ -364,8 +364,8 @@ impl SessionTransport {
         }
     }
 
-    pub(crate) async fn get_links(&self) -> Vec<Link> {
-        zasyncread!(self.links)
+    pub(crate) fn get_links(&self) -> Vec<Link> {
+        zread!(self.links)
             .iter()
             .map(|l| l.get_link().clone())
             .collect()

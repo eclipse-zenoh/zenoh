@@ -217,7 +217,7 @@ impl Network {
             session.get_pid().unwrap(),
             msg
         );
-        if let Err(e) = session.handle_message(msg).await {
+        if let Err(e) = session.handle_message(msg) {
             log::error!("{} Error sending LinkStateList: {}", self.name, e);
         }
     }
@@ -235,7 +235,7 @@ impl Network {
                     link.session.get_pid().unwrap(),
                     msg
                 );
-                if let Err(e) = link.session.handle_message(msg.clone()).await {
+                if let Err(e) = link.session.handle_message(msg.clone()) {
                     log::error!("{} Error sending LinkStateList: {}", self.name, e);
                 }
             }
@@ -608,7 +608,7 @@ impl Network {
         );
 
         for link in self.links.values() {
-            if let Err(e) = link.session.handle_message(msg.clone()).await {
+            if let Err(e) = link.session.handle_message(msg.clone()) {
                 log::error!("{} Error sending LinkStateList: {}", self.name, e);
             }
         }

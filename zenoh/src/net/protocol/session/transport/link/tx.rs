@@ -27,13 +27,15 @@ use super::session::defaults::{
     QUEUE_SIZE_RETX,
 };
 use super::{SeqNumGenerator, SerializationBatch};
-use async_std::sync::{Arc, Mutex, MutexGuard};
+use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::thread;
 use std::time::Duration;
-use zenoh_util::sync::Condition;
-use zenoh_util::zasynclock;
+use zenoh_util::sync::Condition as AsyncCondvar;
+use zenoh_util::{zasynclock, zlock};
 
 macro_rules! zgetbatch {
     ($self:expr, $priority:expr, $stage_in:expr, $is_droppable:expr) => {
@@ -43,20 +45,19 @@ macro_rules! zgetbatch {
                 break batch;
             } else {
                 // Refill the batches
-                let mut refill_guard = zasynclock!($self.stage_refill[$priority]);
+                let mut refill_guard = zlock!($self.stage_refill[$priority]);
                 if refill_guard.is_empty() {
                     // Execute the dropping strategy if provided
                     if $is_droppable {
                         // Drop the guard to allow the sending task to
                         // refill the queue of empty batches
                         drop(refill_guard);
-                        // Yield this task
-                        task::yield_now().await;
+                        // Yield this thread
+                        thread::yield_now();
                         return;
                     }
                     // Drop the guard and wait for the batches to be available
-                    $self.cond_canrefill[$priority].wait(refill_guard).await;
-                    refill_guard = zasynclock!($self.stage_refill[$priority]);
+                    refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
                 }
                 // Drain all the empty batches
                 while let Some(batch) = refill_guard.try_pull() {
@@ -182,17 +183,17 @@ pub(crate) struct TransmissionPipeline {
     // Amount of bytes available in each stage IN priority queue
     bytes_in: Box<[Arc<AtomicUsize>]>,
     // A single Mutex for all the priority queues
-    stage_out: Arc<Mutex<Box<[StageOut]>>>,
+    stage_out: AsyncArc<AsyncMutex<Box<[StageOut]>>>,
     // Number of batches in each stage OUT priority queue
     batches_out: Box<[Arc<AtomicUsize>]>,
     // Each priority queue has its own Mutex
     stage_refill: Box<[Arc<Mutex<StageRefill>>]>,
     // Each priority queue has its own Conditional variable
     // The conditional variable requires a MutexGuard from stage_refill
-    cond_canrefill: Box<[Arc<Condition>]>,
+    cond_canrefill: Box<[Arc<Condvar>]>,
     // A single conditional variable for all the priority queues
     // The conditional variable requires a MutexGuard from stage_out
-    cond_canpull: Condition,
+    cond_canpull: AsyncCondvar,
 }
 
 impl TransmissionPipeline {
@@ -205,8 +206,8 @@ impl TransmissionPipeline {
     ) -> TransmissionPipeline {
         // Conditional variables
         let mut cond_canrefill = vec![];
-        cond_canrefill.resize_with(QUEUE_NUM, || Arc::new(Condition::new()));
-        let cond_canpull = Condition::new();
+        cond_canrefill.resize_with(QUEUE_NUM, || Arc::new(Condvar::new()));
+        let cond_canpull = AsyncCondvar::new();
 
         // Build the stage EMPTY
         let mut stage_refill = Vec::with_capacity(QUEUE_NUM);
@@ -231,7 +232,7 @@ impl TransmissionPipeline {
             *QUEUE_SIZE_DATA,
             batches_out[QUEUE_PRIO_DATA].clone(),
         ));
-        let stage_out = Arc::new(Mutex::new(stage_out.into_boxed_slice()));
+        let stage_out = AsyncArc::new(AsyncMutex::new(stage_out.into_boxed_slice()));
 
         // Bytes to be pulled from stage IN
         let mut bytes_in = vec![];
@@ -278,14 +279,14 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(super) async fn push_session_message(&self, message: SessionMessage, priority: usize) {
-        let mut in_guard = zasynclock!(self.stage_in[priority]);
+    pub(super) fn push_session_message(&self, message: SessionMessage, priority: usize) {
+        let mut in_guard = zlock!(self.stage_in[priority]);
 
         macro_rules! zserialize {
             () => {
                 // Get the current serialization batch
                 let batch = zgetbatch!(self, priority, in_guard, false);
-                if batch.serialize_session_message(&message).await {
+                if batch.serialize_session_message(&message) {
                     self.bytes_in[priority].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return;
@@ -302,7 +303,7 @@ impl TransmissionPipeline {
         //   2) add the batch to the OUT pipeline
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty
-            let mut out_guard = zasynclock!(self.stage_out);
+            let mut out_guard = task::block_on(async { zasynclock!(self.stage_out) });
             out_guard[priority].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
@@ -318,15 +319,15 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(super) async fn push_zenoh_message(&self, message: ZenohMessage, priority: usize) {
-        let mut in_guard = zasynclock!(self.stage_in[priority]);
+    pub(super) fn push_zenoh_message(&self, message: ZenohMessage, priority: usize) {
+        let mut in_guard = zlock!(self.stage_in[priority]);
 
         macro_rules! zserialize {
             () => {
                 // Get the current serialization batch. Drop the message
                 // if no batches are available
                 let batch = zgetbatch!(self, priority, in_guard, message.is_droppable());
-                if batch.serialize_zenoh_message(&message).await {
+                if batch.serialize_zenoh_message(&message) {
                     self.bytes_in[priority].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return;
@@ -344,7 +345,7 @@ impl TransmissionPipeline {
         //   2) add the batch to the OUT pipeline
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty, move it to the stage OUT pipeline
-            let mut out_guard = zasynclock!(self.stage_out);
+            let mut out_guard = task::block_on(async { zasynclock!(self.stage_out) });
             out_guard[priority].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
@@ -355,11 +356,10 @@ impl TransmissionPipeline {
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
-        self.fragment_zenoh_message(message, priority, in_guard)
-            .await;
+        self.fragment_zenoh_message(message, priority, in_guard);
     }
 
-    async fn fragment_zenoh_message(
+    fn fragment_zenoh_message(
         &self,
         message: ZenohMessage,
         priority: usize,
@@ -376,7 +376,7 @@ impl TransmissionPipeline {
         } else {
             (Channel::BestEffort, self.sn_best_effort.clone())
         };
-        let mut guard = zasynclock!(sn);
+        let mut guard = zlock!(sn);
 
         // Fragment the whole message
         let mut to_write = wbuf.len();
@@ -388,9 +388,7 @@ impl TransmissionPipeline {
             let sn = guard.get();
 
             // Serialize the message
-            let written = batch
-                .serialize_zenoh_fragment(ch, sn, &mut wbuf, to_write)
-                .await;
+            let written = batch.serialize_zenoh_fragment(ch, sn, &mut wbuf, to_write);
 
             // Update the amount of bytes left to write
             to_write -= written;
@@ -399,7 +397,7 @@ impl TransmissionPipeline {
             if written != 0 {
                 // Move the serialization batch into the OUT pipeline
                 let batch = in_guard.try_pull().unwrap();
-                let mut out_guard = zasynclock!(self.stage_out);
+                let mut out_guard = task::block_on(async { zasynclock!(self.stage_out) });
                 out_guard[priority].push(batch);
                 drop(out_guard);
                 self.cond_canpull.notify_one();
@@ -441,19 +439,18 @@ impl TransmissionPipeline {
                             return Some(batch);
                         } else {
                             // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
-                            if let Some(mut in_guard) = self.stage_in[priority].try_lock() {
+                            if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
                                 if let Some(batch) = in_guard.try_pull() {
                                     return Some(batch);
                                 } else {
                                     break;
                                 }
-                            } else {
-                                drop(out_guard);
-                                // Batch is being filled up, let's backoff and retry
-                                task::sleep(backoff).await;
-                                backoff = 2 * backoff;
-                                continue;
                             }
+                            drop(out_guard);
+                            // Batch is being filled up, let's backoff and retry
+                            task::sleep(backoff).await;
+                            backoff = 2 * backoff;
+                            continue;
                         }
                     } else {
                         // Batch is being filled up, let's backoff and retry
@@ -487,7 +484,7 @@ impl TransmissionPipeline {
                     return (batch, priority);
                 } else {
                     // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
-                    if let Some(mut in_guard) = self.stage_in[priority].try_lock() {
+                    if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
                         if let Some(batch) = in_guard.try_pull() {
                             return (batch, priority);
                         }
@@ -508,8 +505,8 @@ impl TransmissionPipeline {
         }
     }
 
-    pub(super) async fn refill(&self, batch: SerializationBatch, priority: usize) {
-        let mut refill_guard = zasynclock!(self.stage_refill[priority]);
+    pub(super) fn refill(&self, batch: SerializationBatch, priority: usize) {
+        let mut refill_guard = zlock!(self.stage_refill[priority]);
         refill_guard.push(batch);
         drop(refill_guard);
         self.cond_canrefill[priority].notify_one();
@@ -527,7 +524,7 @@ impl TransmissionPipeline {
 
         // Then try to drain what left in the stage IN pipeline
         for priority in 0..self.stage_in.len() {
-            let mut in_guard = zasynclock!(self.stage_in[priority]);
+            let mut in_guard = zlock!(self.stage_in[priority]);
             if let Some(batch) = in_guard.try_pull() {
                 return Some(batch);
             }
@@ -537,239 +534,235 @@ impl TransmissionPipeline {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::super::core::{CongestionControl, Reliability, ResKey, ZInt};
-    use super::super::io::RBuf;
-    use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
-    use super::super::session::defaults::{
-        QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION,
-    };
-    use super::*;
-    use async_std::prelude::*;
-    use async_std::sync::{Arc, Mutex};
-    use async_std::task;
-    use std::convert::TryFrom;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::time::{Duration, Instant};
+// #[cfg(test)]
+// mod tests {
+//     use super::super::core::{CongestionControl, Reliability, ResKey, ZInt};
+//     use super::super::io::RBuf;
+//     use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
+//     use super::super::session::defaults::{
+//         QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION,
+//     };
+//     use super::*;
+//     use async_std::prelude::*;
+//     use async_std::task;
+//     use std::convert::TryFrom;
+//     use std::sync::atomic::{AtomicUsize, Ordering};
+//     use std::sync::{Arc, Mutex};
+//     use std::time::{Duration, Instant};
 
-    const TIMEOUT: Duration = Duration::from_secs(60);
+//     const TIMEOUT: Duration = Duration::from_secs(60);
 
-    #[test]
-    fn tx_pipeline() {
-        async fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
-            // Send reliable messages
-            let key = ResKey::RName("test".to_string());
-            let payload = RBuf::from(vec![0u8; payload_size]);
-            let reliability = Reliability::Reliable;
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let attachment = None;
+//     #[test]
+//     fn tx_pipeline() {
+//         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
+//             // Send reliable messages
+//             let key = ResKey::RName("test".to_string());
+//             let payload = RBuf::from(vec![0u8; payload_size]);
+//             let reliability = Reliability::Reliable;
+//             let congestion_control = CongestionControl::Block;
+//             let data_info = None;
+//             let routing_context = None;
+//             let reply_context = None;
+//             let attachment = None;
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                reliability,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-                attachment,
-            );
+//             let message = ZenohMessage::make_data(
+//                 key,
+//                 payload,
+//                 reliability,
+//                 congestion_control,
+//                 data_info,
+//                 routing_context,
+//                 reply_context,
+//                 attachment,
+//             );
 
-            println!(
-                ">>> Sending {} messages with payload size: {}",
-                num_msg, payload_size
-            );
-            for _ in 0..num_msg {
-                queue
-                    .push_zenoh_message(message.clone(), QUEUE_PRIO_DATA)
-                    .await;
-            }
-        }
+//             println!(
+//                 ">>> Sending {} messages with payload size: {}",
+//                 num_msg, payload_size
+//             );
+//             for _ in 0..num_msg {
+//                 queue.push_zenoh_message(message.clone(), QUEUE_PRIO_DATA);
+//             }
+//         }
 
-        async fn consume(queue: Arc<TransmissionPipeline>, num_msg: usize) {
-            let mut batches: usize = 0;
-            let mut bytes: usize = 0;
-            let mut msgs: usize = 0;
-            let mut fragments: usize = 0;
+//         async fn consume(queue: Arc<TransmissionPipeline>, num_msg: usize) {
+//             let mut batches: usize = 0;
+//             let mut bytes: usize = 0;
+//             let mut msgs: usize = 0;
+//             let mut fragments: usize = 0;
 
-            while msgs != num_msg {
-                let (batch, priority) = queue.pull().await;
-                batches += 1;
-                bytes += batch.len();
-                // Create a RBuf for deserialization starting from the batch
-                let mut rbuf: RBuf = batch.get_serialized_messages().into();
-                // Deserialize the messages
-                while let Some(msg) = rbuf.read_session_message() {
-                    match msg.body {
-                        SessionBody::Frame(Frame { payload, .. }) => match payload {
-                            FramePayload::Messages { messages } => {
-                                msgs += messages.len();
-                            }
-                            FramePayload::Fragment { is_final, .. } => {
-                                fragments += 1;
-                                if is_final {
-                                    msgs += 1;
-                                }
-                            }
-                        },
-                        _ => {
-                            msgs += 1;
-                        }
-                    }
-                }
-                // Reinsert the batch
-                queue.refill(batch, priority).await;
-            }
+//             while msgs != num_msg {
+//                 let (batch, priority) = queue.pull().await;
+//                 batches += 1;
+//                 bytes += batch.len();
+//                 // Create a RBuf for deserialization starting from the batch
+//                 let mut rbuf: RBuf = batch.get_serialized_messages().into();
+//                 // Deserialize the messages
+//                 while let Some(msg) = rbuf.read_session_message() {
+//                     match msg.body {
+//                         SessionBody::Frame(Frame { payload, .. }) => match payload {
+//                             FramePayload::Messages { messages } => {
+//                                 msgs += messages.len();
+//                             }
+//                             FramePayload::Fragment { is_final, .. } => {
+//                                 fragments += 1;
+//                                 if is_final {
+//                                     msgs += 1;
+//                                 }
+//                             }
+//                         },
+//                         _ => {
+//                             msgs += 1;
+//                         }
+//                     }
+//                 }
+//                 // Reinsert the batch
+//                 queue.refill(batch, priority).await;
+//             }
 
-            println!(
-                "<<< Received {} messages, {} bytes, {} batches, {} fragments",
-                msgs, bytes, batches, fragments
-            );
-        }
+//             println!(
+//                 "<<< Received {} messages, {} bytes, {} batches, {} fragments",
+//                 msgs, bytes, batches, fragments
+//             );
+//         }
 
-        // Queue
-        let batch_size = *SESSION_BATCH_SIZE;
-        let is_streamed = true;
-        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
-            0,
-            *SESSION_SEQ_NUM_RESOLUTION,
-        )));
-        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-            0,
-            *SESSION_SEQ_NUM_RESOLUTION,
-        )));
-        let queue = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
-            sn_reliable,
-            sn_best_effort,
-        ));
+//         // Queue
+//         let batch_size = *SESSION_BATCH_SIZE;
+//         let is_streamed = true;
+//         let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+//             0,
+//             *SESSION_SEQ_NUM_RESOLUTION,
+//         )));
+//         let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
+//             0,
+//             *SESSION_SEQ_NUM_RESOLUTION,
+//         )));
+//         let queue = Arc::new(TransmissionPipeline::new(
+//             batch_size,
+//             is_streamed,
+//             sn_reliable,
+//             sn_best_effort,
+//         ));
 
-        // Total amount of bytes to send in each test
-        let bytes: usize = 100_000_000;
-        let max_msgs: usize = 1_000;
-        // Paylod size of the messages
-        let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
+//         // Total amount of bytes to send in each test
+//         let bytes: usize = 100_000_000;
+//         let max_msgs: usize = 1_000;
+//         // Paylod size of the messages
+//         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
 
-        task::block_on(async {
-            for ps in payload_sizes.iter() {
-                if ZInt::try_from(*ps).is_err() {
-                    break;
-                }
+//         task::block_on(async {
+//             for ps in payload_sizes.iter() {
+//                 if ZInt::try_from(*ps).is_err() {
+//                     break;
+//                 }
 
-                // Compute the number of messages to send
-                let num_msg = max_msgs.min(bytes / ps);
+//                 // Compute the number of messages to send
+//                 let num_msg = max_msgs.min(bytes / ps);
 
-                let c_queue = queue.clone();
-                let t_c = task::spawn(async move {
-                    consume(c_queue, num_msg).await;
-                });
+//                 let c_queue = queue.clone();
+//                 let t_c = task::spawn(async move {
+//                     consume(c_queue, num_msg).await;
+//                 });
 
-                let c_queue = queue.clone();
-                let c_ps = *ps;
-                let t_s = task::spawn(async move {
-                    schedule(c_queue, num_msg, c_ps).await;
-                });
+//                 let c_queue = queue.clone();
+//                 let c_ps = *ps;
+//                 let t_s = task::spawn(async move {
+//                     schedule(c_queue, num_msg, c_ps).await;
+//                 });
 
-                let res = t_c.join(t_s).timeout(TIMEOUT).await;
-                assert!(res.is_ok());
-            }
-        });
-    }
+//                 let res = t_c.join(t_s).timeout(TIMEOUT).await;
+//                 assert!(res.is_ok());
+//             }
+//         });
+//     }
 
-    #[test]
-    #[ignore]
-    fn tx_pipeline_thr() {
-        // Queue
-        let batch_size = *SESSION_BATCH_SIZE;
-        let is_streamed = true;
-        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
-            0,
-            *SESSION_SEQ_NUM_RESOLUTION,
-        )));
-        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-            0,
-            *SESSION_SEQ_NUM_RESOLUTION,
-        )));
-        let pipeline = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
-            sn_reliable,
-            sn_best_effort,
-        ));
-        let count = Arc::new(AtomicUsize::new(0));
-        let size = Arc::new(AtomicUsize::new(0));
+//     #[test]
+//     #[ignore]
+//     fn tx_pipeline_thr() {
+//         // Queue
+//         let batch_size = *SESSION_BATCH_SIZE;
+//         let is_streamed = true;
+//         let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+//             0,
+//             *SESSION_SEQ_NUM_RESOLUTION,
+//         )));
+//         let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
+//             0,
+//             *SESSION_SEQ_NUM_RESOLUTION,
+//         )));
+//         let pipeline = Arc::new(TransmissionPipeline::new(
+//             batch_size,
+//             is_streamed,
+//             sn_reliable,
+//             sn_best_effort,
+//         ));
+//         let count = Arc::new(AtomicUsize::new(0));
+//         let size = Arc::new(AtomicUsize::new(0));
 
-        let c_pipeline = pipeline.clone();
-        let c_size = size.clone();
-        task::spawn(async move {
-            loop {
-                let payload_sizes: [usize; 16] = [
-                    8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
-                    65_536, 262_144, 1_048_576,
-                ];
-                for size in payload_sizes.iter() {
-                    c_size.store(*size, Ordering::Release);
+//         let c_pipeline = pipeline.clone();
+//         let c_size = size.clone();
+//         task::spawn(async move {
+//             loop {
+//                 let payload_sizes: [usize; 16] = [
+//                     8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
+//                     65_536, 262_144, 1_048_576,
+//                 ];
+//                 for size in payload_sizes.iter() {
+//                     c_size.store(*size, Ordering::Release);
 
-                    // Send reliable messages
-                    let key = ResKey::RName("/pipeline/thr".to_string());
-                    let payload = RBuf::from(vec![0u8; *size]);
-                    let reliability = Reliability::Reliable;
-                    let congestion_control = CongestionControl::Block;
-                    let data_info = None;
-                    let routing_context = None;
-                    let reply_context = None;
-                    let attachment = None;
+//                     // Send reliable messages
+//                     let key = ResKey::RName("/pipeline/thr".to_string());
+//                     let payload = RBuf::from(vec![0u8; *size]);
+//                     let reliability = Reliability::Reliable;
+//                     let congestion_control = CongestionControl::Block;
+//                     let data_info = None;
+//                     let routing_context = None;
+//                     let reply_context = None;
+//                     let attachment = None;
 
-                    let message = ZenohMessage::make_data(
-                        key,
-                        payload,
-                        reliability,
-                        congestion_control,
-                        data_info,
-                        routing_context,
-                        reply_context,
-                        attachment,
-                    );
+//                     let message = ZenohMessage::make_data(
+//                         key,
+//                         payload,
+//                         reliability,
+//                         congestion_control,
+//                         data_info,
+//                         routing_context,
+//                         reply_context,
+//                         attachment,
+//                     );
 
-                    let duration = Duration::from_millis(5_500);
-                    let start = Instant::now();
-                    while start.elapsed() < duration {
-                        c_pipeline
-                            .push_zenoh_message(message.clone(), QUEUE_PRIO_DATA)
-                            .await;
-                    }
-                }
-            }
-        });
+//                     let duration = Duration::from_millis(5_500);
+//                     let start = Instant::now();
+//                     while start.elapsed() < duration {
+//                         c_pipeline.push_zenoh_message(message.clone(), QUEUE_PRIO_DATA);
+//                     }
+//                 }
+//             }
+//         });
 
-        let c_pipeline = pipeline.clone();
-        let c_count = count.clone();
-        task::spawn(async move {
-            loop {
-                let (batch, priority) = c_pipeline.pull().await;
-                c_count.fetch_add(batch.len(), Ordering::AcqRel);
-                task::sleep(Duration::from_nanos(100)).await;
-                c_pipeline.refill(batch, priority).await;
-            }
-        });
+//         let c_pipeline = pipeline.clone();
+//         let c_count = count.clone();
+//         task::spawn(async move {
+//             loop {
+//                 let (batch, priority) = c_pipeline.pull().await;
+//                 c_count.fetch_add(batch.len(), Ordering::AcqRel);
+//                 task::sleep(Duration::from_nanos(100)).await;
+//                 c_pipeline.refill(batch, priority).await;
+//             }
+//         });
 
-        task::block_on(async {
-            let mut prev_size: usize = usize::MAX;
-            loop {
-                let received = count.swap(0, Ordering::AcqRel);
-                let current: usize = size.load(Ordering::Acquire);
-                if current == prev_size {
-                    let thr = (8.0 * received as f64) / 1_000_000_000.0;
-                    println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
-                }
-                prev_size = current;
-                task::sleep(Duration::from_millis(500)).await;
-            }
-        });
-    }
-}
+//         task::block_on(async {
+//             let mut prev_size: usize = usize::MAX;
+//             loop {
+//                 let received = count.swap(0, Ordering::AcqRel);
+//                 let current: usize = size.load(Ordering::Acquire);
+//                 if current == prev_size {
+//                     let thr = (8.0 * received as f64) / 1_000_000_000.0;
+//                     println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
+//                 }
+//                 prev_size = current;
+//                 task::sleep(Duration::from_millis(500)).await;
+//             }
+//         });
+//     }
+// }

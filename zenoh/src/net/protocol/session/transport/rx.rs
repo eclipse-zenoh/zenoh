@@ -14,17 +14,17 @@
 use super::core::{Channel, ZInt};
 use super::proto::{Frame, FramePayload, SessionBody, SessionMessage};
 use super::SessionTransport;
-use zenoh_util::{zasynclock, zasyncread};
+use zenoh_util::zread;
 
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
 macro_rules! zcallback {
     ($transport:expr, $msg:expr) => {
-        let callback = zasyncread!($transport.callback).clone();
+        let callback = zread!($transport.callback).clone();
         match callback.as_ref() {
             Some(callback) => {
-                let _ = callback.handle_message($msg).await;
+                let _ = callback.handle_message($msg);
             }
             None => {
                 log::trace!(
@@ -50,7 +50,7 @@ macro_rules! zreceiveframe {
                 // Drop the guard before closing the session
                 drop($guard);
                 // Delete the whole session
-                $transport.delete().await;
+                $transport.delete();
                 // Close the link
                 return;
             }
@@ -113,24 +113,24 @@ impl SessionTransport {
     /*************************************/
     /*   MESSAGE RECEIVED FROM THE LINK  */
     /*************************************/
-    async fn handle_reliable_frame(&self, sn: ZInt, payload: FramePayload) {
+    fn handle_reliable_frame(&self, sn: ZInt, payload: FramePayload) {
         // @TODO: Implement the reordering and reliability. Wait for missing messages.
-        let mut guard = zasynclock!(self.rx_reliable);
+        let mut guard = zlock!(self.rx_reliable);
         zreceiveframe!(self, guard, sn, payload);
     }
 
-    async fn handle_best_effort_frame(&self, sn: ZInt, payload: FramePayload) {
-        let mut guard = zasynclock!(self.rx_best_effort);
+    fn handle_best_effort_frame(&self, sn: ZInt, payload: FramePayload) {
+        let mut guard = zlock!(self.rx_best_effort);
         zreceiveframe!(self, guard, sn, payload);
     }
 
     #[inline(always)]
-    pub(super) async fn receive_message(&self, message: SessionMessage) {
+    pub(super) fn receive_message(&self, message: SessionMessage) {
         // Process the received message
         match message.body {
             SessionBody::Frame(Frame { ch, sn, payload }) => match ch {
-                Channel::Reliable => self.handle_reliable_frame(sn, payload).await,
-                Channel::BestEffort => self.handle_best_effort_frame(sn, payload).await,
+                Channel::Reliable => self.handle_reliable_frame(sn, payload),
+                Channel::BestEffort => self.handle_best_effort_frame(sn, payload),
             },
             SessionBody::Hello { .. } => {
                 log::trace!(

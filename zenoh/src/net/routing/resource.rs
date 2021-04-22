@@ -375,8 +375,7 @@ impl Resource {
                             .local_mappings
                             .insert(rid, nonwild_prefix.clone());
                         face.primitives
-                            .decl_resource(rid, &nonwild_prefix.name().into())
-                            .await;
+                            .decl_resource(rid, &nonwild_prefix.name().into());
                         rid
                     }
                 };
@@ -545,9 +544,7 @@ pub async fn declare_resource(
                         .local_mappings
                         .insert(local_rid, res.clone());
 
-                    face.primitives
-                        .decl_resource(local_rid, &res.name().into())
-                        .await;
+                    face.primitives.decl_resource(local_rid, &res.name().into());
                 }
 
                 get_mut_unchecked(face)

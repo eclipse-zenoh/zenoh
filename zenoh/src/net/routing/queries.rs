@@ -49,10 +49,7 @@ async fn send_sourced_queryable_to_net_childs(
 
                         log::debug!("Send queryable {} on {}", res.name(), someface);
 
-                        someface
-                            .primitives
-                            .decl_queryable(&reskey, routing_context)
-                            .await;
+                        someface.primitives.decl_queryable(&reskey, routing_context);
                     }
                 }
                 None => {
@@ -79,7 +76,7 @@ async fn propagate_simple_queryable(
         {
             get_mut_unchecked(dst_face).local_qabls.push(res.clone());
             let reskey = Resource::decl_key(res, dst_face).await;
-            dst_face.primitives.decl_queryable(&reskey, None).await;
+            dst_face.primitives.decl_queryable(&reskey, None);
         }
     }
 }
@@ -293,8 +290,7 @@ async fn send_forget_sourced_queryable_to_net_childs(
 
                         someface
                             .primitives
-                            .forget_queryable(&reskey, routing_context)
-                            .await;
+                            .forget_queryable(&reskey, routing_context);
                     }
                 }
                 None => {
@@ -309,7 +305,7 @@ async fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Re
     for face in tables.faces.values_mut() {
         if face.local_qabls.contains(res) {
             let reskey = Resource::get_best_key(res, "", face.id);
-            face.primitives.forget_queryable(&reskey, None).await;
+            face.primitives.forget_queryable(&reskey, None);
 
             get_mut_unchecked(face)
                 .local_qabls
@@ -529,7 +525,7 @@ pub(crate) async fn undeclare_client_queryable(
         let face = &mut client_qabls[0];
         if face.local_qabls.contains(&res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
-            face.primitives.forget_queryable(&reskey, None).await;
+            face.primitives.forget_queryable(&reskey, None);
 
             get_mut_unchecked(face)
                 .local_qabls
@@ -561,7 +557,7 @@ pub(crate) async fn queries_new_client_face(tables: &mut Tables, face: &mut Arc<
     for qabl in &tables.router_qabls {
         get_mut_unchecked(face).local_qabls.push(qabl.clone());
         let reskey = Resource::decl_key(&qabl, face).await;
-        face.primitives.decl_queryable(&reskey, None).await;
+        face.primitives.decl_queryable(&reskey, None);
     }
 }
 
@@ -948,7 +944,7 @@ pub async fn route_query(
                 || (route.len() == 1 && route.iter().next().unwrap().1 .0.id == face.id)
             {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
-                face.primitives.clone().send_reply_final(qid).await
+                face.primitives.clone().send_reply_final(qid)
             } else {
                 let query = Arc::new(Query {
                     src_face: face.clone(),
@@ -965,24 +961,21 @@ pub async fn route_query(
 
                         log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
-                        outface
-                            .primitives
-                            .send_query(
-                                &reskey,
-                                predicate,
-                                qid,
-                                target.clone(),
-                                consolidation.clone(),
-                                *context,
-                            )
-                            .await
+                        outface.primitives.send_query(
+                            &reskey,
+                            predicate,
+                            qid,
+                            target.clone(),
+                            consolidation.clone(),
+                            *context,
+                        )
                     }
                 }
             }
         }
         None => {
             log::error!("Route query with unknown rid {}! Send final reply.", rid);
-            face.primitives.clone().send_reply_final(qid).await
+            face.primitives.clone().send_reply_final(qid)
         }
     }
 }
@@ -1000,19 +993,14 @@ pub(crate) async fn route_send_reply_data(
 ) {
     match face.pending_queries.get(&qid) {
         Some(query) => {
-            query
-                .src_face
-                .primitives
-                .clone()
-                .send_reply_data(
-                    query.src_qid,
-                    source_kind,
-                    replier_id,
-                    reskey,
-                    info,
-                    payload,
-                )
-                .await;
+            query.src_face.primitives.clone().send_reply_data(
+                query.src_qid,
+                source_kind,
+                replier_id,
+                reskey,
+                info,
+                payload,
+            );
         }
         None => log::error!("Route reply for unknown query!"),
     }
@@ -1037,8 +1025,7 @@ pub(crate) async fn route_send_reply_final(
                     .src_face
                     .primitives
                     .clone()
-                    .send_reply_final(query.src_qid)
-                    .await;
+                    .send_reply_final(query.src_qid);
             }
             get_mut_unchecked(face).pending_queries.remove(&qid);
         }
@@ -1060,8 +1047,7 @@ pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Ar
                 .src_face
                 .primitives
                 .clone()
-                .send_reply_final(query.src_qid)
-                .await;
+                .send_reply_final(query.src_qid);
         }
     }
     get_mut_unchecked(face).pending_queries.clear();

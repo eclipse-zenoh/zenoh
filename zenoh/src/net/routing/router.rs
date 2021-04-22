@@ -430,7 +430,7 @@ impl LinkStateInterceptor {
 
                 Ok(())
             }
-            _ => self.demux.handle_message(msg).await,
+            _ => self.demux.handle_message(msg),
         }
     }
 
@@ -439,7 +439,7 @@ impl LinkStateInterceptor {
     pub(crate) async fn del_link(&self, _link: Link) {}
 
     pub(crate) async fn closing(&self) {
-        self.demux.closing().await;
+        self.demux.closing();
         sleep(Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
         let mut tables = zasyncwrite!(self.tables);
         match self.session.get_whatami() {

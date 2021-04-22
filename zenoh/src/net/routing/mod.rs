@@ -38,38 +38,38 @@ OutSession(
     Admin(Arc<AdminSpace>),
     Primitives(Arc<dyn Primitives + Send + Sync>),
 ) {
-    async fn decl_resource(&self, rid: ZInt, reskey: &ResKey);
-    async fn forget_resource(&self, rid: ZInt);
-    async fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn decl_resource(&self, rid: ZInt, reskey: &ResKey);
+    fn forget_resource(&self, rid: ZInt);
+    fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn forget_publisher(
+    fn forget_publisher(
         &self,
         reskey: &ResKey,
         routing_context: Option<RoutingContext>,
     );
 
-    async fn decl_subscriber(
+    fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     );
 
-    async fn forget_subscriber(
+    fn forget_subscriber(
         &self,
         reskey: &ResKey,
         routing_context: Option<RoutingContext>,
     );
 
-    async fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn forget_queryable(
+    fn forget_queryable(
         &self,
         reskey: &ResKey,
         routing_context: Option<RoutingContext>,
     );
 
-    async fn send_data(
+    fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -79,7 +79,7 @@ OutSession(
         routing_context: Option<RoutingContext>,
     );
 
-    async fn send_query(
+    fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -89,7 +89,7 @@ OutSession(
         routing_context: Option<RoutingContext>,
     );
 
-    async fn send_reply_data(
+    fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -99,9 +99,9 @@ OutSession(
         payload: RBuf,
     );
 
-    async fn send_reply_final(&self, qid: ZInt);
+    fn send_reply_final(&self, qid: ZInt);
 
-    async fn send_pull(
+    fn send_pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
@@ -109,5 +109,5 @@ OutSession(
         max_samples: &Option<ZInt>,
     );
 
-    async fn send_close(&self);
+    fn send_close(&self);
 });

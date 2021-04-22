@@ -28,26 +28,24 @@ impl Mux {
         Mux { handler }
     }
 
-    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+    pub(crate) fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let d = Declaration::Resource {
             rid,
             key: reskey.clone(),
         };
         let decls = vec![d];
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None, None))
-            .await;
+            .handle_message(ZenohMessage::make_declare(decls, None, None));
     }
 
-    pub(crate) async fn forget_resource(&self, rid: ZInt) {
+    pub(crate) fn forget_resource(&self, rid: ZInt) {
         let d = Declaration::ForgetResource { rid };
         let decls = vec![d];
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, None, None))
-            .await;
+            .handle_message(ZenohMessage::make_declare(decls, None, None));
     }
 
-    pub(crate) async fn decl_subscriber(
+    pub(crate) fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
@@ -59,11 +57,10 @@ impl Mux {
         };
         let decls = vec![d];
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
-            .await;
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    pub(crate) async fn forget_subscriber(
+    pub(crate) fn forget_subscriber(
         &self,
         reskey: &ResKey,
         routing_context: Option<RoutingContext>,
@@ -73,25 +70,19 @@ impl Mux {
         };
         let decls = vec![d];
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
-            .await;
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    pub(crate) async fn decl_publisher(
-        &self,
-        reskey: &ResKey,
-        routing_context: Option<RoutingContext>,
-    ) {
+    pub(crate) fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let d = Declaration::Publisher {
             key: reskey.clone(),
         };
         let decls = vec![d];
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
-            .await;
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    pub(crate) async fn forget_publisher(
+    pub(crate) fn forget_publisher(
         &self,
         reskey: &ResKey,
         routing_context: Option<RoutingContext>,
@@ -101,25 +92,19 @@ impl Mux {
         };
         let decls = vec![d];
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
-            .await;
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    pub(crate) async fn decl_queryable(
-        &self,
-        reskey: &ResKey,
-        routing_context: Option<RoutingContext>,
-    ) {
+    pub(crate) fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let d = Declaration::Queryable {
             key: reskey.clone(),
         };
         let decls = vec![d];
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
-            .await;
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    pub(crate) async fn forget_queryable(
+    pub(crate) fn forget_queryable(
         &self,
         reskey: &ResKey,
         routing_context: Option<RoutingContext>,
@@ -129,11 +114,10 @@ impl Mux {
         };
         let decls = vec![d];
         self.handler
-            .handle_message(ZenohMessage::make_declare(decls, routing_context, None))
-            .await;
+            .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    pub(crate) async fn send_data(
+    pub(crate) fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -142,21 +126,19 @@ impl Mux {
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
     ) {
-        self.handler
-            .handle_message(ZenohMessage::make_data(
-                reskey.clone(),
-                payload,
-                reliability,
-                congestion_control,
-                data_info,
-                routing_context,
-                None,
-                None,
-            ))
-            .await;
+        self.handler.handle_message(ZenohMessage::make_data(
+            reskey.clone(),
+            payload,
+            reliability,
+            congestion_control,
+            data_info,
+            routing_context,
+            None,
+            None,
+        ));
     }
 
-    pub(crate) async fn send_query(
+    pub(crate) fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -170,20 +152,18 @@ impl Mux {
         } else {
             Some(target)
         };
-        self.handler
-            .handle_message(ZenohMessage::make_query(
-                reskey.clone(),
-                predicate.to_string(),
-                qid,
-                target_opt,
-                consolidation.clone(),
-                routing_context,
-                None,
-            ))
-            .await;
+        self.handler.handle_message(ZenohMessage::make_query(
+            reskey.clone(),
+            predicate.to_string(),
+            qid,
+            target_opt,
+            consolidation.clone(),
+            routing_context,
+            None,
+        ));
     }
 
-    pub(crate) async fn send_reply_data(
+    pub(crate) fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -192,50 +172,44 @@ impl Mux {
         data_info: Option<DataInfo>,
         payload: RBuf,
     ) {
-        self.handler
-            .handle_message(ZenohMessage::make_data(
-                reskey,
-                payload,
-                zmsg::default_reliability::REPLY,
-                zmsg::default_congestion_control::REPLY,
-                data_info,
-                None,
-                Some(ReplyContext::make(qid, source_kind, Some(replier_id))),
-                None,
-            ))
-            .await;
+        self.handler.handle_message(ZenohMessage::make_data(
+            reskey,
+            payload,
+            zmsg::default_reliability::REPLY,
+            zmsg::default_congestion_control::REPLY,
+            data_info,
+            None,
+            Some(ReplyContext::make(qid, source_kind, Some(replier_id))),
+            None,
+        ));
     }
 
-    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
-        self.handler
-            .handle_message(ZenohMessage::make_unit(
-                zmsg::default_reliability::REPLY,
-                zmsg::default_congestion_control::REPLY,
-                Some(ReplyContext::make(qid, 0, None)),
-                None,
-            ))
-            .await;
+    pub(crate) fn send_reply_final(&self, qid: ZInt) {
+        self.handler.handle_message(ZenohMessage::make_unit(
+            zmsg::default_reliability::REPLY,
+            zmsg::default_congestion_control::REPLY,
+            Some(ReplyContext::make(qid, 0, None)),
+            None,
+        ));
     }
 
-    pub(crate) async fn send_pull(
+    pub(crate) fn send_pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {
-        self.handler
-            .handle_message(ZenohMessage::make_pull(
-                is_final,
-                reskey.clone(),
-                pull_id,
-                *max_samples,
-                None,
-            ))
-            .await;
+        self.handler.handle_message(ZenohMessage::make_pull(
+            is_final,
+            reskey.clone(),
+            pull_id,
+            *max_samples,
+            None,
+        ));
     }
 
-    pub(crate) async fn send_close(&self) {
+    pub(crate) fn send_close(&self) {
         // self.handler.closing().await;
     }
 }

@@ -760,55 +760,64 @@ pub struct OrchSession {
 }
 
 impl OrchSession {
-    pub(crate) async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
-        // critical path shortcut
-        if msg.reply_context.is_none() {
-            if let ZenohBody::Data(Data {
-                key,
-                data_info,
-                payload,
-            }) = msg.body
-            {
-                let (rid, suffix) = (&key).into();
-                let face = &self.sub_event_handler.demux.primitives.state;
-                full_reentrant_route_data(
-                    &self.sub_event_handler.tables,
-                    face,
-                    rid,
-                    suffix,
-                    msg.congestion_control,
+    // @TOFIX: remove block_on
+    pub(crate) fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+        async_std::task::block_on(async {
+            // critical path shortcut
+            if msg.reply_context.is_none() {
+                if let ZenohBody::Data(Data {
+                    key,
                     data_info,
                     payload,
-                    msg.routing_context,
-                )
-                .await;
-                Ok(())
+                }) = msg.body
+                {
+                    let (rid, suffix) = (&key).into();
+                    let face = &self.sub_event_handler.demux.primitives.state;
+                    full_reentrant_route_data(
+                        &self.sub_event_handler.tables,
+                        face,
+                        rid,
+                        suffix,
+                        msg.congestion_control,
+                        data_info,
+                        payload,
+                        msg.routing_context,
+                    )
+                    .await;
+                    Ok(())
+                } else {
+                    self.sub_event_handler.handle_message(msg).await
+                }
             } else {
                 self.sub_event_handler.handle_message(msg).await
             }
-        } else {
-            self.sub_event_handler.handle_message(msg).await
-        }
+        })
     }
 
-    pub(crate) async fn new_link(&self, link: Link) {
-        self.sub_event_handler.new_link(link).await
+    // @TOFIX: remove block_on
+    pub(crate) fn new_link(&self, link: Link) {
+        async_std::task::block_on(async { self.sub_event_handler.new_link(link).await });
     }
 
-    pub(crate) async fn del_link(&self, link: Link) {
-        self.sub_event_handler.del_link(link).await
+    // @TOFIX: remove block_on
+    pub(crate) fn del_link(&self, link: Link) {
+        async_std::task::block_on(async { self.sub_event_handler.del_link(link).await });
     }
 
-    pub(crate) async fn closing(&self) {
-        self.sub_event_handler.closing().await;
-        if let Some(locator) = &*zasyncread!(self.locator) {
-            let locator = locator.clone();
-            let orchestrator = self.orchestrator.clone();
-            async_std::task::spawn(async move { orchestrator.peer_connector(locator).await });
-        }
+    // @TOFIX: remove block_on
+    pub(crate) fn closing(&self) {
+        async_std::task::block_on(async {
+            self.sub_event_handler.closing().await;
+            if let Some(locator) = &*zasyncread!(self.locator) {
+                let locator = locator.clone();
+                let orchestrator = self.orchestrator.clone();
+                async_std::task::spawn(async move { orchestrator.peer_connector(locator).await });
+            }
+        });
     }
 
-    pub(crate) async fn closed(&self) {
-        self.sub_event_handler.closed().await
+    // @TOFIX: remove block_on
+    pub(crate) fn closed(&self) {
+        async_std::task::block_on(async { self.sub_event_handler.closed().await });
     }
 }

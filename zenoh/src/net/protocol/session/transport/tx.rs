@@ -14,24 +14,24 @@
 use super::proto::ZenohMessage;
 use super::session::defaults::QUEUE_PRIO_DATA;
 use super::SessionTransport;
-use zenoh_util::zasyncread;
+use zenoh_util::zread;
 
 impl SessionTransport {
     #[inline(always)]
-    pub(super) async fn schedule_first_fit(&self, msg: ZenohMessage) {
-        let guard = zasyncread!(self.links);
+    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) {
+        let guard = zread!(self.links);
         for cl in guard.iter() {
             let link = cl.get_link();
             if msg.is_reliable() && link.is_reliable() {
-                cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA).await;
+                cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
                 return;
             } else if !msg.is_reliable() && !link.is_reliable() {
-                cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA).await;
+                cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
                 return;
             }
         }
         match guard.get(0) {
-            Some(cl) => cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA).await,
+            Some(cl) => cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA),
             None => log::trace!("Message dropped because the session has no links: {}", msg),
         }
     }

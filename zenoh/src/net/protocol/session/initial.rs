@@ -490,24 +490,22 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
         //       session lease.
         let keep_alive = manager.config.keep_alive.min(info.lease / 4);
-        let _ = transport
-            .add_link(
-                link.clone(),
-                manager.config.batch_size,
-                info.lease,
-                keep_alive,
-            )
-            .await?;
+        let _ = transport.add_link(
+            link.clone(),
+            manager.config.batch_size,
+            info.lease,
+            keep_alive,
+        )?;
 
         // Start the TX loop
-        let _ = transport.start_tx(&link).await?;
+        let _ = transport.start_tx(&link)?;
 
         // Assign a callback if the session is new
         loop {
-            match transport.get_callback().await {
+            match transport.get_callback() {
                 Some(callback) => {
                     // Notify the session handler there is a new link on this session
-                    callback.new_link(link.clone()).await;
+                    callback.new_link(link.clone());
                     break;
                 }
                 None => {
@@ -515,21 +513,19 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
                     // NOTE: the read loop of the link the open message was sent on remains blocked
                     //       until the new_session() returns. The read_loop in the various links
                     //       waits for any eventual transport to associate to.
-                    let callback = manager.config.handler.new_session(session.clone()).await?;
+                    let callback = manager.config.handler.new_session(session.clone())?;
                     // Set the callback on the transport
-                    let _ = transport.set_callback(callback).await;
+                    let _ = transport.set_callback(callback);
                 }
             }
         }
 
         // Start the RX loop
-        let _ = transport.start_rx(&link).await?;
+        let _ = transport.start_rx(&link)?;
     }
     drop(a_guard);
 
-    let mut guard = zasynclock!(manager.opened);
-    guard.remove(&info.pid);
-    drop(guard);
+    zasynclock!(manager.opened).remove(&info.pid);
 
     Ok(session)
 }
@@ -862,7 +858,7 @@ async fn accept_init_session(
 
         // Check if we have reached maximum number of links for this session
         if let Some(limit) = manager.config.max_links {
-            let links = transport.get_links().await;
+            let links = transport.get_links();
             if links.len() >= limit {
                 let e = format!(
                     "Rejecting OpenSyn on link: {}. Max links limit reached for peer: {}",
@@ -938,7 +934,6 @@ async fn accept_init_session(
             input.lease,
             keep_alive,
         )
-        .await
         .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?;
 
     log::debug!(
@@ -993,14 +988,14 @@ async fn accept_finalize_session(
     let a_guard = transport.get_alive().await;
     if *a_guard {
         // Start the TX loop
-        let _ = transport.start_tx(&link).await?;
+        let _ = transport.start_tx(&link)?;
 
         // Assign a callback if the session is new
         loop {
-            match transport.get_callback().await {
+            match transport.get_callback() {
                 Some(callback) => {
                     // Notify the session handler there is a new link on this session
-                    callback.new_link(link.clone()).await;
+                    callback.new_link(link.clone());
                     break;
                 }
                 None => {
@@ -1012,7 +1007,6 @@ async fn accept_finalize_session(
                         .config
                         .handler
                         .new_session(input.session.clone())
-                        .await
                         .map_err(|e| {
                             let e = format!(
                                 "Rejecting OpenSyn on link: {}. New session error: {:?}",
@@ -1021,13 +1015,13 @@ async fn accept_finalize_session(
                             zerror2!(ZErrorKind::InvalidSession { descr: e })
                         })?;
                     // Set the callback on the transport
-                    transport.set_callback(callback).await;
+                    transport.set_callback(callback);
                 }
             }
         }
 
         // Start the RX loop
-        let _ = transport.start_rx(&link).await?;
+        let _ = transport.start_rx(&link)?;
     }
     drop(a_guard);
 

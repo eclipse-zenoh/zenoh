@@ -481,48 +481,16 @@ impl SessionManager {
         Ok(session)
     }
 
-    pub fn open_session<'async_trait>(
-        &'async_trait self,
-        locator: &'async_trait Locator,
-    ) -> async_std::pin::Pin<
-        Box<dyn std::future::Future<Output = ZResult<Session>> + Send + 'async_trait>,
-    >
-    where
-        Self: Sync + 'async_trait,
-    {
-        Box::pin(async move {
-            // Create the timeout duration
-            let to = Duration::from_millis(self.config.timeout);
-            // Automatically create a new link manager for the protocol if it does not exist
-            let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
-            let ps = self.config.locator_property.get(&locator.get_proto());
-            // Create a new link associated by calling the Link Manager
-            let link = manager.new_link(&locator, ps).await?;
-
-            // Try a maximum number of times to open a session
-            let retries = self.config.retries;
-            for i in 0..retries {
-                // Check the future result
-                match super::initial::open_link(self, &link).timeout(to).await {
-                    Ok(res) => return res,
-                    Err(e) => log::debug!(
-                        "Can not open a session to {}: {}. Timeout: {:?}. Attempt: {}/{}",
-                        locator,
-                        e,
-                        to,
-                        i + 1,
-                        retries
-                    ),
-                }
-            }
-
-            let e = format!(
-                "Can not open a session to {}: maximum number of attemps reached ({})",
-                locator, retries
-            );
-            log::warn!("{}", e);
-            zerror!(ZErrorKind::Other { descr: e })
-        })
+    pub async fn open_session(&self, locator: &Locator) -> ZResult<Session> {
+        // Create the timeout duration
+        let to = Duration::from_millis(self.config.timeout);
+        // Automatically create a new link manager for the protocol if it does not exist
+        let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
+        let ps = self.config.locator_property.get(&locator.get_proto());
+        // Create a new link associated by calling the Link Manager
+        let link = manager.new_link(&locator, ps).await?;
+        // Open the link
+        super::initial::open_link(self, &link).await
     }
 
     pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LocatorProperty>) {

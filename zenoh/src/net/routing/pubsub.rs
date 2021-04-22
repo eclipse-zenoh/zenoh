@@ -50,8 +50,7 @@ async fn send_sourced_subscription_to_net_childs(
 
                         someface
                             .primitives
-                            .decl_subscriber(&reskey, sub_info, routing_context)
-                            .await;
+                            .decl_subscriber(&reskey, sub_info, routing_context);
                     }
                 }
                 None => {
@@ -79,10 +78,7 @@ async fn propagate_simple_subscription(
         {
             get_mut_unchecked(dst_face).local_subs.push(res.clone());
             let reskey = Resource::decl_key(res, dst_face).await;
-            dst_face
-                .primitives
-                .decl_subscriber(&reskey, sub_info, None)
-                .await;
+            dst_face.primitives.decl_subscriber(&reskey, sub_info, None);
         }
     }
 }
@@ -342,8 +338,7 @@ async fn send_forget_sourced_subscription_to_net_childs(
 
                         someface
                             .primitives
-                            .forget_subscriber(&reskey, routing_context)
-                            .await;
+                            .forget_subscriber(&reskey, routing_context);
                     }
                 }
                 None => {
@@ -358,7 +353,7 @@ async fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Res
     for face in tables.faces.values_mut() {
         if face.local_subs.contains(res) {
             let reskey = Resource::get_best_key(res, "", face.id);
-            face.primitives.forget_subscriber(&reskey, None).await;
+            face.primitives.forget_subscriber(&reskey, None);
 
             get_mut_unchecked(face).local_subs.retain(|sub| sub != res);
         }
@@ -581,7 +576,7 @@ pub(crate) async fn undeclare_client_subscription(
         let face = &mut client_subs[0];
         if face.local_subs.contains(&res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
-            face.primitives.forget_subscriber(&reskey, None).await;
+            face.primitives.forget_subscriber(&reskey, None);
 
             get_mut_unchecked(face)
                 .local_subs
@@ -618,9 +613,7 @@ pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<F
     for sub in &tables.router_subs {
         get_mut_unchecked(face).local_subs.push(sub.clone());
         let reskey = Resource::decl_key(&sub, face).await;
-        face.primitives
-            .decl_subscriber(&reskey, &sub_info, None)
-            .await;
+        face.primitives.decl_subscriber(&reskey, &sub_info, None);
     }
 }
 
@@ -1107,7 +1100,6 @@ macro_rules! send_to_first {
                     $data_info,
                     *context,
                 )
-                .await
         }
     }
 }
@@ -1126,7 +1118,6 @@ macro_rules! send_to_all {
                         $data_info.clone(),
                         *context,
                     )
-                    .await
             }
         }
     }
@@ -1254,16 +1245,14 @@ pub async fn pull_data(
                             for (name, (info, data)) in &ctx.last_values {
                                 let reskey =
                                     Resource::get_best_key(&tables.root_res, name, face.id);
-                                face.primitives
-                                    .send_data(
-                                        &reskey,
-                                        data.clone(),
-                                        subinfo.reliability,
-                                        CongestionControl::Drop, // TODO: Default value for the time being
-                                        info.clone(),
-                                        None,
-                                    )
-                                    .await;
+                                face.primitives.send_data(
+                                    &reskey,
+                                    data.clone(),
+                                    subinfo.reliability,
+                                    CongestionControl::Drop, // TODO: Default value for the time being
+                                    info.clone(),
+                                    None,
+                                );
                             }
                             get_mut_unchecked(&mut ctx).last_values.clear();
                             drop(lock);

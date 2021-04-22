@@ -27,14 +27,14 @@ use super::session::defaults::{QUEUE_PRIO_CTRL, RX_BUFF_SIZE};
 use super::{SeqNumGenerator, SessionTransport};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Mutex};
 use async_std::task;
 use batch::*;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tx::*;
 use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zasynclock, zerror};
+use zenoh_util::{zerror, zlock};
 
 #[derive(Clone)]
 pub(crate) struct SessionTransportLink {
@@ -85,12 +85,13 @@ impl SessionTransportLink {
 }
 
 impl SessionTransportLink {
-    pub(crate) async fn start_tx(&self) {
-        let mut guard = zasynclock!(self.signal_tx);
+    pub(crate) fn start_tx(&self) {
+        let mut guard = zlock!(self.signal_tx);
         if guard.is_none() {
             // SessionTransport for signal the termination of TX task
             let (sender_tx, receiver_tx) = bounded::<ZResult<()>>(1);
             *guard = Some(sender_tx);
+            drop(guard);
             // Spawn the TX task
             let c_link = self.clone();
             task::spawn(async move {
@@ -98,21 +99,21 @@ impl SessionTransportLink {
                 let res = tx_task(c_link.clone(), receiver_tx).await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
-                    let _ = c_link.transport.del_link(&c_link.inner).await;
+                    let _ = c_link.transport.del_link(&c_link.inner);
                 }
             });
         }
     }
 
-    pub(crate) async fn stop_tx(&self) {
-        let mut guard = zasynclock!(self.signal_tx);
+    pub(crate) fn stop_tx(&self) {
+        let mut guard = zlock!(self.signal_tx);
         if let Some(signal_tx) = guard.take() {
             let _ = signal_tx.try_send(Ok(()));
         }
     }
 
-    pub(crate) async fn start_rx(&self) {
-        let mut guard = zasynclock!(self.signal_rx);
+    pub(crate) fn start_rx(&self) {
+        let mut guard = zlock!(self.signal_rx);
         if guard.is_none() {
             let (sender_rx, receiver_rx) = bounded::<ZResult<()>>(1);
             *guard = Some(sender_rx);
@@ -123,14 +124,14 @@ impl SessionTransportLink {
                 let res = rx_task(c_link.clone(), receiver_rx).await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
-                    let _ = c_link.transport.del_link(&c_link.inner).await;
+                    let _ = c_link.transport.del_link(&c_link.inner);
                 }
             });
         }
     }
 
-    pub(crate) async fn stop_rx(&self) {
-        let mut guard = zasynclock!(self.signal_rx);
+    pub(crate) fn stop_rx(&self) {
+        let mut guard = zlock!(self.signal_rx);
         if let Some(signal_rx) = guard.take() {
             let _ = signal_rx.try_send(Ok(()));
         }
@@ -142,27 +143,28 @@ impl SessionTransportLink {
     }
 
     #[inline]
-    pub(crate) async fn schedule_zenoh_message(&self, msg: ZenohMessage, priority: usize) {
-        self.pipeline.push_zenoh_message(msg, priority).await;
+    pub(crate) fn schedule_zenoh_message(&self, msg: ZenohMessage, priority: usize) {
+        self.pipeline.push_zenoh_message(msg, priority);
     }
 
     #[inline]
-    pub(crate) async fn schedule_session_message(&self, msg: SessionMessage, priority: usize) {
-        self.pipeline.push_session_message(msg, priority).await;
+    pub(crate) fn schedule_session_message(&self, msg: SessionMessage, priority: usize) {
+        self.pipeline.push_session_message(msg, priority);
     }
 
-    pub(crate) async fn close(self) -> ZResult<()> {
+    pub(crate) fn close(self) {
         // Send the TX stop signal
-        let _ = self.stop_tx().await;
-        // Drain what remains in the queue before exiting
-        while let Some(batch) = self.pipeline.drain().await {
-            let _ = self.inner.write_all(batch.get_buffer()).await;
-        }
-
+        let _ = self.stop_tx();
         // Send the RX stop signal
-        let _ = self.stop_rx().await;
-        // Close the underlying link
-        self.inner.close().await
+        let _ = self.stop_rx();
+        task::spawn(async move {
+            // Drain what remains in the queue before exiting
+            while let Some(batch) = self.pipeline.drain().await {
+                let _ = self.inner.write_all(batch.get_buffer()).await;
+            }
+            // Close the underlying link
+            self.inner.close().await
+        });
     }
 }
 
@@ -185,15 +187,13 @@ async fn tx_task(link: SessionTransportLink, stop: Receiver<ZResult<()>>) -> ZRe
                         break Ok(Ok(()));
                     }
                     // Reinsert the batch into the queue
-                    link.pipeline.refill(batch, index).await;
+                    link.pipeline.refill(batch, index);
                 }
                 Err(_) => {
                     let pid = None;
                     let attachment = None;
                     let message = SessionMessage::make_keep_alive(pid, attachment);
-                    link.pipeline
-                        .push_session_message(message, QUEUE_PRIO_CTRL)
-                        .await;
+                    link.pipeline.push_session_message(message, QUEUE_PRIO_CTRL);
                 }
             }
         }
@@ -260,7 +260,7 @@ async fn read_stream(link: SessionTransportLink) -> ZResult<()> {
 
         while rbuf.can_read() {
             match rbuf.read_session_message() {
-                Some(msg) => link.receive_message(msg).await,
+                Some(msg) => link.receive_message(msg),
                 None => {
                     let e = format!("Decoding error on link: {}", link.inner);
                     return zerror!(ZErrorKind::IoError { descr: e });
@@ -316,7 +316,7 @@ async fn read_dgram(link: SessionTransportLink) -> ZResult<()> {
                 // Deserialize all the messages from the current RBuf
                 while rbuf.can_read() {
                     match rbuf.read_session_message() {
-                        Some(msg) => link.receive_message(msg).await,
+                        Some(msg) => link.receive_message(msg),
                         None => {
                             let e = format!("Decoding error on link: {}", link.inner);
                             return zerror!(ZErrorKind::IoError { descr: e });
