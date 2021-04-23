@@ -61,7 +61,11 @@ fn get_plugins_from_args() -> Vec<String> {
 
 fn main() {
     task::block_on(async {
+        #[cfg(feature = "stats")]
+        env_logger::builder().format_timestamp_millis().init();
+        #[cfg(not(feature = "stats"))]
         env_logger::init();
+
         log::debug!("zenohd {}", *LONG_VERSION);
 
         let plugin_search_dir_usage = format!(
