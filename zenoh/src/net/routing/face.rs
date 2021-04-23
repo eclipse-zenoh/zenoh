@@ -11,11 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, RwLock};
-use std::collections::HashMap;
-use std::fmt;
-use zenoh_util::zasyncwrite;
-
 use super::protocol::core::{
     whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
     SubInfo, WhatAmI, ZInt,
@@ -24,6 +19,9 @@ use super::protocol::io::RBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 use super::router::*;
 use super::OutSession;
+use async_std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+use std::fmt;
 
 pub struct FaceState {
     pub(super) id: usize,
@@ -96,369 +94,366 @@ pub struct Face {
 }
 
 impl Face {
-    pub async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
-        let (prefixid, suffix) = reskey.into();
-        let mut tables = zasyncwrite!(self.tables);
-        declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix).await;
+    // @TOFIX
+    pub fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+        // let (prefixid, suffix) = reskey.into();
+        // let mut tables = zasyncwrite!(self.tables);
+        // declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix).await;
     }
 
-    pub async fn forget_resource(&self, rid: ZInt) {
-        let mut tables = zasyncwrite!(self.tables);
-        undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
+    // @TOFIX
+    pub fn forget_resource(&self, rid: ZInt) {
+        // let mut tables = zasyncwrite!(self.tables);
+        // undeclare_resource(&mut tables, &mut self.state.clone(), rid).await;
     }
 
-    pub async fn decl_subscriber(
+    // @TOFIX
+    pub fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = reskey.into();
-        let mut tables = zasyncwrite!(self.tables);
-        match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
-                Some(routing_context) => {
-                    let router = match tables
-                        .routers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
-                    {
-                        Some(router) => router.clone(),
-                        None => {
-                            log::error!(
-                                "Received router subscription with unknown routing context id {}",
-                                routing_context
-                            );
-                            return;
-                        }
-                    };
+        // let (prefixid, suffix) = reskey.into();
+        // let mut tables = zasyncwrite!(self.tables);
+        // match (tables.whatami, self.state.whatami) {
+        //     (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+        //         Some(routing_context) => {
+        //             let router = match tables
+        //                 .routers_net
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .get_link(self.state.link_id)
+        //                 .get_pid(&routing_context)
+        //             {
+        //                 Some(router) => router.clone(),
+        //                 None => {
+        //                     log::error!(
+        //                         "Received router subscription with unknown routing context id {}",
+        //                         routing_context
+        //                     );
+        //                     return;
+        //                 }
+        //             };
 
-                    declare_router_subscription(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        sub_info,
-                        router,
-                    )
-                    .await
-                }
+        //             declare_router_subscription(
+        //                 &mut tables,
+        //                 &mut self.state.clone(),
+        //                 prefixid,
+        //                 suffix,
+        //                 sub_info,
+        //                 router,
+        //             )
+        //             .await
+        //         }
 
-                None => {
-                    log::error!("Received router subscription with no routing context");
-                    return;
-                }
-            },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
-                Some(routing_context) => {
-                    let peer = match tables
-                        .peers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
-                    {
-                        Some(peer) => peer.clone(),
-                        None => {
-                            log::error!(
-                                "Received peer subscription with unknown routing context id {}",
-                                routing_context
-                            );
-                            return;
-                        }
-                    };
+        //         None => {
+        //             log::error!("Received router subscription with no routing context");
+        //             return;
+        //         }
+        //     },
+        //     (whatami::ROUTER, whatami::PEER)
+        //     | (whatami::PEER, whatami::ROUTER)
+        //     | (whatami::PEER, whatami::PEER) => match routing_context {
+        //         Some(routing_context) => {
+        //             let peer = match tables
+        //                 .peers_net
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .get_link(self.state.link_id)
+        //                 .get_pid(&routing_context)
+        //             {
+        //                 Some(peer) => peer.clone(),
+        //                 None => {
+        //                     log::error!(
+        //                         "Received peer subscription with unknown routing context id {}",
+        //                         routing_context
+        //                     );
+        //                     return;
+        //                 }
+        //             };
 
-                    declare_peer_subscription(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        sub_info,
-                        peer,
-                    )
-                    .await
-                }
+        //             declare_peer_subscription(
+        //                 &mut tables,
+        //                 &mut self.state.clone(),
+        //                 prefixid,
+        //                 suffix,
+        //                 sub_info,
+        //                 peer,
+        //             )
+        //             .await
+        //         }
 
-                None => {
-                    log::error!("Received peer subscription with no routing context");
-                    return;
-                }
-            },
-            _ => {
-                declare_client_subscription(
-                    &mut tables,
-                    &mut self.state.clone(),
-                    prefixid,
-                    suffix,
-                    sub_info,
-                )
-                .await
-            }
-        }
+        //         None => {
+        //             log::error!("Received peer subscription with no routing context");
+        //             return;
+        //         }
+        //     },
+        //     _ => {
+        //         declare_client_subscription(
+        //             &mut tables,
+        //             &mut self.state.clone(),
+        //             prefixid,
+        //             suffix,
+        //             sub_info,
+        //         )
+        //         .await
+        //     }
+        // }
     }
 
-    pub async fn forget_subscriber(
-        &self,
-        reskey: &ResKey,
-        routing_context: Option<RoutingContext>,
-    ) {
-        let (prefixid, suffix) = reskey.into();
-        let mut tables = zasyncwrite!(self.tables);
-        match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
-                Some(routing_context) => {
-                    let router = match tables
-                        .routers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
-                    {
-                        Some(router) => router.clone(),
-                        None => {
-                            log::error!(
-                                "Received router forget subscription with unknown routing context id {}",
-                                routing_context
-                            );
-                            return;
-                        }
-                    };
+    // @TOFIX
+    pub fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+        // let (prefixid, suffix) = reskey.into();
+        // let mut tables = zasyncwrite!(self.tables);
+        // match (tables.whatami, self.state.whatami) {
+        //     (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+        //         Some(routing_context) => {
+        //             let router = match tables
+        //                 .routers_net
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .get_link(self.state.link_id)
+        //                 .get_pid(&routing_context)
+        //             {
+        //                 Some(router) => router.clone(),
+        //                 None => {
+        //                     log::error!(
+        //                         "Received router forget subscription with unknown routing context id {}",
+        //                         routing_context
+        //                     );
+        //                     return;
+        //                 }
+        //             };
 
-                    forget_router_subscription(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        &router,
-                    )
-                    .await
-                }
+        //             forget_router_subscription(
+        //                 &mut tables,
+        //                 &mut self.state.clone(),
+        //                 prefixid,
+        //                 suffix,
+        //                 &router,
+        //             )
+        //             .await
+        //         }
 
-                None => {
-                    log::error!("Received router forget subscription with no routing context");
-                    return;
-                }
-            },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
-                Some(routing_context) => {
-                    let peer = match tables
-                        .peers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
-                    {
-                        Some(peer) => peer.clone(),
-                        None => {
-                            log::error!(
-                                "Received peer forget subscription with unknown routing context id {}",
-                                routing_context
-                            );
-                            return;
-                        }
-                    };
+        //         None => {
+        //             log::error!("Received router forget subscription with no routing context");
+        //             return;
+        //         }
+        //     },
+        //     (whatami::ROUTER, whatami::PEER)
+        //     | (whatami::PEER, whatami::ROUTER)
+        //     | (whatami::PEER, whatami::PEER) => match routing_context {
+        //         Some(routing_context) => {
+        //             let peer = match tables
+        //                 .peers_net
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .get_link(self.state.link_id)
+        //                 .get_pid(&routing_context)
+        //             {
+        //                 Some(peer) => peer.clone(),
+        //                 None => {
+        //                     log::error!(
+        //                         "Received peer forget subscription with unknown routing context id {}",
+        //                         routing_context
+        //                     );
+        //                     return;
+        //                 }
+        //             };
 
-                    forget_peer_subscription(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        &peer,
-                    )
-                    .await
-                }
+        //             forget_peer_subscription(
+        //                 &mut tables,
+        //                 &mut self.state.clone(),
+        //                 prefixid,
+        //                 suffix,
+        //                 &peer,
+        //             )
+        //             .await
+        //         }
 
-                None => {
-                    log::error!("Received peer forget subscription with no routing context");
-                    return;
-                }
-            },
-            _ => {
-                forget_client_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix)
-                    .await
-            }
-        }
+        //         None => {
+        //             log::error!("Received peer forget subscription with no routing context");
+        //             return;
+        //         }
+        //     },
+        //     _ => {
+        //         forget_client_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix)
+        //             .await
+        //     }
+        // }
     }
 
-    pub async fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    pub fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+
+    pub fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+
+    // @TOFIX
+    pub fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+        // let (prefixid, suffix) = reskey.into();
+        // let mut tables = zasyncwrite!(self.tables);
+        // match (tables.whatami, self.state.whatami) {
+        //     (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+        //         Some(routing_context) => {
+        //             let router = match tables
+        //                 .routers_net
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .get_link(self.state.link_id)
+        //                 .get_pid(&routing_context)
+        //             {
+        //                 Some(router) => router.clone(),
+        //                 None => {
+        //                     log::error!(
+        //                         "Received router queryable with unknown routing context id {}",
+        //                         routing_context
+        //                     );
+        //                     return;
+        //                 }
+        //             };
+
+        //             declare_router_queryable(
+        //                 &mut tables,
+        //                 &mut self.state.clone(),
+        //                 prefixid,
+        //                 suffix,
+        //                 router,
+        //             )
+        //             .await
+        //         }
+
+        //         None => {
+        //             log::error!("Received router queryable with no routing context");
+        //             return;
+        //         }
+        //     },
+        //     (whatami::ROUTER, whatami::PEER)
+        //     | (whatami::PEER, whatami::ROUTER)
+        //     | (whatami::PEER, whatami::PEER) => match routing_context {
+        //         Some(routing_context) => {
+        //             let peer = match tables
+        //                 .peers_net
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .get_link(self.state.link_id)
+        //                 .get_pid(&routing_context)
+        //             {
+        //                 Some(peer) => peer.clone(),
+        //                 None => {
+        //                     log::error!(
+        //                         "Received peer queryable with unknown routing context id {}",
+        //                         routing_context
+        //                     );
+        //                     return;
+        //                 }
+        //             };
+
+        //             declare_peer_queryable(
+        //                 &mut tables,
+        //                 &mut self.state.clone(),
+        //                 prefixid,
+        //                 suffix,
+        //                 peer,
+        //             )
+        //             .await
+        //         }
+
+        //         None => {
+        //             log::error!("Received peer queryable with no routing context");
+        //             return;
+        //         }
+        //     },
+        //     _ => {
+        //         declare_client_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix)
+        //             .await
+        //     }
+        // }
     }
 
-    pub async fn forget_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    // @TOFIX
+    pub fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+        // let (prefixid, suffix) = reskey.into();
+        // let mut tables = zasyncwrite!(self.tables);
+        // match (tables.whatami, self.state.whatami) {
+        //     (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+        //         Some(routing_context) => {
+        //             let router = match tables
+        //                 .routers_net
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .get_link(self.state.link_id)
+        //                 .get_pid(&routing_context)
+        //             {
+        //                 Some(router) => router.clone(),
+        //                 None => {
+        //                     log::error!(
+        //                         "Received router forget queryable with unknown routing context id {}",
+        //                         routing_context
+        //                     );
+        //                     return;
+        //                 }
+        //             };
+
+        //             forget_router_queryable(
+        //                 &mut tables,
+        //                 &mut self.state.clone(),
+        //                 prefixid,
+        //                 suffix,
+        //                 &router,
+        //             )
+        //             .await
+        //         }
+
+        //         None => {
+        //             log::error!("Received router forget queryable with no routing context");
+        //             return;
+        //         }
+        //     },
+        //     (whatami::ROUTER, whatami::PEER)
+        //     | (whatami::PEER, whatami::ROUTER)
+        //     | (whatami::PEER, whatami::PEER) => match routing_context {
+        //         Some(routing_context) => {
+        //             let peer = match tables
+        //                 .peers_net
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .get_link(self.state.link_id)
+        //                 .get_pid(&routing_context)
+        //             {
+        //                 Some(peer) => peer.clone(),
+        //                 None => {
+        //                     log::error!(
+        //                         "Received peer forget queryable with unknown routing context id {}",
+        //                         routing_context
+        //                     );
+        //                     return;
+        //                 }
+        //             };
+
+        //             forget_peer_queryable(
+        //                 &mut tables,
+        //                 &mut self.state.clone(),
+        //                 prefixid,
+        //                 suffix,
+        //                 &peer,
+        //             )
+        //             .await
+        //         }
+
+        //         None => {
+        //             log::error!("Received peer forget queryable with no routing context");
+        //             return;
+        //         }
+        //     },
+        //     _ => {
+        //         forget_client_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix)
+        //             .await
+        //     }
+        // }
     }
 
-    pub async fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
-        let (prefixid, suffix) = reskey.into();
-        let mut tables = zasyncwrite!(self.tables);
-        match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
-                Some(routing_context) => {
-                    let router = match tables
-                        .routers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
-                    {
-                        Some(router) => router.clone(),
-                        None => {
-                            log::error!(
-                                "Received router queryable with unknown routing context id {}",
-                                routing_context
-                            );
-                            return;
-                        }
-                    };
-
-                    declare_router_queryable(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        router,
-                    )
-                    .await
-                }
-
-                None => {
-                    log::error!("Received router queryable with no routing context");
-                    return;
-                }
-            },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
-                Some(routing_context) => {
-                    let peer = match tables
-                        .peers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
-                    {
-                        Some(peer) => peer.clone(),
-                        None => {
-                            log::error!(
-                                "Received peer queryable with unknown routing context id {}",
-                                routing_context
-                            );
-                            return;
-                        }
-                    };
-
-                    declare_peer_queryable(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        peer,
-                    )
-                    .await
-                }
-
-                None => {
-                    log::error!("Received peer queryable with no routing context");
-                    return;
-                }
-            },
-            _ => {
-                declare_client_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix)
-                    .await
-            }
-        }
-    }
-
-    pub async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
-        let (prefixid, suffix) = reskey.into();
-        let mut tables = zasyncwrite!(self.tables);
-        match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
-                Some(routing_context) => {
-                    let router = match tables
-                        .routers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
-                    {
-                        Some(router) => router.clone(),
-                        None => {
-                            log::error!(
-                                "Received router forget queryable with unknown routing context id {}",
-                                routing_context
-                            );
-                            return;
-                        }
-                    };
-
-                    forget_router_queryable(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        &router,
-                    )
-                    .await
-                }
-
-                None => {
-                    log::error!("Received router forget queryable with no routing context");
-                    return;
-                }
-            },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
-                Some(routing_context) => {
-                    let peer = match tables
-                        .peers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
-                    {
-                        Some(peer) => peer.clone(),
-                        None => {
-                            log::error!(
-                                "Received peer forget queryable with unknown routing context id {}",
-                                routing_context
-                            );
-                            return;
-                        }
-                    };
-
-                    forget_peer_queryable(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        &peer,
-                    )
-                    .await
-                }
-
-                None => {
-                    log::error!("Received peer forget queryable with no routing context");
-                    return;
-                }
-            },
-            _ => {
-                forget_client_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix)
-                    .await
-            }
-        }
-    }
-
-    pub async fn send_data(
+    // @TOFIX
+    pub fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -467,21 +462,22 @@ impl Face {
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = reskey.into();
-        full_reentrant_route_data(
-            &self.tables,
-            &self.state,
-            prefixid,
-            suffix,
-            congestion_control,
-            data_info,
-            payload,
-            routing_context,
-        )
-        .await;
+        // let (prefixid, suffix) = reskey.into();
+        // full_reentrant_route_data(
+        //     &self.tables,
+        //     &self.state,
+        //     prefixid,
+        //     suffix,
+        //     congestion_control,
+        //     data_info,
+        //     payload,
+        //     routing_context,
+        // )
+        // .await;
     }
 
-    pub async fn send_query(
+    // @TOFIX
+    pub fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -490,23 +486,24 @@ impl Face {
         consolidation: QueryConsolidation,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = reskey.into();
-        let mut tables = zasyncwrite!(self.tables);
-        route_query(
-            &mut tables,
-            &self.state,
-            prefixid,
-            suffix,
-            predicate,
-            qid,
-            target,
-            consolidation,
-            routing_context,
-        )
-        .await;
+        // let (prefixid, suffix) = reskey.into();
+        // let mut tables = zasyncwrite!(self.tables);
+        // route_query(
+        //     &mut tables,
+        //     &self.state,
+        //     prefixid,
+        //     suffix,
+        //     predicate,
+        //     qid,
+        //     target,
+        //     consolidation,
+        //     routing_context,
+        // )
+        // .await;
     }
 
-    pub async fn send_reply_data(
+    // @TOFIX
+    pub fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -515,50 +512,53 @@ impl Face {
         info: Option<DataInfo>,
         payload: RBuf,
     ) {
-        let mut tables = zasyncwrite!(self.tables);
-        route_send_reply_data(
-            &mut tables,
-            &mut self.state.clone(),
-            qid,
-            source_kind,
-            replier_id,
-            reskey,
-            info,
-            payload,
-        )
-        .await;
+        // let mut tables = zasyncwrite!(self.tables);
+        // route_send_reply_data(
+        //     &mut tables,
+        //     &mut self.state.clone(),
+        //     qid,
+        //     source_kind,
+        //     replier_id,
+        //     reskey,
+        //     info,
+        //     payload,
+        // )
+        // .await;
     }
 
-    pub async fn send_reply_final(&self, qid: ZInt) {
-        let mut tables = zasyncwrite!(self.tables);
-        route_send_reply_final(&mut tables, &mut self.state.clone(), qid).await;
+    // @TOFIX
+    pub fn send_reply_final(&self, qid: ZInt) {
+        // let mut tables = zasyncwrite!(self.tables);
+        // route_send_reply_final(&mut tables, &mut self.state.clone(), qid).await;
     }
 
-    pub async fn send_pull(
+    // @TOFIX
+    pub fn send_pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {
-        let (prefixid, suffix) = reskey.into();
-        let mut tables = zasyncwrite!(self.tables);
-        pull_data(
-            &mut tables,
-            &self.state.clone(),
-            is_final,
-            prefixid,
-            suffix,
-            pull_id,
-            max_samples,
-        )
-        .await;
+        // let (prefixid, suffix) = reskey.into();
+        // let mut tables = zasyncwrite!(self.tables);
+        // pull_data(
+        //     &mut tables,
+        //     &self.state.clone(),
+        //     is_final,
+        //     prefixid,
+        //     suffix,
+        //     pull_id,
+        //     max_samples,
+        // )
+        // .await;
     }
 
-    pub async fn send_close(&self) {
-        zasyncwrite!(self.tables)
-            .close_face(&Arc::downgrade(&self.state))
-            .await;
+    // @TOFIX
+    pub fn send_close(&self) {
+        // zasyncwrite!(self.tables)
+        //     .close_face(&Arc::downgrade(&self.state))
+        //     .await;
     }
 }
 

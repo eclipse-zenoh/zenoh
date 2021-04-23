@@ -266,7 +266,7 @@ impl Session {
             .as_ref()
             .unwrap()
             .clone();
-        primitives.send_close().await;
+        primitives.send_close();
 
         Ok(())
     }
@@ -391,7 +391,7 @@ impl Session {
 
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
-                primitives.decl_resource(rid, resource).await;
+                primitives.decl_resource(rid, resource);
 
                 Ok(rid)
             }
@@ -422,7 +422,7 @@ impl Session {
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.forget_resource(rid).await;
+        primitives.forget_resource(rid);
 
         Ok(())
     }
@@ -480,7 +480,7 @@ impl Session {
         if let Some(res) = declared_pub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.decl_publisher(&res, None).await;
+            primitives.decl_publisher(&res, None);
         }
 
         Ok(Publisher {
@@ -510,7 +510,7 @@ impl Session {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         let reskey = join_pub.clone().into();
                         drop(state);
-                        primitives.forget_publisher(&reskey, None).await;
+                        primitives.forget_publisher(&reskey, None);
                     }
                 }
                 None => {
@@ -521,7 +521,7 @@ impl Session {
                     if !twin_pub {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         drop(state);
-                        primitives.forget_publisher(&pub_state.reskey, None).await;
+                        primitives.forget_publisher(&pub_state.reskey, None);
                     }
                 }
             };
@@ -595,7 +595,7 @@ impl Session {
                 reskey => reskey,
             };
 
-            primitives.decl_subscriber(&reskey, info, None).await;
+            primitives.decl_subscriber(&reskey, info, None);
         }
 
         Ok(sub_state)
@@ -718,7 +718,7 @@ impl Session {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         let reskey = join_sub.clone().into();
                         drop(state);
-                        primitives.forget_subscriber(&reskey, None).await;
+                        primitives.forget_subscriber(&reskey, None);
                     }
                 }
                 None => {
@@ -729,7 +729,7 @@ impl Session {
                     if !twin_sub {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         drop(state);
-                        primitives.forget_subscriber(&sub_state.reskey, None).await;
+                        primitives.forget_subscriber(&sub_state.reskey, None);
                     }
                 }
             };
@@ -783,7 +783,7 @@ impl Session {
         if !twin_qable {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.decl_queryable(resource, None).await;
+            primitives.decl_queryable(resource, None);
         }
 
         Ok(Queryable {
@@ -806,7 +806,7 @@ impl Session {
             });
             if !twin_qable {
                 let primitives = state.primitives.as_ref().unwrap();
-                primitives.forget_queryable(&qable_state.reskey, None).await;
+                primitives.forget_queryable(&qable_state.reskey, None);
             }
         }
         Ok(())
@@ -834,16 +834,14 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
-        primitives
-            .send_data(
-                resource,
-                payload.clone(),
-                Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
-                CongestionControl::default(), // Default congestion control when writing data
-                None,
-                None,
-            )
-            .await;
+        primitives.send_data(
+            resource,
+            payload.clone(),
+            Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            CongestionControl::default(), // Default congestion control when writing data
+            None,
+            None,
+        );
         if local_routing {
             self.handle_data(true, resource, None, payload).await;
         }
@@ -892,16 +890,14 @@ impl Session {
             encoding: Some(encoding),
         };
         let data_info = Some(info);
-        primitives
-            .send_data(
-                resource,
-                payload.clone(),
-                Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
-                congestion_control,
-                data_info.clone(),
-                None,
-            )
-            .await;
+        primitives.send_data(
+            resource,
+            payload.clone(),
+            Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+            congestion_control,
+            data_info.clone(),
+            None,
+        );
         if local_routing {
             self.handle_data(true, resource, data_info.clone(), payload)
                 .await;
@@ -1024,7 +1020,7 @@ impl Session {
         let state = zasyncread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.send_pull(true, reskey, 0, &None).await;
+        primitives.send_pull(true, reskey, 0, &None);
         Ok(())
     }
 
@@ -1089,16 +1085,14 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
-        primitives
-            .send_query(
-                resource,
-                predicate,
-                qid,
-                target.clone(),
-                consolidation.clone(),
-                None,
-            )
-            .await;
+        primitives.send_query(
+            resource,
+            predicate,
+            qid,
+            target.clone(),
+            consolidation.clone(),
+            None,
+        );
         if local_routing {
             self.handle_query(true, resource, predicate, qid, target, consolidation)
                 .await;
@@ -1186,53 +1180,51 @@ impl Session {
                         ResKey::RName(sample.res_name),
                         sample.data_info,
                         sample.payload,
-                    )
-                    .await;
+                    );
                 }
-                this.send_reply_final(qid).await;
+                this.send_reply_final(qid);
             });
         } else {
             task::spawn(async move {
                 while let Some((kind, sample)) = rep_receiver.next().await {
-                    primitives
-                        .send_reply_data(
-                            qid,
-                            kind,
-                            pid.clone(),
-                            ResKey::RName(sample.res_name),
-                            sample.data_info,
-                            sample.payload,
-                        )
-                        .await;
+                    primitives.send_reply_data(
+                        qid,
+                        kind,
+                        pid.clone(),
+                        ResKey::RName(sample.res_name),
+                        sample.data_info,
+                        sample.payload,
+                    );
                 }
-                primitives.send_reply_final(qid).await;
+                primitives.send_reply_final(qid);
             });
         }
     }
 
-    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+    // @TOFIX
+    pub(crate) fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Decl Resource {} {:?}", rid, reskey);
-        let state = &mut zasyncwrite!(self.state);
-        match state.remotekey_to_resname(reskey) {
-            Ok(resname) => {
-                let mut res = Resource::new(resname.clone());
-                for sub in state.subscribers.values() {
-                    if rname::matches(&resname, &sub.resname) {
-                        res.subscribers.push(sub.clone());
-                    }
-                }
+        // let state = &mut zasyncwrite!(self.state);
+        // match state.remotekey_to_resname(reskey) {
+        //     Ok(resname) => {
+        //         let mut res = Resource::new(resname.clone());
+        //         for sub in state.subscribers.values() {
+        //             if rname::matches(&resname, &sub.resname) {
+        //                 res.subscribers.push(sub.clone());
+        //             }
+        //         }
 
-                state.remote_resources.insert(rid, res);
-            }
-            Err(_) => error!("Received Resource for unkown reskey: {}", reskey),
-        }
+        //         state.remote_resources.insert(rid, res);
+        //     }
+        //     Err(_) => error!("Received Resource for unkown reskey: {}", reskey),
+        // }
     }
 
-    pub(crate) async fn forget_resource(&self, _rid: ZInt) {
+    pub(crate) fn forget_resource(&self, _rid: ZInt) {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    pub(crate) async fn decl_publisher(
+    pub(crate) fn decl_publisher(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -1240,7 +1232,7 @@ impl Session {
         trace!("recv Decl Publisher {:?}", _reskey);
     }
 
-    pub(crate) async fn forget_publisher(
+    pub(crate) fn forget_publisher(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -1248,7 +1240,7 @@ impl Session {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    pub(crate) async fn decl_subscriber(
+    pub(crate) fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
@@ -1257,7 +1249,7 @@ impl Session {
         trace!("recv Decl Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    pub(crate) async fn forget_subscriber(
+    pub(crate) fn forget_subscriber(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -1265,7 +1257,7 @@ impl Session {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    pub(crate) async fn decl_queryable(
+    pub(crate) fn decl_queryable(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -1273,7 +1265,7 @@ impl Session {
         trace!("recv Decl Queryable {:?}", _reskey);
     }
 
-    pub(crate) async fn forget_queryable(
+    pub(crate) fn forget_queryable(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -1281,7 +1273,8 @@ impl Session {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    pub(crate) async fn send_data(
+    // @TOFIX
+    pub(crate) fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -1298,10 +1291,11 @@ impl Session {
             congestion_control,
             info,
         );
-        self.handle_data(false, reskey, info, payload).await
+        // self.handle_data(false, reskey, info, payload).await
     }
 
-    pub(crate) async fn send_query(
+    // @TOFIX
+    pub(crate) fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -1317,11 +1311,12 @@ impl Session {
             target,
             consolidation
         );
-        self.handle_query(false, reskey, predicate, qid, target, consolidation)
-            .await
+        // self.handle_query(false, reskey, predicate, qid, target, consolidation)
+        // .await
     }
 
-    pub(crate) async fn send_reply_data(
+    // @TOFIX
+    pub(crate) fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -1339,112 +1334,113 @@ impl Session {
             data_info,
             payload
         );
-        let state = &mut zasyncwrite!(self.state);
-        let res_name = match state.remotekey_to_resname(&reskey) {
-            Ok(name) => name,
-            Err(e) => {
-                error!("Received ReplyData for unkown reskey: {}", e);
-                return;
-            }
-        };
-        match state.queries.get_mut(&qid) {
-            Some(query) => {
-                let new_reply = Reply {
-                    data: Sample {
-                        res_name,
-                        payload,
-                        data_info,
-                    },
-                    source_kind,
-                    replier_id,
-                };
-                match query.reception_mode {
-                    ConsolidationMode::None => {
-                        let _ = query.rep_sender.send(new_reply).await;
-                    }
-                    ConsolidationMode::Lazy => {
-                        match query
-                            .replies
-                            .as_ref()
-                            .unwrap()
-                            .get(&new_reply.data.res_name)
-                        {
-                            Some(reply) => {
-                                if new_reply.data.data_info > reply.data.data_info {
-                                    query
-                                        .replies
-                                        .as_mut()
-                                        .unwrap()
-                                        .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                                    let _ = query.rep_sender.send(new_reply).await;
-                                }
-                            }
-                            None => {
-                                query
-                                    .replies
-                                    .as_mut()
-                                    .unwrap()
-                                    .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                                let _ = query.rep_sender.send(new_reply).await;
-                            }
-                        }
-                    }
-                    ConsolidationMode::Full => {
-                        match query
-                            .replies
-                            .as_ref()
-                            .unwrap()
-                            .get(&new_reply.data.res_name)
-                        {
-                            Some(reply) => {
-                                if new_reply.data.data_info > reply.data.data_info {
-                                    query
-                                        .replies
-                                        .as_mut()
-                                        .unwrap()
-                                        .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                                }
-                            }
-                            None => {
-                                query
-                                    .replies
-                                    .as_mut()
-                                    .unwrap()
-                                    .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                            }
-                        };
-                    }
-                }
-            }
-            None => {
-                warn!("Received ReplyData for unkown Query: {}", qid);
-                return;
-            }
-        }
+        // let state = &mut zasyncwrite!(self.state);
+        // let res_name = match state.remotekey_to_resname(&reskey) {
+        //     Ok(name) => name,
+        //     Err(e) => {
+        //         error!("Received ReplyData for unkown reskey: {}", e);
+        //         return;
+        //     }
+        // };
+        // match state.queries.get_mut(&qid) {
+        //     Some(query) => {
+        //         let new_reply = Reply {
+        //             data: Sample {
+        //                 res_name,
+        //                 payload,
+        //                 data_info,
+        //             },
+        //             source_kind,
+        //             replier_id,
+        //         };
+        //         match query.reception_mode {
+        //             ConsolidationMode::None => {
+        //                 let _ = query.rep_sender.send(new_reply).await;
+        //             }
+        //             ConsolidationMode::Lazy => {
+        //                 match query
+        //                     .replies
+        //                     .as_ref()
+        //                     .unwrap()
+        //                     .get(&new_reply.data.res_name)
+        //                 {
+        //                     Some(reply) => {
+        //                         if new_reply.data.data_info > reply.data.data_info {
+        //                             query
+        //                                 .replies
+        //                                 .as_mut()
+        //                                 .unwrap()
+        //                                 .insert(new_reply.data.res_name.clone(), new_reply.clone());
+        //                             let _ = query.rep_sender.send(new_reply).await;
+        //                         }
+        //                     }
+        //                     None => {
+        //                         query
+        //                             .replies
+        //                             .as_mut()
+        //                             .unwrap()
+        //                             .insert(new_reply.data.res_name.clone(), new_reply.clone());
+        //                         let _ = query.rep_sender.send(new_reply).await;
+        //                     }
+        //                 }
+        //             }
+        //             ConsolidationMode::Full => {
+        //                 match query
+        //                     .replies
+        //                     .as_ref()
+        //                     .unwrap()
+        //                     .get(&new_reply.data.res_name)
+        //                 {
+        //                     Some(reply) => {
+        //                         if new_reply.data.data_info > reply.data.data_info {
+        //                             query
+        //                                 .replies
+        //                                 .as_mut()
+        //                                 .unwrap()
+        //                                 .insert(new_reply.data.res_name.clone(), new_reply.clone());
+        //                         }
+        //                     }
+        //                     None => {
+        //                         query
+        //                             .replies
+        //                             .as_mut()
+        //                             .unwrap()
+        //                             .insert(new_reply.data.res_name.clone(), new_reply.clone());
+        //                     }
+        //                 };
+        //             }
+        //         }
+        //     }
+        //     None => {
+        //         warn!("Received ReplyData for unkown Query: {}", qid);
+        //         return;
+        //     }
+        // }
     }
 
-    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
+    // @TOFIX
+    pub(crate) fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
-        let mut state = zasyncwrite!(self.state);
-        match state.queries.get_mut(&qid) {
-            Some(mut query) => {
-                query.nb_final -= 1;
-                if query.nb_final == 0 {
-                    let query = state.queries.remove(&qid).unwrap();
-                    if query.reception_mode == ConsolidationMode::Full {
-                        for (_, reply) in query.replies.unwrap().into_iter() {
-                            let _ = query.rep_sender.send(reply).await;
-                        }
-                    }
-                }
-            }
-            None => {
-                warn!("Received ReplyFinal for unkown Query: {}", qid);
-            }
-        }
+        // let mut state = zasyncwrite!(self.state);
+        // match state.queries.get_mut(&qid) {
+        //     Some(mut query) => {
+        //         query.nb_final -= 1;
+        //         if query.nb_final == 0 {
+        //             let query = state.queries.remove(&qid).unwrap();
+        //             if query.reception_mode == ConsolidationMode::Full {
+        //                 for (_, reply) in query.replies.unwrap().into_iter() {
+        //                     let _ = query.rep_sender.send(reply).await;
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     None => {
+        //         warn!("Received ReplyFinal for unkown Query: {}", qid);
+        //     }
+        // }
     }
 
-    pub(crate) async fn send_pull(
+    pub(crate) fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -1460,19 +1456,20 @@ impl Session {
         );
     }
 
-    pub(crate) async fn send_close(&self) {
+    pub(crate) fn send_close(&self) {
         trace!("recv Close");
     }
 }
 
+// @TOFIX
 impl Drop for Session {
     fn drop(&mut self) {
-        if self.alive {
-            let this = self.clone();
-            let _ = task::block_on(async move {
-                task::spawn_blocking(move || task::block_on(this.close_alive())).await
-            });
-        }
+        // if self.alive {
+        //     let this = self.clone();
+        //     let _ = task::block_on(async move {
+        //         task::spawn_blocking(move || task::block_on(this.close_alive())).await
+        //     });
+        // }
     }
 }
 

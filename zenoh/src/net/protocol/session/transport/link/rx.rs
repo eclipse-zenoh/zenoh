@@ -33,13 +33,8 @@ impl SessionTransportLink {
             }
         }
 
-        // Spawn a new task to close the link or the session. This is necessary to
-        // avoid that the future reading from the link will be cancelled while doing
-        // the necessary cleanup.
-
-        // @TODO TO FIX WITH A SPAWN
         if link_only {
-            self.transport.del_link(&self.inner);
+            let _ = self.transport.del_link(&self.inner);
         } else {
             self.transport.delete();
         }

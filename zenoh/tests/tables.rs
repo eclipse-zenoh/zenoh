@@ -13,7 +13,6 @@
 //
 use async_std::sync::Arc;
 use async_std::task;
-use async_trait::async_trait;
 use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh::net::protocol::core::rname::intersect;
@@ -26,6 +25,7 @@ use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
 use zenoh::net::protocol::session::{DummyPrimitives, Primitives};
 use zenoh::net::routing::router::*;
 use zenoh::net::routing::OutSession;
+use zenoh_util::zlock;
 
 #[test]
 fn base_test() {
@@ -421,32 +421,32 @@ impl ClientPrimitives {
     }
 }
 
-#[async_trait]
 impl Primitives for ClientPrimitives {
-    async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let name = self.get_name(reskey);
-        self.mapping.lock().unwrap().insert(rid, name);
-    }
-    async fn forget_resource(&self, rid: ZInt) {
-        self.mapping.lock().unwrap().remove(&rid);
+        zlock!(self.mapping).insert(rid, name);
     }
 
-    async fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
-    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_resource(&self, rid: ZInt) {
+        zlock!(self.mapping).remove(&rid);
+    }
 
-    async fn decl_subscriber(
+    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+
+    fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
-    async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn send_data(
+    fn send_data(
         &self,
         reskey: &ResKey,
         _payload: RBuf,
@@ -455,9 +455,10 @@ impl Primitives for ClientPrimitives {
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
-        *self.data.lock().unwrap() = Some(reskey.clone());
+        *zlock!(self.data) = Some(reskey.clone());
     }
-    async fn send_query(
+
+    fn send_query(
         &self,
         _reskey: &ResKey,
         _predicate: &str,
@@ -467,7 +468,8 @@ impl Primitives for ClientPrimitives {
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    async fn send_reply_data(
+
+    fn send_reply_data(
         &self,
         _qid: ZInt,
         _source_kind: ZInt,
@@ -477,8 +479,9 @@ impl Primitives for ClientPrimitives {
         _payload: RBuf,
     ) {
     }
-    async fn send_reply_final(&self, _qid: ZInt) {}
-    async fn send_pull(
+    fn send_reply_final(&self, _qid: ZInt) {}
+
+    fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -487,7 +490,7 @@ impl Primitives for ClientPrimitives {
     ) {
     }
 
-    async fn send_close(&self) {}
+    fn send_close(&self) {}
 }
 
 #[test]
@@ -520,9 +523,7 @@ fn client_test() {
             "/test/client",
         )
         .await;
-        primitives0
-            .decl_resource(11, &ResKey::RName("/test/client".to_string()))
-            .await;
+        primitives0.decl_resource(11, &ResKey::RName("/test/client".to_string()));
         declare_client_subscription(
             &mut tables,
             &mut face0.upgrade().unwrap(),
@@ -539,9 +540,7 @@ fn client_test() {
             "/z1_pub1",
         )
         .await;
-        primitives0
-            .decl_resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".to_string()))
-            .await;
+        primitives0.decl_resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".to_string()));
 
         let primitives1 = Arc::new(ClientPrimitives::new());
         let face1 = tables
@@ -559,9 +558,7 @@ fn client_test() {
             "/test/client",
         )
         .await;
-        primitives1
-            .decl_resource(21, &ResKey::RName("/test/client".to_string()))
-            .await;
+        primitives1.decl_resource(21, &ResKey::RName("/test/client".to_string()));
         declare_client_subscription(
             &mut tables,
             &mut face1.upgrade().unwrap(),
@@ -578,9 +575,7 @@ fn client_test() {
             "/z2_pub1",
         )
         .await;
-        primitives1
-            .decl_resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".to_string()))
-            .await;
+        primitives1.decl_resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".to_string()));
 
         let primitives2 = Arc::new(ClientPrimitives::new());
         let face2 = tables
@@ -598,9 +593,7 @@ fn client_test() {
             "/test/client",
         )
         .await;
-        primitives2
-            .decl_resource(31, &ResKey::RName("/test/client".to_string()))
-            .await;
+        primitives2.decl_resource(31, &ResKey::RName("/test/client".to_string()));
         declare_client_subscription(
             &mut tables,
             &mut face2.upgrade().unwrap(),

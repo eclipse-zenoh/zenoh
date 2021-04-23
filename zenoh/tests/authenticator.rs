@@ -13,7 +13,6 @@
 //
 use async_std::sync::Arc;
 use async_std::task;
-use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
@@ -39,9 +38,8 @@ impl SHRouterAuthenticator {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHRouterAuthenticator {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -57,15 +55,14 @@ impl MHRouterAuthenticator {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for MHRouterAuthenticator {
-    async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
 }
 
 // Session Handler for the client
@@ -77,9 +74,8 @@ impl SHClientAuthenticator {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHClientAuthenticator {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -122,8 +118,6 @@ async fn authenticator_user_password(locator: Locator) {
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_router.clone().into()]),
@@ -149,8 +143,6 @@ async fn authenticator_user_password(locator: Locator) {
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client01.into()]),
@@ -176,8 +168,6 @@ async fn authenticator_user_password(locator: Locator) {
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client02.into()]),
@@ -201,8 +191,6 @@ async fn authenticator_user_password(locator: Locator) {
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client03.into()]),
@@ -320,8 +308,6 @@ async fn authenticator_shared_memory(locator: Locator) {
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_router.into()]),
@@ -343,8 +329,6 @@ async fn authenticator_shared_memory(locator: Locator) {
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client.into()]),

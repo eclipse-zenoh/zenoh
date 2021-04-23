@@ -169,7 +169,7 @@ impl Session {
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the session has already been closed
         match self.0.upgrade() {
-            Some(transport) => transport.close(smsg::close_reason::GENERIC).await,
+            Some(transport) => transport.close(smsg::close_reason::GENERIC),
             None => Ok(()),
         }
     }
@@ -177,9 +177,7 @@ impl Session {
     #[inline(always)]
     pub async fn close_link(&self, link: &Link) -> ZResult<()> {
         let transport = zweak!(self.0, STR_ERR);
-        transport
-            .close_link(link, smsg::close_reason::GENERIC)
-            .await?;
+        transport.close_link(link, smsg::close_reason::GENERIC)?;
         Ok(())
     }
 

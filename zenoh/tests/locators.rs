@@ -13,7 +13,6 @@
 //
 use async_std::sync::Arc;
 use async_std::task;
-use async_trait::async_trait;
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
@@ -36,9 +35,8 @@ impl SH {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SH {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -56,15 +54,14 @@ impl SC {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for SC {
-    async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
 }
 
 async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>>) {
@@ -80,8 +77,6 @@ async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,

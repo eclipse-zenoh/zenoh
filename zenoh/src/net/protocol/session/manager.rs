@@ -18,7 +18,7 @@ use super::authenticator::{
 use super::core::{PeerId, WhatAmI, ZInt};
 use super::defaults::{
     SESSION_BATCH_SIZE, SESSION_KEEP_ALIVE, SESSION_LEASE, SESSION_OPEN_MAX_CONCURRENT,
-    SESSION_OPEN_RETRIES, SESSION_OPEN_TIMEOUT, SESSION_SEQ_NUM_RESOLUTION,
+    SESSION_OPEN_TIMEOUT, SESSION_SEQ_NUM_RESOLUTION,
 };
 use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
@@ -85,8 +85,6 @@ use zenoh_util::{zasynclock, zerror};
 ///     keep_alive: Some(100),      // Set the default keep alive interval to 100ms
 ///     sn_resolution: None,        // Use the default sequence number resolution
 ///     batch_size: None,           // Use the default batch size
-///     timeout: Some(10_000),      // Timeout of 10s when opening a session
-///     retries: Some(3),           // Tries to open a session 3 times before failure
 ///     max_sessions: Some(5),      // Accept any number of sessions
 ///     max_links: None,            // Allow any number of links in a single session
 ///     peer_authenticator: None,   // Accept any incoming session
@@ -108,8 +106,6 @@ pub struct SessionManagerOptionalConfig {
     pub keep_alive: Option<ZInt>,
     pub sn_resolution: Option<ZInt>,
     pub batch_size: Option<usize>,
-    pub timeout: Option<u64>,
-    pub retries: Option<usize>,
     pub max_sessions: Option<usize>,
     pub max_links: Option<usize>,
     pub peer_authenticator: Option<Vec<PeerAuthenticator>>,
@@ -130,8 +126,6 @@ impl SessionManagerOptionalConfig {
             keep_alive: None,
             sn_resolution: None,
             batch_size: None,
-            timeout: None,
-            retries: None,
             max_sessions: None,
             max_links: None,
             peer_authenticator: if peer_authenticator.is_empty() {
@@ -162,8 +156,6 @@ pub(super) struct SessionManagerConfigInner {
     pub(super) keep_alive: ZInt,
     pub(super) sn_resolution: ZInt,
     pub(super) batch_size: usize,
-    pub(super) timeout: u64,
-    pub(super) retries: usize,
     pub(super) max_sessions: Option<usize>,
     pub(super) max_links: Option<usize>,
     pub(super) peer_authenticator: Vec<PeerAuthenticator>,
@@ -205,8 +197,6 @@ impl SessionManager {
         let mut keep_alive = *SESSION_KEEP_ALIVE;
         let mut sn_resolution = *SESSION_SEQ_NUM_RESOLUTION;
         let mut batch_size = *SESSION_BATCH_SIZE;
-        let mut timeout = *SESSION_OPEN_TIMEOUT;
-        let mut retries = *SESSION_OPEN_RETRIES;
         let mut max_sessions = None;
         let mut max_links = None;
         let mut peer_authenticator = vec![DummyPeerAuthenticator::make()];
@@ -226,12 +216,6 @@ impl SessionManager {
             }
             if let Some(v) = opt.batch_size.take() {
                 batch_size = v;
-            }
-            if let Some(v) = opt.timeout.take() {
-                timeout = v;
-            }
-            if let Some(v) = opt.retries.take() {
-                retries = v;
             }
             max_sessions = opt.max_sessions;
             max_links = opt.max_links;
@@ -256,8 +240,6 @@ impl SessionManager {
             keep_alive,
             sn_resolution,
             batch_size,
-            timeout,
-            retries,
             max_sessions,
             max_links,
             peer_authenticator,
@@ -482,8 +464,6 @@ impl SessionManager {
     }
 
     pub async fn open_session(&self, locator: &Locator) -> ZResult<Session> {
-        // Create the timeout duration
-        let to = Duration::from_millis(self.config.timeout);
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
         let ps = self.config.locator_property.get(&locator.get_proto());

@@ -87,9 +87,7 @@ impl AdminSpace {
             .await;
         admin.primitives.lock().await.replace(primitives.clone());
 
-        primitives
-            .decl_queryable(&[&root_path, "/**"].concat().into(), None)
-            .await;
+        primitives.decl_queryable(&[&root_path, "/**"].concat().into(), None);
     }
 
     pub async fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
@@ -105,21 +103,22 @@ impl AdminSpace {
         }
     }
 
-    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+    // @TOFIX
+    pub(crate) fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
-        match self.reskey_to_string(reskey).await {
-            Some(s) => {
-                self.mappings.lock().await.insert(rid, s);
-            }
-            None => error!("Unknown rid {}!", rid),
-        }
+        // match self.reskey_to_string(reskey).await {
+        //     Some(s) => {
+        //         self.mappings.lock().await.insert(rid, s);
+        //     }
+        //     None => error!("Unknown rid {}!", rid),
+        // }
     }
 
-    pub(crate) async fn forget_resource(&self, _rid: ZInt) {
+    pub(crate) fn forget_resource(&self, _rid: ZInt) {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    pub(crate) async fn decl_publisher(
+    pub(crate) fn decl_publisher(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -127,7 +126,7 @@ impl AdminSpace {
         trace!("recv Publisher {:?}", _reskey);
     }
 
-    pub(crate) async fn forget_publisher(
+    pub(crate) fn forget_publisher(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -135,7 +134,7 @@ impl AdminSpace {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    pub(crate) async fn decl_subscriber(
+    pub(crate) fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
@@ -144,7 +143,7 @@ impl AdminSpace {
         trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    pub(crate) async fn forget_subscriber(
+    pub(crate) fn forget_subscriber(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -152,7 +151,7 @@ impl AdminSpace {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    pub(crate) async fn decl_queryable(
+    pub(crate) fn decl_queryable(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -160,7 +159,7 @@ impl AdminSpace {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    pub(crate) async fn forget_queryable(
+    pub(crate) fn forget_queryable(
         &self,
         _reskey: &ResKey,
         _routing_context: Option<RoutingContext>,
@@ -168,7 +167,7 @@ impl AdminSpace {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    pub(crate) async fn send_data(
+    pub(crate) fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -187,7 +186,8 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) async fn send_query(
+    // @TOFIX
+    pub(crate) fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -203,52 +203,52 @@ impl AdminSpace {
             target,
             _consolidation
         );
-        let pid = self.pid.clone();
-        let context = self.context.clone();
-        let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
+        // let pid = self.pid.clone();
+        // let context = self.context.clone();
+        // let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
 
-        let mut matching_handlers = vec![];
-        match self.reskey_to_string(reskey).await {
-            Some(name) => {
-                for (path, handler) in &self.handlers {
-                    if rname::intersect(&name, path) {
-                        matching_handlers.push((path.clone(), handler.clone()));
-                    }
-                }
-            }
-            None => error!("Unknown ResKey!!"),
-        };
+        // let mut matching_handlers = vec![];
+        // match self.reskey_to_string(reskey).await {
+        //     Some(name) => {
+        //         for (path, handler) in &self.handlers {
+        //             if rname::intersect(&name, path) {
+        //                 matching_handlers.push((path.clone(), handler.clone()));
+        //             }
+        //         }
+        //     }
+        //     None => error!("Unknown ResKey!!"),
+        // };
 
-        // router is not re-entrant
-        task::spawn(async move {
-            for (path, handler) in matching_handlers {
-                let (payload, encoding) = handler(&context).await;
-                let data_info = DataInfo {
-                    source_id: None,
-                    source_sn: None,
-                    first_router_id: None,
-                    first_router_sn: None,
-                    timestamp: None,
-                    kind: None,
-                    encoding: Some(encoding),
-                };
-                primitives
-                    .send_reply_data(
-                        qid,
-                        EVAL,
-                        pid.clone(),
-                        ResKey::RName(path),
-                        Some(data_info),
-                        payload,
-                    )
-                    .await;
-            }
+        // // router is not re-entrant
+        // task::spawn(async move {
+        //     for (path, handler) in matching_handlers {
+        //         let (payload, encoding) = handler(&context).await;
+        //         let data_info = DataInfo {
+        //             source_id: None,
+        //             source_sn: None,
+        //             first_router_id: None,
+        //             first_router_sn: None,
+        //             timestamp: None,
+        //             kind: None,
+        //             encoding: Some(encoding),
+        //         };
+        //         primitives
+        //             .send_reply_data(
+        //                 qid,
+        //                 EVAL,
+        //                 pid.clone(),
+        //                 ResKey::RName(path),
+        //                 Some(data_info),
+        //                 payload,
+        //             )
+        //             .await;
+        //     }
 
-            primitives.send_reply_final(qid).await;
-        });
+        //     primitives.send_reply_final(qid).await;
+        // });
     }
 
-    pub(crate) async fn send_reply_data(
+    pub(crate) fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -268,11 +268,11 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
+    pub(crate) fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 
-    pub(crate) async fn send_pull(
+    pub(crate) fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -288,7 +288,7 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) async fn send_close(&self) {
+    pub(crate) fn send_close(&self) {
         trace!("recv Close");
     }
 }

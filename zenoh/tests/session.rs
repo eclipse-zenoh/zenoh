@@ -14,7 +14,6 @@
 use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
-use async_trait::async_trait;
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::link::{Locator, LocatorProperty};
@@ -36,9 +35,8 @@ impl SHRouterOpenClose {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHRouterOpenClose {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -55,9 +53,8 @@ impl SHClientOpenClose {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHClientOpenClose {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -82,8 +79,6 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: Some(1),
         max_links: Some(2),
         peer_authenticator: None,
@@ -108,8 +103,6 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: Some(1),
         max_links: Some(2),
         peer_authenticator: None,
@@ -130,8 +123,6 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: Some(1),
         max_links: Some(2),
         peer_authenticator: None,
@@ -453,6 +444,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_only() {
+    env_logger::init();
     let locator = "tcp/127.0.0.1:8447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }

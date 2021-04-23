@@ -14,7 +14,6 @@
 use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
-use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
@@ -51,9 +50,8 @@ impl SHRouter {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHRouter {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -73,17 +71,16 @@ impl SCRouter {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for SCRouter {
-    async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
 }
 
 // Session Handler for the client
@@ -95,9 +92,8 @@ impl SHClient {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHClient {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -114,16 +110,15 @@ impl SCClient {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for SCClient {
-    async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
 
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
 }
 
 async fn open_session(
@@ -147,8 +142,6 @@ async fn open_session(
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -169,8 +162,6 @@ async fn open_session(
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -279,7 +270,7 @@ async fn single_run(
         MSG_COUNT, reliability, congestion_control, msg_size
     );
     for _ in 0..MSG_COUNT {
-        client_session.schedule(message.clone()).await.unwrap();
+        client_session.schedule(message.clone()).unwrap();
     }
 
     macro_rules! some {
@@ -353,6 +344,7 @@ async fn run(
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_only() {
+    env_logger::init();
     // Define the locators
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;

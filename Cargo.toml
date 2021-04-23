@@ -13,18 +13,23 @@
 #
 [workspace]
 
+#members = [
+#  "zenoh",
+#  "zenoh-util",
+#  "plugins/example-plugin",
+#  "plugins/zenoh-rest",
+#  "plugins/zenoh-storages",
+#  "backends/traits",
+#]
+
 members = [
   "zenoh",
   "zenoh-util",
-  "plugins/example-plugin",
-  "plugins/zenoh-rest",
-  "plugins/zenoh-storages",
-  "backends/traits",
 ]
 
 [profile.dev]
 debug=true
-opt-level = 1
+opt-level = 0
 
 
 [profile.release]

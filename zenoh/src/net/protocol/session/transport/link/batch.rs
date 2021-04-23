@@ -144,7 +144,7 @@ impl SerializationBatch {
 
     /// Get a `&[u8]` to access the internal memory buffer, usually for transmitting it on the network.
     #[inline(always)]
-    pub(super) fn get_buffer(&self) -> &[u8] {
+    pub(super) fn as_bytes(&self) -> &[u8] {
         self.buffer.get_first_slice(..)
     }
 

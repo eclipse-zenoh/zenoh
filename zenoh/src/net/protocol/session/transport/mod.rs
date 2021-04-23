@@ -18,16 +18,16 @@ mod seq_num;
 mod tx;
 
 use super::core;
-use super::io;
-use super::proto;
-use super::session;
-
 use super::core::{PeerId, Reliability, WhatAmI, ZInt};
+use super::io;
 use super::link::Link;
+use super::proto;
 use super::proto::{SessionMessage, ZenohMessage};
+use super::session;
 use super::session::defaults::QUEUE_PRIO_DATA;
 use super::session::{SessionEventDispatcher, SessionManager};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+use async_std::task;
 use defragmentation::*;
 use link::*;
 pub(super) use seq_num::*;
@@ -180,12 +180,13 @@ impl SessionTransport {
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    pub(super) async fn delete(&self) {
-        log::debug!("Closing the session with peer: {}", self.pid);
+    // @TOFIX
+    pub(super) fn delete(&self) {
+        log::debug!("Closing session with peer: {}", self.pid);
 
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_session and closing/closed notifications
-        let mut a_guard = self.get_alive().await;
+        let mut a_guard = task::block_on(self.get_alive());
         *a_guard = false;
 
         // Notify the callback that we are going to close the session
@@ -195,15 +196,17 @@ impl SessionTransport {
         }
 
         // Delete the session on the manager
-        let _ = self.manager.del_session(&self.pid);
+        let _ = task::block_on(self.manager.del_session(&self.pid));
 
         // Close all the links
         let mut l_guard = zwrite!(self.links);
         let mut links = l_guard.to_vec();
         *l_guard = vec![].into_boxed_slice();
         drop(l_guard);
+
+        // @TOFIX: stop first link tx, call then callback closed, then stop link rx
         for l in links.drain(..) {
-            let _ = l.close();
+            l.close();
         }
 
         // Notify the callback that we have closed the session
@@ -212,7 +215,7 @@ impl SessionTransport {
         }
     }
 
-    pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {
+    pub(crate) fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.pid);
 
         let guard = zread!(self.links);
@@ -238,26 +241,24 @@ impl SessionTransport {
         Ok(())
     }
 
-    pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
+    pub(crate) fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing session with peer: {}", self.pid);
-        {
-            // Close message to be sent on all the links
-            let peer_id = Some(self.manager.pid());
-            let reason_id = reason;
-            // link_only should always be false for user-triggered close. However, in case of
-            // multiple links, it is safer to close all the links first. When no links are left,
-            // the session is then considered closed.
-            let link_only = true;
-            let attachment = None; // No attachment here
-            let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            let guard = zread!(self.links);
-            for link in guard.iter() {
-                link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA);
-            }
+        // Close message to be sent on all the links
+        let peer_id = Some(self.manager.pid());
+        let reason_id = reason;
+        // link_only should always be false for user-triggered close. However, in case of
+        // multiple links, it is safer to close all the links first. When no links are left,
+        // the session is then considered closed.
+        let link_only = true;
+        let attachment = None; // No attachment here
+        let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+
+        for link in zread!(self.links).iter() {
+            link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA);
         }
         // Terminate and clean up the session
-        self.delete().await;
+        self.delete();
 
         Ok(())
     }
@@ -337,6 +338,10 @@ impl SessionTransport {
     pub(crate) fn del_link(&self, link: &Link) -> ZResult<()> {
         // Try to remove the link
         let mut guard = zwrite!(self.links);
+        log::trace!("{}: deleting", link);
+        for l in guard.iter() {
+            log::trace!("\t{}", l.get_link());
+        }
         if let Some(index) = zlinkindex!(guard, link) {
             let is_last = guard.len() == 1;
             if is_last {

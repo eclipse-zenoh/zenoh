@@ -14,7 +14,6 @@
 use async_std::prelude::*;
 use async_std::sync::{Arc, Barrier};
 use async_std::task;
-use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -51,9 +50,8 @@ impl SHPeer {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHPeer {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -72,17 +70,16 @@ impl MHPeer {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for MHPeer {
-    async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
 }
 
 async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
@@ -108,8 +105,6 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -131,8 +126,6 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -224,7 +217,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
         for _ in 0..MSG_COUNT {
-            s02.schedule(message.clone()).await.unwrap();
+            s02.schedule(message.clone()).unwrap();
         }
 
         // Wait for the messages to arrive to the other side
@@ -324,7 +317,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
         for _ in 0..MSG_COUNT {
-            s01.schedule(message.clone()).await.unwrap();
+            s01.schedule(message.clone()).unwrap();
         }
 
         // Wait for the messages to arrive to the other side
