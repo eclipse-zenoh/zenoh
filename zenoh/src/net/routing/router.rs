@@ -206,6 +206,7 @@ impl Tables {
         tables_ref: Arc<RwLock<Tables>>,
         net_type: whatami::Type,
     ) {
+        log::trace!("Schedule computations");
         if (net_type == whatami::ROUTER && self.routers_trees_task.is_none())
             || (net_type == whatami::PEER && self.peers_trees_task.is_none())
         {
@@ -213,12 +214,18 @@ impl Tables {
                 async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
                     .await;
                 let mut tables = zasyncwrite!(tables_ref);
+
+                log::trace!("Compute trees");
                 let new_childs = match net_type {
                     whatami::ROUTER => tables.routers_net.as_mut().unwrap().compute_trees().await,
                     _ => tables.peers_net.as_mut().unwrap().compute_trees().await,
                 };
+
+                log::trace!("Compute routes");
                 pubsub_tree_change(&mut tables, &new_childs, net_type).await;
                 queries_tree_change(&mut tables, &new_childs, net_type).await;
+
+                log::trace!("Computations completed");
                 match net_type {
                     whatami::ROUTER => tables.routers_trees_task = None,
                     _ => tables.peers_trees_task = None,
@@ -374,6 +381,7 @@ impl LinkStateInterceptor {
     }
 
     pub(crate) async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+        log::trace!("Recv {:?}", msg);
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
