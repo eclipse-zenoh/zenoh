@@ -200,6 +200,10 @@ impl LocatorProperty {
         }
     }
 
+    // The #[allow(unused_variables)] and #[allow(unused_mut)] suppress unnecessary warnings when
+    // neither #[feature = "transport_tls"] and #[feature = "transport_quic"] are enabled
+    #[allow(unused_variables)]
+    #[allow(unused_mut)]
     pub async fn from_properties(config: &ConfigProperties) -> ZResult<Vec<LocatorProperty>> {
         let mut ps: Vec<LocatorProperty> = vec![];
         #[cfg(feature = "transport_tls")]

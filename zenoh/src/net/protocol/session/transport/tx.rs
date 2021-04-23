@@ -25,7 +25,8 @@ impl SessionTransport {
             if msg.is_reliable() && link.is_reliable() {
                 cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
                 return;
-            } else if !msg.is_reliable() && !link.is_reliable() {
+            }
+            if !msg.is_reliable() && !link.is_reliable() {
                 cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
                 return;
             }

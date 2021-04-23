@@ -170,7 +170,7 @@ impl SessionTransport {
 
     pub(crate) fn set_callback(&self, callback: SessionEventDispatcher) {
         let mut guard = zwrite!(self.callback);
-        *guard = Some(callback.clone());
+        *guard = Some(callback);
     }
 
     pub(crate) async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
@@ -338,7 +338,7 @@ impl SessionTransport {
     pub(crate) fn del_link(&self, link: &Link) -> ZResult<()> {
         // Try to remove the link
         let mut guard = zwrite!(self.links);
-        log::trace!("{}: deleting", link);
+        log::trace!("{}: deleting 1", link);
         for l in guard.iter() {
             log::trace!("\t{}", l.get_link());
         }
@@ -347,10 +347,12 @@ impl SessionTransport {
             if is_last {
                 // Close the whole session
                 drop(guard);
+                log::trace!("{}: deleting 2", link);
                 self.delete();
                 Ok(())
             } else {
                 // Remove the link
+                log::trace!("{}: deleting 3", link);
                 let mut links = guard.to_vec();
                 let link = links.remove(index);
                 *guard = links.into_boxed_slice();
@@ -359,10 +361,12 @@ impl SessionTransport {
                 if let Some(callback) = zread!(self.callback).as_ref() {
                     callback.del_link(link.get_link().clone());
                 }
+                log::trace!("{}: deleting 4", link.get_link());
                 link.close();
                 Ok(())
             }
         } else {
+            log::trace!("{}: deleting -1", link);
             zerror!(ZErrorKind::InvalidLink {
                 descr: format!("Can not delete Link {} with peer: {}", link, self.pid)
             })

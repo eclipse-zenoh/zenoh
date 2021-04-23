@@ -17,7 +17,9 @@ use super::ArcSlice;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
+#[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+#[cfg(feature = "zero-copy")]
 use zenoh_util::zerror;
 
 #[derive(Clone, Copy, PartialEq)]

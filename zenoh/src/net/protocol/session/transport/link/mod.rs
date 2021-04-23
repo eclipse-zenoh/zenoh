@@ -25,9 +25,11 @@ use super::proto::{SessionMessage, ZenohMessage};
 use super::session;
 use super::session::defaults::{QUEUE_PRIO_CTRL, RX_BUFF_SIZE};
 use super::{SeqNumGenerator, SessionTransport};
-use async_std::channel::{bounded, Receiver, Sender};
+use async_std::io::{Read, Result as IoResult};
+use async_std::pin::Pin;
 use async_std::prelude::*;
 use async_std::task;
+use async_std::task::{Context, Poll};
 use batch::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -35,7 +37,7 @@ use std::time::Duration;
 use tx::*;
 use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zerror, zlock};
+use zenoh_util::zerror;
 
 #[derive(Clone)]
 pub(crate) struct SessionTransportLink {
@@ -49,9 +51,6 @@ pub(crate) struct SessionTransportLink {
     transport: SessionTransport,
     // The transmission pipeline
     pipeline: Arc<TransmissionPipeline>,
-    // The signals to stop TX/RX tasks
-    signal_tx: Arc<Mutex<Option<Sender<()>>>>,
-    signal_rx: Arc<Mutex<Option<Sender<()>>>>,
     // Active
     active_tx: Arc<AtomicBool>,
     active_rx: Arc<AtomicBool>,
@@ -82,8 +81,6 @@ impl SessionTransportLink {
             lease,
             keep_alive,
             pipeline,
-            signal_tx: Arc::new(Mutex::new(None)),
-            signal_rx: Arc::new(Mutex::new(None)),
             active_tx: Arc::new(AtomicBool::new(false)),
             active_rx: Arc::new(AtomicBool::new(false)),
         }
@@ -92,20 +89,13 @@ impl SessionTransportLink {
 
 impl SessionTransportLink {
     pub(crate) fn start_tx(&self) {
-        let mut guard = zlock!(self.signal_tx);
-        if guard.is_none() {
-            // SessionTransport for signal the termination of TX task
-            let (sender_tx, receiver_tx) = bounded::<()>(1);
-            *guard = Some(sender_tx);
-            drop(guard);
+        if !self.active_tx.swap(true, Ordering::AcqRel) {
             // Spawn the TX task
             let c_link = self.clone();
             let c_active = self.active_tx.clone();
             task::spawn(async move {
                 // Start the consume task
-                c_active.store(true, Ordering::Release);
-                let res = tx_task(c_link.clone(), c_active.clone(), receiver_tx).await;
-                c_active.store(false, Ordering::Release);
+                let res = tx_task(c_link.clone(), c_active.clone()).await;
                 if let Err(e) = res {
                     log::debug!("{}: {}", c_link.inner, e);
                     let _ = c_link.transport.del_link(&c_link.inner);
@@ -115,26 +105,17 @@ impl SessionTransportLink {
     }
 
     pub(crate) fn stop_tx(&self) {
-        let mut guard = zlock!(self.signal_tx);
-        if let Some(signal_tx) = guard.take() {
-            self.active_tx.store(false, Ordering::Release);
-            let _ = signal_tx.try_send(());
-        }
+        self.active_tx.store(false, Ordering::Release);
     }
 
     pub(crate) fn start_rx(&self) {
-        let mut guard = zlock!(self.signal_rx);
-        if guard.is_none() {
-            let (sender_rx, receiver_rx) = bounded::<()>(1);
-            *guard = Some(sender_rx);
+        if !self.active_rx.swap(true, Ordering::AcqRel) {
             // Spawn the RX task
             let c_link = self.clone();
             let c_active = self.active_rx.clone();
             task::spawn(async move {
                 // Start the consume task
-                c_active.store(true, Ordering::Release);
-                let res = rx_task(c_link.clone(), c_active.clone(), receiver_rx).await;
-                c_active.store(false, Ordering::Release);
+                let res = rx_task(c_link.clone(), c_active.clone()).await;
                 if let Err(e) = res {
                     log::debug!("{}: {}", c_link.inner, e);
                     let _ = c_link.transport.del_link(&c_link.inner);
@@ -144,11 +125,7 @@ impl SessionTransportLink {
     }
 
     pub(crate) fn stop_rx(&self) {
-        let mut guard = zlock!(self.signal_rx);
-        if let Some(signal_rx) = guard.take() {
-            self.active_rx.store(false, Ordering::Release);
-            let _ = signal_rx.try_send(());
-        }
+        self.active_rx.store(false, Ordering::Release);
     }
 
     #[inline(always)]
@@ -177,6 +154,7 @@ impl SessionTransportLink {
     pub(crate) async fn flush(&self) {
         // Drain what remains in the queue before exiting
         while let Some(batch) = self.pipeline.drain().await {
+            log::trace!("Draining {}: {:?}", self.inner, batch.as_bytes());
             let _ = self.inner.write_all(batch.as_bytes()).await;
         }
         // Close the underlying link
@@ -194,39 +172,55 @@ impl Drop for SessionTransportLink {
 /*************************************/
 /*              TASKS                */
 /*************************************/
-async fn tx_task(
-    link: SessionTransportLink,
-    active: Arc<AtomicBool>,
-    signal: Receiver<()>,
-) -> ZResult<()> {
+// Signal to interrupt IO futures
+struct Signal(Arc<AtomicBool>);
+
+impl Signal {
+    fn new(var: Arc<AtomicBool>) -> Signal {
+        Signal(var)
+    }
+
+    async fn wait(&mut self) {
+        let mut buf = [0u8; 1];
+        let _ = self.read(&mut buf).await;
+    }
+}
+
+impl Read for Signal {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        _ctx: &mut Context<'_>,
+        _buf: &mut [u8],
+    ) -> Poll<IoResult<usize>> {
+        match self.0.load(Ordering::Acquire) {
+            true => Poll::Pending,
+            false => Poll::Ready(Ok(0)),
+        }
+    }
+}
+
+async fn tx_task(link: SessionTransportLink, active: Arc<AtomicBool>) -> ZResult<()> {
     enum Action {
         Pull((SerializationBatch, usize)),
         Timeout,
         Stop,
     }
 
-    async fn pull(link: &SessionTransportLink) -> Action {
-        let (batch, index) = link.pipeline.pull().await;
-        Action::Pull((batch, index))
+    async fn pull(link: &SessionTransportLink, duration: Duration) -> Action {
+        match link.pipeline.pull().timeout(duration).await {
+            Ok((batch, index)) => Action::Pull((batch, index)),
+            Err(_) => Action::Timeout,
+        }
     }
 
-    async fn timeout(duration: Duration) -> Action {
-        task::sleep(duration).await;
-        Action::Timeout
-    }
-
-    async fn stop(signal: &Receiver<()>) -> Action {
-        let _ = signal.recv().await;
+    async fn stop(active: Arc<AtomicBool>) -> Action {
+        Signal::new(active).wait().await;
         Action::Stop
     }
 
     let keep_alive = Duration::from_millis(link.keep_alive);
     while active.load(Ordering::Acquire) {
-        match pull(&link)
-            .race(timeout(keep_alive))
-            .race(stop(&signal))
-            .await
-        {
+        match pull(&link, keep_alive).race(stop(active.clone())).await {
             Action::Pull((batch, index)) => {
                 // Send the buffer on the link
                 link.inner.write_all(batch.as_bytes()).await?;
@@ -239,35 +233,36 @@ async fn tx_task(
                 let message = SessionMessage::make_keep_alive(pid, attachment);
                 link.pipeline.push_session_message(message, QUEUE_PRIO_CTRL);
             }
-            Action::Stop => return Ok(()),
+            Action::Stop => break,
         }
     }
     Ok(())
 }
 
-async fn read_stream(
-    link: SessionTransportLink,
-    active: Arc<AtomicBool>,
-    signal: Receiver<()>,
-) -> ZResult<()> {
+async fn read_stream(link: SessionTransportLink, active: Arc<AtomicBool>) -> ZResult<()> {
     enum Action {
         Read,
-        Timeout,
         Stop,
     }
 
-    async fn read(link: &SessionTransportLink, buffer: &mut [u8]) -> ZResult<Action> {
-        link.inner.read_exact(buffer).await?;
+    async fn read(
+        link: &SessionTransportLink,
+        buffer: &mut [u8],
+        duration: Duration,
+    ) -> ZResult<Action> {
+        link.inner
+            .read_exact(buffer)
+            .timeout(duration)
+            .await
+            .map_err(|_| {
+                let e = format!("{}: expired after {} milliseconds", link.inner, link.lease);
+                zerror2!(ZErrorKind::IoError { descr: e })
+            })??;
         Ok(Action::Read)
     }
 
-    async fn timeout(duration: Duration) -> ZResult<Action> {
-        task::sleep(duration).await;
-        Ok(Action::Timeout)
-    }
-
-    async fn stop(signal: &Receiver<()>) -> ZResult<Action> {
-        let _ = signal.recv().await;
+    async fn stop(active: Arc<AtomicBool>) -> ZResult<Action> {
+        Signal::new(active).wait().await;
         Ok(Action::Stop)
     }
 
@@ -278,33 +273,27 @@ async fn read_stream(
     let mut length = [0u8, 0u8];
     // The pool of buffers
     let n = 1 + (*RX_BUFF_SIZE / link.inner.get_mtu());
-    // let pool = RecyclingBufferPool::new(n, link.inner.get_mtu());
     let pool = RecyclingObjectPool::new(n, || vec![0u8; link.inner.get_mtu()].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the RBuf
         rbuf.clear();
 
         // Async read from the underlying link
-        let action = read(&link, &mut length)
-            .race(timeout(lease))
-            .race(stop(&signal))
+        log::trace!("{} waiting to read length", link.inner);
+        let action = read(&link, &mut length, lease)
+            .race(stop(active.clone()))
             .await?;
         let to_read = match action {
             Action::Read => u16::from_le_bytes(length) as usize,
-            Action::Timeout => {
-                // Link lease has expired
-                let e = format!("{}: expired after {} milliseconds", link.inner, link.lease);
-                return zerror!(ZErrorKind::IoError { descr: e });
-            }
             Action::Stop => return Ok(()),
         };
 
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
-        let action = read(&link, &mut buffer[0..to_read])
-            .race(timeout(lease))
-            .race(stop(&signal))
+        log::trace!("{} waiting to read {} bytes", link.inner, to_read);
+        let action = read(&link, &mut buffer[0..to_read], lease)
+            .race(stop(active.clone()))
             .await?;
         match action {
             Action::Read => {
@@ -320,40 +309,38 @@ async fn read_stream(
                     }
                 }
             }
-            Action::Timeout => {
-                // Link lease has expired
-                let e = format!("{}: expired after {} milliseconds", link.inner, link.lease);
-                return zerror!(ZErrorKind::IoError { descr: e });
-            }
-            Action::Stop => return Ok(()),
+            Action::Stop => break,
         }
     }
+    log::trace!("{}: exit read_stream", link.inner);
     Ok(())
 }
 
-async fn read_dgram(
-    link: SessionTransportLink,
-    active: Arc<AtomicBool>,
-    signal: Receiver<()>,
-) -> ZResult<()> {
+async fn read_dgram(link: SessionTransportLink, active: Arc<AtomicBool>) -> ZResult<()> {
     enum Action {
         Read(usize),
-        Timeout,
         Stop,
     }
 
-    async fn read(link: &SessionTransportLink, buffer: &mut [u8]) -> ZResult<Action> {
-        let n = link.inner.read(buffer).await?;
+    async fn read(
+        link: &SessionTransportLink,
+        buffer: &mut [u8],
+        duration: Duration,
+    ) -> ZResult<Action> {
+        let n = link
+            .inner
+            .read(buffer)
+            .timeout(duration)
+            .await
+            .map_err(|_| {
+                let e = format!("{}: expired after {} milliseconds", link.inner, link.lease);
+                zerror2!(ZErrorKind::IoError { descr: e })
+            })??;
         Ok(Action::Read(n))
     }
 
-    async fn timeout(duration: Duration) -> ZResult<Action> {
-        task::sleep(duration).await;
-        Ok(Action::Timeout)
-    }
-
-    async fn stop(signal: &Receiver<()>) -> ZResult<Action> {
-        let _ = signal.recv().await;
+    async fn stop(active: Arc<AtomicBool>) -> ZResult<Action> {
+        Signal::new(active).wait().await;
         Ok(Action::Stop)
     }
 
@@ -362,7 +349,6 @@ async fn read_dgram(
     let mut rbuf = RBuf::new();
     // The pool of buffers
     let n = 1 + (*RX_BUFF_SIZE / link.inner.get_mtu());
-    // let pool = RecyclingBufferPool::new(n, link.inner.get_mtu());
     let pool = RecyclingObjectPool::new(n, || vec![0u8; link.inner.get_mtu()].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the rbuf
@@ -371,9 +357,8 @@ async fn read_dgram(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let action = read(&link, &mut buffer)
-            .race(timeout(lease))
-            .race(stop(&signal))
+        let action = read(&link, &mut buffer, lease)
+            .race(stop(active.clone()))
             .await?;
         match action {
             Action::Read(n) => {
@@ -397,25 +382,17 @@ async fn read_dgram(
                     }
                 }
             }
-            Action::Timeout => {
-                // Link lease has expired
-                let e = format!("{}: expired after {} milliseconds", link.inner, link.lease);
-                return zerror!(ZErrorKind::IoError { descr: e });
-            }
-            Action::Stop => return Ok(()),
+            Action::Stop => break,
         }
     }
+    log::trace!("{}: exit read_dgram", link.inner);
     Ok(())
 }
 
-async fn rx_task(
-    link: SessionTransportLink,
-    active: Arc<AtomicBool>,
-    signal: Receiver<()>,
-) -> ZResult<()> {
+async fn rx_task(link: SessionTransportLink, active: Arc<AtomicBool>) -> ZResult<()> {
     if link.inner.is_streamed() {
-        read_stream(link, active, signal).await
+        read_stream(link, active).await
     } else {
-        read_dgram(link, active, signal).await
+        read_dgram(link, active).await
     }
 }
