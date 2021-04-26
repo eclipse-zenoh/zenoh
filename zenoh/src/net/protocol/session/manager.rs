@@ -39,7 +39,6 @@ use zenoh_util::{zasynclock, zerror};
 /// # Examples
 /// ```
 /// use async_std::sync::Arc;
-/// use async_trait::async_trait;
 /// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
 /// use zenoh::net::protocol::session::{DummySessionEventHandler, SessionEventHandler, Session, SessionDispatcher, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 ///
@@ -54,9 +53,8 @@ use zenoh_util::{zasynclock, zerror};
 ///     }
 /// }
 ///
-/// #[async_trait]
 /// impl SessionHandler for MySH {
-///     async fn new_session(&self,
+///     fn new_session(&self,
 ///         _session: Session
 ///     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
 ///         Ok(Arc::new(DummySessionEventHandler::new()))
@@ -93,7 +91,6 @@ use zenoh_util::{zasynclock, zerror};
 /// };
 /// let manager_opt = SessionManager::new(config, Some(opt_config));
 /// ```
-
 pub struct SessionManagerConfig {
     pub version: u8,
     pub whatami: WhatAmI,

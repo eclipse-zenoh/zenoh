@@ -23,16 +23,24 @@ impl SessionTransport {
         for cl in guard.iter() {
             let link = cl.get_link();
             if msg.is_reliable() && link.is_reliable() {
-                cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
+                let c_cl = cl.clone();
+                drop(guard);
+                c_cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
                 return;
             }
             if !msg.is_reliable() && !link.is_reliable() {
-                cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
+                let c_cl = cl.clone();
+                drop(guard);
+                c_cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
                 return;
             }
         }
         match guard.get(0) {
-            Some(cl) => cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA),
+            Some(cl) => {
+                let c_cl = cl.clone();
+                drop(guard);
+                c_cl.schedule_zenoh_message(msg, QUEUE_PRIO_DATA);
+            }
             None => log::trace!("Message dropped because the session has no links: {}", msg),
         }
     }
