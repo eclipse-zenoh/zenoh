@@ -303,7 +303,7 @@ impl SharedMemoryManager {
                 Some(c) => {
                     self.free_list.push(c);
                     log::debug!(
-                        "SharedMemoryManager::alloc({}) cannot find any available chunk",
+                        "SharedMemoryManager::alloc({}) cannot find any available chunk of the appropriate size.",
                         len
                     );
                     log::debug!("SharedMemoryManager::free_list = {:?}", self.free_list);
@@ -413,6 +413,8 @@ impl std::fmt::Debug for SharedMemoryManager {
             .field("segment_path", &self.segment_path)
             .field("size", &self.size)
             .field("available", &self.available)
+            .field("free_list.len", &self.free_list.len())
+            .field("busy_list.len", &self.busy_list.len())
             .finish();
         f.debug_list()
             .entries(self.segments.keys().into_iter())
