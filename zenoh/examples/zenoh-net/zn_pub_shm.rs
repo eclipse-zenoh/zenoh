@@ -42,7 +42,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Allocating a Shared Memory Buffer...");
 
-    for idx in 1..=(K * N as u32) {
+    for idx in 1..=(K * N as u32 * 100) {
+        println!("{:?}", shm);
         let mut sbuf = match shm.alloc(1024) {
             Some(buf) => buf,
             None => {
@@ -50,6 +51,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "Afer failing allocation the GC collected: {} bytes -- retrying",
                     shm.garbage_collect()
+                );
+                println!(
+                    "Trying to de-fragment memory... De-fragmented {} bytes",
+                    shm.defragment()
                 );
                 shm.alloc(1024).unwrap()
             }
@@ -87,6 +92,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if idx % K == 0 {
             let freed = shm.garbage_collect();
             println!("The Gargabe collector freed {} bytes", freed);
+            let defrag = shm.defragment();
+            println!("De-framented {} bytes", defrag);
         }
         // sleep(Duration::from_millis(100)).await;
     }
