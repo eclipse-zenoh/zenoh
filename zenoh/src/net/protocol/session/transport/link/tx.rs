@@ -534,235 +534,235 @@ impl TransmissionPipeline {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::super::core::{CongestionControl, Reliability, ResKey, ZInt};
-//     use super::super::io::RBuf;
-//     use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
-//     use super::super::session::defaults::{
-//         QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION,
-//     };
-//     use super::*;
-//     use async_std::prelude::*;
-//     use async_std::task;
-//     use std::convert::TryFrom;
-//     use std::sync::atomic::{AtomicUsize, Ordering};
-//     use std::sync::{Arc, Mutex};
-//     use std::time::{Duration, Instant};
+#[cfg(test)]
+mod tests {
+    use super::super::core::{CongestionControl, Reliability, ResKey, ZInt};
+    use super::super::io::RBuf;
+    use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
+    use super::super::session::defaults::{
+        QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION,
+    };
+    use super::*;
+    use async_std::prelude::*;
+    use async_std::task;
+    use std::convert::TryFrom;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
 
-//     const TIMEOUT: Duration = Duration::from_secs(60);
+    const TIMEOUT: Duration = Duration::from_secs(60);
 
-//     #[test]
-//     fn tx_pipeline() {
-//         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
-//             // Send reliable messages
-//             let key = ResKey::RName("test".to_string());
-//             let payload = RBuf::from(vec![0u8; payload_size]);
-//             let reliability = Reliability::Reliable;
-//             let congestion_control = CongestionControl::Block;
-//             let data_info = None;
-//             let routing_context = None;
-//             let reply_context = None;
-//             let attachment = None;
+    #[test]
+    fn tx_pipeline() {
+        fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
+            // Send reliable messages
+            let key = ResKey::RName("test".to_string());
+            let payload = RBuf::from(vec![0u8; payload_size]);
+            let reliability = Reliability::Reliable;
+            let congestion_control = CongestionControl::Block;
+            let data_info = None;
+            let routing_context = None;
+            let reply_context = None;
+            let attachment = None;
 
-//             let message = ZenohMessage::make_data(
-//                 key,
-//                 payload,
-//                 reliability,
-//                 congestion_control,
-//                 data_info,
-//                 routing_context,
-//                 reply_context,
-//                 attachment,
-//             );
+            let message = ZenohMessage::make_data(
+                key,
+                payload,
+                reliability,
+                congestion_control,
+                data_info,
+                routing_context,
+                reply_context,
+                attachment,
+            );
 
-//             println!(
-//                 ">>> Sending {} messages with payload size: {}",
-//                 num_msg, payload_size
-//             );
-//             for _ in 0..num_msg {
-//                 queue.push_zenoh_message(message.clone(), QUEUE_PRIO_DATA);
-//             }
-//         }
+            println!(
+                ">>> Sending {} messages with payload size: {}",
+                num_msg, payload_size
+            );
+            for _ in 0..num_msg {
+                queue.push_zenoh_message(message.clone(), QUEUE_PRIO_DATA);
+            }
+        }
 
-//         async fn consume(queue: Arc<TransmissionPipeline>, num_msg: usize) {
-//             let mut batches: usize = 0;
-//             let mut bytes: usize = 0;
-//             let mut msgs: usize = 0;
-//             let mut fragments: usize = 0;
+        async fn consume(queue: Arc<TransmissionPipeline>, num_msg: usize) {
+            let mut batches: usize = 0;
+            let mut bytes: usize = 0;
+            let mut msgs: usize = 0;
+            let mut fragments: usize = 0;
 
-//             while msgs != num_msg {
-//                 let (batch, priority) = queue.pull().await;
-//                 batches += 1;
-//                 bytes += batch.len();
-//                 // Create a RBuf for deserialization starting from the batch
-//                 let mut rbuf: RBuf = batch.get_serialized_messages().into();
-//                 // Deserialize the messages
-//                 while let Some(msg) = rbuf.read_session_message() {
-//                     match msg.body {
-//                         SessionBody::Frame(Frame { payload, .. }) => match payload {
-//                             FramePayload::Messages { messages } => {
-//                                 msgs += messages.len();
-//                             }
-//                             FramePayload::Fragment { is_final, .. } => {
-//                                 fragments += 1;
-//                                 if is_final {
-//                                     msgs += 1;
-//                                 }
-//                             }
-//                         },
-//                         _ => {
-//                             msgs += 1;
-//                         }
-//                     }
-//                 }
-//                 // Reinsert the batch
-//                 queue.refill(batch, priority).await;
-//             }
+            while msgs != num_msg {
+                let (batch, priority) = queue.pull().await;
+                batches += 1;
+                bytes += batch.len();
+                // Create a RBuf for deserialization starting from the batch
+                let mut rbuf: RBuf = batch.get_serialized_messages().into();
+                // Deserialize the messages
+                while let Some(msg) = rbuf.read_session_message() {
+                    match msg.body {
+                        SessionBody::Frame(Frame { payload, .. }) => match payload {
+                            FramePayload::Messages { messages } => {
+                                msgs += messages.len();
+                            }
+                            FramePayload::Fragment { is_final, .. } => {
+                                fragments += 1;
+                                if is_final {
+                                    msgs += 1;
+                                }
+                            }
+                        },
+                        _ => {
+                            msgs += 1;
+                        }
+                    }
+                }
+                // Reinsert the batch
+                queue.refill(batch, priority);
+            }
 
-//             println!(
-//                 "<<< Received {} messages, {} bytes, {} batches, {} fragments",
-//                 msgs, bytes, batches, fragments
-//             );
-//         }
+            println!(
+                "<<< Received {} messages, {} bytes, {} batches, {} fragments",
+                msgs, bytes, batches, fragments
+            );
+        }
 
-//         // Queue
-//         let batch_size = *SESSION_BATCH_SIZE;
-//         let is_streamed = true;
-//         let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
-//             0,
-//             *SESSION_SEQ_NUM_RESOLUTION,
-//         )));
-//         let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-//             0,
-//             *SESSION_SEQ_NUM_RESOLUTION,
-//         )));
-//         let queue = Arc::new(TransmissionPipeline::new(
-//             batch_size,
-//             is_streamed,
-//             sn_reliable,
-//             sn_best_effort,
-//         ));
+        // Queue
+        let batch_size = *SESSION_BATCH_SIZE;
+        let is_streamed = true;
+        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+            0,
+            *SESSION_SEQ_NUM_RESOLUTION,
+        )));
+        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
+            0,
+            *SESSION_SEQ_NUM_RESOLUTION,
+        )));
+        let queue = Arc::new(TransmissionPipeline::new(
+            batch_size,
+            is_streamed,
+            sn_reliable,
+            sn_best_effort,
+        ));
 
-//         // Total amount of bytes to send in each test
-//         let bytes: usize = 100_000_000;
-//         let max_msgs: usize = 1_000;
-//         // Paylod size of the messages
-//         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
+        // Total amount of bytes to send in each test
+        let bytes: usize = 100_000_000;
+        let max_msgs: usize = 1_000;
+        // Paylod size of the messages
+        let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
 
-//         task::block_on(async {
-//             for ps in payload_sizes.iter() {
-//                 if ZInt::try_from(*ps).is_err() {
-//                     break;
-//                 }
+        task::block_on(async {
+            for ps in payload_sizes.iter() {
+                if ZInt::try_from(*ps).is_err() {
+                    break;
+                }
 
-//                 // Compute the number of messages to send
-//                 let num_msg = max_msgs.min(bytes / ps);
+                // Compute the number of messages to send
+                let num_msg = max_msgs.min(bytes / ps);
 
-//                 let c_queue = queue.clone();
-//                 let t_c = task::spawn(async move {
-//                     consume(c_queue, num_msg).await;
-//                 });
+                let c_queue = queue.clone();
+                let t_c = task::spawn(async move {
+                    consume(c_queue, num_msg).await;
+                });
 
-//                 let c_queue = queue.clone();
-//                 let c_ps = *ps;
-//                 let t_s = task::spawn(async move {
-//                     schedule(c_queue, num_msg, c_ps).await;
-//                 });
+                let c_queue = queue.clone();
+                let c_ps = *ps;
+                let t_s = task::spawn(async move {
+                    schedule(c_queue, num_msg, c_ps);
+                });
 
-//                 let res = t_c.join(t_s).timeout(TIMEOUT).await;
-//                 assert!(res.is_ok());
-//             }
-//         });
-//     }
+                let res = t_c.join(t_s).timeout(TIMEOUT).await;
+                assert!(res.is_ok());
+            }
+        });
+    }
 
-//     #[test]
-//     #[ignore]
-//     fn tx_pipeline_thr() {
-//         // Queue
-//         let batch_size = *SESSION_BATCH_SIZE;
-//         let is_streamed = true;
-//         let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
-//             0,
-//             *SESSION_SEQ_NUM_RESOLUTION,
-//         )));
-//         let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-//             0,
-//             *SESSION_SEQ_NUM_RESOLUTION,
-//         )));
-//         let pipeline = Arc::new(TransmissionPipeline::new(
-//             batch_size,
-//             is_streamed,
-//             sn_reliable,
-//             sn_best_effort,
-//         ));
-//         let count = Arc::new(AtomicUsize::new(0));
-//         let size = Arc::new(AtomicUsize::new(0));
+    #[test]
+    #[ignore]
+    fn tx_pipeline_thr() {
+        // Queue
+        let batch_size = *SESSION_BATCH_SIZE;
+        let is_streamed = true;
+        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+            0,
+            *SESSION_SEQ_NUM_RESOLUTION,
+        )));
+        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
+            0,
+            *SESSION_SEQ_NUM_RESOLUTION,
+        )));
+        let pipeline = Arc::new(TransmissionPipeline::new(
+            batch_size,
+            is_streamed,
+            sn_reliable,
+            sn_best_effort,
+        ));
+        let count = Arc::new(AtomicUsize::new(0));
+        let size = Arc::new(AtomicUsize::new(0));
 
-//         let c_pipeline = pipeline.clone();
-//         let c_size = size.clone();
-//         task::spawn(async move {
-//             loop {
-//                 let payload_sizes: [usize; 16] = [
-//                     8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
-//                     65_536, 262_144, 1_048_576,
-//                 ];
-//                 for size in payload_sizes.iter() {
-//                     c_size.store(*size, Ordering::Release);
+        let c_pipeline = pipeline.clone();
+        let c_size = size.clone();
+        task::spawn(async move {
+            loop {
+                let payload_sizes: [usize; 16] = [
+                    8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
+                    65_536, 262_144, 1_048_576,
+                ];
+                for size in payload_sizes.iter() {
+                    c_size.store(*size, Ordering::Release);
 
-//                     // Send reliable messages
-//                     let key = ResKey::RName("/pipeline/thr".to_string());
-//                     let payload = RBuf::from(vec![0u8; *size]);
-//                     let reliability = Reliability::Reliable;
-//                     let congestion_control = CongestionControl::Block;
-//                     let data_info = None;
-//                     let routing_context = None;
-//                     let reply_context = None;
-//                     let attachment = None;
+                    // Send reliable messages
+                    let key = ResKey::RName("/pipeline/thr".to_string());
+                    let payload = RBuf::from(vec![0u8; *size]);
+                    let reliability = Reliability::Reliable;
+                    let congestion_control = CongestionControl::Block;
+                    let data_info = None;
+                    let routing_context = None;
+                    let reply_context = None;
+                    let attachment = None;
 
-//                     let message = ZenohMessage::make_data(
-//                         key,
-//                         payload,
-//                         reliability,
-//                         congestion_control,
-//                         data_info,
-//                         routing_context,
-//                         reply_context,
-//                         attachment,
-//                     );
+                    let message = ZenohMessage::make_data(
+                        key,
+                        payload,
+                        reliability,
+                        congestion_control,
+                        data_info,
+                        routing_context,
+                        reply_context,
+                        attachment,
+                    );
 
-//                     let duration = Duration::from_millis(5_500);
-//                     let start = Instant::now();
-//                     while start.elapsed() < duration {
-//                         c_pipeline.push_zenoh_message(message.clone(), QUEUE_PRIO_DATA);
-//                     }
-//                 }
-//             }
-//         });
+                    let duration = Duration::from_millis(5_500);
+                    let start = Instant::now();
+                    while start.elapsed() < duration {
+                        c_pipeline.push_zenoh_message(message.clone(), QUEUE_PRIO_DATA);
+                    }
+                }
+            }
+        });
 
-//         let c_pipeline = pipeline.clone();
-//         let c_count = count.clone();
-//         task::spawn(async move {
-//             loop {
-//                 let (batch, priority) = c_pipeline.pull().await;
-//                 c_count.fetch_add(batch.len(), Ordering::AcqRel);
-//                 task::sleep(Duration::from_nanos(100)).await;
-//                 c_pipeline.refill(batch, priority).await;
-//             }
-//         });
+        let c_pipeline = pipeline.clone();
+        let c_count = count.clone();
+        task::spawn(async move {
+            loop {
+                let (batch, priority) = c_pipeline.pull().await;
+                c_count.fetch_add(batch.len(), Ordering::AcqRel);
+                task::sleep(Duration::from_nanos(100)).await;
+                c_pipeline.refill(batch, priority);
+            }
+        });
 
-//         task::block_on(async {
-//             let mut prev_size: usize = usize::MAX;
-//             loop {
-//                 let received = count.swap(0, Ordering::AcqRel);
-//                 let current: usize = size.load(Ordering::Acquire);
-//                 if current == prev_size {
-//                     let thr = (8.0 * received as f64) / 1_000_000_000.0;
-//                     println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
-//                 }
-//                 prev_size = current;
-//                 task::sleep(Duration::from_millis(500)).await;
-//             }
-//         });
-//     }
-// }
+        task::block_on(async {
+            let mut prev_size: usize = usize::MAX;
+            loop {
+                let received = count.swap(0, Ordering::AcqRel);
+                let current: usize = size.load(Ordering::Acquire);
+                if current == prev_size {
+                    let thr = (8.0 * received as f64) / 1_000_000_000.0;
+                    println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
+                }
+                prev_size = current;
+                task::sleep(Duration::from_millis(500)).await;
+            }
+        });
+    }
+}
