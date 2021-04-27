@@ -204,7 +204,6 @@ impl SessionTransport {
         *l_guard = vec![].into_boxed_slice();
         drop(l_guard);
 
-        // @TOFIX: stop first link tx, call then callback closed, then stop link rx
         for l in links.drain(..) {
             l.close();
         }

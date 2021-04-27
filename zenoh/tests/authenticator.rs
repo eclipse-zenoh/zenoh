@@ -393,8 +393,9 @@ fn authenticator_udp() {
     let locator: Locator = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(locator.clone()).await;
-        #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(locator).await;
+        // @TOFIX: enable shared_memory test
+        // #[cfg(feature = "zero-copy")]
+        // authenticator_shared_memory(locator).await;
     });
 }
 

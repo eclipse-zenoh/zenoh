@@ -155,36 +155,35 @@ impl SessionTransportLink {
         log::trace!("{}: closing", self.inner);
         self.stop_tx();
         self.stop_rx();
-        let tmp = self;
-        task::spawn(async move { tmp.flush().await });
-    }
-
-    pub(crate) async fn flush(self) -> ZResult<()> {
-        let duration = Duration::from_millis(self.lease);
-        // Drain what remains in the queue before exiting
-        while let Some(batch) = self.pipeline.drain().await {
-            log::trace!("Draining {}: {:?}", self.inner, batch.as_bytes());
-            let _ = self
-                .inner
-                .write_all(batch.as_bytes())
-                .timeout(duration)
-                .await
-                .map_err(|_| {
+        let link = self;
+        task::spawn(async move {
+            let duration = Duration::from_millis(link.lease);
+            // Drain what remains in the queue before exiting
+            while let Some(batch) = link.pipeline.drain().await {
+                log::trace!("Draining {}: {:?}", link.inner, batch.as_bytes());
+                let res = link
+                    .inner
+                    .write_all(batch.as_bytes())
+                    .timeout(duration)
+                    .await;
+                if res.is_err() {
                     let e = format!(
                         "{}: failed to flush after {} milliseconds",
-                        self.inner, self.lease
+                        link.inner, link.lease
                     );
-                    zerror2!(ZErrorKind::IoError { descr: e })
-                })??;
-        }
-        // Close the underlying link
-        self.inner.close().timeout(duration).await.map_err(|_| {
-            let e = format!(
-                "{}: failed to close after {} milliseconds",
-                self.inner, self.lease
-            );
-            zerror2!(ZErrorKind::IoError { descr: e })
-        })?
+                    log::trace!("{}", e);
+                }
+            }
+            // Close the underlying link
+            let res = link.inner.close().timeout(duration).await;
+            if res.is_err() {
+                let e = format!(
+                    "{}: failed to close after {} milliseconds",
+                    link.inner, link.lease
+                );
+                log::trace!("{}", e);
+            }
+        });
     }
 }
 
