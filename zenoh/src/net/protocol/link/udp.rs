@@ -22,7 +22,6 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use zenoh_util::collections::{RecyclingObject, RecyclingObjectPool};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -130,64 +129,56 @@ pub type LocatorPropertyUdp = ();
 /*************************************/
 /*              LINK                 */
 /*************************************/
-type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUdp>>>>;
+type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUdpUnconnected>>>>;
 type LinkInput = (RecyclingObject<Box<[u8]>>, usize);
 type LinkLeftOver = (RecyclingObject<Box<[u8]>>, usize, usize);
 
-struct UnconnectedUdp {
+struct LinkUdpConnected {
+    socket: Arc<UdpSocket>,
+}
+
+impl LinkUdpConnected {
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+        (&self.socket).recv(buffer).await.map_err(|e| {
+            zerror2!(ZErrorKind::IoError {
+                descr: format!("{}", e)
+            })
+        })
+    }
+
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+        (&self.socket).send(buffer).await.map_err(|e| {
+            zerror2!(ZErrorKind::IoError {
+                descr: format!("{}", e)
+            })
+        })
+    }
+
+    async fn close(&self) -> ZResult<()> {
+        Ok(())
+    }
+}
+
+struct LinkUdpUnconnected {
+    socket: Weak<UdpSocket>,
     links: LinkHashMap,
-    status: ListenerUdpStatus,
-    signal: Sender<()>,
     input: Mvar<LinkInput>,
     leftover: Mutex<Option<LinkLeftOver>>,
 }
 
-pub struct LinkUdp {
-    // The underlying socket as returned from the async-std library
-    socket: Arc<UdpSocket>,
-    // The source socket address of this link (address used on the local host)
-    src_addr: SocketAddr,
-    // The destination socket address of this link (address used on the remote host)
-    dst_addr: SocketAddr,
-    // The UDP socket is connected to the peer
-    unconnected: Option<UnconnectedUdp>,
-}
-
-impl LinkUdp {
-    fn new(
-        socket: Arc<UdpSocket>,
-        src_addr: SocketAddr,
-        dst_addr: SocketAddr,
-        unconnected: Option<UnconnectedUdp>,
-    ) -> LinkUdp {
-        LinkUdp {
-            socket,
-            src_addr,
-            dst_addr,
-            unconnected,
-        }
-    }
-
-    #[inline(always)]
+impl LinkUdpUnconnected {
     async fn received(&self, buffer: RecyclingObject<Box<[u8]>>, len: usize) {
-        let unconnected = self.unconnected.as_ref().unwrap();
-        unconnected.input.put((buffer, len)).await;
+        self.input.put((buffer, len)).await;
     }
 
-    #[inline(always)]
-    async fn read_unconnected(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let unconnected = self.unconnected.as_ref().ok_or_else(|| {
-            zerror2!(ZErrorKind::IoError {
-                descr: "Send error".to_string()
-            })
-        })?;
-
-        let mut guard = zasynclock!(unconnected.leftover);
-        let (slice, start, len) = if let Some(tuple) = guard.take() {
-            tuple
-        } else {
-            let (slice, len) = unconnected.input.take().await;
-            (slice, 0, len)
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+        let mut guard = zasynclock!(self.leftover);
+        let (slice, start, len) = match guard.take() {
+            Some(tuple) => tuple,
+            None => {
+                let (slice, len) = self.input.take().await;
+                (slice, 0, len)
+            }
         };
         // Copy the read bytes into the target buffer
         let len_min = (len - start).min(buffer.len());
@@ -204,47 +195,63 @@ impl LinkUdp {
         Ok(len_min)
     }
 
-    #[inline(always)]
-    async fn read_connected(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        match (&self.socket).recv(buffer).await {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!("Reception error on UDP link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
+    async fn write(&self, buffer: &[u8], dst_addr: SocketAddr) -> ZResult<usize> {
+        match self.socket.upgrade() {
+            Some(socket) => socket.send_to(buffer, &dst_addr).await.map_err(|e| {
+                zerror2!(ZErrorKind::IoError {
+                    descr: e.to_string()
                 })
-            }
+            }),
+            None => zerror!(ZErrorKind::IoError {
+                descr: "UDP listener has been dropped".to_string()
+            }),
+        }
+    }
+
+    async fn close(&self, src_addr: SocketAddr, dst_addr: SocketAddr) -> ZResult<()> {
+        // Delete the link from the list of links
+        let mut guard = zasynclock!(self.links);
+        guard.remove(&(src_addr, dst_addr));
+        Ok(())
+    }
+}
+
+enum LinkUdpVariant {
+    Connected(LinkUdpConnected),
+    Unconnected(Arc<LinkUdpUnconnected>),
+}
+
+pub struct LinkUdp {
+    // The source socket address of this link (address used on the local host)
+    src_addr: SocketAddr,
+    // The destination socket address of this link (address used on the remote host)
+    dst_addr: SocketAddr,
+    // The UDP socket is connected to the peer
+    variant: LinkUdpVariant,
+}
+
+impl LinkUdp {
+    fn new(src_addr: SocketAddr, dst_addr: SocketAddr, variant: LinkUdpVariant) -> LinkUdp {
+        LinkUdp {
+            src_addr,
+            dst_addr,
+            variant,
         }
     }
 
     pub(crate) async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
-        if let Some(unconnected) = self.unconnected.as_ref() {
-            // Delete the link from the list of links
-            let mut guard = zasynclock!(unconnected.links);
-            guard.remove(&(self.src_addr, self.dst_addr));
-            if !unconnected.status.is_active() && guard.is_empty() {
-                let _ = unconnected.signal.send(()).await;
-            }
+        match &self.variant {
+            LinkUdpVariant::Connected(link) => link.close().await,
+            LinkUdpVariant::Unconnected(link) => link.close(self.src_addr, self.dst_addr).await,
         }
-        Ok(())
     }
 
     #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let res = if self.unconnected.is_some() {
-            (&self.socket).send_to(buffer, &self.dst_addr).await
-        } else {
-            (&self.socket).send(buffer).await
-        };
-        match res {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!("Transmission error on UDP link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
+        match &self.variant {
+            LinkUdpVariant::Connected(link) => link.write(buffer).await,
+            LinkUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await,
         }
     }
 
@@ -259,10 +266,9 @@ impl LinkUdp {
 
     #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        if self.unconnected.is_some() {
-            self.read_unconnected(buffer).await
-        } else {
-            self.read_connected(buffer).await
+        match &self.variant {
+            LinkUdpVariant::Connected(link) => link.read(buffer).await,
+            LinkUdpVariant::Unconnected(link) => link.read(buffer).await,
         }
     }
 
@@ -342,53 +348,47 @@ impl LinkManagerTrait for LinkManagerUdp {
     async fn new_link(&self, dst: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let dst_addr = get_udp_addr(dst).await?;
         // Establish a UDP socket
-        let res = if dst_addr.is_ipv4() {
+        let socket = if dst_addr.is_ipv4() {
             // IPv4 format
             UdpSocket::bind("0.0.0.0:0").await
         } else {
             // IPv6 format
             UdpSocket::bind(":::0").await
-        };
-
-        // Get the socket
-        let socket = match res {
-            Ok(socket) => socket,
-            Err(e) => {
-                let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
-
-        // Connect the socket to the remote address
-        let res = socket.connect(dst_addr).await;
-        if let Err(e) = res {
+        }
+        .map_err(|e| {
             let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
             log::warn!("{}", e);
-            return zerror!(ZErrorKind::InvalidLink { descr: e });
-        };
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        // Connect the socket to the remote address
+        socket.connect(dst_addr).await.map_err(|e| {
+            let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
         // Get source and destination UDP addresses
-        let src_addr = match socket.local_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let src_addr = socket.local_addr().map_err(|e| {
+            let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
-        let dst_addr = match socket.peer_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let dst_addr = socket.peer_addr().map_err(|e| {
+            let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
         // Create UDP link
-        let link = Arc::new(LinkUdp::new(Arc::new(socket), src_addr, dst_addr, None));
+        let link = Arc::new(LinkUdp::new(
+            src_addr,
+            dst_addr,
+            LinkUdpVariant::Connected(LinkUdpConnected {
+                socket: Arc::new(socket),
+            }),
+        ));
         let lobj = Link::Udp(link);
 
         Ok(lobj)
@@ -402,16 +402,14 @@ impl LinkManagerTrait for LinkManagerUdp {
         let addr = get_udp_addr(locator).await?;
 
         if let Some(listener) = zasynclock!(self.listeners).get(&addr) {
-            listener.status.activate();
-            let local_addr = match listener.socket.local_addr() {
-                Ok(addr) => addr,
+            match listener.socket.local_addr() {
+                Ok(addr) => return Ok(Locator::Udp(LocatorUdp::SocketAddr(addr))),
                 Err(e) => {
                     let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
                     log::warn!("{}", e);
                     return zerror!(ZErrorKind::InvalidLink { descr: e });
                 }
             };
-            return Ok(Locator::Udp(LocatorUdp::SocketAddr(local_addr)));
         }
 
         // Bind the UDP socket
@@ -424,14 +422,11 @@ impl LinkManagerTrait for LinkManagerUdp {
             }
         };
 
-        let local_addr = match socket.local_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let local_addr = socket.local_addr().map_err(|e| {
+            let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
         let listener = Arc::new(ListenerUdp::new(socket));
         // Update the list of active listeners on the manager
         zasynclock!(self.listeners).insert(local_addr, listener.clone());
@@ -455,18 +450,12 @@ impl LinkManagerTrait for LinkManagerUdp {
         let mut guard = zasynclock!(self.listeners);
         match guard.remove(&addr) {
             Some(listener) => {
-                // Deactivate the listener to not accept any new incoming connections
-                listener.status.deactivate();
-
-                let guard = zasynclock!(listener.links);
-                if guard.is_empty() {
-                    let res = listener.sender.send(()).await;
-                    if res.is_ok() {
-                        // Wait for the accept loop to be stopped
-                        listener.barrier.wait().await;
-                    }
+                let res = listener.sender.send(()).await;
+                zasynclock!(listener.links).clear();
+                if res.is_ok() {
+                    // Wait for the accept loop to be stopped
+                    listener.barrier.wait().await;
                 }
-
                 Ok(())
             }
             None => {
@@ -492,31 +481,9 @@ impl LinkManagerTrait for LinkManagerUdp {
     }
 }
 
-#[derive(Clone)]
-struct ListenerUdpStatus(Arc<AtomicBool>);
-
-impl ListenerUdpStatus {
-    fn new(value: bool) -> ListenerUdpStatus {
-        Self(Arc::new(AtomicBool::new(value)))
-    }
-
-    fn is_active(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
-    }
-
-    fn activate(&self) {
-        self.0.store(true, Ordering::SeqCst);
-    }
-
-    fn deactivate(&self) {
-        self.0.store(false, Ordering::SeqCst);
-    }
-}
-
 struct ListenerUdp {
     socket: Arc<UdpSocket>,
     links: LinkHashMap,
-    status: ListenerUdpStatus,
     sender: Sender<()>,
     receiver: Receiver<()>,
     barrier: Arc<Barrier>,
@@ -530,7 +497,6 @@ impl ListenerUdp {
         Self {
             socket,
             links: Arc::new(Mutex::new(HashMap::new())),
-            status: ListenerUdpStatus::new(true),
             sender,
             receiver,
             barrier: Arc::new(Barrier::new(2)),
@@ -599,44 +565,34 @@ async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
                 match res {
                     Some(link) => break link.upgrade(),
                     None => {
-                        // Create a new link if the listener is active
-                        if listener.status.is_active() {
-                            // A new peers has sent data to this socket
-                            log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
-                            let unconnected = UnconnectedUdp {
-                                links: listener.links.clone(),
-                                status: listener.status.clone(),
-                                signal: listener.sender.clone(),
-                                input: Mvar::new(),
-                                leftover: Mutex::new(None),
-                            };
-                            // Create the new link object
-                            let link = Arc::new(LinkUdp::new(
-                                listener.socket.clone(),
-                                src_addr,
-                                dst_addr,
-                                Some(unconnected),
-                            ));
-                            // Add the new link to the set of connected peers
-                            zaddlink!(src_addr, dst_addr, Arc::downgrade(&link));
-
-                            manager.handle_new_link(Link::Udp(link), None).await;
-                        } else {
-                            log::debug!(
-                                "Rejected UDP connection from {}: listerner {} is not active",
-                                src_addr,
-                                dst_addr
-                            );
-                            break None;
-                        }
+                        // A new peers has sent data to this socket
+                        log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
+                        let unconnected = Arc::new(LinkUdpUnconnected {
+                            socket: Arc::downgrade(&listener.socket),
+                            links: listener.links.clone(),
+                            input: Mvar::new(),
+                            leftover: Mutex::new(None),
+                        });
+                        zaddlink!(src_addr, dst_addr, Arc::downgrade(&unconnected));
+                        // Create the new link object
+                        let link = Arc::new(LinkUdp::new(
+                            src_addr,
+                            dst_addr,
+                            LinkUdpVariant::Unconnected(unconnected),
+                        ));
+                        // Add the new link to the set of connected peers
+                        manager.handle_new_link(Link::Udp(link), None).await;
                     }
                 }
             };
 
-            if let Some(link) = link {
-                link.received(buff, n).await;
-            } else {
-                zdellink!(src_addr, dst_addr);
+            match link {
+                Some(link) => {
+                    link.received(buff, n).await;
+                }
+                None => {
+                    zdellink!(src_addr, dst_addr);
+                }
             }
         }
     };

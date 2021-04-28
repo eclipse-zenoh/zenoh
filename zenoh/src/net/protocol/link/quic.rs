@@ -511,12 +511,10 @@ impl LinkManagerTrait for LinkManagerQuic {
         let mut endpoint = Endpoint::builder();
         endpoint.default_client_config(config.build());
 
-        let (endpoint, _) = {
-            if addr.is_ipv4() {
-                endpoint.bind(&"0.0.0.0:0".parse().unwrap())
-            } else {
-                endpoint.bind(&"[::]:0".parse().unwrap())
-            }
+        let (endpoint, _) = if addr.is_ipv4() {
+            endpoint.bind(&"0.0.0.0:0".parse().unwrap())
+        } else {
+            endpoint.bind(&"[::]:0".parse().unwrap())
         }
         .map_err(|e| {
             let e = format!("Can not create a new QUIC link bound to {}: {}", host, e);
