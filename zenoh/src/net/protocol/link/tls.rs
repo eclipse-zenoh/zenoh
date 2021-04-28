@@ -98,7 +98,7 @@ async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
                 match split.get(0) {
                     Some(dom) => {
                         let domain = DNSNameRef::try_from_ascii_str(dom).map_err(|e| {
-                            let e = format!("{}", e);
+                            let e = e.to_string();
                             zerror2!(ZErrorKind::InvalidLocator { descr: e })
                         })?;
                         Ok(domain.to_owned())
@@ -118,7 +118,6 @@ async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
 }
 
 #[allow(unreachable_patterns)]
-#[inline(always)]
 fn get_tls_prop(property: &LocatorProperty) -> ZResult<&LocatorPropertyTls> {
     match property {
         LocatorProperty::Tls(prop) => Ok(prop),
@@ -386,7 +385,7 @@ impl LinkTls {
         log::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| {
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e),
+                descr: e.to_string(),
             })
         })
     }
@@ -394,9 +393,9 @@ impl LinkTls {
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write(buffer).await.map_err(|e| {
-            log::trace!("Transmission error on TLS link {}: {}", self, e);
+            log::trace!("Write error on TLS link {}: {}", self, e);
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e)
+                descr: e.to_string()
             })
         })
     }
@@ -404,9 +403,9 @@ impl LinkTls {
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write_all(buffer).await.map_err(|e| {
-            log::trace!("Transmission error on TLS link {}: {}", self, e);
+            log::trace!("Write error on TLS link {}: {}", self, e);
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e)
+                descr: e.to_string()
             })
         })
     }
@@ -414,9 +413,9 @@ impl LinkTls {
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read(buffer).await.map_err(|e| {
-            log::trace!("Reception error on TLS link {}: {}", self, e);
+            log::trace!("Read error on TLS link {}: {}", self, e);
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e)
+                descr: e.to_string()
             })
         })
     }
@@ -424,9 +423,9 @@ impl LinkTls {
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
-            log::trace!("Reception error on TLS link {}: {}", self, e);
+            log::trace!("Read error on TLS link {}: {}", self, e);
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e)
+                descr: e.to_string()
             })
         })
     }
