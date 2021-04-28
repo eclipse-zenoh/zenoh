@@ -141,7 +141,7 @@ impl LinkUdpConnected {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         (&self.socket).recv(buffer).await.map_err(|e| {
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e)
+                descr: e.to_string()
             })
         })
     }
@@ -149,7 +149,7 @@ impl LinkUdpConnected {
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         (&self.socket).send(buffer).await.map_err(|e| {
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e)
+                descr: e.to_string()
             })
         })
     }
@@ -247,7 +247,6 @@ impl LinkUdp {
         }
     }
 
-    #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match &self.variant {
             LinkUdpVariant::Connected(link) => link.write(buffer).await,
@@ -255,7 +254,6 @@ impl LinkUdp {
         }
     }
 
-    #[inline(always)]
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut written: usize = 0;
         while written < buffer.len() {
@@ -264,7 +262,6 @@ impl LinkUdp {
         Ok(())
     }
 
-    #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match &self.variant {
             LinkUdpVariant::Connected(link) => link.read(buffer).await,
@@ -272,7 +269,6 @@ impl LinkUdp {
         }
     }
 
-    #[inline(always)]
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let mut read: usize = 0;
         loop {

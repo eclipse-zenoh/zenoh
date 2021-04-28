@@ -20,7 +20,7 @@ fn error_simple() {
         descr: "TEST".to_string()
     });
     if let Err(e) = err {
-        let s = format!("{}", e);
+        let s = e.to_string();
         println!("{}", e);
         println!("{:?}", e);
         assert!(if let ZErrorKind::Other { descr: _ } = e.get_kind() {
@@ -37,7 +37,7 @@ fn error_simple() {
 
     let err: ZResult<()> = zerror!(ZErrorKind::BufferOverflow { missing: 3 });
     if let Err(e) = err {
-        let s = format!("{}", e);
+        let s = e.to_string();
         println!("{}", e);
         println!("{:?}", e);
         match e.get_kind() {
@@ -64,7 +64,7 @@ fn error_with_source() {
             e
         );
         if let Err(e) = err2 {
-            let s = format!("{}", e);
+            let s = e.to_string();
             println!("{}", e);
             println!("{:?}", e);
 
@@ -92,7 +92,7 @@ fn error_with_source() {
         ioerr
     );
     if let Err(e) = err2 {
-        let s = format!("{}", e);
+        let s = e.to_string();
         println!("{}", e);
         println!("{:?}", e);
 

@@ -128,7 +128,7 @@ impl LinkTcp {
         // Set the TCP nodelay option
         if let Err(err) = socket.set_nodelay(true) {
             log::warn!(
-                "Unable to set NODEALY option on TCP link {} => {} : {}",
+                "Unable to set NODEALY option on TCP link {} => {}: {}",
                 src_addr,
                 dst_addr,
                 err
@@ -143,7 +143,7 @@ impl LinkTcp {
             )),
         ) {
             log::warn!(
-                "Unable to set LINGER option on TCP link {} => {} : {}",
+                "Unable to set LINGER option on TCP link {} => {}: {}",
                 src_addr,
                 dst_addr,
                 err
@@ -165,61 +165,45 @@ impl LinkTcp {
         log::trace!("TCP link shutdown {}: {:?}", self, res);
         res.map_err(|e| {
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e),
+                descr: e.to_string(),
             })
         })
     }
 
-    #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        match (&self.socket).write(buffer).await {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!("Transmission error on TCP link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        (&self.socket).write(buffer).await.map_err(|e| {
+            log::trace!("Write error on TCP link {}: {}", self, e);
+            zerror2!(ZErrorKind::IoError {
+                descr: e.to_string()
+            })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        match (&self.socket).write_all(buffer).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                log::trace!("Transmission error on TCP link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        (&self.socket).write_all(buffer).await.map_err(|e| {
+            log::trace!("Write error on TCP link {}: {}", self, e);
+            zerror2!(ZErrorKind::IoError {
+                descr: e.to_string()
+            })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        match (&self.socket).read(buffer).await {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!("Reception error on TCP link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        (&self.socket).read(buffer).await.map_err(|e| {
+            log::trace!("Read error on TCP link {}: {}", self, e);
+            zerror2!(ZErrorKind::IoError {
+                descr: e.to_string()
+            })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        match (&self.socket).read_exact(buffer).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                log::trace!("Reception error on TCP link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        (&self.socket).read_exact(buffer).await.map_err(|e| {
+            log::trace!("Read error on TCP link {}: {}", self, e);
+            zerror2!(ZErrorKind::IoError {
+                descr: e.to_string()
+            })
+        })
     }
 
     #[inline(always)]

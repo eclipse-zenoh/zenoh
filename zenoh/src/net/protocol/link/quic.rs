@@ -96,7 +96,7 @@ async fn get_quic_dns(locator: &Locator) -> ZResult<DnsName> {
                 match split.get(0) {
                     Some(dom) => {
                         let domain = DnsNameRef::try_from_ascii_str(dom).map_err(|e| {
-                            let e = format!("{}", e);
+                            let e = e.to_string();
                             zerror2!(ZErrorKind::InvalidLocator { descr: e })
                         })?;
                         Ok(domain.to_owned())
@@ -116,7 +116,6 @@ async fn get_quic_dns(locator: &Locator) -> ZResult<DnsName> {
 }
 
 #[allow(unreachable_patterns)]
-#[inline(always)]
 fn get_quic_prop(property: &LocatorProperty) -> ZResult<&LocatorPropertyQuic> {
     match property {
         LocatorProperty::Quic(prop) => Ok(prop),
@@ -330,67 +329,52 @@ impl LinkQuic {
         Ok(())
     }
 
-    #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.send);
-        match guard.write(buffer).await {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!("Transmission error on QUIC link {}: {}", self, e);
-                let e = format!("{}", e);
-                zerror!(ZErrorKind::IoError { descr: e })
-            }
-        }
+        guard.write(buffer).await.map_err(|e| {
+            log::trace!("Write error on QUIC link {}: {}", self, e);
+            let e = e.to_string();
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.send);
-        match guard.write_all(buffer).await {
-            Ok(res) => Ok(res),
-            Err(e) => {
-                log::trace!("Transmission error on QUIC link {}: {}", self, e);
-                let e = format!("{}", e);
-                zerror!(ZErrorKind::IoError { descr: e })
-            }
-        }
+        guard.write_all(buffer).await.map_err(|e| {
+            log::trace!("Write error on QUIC link {}: {}", self, e);
+            let e = e.to_string();
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.recv);
-        match guard.read(buffer).await {
-            Ok(res) => match res {
-                Some(n) => Ok(n),
-                None => {
-                    let e = format!(
-                        "Reception error on QUIC link {}: stream {} has been closed",
-                        self,
-                        guard.id()
-                    );
-                    log::trace!("{}", e);
-                    zerror!(ZErrorKind::IoError { descr: e })
-                }
-            },
-            Err(e) => {
-                log::trace!("Reception error on QUIC link {}: {}", self, e);
-                let e = format!("{}", e);
-                zerror!(ZErrorKind::IoError { descr: e })
-            }
-        }
+        guard
+            .read(buffer)
+            .await
+            .map_err(|e| {
+                log::trace!("Read error on QUIC link {}: {}", self, e);
+                let e = e.to_string();
+                zerror2!(ZErrorKind::IoError { descr: e })
+            })?
+            .ok_or_else(|| {
+                let e = format!(
+                    "Read error on QUIC link {}: stream {} has been closed",
+                    self,
+                    guard.id()
+                );
+                log::trace!("{}", e);
+                zerror2!(ZErrorKind::IoError { descr: e })
+            })
     }
 
-    #[inline(always)]
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.recv);
-        match guard.read_exact(buffer).await {
-            Ok(res) => Ok(res),
-            Err(e) => {
-                log::trace!("Reception error on QUIC link {}: {}", self, e);
-                let e = format!("{}", e);
-                zerror!(ZErrorKind::IoError { descr: e })
-            }
-        }
+        guard.read_exact(buffer).await.map_err(|e| {
+            log::trace!("Read error on QUIC link {}: {}", self, e);
+            let e = e.to_string();
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })
     }
 
     #[inline(always)]

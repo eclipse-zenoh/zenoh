@@ -140,69 +140,41 @@ impl LinkUnixSocketStream {
         log::trace!("UnixSocketStream link shutdown {}: {:?}", self, res);
         res.map_err(|e| {
             zerror2!(ZErrorKind::IoError {
-                descr: format!("{}", e),
+                descr: e.to_string(),
             })
         })
     }
 
-    #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        match (&self.socket).write(buffer).await {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!(
-                    "Transmission error on UnixSocketStream link {}: {}",
-                    self,
-                    e
-                );
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        (&self.socket).write(buffer).await.map_err(|e| {
+            let e = format!("Write error on UnixSocketStream link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        match (&self.socket).write_all(buffer).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                log::trace!(
-                    "Transmission error on UnixSocketStream link {}: {}",
-                    self,
-                    e
-                );
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        (&self.socket).write_all(buffer).await.map_err(|e| {
+            let e = format!("Write error on UnixSocketStream link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        match (&self.socket).read(buffer).await {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!("Reception error on UnixSocketStream link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        (&self.socket).read(buffer).await.map_err(|e| {
+            let e = format!("Read error on UnixSocketStream link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        match (&self.socket).read_exact(buffer).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                log::trace!("Reception error on UnixSocketStream link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        (&self.socket).read_exact(buffer).await.map_err(|e| {
+            let e = format!("Read error on UnixSocketStream link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })
     }
 
     #[inline(always)]
@@ -429,7 +401,7 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
                 path, e
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })            
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
 
         // We try to acquire the lock
