@@ -419,36 +419,29 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
         open_mode.insert(nix::sys::stat::Mode::S_IRUSR);
         open_mode.insert(nix::sys::stat::Mode::S_IWUSR);
 
-        let lock_fd = match nix::fcntl::open(
+        let lock_fd = nix::fcntl::open(
             std::path::Path::new(&lock_file_path),
             open_flags,
             open_mode,
-        ) {
-            Ok(raw_fd) => raw_fd,
-            Err(e) => {
-                let e = format!(
-                        "Can not create a new UnixSocketStream listener on {} - Unable to open lock file: {}",
-                        path, e
-                    );
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        ).map_err(|e| {
+            let e = format!(
+                "Can not create a new UnixSocketStream listener on {} - Unable to open lock file: {}",
+                path, e
+            );
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })            
+        })?;
 
         // We try to acquire the lock
-
-        match nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::LockExclusiveNonblock) {
-            Ok(()) => (),
-            Err(e) => {
-                let _ = nix::unistd::close(lock_fd);
-                let e = format!(
-                    "Can not create a new UnixSocketStream listener on {} - Unable to acquire look: {}",
-                    path, e
-                );
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::LockExclusiveNonblock).map_err(|e| {
+            let _ = nix::unistd::close(lock_fd);
+            let e = format!(
+                "Can not create a new UnixSocketStream listener on {} - Unable to acquire look: {}",
+                path, e
+            );
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
         //Lock is acquired we can remove the socket file
         // If the file does not exist this would return an error.
@@ -468,17 +461,14 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
             }
         };
 
-        let local_addr = match socket.local_addr() {
-            Ok(addr) => addr,
-            Err(e) => {
-                let e = format!(
-                    "Can not create a new UnixSocketStream listener on {}: {}",
-                    path, e
-                );
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let local_addr = socket.local_addr().map_err(|e| {
+            let e = format!(
+                "Can not create a new UnixSocketStream listener on {}: {}",
+                path, e
+            );
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
         let local_path = match local_addr.as_pathname() {
             Some(path) => PathBuf::from(path),

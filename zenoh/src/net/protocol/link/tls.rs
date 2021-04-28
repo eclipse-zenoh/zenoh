@@ -391,60 +391,44 @@ impl LinkTls {
         })
     }
 
-    #[inline(always)]
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
-        match self.get_sock_mut().write(buffer).await {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!("Transmission error on TLS link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        self.get_sock_mut().write(buffer).await.map_err(|e| {
+            log::trace!("Transmission error on TLS link {}: {}", self, e);
+            zerror2!(ZErrorKind::IoError {
+                descr: format!("{}", e)
+            })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
-        match self.get_sock_mut().write_all(buffer).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                log::trace!("Transmission error on TLS link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        self.get_sock_mut().write_all(buffer).await.map_err(|e| {
+            log::trace!("Transmission error on TLS link {}: {}", self, e);
+            zerror2!(ZErrorKind::IoError {
+                descr: format!("{}", e)
+            })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
-        match self.get_sock_mut().read(buffer).await {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                log::trace!("Reception error on TLS link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        self.get_sock_mut().read(buffer).await.map_err(|e| {
+            log::trace!("Reception error on TLS link {}: {}", self, e);
+            zerror2!(ZErrorKind::IoError {
+                descr: format!("{}", e)
+            })
+        })
     }
 
-    #[inline(always)]
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
-        match self.get_sock_mut().read_exact(buffer).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                log::trace!("Reception error on TLS link {}: {}", self, e);
-                zerror!(ZErrorKind::IoError {
-                    descr: format!("{}", e)
-                })
-            }
-        }
+        self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
+            log::trace!("Reception error on TLS link {}: {}", self, e);
+            zerror2!(ZErrorKind::IoError {
+                descr: format!("{}", e)
+            })
+        })
     }
 
     #[inline(always)]
