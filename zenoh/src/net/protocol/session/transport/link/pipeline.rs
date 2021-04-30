@@ -42,11 +42,6 @@ macro_rules! zgetbatch {
     ($self:expr, $priority:expr, $stage_in:expr, $is_droppable:expr) => {
         // Try to get a pointer to the first batch
         loop {
-            // Exit directly if the pipeline is no longer active
-            if !$self.active.load(Ordering::Acquire) {
-                return;
-            }
-
             if let Some(batch) = $stage_in.inner.front_mut() {
                 break batch;
             } else {
@@ -64,6 +59,10 @@ macro_rules! zgetbatch {
                     }
                     // Drop the guard and wait for the batches to be available
                     refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
+                    // Verify that the pipeline is still active
+                    if !$self.active.load(Ordering::Acquire) {
+                        return;
+                    }
                 }
                 // Drain all the empty batches
                 while let Some(batch) = refill_guard.try_pull() {
@@ -479,7 +478,7 @@ impl TransmissionPipeline {
 
     pub(super) async fn pull(&self) -> Option<(SerializationBatch, usize)> {
         let mut backoff = Duration::from_nanos(*QUEUE_PULL_BACKOFF);
-        while self.active.load(Ordering::Acquire) {
+        loop {
             for priority in 0..QUEUE_NUM {
                 if let Some(batch) = self.try_pull_queue(priority).await {
                     return Some((batch, priority));
@@ -503,6 +502,11 @@ impl TransmissionPipeline {
                 }
             }
 
+            // Check if the pipeline is still active
+            if !self.active.load(Ordering::Acquire) {
+                return None;
+            }
+
             if is_pipeline_really_empty {
                 self.cond_canpull.wait(out_guard).await;
             } else {
@@ -512,7 +516,6 @@ impl TransmissionPipeline {
                 backoff = 2 * backoff;
             }
         }
-        None
     }
 
     pub(super) fn refill(&self, batch: SerializationBatch, priority: usize) {
@@ -523,15 +526,20 @@ impl TransmissionPipeline {
     }
 
     pub(super) fn disable(&self) {
-        // Unblock stucked pushers or pullers
+        // Mark the pipeline as no longer active
         self.active.store(false, Ordering::Release);
+        // Acquire all the locks
+        let _in_guards: Vec<MutexGuard<'_, StageIn>> =
+            self.stage_in.iter().map(|x| zlock!(x)).collect();
+        let _out_guard = task::block_on(async { zasynclock!(self.stage_out) });
+        // Unblock waiting pushers or pullers
         for cr in self.cond_canrefill.iter() {
             cr.notify_all();
         }
         self.cond_canpull.notify_all();
     }
 
-    pub(super) async fn drain(self) -> Vec<SerializationBatch> {
+    pub(super) async fn drain(&self) -> Vec<SerializationBatch> {
         // Drain the remaining batches
         let mut batches = vec![];
 

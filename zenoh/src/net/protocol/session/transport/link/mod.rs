@@ -228,9 +228,6 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
         }
     }
 
-    // Extract the transmission pipeline from the link
-    let pipeline = Arc::try_unwrap(pipeline).unwrap();
-
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain().await;
     for b in batches.drain(..) {
