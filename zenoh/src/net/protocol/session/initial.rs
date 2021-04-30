@@ -490,15 +490,10 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
         //       session lease.
         let keep_alive = manager.config.keep_alive.min(info.lease / 4);
-        let _ = transport.add_link(
-            link.clone(),
-            manager.config.batch_size,
-            info.lease,
-            keep_alive,
-        )?;
+        let _ = transport.add_link(link.clone())?;
 
         // Start the TX loop
-        let _ = transport.start_tx(&link)?;
+        let _ = transport.start_tx(&link, keep_alive, manager.config.batch_size)?;
 
         // Assign a callback if the session is new
         loop {
@@ -521,7 +516,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         }
 
         // Start the RX loop
-        let _ = transport.start_rx(&link)?;
+        let _ = transport.start_rx(&link, info.lease)?;
     }
     drop(a_guard);
 
@@ -811,6 +806,7 @@ async fn accept_recv_open_syn(
 struct AcceptInitSessionOutput {
     session: Session,
     initial_sn: ZInt,
+    lease: ZInt,
     open_ack_attachment: Option<Attachment>,
 }
 async fn accept_init_session(
@@ -917,23 +913,8 @@ async fn accept_init_session(
 
     // Retrieve the session's transport
     let transport = session.get_transport().map_err(|e| (e, None))?;
-
-    // Add the link to the session
-    // Compute a suitable keep alive interval based on the lease
-    // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
-    //       set the actual keep_alive timeout to one fourth of the agreed session lease.
-    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
-    //       check which considers a link as failed when no messages are received in 3.5 times the
-    //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
-    //       session lease.
-    let keep_alive = manager.config.keep_alive.min(input.lease / 4);
     let _ = transport
-        .add_link(
-            link.clone(),
-            manager.config.batch_size,
-            input.lease,
-            keep_alive,
-        )
+        .add_link(link.clone())
         .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?;
 
     log::debug!(
@@ -945,6 +926,7 @@ async fn accept_init_session(
     let output = AcceptInitSessionOutput {
         session,
         initial_sn: open_ack_initial_sn,
+        lease: input.lease,
         open_ack_attachment: input.open_ack_attachment,
     };
     Ok(output)
@@ -952,6 +934,7 @@ async fn accept_init_session(
 
 struct AcceptOpenAckOutput {
     session: Session,
+    lease: ZInt,
 }
 async fn accept_send_open_ack(
     manager: &SessionManager,
@@ -971,6 +954,7 @@ async fn accept_send_open_ack(
 
     let output = AcceptOpenAckOutput {
         session: input.session,
+        lease: input.lease,
     };
     Ok(output)
 }
@@ -987,8 +971,17 @@ async fn accept_finalize_session(
     // Acquire the lock to avoid concurrent new_session and closing/closed notifications
     let a_guard = transport.get_alive().await;
     if *a_guard {
+        // Add the link to the session
+        // Compute a suitable keep alive interval based on the lease
+        // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
+        //       set the actual keep_alive timeout to one fourth of the agreed session lease.
+        //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+        //       check which considers a link as failed when no messages are received in 3.5 times the
+        //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
+        //       session lease.
+        let keep_alive = manager.config.keep_alive.min(input.lease / 4);
         // Start the TX loop
-        let _ = transport.start_tx(&link)?;
+        let _ = transport.start_tx(&link, keep_alive, manager.config.batch_size)?;
 
         // Assign a callback if the session is new
         loop {
@@ -1021,7 +1014,7 @@ async fn accept_finalize_session(
         }
 
         // Start the RX loop
-        let _ = transport.start_rx(&link)?;
+        let _ = transport.start_rx(&link, input.lease)?;
     }
     drop(a_guard);
 

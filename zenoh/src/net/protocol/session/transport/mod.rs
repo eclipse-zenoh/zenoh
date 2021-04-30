@@ -27,7 +27,6 @@ use super::session;
 use super::session::defaults::QUEUE_PRIO_DATA;
 use super::session::{SessionEventDispatcher, SessionManager};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-use async_std::task;
 use defragmentation::*;
 use link::*;
 pub(super) use seq_num::*;
@@ -38,6 +37,12 @@ use zenoh_util::zerror;
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
         $guard.iter().find(|l| l.get_link() == $link)
+    };
+}
+
+macro_rules! zlinkgetmut {
+    ($guard:expr, $link:expr) => {
+        $guard.iter_mut().find(|l| l.get_link() == $link)
     };
 }
 
@@ -123,7 +128,6 @@ pub(crate) struct SessionTransport {
 }
 
 impl SessionTransport {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         manager: SessionManager,
         pid: PeerId,
@@ -180,41 +184,42 @@ impl SessionTransport {
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    // @TOFIX
-    pub(super) fn delete(&self) {
+    pub(super) async fn delete(&self) {
         log::debug!("Closing session with peer: {}", self.pid);
 
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_session and closing/closed notifications
-        let mut a_guard = task::block_on(self.get_alive());
+        let mut a_guard = self.get_alive().await;
         *a_guard = false;
 
         // Notify the callback that we are going to close the session
-        let mut c_guard = zwrite!(self.callback);
-        if let Some(callback) = c_guard.as_ref() {
-            callback.closing();
+        let callback = zwrite!(self.callback).take();
+        if let Some(cb) = callback.as_ref() {
+            cb.closing();
         }
 
         // Delete the session on the manager
-        let _ = task::block_on(self.manager.del_session(&self.pid));
+        let _ = self.manager.del_session(&self.pid).await;
 
         // Close all the links
-        let mut l_guard = zwrite!(self.links);
-        let mut links = l_guard.to_vec();
-        *l_guard = vec![].into_boxed_slice();
-        drop(l_guard);
-
+        let mut links = {
+            let mut l_guard = zwrite!(self.links);
+            let links = l_guard.to_vec();
+            *l_guard = vec![].into_boxed_slice();
+            drop(l_guard);
+            links
+        };
         for l in links.drain(..) {
-            l.close();
+            l.close().await;
         }
 
         // Notify the callback that we have closed the session
-        if let Some(callback) = c_guard.take() {
-            callback.closed();
+        if let Some(cb) = callback.as_ref() {
+            cb.closed();
         }
     }
 
-    pub(crate) fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {
+    pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.pid);
 
         let guard = zread!(self.links);
@@ -234,13 +239,13 @@ impl SessionTransport {
             c_l.schedule_session_message(msg, QUEUE_PRIO_DATA);
 
             // Remove the link from the channel
-            self.del_link(&link)?;
+            self.del_link(&link).await?;
         }
 
         Ok(())
     }
 
-    pub(crate) fn close(&self, reason: u8) -> ZResult<()> {
+    pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing session with peer: {}", self.pid);
 
         // Close message to be sent on all the links
@@ -252,12 +257,11 @@ impl SessionTransport {
         let link_only = true;
         let attachment = None; // No attachment here
         let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
         for link in zread!(self.links).iter() {
             link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA);
         }
         // Terminate and clean up the session
-        self.delete();
+        self.delete().await;
 
         Ok(())
     }
@@ -284,13 +288,7 @@ impl SessionTransport {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(crate) fn add_link(
-        &self,
-        link: Link,
-        batch_size: usize,
-        lease: ZInt,
-        keep_alive: ZInt,
-    ) -> ZResult<()> {
+    pub(crate) fn add_link(&self, link: Link) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         if zlinkget!(guard, &link).is_some() {
             return zerror!(ZErrorKind::InvalidLink {
@@ -299,15 +297,7 @@ impl SessionTransport {
         }
 
         // Create a channel link from a link
-        let link = SessionTransportLink::new(
-            self.clone(),
-            link,
-            batch_size,
-            keep_alive,
-            lease,
-            self.tx_sn_reliable.clone(),
-            self.tx_sn_best_effort.clone(),
-        );
+        let link = SessionTransportLink::new(self.clone(), link);
 
         // Add the link to the channel
         let mut links = Vec::with_capacity(guard.len() + 1);
@@ -318,58 +308,85 @@ impl SessionTransport {
         Ok(())
     }
 
-    pub(crate) fn start_tx(&self, link: &Link) -> ZResult<()> {
-        let guard = zread!(self.links);
-        if let Some(l) = zlinkget!(guard, link) {
-            l.start_tx();
-        }
-        Ok(())
-    }
-
-    pub(crate) fn start_rx(&self, link: &Link) -> ZResult<()> {
-        let guard = zread!(self.links);
-        if let Some(l) = zlinkget!(guard, link) {
-            l.start_rx();
-        }
-        Ok(())
-    }
-
-    pub(crate) fn del_link(&self, link: &Link) -> ZResult<()> {
-        // Try to remove the link
+    pub(crate) fn start_tx(&self, link: &Link, keep_alive: ZInt, batch_size: usize) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        log::trace!("{}: deleting 1", link);
-        for l in guard.iter() {
-            log::trace!("\t{}", l.get_link());
+        if let Some(l) = zlinkgetmut!(guard, link) {
+            l.start_tx(
+                keep_alive,
+                batch_size,
+                self.tx_sn_reliable.clone(),
+                self.tx_sn_best_effort.clone(),
+            );
         }
-        if let Some(index) = zlinkindex!(guard, link) {
-            let is_last = guard.len() == 1;
-            if is_last {
-                // Close the whole session
-                drop(guard);
-                log::trace!("{}: deleting 2", link);
-                self.delete();
-                Ok(())
-            } else {
-                // Remove the link
-                log::trace!("{}: deleting 3", link);
-                let mut links = guard.to_vec();
-                let link = links.remove(index);
-                *guard = links.into_boxed_slice();
-                drop(guard);
-                // Notify the callback
-                if let Some(callback) = zread!(self.callback).as_ref() {
-                    callback.del_link(link.get_link().clone());
+        Ok(())
+    }
+
+    pub(crate) fn stop_tx(&self, link: &Link) -> ZResult<()> {
+        let mut guard = zwrite!(self.links);
+        if let Some(l) = zlinkgetmut!(guard, link) {
+            l.stop_tx();
+        }
+        Ok(())
+    }
+
+    pub(crate) fn start_rx(&self, link: &Link, lease: ZInt) -> ZResult<()> {
+        let mut guard = zwrite!(self.links);
+        if let Some(l) = zlinkgetmut!(guard, link) {
+            l.start_rx(lease);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn stop_rx(&self, link: &Link) -> ZResult<()> {
+        let mut guard = zwrite!(self.links);
+        if let Some(l) = zlinkgetmut!(guard, link) {
+            l.stop_rx();
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn del_link(&self, link: &Link) -> ZResult<()> {
+        enum Target {
+            Session,
+            Link(SessionTransportLink),
+        }
+
+        // Try to remove the link
+        let target = {
+            let mut guard = zwrite!(self.links);
+            if let Some(index) = zlinkindex!(guard, link) {
+                let is_last = guard.len() == 1;
+                if is_last {
+                    // Close the whole session
+                    drop(guard);
+                    Target::Session
+                } else {
+                    // Remove the link
+                    let mut links = guard.to_vec();
+                    let stl = links.remove(index);
+                    *guard = links.into_boxed_slice();
+                    drop(guard);
+                    // Notify the callback
+                    if let Some(callback) = zread!(self.callback).as_ref() {
+                        callback.del_link(link.clone());
+                    }
+                    Target::Link(stl)
                 }
-                log::trace!("{}: deleting 4", link.get_link());
-                link.close();
-                Ok(())
+            } else {
+                return zerror!(ZErrorKind::InvalidLink {
+                    descr: format!("Can not delete Link {} with peer: {}", link, self.pid)
+                });
             }
-        } else {
-            log::trace!("{}: deleting -1", link);
-            zerror!(ZErrorKind::InvalidLink {
-                descr: format!("Can not delete Link {} with peer: {}", link, self.pid)
-            })
+        };
+
+        match target {
+            Target::Session => self.delete().await,
+            Target::Link(stl) => {
+                stl.close().await;
+            }
         }
+
+        Ok(())
     }
 
     pub(crate) fn get_links(&self) -> Vec<Link> {

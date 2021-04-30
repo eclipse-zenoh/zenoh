@@ -154,6 +154,7 @@ impl Session {
         Ok(transport.is_shm)
     }
 
+    // @TOFIX: remove async
     #[inline(always)]
     pub async fn get_callback(&self) -> ZResult<Option<SessionEventDispatcher>> {
         let transport = zweak!(self.0, STR_ERR);
@@ -161,15 +162,10 @@ impl Session {
     }
 
     #[inline(always)]
-    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        self.schedule(message)
-    }
-
-    #[inline(always)]
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the session has already been closed
         match self.0.upgrade() {
-            Some(transport) => transport.close(smsg::close_reason::GENERIC),
+            Some(transport) => transport.close(smsg::close_reason::GENERIC).await,
             None => Ok(()),
         }
     }
@@ -177,10 +173,13 @@ impl Session {
     #[inline(always)]
     pub async fn close_link(&self, link: &Link) -> ZResult<()> {
         let transport = zweak!(self.0, STR_ERR);
-        transport.close_link(link, smsg::close_reason::GENERIC)?;
+        transport
+            .close_link(link, smsg::close_reason::GENERIC)
+            .await?;
         Ok(())
     }
 
+    // @TOFIX: remove async
     #[inline(always)]
     pub async fn get_links(&self) -> ZResult<Vec<Link>> {
         log::trace!("{:?}. Get links", self);
@@ -194,6 +193,11 @@ impl Session {
         let transport = zweak!(self.0, STR_ERR);
         transport.schedule(message);
         Ok(())
+    }
+
+    #[inline(always)]
+    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+        self.schedule(message)
     }
 }
 

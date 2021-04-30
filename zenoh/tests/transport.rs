@@ -523,7 +523,7 @@ fn transport_tcp_udp_unix() {
 
 #[cfg(feature = "transport_tls")]
 #[test]
-fn transport_tls() {
+fn transport_tls_only() {
     use std::io::Cursor;
     use zenoh::net::protocol::link::tls::{
         internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
@@ -636,7 +636,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
 #[cfg(feature = "transport_quic")]
 #[test]
-fn transport_quic() {
+fn transport_quic_only() {
     use zenoh::net::protocol::link::quic::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,

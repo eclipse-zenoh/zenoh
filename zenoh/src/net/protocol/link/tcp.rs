@@ -161,48 +161,42 @@ impl LinkTcp {
     pub(crate) async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TCP link: {}", self);
         // Close the underlying TCP socket
-        let res = self.socket.shutdown(Shutdown::Both);
-        log::trace!("TCP link shutdown {}: {:?}", self, res);
-        res.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string(),
-            })
+        self.socket.shutdown(Shutdown::Both).map_err(|e| {
+            let e = format!("TCP link shutdown {}: {:?}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
     pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         (&self.socket).write(buffer).await.map_err(|e| {
-            log::trace!("Write error on TCP link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            let e = format!("Write error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
     pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         (&self.socket).write_all(buffer).await.map_err(|e| {
-            log::trace!("Write error on TCP link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            let e = format!("Write error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
     pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         (&self.socket).read(buffer).await.map_err(|e| {
-            log::trace!("Read error on TCP link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            let e = format!("Read error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         (&self.socket).read_exact(buffer).await.map_err(|e| {
-            log::trace!("Read error on TCP link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            let e = format!("Read error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 

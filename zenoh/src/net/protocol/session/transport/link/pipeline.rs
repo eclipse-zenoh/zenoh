@@ -30,7 +30,8 @@ use super::{SeqNumGenerator, SerializationBatch};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::fmt;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
@@ -41,6 +42,11 @@ macro_rules! zgetbatch {
     ($self:expr, $priority:expr, $stage_in:expr, $is_droppable:expr) => {
         // Try to get a pointer to the first batch
         loop {
+            // Exit directly if the pipeline is no longer active
+            if !$self.active.load(Ordering::Acquire) {
+                return;
+            }
+
             if let Some(batch) = $stage_in.inner.front_mut() {
                 break batch;
             } else {
@@ -52,7 +58,7 @@ macro_rules! zgetbatch {
                         // Drop the guard to allow the sending task to
                         // refill the queue of empty batches
                         drop(refill_guard);
-                        // Yield this thread
+                        // Yield this thread to not spin the msg pusher
                         thread::yield_now();
                         return;
                     }
@@ -172,6 +178,8 @@ impl StageRefill {
 
 /// Link queue
 pub(crate) struct TransmissionPipeline {
+    // Active or not
+    active: Arc<AtomicBool>,
     // The default batch size
     batch_size: usize,
     // The sn generator for the reliable channel
@@ -265,6 +273,7 @@ impl TransmissionPipeline {
         ))));
 
         TransmissionPipeline {
+            active: Arc::new(AtomicBool::new(true)),
             batch_size,
             sn_reliable,
             sn_best_effort,
@@ -468,12 +477,12 @@ impl TransmissionPipeline {
         None
     }
 
-    pub(super) async fn pull(&self) -> (SerializationBatch, usize) {
+    pub(super) async fn pull(&self) -> Option<(SerializationBatch, usize)> {
         let mut backoff = Duration::from_nanos(*QUEUE_PULL_BACKOFF);
-        loop {
+        while self.active.load(Ordering::Acquire) {
             for priority in 0..QUEUE_NUM {
                 if let Some(batch) = self.try_pull_queue(priority).await {
-                    return (batch, priority);
+                    return Some((batch, priority));
                 }
             }
 
@@ -481,12 +490,12 @@ impl TransmissionPipeline {
             let mut is_pipeline_really_empty = true;
             for priority in 0..out_guard.len() {
                 if let Some(batch) = out_guard[priority].try_pull() {
-                    return (batch, priority);
+                    return Some((batch, priority));
                 } else {
                     // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
                     if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
                         if let Some(batch) = in_guard.try_pull() {
-                            return (batch, priority);
+                            return Some((batch, priority));
                         }
                     } else {
                         is_pipeline_really_empty = false
@@ -503,6 +512,7 @@ impl TransmissionPipeline {
                 backoff = 2 * backoff;
             }
         }
+        None
     }
 
     pub(super) fn refill(&self, batch: SerializationBatch, priority: usize) {
@@ -512,25 +522,44 @@ impl TransmissionPipeline {
         self.cond_canrefill[priority].notify_one();
     }
 
-    pub(super) async fn drain(&self) -> Option<SerializationBatch> {
+    pub(super) fn disable(&self) {
+        // Unblock stucked pushers or pullers
+        self.active.store(false, Ordering::Release);
+        for cr in self.cond_canrefill.iter() {
+            cr.notify_all();
+        }
+        self.cond_canpull.notify_all();
+    }
+
+    pub(super) async fn drain(self) -> Vec<SerializationBatch> {
+        // Drain the remaining batches
+        let mut batches = vec![];
+
         // First try to drain the stage OUT pipeline
         let mut out_guard = zasynclock!(self.stage_out);
         for priority in 0..out_guard.len() {
-            if let Some(batch) = out_guard[priority].try_pull() {
-                return Some(batch);
+            if let Some(b) = out_guard[priority].try_pull() {
+                batches.push(b);
             }
         }
-        drop(out_guard);
 
         // Then try to drain what left in the stage IN pipeline
         for priority in 0..self.stage_in.len() {
             let mut in_guard = zlock!(self.stage_in[priority]);
-            if let Some(batch) = in_guard.try_pull() {
-                return Some(batch);
+            if let Some(b) = in_guard.try_pull() {
+                batches.push(b);
             }
         }
 
-        None
+        batches
+    }
+}
+
+impl fmt::Debug for TransmissionPipeline {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransmissionPipeline")
+            .field("queues", &self.stage_in.len())
+            .finish()
     }
 }
 
@@ -592,7 +621,7 @@ mod tests {
             let mut fragments: usize = 0;
 
             while msgs != num_msg {
-                let (batch, priority) = queue.pull().await;
+                let (batch, priority) = queue.pull().await.unwrap();
                 batches += 1;
                 bytes += batch.len();
                 // Create a RBuf for deserialization starting from the batch
@@ -744,7 +773,7 @@ mod tests {
         let c_count = count.clone();
         task::spawn(async move {
             loop {
-                let (batch, priority) = c_pipeline.pull().await;
+                let (batch, priority) = c_pipeline.pull().await.unwrap();
                 c_count.fetch_add(batch.len(), Ordering::AcqRel);
                 task::sleep(Duration::from_nanos(100)).await;
                 c_pipeline.refill(batch, priority);

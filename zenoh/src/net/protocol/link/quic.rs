@@ -353,8 +353,8 @@ impl LinkQuic {
             .read(buffer)
             .await
             .map_err(|e| {
-                log::trace!("Read error on QUIC link {}: {}", self, e);
-                let e = e.to_string();
+                let e = format!("Read error on QUIC link {}: {}", self, e);
+                log::trace!("{}", e);
                 zerror2!(ZErrorKind::IoError { descr: e })
             })?
             .ok_or_else(|| {
@@ -371,8 +371,8 @@ impl LinkQuic {
     pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.recv);
         guard.read_exact(buffer).await.map_err(|e| {
-            log::trace!("Read error on QUIC link {}: {}", self, e);
-            let e = e.to_string();
+            let e = format!("Read error on QUIC link {}: {}", self, e);
+            log::trace!("{}", e);
             zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
