@@ -578,7 +578,7 @@ async fn accept_recv_init_syn(
     if let Some(s) = manager.get_session(&init_syn_pid).await {
         // Check if we have reached maximum number of links for this session
         if let Some(limit) = manager.config.max_links {
-            let links = s.get_links().await.map_err(|e| (e, None))?;
+            let links = s.get_links().map_err(|e| (e, None))?;
             if links.len() >= limit {
                 let e = format!(
                     "Rejecting Open on link {} because of maximum links limit reached for peer: {}",

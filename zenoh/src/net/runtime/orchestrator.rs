@@ -480,7 +480,7 @@ impl SessionOrchestrator {
             if let Ok(session) = self.manager().await.open_session(&peer).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
                 if let SessionEventDispatcher::OrchSession(orch_session) =
-                    session.get_callback().await.unwrap().unwrap()
+                    session.get_callback().unwrap().unwrap()
                 {
                     *zasyncwrite!(orch_session.locator) = Some(peer);
                 }

@@ -190,7 +190,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         assert_eq!(peer01_manager.get_sessions().await.len(), 1);
         let s02 = peer01_manager.get_session(&c_pid02).await.unwrap();
         assert_eq!(
-            s02.get_links().await.unwrap().len(),
+            s02.get_links().unwrap().len(),
             c_loc01.len() + c_loc02.len()
         );
 
@@ -290,7 +290,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         assert_eq!(peer02_manager.get_sessions().await.len(), 1);
         let s01 = peer02_manager.get_session(&c_pid01).await.unwrap();
         assert_eq!(
-            s01.get_links().await.unwrap().len(),
+            s01.get_links().unwrap().len(),
             c_loc01.len() + c_loc02.len()
         );
 

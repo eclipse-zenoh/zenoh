@@ -155,7 +155,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(sessions.len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
     println!("Session Open Close [1e1]");
-    let links = c_ses1.get_links().await.unwrap();
+    let links = c_ses1.get_links().unwrap();
     println!("Session Open Close [1e2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
@@ -170,7 +170,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
 
             match s {
                 Some(s) => {
-                    let links = s.get_links().await.unwrap();
+                    let links = s.get_links().unwrap();
                     assert_eq!(links.len(), 1);
                     break;
                 }
@@ -195,7 +195,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(sessions.len(), 1);
     assert_eq!(c_ses2.get_pid().unwrap(), router_id);
     println!("Session Open Close [2c1]");
-    let links = c_ses2.get_links().await.unwrap();
+    let links = c_ses2.get_links().unwrap();
     println!("Session Open Close [2c2]: {:?}", links);
     assert_eq!(links.len(), 2);
     assert_eq!(c_ses2, c_ses1);
@@ -210,7 +210,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
                 .find(|s| s.get_pid().unwrap() == client01_id)
                 .unwrap();
 
-            let links = s.get_links().await.unwrap();
+            let links = s.get_links().unwrap();
             if links.len() == 2 {
                 break;
             }
@@ -233,7 +233,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(sessions.len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
     println!("Session Open Close [3c1]");
-    let links = c_ses1.get_links().await.unwrap();
+    let links = c_ses1.get_links().unwrap();
     println!("Session Open Close [3c2]: {:?}", links);
     assert_eq!(links.len(), 2);
 
@@ -247,7 +247,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
             .iter()
             .find(|s| s.get_pid().unwrap() == client01_id)
             .unwrap();
-        let links = s.get_links().await.unwrap();
+        let links = s.get_links().unwrap();
         assert_eq!(links.len(), 2);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
@@ -295,7 +295,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert_eq!(sessions.len(), 1);
     assert_eq!(c_ses3.get_pid().unwrap(), router_id);
     println!("Session Open Close [5c1]");
-    let links = c_ses3.get_links().await.unwrap();
+    let links = c_ses3.get_links().unwrap();
     println!("Session Open Close [5c2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
@@ -309,7 +309,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
             .iter()
             .find(|s| s.get_pid().unwrap() == client01_id)
             .unwrap();
-        let links = s.get_links().await.unwrap();
+        let links = s.get_links().unwrap();
         assert_eq!(links.len(), 1);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
@@ -337,7 +337,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
             .iter()
             .find(|s| s.get_pid().unwrap() == client01_id)
             .unwrap();
-        let links = s.get_links().await.unwrap();
+        let links = s.get_links().unwrap();
         assert_eq!(links.len(), 1);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
@@ -381,7 +381,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [8b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 1);
     println!("Session Open Close [8c1]");
-    let links = c_ses4.get_links().await.unwrap();
+    let links = c_ses4.get_links().unwrap();
     println!("Session Open Close [8c2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
@@ -395,7 +395,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
                 .find(|s| s.get_pid().unwrap() == client02_id);
             match s {
                 Some(s) => {
-                    let links = s.get_links().await.unwrap();
+                    let links = s.get_links().unwrap();
                     assert_eq!(links.len(), 1);
                     break;
                 }

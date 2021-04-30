@@ -154,20 +154,28 @@ impl Session {
         Ok(transport.is_shm)
     }
 
-    // @TOFIX: remove async
     #[inline(always)]
-    pub async fn get_callback(&self) -> ZResult<Option<SessionEventDispatcher>> {
+    pub fn get_callback(&self) -> ZResult<Option<SessionEventDispatcher>> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.get_callback())
     }
 
     #[inline(always)]
-    pub async fn close(&self) -> ZResult<()> {
-        // Return Ok if the session has already been closed
-        match self.0.upgrade() {
-            Some(transport) => transport.close(smsg::close_reason::GENERIC).await,
-            None => Ok(()),
-        }
+    pub fn get_links(&self) -> ZResult<Vec<Link>> {
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.get_links())
+    }
+
+    #[inline(always)]
+    pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
+        let transport = zweak!(self.0, STR_ERR);
+        transport.schedule(message);
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+        self.schedule(message)
     }
 
     #[inline(always)]
@@ -179,25 +187,13 @@ impl Session {
         Ok(())
     }
 
-    // @TOFIX: remove async
     #[inline(always)]
-    pub async fn get_links(&self) -> ZResult<Vec<Link>> {
-        log::trace!("{:?}. Get links", self);
-        let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.get_links())
-    }
-
-    #[inline(always)]
-    pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
-        log::trace!("{:?}. Schedule: {:?}", self, message);
-        let transport = zweak!(self.0, STR_ERR);
-        transport.schedule(message);
-        Ok(())
-    }
-
-    #[inline(always)]
-    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        self.schedule(message)
+    pub async fn close(&self) -> ZResult<()> {
+        // Return Ok if the session has already been closed
+        match self.0.upgrade() {
+            Some(transport) => transport.close(smsg::close_reason::GENERIC).await,
+            None => Ok(()),
+        }
     }
 }
 
