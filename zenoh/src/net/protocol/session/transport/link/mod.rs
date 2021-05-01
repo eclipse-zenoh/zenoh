@@ -20,7 +20,7 @@ use super::core::ZInt;
 use super::io;
 use super::io::{ArcSlice, RBuf};
 use super::proto;
-use super::proto::{SessionMessage, ZenohMessage};
+use super::proto::SessionMessage;
 use super::session;
 use super::session::defaults::{QUEUE_PRIO_CTRL, RX_BUFF_SIZE};
 use super::{SeqNumGenerator, SessionTransport};
@@ -29,7 +29,7 @@ use async_std::task;
 use async_std::task::JoinHandle;
 use batch::*;
 use event_listener::Event;
-use pipeline::*;
+pub(crate) use pipeline::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -73,23 +73,8 @@ impl SessionTransportLink {
     }
 
     #[inline]
-    pub(crate) fn schedule_zenoh_message(&self, msg: ZenohMessage, priority: usize) {
-        match self.pipeline.as_ref() {
-            Some(pipeline) => pipeline.push_zenoh_message(msg, priority),
-            None => {
-                log::trace!("Link is not started: {}", self.inner);
-            }
-        }
-    }
-
-    #[inline]
-    pub(crate) fn schedule_session_message(&self, msg: SessionMessage, priority: usize) {
-        match self.pipeline.as_ref() {
-            Some(pipeline) => pipeline.push_session_message(msg, priority),
-            None => {
-                log::trace!("Link is not started: {}", self.inner);
-            }
-        }
+    pub(crate) fn get_pipeline(&self) -> Option<Arc<TransmissionPipeline>> {
+        self.pipeline.clone()
     }
 
     pub(crate) fn start_tx(
@@ -116,7 +101,7 @@ impl SessionTransportLink {
                 let res = tx_task(pipeline, c_link.clone(), keep_alive).await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
-                    let _ = c_transport.del_link(&c_link);
+                    let _ = c_transport.del_link(&c_link).await;
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -137,6 +122,7 @@ impl SessionTransportLink {
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_active = self.active_rx.clone();
+
             let handle = task::spawn(async move {
                 // Start the consume task
                 let res = rx_task(
@@ -150,7 +136,7 @@ impl SessionTransportLink {
                 c_active.store(false, Ordering::Release);
                 if let Err(e) = res {
                     log::debug!("{}", e);
-                    let _ = c_transport.del_link(&c_link);
+                    let _ = c_transport.del_link(&c_link).await;
                 }
             });
             self.handle_rx = Some(Arc::new(handle));
@@ -162,7 +148,7 @@ impl SessionTransportLink {
         self.signal_rx.trigger();
     }
 
-    pub(crate) async fn close(mut self) {
+    pub(crate) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.inner);
         self.stop_rx();
         if let Some(handle) = self.handle_rx.take() {
@@ -178,7 +164,7 @@ impl SessionTransportLink {
             handle_tx.await;
         }
 
-        let _ = self.inner.close().await;
+        self.inner.close().await
     }
 }
 
@@ -229,7 +215,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
     }
 
     // Drain the transmission pipeline and write remaining bytes on the wire
-    let mut batches = pipeline.drain().await;
+    let mut batches = pipeline.drain();
     for b in batches.drain(..) {
         let _ = link
             .write_all(b.as_bytes())
@@ -244,7 +230,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
     Ok(())
 }
 
-async fn read_stream(
+async fn rx_task_stream(
     link: Link,
     transport: SessionTransport,
     lease: ZInt,
@@ -316,7 +302,7 @@ async fn read_stream(
     Ok(())
 }
 
-async fn read_dgram(
+async fn rx_task_dgram(
     link: Link,
     transport: SessionTransport,
     lease: ZInt,
@@ -393,8 +379,8 @@ async fn rx_task(
     active: Arc<AtomicBool>,
 ) -> ZResult<()> {
     if link.is_streamed() {
-        read_stream(link, transport, lease, signal, active).await
+        rx_task_stream(link, transport, lease, signal, active).await
     } else {
-        read_dgram(link, transport, lease, signal, active).await
+        rx_task_dgram(link, transport, lease, signal, active).await
     }
 }

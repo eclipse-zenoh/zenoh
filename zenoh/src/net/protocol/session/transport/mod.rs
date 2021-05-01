@@ -184,7 +184,7 @@ impl SessionTransport {
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    pub(super) async fn delete(&self) {
+    pub(super) async fn delete(&self) -> ZResult<()> {
         log::debug!("Closing session with peer: {}", self.pid);
 
         // Mark the transport as no longer alive and keep the lock
@@ -206,17 +206,18 @@ impl SessionTransport {
             let mut l_guard = zwrite!(self.links);
             let links = l_guard.to_vec();
             *l_guard = vec![].into_boxed_slice();
-            drop(l_guard);
             links
         };
         for l in links.drain(..) {
-            l.close().await;
+            let _ = l.close().await;
         }
 
         // Notify the callback that we have closed the session
         if let Some(cb) = callback.as_ref() {
             cb.closed();
         }
+
+        Ok(())
     }
 
     pub(crate) async fn close_link(&self, link: &Link, reason: u8) -> ZResult<()> {
@@ -224,19 +225,21 @@ impl SessionTransport {
 
         let guard = zread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
-            let c_l = l.clone();
+            let mut pipeline = l.get_pipeline();
             // Drop the guard
             drop(guard);
 
-            // Close message to be sent on the target link
-            let peer_id = Some(self.manager.pid());
-            let reason_id = reason;
-            let link_only = true; // This is should always be true when closing a link
-            let attachment = None; // No attachment here
-            let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-
             // Schedule the close message for transmission
-            c_l.schedule_session_message(msg, QUEUE_PRIO_DATA);
+            if let Some(pipeline) = pipeline.take() {
+                // Close message to be sent on the target link
+                let peer_id = Some(self.manager.pid());
+                let reason_id = reason;
+                let link_only = true; // This is should always be true when closing a link
+                let attachment = None; // No attachment here
+                let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+
+                pipeline.push_session_message(msg, QUEUE_PRIO_DATA);
+            }
 
             // Remove the link from the channel
             self.del_link(&link).await?;
@@ -248,22 +251,25 @@ impl SessionTransport {
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing session with peer: {}", self.pid);
 
-        // Close message to be sent on all the links
-        let peer_id = Some(self.manager.pid());
-        let reason_id = reason;
-        // link_only should always be false for user-triggered close. However, in case of
-        // multiple links, it is safer to close all the links first. When no links are left,
-        // the session is then considered closed.
-        let link_only = true;
-        let attachment = None; // No attachment here
-        let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
-        for link in zread!(self.links).iter() {
-            link.schedule_session_message(msg.clone(), QUEUE_PRIO_DATA);
+        let mut pipelines: Vec<Arc<TransmissionPipeline>> = zread!(self.links)
+            .iter()
+            .filter_map(|sl| sl.get_pipeline())
+            .collect();
+        for p in pipelines.drain(..) {
+            // Close message to be sent on all the links
+            let peer_id = Some(self.manager.pid());
+            let reason_id = reason;
+            // link_only should always be false for user-triggered close. However, in case of
+            // multiple links, it is safer to close all the links first. When no links are left,
+            // the session is then considered closed.
+            let link_only = true;
+            let attachment = None; // No attachment here
+            let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+
+            p.push_session_message(msg, QUEUE_PRIO_DATA);
         }
         // Terminate and clean up the session
-        self.delete().await;
-
-        Ok(())
+        self.delete().await
     }
 
     /*************************************/
@@ -348,7 +354,7 @@ impl SessionTransport {
     pub(crate) async fn del_link(&self, link: &Link) -> ZResult<()> {
         enum Target {
             Session,
-            Link(SessionTransportLink),
+            Link(Box<SessionTransportLink>),
         }
 
         // Try to remove the link
@@ -370,7 +376,7 @@ impl SessionTransport {
                     if let Some(callback) = zread!(self.callback).as_ref() {
                         callback.del_link(link.clone());
                     }
-                    Target::Link(stl)
+                    Target::Link(stl.into())
                 }
             } else {
                 return zerror!(ZErrorKind::InvalidLink {
@@ -381,12 +387,8 @@ impl SessionTransport {
 
         match target {
             Target::Session => self.delete().await,
-            Target::Link(stl) => {
-                stl.close().await;
-            }
+            Target::Link(stl) => stl.close().await,
         }
-
-        Ok(())
     }
 
     pub(crate) fn get_links(&self) -> Vec<Link> {

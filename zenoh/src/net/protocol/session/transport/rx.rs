@@ -56,7 +56,7 @@ macro_rules! zreceiveframe {
                 // Delete the whole session
                 let tr = $transport.clone();
                 task::spawn(async move {
-                    tr.delete().await;
+                    let _ = tr.delete().await;
                 });
                 // Close the link
                 return;
@@ -141,7 +141,7 @@ impl SessionTransport {
             if link_only {
                 let _ = c_transport.del_link(&c_link).await;
             } else {
-                c_transport.delete().await;
+                let _ = c_transport.delete().await;
             }
         });
     }

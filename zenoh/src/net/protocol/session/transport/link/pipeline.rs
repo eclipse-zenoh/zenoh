@@ -287,7 +287,7 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(super) fn push_session_message(&self, message: SessionMessage, priority: usize) {
+    pub(crate) fn push_session_message(&self, message: SessionMessage, priority: usize) {
         let mut in_guard = zlock!(self.stage_in[priority]);
 
         macro_rules! zserialize {
@@ -327,7 +327,7 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(super) fn push_zenoh_message(&self, message: ZenohMessage, priority: usize) {
+    pub(crate) fn push_zenoh_message(&self, message: ZenohMessage, priority: usize) {
         let mut in_guard = zlock!(self.stage_in[priority]);
 
         macro_rules! zserialize {
@@ -528,33 +528,41 @@ impl TransmissionPipeline {
     pub(super) fn disable(&self) {
         // Mark the pipeline as no longer active
         self.active.store(false, Ordering::Release);
-        // Acquire all the locks
+
+        // Acquire all the locks, in_guard first, out_guard later
+        // Use the same locking order as in drain to avoid deadlocks
         let _in_guards: Vec<MutexGuard<'_, StageIn>> =
             self.stage_in.iter().map(|x| zlock!(x)).collect();
         let _out_guard = task::block_on(async { zasynclock!(self.stage_out) });
-        // Unblock waiting pushers or pullers
+
+        // Unblock waiting pushers
         for cr in self.cond_canrefill.iter() {
             cr.notify_all();
         }
+        // Unblock waiting pullers
         self.cond_canpull.notify_all();
     }
 
-    pub(super) async fn drain(&self) -> Vec<SerializationBatch> {
+    pub(super) fn drain(&self) -> Vec<SerializationBatch> {
         // Drain the remaining batches
         let mut batches = vec![];
 
-        // First try to drain the stage OUT pipeline
-        let mut out_guard = zasynclock!(self.stage_out);
+        // Acquire all the locks, in_guard first, out_guard later
+        // Use the same locking order as in disable to avoid deadlocks
+        let mut in_guards: Vec<MutexGuard<'_, StageIn>> =
+            self.stage_in.iter().map(|x| zlock!(x)).collect();
+        let mut out_guard = task::block_on(async { zasynclock!(self.stage_out) });
+
+        // Drain first the batches in stage OUT
         for priority in 0..out_guard.len() {
             if let Some(b) = out_guard[priority].try_pull() {
                 batches.push(b);
             }
         }
 
-        // Then try to drain what left in the stage IN pipeline
-        for priority in 0..self.stage_in.len() {
-            let mut in_guard = zlock!(self.stage_in[priority]);
-            if let Some(b) = in_guard.try_pull() {
+        // Then try to drain what left in the stage IN
+        for ig in in_guards.iter_mut() {
+            if let Some(b) = ig.try_pull() {
                 batches.push(b);
             }
         }
