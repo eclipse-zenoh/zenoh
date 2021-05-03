@@ -75,6 +75,7 @@ macro_rules! zgetbatch {
 struct StageIn {
     inner: VecDeque<SerializationBatch>,
     bytes_topull: Arc<AtomicUsize>,
+    fragbuf: Option<WBuf>,
 }
 
 impl StageIn {
@@ -99,6 +100,7 @@ impl StageIn {
         StageIn {
             inner,
             bytes_topull,
+            fragbuf: Some(WBuf::new(batch_size, false)),
         }
     }
 
@@ -178,8 +180,6 @@ impl StageRefill {
 pub(crate) struct TransmissionPipeline {
     // Active or not
     active: Arc<AtomicBool>,
-    // The default batch size
-    batch_size: usize,
     // The sn generator for the reliable channel
     sn_reliable: Arc<Mutex<SeqNumGenerator>>,
     // The sn generator for the best effor channel
@@ -272,7 +272,6 @@ impl TransmissionPipeline {
 
         TransmissionPipeline {
             active: Arc::new(AtomicBool::new(true)),
-            batch_size,
             sn_reliable,
             sn_best_effort,
             stage_in: stage_in.into_boxed_slice(),
@@ -372,9 +371,10 @@ impl TransmissionPipeline {
         priority: usize,
         mut in_guard: MutexGuard<'_, StageIn>,
     ) {
-        // Create an expandable buffer and serialize the totality of the message
-        let mut wbuf = WBuf::new(self.batch_size, false);
-        wbuf.write_zenoh_message(&message);
+        // Take the expandable buffer and serialize the totality of the message
+        let mut fragbuf = in_guard.fragbuf.take().unwrap();
+        fragbuf.clear();
+        fragbuf.write_zenoh_message(&message);
 
         // Acquire the lock on the SN generator to ensure that we have all
         // sequential sequence numbers for the fragments
@@ -386,7 +386,7 @@ impl TransmissionPipeline {
         let mut guard = zlock!(sn);
 
         // Fragment the whole message
-        let mut to_write = wbuf.len();
+        let mut to_write = fragbuf.len();
         while to_write > 0 {
             // Get the current serialization batch
             let batch = zgetbatch!(self, priority, in_guard, false);
@@ -395,7 +395,7 @@ impl TransmissionPipeline {
             let sn = guard.get();
 
             // Serialize the message
-            let written = batch.serialize_zenoh_fragment(ch, sn, &mut wbuf, to_write);
+            let written = batch.serialize_zenoh_fragment(ch, sn, &mut fragbuf, to_write);
 
             // Update the amount of bytes left to write
             to_write -= written;
@@ -418,6 +418,8 @@ impl TransmissionPipeline {
                 break;
             }
         }
+        // Reinsert the fragbuf
+        in_guard.fragbuf = Some(fragbuf);
     }
 
     pub(super) async fn try_pull_queue(&self, priority: usize) -> Option<SerializationBatch> {
