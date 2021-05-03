@@ -17,6 +17,8 @@ pub mod condition;
 pub use condition::*;
 pub mod mvar;
 pub use mvar::*;
+pub mod signal;
+pub use signal::*;
 
 pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
     unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }

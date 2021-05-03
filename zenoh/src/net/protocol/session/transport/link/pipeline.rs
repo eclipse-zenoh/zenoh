@@ -43,30 +43,33 @@ macro_rules! zgetbatch {
         loop {
             if let Some(batch) = $stage_in.inner.front_mut() {
                 break batch;
-            } else {
-                // Refill the batches
-                let mut refill_guard = zlock!($self.stage_refill[$priority]);
-                if refill_guard.is_empty() {
-                    // Execute the dropping strategy if provided
-                    if $is_droppable {
-                        // Drop the guard to allow the sending task to
-                        // refill the queue of empty batches
-                        drop(refill_guard);
-                        // Yield this thread to not spin the msg pusher
-                        thread::yield_now();
-                        return;
-                    }
-                    // Drop the guard and wait for the batches to be available
-                    refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
-                    // Verify that the pipeline is still active
-                    if !$self.active.load(Ordering::Acquire) {
-                        return;
-                    }
+            }
+
+            // Refill the batches
+            let mut refill_guard = zlock!($self.stage_refill[$priority]);
+            if refill_guard.is_empty() {
+                // Execute the dropping strategy if provided
+                if $is_droppable {
+                    // Drop the guard to allow the sending task to
+                    // refill the queue of empty batches
+                    drop(refill_guard);
+                    // Yield this thread to not spin the msg pusher
+                    thread::yield_now();
+                    return;
                 }
-                // Drain all the empty batches
-                while let Some(batch) = refill_guard.try_pull() {
-                    $stage_in.inner.push_back(batch);
+
+                // Drop the guard and wait for the batches to be available
+                refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
+
+                // Verify that the pipeline is still active
+                if !$self.active.load(Ordering::Acquire) {
+                    return;
                 }
+            }
+
+            // Drain all the empty batches
+            while let Some(batch) = refill_guard.try_pull() {
+                $stage_in.inner.push_back(batch);
             }
         }
     };

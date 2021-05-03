@@ -28,13 +28,13 @@ use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
 use batch::*;
-use event_listener::Event;
 pub(crate) use pipeline::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
 #[derive(Clone)]
@@ -171,27 +171,6 @@ impl SessionTransportLink {
 /*************************************/
 /*              TASKS                */
 /*************************************/
-#[derive(Clone)]
-struct Signal {
-    event: Arc<Event>,
-}
-
-impl Signal {
-    fn new() -> Signal {
-        let event = Arc::new(Event::new());
-        Signal { event }
-    }
-
-    fn trigger(&self) {
-        self.event.notify_additional(usize::MAX);
-    }
-
-    async fn wait(&self) {
-        let listener = self.event.listen();
-        listener.await;
-    }
-}
-
 async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZInt) -> ZResult<()> {
     let keep_alive = Duration::from_millis(keep_alive);
     loop {

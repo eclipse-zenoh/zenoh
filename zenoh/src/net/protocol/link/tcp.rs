@@ -13,19 +13,21 @@
 //
 use super::session::SessionManager;
 use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
-use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Barrier, RwLock};
+use async_std::sync::{Arc, RwLock};
 use async_std::task;
+use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::sync::Signal;
 use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
 
 // Default MTU (TCP PDU) in bytes.
@@ -253,31 +255,28 @@ impl fmt::Debug for LinkTcp {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerTcp {
-    socket: TcpListener,
-    sender: Sender<()>,
-    receiver: Receiver<()>,
-    barrier: Arc<Barrier>,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerTcp {
-    fn new(socket: TcpListener) -> ListenerTcp {
-        // Create the channel necessary to break the accept loop
-        let (sender, receiver) = bounded::<()>(1);
-        // Create the barrier necessary to detect the termination of the accept loop
-        let barrier = Arc::new(Barrier::new(2));
-        // Update the list of active listeners on the manager
+    fn new(
+        active: Arc<AtomicBool>,
+        signal: Signal,
+        handle: JoinHandle<ZResult<()>>,
+    ) -> ListenerTcp {
         ListenerTcp {
-            socket,
-            sender,
-            receiver,
-            barrier,
+            active,
+            signal,
+            handle,
         }
     }
 }
 
 pub struct LinkManagerTcp {
     manager: SessionManager,
-    listener: Arc<RwLock<HashMap<SocketAddr, Arc<ListenerTcp>>>>,
+    listener: Arc<RwLock<HashMap<SocketAddr, ListenerTcp>>>,
 }
 
 impl LinkManagerTcp {
@@ -331,20 +330,22 @@ impl LinkManagerTrait for LinkManagerTcp {
             let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
-        let listener = Arc::new(ListenerTcp::new(socket));
-        // Update the list of active listeners on the manager
-        zasyncwrite!(self.listener).insert(local_addr, listener.clone());
 
         // Spawn the accept loop for the listener
-        let c_listeners = self.listener.clone();
-        let c_addr = local_addr;
+        let active = Arc::new(AtomicBool::new(true));
+        let signal = Signal::new();
+
+        let c_active = active.clone();
+        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
-        task::spawn(async move {
+        let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(listener, c_manager).await;
-            // Delete the listener from the manager
-            zasyncwrite!(c_listeners).remove(&c_addr);
+            accept_task(socket, c_active, c_signal, c_manager).await
         });
+
+        let listener = ListenerTcp::new(active, signal, handle);
+        // Update the list of active listeners on the manager
+        zasyncwrite!(self.listener).insert(local_addr, listener);
 
         Ok(Locator::Tcp(LocatorTcp::SocketAddr(local_addr)))
     }
@@ -356,12 +357,9 @@ impl LinkManagerTrait for LinkManagerTcp {
         match zasyncwrite!(self.listener).remove(&addr) {
             Some(listener) => {
                 // Send the stop signal
-                let res = listener.sender.send(()).await;
-                if res.is_ok() {
-                    // Wait for the accept loop to be stopped
-                    listener.barrier.wait().await;
-                }
-                Ok(())
+                listener.active.store(false, Ordering::Release);
+                listener.signal.trigger();
+                listener.handle.await
             }
             None => {
                 let e = format!(
@@ -406,60 +404,65 @@ impl LinkManagerTrait for LinkManagerTcp {
     }
 }
 
-async fn accept_task(listener: Arc<ListenerTcp>, manager: SessionManager) {
-    // The accept future
-    let accept_loop = async {
-        log::trace!(
-            "Ready to accept TCP connections on: {:?}",
-            listener.socket.local_addr()
-        );
-        loop {
-            // Wait for incoming connections
-            let stream = match listener.socket.accept().await {
-                Ok((stream, _)) => stream,
-                Err(e) => {
-                    log::warn!(
-                        "{}. Hint: you might want to increase the system open file limit",
-                        e
-                    );
-                    // Throttle the accept loop upon an error
-                    // NOTE: This might be due to various factors. However, the most common case is that
-                    //       the process has reached the maximum number of open files in the system. On
-                    //       Linux systems this limit can be changed by using the "ulimit" command line
-                    //       tool. In case of systemd-based systems, this can be changed by using the
-                    //       "sysctl" command line tool.
-                    task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
-                    continue;
-                }
-            };
-            // Get the source and destination TCP addresses
-            let src_addr = match stream.local_addr() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    let e = format!("Can not accept TCP connection: {}", e);
-                    log::warn!("{}", e);
-                    continue;
-                }
-            };
-            let dst_addr = match stream.peer_addr() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    let e = format!("Can not accept TCP connection: {}", e);
-                    log::warn!("{}", e);
-                    continue;
-                }
-            };
+async fn accept_task(
+    socket: TcpListener,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    manager: SessionManager,
+) -> ZResult<()> {
+    enum Action {
+        Accept((TcpStream, SocketAddr)),
+        Stop,
+    }
 
-            log::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
-            // Create the new link object
-            let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
+    async fn accept(socket: &TcpListener) -> ZResult<Action> {
+        let res = socket.accept().await.map_err(|e| {
+            zerror2!(ZErrorKind::IoError {
+                descr: e.to_string()
+            })
+        })?;
+        Ok(Action::Accept(res))
+    }
 
-            // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::Tcp(link), None).await;
-        }
-    };
+    async fn stop(signal: Signal) -> ZResult<Action> {
+        signal.wait().await;
+        Ok(Action::Stop)
+    }
 
-    let stop = listener.receiver.recv();
-    let _ = accept_loop.race(stop).await;
-    listener.barrier.wait().await;
+    let src_addr = socket.local_addr().map_err(|e| {
+        let e = format!("Can not accept TCP connections: {}", e);
+        log::warn!("{}", e);
+        zerror2!(ZErrorKind::IoError { descr: e })
+    })?;
+
+    log::trace!("Ready to accept TCP connections on: {:?}", src_addr);
+    while active.load(Ordering::Acquire) {
+        // Wait for incoming connections
+        let (stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
+            Ok(action) => match action {
+                Action::Accept((stream, addr)) => (stream, addr),
+                Action::Stop => break,
+            },
+            Err(e) => {
+                log::warn!("{}. Hint: increase the system open file limit.", e);
+                // Throttle the accept loop upon an error
+                // NOTE: This might be due to various factors. However, the most common case is that
+                //       the process has reached the maximum number of open files in the system. On
+                //       Linux systems this limit can be changed by using the "ulimit" command line
+                //       tool. In case of systemd-based systems, this can be changed by using the
+                //       "sysctl" command line tool.
+                task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
+                continue;
+            }
+        };
+
+        log::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
+        // Create the new link object
+        let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
+
+        // Communicate the new link to the initial session manager
+        manager.handle_new_link(Link::Tcp(link), None).await;
+    }
+
+    Ok(())
 }

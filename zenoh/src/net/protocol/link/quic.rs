@@ -13,21 +13,23 @@
 //
 use super::session::SessionManager;
 use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
-use async_std::channel::{bounded, Receiver, Sender};
 use async_std::fs;
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Barrier, Mutex, RwLock};
+use async_std::sync::{Arc, Mutex, RwLock};
 use async_std::task;
+use async_std::task::JoinHandle;
 use async_trait::async_trait;
 pub use quinn::*;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use webpki::{DnsName, DnsNameRef};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
+use zenoh_util::sync::Signal;
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror, zerror2};
 
 // Default ALPN protocol
@@ -436,38 +438,35 @@ impl fmt::Debug for LinkQuic {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerQuic {
-    endpoint: Endpoint,
-    sender: Sender<()>,
-    receiver: Receiver<()>,
-    barrier: Arc<Barrier>,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerQuic {
-    fn new(endpoint: Endpoint) -> ListenerQuic {
-        // Create the channel necessary to break the accept loop
-        let (sender, receiver) = bounded::<()>(1);
-        // Create the barrier necessary to detect the termination of the accept loop
-        let barrier = Arc::new(Barrier::new(2));
-        // Update the list of active listeners on the manager
+    fn new(
+        active: Arc<AtomicBool>,
+        signal: Signal,
+        handle: JoinHandle<ZResult<()>>,
+    ) -> ListenerQuic {
         ListenerQuic {
-            endpoint,
-            sender,
-            receiver,
-            barrier,
+            active,
+            signal,
+            handle,
         }
     }
 }
 
 pub struct LinkManagerQuic {
     manager: SessionManager,
-    listener: Arc<RwLock<HashMap<SocketAddr, Arc<ListenerQuic>>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerQuic>>>,
 }
 
 impl LinkManagerQuic {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
-            listener: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -569,21 +568,26 @@ impl LinkManagerTrait for LinkManagerQuic {
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
 
-        // Initialize the QuicAcceptor
-        let listener = Arc::new(ListenerQuic::new(endpoint));
-        // Update the list of active listeners on the manager
-        zasyncwrite!(self.listener).insert(local_addr, listener.clone());
-
         // Spawn the accept loop for the listener
-        let c_listeners = self.listener.clone();
-        let c_addr = local_addr;
+        let active = Arc::new(AtomicBool::new(true));
+        let signal = Signal::new();
+
+        let c_active = active.clone();
+        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
-        task::spawn(async move {
+        let c_listeners = self.listeners.clone();
+        let c_addr = local_addr;
+        let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(listener, acceptor, c_manager).await;
-            // Delete the listener from the manager
+            let res = accept_task(endpoint, acceptor, c_active, c_signal, c_manager).await;
             zasyncwrite!(c_listeners).remove(&c_addr);
+            res
         });
+
+        // Initialize the QuicAcceptor
+        let listener = ListenerQuic::new(active, signal, handle);
+        // Update the list of active listeners on the manager
+        zasyncwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(Locator::Quic(LocatorQuic::SocketAddr(local_addr)))
     }
@@ -592,15 +596,14 @@ impl LinkManagerTrait for LinkManagerQuic {
         let addr = get_quic_addr(locator).await?;
 
         // Stop the listener
-        match zasyncwrite!(self.listener).remove(&addr) {
+        let mut guard = zasyncwrite!(self.listeners);
+        match guard.remove(&addr) {
             Some(listener) => {
+                drop(guard);
                 // Send the stop signal
-                let res = listener.sender.send(()).await;
-                if res.is_ok() {
-                    // Wait for the accept loop to be stopped
-                    listener.barrier.wait().await;
-                }
-                Ok(())
+                listener.active.store(false, Ordering::Release);
+                listener.signal.trigger();
+                listener.handle.await
             }
             None => {
                 let e = format!(
@@ -614,7 +617,7 @@ impl LinkManagerTrait for LinkManagerQuic {
     }
 
     async fn get_listeners(&self) -> Vec<Locator> {
-        zasyncread!(self.listener)
+        zasyncread!(self.listeners)
             .keys()
             .map(|x| Locator::Quic(LocatorQuic::SocketAddr(*x)))
             .collect()
@@ -622,7 +625,7 @@ impl LinkManagerTrait for LinkManagerQuic {
 
     async fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
-        for addr in zasyncread!(self.listener).keys() {
+        for addr in zasyncread!(self.listeners).keys() {
             if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
@@ -645,69 +648,89 @@ impl LinkManagerTrait for LinkManagerQuic {
     }
 }
 
-async fn accept_task(listener: Arc<ListenerQuic>, mut acceptor: Incoming, manager: SessionManager) {
+async fn accept_task(
+    endpoint: Endpoint,
+    mut acceptor: Incoming,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    manager: SessionManager,
+) -> ZResult<()> {
+    enum Action {
+        Accept(NewConnection),
+        Stop,
+    }
+
+    async fn accept(acceptor: &mut Incoming) -> ZResult<Action> {
+        let qc = acceptor.next().await.ok_or_else(|| {
+            let e = "Can not accept QUIC connections: acceptor closed".to_string();
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })?;
+
+        let conn = qc.await.map_err(|e| {
+            let e = format!("QUIC acceptor failed: {:?}", e);
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })?;
+
+        Ok(Action::Accept(conn))
+    }
+
+    async fn stop(signal: Signal) -> ZResult<Action> {
+        signal.wait().await;
+        Ok(Action::Stop)
+    }
+
+    let src_addr = endpoint.local_addr().map_err(|e| {
+        let e = format!("Can not accept QUIC connections: {}", e);
+        log::warn!("{}", e);
+        zerror2!(ZErrorKind::IoError { descr: e })
+    })?;
+
     // The accept future
-    let accept_loop = async {
-        log::trace!(
-            "Ready to accept QUIC connections on: {:?}",
-            listener.endpoint.local_addr()
-        );
-        loop {
-            // Wait for incoming connections
-            let mut quic_conn = match acceptor.next().await {
-                Some(qc) => match qc.await {
-                    Ok(qc) => qc,
-                    Err(e) => {
-                        log::warn!("QUIC acceptor failed: {:?}", e);
-                        continue;
-                    }
-                },
-                None => {
-                    log::warn!("QUIC acceptor failed. Hint: you might want to increase the system open file limit",);
-                    // Throttle the accept loop upon an error
-                    // NOTE: This might be due to various factors. However, the most common case is that
-                    //       the process has reached the maximum number of open files in the system. On
-                    //       Linux systems this limit can be changed by using the "ulimit" command line
-                    //       tool. In case of systemd-based systems, this can be changed by using the
-                    //       "sysctl" command line tool.
-                    task::sleep(Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME)).await;
-                    continue;
-                }
-            };
+    log::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
+    while active.load(Ordering::Acquire) {
+        // Wait for incoming connections
+        let mut quic_conn = match accept(&mut acceptor).race(stop(signal.clone())).await {
+            Ok(action) => match action {
+                Action::Accept(qc) => qc,
+                Action::Stop => break,
+            },
+            Err(e) => {
+                log::warn!("{}. Hint: increase the system open file limit.", e);
+                // Throttle the accept loop upon an error
+                // NOTE: This might be due to various factors. However, the most common case is that
+                //       the process has reached the maximum number of open files in the system. On
+                //       Linux systems this limit can be changed by using the "ulimit" command line
+                //       tool. In case of systemd-based systems, this can be changed by using the
+                //       "sysctl" command line tool.
+                task::sleep(Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME)).await;
+                continue;
+            }
+        };
 
-            // Get the bideractional streams. Note that we don't allow unidirectional streams.
-            let (send, recv) = match quic_conn.bi_streams.next().await {
-                Some(bs) => match bs {
-                    Ok((send, recv)) => (send, recv),
-                    Err(e) => {
-                        log::warn!("QUIC acceptor failed: {:?}", e);
-                        continue;
-                    }
-                },
-                None => {
-                    log::warn!("QUIC connection has no streams: {:?}", quic_conn.connection);
-                    continue;
-                }
-            };
-
-            let src_addr = match listener.endpoint.local_addr() {
-                Ok(addr) => addr,
+        // Get the bideractional streams. Note that we don't allow unidirectional streams.
+        let (send, recv) = match quic_conn.bi_streams.next().await {
+            Some(bs) => match bs {
+                Ok((send, recv)) => (send, recv),
                 Err(e) => {
-                    log::warn!("QUIC connection has no streams: {:?}", e);
+                    log::warn!("QUIC acceptor failed: {:?}", e);
                     continue;
                 }
-            };
-            let dst_addr = quic_conn.connection.remote_address();
-            log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
-            // Create the new link object
-            let link = Arc::new(LinkQuic::new(quic_conn, src_addr, send, recv));
+            },
+            None => {
+                log::warn!("QUIC connection has no streams: {:?}", quic_conn.connection);
+                continue;
+            }
+        };
 
-            // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::Quic(link), None).await;
-        }
-    };
+        let dst_addr = quic_conn.connection.remote_address();
+        log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
+        // Create the new link object
+        let link = Arc::new(LinkQuic::new(quic_conn, src_addr, send, recv));
 
-    let stop = listener.receiver.recv();
-    let _ = accept_loop.race(stop).await;
-    listener.barrier.wait().await;
+        // Communicate the new link to the initial session manager
+        manager.handle_new_link(Link::Quic(link), None).await;
+    }
+
+    Ok(())
 }
