@@ -27,7 +27,6 @@ use super::session::defaults::{
     QUEUE_SIZE_RETX,
 };
 use super::{SeqNumGenerator, SerializationBatch};
-use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
 use std::collections::VecDeque;
 use std::fmt;
@@ -35,8 +34,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
-use zenoh_util::sync::Condition as AsyncCondvar;
-use zenoh_util::{zasynclock, zlock};
+use zenoh_util::sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondvarWaiter};
+use zenoh_util::zlock;
 
 macro_rules! zgetbatch {
     ($self:expr, $priority:expr, $stage_in:expr, $is_droppable:expr) => {
@@ -190,7 +189,7 @@ pub(crate) struct TransmissionPipeline {
     // Amount of bytes available in each stage IN priority queue
     bytes_in: Box<[Arc<AtomicUsize>]>,
     // A single Mutex for all the priority queues
-    stage_out: AsyncArc<AsyncMutex<Box<[StageOut]>>>,
+    stage_out: Arc<Mutex<Box<[StageOut]>>>,
     // Number of batches in each stage OUT priority queue
     batches_out: Box<[Arc<AtomicUsize>]>,
     // Each priority queue has its own Mutex
@@ -239,7 +238,7 @@ impl TransmissionPipeline {
             *QUEUE_SIZE_DATA,
             batches_out[QUEUE_PRIO_DATA].clone(),
         ));
-        let stage_out = AsyncArc::new(AsyncMutex::new(stage_out.into_boxed_slice()));
+        let stage_out = Arc::new(Mutex::new(stage_out.into_boxed_slice()));
 
         // Bytes to be pulled from stage IN
         let mut bytes_in = vec![];
@@ -311,7 +310,7 @@ impl TransmissionPipeline {
         //   2) add the batch to the OUT pipeline
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty
-            let mut out_guard = task::block_on(async { zasynclock!(self.stage_out) });
+            let mut out_guard = zlock!(self.stage_out);
             out_guard[priority].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
@@ -353,7 +352,7 @@ impl TransmissionPipeline {
         //   2) add the batch to the OUT pipeline
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty, move it to the stage OUT pipeline
-            let mut out_guard = task::block_on(async { zasynclock!(self.stage_out) });
+            let mut out_guard = zlock!(self.stage_out);
             out_guard[priority].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
@@ -405,7 +404,7 @@ impl TransmissionPipeline {
             if written != 0 {
                 // Move the serialization batch into the OUT pipeline
                 let batch = in_guard.try_pull().unwrap();
-                let mut out_guard = task::block_on(async { zasynclock!(self.stage_out) });
+                let mut out_guard = zlock!(self.stage_out);
                 out_guard[priority].push(batch);
                 drop(out_guard);
                 self.cond_canpull.notify_one();
@@ -421,62 +420,56 @@ impl TransmissionPipeline {
         }
     }
 
-    #[allow(clippy::comparison_chain)]
     pub(super) async fn try_pull_queue(&self, priority: usize) -> Option<SerializationBatch> {
         let mut backoff = Duration::from_nanos(*QUEUE_PULL_BACKOFF);
         let mut bytes_in_pre: usize = 0;
         loop {
             // Check first if we have complete batches available for transmission
             if self.batches_out[priority].load(Ordering::Acquire) > 0 {
-                let mut out_guard = zasynclock!(self.stage_out);
-                let batch = out_guard[priority].try_pull().unwrap();
-                return Some(batch);
+                let mut out_guard = zlock!(self.stage_out);
+                return out_guard[priority].try_pull();
             }
+
             // Check then if there are incomplete batches available for transmission
-            else {
-                let bytes_in_now = self.bytes_in[priority].load(Ordering::Acquire);
-                if bytes_in_now > 0 {
-                    if bytes_in_now < bytes_in_pre {
-                        // There should be a new batch in Stage OUT
-                        bytes_in_pre = bytes_in_now;
-                        continue;
-                    } else if bytes_in_now == bytes_in_pre {
-                        // No new bytes have been written on the batch, try to pull
-                        let mut out_guard = zasynclock!(self.stage_out);
-                        if let Some(batch) = out_guard[priority].try_pull() {
-                            return Some(batch);
-                        } else {
-                            // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
-                            if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
-                                if let Some(batch) = in_guard.try_pull() {
-                                    return Some(batch);
-                                } else {
-                                    break;
-                                }
-                            }
-                            drop(out_guard);
-                            // Batch is being filled up, let's backoff and retry
-                            task::sleep(backoff).await;
-                            backoff = 2 * backoff;
-                            continue;
-                        }
-                    } else {
-                        // Batch is being filled up, let's backoff and retry
-                        bytes_in_pre = bytes_in_now;
-                        task::sleep(backoff).await;
-                        backoff = 2 * backoff;
-                        continue;
-                    }
-                } else {
-                    break;
+            let bytes_in_now = self.bytes_in[priority].load(Ordering::Acquire);
+            if bytes_in_now == 0 {
+                // Nothing in the batch, return immediately
+                return None;
+            }
+
+            if bytes_in_now < bytes_in_pre {
+                // There should be a new batch in Stage OUT
+                bytes_in_pre = bytes_in_now;
+                continue;
+            }
+
+            if bytes_in_now == bytes_in_pre {
+                // No new bytes have been written on the batch, try to pull
+                // First try to pull from stage OUT
+                let mut out_guard = zlock!(self.stage_out);
+                if let Some(batch) = out_guard[priority].try_pull() {
+                    return Some(batch);
+                }
+
+                // An incomplete (non-empty) batch is available in the state IN pipeline.
+                if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
+                    return in_guard.try_pull();
                 }
             }
+
+            // Batch is being filled up, let's backoff and retry
+            bytes_in_pre = bytes_in_now;
+            task::sleep(backoff).await;
+            backoff = 2 * backoff;
         }
-        // There are no batches in this queue to be pulled
-        None
     }
 
     pub(super) async fn pull(&self) -> Option<(SerializationBatch, usize)> {
+        enum Action {
+            Wait(AsyncCondvarWaiter),
+            Sleep,
+        }
+
         let mut backoff = Duration::from_nanos(*QUEUE_PULL_BACKOFF);
         loop {
             for priority in 0..QUEUE_NUM {
@@ -485,12 +478,14 @@ impl TransmissionPipeline {
                 }
             }
 
-            let mut out_guard = zasynclock!(self.stage_out);
-            let mut is_pipeline_really_empty = true;
-            for priority in 0..out_guard.len() {
-                if let Some(batch) = out_guard[priority].try_pull() {
-                    return Some((batch, priority));
-                } else {
+            let action = {
+                let mut out_guard = zlock!(self.stage_out);
+                let mut is_pipeline_really_empty = true;
+                for priority in 0..out_guard.len() {
+                    if let Some(batch) = out_guard[priority].try_pull() {
+                        return Some((batch, priority));
+                    }
+
                     // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
                     if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
                         if let Some(batch) = in_guard.try_pull() {
@@ -500,20 +495,27 @@ impl TransmissionPipeline {
                         is_pipeline_really_empty = false
                     }
                 }
-            }
 
-            // Check if the pipeline is still active
-            if !self.active.load(Ordering::Acquire) {
-                return None;
-            }
+                // Check if the pipeline is still active
+                if !self.active.load(Ordering::Acquire) {
+                    return None;
+                }
 
-            if is_pipeline_really_empty {
-                self.cond_canpull.wait(out_guard).await;
-            } else {
-                drop(out_guard);
-                // Batches are being filled up, let's backoff and retry
-                task::sleep(backoff).await;
-                backoff = 2 * backoff;
+                if is_pipeline_really_empty {
+                    let waiter = self.cond_canpull.waiter(out_guard);
+                    Action::Wait(waiter)
+                } else {
+                    Action::Sleep
+                }
+            };
+
+            match action {
+                Action::Wait(waiter) => waiter.await,
+                Action::Sleep => {
+                    // Batches are being filled up, let's backoff and retry
+                    task::sleep(backoff).await;
+                    backoff = 2 * backoff;
+                }
             }
         }
     }
@@ -533,7 +535,7 @@ impl TransmissionPipeline {
         // Use the same locking order as in drain to avoid deadlocks
         let _in_guards: Vec<MutexGuard<'_, StageIn>> =
             self.stage_in.iter().map(|x| zlock!(x)).collect();
-        let _out_guard = task::block_on(async { zasynclock!(self.stage_out) });
+        let _out_guard = zlock!(self.stage_out);
 
         // Unblock waiting pushers
         for cr in self.cond_canrefill.iter() {
@@ -551,7 +553,7 @@ impl TransmissionPipeline {
         // Use the same locking order as in disable to avoid deadlocks
         let mut in_guards: Vec<MutexGuard<'_, StageIn>> =
             self.stage_in.iter().map(|x| zlock!(x)).collect();
-        let mut out_guard = task::block_on(async { zasynclock!(self.stage_out) });
+        let mut out_guard = zlock!(self.stage_out);
 
         // Drain first the batches in stage OUT
         for priority in 0..out_guard.len() {
