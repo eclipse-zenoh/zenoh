@@ -16,7 +16,6 @@ use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::{Path, PathBuf};
 use async_std::prelude::*;
-use async_std::sync::{Arc, RwLock};
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
@@ -27,11 +26,12 @@ use std::net::Shutdown;
 use std::os::unix::io::RawFd;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uuid::Uuid;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::Signal;
-use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
+use zenoh_util::{zerror, zerror2, zread, zwrite};
 
 // Default MTU (UnixSocketStream PDU) in bytes.
 // NOTE: Since UnixSocketStream is a byte-stream oriented transport, theoretically it has
@@ -260,14 +260,14 @@ impl ListenerUnixSocketStream {
 
 pub struct LinkManagerUnixSocketStream {
     manager: SessionManager,
-    listener: Arc<RwLock<HashMap<String, ListenerUnixSocketStream>>>,
+    listeners: Arc<RwLock<HashMap<String, ListenerUnixSocketStream>>>,
 }
 
 impl LinkManagerUnixSocketStream {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
-            listener: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -451,13 +451,17 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
         let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
+        let c_listeners = self.listeners.clone();
+        let c_path = local_path_str.clone();
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(socket, c_active, c_signal, c_manager).await
+            let res = accept_task(socket, c_active, c_signal, c_manager).await;
+            zwrite!(c_listeners).remove(&c_path);
+            res
         });
 
         let listener = ListenerUnixSocketStream::new(active, signal, handle, lock_fd);
-        zasyncwrite!(self.listener).insert(local_path_str.clone(), listener);
+        zwrite!(self.listeners).insert(local_path_str, listener);
 
         Ok(Locator::UnixSocketStream(LocatorUnixSocketStream(
             local_path,
@@ -468,47 +472,44 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
         let path = get_unix_path_as_string(locator);
 
         // Stop the listener
-        match zasyncwrite!(self.listener).remove(&path) {
-            Some(listener) => {
-                // Send the stop signal
-                listener.active.store(false, Ordering::Release);
-                listener.signal.trigger();
-                let _ = listener.handle.await;
+        let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
+            let e = format!(
+                "Can not delete the UnixSocketStream listener because it has not been found: {}",
+                path
+            );
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
-                //Release the lock
-                let _ = nix::fcntl::flock(listener.lock_fd, nix::fcntl::FlockArg::UnlockNonblock);
-                let _ = nix::unistd::close(listener.lock_fd);
-                let _ = remove_file(path.clone());
+        // Send the stop signal
+        listener.active.store(false, Ordering::Release);
+        listener.signal.trigger();
+        let res = listener.handle.await;
 
-                // Remove the Unix Domain Socket file
-                let lock_file_path = format!("{}.lock", path);
-                let res = remove_file(lock_file_path);
-                log::trace!("UnixSocketStream Domain Socket removal result: {:?}", res);
-                Ok(())
-            }
-            None => {
-                let e = format!(
-                    "Can not delete the UnixSocketStream listener because it has not been found: {}",
-                    path
-                );
-                log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink { descr: e })
-            }
-        }
+        //Release the lock
+        let _ = nix::fcntl::flock(listener.lock_fd, nix::fcntl::FlockArg::UnlockNonblock);
+        let _ = nix::unistd::close(listener.lock_fd);
+        let _ = remove_file(path.clone());
+
+        // Remove the Unix Domain Socket file
+        let lock_file_path = format!("{}.lock", path);
+        let tmp = remove_file(lock_file_path);
+        log::trace!("UnixSocketStream Domain Socket removal result: {:?}", tmp);
+        res
     }
 
-    async fn get_listeners(&self) -> Vec<Locator> {
-        zasyncread!(self.listener)
+    fn get_listeners(&self) -> Vec<Locator> {
+        zread!(self.listeners)
             .keys()
             .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(x))))
             .collect()
     }
 
-    async fn get_locators(&self) -> Vec<Locator> {
+    fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
-        for addr in zasyncread!(self.listener).keys() {
+        for addr in zread!(self.listeners).keys() {
             let path = Path::new(&addr);
-            if !path.exists().await {
+            if !task::block_on(path.exists()) {
                 log::error!("Unable to get local addresses : {}", addr);
             } else {
                 locators.push(PathBuf::from(addr));

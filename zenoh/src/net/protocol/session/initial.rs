@@ -575,7 +575,7 @@ async fn accept_recv_init_syn(
     };
 
     // Check if we are allowed to open more links if the session is established
-    if let Some(s) = manager.get_session(&init_syn_pid).await {
+    if let Some(s) = manager.get_session(&init_syn_pid) {
         // Check if we have reached maximum number of links for this session
         if let Some(limit) = manager.config.max_links {
             let links = s.get_links().map_err(|e| (e, None))?;
@@ -847,7 +847,7 @@ async fn accept_init_session(
         initial_sn
     };
 
-    let session = if let Some(session) = manager.get_session(&input.cookie.pid).await {
+    let session = if let Some(session) = manager.get_session(&input.cookie.pid) {
         // Check if this open is related to a totally new session (i.e. new peer) or to an exsiting one
         // Get the underlying transport
         let transport = session.get_transport().map_err(|e| (e, None))?;
@@ -883,7 +883,7 @@ async fn accept_init_session(
     } else {
         // Check if a limit for the maximum number of open sessions is set
         if let Some(limit) = manager.config.max_sessions {
-            let num = manager.get_sessions().await.len();
+            let num = manager.get_sessions().len();
             // Check if we have reached the session limit
             if num >= limit {
                 let e = format!(

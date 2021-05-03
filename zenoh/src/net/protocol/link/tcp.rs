@@ -15,7 +15,6 @@ use super::session::SessionManager;
 use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
 use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use async_std::prelude::*;
-use async_std::sync::{Arc, RwLock};
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
@@ -25,10 +24,11 @@ use std::fmt;
 use std::net::Shutdown;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::Signal;
-use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
+use zenoh_util::{zerror, zerror2, zread, zwrite};
 
 // Default MTU (TCP PDU) in bytes.
 // NOTE: Since TCP is a byte-stream oriented transport, theoretically it has
@@ -276,14 +276,14 @@ impl ListenerTcp {
 
 pub struct LinkManagerTcp {
     manager: SessionManager,
-    listener: Arc<RwLock<HashMap<SocketAddr, ListenerTcp>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerTcp>>>,
 }
 
 impl LinkManagerTcp {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
-            listener: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -338,14 +338,18 @@ impl LinkManagerTrait for LinkManagerTcp {
         let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
+        let c_listeners = self.listeners.clone();
+        let c_addr = local_addr;
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(socket, c_active, c_signal, c_manager).await
+            let res = accept_task(socket, c_active, c_signal, c_manager).await;
+            zwrite!(c_listeners).remove(&c_addr);
+            res
         });
 
         let listener = ListenerTcp::new(active, signal, handle);
         // Update the list of active listeners on the manager
-        zasyncwrite!(self.listener).insert(local_addr, listener);
+        zwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(Locator::Tcp(LocatorTcp::SocketAddr(local_addr)))
     }
@@ -354,34 +358,31 @@ impl LinkManagerTrait for LinkManagerTcp {
         let addr = get_tcp_addr(locator).await?;
 
         // Stop the listener
-        match zasyncwrite!(self.listener).remove(&addr) {
-            Some(listener) => {
-                // Send the stop signal
-                listener.active.store(false, Ordering::Release);
-                listener.signal.trigger();
-                listener.handle.await
-            }
-            None => {
-                let e = format!(
-                    "Can not delete the TCP listener because it has not been found: {}",
-                    addr
-                );
-                log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink { descr: e })
-            }
-        }
+        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+            let e = format!(
+                "Can not delete the TCP listener because it has not been found: {}",
+                addr
+            );
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        // Send the stop signal
+        listener.active.store(false, Ordering::Release);
+        listener.signal.trigger();
+        listener.handle.await
     }
 
-    async fn get_listeners(&self) -> Vec<Locator> {
-        zasyncread!(self.listener)
+    fn get_listeners(&self) -> Vec<Locator> {
+        zread!(self.listeners)
             .keys()
             .map(|x| Locator::Tcp(LocatorTcp::SocketAddr(*x)))
             .collect()
     }
 
-    async fn get_locators(&self) -> Vec<Locator> {
+    fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
-        for addr in zasyncread!(self.listener).keys() {
+        for addr in zread!(self.listeners).keys() {
             if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {

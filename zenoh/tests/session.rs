@@ -150,7 +150,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
     println!("Session Open Close [1d1]");
-    let sessions = client01_manager.get_sessions().await;
+    let sessions = client01_manager.get_sessions();
     println!("Session Open Close [1d2]: {:?}", sessions);
     assert_eq!(sessions.len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
@@ -163,7 +163,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [1f1]");
     let check = async {
         loop {
-            let sessions = router_manager.get_sessions().await;
+            let sessions = router_manager.get_sessions();
             let s = sessions
                 .iter()
                 .find(|s| s.get_pid().unwrap() == client01_id);
@@ -190,7 +190,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
     println!("Session Open Close [2b1]");
-    let sessions = client01_manager.get_sessions().await;
+    let sessions = client01_manager.get_sessions();
     println!("Session Open Close [2b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 1);
     assert_eq!(c_ses2.get_pid().unwrap(), router_id);
@@ -204,7 +204,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [2d1]");
     let check = async {
         loop {
-            let sessions = router_manager.get_sessions().await;
+            let sessions = router_manager.get_sessions();
             let s = sessions
                 .iter()
                 .find(|s| s.get_pid().unwrap() == client01_id)
@@ -228,7 +228,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
     println!("Session Open Close [3b1]");
-    let sessions = client01_manager.get_sessions().await;
+    let sessions = client01_manager.get_sessions();
     println!("Session Open Close [3b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
@@ -241,7 +241,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [3d1]");
     let check = async {
         task::sleep(SLEEP).await;
-        let sessions = router_manager.get_sessions().await;
+        let sessions = router_manager.get_sessions();
         assert_eq!(sessions.len(), 1);
         let s = sessions
             .iter()
@@ -260,7 +260,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [4a2]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Open Close [4b1]");
-    let sessions = client01_manager.get_sessions().await;
+    let sessions = client01_manager.get_sessions();
     println!("Session Open Close [4b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 0);
 
@@ -268,7 +268,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [4c1]");
     let check = async {
         loop {
-            let sessions = router_manager.get_sessions().await;
+            let sessions = router_manager.get_sessions();
             let index = sessions
                 .iter()
                 .find(|s| s.get_pid().unwrap() == client01_id);
@@ -290,7 +290,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
     println!("Session Open Close [5b1]");
-    let sessions = client01_manager.get_sessions().await;
+    let sessions = client01_manager.get_sessions();
     println!("Session Open Close [5b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 1);
     assert_eq!(c_ses3.get_pid().unwrap(), router_id);
@@ -303,7 +303,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [5d1]");
     let check = async {
         task::sleep(SLEEP).await;
-        let sessions = router_manager.get_sessions().await;
+        let sessions = router_manager.get_sessions();
         assert_eq!(sessions.len(), 1);
         let s = sessions
             .iter()
@@ -323,7 +323,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
     println!("Session Open Close [6b1]");
-    let sessions = client02_manager.get_sessions().await;
+    let sessions = client02_manager.get_sessions();
     println!("Session Open Close [6b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 0);
 
@@ -331,7 +331,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [6c1]");
     let check = async {
         task::sleep(SLEEP).await;
-        let sessions = router_manager.get_sessions().await;
+        let sessions = router_manager.get_sessions();
         assert_eq!(sessions.len(), 1);
         let s = sessions
             .iter()
@@ -350,7 +350,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [7a2]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Open Close [7b1]");
-    let sessions = client01_manager.get_sessions().await;
+    let sessions = client01_manager.get_sessions();
     println!("Session Open Close [7b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 0);
 
@@ -358,7 +358,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [7c1]");
     let check = async {
         loop {
-            let sessions = router_manager.get_sessions().await;
+            let sessions = router_manager.get_sessions();
             if sessions.is_empty() {
                 break;
             }
@@ -377,7 +377,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();
     println!("Session Open Close [8b1]");
-    let sessions = client02_manager.get_sessions().await;
+    let sessions = client02_manager.get_sessions();
     println!("Session Open Close [8b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 1);
     println!("Session Open Close [8c1]");
@@ -389,7 +389,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [8d1]");
     let check = async {
         loop {
-            let sessions = router_manager.get_sessions().await;
+            let sessions = router_manager.get_sessions();
             let s = sessions
                 .iter()
                 .find(|s| s.get_pid().unwrap() == client02_id);
@@ -413,7 +413,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [9a2]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Open Close [9b1]");
-    let sessions = client02_manager.get_sessions().await;
+    let sessions = client02_manager.get_sessions();
     println!("Session Open Close [9b2]: {:?}", sessions);
     assert_eq!(sessions.len(), 0);
 
@@ -421,7 +421,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [9c1]");
     let check = async {
         loop {
-            let sessions = router_manager.get_sessions().await;
+            let sessions = router_manager.get_sessions();
             if sessions.is_empty() {
                 break;
             }

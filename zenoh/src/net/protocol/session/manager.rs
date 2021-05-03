@@ -26,15 +26,16 @@ use super::link::{
 use super::transport::SessionTransport;
 use super::{Session, SessionDispatcher};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Mutex};
+use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
 use rand::{RngCore, SeedableRng};
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::properties::config::ConfigProperties;
-use zenoh_util::{zasynclock, zerror};
+use zenoh_util::{zasynclock, zerror, zlock};
 
 /// # Examples
 /// ```
@@ -171,11 +172,11 @@ pub(super) struct Opened {
 pub struct SessionManager {
     pub(super) config: Arc<SessionManagerConfigInner>,
     // Outgoing and incoming opened (i.e. established) sessions
-    pub(super) opened: Arc<Mutex<HashMap<PeerId, Opened>>>,
+    pub(super) opened: AsyncArc<AsyncMutex<HashMap<PeerId, Opened>>>,
     // Incoming uninitialized sessions
-    pub(super) incoming: Arc<Mutex<HashSet<Link>>>,
+    pub(super) incoming: AsyncArc<AsyncMutex<HashSet<Link>>>,
     // Default PRNG
-    pub(super) prng: Arc<Mutex<PseudoRng>>,
+    pub(super) prng: AsyncArc<AsyncMutex<PseudoRng>>,
     // Default cipher for cookies
     pub(super) cipher: Arc<BlockCipher>,
     // Established listeners
@@ -255,9 +256,9 @@ impl SessionManager {
             config: Arc::new(config_inner),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            opened: Arc::new(Mutex::new(HashMap::new())),
-            incoming: Arc::new(Mutex::new(HashSet::new())),
-            prng: Arc::new(Mutex::new(prng)),
+            opened: AsyncArc::new(AsyncMutex::new(HashMap::new())),
+            incoming: AsyncArc::new(AsyncMutex::new(HashSet::new())),
+            prng: AsyncArc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
         }
     }
@@ -275,29 +276,29 @@ impl SessionManager {
         manager.new_listener(locator, ps).await
     }
 
-    pub async fn get_listeners(&self) -> Vec<Locator> {
-        let mut vec: Vec<Locator> = vec![];
-        for p in zasynclock!(self.protocols).values() {
-            vec.extend_from_slice(&p.get_listeners().await);
-        }
-        vec
-    }
-
-    pub async fn get_locators(&self) -> Vec<Locator> {
-        let mut vec: Vec<Locator> = vec![];
-        for p in zasynclock!(self.protocols).values() {
-            vec.extend_from_slice(&p.get_locators().await);
-        }
-        vec
-    }
-
     pub async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let manager = self.get_link_manager(&locator.get_proto()).await?;
+        let manager = self.get_link_manager(&locator.get_proto())?;
         manager.del_listener(locator).await?;
-        if manager.get_listeners().await.is_empty() {
+        if manager.get_listeners().is_empty() {
             self.del_link_manager(&locator.get_proto()).await?;
         }
         Ok(())
+    }
+
+    pub fn get_listeners(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = vec![];
+        for p in zlock!(self.protocols).values() {
+            vec.extend_from_slice(&p.get_listeners());
+        }
+        vec
+    }
+
+    pub fn get_locators(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = vec![];
+        for p in zlock!(self.protocols).values() {
+            vec.extend_from_slice(&p.get_locators());
+        }
+        vec
     }
 
     /*************************************/
@@ -305,7 +306,7 @@ impl SessionManager {
     /*************************************/
     async fn get_or_new_link_manager(&self, protocol: &LocatorProtocol) -> LinkManager {
         loop {
-            match self.get_link_manager(protocol).await {
+            match self.get_link_manager(protocol) {
                 Ok(manager) => return manager,
                 Err(_) => match self.new_link_manager(protocol).await {
                     Ok(manager) => return manager,
@@ -316,7 +317,7 @@ impl SessionManager {
     }
 
     async fn new_link_manager(&self, protocol: &LocatorProtocol) -> ZResult<LinkManager> {
-        let mut w_guard = zasynclock!(self.protocols);
+        let mut w_guard = zlock!(self.protocols);
         if w_guard.contains_key(protocol) {
             return zerror!(ZErrorKind::Other {
                 descr: format!(
@@ -331,8 +332,8 @@ impl SessionManager {
         Ok(lm)
     }
 
-    async fn get_link_manager(&self, protocol: &LocatorProtocol) -> ZResult<LinkManager> {
-        match zasynclock!(self.protocols).get(protocol) {
+    fn get_link_manager(&self, protocol: &LocatorProtocol) -> ZResult<LinkManager> {
+        match zlock!(self.protocols).get(protocol) {
             Some(manager) => Ok(manager.clone()),
             None => zerror!(ZErrorKind::Other {
                 descr: format!(
@@ -344,8 +345,14 @@ impl SessionManager {
     }
 
     async fn del_link_manager(&self, protocol: &LocatorProtocol) -> ZResult<()> {
-        match zasynclock!(self.protocols).remove(protocol) {
-            Some(_) => Ok(()),
+        match zlock!(self.protocols).remove(protocol) {
+            Some(lm) => {
+                let mut listeners = lm.get_listeners();
+                for l in listeners.drain(..) {
+                    let _ = lm.del_listener(&l).await;
+                }
+                Ok(())
+            },
             None => zerror!(ZErrorKind::Other {
                 descr: format!("Can not delete the link manager for protocol ({}) because it has not been found.", protocol)
             })
@@ -355,14 +362,14 @@ impl SessionManager {
     /*************************************/
     /*              SESSION              */
     /*************************************/
-    pub async fn get_session(&self, peer: &PeerId) -> Option<Session> {
-        zasynclock!(self.sessions)
+    pub fn get_session(&self, peer: &PeerId) -> Option<Session> {
+        zlock!(self.sessions)
             .get(peer)
             .map(|t| Session::new(Arc::downgrade(&t)))
     }
 
-    pub async fn get_sessions(&self) -> Vec<Session> {
-        zasynclock!(self.sessions)
+    pub fn get_sessions(&self) -> Vec<Session> {
+        zlock!(self.sessions)
             .values()
             .map(|t| Session::new(Arc::downgrade(&t)))
             .collect()
@@ -379,7 +386,7 @@ impl SessionManager {
         is_local: bool,
     ) -> Session {
         loop {
-            match self.get_session(peer).await {
+            match self.get_session(peer) {
                 Some(session) => return session,
                 None => match self
                     .new_session(
@@ -400,19 +407,16 @@ impl SessionManager {
     }
 
     pub(super) async fn del_session(&self, peer: &PeerId) -> ZResult<()> {
-        match zasynclock!(self.sessions).remove(peer) {
-            Some(_) => {
-                for pa in self.config.peer_authenticator.iter() {
-                    pa.handle_close(peer).await;
-                }
-                Ok(())
-            }
-            None => {
-                let e = format!("Can not delete the session of peer: {}", peer);
-                log::trace!("{}", e);
-                zerror!(ZErrorKind::Other { descr: e })
-            }
+        let _ = zlock!(self.sessions).remove(peer).ok_or_else(|| {
+            let e = format!("Can not delete the session of peer: {}", peer);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::Other { descr: e })
+        })?;
+
+        for pa in self.config.peer_authenticator.iter() {
+            pa.handle_close(peer).await;
         }
+        Ok(())
     }
 
     pub(super) async fn new_session(
@@ -424,7 +428,7 @@ impl SessionManager {
         initial_sn_rx: ZInt,
         is_local: bool,
     ) -> ZResult<Session> {
-        let mut w_guard = zasynclock!(self.sessions);
+        let mut w_guard = zlock!(self.sessions);
         if w_guard.contains_key(peer) {
             let e = format!("Can not create a new session for peer: {}", peer);
             log::trace!("{}", e);

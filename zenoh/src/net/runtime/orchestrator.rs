@@ -300,7 +300,7 @@ impl SessionOrchestrator {
                 }
             }
         }
-        for locator in self.manager().await.get_locators().await {
+        for locator in self.manager().await.get_locators() {
             log::info!("zenohd can be reached on {}", locator);
         }
         Ok(())
@@ -586,7 +586,7 @@ impl SessionOrchestrator {
 
     pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
         if pid != &self.manager().await.pid() {
-            if self.manager().await.get_session(pid).await.is_none() {
+            if self.manager().await.get_session(pid).is_none() {
                 let session = self.connect(locators).await;
                 if session.is_ok() {
                     log::debug!("Successfully connected to newly scouted {}", pid);
@@ -707,7 +707,7 @@ impl SessionOrchestrator {
                         let hello = SessionMessage::make_hello(
                             pid,
                             Some(self.whatami),
-                            Some(self.manager().await.get_locators().await.clone()),
+                            Some(self.manager().await.get_locators().clone()),
                             None,
                         );
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
@@ -738,7 +738,7 @@ impl SessionOrchestrator {
 
     pub async fn close(&mut self) -> ZResult<()> {
         log::trace!("SessionOrchestrator::close())");
-        for session in &mut self.manager().await.get_sessions().await {
+        for session in &mut self.manager().await.get_sessions() {
             session.close().await?;
         }
         Ok(())

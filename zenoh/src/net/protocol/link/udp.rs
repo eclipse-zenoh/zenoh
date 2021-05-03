@@ -15,7 +15,7 @@ use super::session::SessionManager;
 use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
 use async_std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Mutex, Weak};
+use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
@@ -23,6 +23,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 use zenoh_util::collections::{RecyclingObject, RecyclingObjectPool};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -164,7 +165,7 @@ struct LinkUdpUnconnected {
     socket: Weak<UdpSocket>,
     links: LinkHashMap,
     input: Mvar<LinkInput>,
-    leftover: Mutex<Option<LinkLeftOver>>,
+    leftover: AsyncMutex<Option<LinkLeftOver>>,
 }
 
 impl LinkUdpUnconnected {
@@ -211,8 +212,7 @@ impl LinkUdpUnconnected {
 
     async fn close(&self, src_addr: SocketAddr, dst_addr: SocketAddr) -> ZResult<()> {
         // Delete the link from the list of links
-        let mut guard = zasynclock!(self.links);
-        guard.remove(&(src_addr, dst_addr));
+        zlock!(self.links).remove(&(src_addr, dst_addr));
         Ok(())
     }
 }
@@ -348,14 +348,14 @@ impl ListenerUdp {
 
 pub struct LinkManagerUdp {
     manager: SessionManager,
-    listeners: Arc<Mutex<HashMap<SocketAddr, ListenerUdp>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUdp>>>,
 }
 
 impl LinkManagerUdp {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
-            listeners: Arc::new(Mutex::new(HashMap::new())),
+            listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -438,47 +438,50 @@ impl LinkManagerTrait for LinkManagerUdp {
         let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
+        let c_listeners = self.listeners.clone();
+        let c_addr = local_addr;
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_read_task(socket, c_active, c_signal, c_manager).await
+            let res = accept_read_task(socket, c_active, c_signal, c_manager).await;
+            zwrite!(c_listeners).remove(&c_addr);
+            res
         });
 
         let listener = ListenerUdp::new(active, signal, handle);
         // Update the list of active listeners on the manager
-        zasynclock!(self.listeners).insert(local_addr, listener);
+        zwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(Locator::Udp(LocatorUdp::SocketAddr(local_addr)))
     }
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
         let addr = get_udp_addr(locator).await?;
+
         // Stop the listener
-        match zasynclock!(self.listeners).remove(&addr) {
-            Some(listener) => {
-                listener.active.store(false, Ordering::Release);
-                listener.signal.trigger();
-                listener.handle.await
-            }
-            None => {
-                let e = format!(
-                    "Can not delete the UDP listener because it has not been found: {}",
-                    addr
-                );
-                log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink { descr: e })
-            }
-        }
+        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+            let e = format!(
+                "Can not delete the UDP listener because it has not been found: {}",
+                addr
+            );
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        // Send the stop signal
+        listener.active.store(false, Ordering::Release);
+        listener.signal.trigger();
+        listener.handle.await
     }
 
-    async fn get_listeners(&self) -> Vec<Locator> {
-        zasynclock!(self.listeners)
+    fn get_listeners(&self) -> Vec<Locator> {
+        zread!(self.listeners)
             .keys()
             .map(|x| Locator::Udp(LocatorUdp::SocketAddr(*x)))
             .collect()
     }
 
-    async fn get_locators(&self) -> Vec<Locator> {
-        self.get_listeners().await
+    fn get_locators(&self) -> Vec<Locator> {
+        self.get_listeners()
     }
 }
 
@@ -493,21 +496,19 @@ async fn accept_read_task(
 
     macro_rules! zaddlink {
         ($src:expr, $dst:expr, $link:expr) => {
-            zasynclock!(links).insert(($src, $dst), $link);
+            zlock!(links).insert(($src, $dst), $link);
         };
     }
 
     macro_rules! zdellink {
         ($src:expr, $dst:expr) => {
-            zasynclock!(links).remove(&($src, $dst));
+            zlock!(links).remove(&($src, $dst));
         };
     }
 
     macro_rules! zgetlink {
         ($src:expr, $dst:expr) => {
-            zasynclock!(links)
-                .get(&($src, $dst))
-                .map(|link| link.clone())
+            zlock!(links).get(&($src, $dst)).map(|link| link.clone())
         };
     }
 
@@ -574,7 +575,7 @@ async fn accept_read_task(
                         socket: Arc::downgrade(&socket),
                         links: links.clone(),
                         input: Mvar::new(),
-                        leftover: Mutex::new(None),
+                        leftover: AsyncMutex::new(None),
                     });
                     zaddlink!(src_addr, dst_addr, Arc::downgrade(&unconnected));
                     // Create the new link object

@@ -179,8 +179,8 @@ pub trait LinkManagerTrait {
         property: Option<&LocatorProperty>,
     ) -> ZResult<Locator>;
     async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
-    async fn get_listeners(&self) -> Vec<Locator>;
-    async fn get_locators(&self) -> Vec<Locator>;
+    fn get_listeners(&self) -> Vec<Locator>;
+    fn get_locators(&self) -> Vec<Locator>;
 }
 
 pub type LinkManager = Arc<dyn LinkManagerTrait + Send + Sync>;

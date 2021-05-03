@@ -16,7 +16,7 @@ use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
 use async_std::fs;
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Mutex, RwLock};
+use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
@@ -25,12 +25,13 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use webpki::{DnsName, DnsNameRef};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::Signal;
-use zenoh_util::{zasynclock, zasyncread, zasyncwrite, zerror, zerror2};
+use zenoh_util::{zasynclock, zerror, zerror2, zread, zwrite};
 
 // Default ALPN protocol
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
@@ -300,8 +301,8 @@ impl From<(ClientConfigBuilder, ServerConfigBuilder)> for LocatorProperty {
 pub struct LinkQuic {
     connection: NewConnection,
     src_addr: SocketAddr,
-    send: Mutex<SendStream>,
-    recv: Mutex<RecvStream>,
+    send: AsyncMutex<SendStream>,
+    recv: AsyncMutex<RecvStream>,
 }
 
 impl LinkQuic {
@@ -315,8 +316,8 @@ impl LinkQuic {
         LinkQuic {
             connection,
             src_addr,
-            send: Mutex::new(send),
-            recv: Mutex::new(recv),
+            send: AsyncMutex::new(send),
+            recv: AsyncMutex::new(recv),
         }
     }
 
@@ -580,14 +581,14 @@ impl LinkManagerTrait for LinkManagerQuic {
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_task(endpoint, acceptor, c_active, c_signal, c_manager).await;
-            zasyncwrite!(c_listeners).remove(&c_addr);
+            zwrite!(c_listeners).remove(&c_addr);
             res
         });
 
         // Initialize the QuicAcceptor
         let listener = ListenerQuic::new(active, signal, handle);
         // Update the list of active listeners on the manager
-        zasyncwrite!(self.listeners).insert(local_addr, listener);
+        zwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(Locator::Quic(LocatorQuic::SocketAddr(local_addr)))
     }
@@ -596,36 +597,31 @@ impl LinkManagerTrait for LinkManagerQuic {
         let addr = get_quic_addr(locator).await?;
 
         // Stop the listener
-        let mut guard = zasyncwrite!(self.listeners);
-        match guard.remove(&addr) {
-            Some(listener) => {
-                drop(guard);
-                // Send the stop signal
-                listener.active.store(false, Ordering::Release);
-                listener.signal.trigger();
-                listener.handle.await
-            }
-            None => {
-                let e = format!(
-                    "Can not delete the QUIC listener because it has not been found: {}",
-                    addr
-                );
-                log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink { descr: e })
-            }
-        }
+        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+            let e = format!(
+                "Can not delete the QUIC listener because it has not been found: {}",
+                addr
+            );
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        // Send the stop signal
+        listener.active.store(false, Ordering::Release);
+        listener.signal.trigger();
+        listener.handle.await
     }
 
-    async fn get_listeners(&self) -> Vec<Locator> {
-        zasyncread!(self.listeners)
+    fn get_listeners(&self) -> Vec<Locator> {
+        zread!(self.listeners)
             .keys()
             .map(|x| Locator::Quic(LocatorQuic::SocketAddr(*x)))
             .collect()
     }
 
-    async fn get_locators(&self) -> Vec<Locator> {
+    fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
-        for addr in zasyncread!(self.listeners).keys() {
+        for addr in zread!(self.listeners).keys() {
             if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {

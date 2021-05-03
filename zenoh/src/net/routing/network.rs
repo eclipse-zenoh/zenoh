@@ -193,7 +193,7 @@ impl Network {
             },
             whatami: Some(self.graph[idx].whatami),
             locators: if idx == self.idx {
-                Some(self.orchestrator.manager().await.get_locators().await)
+                Some(self.orchestrator.manager().await.get_locators())
             } else {
                 self.graph[idx].locators.clone()
             },
@@ -601,7 +601,7 @@ impl Network {
                 sn: self.graph[self.idx].sn,
                 pid: None,
                 whatami: Some(self.graph[self.idx].whatami),
-                locators: Some(self.orchestrator.manager().await.get_locators().await),
+                locators: Some(self.orchestrator.manager().await.get_locators()),
                 links,
             }],
             None,

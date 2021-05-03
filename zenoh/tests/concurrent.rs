@@ -188,7 +188,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         println!("[Session Peer 01e] => Waiting... OK");
 
         // Verify that the session has been correctly open
-        assert_eq!(peer01_manager.get_sessions().await.len(), 1);
+        assert_eq!(peer01_manager.get_sessions().len(), 1);
         let s02 = peer01_manager.get_session(&c_pid02).await.unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
@@ -291,9 +291,9 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         // Verify that the session has been correctly open
         println!(
             "[Session Peer 02e] => Sessions: {:?}",
-            peer02_manager.get_sessions().await
+            peer02_manager.get_sessions()
         );
-        assert_eq!(peer02_manager.get_sessions().await.len(), 1);
+        assert_eq!(peer02_manager.get_sessions().len(), 1);
         let s01 = peer02_manager.get_session(&c_pid01).await.unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
