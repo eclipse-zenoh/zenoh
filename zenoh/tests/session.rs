@@ -138,7 +138,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     println!("Session Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Open Close [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = router_manager.get_listeners();
     println!("Session Open Close [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 

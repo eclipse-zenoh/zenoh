@@ -153,7 +153,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             println!("[Session Peer 01a] => Adding locator {:?}: {:?}", loc, res);
             assert!(res.is_ok());
         }
-        let locs = peer01_manager.get_listeners().await;
+        let locs = peer01_manager.get_listeners();
         println!(
             "[Session Peer 01b] => Getting locators: {:?} {:?}",
             c_loc01, locs
@@ -189,7 +189,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
         // Verify that the session has been correctly open
         assert_eq!(peer01_manager.get_sessions().len(), 1);
-        let s02 = peer01_manager.get_session(&c_pid02).await.unwrap();
+        let s02 = peer01_manager.get_session(&c_pid02).unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_loc01.len() + c_loc02.len()
@@ -255,7 +255,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             println!("[Session Peer 02a] => Adding locator {:?}: {:?}", loc, res);
             assert!(res.is_ok());
         }
-        let locs = peer02_manager.get_listeners().await;
+        let locs = peer02_manager.get_listeners();
         println!(
             "[Session Peer 02b] => Getting locators: {:?} {:?}",
             c_loc02, locs
@@ -294,7 +294,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             peer02_manager.get_sessions()
         );
         assert_eq!(peer02_manager.get_sessions().len(), 1);
-        let s01 = peer02_manager.get_session(&c_pid01).await.unwrap();
+        let s01 = peer02_manager.get_session(&c_pid01).unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_loc01.len() + c_loc02.len()

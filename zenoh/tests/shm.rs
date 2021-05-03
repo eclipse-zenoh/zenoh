@@ -213,20 +213,10 @@ mod tests {
 
         // Retrieve the sessions
         println!("Session SHM [2a]");
-        let peer_shm02_session = peer_shm01_manager
-            .get_session(&peer_shm02)
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let peer_shm02_session = peer_shm01_manager.get_session(&peer_shm02).unwrap();
 
         println!("Session SHM [2b]");
-        let peer_net01_session = peer_shm01_manager
-            .get_session(&peer_net01)
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let peer_net01_session = peer_shm01_manager.get_session(&peer_net01).unwrap();
 
         // Send the message
         println!("Session SHM [3a]");

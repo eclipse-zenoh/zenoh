@@ -209,7 +209,7 @@ async fn authenticator_user_password(
     println!("Session Authenticator UserPassword [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Authenticator UserPassword [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = router_manager.get_listeners();
     println!("Session Authenticator UserPassword [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
@@ -350,7 +350,7 @@ async fn authenticator_shared_memory(
     println!("Session Authenticator SharedMemory [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Authenticator SharedMemory [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = router_manager.get_listeners();
     println!("Session Authenticator SharedMemory 1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 

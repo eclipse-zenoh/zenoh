@@ -193,12 +193,7 @@ async fn open_session(
             .unwrap();
     }
 
-    let client_session = client_manager
-        .get_session(&router_id)
-        .timeout(TIMEOUT)
-        .await
-        .unwrap()
-        .unwrap();
+    let client_session = client_manager.get_session(&router_id).unwrap();
 
     // Return the handlers
     (router_manager, router_handler, client_session)
