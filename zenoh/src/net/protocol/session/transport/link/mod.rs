@@ -217,16 +217,17 @@ async fn rx_task_stream(
     active: Arc<AtomicBool>,
 ) -> ZResult<()> {
     enum Action {
-        Read,
+        Read(usize),
         Stop,
     }
 
-    async fn read(link: &Link, buffer: &mut [u8], lease: Duration) -> ZResult<Action> {
-        link.read_exact(buffer).timeout(lease).await.map_err(|_| {
-            let e = format!("{}: expired after {} milliseconds", link, lease.as_millis());
-            zerror2!(ZErrorKind::IoError { descr: e })
-        })??;
-        Ok(Action::Read)
+    async fn read(link: &Link, buffer: &mut [u8]) -> ZResult<Action> {
+        // 16 bits for reading the batch length
+        let mut length = [0u8, 0u8];
+        link.read_exact(&mut length).await?;
+        let n = u16::from_le_bytes(length) as usize;
+        link.read_exact(&mut buffer[0..n]).await?;
+        Ok(Action::Read(n))
     }
 
     async fn stop(signal: Signal) -> ZResult<Action> {
@@ -237,8 +238,6 @@ async fn rx_task_stream(
     let lease = Duration::from_millis(lease);
     // The RBuf to read a message batch onto
     let mut rbuf = RBuf::new();
-    // 16 bits for reading the batch length
-    let mut length = [0u8, 0u8];
     // The pool of buffers
     let n = 1 + (*RX_BUFF_SIZE / link.get_mtu());
     let pool = RecyclingObjectPool::new(n, || vec![0u8; link.get_mtu()].into_boxed_slice());
@@ -246,24 +245,21 @@ async fn rx_task_stream(
         // Clear the RBuf
         rbuf.clear();
 
-        // Async read from the underlying link
-        let action = read(&link, &mut length, lease)
-            .race(stop(signal.clone()))
-            .await?;
-        let to_read = match action {
-            Action::Read => u16::from_le_bytes(length) as usize,
-            Action::Stop => return Ok(()),
-        };
-
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
-        let action = read(&link, &mut buffer[0..to_read], lease)
+        // Async read from the underlying link
+        let action = read(&link, &mut buffer)
             .race(stop(signal.clone()))
-            .await?;
+            .timeout(lease)
+            .await
+            .map_err(|_| {
+                let e = format!("{}: expired after {} milliseconds", link, lease.as_millis());
+                zerror2!(ZErrorKind::IoError { descr: e })
+            })??;
         match action {
-            Action::Read => {
-                rbuf.add_slice(ArcSlice::new(buffer.into(), 0, to_read));
+            Action::Read(n) => {
+                rbuf.add_slice(ArcSlice::new(buffer.into(), 0, n));
 
                 while rbuf.can_read() {
                     match rbuf.read_session_message() {
@@ -293,11 +289,8 @@ async fn rx_task_dgram(
         Stop,
     }
 
-    async fn read(link: &Link, buffer: &mut [u8], lease: Duration) -> ZResult<Action> {
-        let n = link.read(buffer).timeout(lease).await.map_err(|_| {
-            let e = format!("{}: expired after {} milliseconds", link, lease.as_millis());
-            zerror2!(ZErrorKind::IoError { descr: e })
-        })??;
+    async fn read(link: &Link, buffer: &mut [u8]) -> ZResult<Action> {
+        let n = link.read(buffer).await?;
         Ok(Action::Read(n))
     }
 
@@ -321,7 +314,12 @@ async fn rx_task_dgram(
         // Async read from the underlying link
         let action = read(&link, &mut buffer, lease)
             .race(stop(signal.clone()))
-            .await?;
+            .timeout(lease)
+            .await
+            .map_err(|_| {
+                let e = format!("{}: expired after {} milliseconds", link, lease.as_millis());
+                zerror2!(ZErrorKind::IoError { descr: e })
+            })??;
         match action {
             Action::Read(n) => {
                 if n == 0 {
