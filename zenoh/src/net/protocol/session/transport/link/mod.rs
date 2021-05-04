@@ -312,7 +312,7 @@ async fn rx_task_dgram(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let action = read(&link, &mut buffer, lease)
+        let action = read(&link, &mut buffer)
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
