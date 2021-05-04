@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use async_std::fs;
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use async_std::prelude::*;
@@ -320,8 +320,11 @@ impl LinkQuic {
             recv: AsyncMutex::new(recv),
         }
     }
+}
 
-    pub(crate) async fn close(&self) -> ZResult<()> {
+#[async_trait]
+impl LinkTrait for LinkQuic {
+    async fn close(&self) -> ZResult<()> {
         log::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
         let mut guard = zasynclock!(self.send);
@@ -332,7 +335,7 @@ impl LinkQuic {
         Ok(())
     }
 
-    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.send);
         guard.write(buffer).await.map_err(|e| {
             log::trace!("Write error on QUIC link {}: {}", self, e);
@@ -341,7 +344,7 @@ impl LinkQuic {
         })
     }
 
-    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.send);
         guard.write_all(buffer).await.map_err(|e| {
             log::trace!("Write error on QUIC link {}: {}", self, e);
@@ -350,7 +353,7 @@ impl LinkQuic {
         })
     }
 
-    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.recv);
         guard
             .read(buffer)
@@ -371,7 +374,7 @@ impl LinkQuic {
             })
     }
 
-    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.recv);
         guard.read_exact(buffer).await.map_err(|e| {
             let e = format!("Read error on QUIC link {}: {}", self, e);
@@ -381,29 +384,29 @@ impl LinkQuic {
     }
 
     #[inline(always)]
-    pub(crate) fn get_src(&self) -> Locator {
+    fn get_src(&self) -> Locator {
         Locator::Quic(LocatorQuic::SocketAddr(self.src_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_dst(&self) -> Locator {
+    fn get_dst(&self) -> Locator {
         Locator::Quic(LocatorQuic::SocketAddr(
             self.connection.connection.remote_address(),
         ))
     }
 
     #[inline(always)]
-    pub(crate) fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> usize {
         *QUIC_DEFAULT_MTU
     }
 
     #[inline(always)]
-    pub(crate) fn is_reliable(&self) -> bool {
+    fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline(always)]
-    pub(crate) fn is_streamed(&self) -> bool {
+    fn is_streamed(&self) -> bool {
         true
     }
 }
@@ -529,7 +532,7 @@ impl LinkManagerTrait for LinkManagerQuic {
 
         let link = Arc::new(LinkQuic::new(quic_conn, src_addr, send, recv));
 
-        Ok(Link::Quic(link))
+        Ok(Link(link))
     }
 
     async fn new_listener(
@@ -725,7 +728,7 @@ async fn accept_task(
         let link = Arc::new(LinkQuic::new(quic_conn, src_addr, send, recv));
 
         // Communicate the new link to the initial session manager
-        manager.handle_new_link(Link::Quic(link), None).await;
+        manager.handle_new_link(Link(link), None).await;
     }
 
     Ok(())

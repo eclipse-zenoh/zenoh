@@ -99,6 +99,12 @@ impl<T> DerefMut for RecyclingObject<T> {
     }
 }
 
+impl<T> From<T> for RecyclingObject<T> {
+    fn from(obj: T) -> RecyclingObject<T> {
+        RecyclingObject::new(obj, Weak::new())
+    }
+}
+
 impl<T> Drop for RecyclingObject<T> {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.upgrade() {

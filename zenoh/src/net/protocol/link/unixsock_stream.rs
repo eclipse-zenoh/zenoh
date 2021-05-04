@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::{Path, PathBuf};
 use async_std::prelude::*;
@@ -134,8 +134,11 @@ impl LinkUnixSocketStream {
             dst_path,
         }
     }
+}
 
-    pub(crate) async fn close(&self) -> ZResult<()> {
+#[async_trait]
+impl LinkTrait for LinkUnixSocketStream {
+    async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UnixSocketStream link: {}", self);
         // Close the underlying UnixSocketStream socket
         let res = self.socket.shutdown(Shutdown::Both);
@@ -147,7 +150,7 @@ impl LinkUnixSocketStream {
         })
     }
 
-    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         (&self.socket).write(buffer).await.map_err(|e| {
             let e = format!("Write error on UnixSocketStream link {}: {}", self, e);
             log::trace!("{}", e);
@@ -155,7 +158,7 @@ impl LinkUnixSocketStream {
         })
     }
 
-    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         (&self.socket).write_all(buffer).await.map_err(|e| {
             let e = format!("Write error on UnixSocketStream link {}: {}", self, e);
             log::trace!("{}", e);
@@ -163,7 +166,7 @@ impl LinkUnixSocketStream {
         })
     }
 
-    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         (&self.socket).read(buffer).await.map_err(|e| {
             let e = format!("Read error on UnixSocketStream link {}: {}", self, e);
             log::trace!("{}", e);
@@ -171,7 +174,7 @@ impl LinkUnixSocketStream {
         })
     }
 
-    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         (&self.socket).read_exact(buffer).await.map_err(|e| {
             let e = format!("Read error on UnixSocketStream link {}: {}", self, e);
             log::trace!("{}", e);
@@ -180,31 +183,31 @@ impl LinkUnixSocketStream {
     }
 
     #[inline(always)]
-    pub(crate) fn get_src(&self) -> Locator {
+    fn get_src(&self) -> Locator {
         Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
             self.src_path.clone(),
         )))
     }
 
     #[inline(always)]
-    pub(crate) fn get_dst(&self) -> Locator {
+    fn get_dst(&self) -> Locator {
         Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
             self.dst_path.clone(),
         )))
     }
 
     #[inline(always)]
-    pub(crate) fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> usize {
         *UNIXSOCKSTREAM_DEFAULT_MTU
     }
 
     #[inline(always)]
-    pub(crate) fn is_reliable(&self) -> bool {
+    fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline(always)]
-    pub(crate) fn is_streamed(&self) -> bool {
+    fn is_streamed(&self) -> bool {
         true
     }
 }
@@ -348,7 +351,7 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
             remote_path_str,
         ));
 
-        Ok(Link::UnixSocketStream(link))
+        Ok(Link(link))
     }
 
     async fn new_listener(
@@ -611,9 +614,7 @@ async fn accept_task(
         ));
 
         // Communicate the new link to the initial session manager
-        manager
-            .handle_new_link(Link::UnixSocketStream(link), None)
-            .await;
+        manager.handle_new_link(Link(link), None).await;
     }
 
     Ok(())

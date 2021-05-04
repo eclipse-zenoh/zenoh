@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_rustls::{rustls::internal::pemfile, TlsAcceptor, TlsConnector, TlsStream};
@@ -374,8 +374,11 @@ impl LinkTls {
     fn get_sock_mut(&self) -> &mut TlsStream<TcpStream> {
         unsafe { &mut *self.inner.get() }
     }
+}
 
-    pub(crate) async fn close(&self) -> ZResult<()> {
+#[async_trait]
+impl LinkTrait for LinkTls {
+    async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
         let _guard = zasynclock!(self.write_mtx);
@@ -393,7 +396,7 @@ impl LinkTls {
         })
     }
 
-    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write(buffer).await.map_err(|e| {
             log::trace!("Write error on TLS link {}: {}", self, e);
@@ -403,7 +406,7 @@ impl LinkTls {
         })
     }
 
-    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write_all(buffer).await.map_err(|e| {
             log::trace!("Write error on TLS link {}: {}", self, e);
@@ -413,7 +416,7 @@ impl LinkTls {
         })
     }
 
-    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read(buffer).await.map_err(|e| {
             log::trace!("Read error on TLS link {}: {}", self, e);
@@ -423,7 +426,7 @@ impl LinkTls {
         })
     }
 
-    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
             log::trace!("Read error on TLS link {}: {}", self, e);
@@ -434,27 +437,27 @@ impl LinkTls {
     }
 
     #[inline(always)]
-    pub(crate) fn get_src(&self) -> Locator {
+    fn get_src(&self) -> Locator {
         Locator::Tls(LocatorTls::SocketAddr(self.src_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_dst(&self) -> Locator {
+    fn get_dst(&self) -> Locator {
         Locator::Tls(LocatorTls::SocketAddr(self.dst_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> usize {
         *TLS_DEFAULT_MTU
     }
 
     #[inline(always)]
-    pub(crate) fn is_reliable(&self) -> bool {
+    fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline(always)]
-    pub(crate) fn is_streamed(&self) -> bool {
+    fn is_streamed(&self) -> bool {
         true
     }
 }
@@ -566,7 +569,7 @@ impl LinkManagerTrait for LinkManagerTls {
 
         let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
 
-        Ok(Link::Tls(link))
+        Ok(Link(link))
     }
 
     async fn new_listener(
@@ -747,7 +750,7 @@ async fn accept_task(
         let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial session manager
-        manager.handle_new_link(Link::Tls(link), None).await;
+        manager.handle_new_link(Link(link), None).await;
     }
 
     Ok(())
