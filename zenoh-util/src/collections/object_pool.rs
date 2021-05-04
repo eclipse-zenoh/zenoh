@@ -76,6 +76,14 @@ impl<T> RecyclingObject<T> {
     }
 }
 
+impl<T: PartialEq> Eq for RecyclingObject<T> {}
+
+impl<T: PartialEq> PartialEq for RecyclingObject<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.object == other.object
+    }
+}
+
 impl<T> Deref for RecyclingObject<T> {
     type Target = T;
     #[inline]
@@ -103,6 +111,6 @@ impl<T> Drop for RecyclingObject<T> {
 
 impl<T: fmt::Debug> fmt::Debug for RecyclingObject<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("").field("inner", &self).finish()
+        f.debug_struct("").field("inner", &self.object).finish()
     }
 }
