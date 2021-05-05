@@ -92,7 +92,7 @@ pub(crate) struct Network {
 }
 
 impl Network {
-    pub(crate) async fn new(
+    pub(crate) fn new(
         name: String,
         pid: PeerId,
         orchestrator: SessionOrchestrator,
@@ -155,6 +155,11 @@ impl Network {
             .unwrap()
     }
 
+    #[inline]
+    fn get_locators(&self) -> Vec<Locator> {
+        async_std::task::block_on(async { self.orchestrator.manager().await.get_locators() })
+    }
+
     fn add_node(&mut self, node: Node) -> NodeIndex {
         let pid = node.pid.clone();
         let idx = self.graph.add_node(node);
@@ -166,7 +171,7 @@ impl Network {
         idx
     }
 
-    async fn make_link_state(&self, idx: NodeIndex, details: bool) -> LinkState {
+    fn make_link_state(&self, idx: NodeIndex, details: bool) -> LinkState {
         let links = self.graph[idx]
             .links
             .iter()
@@ -193,7 +198,7 @@ impl Network {
             },
             whatami: Some(self.graph[idx].whatami),
             locators: if idx == self.idx {
-                Some(self.orchestrator.manager().await.get_locators())
+                Some(self.get_locators())
             } else {
                 self.graph[idx].locators.clone()
             },
@@ -201,16 +206,16 @@ impl Network {
         }
     }
 
-    async fn make_msg(&self, idxs: Vec<(NodeIndex, bool)>) -> ZenohMessage {
+    fn make_msg(&self, idxs: Vec<(NodeIndex, bool)>) -> ZenohMessage {
         let mut list = vec![];
         for (idx, details) in idxs {
-            list.push(self.make_link_state(idx, details).await);
+            list.push(self.make_link_state(idx, details));
         }
         ZenohMessage::make_link_state_list(list, None)
     }
 
-    async fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, session: &Session) {
-        let msg = self.make_msg(idxs).await;
+    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, session: &Session) {
+        let msg = self.make_msg(idxs);
         log::trace!(
             "{} Send to {} {:?}",
             self.name,
@@ -222,11 +227,11 @@ impl Network {
         }
     }
 
-    async fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut predicate: P)
+    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut predicate: P)
     where
         P: FnMut(&Link) -> bool,
     {
-        let msg = self.make_msg(idxs).await;
+        let msg = self.make_msg(idxs);
         for link in self.links.values() {
             if predicate(link) {
                 log::trace!(
@@ -256,7 +261,7 @@ impl Network {
         self.graph.update_edge(idx1, idx2, weight);
     }
 
-    pub(crate) async fn link_states(
+    pub(crate) fn link_states(
         &mut self,
         link_states: Vec<LinkState>,
         src: PeerId,
@@ -505,18 +510,17 @@ impl Network {
                         self.send_on_link(
                             [&new_idxs[..], &updated_idxs[..]].concat(),
                             &link.session,
-                        )
-                        .await;
+                        );
                     }
                 } else if !new_idxs.is_empty() {
-                    self.send_on_link(new_idxs.clone(), &link.session).await;
+                    self.send_on_link(new_idxs.clone(), &link.session);
                 }
             }
         }
         removed
     }
 
-    pub(crate) async fn add_link(&mut self, session: Session) -> usize {
+    pub(crate) fn add_link(&mut self, session: Session) -> usize {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -554,21 +558,19 @@ impl Network {
         if new {
             self.send_on_links(vec![(idx, true), (self.idx, false)], |link| {
                 link.session.get_pid().unwrap() != pid
-            })
-            .await;
+            });
         } else {
             self.send_on_links(vec![(self.idx, false)], |link| {
                 link.session.get_pid().unwrap() != pid
-            })
-            .await;
+            });
         }
 
         let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
-        self.send_on_link(idxs, &session).await;
+        self.send_on_link(idxs, &session);
         free_index
     }
 
-    pub(crate) async fn remove_link(&mut self, session: &Session) -> Vec<(NodeIndex, Node)> {
+    pub(crate) fn remove_link(&mut self, session: &Session) -> Vec<(NodeIndex, Node)> {
         let pid = session.get_pid().unwrap();
         log::trace!("{} remove_link {}", self.name, pid);
         self.links
@@ -601,7 +603,7 @@ impl Network {
                 sn: self.graph[self.idx].sn,
                 pid: None,
                 whatami: Some(self.graph[self.idx].whatami),
-                locators: Some(self.orchestrator.manager().await.get_locators()),
+                locators: Some(self.get_locators()),
                 links,
             }],
             None,
@@ -641,7 +643,7 @@ impl Network {
         removed
     }
 
-    pub(crate) async fn compute_trees(&mut self) -> Vec<Vec<NodeIndex>> {
+    pub(crate) fn compute_trees(&mut self) -> Vec<Vec<NodeIndex>> {
         let indexes = self.graph.node_indices().collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
 

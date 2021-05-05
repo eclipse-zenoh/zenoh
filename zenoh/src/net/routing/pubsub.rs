@@ -11,12 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::sync::RwLock;
 use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::zasyncread;
+use zenoh_util::zread;
 
 use super::protocol::core::{
     whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode, ZInt,
@@ -30,7 +31,7 @@ use super::resource::{elect_router, PullCaches, Resource, Route, SessionContext}
 use super::router::Tables;
 
 #[inline]
-async fn send_sourced_subscription_to_net_childs(
+fn send_sourced_subscription_to_net_childs(
     tables: &Tables,
     net: &Network,
     childs: &[NodeIndex],
@@ -44,7 +45,7 @@ async fn send_sourced_subscription_to_net_childs(
             match tables.get_face(&net.graph[*child].pid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
-                        let reskey = Resource::decl_key(res, &mut someface).await;
+                        let reskey = Resource::decl_key(res, &mut someface);
 
                         log::debug!("Send subscription {} on {}", res.name(), someface);
 
@@ -61,7 +62,7 @@ async fn send_sourced_subscription_to_net_childs(
     }
 }
 
-async fn propagate_simple_subscription(
+fn propagate_simple_subscription(
     tables: &mut Tables,
     res: &Arc<Resource>,
     sub_info: &SubInfo,
@@ -77,13 +78,13 @@ async fn propagate_simple_subscription(
             }
         {
             get_mut_unchecked(dst_face).local_subs.push(res.clone());
-            let reskey = Resource::decl_key(res, dst_face).await;
+            let reskey = Resource::decl_key(res, dst_face);
             dst_face.primitives.decl_subscriber(&reskey, sub_info, None);
         }
     }
 }
 
-async fn propagate_sourced_subscription(
+fn propagate_sourced_subscription(
     tables: &Tables,
     res: &Arc<Resource>,
     sub_info: &SubInfo,
@@ -103,8 +104,7 @@ async fn propagate_sourced_subscription(
                     src_face,
                     sub_info,
                     Some(tree_sid.index() as ZInt),
-                )
-                .await;
+                );
             } else {
                 log::trace!("Tree for node {} not yet ready", source);
             }
@@ -117,7 +117,7 @@ async fn propagate_sourced_subscription(
     }
 }
 
-async fn register_router_subscription(
+fn register_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -140,20 +140,19 @@ async fn register_router_subscription(
         }
 
         // Propagate subscription to routers
-        propagate_sourced_subscription(tables, res, sub_info, Some(face), &router, whatami::ROUTER)
-            .await;
+        propagate_sourced_subscription(tables, res, sub_info, Some(face), &router, whatami::ROUTER);
 
         // Propagate subscription to peers
         if face.whatami != whatami::PEER {
-            register_peer_subscription(tables, face, res, sub_info, tables.pid.clone()).await
+            register_peer_subscription(tables, face, res, sub_info, tables.pid.clone())
         }
     }
 
     // Propagate subscription to clients
-    propagate_simple_subscription(tables, res, sub_info, face).await;
+    propagate_simple_subscription(tables, res, sub_info, face);
 }
 
-pub async fn declare_router_subscription(
+pub fn declare_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -165,7 +164,7 @@ pub async fn declare_router_subscription(
         Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
-            register_router_subscription(tables, face, &mut res, sub_info, router).await;
+            register_router_subscription(tables, face, &mut res, sub_info, router);
 
             compute_matches_data_routes(tables, &mut res);
         }
@@ -173,7 +172,7 @@ pub async fn declare_router_subscription(
     }
 }
 
-async fn register_peer_subscription(
+fn register_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -192,12 +191,11 @@ async fn register_peer_subscription(
         }
 
         // Propagate subscription to peers
-        propagate_sourced_subscription(tables, res, sub_info, Some(face), &peer, whatami::PEER)
-            .await;
+        propagate_sourced_subscription(tables, res, sub_info, Some(face), &peer, whatami::PEER);
     }
 }
 
-pub async fn declare_peer_subscription(
+pub fn declare_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -209,7 +207,7 @@ pub async fn declare_peer_subscription(
         Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
-            register_peer_subscription(tables, face, &mut res, sub_info, peer).await;
+            register_peer_subscription(tables, face, &mut res, sub_info, peer);
 
             if tables.whatami == whatami::ROUTER {
                 let mut propa_sub_info = sub_info.clone();
@@ -220,8 +218,7 @@ pub async fn declare_peer_subscription(
                     &mut res,
                     &propa_sub_info,
                     tables.pid.clone(),
-                )
-                .await;
+                );
             }
 
             compute_matches_data_routes(tables, &mut res);
@@ -230,7 +227,7 @@ pub async fn declare_peer_subscription(
     }
 }
 
-async fn register_client_subscription(
+fn register_client_subscription(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -269,7 +266,7 @@ async fn register_client_subscription(
     get_mut_unchecked(face).remote_subs.push(res.clone());
 }
 
-pub async fn declare_client_subscription(
+pub fn declare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -281,7 +278,7 @@ pub async fn declare_client_subscription(
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
 
-            register_client_subscription(tables, face, &mut res, sub_info).await;
+            register_client_subscription(tables, face, &mut res, sub_info);
             match tables.whatami {
                 whatami::ROUTER => {
                     let mut propa_sub_info = sub_info.clone();
@@ -292,8 +289,7 @@ pub async fn declare_client_subscription(
                         &mut res,
                         &propa_sub_info,
                         tables.pid.clone(),
-                    )
-                    .await;
+                    );
                 }
                 whatami::PEER => {
                     let mut propa_sub_info = sub_info.clone();
@@ -304,11 +300,10 @@ pub async fn declare_client_subscription(
                         &mut res,
                         &propa_sub_info,
                         tables.pid.clone(),
-                    )
-                    .await;
+                    );
                 }
                 _ => {
-                    propagate_simple_subscription(tables, &res, sub_info, face).await;
+                    propagate_simple_subscription(tables, &res, sub_info, face);
                 }
             }
 
@@ -319,7 +314,7 @@ pub async fn declare_client_subscription(
 }
 
 #[inline]
-async fn send_forget_sourced_subscription_to_net_childs(
+fn send_forget_sourced_subscription_to_net_childs(
     tables: &Tables,
     net: &Network,
     childs: &[NodeIndex],
@@ -332,7 +327,7 @@ async fn send_forget_sourced_subscription_to_net_childs(
             match tables.get_face(&net.graph[*child].pid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
-                        let reskey = Resource::decl_key(res, &mut someface).await;
+                        let reskey = Resource::decl_key(res, &mut someface);
 
                         log::debug!("Send forget subscription {} on {}", res.name(), someface);
 
@@ -349,7 +344,7 @@ async fn send_forget_sourced_subscription_to_net_childs(
     }
 }
 
-async fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
+fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
     for face in tables.faces.values_mut() {
         if face.local_subs.contains(res) {
             let reskey = Resource::get_best_key(res, "", face.id);
@@ -360,7 +355,7 @@ async fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Res
     }
 }
 
-async fn propagate_forget_sourced_subscription(
+fn propagate_forget_sourced_subscription(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
@@ -377,8 +372,7 @@ async fn propagate_forget_sourced_subscription(
                 res,
                 src_face,
                 Some(tree_sid.index() as ZInt),
-            )
-            .await;
+            );
         }
         None => log::error!(
             "Error propagating sub {}: cannot get index of {}!",
@@ -388,11 +382,7 @@ async fn propagate_forget_sourced_subscription(
     }
 }
 
-async fn unregister_router_subscription(
-    tables: &mut Tables,
-    res: &mut Arc<Resource>,
-    router: &PeerId,
-) {
+fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, router: &PeerId) {
     log::debug!(
         "Unregister router subscription {} (router: {})",
         res.name(),
@@ -406,24 +396,24 @@ async fn unregister_router_subscription(
     if res.context().router_subs.is_empty() {
         tables.router_subs.retain(|sub| !Arc::ptr_eq(sub, &res));
 
-        undeclare_peer_subscription(tables, None, res, &tables.pid.clone()).await;
-        propagate_forget_simple_subscription(tables, res).await;
+        undeclare_peer_subscription(tables, None, res, &tables.pid.clone());
+        propagate_forget_simple_subscription(tables, res);
     }
 }
 
-async fn undeclare_router_subscription(
+fn undeclare_router_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     router: &PeerId,
 ) {
     if res.context().router_subs.contains(router) {
-        unregister_router_subscription(tables, res, router).await;
-        propagate_forget_sourced_subscription(tables, res, face, router, whatami::ROUTER).await;
+        unregister_router_subscription(tables, res, router);
+        propagate_forget_sourced_subscription(tables, res, face, router, whatami::ROUTER);
     }
 }
 
-pub async fn forget_router_subscription(
+pub fn forget_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -433,7 +423,7 @@ pub async fn forget_router_subscription(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
-                undeclare_router_subscription(tables, Some(face), &mut res, router).await;
+                undeclare_router_subscription(tables, Some(face), &mut res, router);
                 Resource::clean(&mut res)
             }
             None => log::error!("Undeclare unknown router subscription!"),
@@ -442,7 +432,7 @@ pub async fn forget_router_subscription(
     }
 }
 
-async fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &PeerId) {
+fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &PeerId) {
     log::debug!(
         "Unregister peer subscription {} (peer: {})",
         res.name(),
@@ -458,19 +448,19 @@ async fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resourc
     }
 }
 
-async fn undeclare_peer_subscription(
+fn undeclare_peer_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     peer: &PeerId,
 ) {
     if res.context().peer_subs.contains(&peer) {
-        unregister_peer_subscription(tables, res, peer).await;
-        propagate_forget_sourced_subscription(tables, res, face, peer, whatami::PEER).await;
+        unregister_peer_subscription(tables, res, peer);
+        propagate_forget_sourced_subscription(tables, res, face, peer, whatami::PEER);
     }
 }
 
-pub async fn forget_peer_subscription(
+pub fn forget_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -480,7 +470,7 @@ pub async fn forget_peer_subscription(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
-                undeclare_peer_subscription(tables, Some(face), &mut res, peer).await;
+                undeclare_peer_subscription(tables, Some(face), &mut res, peer);
 
                 if tables.whatami == whatami::ROUTER
                     && !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
@@ -491,8 +481,7 @@ pub async fn forget_peer_subscription(
                             .any(|peer| peer != &tables.pid)
                     })
                 {
-                    undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone())
-                        .await;
+                    undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
                 }
 
                 Resource::clean(&mut res)
@@ -503,7 +492,7 @@ pub async fn forget_peer_subscription(
     }
 }
 
-pub(crate) async fn undeclare_client_subscription(
+pub(crate) fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -526,7 +515,7 @@ pub(crate) async fn undeclare_client_subscription(
                         .any(|peer| *peer != tables.pid)
                 })
             {
-                undeclare_router_subscription(tables, None, res, &tables.pid.clone()).await;
+                undeclare_router_subscription(tables, None, res, &tables.pid.clone());
             }
         }
         whatami::PEER => {
@@ -538,12 +527,12 @@ pub(crate) async fn undeclare_client_subscription(
                         .any(|peer| *peer != tables.pid)
                 })
             {
-                undeclare_peer_subscription(tables, None, res, &tables.pid.clone()).await;
+                undeclare_peer_subscription(tables, None, res, &tables.pid.clone());
             }
         }
         _ => {
             if !res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) {
-                propagate_forget_simple_subscription(tables, res).await;
+                propagate_forget_simple_subscription(tables, res);
             }
         }
     }
@@ -587,7 +576,7 @@ pub(crate) async fn undeclare_client_subscription(
     Resource::clean(res)
 }
 
-pub async fn forget_client_subscription(
+pub fn forget_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -596,7 +585,7 @@ pub async fn forget_client_subscription(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
-                undeclare_client_subscription(tables, face, &mut res).await;
+                undeclare_client_subscription(tables, face, &mut res);
             }
             None => log::error!("Undeclare unknown subscription!"),
         },
@@ -604,7 +593,7 @@ pub async fn forget_client_subscription(
     }
 }
 
-pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(crate) fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable, // TODO
         mode: SubMode::Push,
@@ -612,16 +601,12 @@ pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<F
     };
     for sub in &tables.router_subs {
         get_mut_unchecked(face).local_subs.push(sub.clone());
-        let reskey = Resource::decl_key(&sub, face).await;
+        let reskey = Resource::decl_key(&sub, face);
         face.primitives.decl_subscriber(&reskey, &sub_info, None);
     }
 }
 
-pub(crate) async fn pubsub_remove_node(
-    tables: &mut Tables,
-    node: &PeerId,
-    net_type: whatami::Type,
-) {
+pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &PeerId, net_type: whatami::Type) {
     match net_type {
         whatami::ROUTER => {
             for mut res in tables
@@ -631,7 +616,7 @@ pub(crate) async fn pubsub_remove_node(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                unregister_router_subscription(tables, &mut res, node).await;
+                unregister_router_subscription(tables, &mut res, node);
                 Resource::clean(&mut res)
             }
         }
@@ -643,7 +628,7 @@ pub(crate) async fn pubsub_remove_node(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                unregister_peer_subscription(tables, &mut res, node).await;
+                unregister_peer_subscription(tables, &mut res, node);
 
                 if tables.whatami == whatami::ROUTER
                     && !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
@@ -654,8 +639,7 @@ pub(crate) async fn pubsub_remove_node(
                             .any(|peer| peer != &tables.pid)
                     })
                 {
-                    undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone())
-                        .await;
+                    undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
                 }
 
                 Resource::clean(&mut res)
@@ -665,7 +649,7 @@ pub(crate) async fn pubsub_remove_node(
     }
 }
 
-pub(crate) async fn pubsub_tree_change(
+pub(crate) fn pubsub_tree_change(
     tables: &mut Tables,
     new_childs: &[Vec<NodeIndex>],
     net_type: whatami::Type,
@@ -703,8 +687,7 @@ pub(crate) async fn pubsub_tree_change(
                                 None,
                                 &sub_info,
                                 Some(tree_sid as ZInt),
-                            )
-                            .await;
+                            );
                         }
                     }
                 }
@@ -940,48 +923,50 @@ pub(crate) fn compute_matches_data_routes(tables: &mut Tables, res: &mut Arc<Res
     }
 }
 
+// @TOFIX
 macro_rules! treat_timestamp {
     ($hlc:expr, $info:expr) => {
-        // if an HLC was configured (via Config.add_timestamp),
-        // check DataInfo and add a timestamp if there isn't
-        match $hlc {
-            Some(hlc) => {
-                if let Some(mut data_info) = $info {
-                    if let Some(ref ts) = data_info.timestamp {
-                        // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
-                        match hlc.update_with_timestamp(ts).await {
-                            Ok(()) => Some(data_info),
-                            Err(e) => {
-                                log::error!(
-                                    "Error treating timestamp for received Data ({}): drop it!",
-                                    e
-                                );
-                                return;
-                            }
-                        }
-                    } else {
-                        // Timestamp not present; add one
-                        data_info.timestamp = Some(hlc.new_timestamp().await);
-                        log::trace!("Adding timestamp to DataInfo: {:?}", data_info.timestamp);
-                        Some(data_info)
-                    }
-                } else {
-                    // No DataInfo; add one with a Timestamp
-                    Some(
-                        DataInfo {
-                            source_id: None,
-                            source_sn: None,
-                            first_router_id: None,
-                            first_router_sn: None,
-                            timestamp: Some(hlc.new_timestamp().await),
-                            kind: None,
-                            encoding: None,
-                        }
-                    )
-                }
-            },
-            None => $info,
-        };
+        $info
+        // // if an HLC was configured (via Config.add_timestamp),
+        // // check DataInfo and add a timestamp if there isn't
+        // match $hlc {
+        //     Some(hlc) => {
+        //         if let Some(mut data_info) = $info {
+        //             if let Some(ref ts) = data_info.timestamp {
+        //                 // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
+        //                 match hlc.update_with_timestamp(ts).await {
+        //                     Ok(()) => Some(data_info),
+        //                     Err(e) => {
+        //                         log::error!(
+        //                             "Error treating timestamp for received Data ({}): drop it!",
+        //                             e
+        //                         );
+        //                         return;
+        //                     }
+        //                 }
+        //             } else {
+        //                 // Timestamp not present; add one
+        //                 data_info.timestamp = Some(hlc.new_timestamp().await);
+        //                 log::trace!("Adding timestamp to DataInfo: {:?}", data_info.timestamp);
+        //                 Some(data_info)
+        //             }
+        //         } else {
+        //             // No DataInfo; add one with a Timestamp
+        //             Some(
+        //                 DataInfo {
+        //                     source_id: None,
+        //                     source_sn: None,
+        //                     first_router_id: None,
+        //                     first_router_sn: None,
+        //                     timestamp: Some(hlc.new_timestamp().await),
+        //                     kind: None,
+        //                     encoding: None,
+        //                 }
+        //             )
+        //         }
+        //     },
+        //     None => $info,
+        // };
     }
 }
 
@@ -1142,7 +1127,7 @@ macro_rules! cache_data {
 
 #[inline]
 #[allow(clippy::too_many_arguments)]
-pub async fn route_data(
+pub fn route_data(
     tables: &Tables,
     face: &Arc<FaceState>,
     rid: u64,
@@ -1167,7 +1152,7 @@ pub async fn route_data(
                     send_to_first!(route, face, payload, congestion_control, data_info);
                 } else {
                     if !matching_pulls.is_empty() {
-                        let lock = zasynclock!(tables.pull_caches_lock);
+                        let lock = zlock!(tables.pull_caches_lock);
                         cache_data!(matching_pulls, prefix, suffix, payload, data_info);
                         drop(lock);
                     }
@@ -1183,7 +1168,7 @@ pub async fn route_data(
 
 #[inline]
 #[allow(clippy::too_many_arguments)]
-pub async fn full_reentrant_route_data(
+pub fn full_reentrant_route_data(
     tables_ref: &Arc<RwLock<Tables>>,
     face: &Arc<FaceState>,
     rid: u64,
@@ -1193,7 +1178,7 @@ pub async fn full_reentrant_route_data(
     payload: RBuf,
     routing_context: Option<RoutingContext>,
 ) {
-    let tables = zasyncread!(tables_ref);
+    let tables = zread!(tables_ref);
     match tables.get_mapping(&face, &rid).cloned() {
         Some(prefix) => {
             log::trace!("Route data for res {}{}", prefix.name(), suffix,);
@@ -1210,7 +1195,7 @@ pub async fn full_reentrant_route_data(
                     send_to_first!(route, face, payload, congestion_control, data_info);
                 } else {
                     if !matching_pulls.is_empty() {
-                        let lock = zasynclock!(tables.pull_caches_lock);
+                        let lock = zlock!(tables.pull_caches_lock);
                         cache_data!(matching_pulls, prefix, suffix, payload, data_info);
                         drop(lock);
                     }
@@ -1225,7 +1210,7 @@ pub async fn full_reentrant_route_data(
     }
 }
 
-pub async fn pull_data(
+pub fn pull_data(
     tables: &mut Tables,
     face: &Arc<FaceState>,
     _is_final: bool,
@@ -1241,7 +1226,7 @@ pub async fn pull_data(
                 match res.session_ctxs.get_mut(&face.id) {
                     Some(mut ctx) => match &ctx.subs {
                         Some(subinfo) => {
-                            let lock = zasynclock!(tables.pull_caches_lock);
+                            let lock = zlock!(tables.pull_caches_lock);
                             for (name, (info, data)) in &ctx.last_values {
                                 let reskey =
                                     Resource::get_best_key(&tables.root_res, name, face.id);

@@ -14,11 +14,12 @@
 use crate::net::Session;
 use async_std::channel::{Receiver, Sender, TrySendError};
 use async_std::stream::Stream;
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use async_std::task;
 use pin_project_lite::pin_project;
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::RwLock;
 
 /// A read-only bytes buffer.
 pub use super::protocol::io::RBuf;

@@ -22,13 +22,14 @@ use super::protocol::{
 use super::routing::face::Face;
 use super::routing::OutSession;
 use super::Runtime;
-use async_std::sync::{Arc, Mutex};
+use async_std::sync::Arc;
 use async_std::task;
 use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 pub struct AdminContext {
     runtime: Runtime,
@@ -85,33 +86,29 @@ impl AdminSpace {
             .router
             .new_primitives(OutSession::Admin(admin.clone()))
             .await;
-        admin.primitives.lock().await.replace(primitives.clone());
+        zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.decl_queryable(&[&root_path, "/**"].concat().into(), None);
     }
 
-    pub async fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
+    pub fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
         match key {
-            ResKey::RId(id) => self.mappings.lock().await.get(&id).cloned(),
-            ResKey::RIdWithSuffix(id, suffix) => self
-                .mappings
-                .lock()
-                .await
+            ResKey::RId(id) => zlock!(self.mappings).get(&id).cloned(),
+            ResKey::RIdWithSuffix(id, suffix) => zlock!(self.mappings)
                 .get(&id)
                 .map(|prefix| format!("{}{}", prefix, suffix)),
             ResKey::RName(name) => Some(name.clone()),
         }
     }
 
-    // @TOFIX
     pub(crate) fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
-        // match self.reskey_to_string(reskey).await {
-        //     Some(s) => {
-        //         self.mappings.lock().await.insert(rid, s);
-        //     }
-        //     None => error!("Unknown rid {}!", rid),
-        // }
+        match self.reskey_to_string(reskey) {
+            Some(s) => {
+                zlock!(self.mappings).insert(rid, s);
+            }
+            None => error!("Unknown rid {}!", rid),
+        }
     }
 
     pub(crate) fn forget_resource(&self, _rid: ZInt) {
@@ -186,7 +183,6 @@ impl AdminSpace {
         );
     }
 
-    // @TOFIX
     pub(crate) fn send_query(
         &self,
         reskey: &ResKey,
@@ -203,49 +199,47 @@ impl AdminSpace {
             target,
             _consolidation
         );
-        // let pid = self.pid.clone();
-        // let context = self.context.clone();
-        // let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
+        let pid = self.pid.clone();
+        let context = self.context.clone();
+        let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
-        // let mut matching_handlers = vec![];
-        // match self.reskey_to_string(reskey).await {
-        //     Some(name) => {
-        //         for (path, handler) in &self.handlers {
-        //             if rname::intersect(&name, path) {
-        //                 matching_handlers.push((path.clone(), handler.clone()));
-        //             }
-        //         }
-        //     }
-        //     None => error!("Unknown ResKey!!"),
-        // };
+        let mut matching_handlers = vec![];
+        match self.reskey_to_string(reskey) {
+            Some(name) => {
+                for (path, handler) in &self.handlers {
+                    if rname::intersect(&name, path) {
+                        matching_handlers.push((path.clone(), handler.clone()));
+                    }
+                }
+            }
+            None => error!("Unknown ResKey!!"),
+        };
 
-        // // router is not re-entrant
-        // task::spawn(async move {
-        //     for (path, handler) in matching_handlers {
-        //         let (payload, encoding) = handler(&context).await;
-        //         let data_info = DataInfo {
-        //             source_id: None,
-        //             source_sn: None,
-        //             first_router_id: None,
-        //             first_router_sn: None,
-        //             timestamp: None,
-        //             kind: None,
-        //             encoding: Some(encoding),
-        //         };
-        //         primitives
-        //             .send_reply_data(
-        //                 qid,
-        //                 EVAL,
-        //                 pid.clone(),
-        //                 ResKey::RName(path),
-        //                 Some(data_info),
-        //                 payload,
-        //             )
-        //             .await;
-        //     }
+        // router is not re-entrant
+        task::spawn(async move {
+            for (path, handler) in matching_handlers {
+                let (payload, encoding) = handler(&context).await;
+                let data_info = DataInfo {
+                    source_id: None,
+                    source_sn: None,
+                    first_router_id: None,
+                    first_router_sn: None,
+                    timestamp: None,
+                    kind: None,
+                    encoding: Some(encoding),
+                };
+                primitives.send_reply_data(
+                    qid,
+                    EVAL,
+                    pid.clone(),
+                    ResKey::RName(path),
+                    Some(data_info),
+                    payload,
+                );
+            }
 
-        //     primitives.send_reply_final(qid).await;
-        // });
+            primitives.send_reply_final(qid);
+        });
     }
 
     pub(crate) fn send_reply_data(
@@ -348,7 +342,7 @@ pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
 
 pub async fn linkstate_routers_data(context: &AdminContext) -> (RBuf, ZInt) {
     let runtime = &context.runtime.read().await;
-    let tables = runtime.router.tables.read().await;
+    let tables = zread!(runtime.router.tables);
 
     let res = (
         RBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
@@ -367,7 +361,7 @@ pub async fn linkstate_peers_data(context: &AdminContext) -> (RBuf, ZInt) {
                 .router
                 .tables
                 .read()
-                .await
+                .unwrap()
                 .peers_net
                 .as_ref()
                 .unwrap()

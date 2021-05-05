@@ -28,7 +28,6 @@ use super::proto;
 use super::proto::{smsg, ZenohMessage};
 use super::session;
 use async_std::sync::{Arc, Weak};
-use async_std::task;
 pub use manager::*;
 pub use primitives::*;
 use std::fmt;
@@ -70,12 +69,9 @@ pub enum SessionDispatcher {
 impl SessionDispatcher {
     fn new_session(&self, session: Session) -> ZResult<SessionEventDispatcher> {
         match self {
-            // @TOFIX: remove block_on
-            SessionDispatcher::SessionOrchestrator(this) => task::block_on(async {
-                this.new_session(session)
-                    .await
-                    .map(SessionEventDispatcher::OrchSession)
-            }),
+            SessionDispatcher::SessionOrchestrator(this) => this
+                .new_session(session)
+                .map(SessionEventDispatcher::OrchSession),
             SessionDispatcher::SessionHandler(this) => this
                 .new_session(session)
                 .map(SessionEventDispatcher::SessionEventHandler),

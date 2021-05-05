@@ -16,7 +16,6 @@ use super::routing::face::Face;
 use super::*;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::sync::Arc;
-use async_std::sync::RwLock;
 use async_std::task;
 use log::{error, trace, warn};
 use protocol::{
@@ -32,6 +31,7 @@ use runtime::Runtime;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zconfigurable, zerror};
@@ -253,7 +253,7 @@ impl Session {
                 .new_primitives(OutSession::User(Arc::new(session.clone())))
                 .await,
         );
-        zasyncwrite!(state).primitives = primitives;
+        zwrite!(state).primitives = primitives;
         session
     }
 
@@ -261,11 +261,7 @@ impl Session {
         trace!("close()");
         self.runtime.close().await?;
 
-        let primitives = zasyncwrite!(self.state)
-            .primitives
-            .as_ref()
-            .unwrap()
-            .clone();
+        let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
         primitives.send_close();
 
         Ok(())
@@ -368,8 +364,12 @@ impl Session {
     /// # })
     /// ```
     pub async fn declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
+        self.sync_declare_resource(resource)
+    }
+
+    fn sync_declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
         trace!("declare_resource({:?})", resource);
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let resname = state.localkey_to_resname(resource)?;
 
         match state
@@ -417,7 +417,7 @@ impl Session {
     /// ```
     pub async fn undeclare_resource(&self, rid: ResourceId) -> ZResult<()> {
         trace!("undeclare_resource({:?})", rid);
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         state.local_resources.remove(&rid);
 
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -448,7 +448,7 @@ impl Session {
     /// ```
     pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher<'_>> {
         trace!("declare_publisher({:?})", resource);
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = state.localkey_to_resname(resource)?;
         let pub_state = Arc::new(PublisherState {
@@ -491,7 +491,7 @@ impl Session {
     }
 
     pub(crate) async fn undeclare_publisher(&self, pid: usize) -> ZResult<()> {
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         if let Some(pub_state) = state.publishers.remove(&pid) {
             trace!("undeclare_publisher({:?})", pub_state);
             // Note: there might be several Publishers on the same ResKey.
@@ -529,13 +529,13 @@ impl Session {
         Ok(())
     }
 
-    async fn declare_any_subscriber(
+    fn declare_any_subscriber(
         &self,
         reskey: &ResKey,
         invoker: SubscriberInvoker,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = state.localkey_to_resname(reskey)?;
         let sub_state = Arc::new(SubscriberState {
@@ -584,11 +584,11 @@ impl Session {
             let reskey = match reskey {
                 ResKey::RName(name) => match name.find('*') {
                     Some(pos) => {
-                        let id = self.declare_resource(&name[..pos].into()).await?;
+                        let id = self.sync_declare_resource(&name[..pos].into())?;
                         ResKey::RIdWithSuffix(id, name[pos..].into())
                     }
                     None => {
-                        let id = self.declare_resource(&name.into()).await?;
+                        let id = self.sync_declare_resource(&name.into())?;
                         ResKey::RId(id)
                     }
                 },
@@ -633,9 +633,8 @@ impl Session {
     ) -> ZResult<Subscriber<'_>> {
         trace!("declare_subscriber({:?})", reskey);
         let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
-        let sub_state = self
-            .declare_any_subscriber(reskey, SubscriberInvoker::Sender(sender), info)
-            .await?;
+        let sub_state =
+            self.declare_any_subscriber(reskey, SubscriberInvoker::Sender(sender), info)?;
 
         Ok(Subscriber {
             session: self,
@@ -680,9 +679,8 @@ impl Session {
     {
         trace!("declare_callback_subscriber({:?})", reskey);
         let dhandler = Arc::new(RwLock::new(data_handler));
-        let sub_state = self
-            .declare_any_subscriber(reskey, SubscriberInvoker::Handler(dhandler), info)
-            .await?;
+        let sub_state =
+            self.declare_any_subscriber(reskey, SubscriberInvoker::Handler(dhandler), info)?;
 
         Ok(CallbackSubscriber {
             session: self,
@@ -692,7 +690,7 @@ impl Session {
     }
 
     pub(crate) async fn undeclare_subscriber(&self, sid: usize) -> ZResult<()> {
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
             for res in state.local_resources.values_mut() {
@@ -764,7 +762,7 @@ impl Session {
     /// ```
     pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable<'_>> {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (q_sender, q_receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {
@@ -795,7 +793,7 @@ impl Session {
     }
 
     pub(crate) async fn undeclare_queryable(&self, qid: usize) -> ZResult<()> {
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
             // Note: there might be several Queryables on the same ResKey.
@@ -830,7 +828,7 @@ impl Session {
     /// ```
     pub async fn write(&self, resource: &ResKey, payload: RBuf) -> ZResult<()> {
         trace!("write({:?}, [...])", resource);
-        let state = zasyncread!(self.state);
+        let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
@@ -843,7 +841,7 @@ impl Session {
             None,
         );
         if local_routing {
-            self.handle_data(true, resource, None, payload).await;
+            self.handle_data(true, resource, None, payload);
         }
         Ok(())
     }
@@ -876,7 +874,7 @@ impl Session {
         congestion_control: CongestionControl,
     ) -> ZResult<()> {
         trace!("write_ext({:?}, [...])", resource);
-        let state = zasyncread!(self.state);
+        let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
@@ -899,20 +897,13 @@ impl Session {
             None,
         );
         if local_routing {
-            self.handle_data(true, resource, data_info.clone(), payload)
-                .await;
+            self.handle_data(true, resource, data_info, payload);
         }
         Ok(())
     }
 
-    async fn handle_data(
-        &self,
-        local: bool,
-        reskey: &ResKey,
-        info: Option<DataInfo>,
-        payload: RBuf,
-    ) {
-        let state = zasyncread!(self.state);
+    fn handle_data(&self, local: bool, reskey: &ResKey, info: Option<DataInfo>, payload: RBuf) {
+        let state = zread!(self.state);
         if let ResKey::RId(rid) = reskey {
             match state.get_res(rid, local) {
                 Some(res) => match res.subscribers.len() {
@@ -921,14 +912,14 @@ impl Session {
                         let sub = res.subscribers.get(0).unwrap();
                         match &sub.invoker {
                             SubscriberInvoker::Handler(handler) => {
-                                let handler = &mut *zasyncwrite!(handler);
+                                let handler = &mut *zwrite!(handler);
                                 handler(Sample {
                                     res_name: res.name.clone(),
                                     payload,
                                     data_info: info,
                                 });
                             }
-                            SubscriberInvoker::Sender(sender) => {
+                            SubscriberInvoker::Sender(sender) => async_std::task::block_on(async {
                                 if let Err(e) = sender
                                     .send(Sample {
                                         res_name: res.name.clone(),
@@ -940,14 +931,14 @@ impl Session {
                                     error!("SubscriberInvoker error: {}", e);
                                     return;
                                 }
-                            }
+                            }),
                         }
                     }
                     _ => {
                         for sub in &res.subscribers {
                             match &sub.invoker {
                                 SubscriberInvoker::Handler(handler) => {
-                                    let handler = &mut *zasyncwrite!(handler);
+                                    let handler = &mut *zwrite!(handler);
                                     handler(Sample {
                                         res_name: res.name.clone(),
                                         payload: payload.clone(),
@@ -955,17 +946,19 @@ impl Session {
                                     });
                                 }
                                 SubscriberInvoker::Sender(sender) => {
-                                    if let Err(e) = sender
-                                        .send(Sample {
-                                            res_name: res.name.clone(),
-                                            payload: payload.clone(),
-                                            data_info: info.clone(),
-                                        })
-                                        .await
-                                    {
-                                        error!("SubscriberInvoker error: {}", e);
-                                        return;
-                                    }
+                                    async_std::task::block_on(async {
+                                        if let Err(e) = sender
+                                            .send(Sample {
+                                                res_name: res.name.clone(),
+                                                payload: payload.clone(),
+                                                data_info: info.clone(),
+                                            })
+                                            .await
+                                        {
+                                            error!("SubscriberInvoker error: {}", e);
+                                            return;
+                                        }
+                                    })
                                 }
                             }
                         }
@@ -973,7 +966,6 @@ impl Session {
                 },
                 None => {
                     error!("Received Data for unkown rid: {}", rid);
-                    return;
                 }
             }
         } else {
@@ -983,7 +975,7 @@ impl Session {
                         if rname::matches(&sub.resname, &resname) {
                             match &sub.invoker {
                                 SubscriberInvoker::Handler(handler) => {
-                                    let handler = &mut *zasyncwrite!(handler);
+                                    let handler = &mut *zwrite!(handler);
                                     handler(Sample {
                                         res_name: resname.clone(),
                                         payload: payload.clone(),
@@ -991,17 +983,19 @@ impl Session {
                                     });
                                 }
                                 SubscriberInvoker::Sender(sender) => {
-                                    if let Err(e) = sender
-                                        .send(Sample {
-                                            res_name: resname.clone(),
-                                            payload: payload.clone(),
-                                            data_info: info.clone(),
-                                        })
-                                        .await
-                                    {
-                                        error!("SubscriberInvoker error: {}", e);
-                                        return;
-                                    }
+                                    async_std::task::block_on(async {
+                                        if let Err(e) = sender
+                                            .send(Sample {
+                                                res_name: resname.clone(),
+                                                payload: payload.clone(),
+                                                data_info: info.clone(),
+                                            })
+                                            .await
+                                        {
+                                            error!("SubscriberInvoker error: {}", e);
+                                            return;
+                                        }
+                                    })
                                 }
                             }
                         }
@@ -1009,7 +1003,6 @@ impl Session {
                 }
                 Err(err) => {
                     error!("Received Data for unkown reskey: {}", err);
-                    return;
                 }
             }
         }
@@ -1017,7 +1010,7 @@ impl Session {
 
     pub(crate) async fn pull(&self, reskey: &ResKey) -> ZResult<()> {
         trace!("pull({:?})", reskey);
-        let state = zasyncread!(self.state);
+        let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_pull(true, reskey, 0, &None);
@@ -1065,7 +1058,7 @@ impl Session {
             target,
             consolidation
         );
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE);
         state.queries.insert(
@@ -1094,14 +1087,13 @@ impl Session {
             None,
         );
         if local_routing {
-            self.handle_query(true, resource, predicate, qid, target, consolidation)
-                .await;
+            self.handle_query(true, resource, predicate, qid, target, consolidation);
         }
 
         Ok(rep_receiver)
     }
 
-    async fn handle_query(
+    fn handle_query(
         &self,
         local: bool,
         reskey: &ResKey,
@@ -1111,7 +1103,7 @@ impl Session {
         _consolidation: QueryConsolidation,
     ) {
         let (primitives, resname, kinds_and_senders) = {
-            let state = zasyncread!(self.state);
+            let state = zread!(self.state);
             match state.reskey_to_resname(reskey, local) {
                 Ok(resname) => {
                     let kinds_and_senders = state
@@ -1151,20 +1143,21 @@ impl Session {
 
         let predicate = predicate.to_string();
         let (rep_sender, mut rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
-        let pid = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
-
-        for (kind, req_sender) in kinds_and_senders {
-            let _ = req_sender
-                .send(Query {
-                    res_name: resname.clone(),
-                    predicate: predicate.clone(),
-                    replies_sender: RepliesSender {
-                        kind,
-                        sender: rep_sender.clone(),
-                    },
-                })
-                .await;
-        }
+        let pid = async_std::task::block_on(async {
+            for (kind, req_sender) in kinds_and_senders {
+                let _ = req_sender
+                    .send(Query {
+                        res_name: resname.clone(),
+                        predicate: predicate.clone(),
+                        replies_sender: RepliesSender {
+                            kind,
+                            sender: rep_sender.clone(),
+                        },
+                    })
+                    .await;
+            }
+            self.runtime.read().await.pid.clone() // @TODO build/use prebuilt specific pid
+        });
         drop(rep_sender); // all senders need to be dropped for the channel to close
 
         // router is not re-entrant
@@ -1201,23 +1194,22 @@ impl Session {
         }
     }
 
-    // @TOFIX
     pub(crate) fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Decl Resource {} {:?}", rid, reskey);
-        // let state = &mut zasyncwrite!(self.state);
-        // match state.remotekey_to_resname(reskey) {
-        //     Ok(resname) => {
-        //         let mut res = Resource::new(resname.clone());
-        //         for sub in state.subscribers.values() {
-        //             if rname::matches(&resname, &sub.resname) {
-        //                 res.subscribers.push(sub.clone());
-        //             }
-        //         }
+        let state = &mut zwrite!(self.state);
+        match state.remotekey_to_resname(reskey) {
+            Ok(resname) => {
+                let mut res = Resource::new(resname.clone());
+                for sub in state.subscribers.values() {
+                    if rname::matches(&resname, &sub.resname) {
+                        res.subscribers.push(sub.clone());
+                    }
+                }
 
-        //         state.remote_resources.insert(rid, res);
-        //     }
-        //     Err(_) => error!("Received Resource for unkown reskey: {}", reskey),
-        // }
+                state.remote_resources.insert(rid, res);
+            }
+            Err(_) => error!("Received Resource for unkown reskey: {}", reskey),
+        }
     }
 
     pub(crate) fn forget_resource(&self, _rid: ZInt) {
@@ -1273,7 +1265,6 @@ impl Session {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    // @TOFIX
     pub(crate) fn send_data(
         &self,
         reskey: &ResKey,
@@ -1291,10 +1282,9 @@ impl Session {
             congestion_control,
             info,
         );
-        // self.handle_data(false, reskey, info, payload).await
+        self.handle_data(false, reskey, info, payload)
     }
 
-    // @TOFIX
     pub(crate) fn send_query(
         &self,
         reskey: &ResKey,
@@ -1311,11 +1301,9 @@ impl Session {
             target,
             consolidation
         );
-        // self.handle_query(false, reskey, predicate, qid, target, consolidation)
-        // .await
+        self.handle_query(false, reskey, predicate, qid, target, consolidation)
     }
 
-    // @TOFIX
     pub(crate) fn send_reply_data(
         &self,
         qid: ZInt,
@@ -1334,110 +1322,110 @@ impl Session {
             data_info,
             payload
         );
-        // let state = &mut zasyncwrite!(self.state);
-        // let res_name = match state.remotekey_to_resname(&reskey) {
-        //     Ok(name) => name,
-        //     Err(e) => {
-        //         error!("Received ReplyData for unkown reskey: {}", e);
-        //         return;
-        //     }
-        // };
-        // match state.queries.get_mut(&qid) {
-        //     Some(query) => {
-        //         let new_reply = Reply {
-        //             data: Sample {
-        //                 res_name,
-        //                 payload,
-        //                 data_info,
-        //             },
-        //             source_kind,
-        //             replier_id,
-        //         };
-        //         match query.reception_mode {
-        //             ConsolidationMode::None => {
-        //                 let _ = query.rep_sender.send(new_reply).await;
-        //             }
-        //             ConsolidationMode::Lazy => {
-        //                 match query
-        //                     .replies
-        //                     .as_ref()
-        //                     .unwrap()
-        //                     .get(&new_reply.data.res_name)
-        //                 {
-        //                     Some(reply) => {
-        //                         if new_reply.data.data_info > reply.data.data_info {
-        //                             query
-        //                                 .replies
-        //                                 .as_mut()
-        //                                 .unwrap()
-        //                                 .insert(new_reply.data.res_name.clone(), new_reply.clone());
-        //                             let _ = query.rep_sender.send(new_reply).await;
-        //                         }
-        //                     }
-        //                     None => {
-        //                         query
-        //                             .replies
-        //                             .as_mut()
-        //                             .unwrap()
-        //                             .insert(new_reply.data.res_name.clone(), new_reply.clone());
-        //                         let _ = query.rep_sender.send(new_reply).await;
-        //                     }
-        //                 }
-        //             }
-        //             ConsolidationMode::Full => {
-        //                 match query
-        //                     .replies
-        //                     .as_ref()
-        //                     .unwrap()
-        //                     .get(&new_reply.data.res_name)
-        //                 {
-        //                     Some(reply) => {
-        //                         if new_reply.data.data_info > reply.data.data_info {
-        //                             query
-        //                                 .replies
-        //                                 .as_mut()
-        //                                 .unwrap()
-        //                                 .insert(new_reply.data.res_name.clone(), new_reply.clone());
-        //                         }
-        //                     }
-        //                     None => {
-        //                         query
-        //                             .replies
-        //                             .as_mut()
-        //                             .unwrap()
-        //                             .insert(new_reply.data.res_name.clone(), new_reply.clone());
-        //                     }
-        //                 };
-        //             }
-        //         }
-        //     }
-        //     None => {
-        //         warn!("Received ReplyData for unkown Query: {}", qid);
-        //         return;
-        //     }
-        // }
+        let state = &mut zwrite!(self.state);
+        let res_name = match state.remotekey_to_resname(&reskey) {
+            Ok(name) => name,
+            Err(e) => {
+                error!("Received ReplyData for unkown reskey: {}", e);
+                return;
+            }
+        };
+        match state.queries.get_mut(&qid) {
+            Some(query) => {
+                let new_reply = Reply {
+                    data: Sample {
+                        res_name,
+                        payload,
+                        data_info,
+                    },
+                    source_kind,
+                    replier_id,
+                };
+                task::block_on(async move {
+                    match query.reception_mode {
+                        ConsolidationMode::None => {
+                            let _ = query.rep_sender.send(new_reply).await;
+                        }
+                        ConsolidationMode::Lazy => {
+                            match query
+                                .replies
+                                .as_ref()
+                                .unwrap()
+                                .get(&new_reply.data.res_name)
+                            {
+                                Some(reply) => {
+                                    if new_reply.data.data_info > reply.data.data_info {
+                                        query.replies.as_mut().unwrap().insert(
+                                            new_reply.data.res_name.clone(),
+                                            new_reply.clone(),
+                                        );
+                                        let _ = query.rep_sender.send(new_reply).await;
+                                    }
+                                }
+                                None => {
+                                    query
+                                        .replies
+                                        .as_mut()
+                                        .unwrap()
+                                        .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                    let _ = query.rep_sender.send(new_reply).await;
+                                }
+                            }
+                        }
+                        ConsolidationMode::Full => {
+                            match query
+                                .replies
+                                .as_ref()
+                                .unwrap()
+                                .get(&new_reply.data.res_name)
+                            {
+                                Some(reply) => {
+                                    if new_reply.data.data_info > reply.data.data_info {
+                                        query.replies.as_mut().unwrap().insert(
+                                            new_reply.data.res_name.clone(),
+                                            new_reply.clone(),
+                                        );
+                                    }
+                                }
+                                None => {
+                                    query
+                                        .replies
+                                        .as_mut()
+                                        .unwrap()
+                                        .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                }
+                            };
+                        }
+                    }
+                })
+            }
+            None => {
+                warn!("Received ReplyData for unkown Query: {}", qid);
+            }
+        }
     }
 
-    // @TOFIX
     pub(crate) fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
-        // let mut state = zasyncwrite!(self.state);
-        // match state.queries.get_mut(&qid) {
-        //     Some(mut query) => {
-        //         query.nb_final -= 1;
-        //         if query.nb_final == 0 {
-        //             let query = state.queries.remove(&qid).unwrap();
-        //             if query.reception_mode == ConsolidationMode::Full {
-        //                 for (_, reply) in query.replies.unwrap().into_iter() {
-        //                     let _ = query.rep_sender.send(reply).await;
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     None => {
-        //         warn!("Received ReplyFinal for unkown Query: {}", qid);
-        //     }
-        // }
+        let mut state = zwrite!(self.state);
+        match state.queries.get_mut(&qid) {
+            Some(mut query) => {
+                query.nb_final -= 1;
+                if query.nb_final == 0 {
+                    let query = state.queries.remove(&qid).unwrap();
+                    if query.reception_mode == ConsolidationMode::Full {
+                        task::block_on(async move {
+                            for (_, reply) in query.replies.unwrap().into_iter() {
+                                let _ = query.rep_sender.send(reply).await;
+                            }
+                        })
+                    }
+                }
+            }
+            None => {
+                warn!("Received ReplyFinal for unkown Query: {}", qid);
+            }
+        }
     }
 
     pub(crate) fn send_pull(
@@ -1461,15 +1449,14 @@ impl Session {
     }
 }
 
-// @TOFIX
 impl Drop for Session {
     fn drop(&mut self) {
-        // if self.alive {
-        //     let this = self.clone();
-        //     let _ = task::block_on(async move {
-        //         task::spawn_blocking(move || task::block_on(this.close_alive())).await
-        //     });
-        // }
+        if self.alive {
+            let this = self.clone();
+            let _ = task::block_on(async move {
+                task::spawn_blocking(move || task::block_on(this.close_alive())).await
+            });
+        }
     }
 }
 
