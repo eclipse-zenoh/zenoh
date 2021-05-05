@@ -76,7 +76,7 @@ async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve TCP locator: {}", addr);
+                        let e = format!("Couldn't resolve UDP locator: {}", addr);
                         zerror!(ZErrorKind::InvalidLocator { descr: e })
                     }
                 }
@@ -87,7 +87,7 @@ async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
             },
         },
         _ => {
-            let e = format!("Not a TCP locator: {}", locator);
+            let e = format!("Not a UDP locator: {}", locator);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }
