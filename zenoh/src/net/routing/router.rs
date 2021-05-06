@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, Mutex, RwLock, Weak};
-use async_std::task::{sleep, JoinHandle};
+use async_std::sync::{Arc, Weak};
+use async_std::task::JoinHandle;
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
+use std::sync::{Mutex, RwLock};
 use uhlc::HLC;
 use zenoh_util::sync::get_mut_unchecked;
 
@@ -43,6 +43,7 @@ pub struct Tables {
     pub(crate) pid: PeerId,
     pub(crate) whatami: whatami::Type,
     face_counter: usize,
+    #[allow(dead_code)]
     pub(crate) hlc: Option<HLC>,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
@@ -85,7 +86,7 @@ impl Tables {
         &self.root_res
     }
 
-    pub async fn print(&self) -> String {
+    pub fn print(&self) -> String {
         Resource::print_tree(&self.root_res)
     }
 
@@ -116,7 +117,7 @@ impl Tables {
         self.faces.values().find(|face| face.pid == *pid)
     }
 
-    async fn open_net_face(
+    fn open_net_face(
         &mut self,
         pid: PeerId,
         whatami: WhatAmI,
@@ -133,26 +134,26 @@ impl Tables {
         log::debug!("New {}", newface);
 
         if whatami == whatami::CLIENT {
-            pubsub_new_client_face(self, &mut newface).await;
-            queries_new_client_face(self, &mut newface).await;
+            pubsub_new_client_face(self, &mut newface);
+            queries_new_client_face(self, &mut newface);
         }
         Arc::downgrade(&newface)
     }
 
-    pub async fn open_face(
+    pub fn open_face(
         &mut self,
         pid: PeerId,
         whatami: WhatAmI,
         primitives: OutSession,
     ) -> Weak<FaceState> {
-        self.open_net_face(pid, whatami, primitives, 0).await
+        self.open_net_face(pid, whatami, primitives, 0)
     }
 
-    pub async fn close_face(&mut self, face: &Weak<FaceState>) {
+    pub fn close_face(&mut self, face: &Weak<FaceState>) {
         match face.upgrade() {
             Some(mut face) => {
                 log::debug!("Close {}", face);
-                finalize_pending_queries(self, &mut face).await;
+                finalize_pending_queries(self, &mut face);
 
                 let mut face_clone = face.clone();
                 let face = get_mut_unchecked(&mut face);
@@ -168,12 +169,12 @@ impl Tables {
                 face.local_mappings.clear();
                 while let Some(mut res) = face.remote_subs.pop() {
                     get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-                    undeclare_client_subscription(self, &mut face_clone, &mut res).await;
+                    undeclare_client_subscription(self, &mut face_clone, &mut res);
                     Resource::clean(&mut res);
                 }
                 while let Some(mut res) = face.remote_qabls.pop() {
                     get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-                    undeclare_client_queryable(self, &mut face_clone, &mut res).await;
+                    undeclare_client_queryable(self, &mut face_clone, &mut res);
                     Resource::clean(&mut res);
                 }
                 self.faces.remove(&face.id);
@@ -212,13 +213,13 @@ impl Tables {
             let task = Some(async_std::task::spawn(async move {
                 async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
                     .await;
-                let mut tables = zasyncwrite!(tables_ref);
+                let mut tables = zwrite!(tables_ref);
                 let new_childs = match net_type {
-                    whatami::ROUTER => tables.routers_net.as_mut().unwrap().compute_trees().await,
-                    _ => tables.peers_net.as_mut().unwrap().compute_trees().await,
+                    whatami::ROUTER => tables.routers_net.as_mut().unwrap().compute_trees(),
+                    _ => tables.peers_net.as_mut().unwrap().compute_trees(),
                 };
-                pubsub_tree_change(&mut tables, &new_childs, net_type).await;
-                queries_tree_change(&mut tables, &new_childs, net_type).await;
+                pubsub_tree_change(&mut tables, &new_childs, net_type);
+                queries_tree_change(&mut tables, &new_childs, net_type);
                 match net_type {
                     whatami::ROUTER => tables.routers_trees_task = None,
                     _ => tables.peers_trees_task = None,
@@ -250,26 +251,20 @@ impl Router {
         orchestrator: SessionOrchestrator,
         peers_autoconnect: bool,
     ) {
-        let mut tables = zasyncwrite!(self.tables);
-        tables.peers_net = Some(
-            Network::new(
-                "[Peers network]".to_string(),
-                tables.pid.clone(),
-                orchestrator.clone(),
-                peers_autoconnect,
-            )
-            .await,
-        );
+        let mut tables = zwrite!(self.tables);
+        tables.peers_net = Some(Network::new(
+            "[Peers network]".to_string(),
+            tables.pid.clone(),
+            orchestrator.clone(),
+            peers_autoconnect,
+        ));
         if orchestrator.whatami == whatami::ROUTER {
-            tables.routers_net = Some(
-                Network::new(
-                    "[Routers network]".to_string(),
-                    tables.pid.clone(),
-                    orchestrator.clone(),
-                    peers_autoconnect,
-                )
-                .await,
-            );
+            tables.routers_net = Some(Network::new(
+                "[Routers network]".to_string(),
+                tables.pid.clone(),
+                orchestrator,
+                peers_autoconnect,
+            ));
             tables.shared_nodes = shared_nodes(
                 tables.routers_net.as_ref().unwrap(),
                 tables.peers_net.as_ref().unwrap(),
@@ -281,39 +276,30 @@ impl Router {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
-                let mut tables = zasyncwrite!(self.tables);
+                let mut tables = zwrite!(self.tables);
                 let pid = tables.pid.clone();
                 tables
                     .open_face(pid, whatami::CLIENT, primitives)
-                    .await
                     .upgrade()
                     .unwrap()
             },
         })
     }
 
-    pub async fn new_session(&self, session: Session) -> ZResult<Arc<LinkStateInterceptor>> {
-        let mut tables = zasyncwrite!(self.tables);
+    pub fn new_session(&self, session: Session) -> ZResult<Arc<LinkStateInterceptor>> {
+        let mut tables = zwrite!(self.tables);
         let whatami = session.get_whatami()?;
 
         let link_id = match (self.whatami, whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => {
-                tables
-                    .routers_net
-                    .as_mut()
-                    .unwrap()
-                    .add_link(session.clone())
-                    .await
-            }
+            (whatami::ROUTER, whatami::ROUTER) => tables
+                .routers_net
+                .as_mut()
+                .unwrap()
+                .add_link(session.clone()),
             (whatami::ROUTER, whatami::PEER)
             | (whatami::PEER, whatami::ROUTER)
             | (whatami::PEER, whatami::PEER) => {
-                tables
-                    .peers_net
-                    .as_mut()
-                    .unwrap()
-                    .add_link(session.clone())
-                    .await
+                tables.peers_net.as_mut().unwrap().add_link(session.clone())
             }
             _ => 0,
         };
@@ -334,10 +320,9 @@ impl Router {
                     .open_net_face(
                         session.get_pid().unwrap(),
                         whatami,
-                        OutSession::Transport(Arc::new(Mux::new(session.clone()))),
+                        OutSession::Transport(Arc::new(Mux::new(session))),
                         link_id,
                     )
-                    .await
                     .upgrade()
                     .unwrap(),
             }),
@@ -373,11 +358,11 @@ impl LinkStateInterceptor {
         }
     }
 
-    pub(crate) async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+    pub(crate) fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();
-                let mut tables = zasyncwrite!(self.tables);
+                let mut tables = zwrite!(self.tables);
                 let whatami = self.session.get_whatami()?;
                 match (tables.whatami, whatami) {
                     (whatami::ROUTER, whatami::ROUTER) => {
@@ -386,12 +371,9 @@ impl LinkStateInterceptor {
                             .as_mut()
                             .unwrap()
                             .link_states(list.link_states, pid)
-                            .await
                         {
-                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER)
-                                .await;
-                            queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER)
-                                .await;
+                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER);
+                            queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER);
                         }
 
                         tables.shared_nodes = shared_nodes(
@@ -409,11 +391,9 @@ impl LinkStateInterceptor {
                             .as_mut()
                             .unwrap()
                             .link_states(list.link_states, pid)
-                            .await
                         {
-                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
-                            queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER)
-                                .await;
+                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER);
+                            queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER);
                         }
 
                         if tables.whatami == whatami::ROUTER {
@@ -434,14 +414,15 @@ impl LinkStateInterceptor {
         }
     }
 
-    pub(crate) async fn new_link(&self, _link: Link) {}
+    pub(crate) fn new_link(&self, _link: Link) {}
 
-    pub(crate) async fn del_link(&self, _link: Link) {}
+    pub(crate) fn del_link(&self, _link: Link) {}
 
-    pub(crate) async fn closing(&self) {
+    pub(crate) fn closing(&self) {
         self.demux.closing();
-        sleep(Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
-        let mut tables = zasyncwrite!(self.tables);
+        // @TOFIX
+        // std::thread::sleep(std::time::Duration::from_millis(*LINK_CLOSURE_DELAY));
+        let mut tables = zwrite!(self.tables);
         match self.session.get_whatami() {
             Ok(whatami) => match (tables.whatami, whatami) {
                 (whatami::ROUTER, whatami::ROUTER) => {
@@ -450,10 +431,9 @@ impl LinkStateInterceptor {
                         .as_mut()
                         .unwrap()
                         .remove_link(&self.session)
-                        .await
                     {
-                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
-                        queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER).await;
+                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER);
+                        queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER);
                     }
 
                     tables.shared_nodes = shared_nodes(
@@ -471,10 +451,9 @@ impl LinkStateInterceptor {
                         .as_mut()
                         .unwrap()
                         .remove_link(&self.session)
-                        .await
                     {
-                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
-                        queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER).await;
+                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER);
+                        queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER);
                     }
 
                     if tables.whatami == whatami::ROUTER {
@@ -492,5 +471,5 @@ impl LinkStateInterceptor {
         };
     }
 
-    pub(crate) async fn closed(&self) {}
+    pub(crate) fn closed(&self) {}
 }

@@ -157,7 +157,7 @@ impl Mux {
             predicate.to_string(),
             qid,
             target_opt,
-            consolidation.clone(),
+            consolidation,
             routing_context,
             None,
         ));
