@@ -103,6 +103,13 @@ impl Runtime {
             .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
             .to_lowercase()
             == ZN_TRUE;
+        let routers_autoconnect_gossip = config
+            .get_or(
+                &ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY,
+                ZN_ROUTERS_AUTOCONNECT_GOSSIP_DEFAULT,
+            )
+            .to_lowercase()
+            == ZN_TRUE;
         if whatami != whatami::CLIENT
             && config
                 .get_or(&ZN_LINK_STATE_KEY, ZN_LINK_STATE_DEFAULT)
@@ -110,13 +117,14 @@ impl Runtime {
                 == ZN_TRUE
         {
             get_mut_unchecked(&mut router)
-                .init_link_state(orchestrator.clone(), peers_autoconnect)
+                .init_link_state(
+                    orchestrator.clone(),
+                    peers_autoconnect,
+                    routers_autoconnect_gossip,
+                )
                 .await;
         }
-        match orchestrator
-            .init(session_manager, config, peers_autoconnect)
-            .await
-        {
+        match orchestrator.init(session_manager, config).await {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
                     pid,

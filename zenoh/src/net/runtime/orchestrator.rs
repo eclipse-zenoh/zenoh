@@ -62,17 +62,12 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn init(
-        &mut self,
-        manager: SessionManager,
-        config: ConfigProperties,
-        peers_autoconnect: bool,
-    ) -> ZResult<()> {
+    pub async fn init(&mut self, manager: SessionManager, config: ConfigProperties) -> ZResult<()> {
         *zasyncwrite!(self.manager) = Some(manager);
         match self.whatami {
             whatami::CLIENT => self.init_client(config).await,
-            whatami::PEER => self.init_peer(config, peers_autoconnect).await,
-            whatami::ROUTER => self.init_broker(config).await,
+            whatami::PEER => self.init_peer(config).await,
+            whatami::ROUTER => self.init_router(config).await,
             _ => {
                 log::error!("Unknown mode");
                 zerror!(ZErrorKind::Other {
@@ -155,11 +150,7 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn init_peer(
-        &mut self,
-        config: ConfigProperties,
-        peers_autoconnect: bool,
-    ) -> ZResult<()> {
+    pub async fn init_peer(&mut self, config: ConfigProperties) -> ZResult<()> {
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, PEER_DEFAULT_LISTENER)
             .split(',')
@@ -178,6 +169,10 @@ impl SessionOrchestrator {
             .collect::<Vec<Locator>>();
         let scouting = config
             .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
+        let peers_autoconnect = config
+            .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
             .to_lowercase()
             == ZN_TRUE;
         let addr = config
@@ -231,7 +226,7 @@ impl SessionOrchestrator {
         Ok(())
     }
 
-    pub async fn init_broker(&mut self, config: ConfigProperties) -> ZResult<()> {
+    pub async fn init_router(&mut self, config: ConfigProperties) -> ZResult<()> {
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
             .split(',')
@@ -250,6 +245,13 @@ impl SessionOrchestrator {
             .collect::<Vec<Locator>>();
         let scouting = config
             .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
+        let routers_autoconnect_multicast = config
+            .get_or(
+                &ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY,
+                ZN_ROUTERS_AUTOCONNECT_MULTICAST_DEFAULT,
+            )
             .to_lowercase()
             == ZN_TRUE;
         let addr = config
@@ -275,9 +277,17 @@ impl SessionOrchestrator {
                     .collect();
                 if !sockets.is_empty() {
                     let this = self.clone();
-                    async_std::task::spawn(async move {
-                        this.responder(&mcast_socket, &sockets).await;
-                    });
+                    if routers_autoconnect_multicast {
+                        async_std::prelude::FutureExt::race(
+                            this.responder(&mcast_socket, &sockets),
+                            this.connect_all(&sockets, whatami::ROUTER, &addr),
+                        )
+                        .await;
+                    } else {
+                        async_std::task::spawn(async move {
+                            this.responder(&mcast_socket, &sockets).await;
+                        });
+                    }
                 }
             }
         }

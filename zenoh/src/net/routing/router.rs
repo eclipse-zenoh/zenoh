@@ -256,6 +256,7 @@ impl Router {
         &mut self,
         orchestrator: SessionOrchestrator,
         peers_autoconnect: bool,
+        routers_autoconnect_gossip: bool,
     ) {
         let mut tables = zasyncwrite!(self.tables);
         tables.peers_net = Some(
@@ -264,6 +265,7 @@ impl Router {
                 tables.pid.clone(),
                 orchestrator.clone(),
                 peers_autoconnect,
+                routers_autoconnect_gossip,
             )
             .await,
         );
@@ -274,6 +276,7 @@ impl Router {
                     tables.pid.clone(),
                     orchestrator.clone(),
                     peers_autoconnect,
+                    routers_autoconnect_gossip,
                 )
                 .await,
             );

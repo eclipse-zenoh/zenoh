@@ -124,7 +124,7 @@ mod consts {
 
     /// Indicates if peers should connect to each other
     /// when they discover each other (through multicast
-    /// or link_state protocol).
+    /// or gossip discovery).
     /// String key : `"peers_autoconnect"`.
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"true"`.
@@ -160,6 +160,24 @@ mod consts {
     pub const ZN_ZERO_COPY_KEY: u64 = 0x51;
     pub const ZN_ZERO_COPY_STR: &str = "zero_copy";
     pub const ZN_ZERO_COPY_DEFAULT: &str = ZN_TRUE;
+
+    /// Indicates if routers should connect to each other
+    /// when they discover each other through multicast.
+    /// String key : `"routers_autoconnect_multicast"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"false"`.
+    pub const ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY: u64 = 0x52;
+    pub const ZN_ROUTERS_AUTOCONNECT_MULTICAST_STR: &str = "routers_autoconnect_multicast";
+    pub const ZN_ROUTERS_AUTOCONNECT_MULTICAST_DEFAULT: &str = ZN_FALSE;
+
+    /// Indicates if routers should connect to each other
+    /// when they discover each other through gossip discovery.
+    /// String key : `"routers_autoconnect_gossip"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"false"`.
+    pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY: u64 = 0x53;
+    pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_STR: &str = "routers_autoconnect_gossip";
+    pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_DEFAULT: &str = ZN_FALSE;
 
     /// Indicates if local writes/queries should reach local subscribers/queryables.
     /// String key : `"local_routing"`.
@@ -203,6 +221,8 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_TLS_SERVER_CERTIFICATE_STR => Some(ZN_TLS_SERVER_CERTIFICATE_KEY),
             ZN_TLS_ROOT_CA_CERTIFICATE_STR => Some(ZN_TLS_ROOT_CA_CERTIFICATE_KEY),
             ZN_ZERO_COPY_STR => Some(ZN_ZERO_COPY_KEY),
+            ZN_ROUTERS_AUTOCONNECT_MULTICAST_STR => Some(ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY),
+            ZN_ROUTERS_AUTOCONNECT_GOSSIP_STR => Some(ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY),
             ZN_LOCAL_ROUTING_STR => Some(ZN_LOCAL_ROUTING_KEY),
             ZN_JOIN_SUBSCRIPTIONS_STR => Some(ZN_JOIN_SUBSCRIPTIONS_KEY),
             ZN_JOIN_PUBLICATIONS_STR => Some(ZN_JOIN_PUBLICATIONS_KEY),
@@ -230,6 +250,12 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_TLS_SERVER_CERTIFICATE_KEY => Some(ZN_TLS_SERVER_CERTIFICATE_STR.to_string()),
             ZN_TLS_ROOT_CA_CERTIFICATE_KEY => Some(ZN_TLS_ROOT_CA_CERTIFICATE_STR.to_string()),
             ZN_ZERO_COPY_KEY => Some(ZN_ZERO_COPY_STR.to_string()),
+            ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY => {
+                Some(ZN_ROUTERS_AUTOCONNECT_MULTICAST_STR.to_string())
+            }
+            ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY => {
+                Some(ZN_ROUTERS_AUTOCONNECT_GOSSIP_STR.to_string())
+            }
             ZN_LOCAL_ROUTING_KEY => Some(ZN_LOCAL_ROUTING_STR.to_string()),
             ZN_JOIN_SUBSCRIPTIONS_KEY => Some(ZN_JOIN_SUBSCRIPTIONS_STR.to_string()),
             ZN_JOIN_PUBLICATIONS_KEY => Some(ZN_JOIN_PUBLICATIONS_STR.to_string()),

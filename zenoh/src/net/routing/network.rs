@@ -84,6 +84,7 @@ pub(crate) struct Tree {
 pub(crate) struct Network {
     pub(crate) name: String,
     pub(crate) peers_autoconnect: bool,
+    pub(crate) routers_autoconnect_gossip: bool,
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
     pub(crate) trees: Vec<Tree>,
@@ -97,6 +98,7 @@ impl Network {
         pid: PeerId,
         orchestrator: SessionOrchestrator,
         peers_autoconnect: bool,
+        routers_autoconnect_gossip: bool,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         log::debug!("{} Add node (self) {}", name, pid);
@@ -110,6 +112,7 @@ impl Network {
         Network {
             name,
             peers_autoconnect,
+            routers_autoconnect_gossip,
             idx,
             links: VecMap::new(),
             trees: vec![Tree {
@@ -452,11 +455,17 @@ impl Network {
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
             .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
 
-        if self.peers_autoconnect && self.orchestrator.whatami == whatami::PEER {
+        if (self.peers_autoconnect && self.orchestrator.whatami == whatami::PEER)
+            || (self.routers_autoconnect_gossip && self.orchestrator.whatami == whatami::ROUTER)
+        {
             // Connect discovered peers
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
-                if node.whatami == whatami::PEER || node.whatami == whatami::ROUTER {
+                if (self.orchestrator.whatami == whatami::PEER
+                    && (node.whatami == whatami::PEER || node.whatami == whatami::ROUTER))
+                    || (self.orchestrator.whatami == whatami::ROUTER
+                        && node.whatami == whatami::ROUTER)
+                {
                     if let Some(locators) = &node.locators {
                         let orchestrator = self.orchestrator.clone();
                         let pid = node.pid.clone();
