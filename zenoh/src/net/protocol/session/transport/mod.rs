@@ -296,6 +296,14 @@ impl SessionTransport {
     /*************************************/
     pub(crate) fn add_link(&self, link: Link) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
+        if let Some(limit) = self.manager.config.max_links {
+            if guard.len() == limit {
+                return zerror!(ZErrorKind::InvalidLink {
+                    descr: format!("Max num of links ({}) with peer: {}", link, self.pid)
+                });
+            }
+        }
+
         if zlinkget!(guard, &link).is_some() {
             return zerror!(ZErrorKind::InvalidLink {
                 descr: format!("Can not add Link {} with peer: {}", link, self.pid)

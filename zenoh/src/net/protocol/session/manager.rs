@@ -375,35 +375,88 @@ impl SessionManager {
             .collect()
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(super) async fn get_or_new_session(
+    pub(super) fn init_session(
         &self,
         peer: &PeerId,
-        whatami: &WhatAmI,
+        whatami: WhatAmI,
         sn_resolution: ZInt,
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
-        is_local: bool,
-    ) -> Session {
-        loop {
-            match self.get_session(peer) {
-                Some(session) => return session,
-                None => match self
-                    .new_session(
-                        peer,
-                        whatami,
-                        sn_resolution,
-                        initial_sn_tx,
-                        initial_sn_rx,
-                        is_local,
-                    )
-                    .await
-                {
-                    Ok(session) => return session,
-                    Err(_) => continue,
-                },
+        is_shm: bool,
+    ) -> ZResult<Session> {
+        let mut guard = zlock!(self.sessions);
+
+        // First verify if the session already exists
+        if let Some(session) = guard.get(peer) {
+            if session.whatami != whatami {
+                let e = format!(
+                    "Session with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
+                    peer, whatami, session.whatami
+                );
+                log::trace!("{}", e);
+                return zerror!(ZErrorKind::Other { descr: e });
+            }
+
+            if session.sn_resolution != sn_resolution {
+                let e = format!(
+                    "Session with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
+                    peer, sn_resolution, session.sn_resolution
+                );
+                log::trace!("{}", e);
+                return zerror!(ZErrorKind::Other { descr: e });
+            }
+
+            if session.is_shm != is_shm {
+                let e = format!(
+                    "Session with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
+                    peer, is_shm, session.is_shm
+                );
+                log::trace!("{}", e);
+                return zerror!(ZErrorKind::Other { descr: e });
+            }
+
+            return Ok(Session::new(Arc::downgrade(&session)));
+        }
+
+        // Then verify that we haven't reached the session number limit
+        if let Some(limit) = self.config.max_sessions {
+            if guard.len() == limit {
+                let e = format!(
+                    "Max sessions reached ({}). Denying new session with peer: {}",
+                    limit, peer
+                );
+                log::trace!("{}", e);
+                return zerror!(ZErrorKind::Other { descr: e });
             }
         }
+
+        // Create the channel object
+        let a_st = Arc::new(SessionTransport::new(
+            self.clone(),
+            peer.clone(),
+            whatami,
+            sn_resolution,
+            initial_sn_tx,
+            initial_sn_rx,
+            is_shm,
+        ));
+
+        // Create a weak reference to the session
+        let session = Session::new(Arc::downgrade(&a_st));
+        // Add the session to the list of active sessions
+        guard.insert(peer.clone(), a_st);
+
+        log::debug!(
+            "New session opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}, is_local: {}",
+            peer,
+            whatami,
+            sn_resolution,
+            initial_sn_tx,
+            initial_sn_rx,
+            is_shm
+        );
+
+        Ok(session)
     }
 
     pub(super) async fn del_session(&self, peer: &PeerId) -> ZResult<()> {
@@ -417,51 +470,6 @@ impl SessionManager {
             pa.handle_close(peer).await;
         }
         Ok(())
-    }
-
-    pub(super) async fn new_session(
-        &self,
-        peer: &PeerId,
-        whatami: &WhatAmI,
-        sn_resolution: ZInt,
-        initial_sn_tx: ZInt,
-        initial_sn_rx: ZInt,
-        is_local: bool,
-    ) -> ZResult<Session> {
-        let mut w_guard = zlock!(self.sessions);
-        if w_guard.contains_key(peer) {
-            let e = format!("Can not create a new session for peer: {}", peer);
-            log::trace!("{}", e);
-            return zerror!(ZErrorKind::Other { descr: e });
-        }
-
-        // Create the channel object
-        let a_ch = Arc::new(SessionTransport::new(
-            self.clone(),
-            peer.clone(),
-            *whatami,
-            sn_resolution,
-            initial_sn_tx,
-            initial_sn_rx,
-            is_local,
-        ));
-
-        // Create a weak reference to the session
-        let session = Session::new(Arc::downgrade(&a_ch));
-        // Add the session to the list of active sessions
-        w_guard.insert(peer.clone(), a_ch);
-
-        log::debug!(
-            "New session opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}, is_local: {}",
-            peer,
-            whatami,
-            sn_resolution,
-            initial_sn_tx,
-            initial_sn_rx,
-            is_local
-        );
-
-        Ok(session)
     }
 
     pub async fn open_session(&self, locator: &Locator) -> ZResult<Session> {

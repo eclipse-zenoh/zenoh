@@ -465,16 +465,21 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         }
     };
 
-    let session = manager
-        .get_or_new_session(
-            &info.pid,
-            &info.whatami,
-            info.sn_resolution,
-            info.initial_sn_tx,
-            info.initial_sn_rx,
-            info.auth_session.is_local,
-        )
-        .await;
+    let res = manager.init_session(
+        &info.pid,
+        info.whatami,
+        info.sn_resolution,
+        info.initial_sn_tx,
+        info.initial_sn_rx,
+        info.auth_session.is_local,
+    );
+    let session = match res {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = close_link(manager, link, &auth_link, Some(smsg::close_reason::INVALID)).await;
+            return Err(e);
+        }
+    };
 
     // Retrive the session's transport
     let transport = session.get_transport()?;
@@ -820,96 +825,56 @@ async fn accept_init_session(
     //       addition of new sessions and links
     let mut guard = zasynclock!(manager.opened);
 
-    let open_ack_initial_sn = if let Some(opened) = guard.get(&input.cookie.pid) {
-        if opened.whatami != input.cookie.whatami
-            || opened.sn_resolution != input.cookie.sn_resolution
-        {
-            let e = format!(
-                "Rejecting OpenSyn cookie on link: {}. Invalid sn resolution: {}",
-                link, input.cookie.pid
-            );
-            return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
-            ));
-        }
-        opened.initial_sn
-    } else {
-        let initial_sn = zasynclock!(manager.prng).gen_range(0..input.cookie.sn_resolution);
-        guard.insert(
-            input.cookie.pid.clone(),
-            Opened {
-                whatami: input.cookie.whatami,
-                sn_resolution: input.cookie.sn_resolution,
-                initial_sn,
-            },
-        );
-        initial_sn
-    };
-
-    let session = if let Some(session) = manager.get_session(&input.cookie.pid) {
-        // Check if this open is related to a totally new session (i.e. new peer) or to an exsiting one
-        // Get the underlying transport
-        let transport = session.get_transport().map_err(|e| (e, None))?;
-
-        // Check if we have reached maximum number of links for this session
-        if let Some(limit) = manager.config.max_links {
-            let links = transport.get_links();
-            if links.len() >= limit {
+    let open_ack_initial_sn = match guard.get(&input.cookie.pid) {
+        Some(opened) => {
+            if opened.sn_resolution != input.cookie.sn_resolution {
                 let e = format!(
-                    "Rejecting OpenSyn on link: {}. Max links limit reached for peer: {}",
+                "Rejecting OpenSyn cookie on link {} for peer: {}. Invalid sn resolution: {}. Expected: {}",
+                link, input.cookie.pid, input.cookie.sn_resolution, opened.sn_resolution
+            );
+                return Err((
+                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    Some(smsg::close_reason::INVALID),
+                ));
+            }
+
+            if opened.whatami != input.cookie.whatami {
+                let e = format!(
+                    "Rejecting OpenSyn cookie on link: {}. Invalid whatami: {}",
                     link, input.cookie.pid
                 );
                 return Err((
-                    zerror2!(ZErrorKind::InvalidSession { descr: e }),
-                    Some(smsg::close_reason::MAX_LINKS),
+                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    Some(smsg::close_reason::INVALID),
                 ));
             }
-        }
 
-        // Check if the sn_resolution is valid (i.e. the same of existing session)
-        if input.cookie.sn_resolution != transport.sn_resolution {
-            let e = format!(
-                "Rejecting OpenSyn on link: {}. Invalid sequence number resolution for peer: {}",
-                link, input.cookie.pid
+            opened.initial_sn
+        }
+        None => {
+            let initial_sn = zasynclock!(manager.prng).gen_range(0..input.cookie.sn_resolution);
+            guard.insert(
+                input.cookie.pid.clone(),
+                Opened {
+                    whatami: input.cookie.whatami,
+                    sn_resolution: input.cookie.sn_resolution,
+                    initial_sn,
+                },
             );
-            return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
-            ));
+            initial_sn
         }
-
-        session
-    } else {
-        // Check if a limit for the maximum number of open sessions is set
-        if let Some(limit) = manager.config.max_sessions {
-            let num = manager.get_sessions().len();
-            // Check if we have reached the session limit
-            if num >= limit {
-                let e = format!(
-                    "Rejecting OpenSyn on link: {}. Max sessions limit reached for peer: {}",
-                    link, input.cookie.pid
-                );
-                return Err((
-                    zerror2!(ZErrorKind::InvalidSession { descr: e }),
-                    Some(smsg::close_reason::MAX_SESSIONS),
-                ));
-            }
-        }
-
-        // Create a new session
-        manager
-            .new_session(
-                &input.cookie.pid,
-                &input.cookie.whatami,
-                input.cookie.sn_resolution,
-                open_ack_initial_sn,
-                input.initial_sn,
-                input.auth_session.is_local,
-            )
-            .await
-            .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?
     };
+
+    let session = manager
+        .init_session(
+            &input.cookie.pid,
+            input.cookie.whatami,
+            input.cookie.sn_resolution,
+            open_ack_initial_sn,
+            input.initial_sn,
+            input.auth_session.is_local,
+        )
+        .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
 
     // Retrieve the session's transport
     let transport = session.get_transport().map_err(|e| (e, None))?;
