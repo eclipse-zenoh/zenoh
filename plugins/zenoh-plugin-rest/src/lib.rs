@@ -166,6 +166,13 @@ fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
 
 #[no_mangle]
 pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
+    get_expected_args2()
+}
+
+// NOTE: temporary hack for static link of REST plugin in zenoh-bridge-dds, thus it can call this function
+// instead of relying on #[no_mangle] functions that will conflicts with those defined in DDS plugin.
+// TODO: remove once eclipse-zenoh/zenoh#89 is implemented
+pub fn get_expected_args2<'a, 'b>() -> Vec<Arg<'a, 'b>> {
     vec![
         Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
             .default_value(DEFAULT_HTTP_PORT),
@@ -174,7 +181,7 @@ pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
 
 #[no_mangle]
 pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    async_std::task::spawn(run(runtime, args));
+    async_std::task::spawn(run(runtime, args.clone()));
 }
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
@@ -333,8 +340,11 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     }
 }
 
-async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    env_logger::init();
+pub async fn run(runtime: Runtime, args: ArgMatches<'_>) {
+    // Try to initiate login.
+    // Required in case of dynamic lib, otherwise no logs.
+    // But cannot be done twice in case of static link.
+    let _ = env_logger::try_init();
 
     let http_port = parse_http_port(args.value_of("rest-http-port").unwrap());
 

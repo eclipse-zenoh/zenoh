@@ -69,7 +69,10 @@ const MEMORY_BACKEND_NAME: &str = "memory";
 const MEMORY_STORAGE_NAME: &str = "mem-storage";
 
 async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    env_logger::init();
+    // Try to initiate login.
+    // Required in case of dynamic lib, otherwise no logs.
+    // But cannot be done twice in case of static link.
+    let _ = env_logger::try_init();
 
     let lib_loader = if let Some(values) = args.values_of("backend-search-dir") {
         LibLoader::new(&values.collect::<Vec<&str>>(), false)

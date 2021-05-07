@@ -42,7 +42,7 @@ echo "Section: net " >> ${CONTROL_FILE}
 echo "Priority: optional" >> ${CONTROL_FILE}
 echo "Essential: no" >> ${CONTROL_FILE}
 echo "Installed-Size: 1024 " >> ${CONTROL_FILE}
-echo "Depends: zenohd, zenoh-rest, zenoh-storages " >> ${CONTROL_FILE}
+echo "Depends: zenohd, zenoh-plugin-rest, zenoh-plugin-storages " >> ${CONTROL_FILE}
 echo "Maintainer: zenoh-dev@eclipse.org " >> ${CONTROL_FILE}
 echo "Description: The zenoh top-level package" >> ${CONTROL_FILE}
 echo "" >> ${CONTROL_FILE}

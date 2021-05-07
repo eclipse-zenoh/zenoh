@@ -2951,7 +2951,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zenoh-rest"
+name = "zenoh-plugin-rest"
 version = "0.5.0-dev"
 dependencies = [
  "async-std",
@@ -2967,7 +2967,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zenoh-storages"
+name = "zenoh-plugin-storages"
 version = "0.5.0-dev"
 dependencies = [
  "async-std",
