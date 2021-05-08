@@ -62,3 +62,5 @@ jobs:
       with:
         command: test
         args: --verbose -- --nocapture
+      env:
+        ASYNC_STD_THREAD_COUNT: 4

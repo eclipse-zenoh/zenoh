@@ -219,7 +219,8 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
         println!("[Session Peer 01f] => Waiting... OK");
 
-        for _ in 0..MSG_COUNT {
+        for i in 0..MSG_COUNT {
+            println!("[Session Peer 01g] Scheduling message {}", i);
             s02.schedule(message.clone()).unwrap();
         }
         println!("[Session Peer 01g] => Scheduling OK");
@@ -324,7 +325,8 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
         println!("[Session Peer 02f] => Waiting... OK");
 
-        for _ in 0..MSG_COUNT {
+        for i in 0..MSG_COUNT {
+            println!("[Session Peer 02g] Scheduling message {}", i);
             s01.schedule(message.clone()).unwrap();
         }
         println!("[Session Peer 02g] => Scheduling OK");
@@ -356,7 +358,6 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-#[ignore]
 fn session_tcp_concurrent() {
     env_logger::init();
 
