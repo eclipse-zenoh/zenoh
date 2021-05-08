@@ -61,6 +61,6 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --verbose -- --nocapture
+        args: --verbose
       env:
         ASYNC_STD_THREAD_COUNT: 4
