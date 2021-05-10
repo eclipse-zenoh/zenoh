@@ -923,50 +923,48 @@ pub(crate) fn compute_matches_data_routes(tables: &mut Tables, res: &mut Arc<Res
     }
 }
 
-// @TOFIX
 macro_rules! treat_timestamp {
     ($hlc:expr, $info:expr) => {
-        $info
-        // // if an HLC was configured (via Config.add_timestamp),
-        // // check DataInfo and add a timestamp if there isn't
-        // match $hlc {
-        //     Some(hlc) => {
-        //         if let Some(mut data_info) = $info {
-        //             if let Some(ref ts) = data_info.timestamp {
-        //                 // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
-        //                 match hlc.update_with_timestamp(ts).await {
-        //                     Ok(()) => Some(data_info),
-        //                     Err(e) => {
-        //                         log::error!(
-        //                             "Error treating timestamp for received Data ({}): drop it!",
-        //                             e
-        //                         );
-        //                         return;
-        //                     }
-        //                 }
-        //             } else {
-        //                 // Timestamp not present; add one
-        //                 data_info.timestamp = Some(hlc.new_timestamp().await);
-        //                 log::trace!("Adding timestamp to DataInfo: {:?}", data_info.timestamp);
-        //                 Some(data_info)
-        //             }
-        //         } else {
-        //             // No DataInfo; add one with a Timestamp
-        //             Some(
-        //                 DataInfo {
-        //                     source_id: None,
-        //                     source_sn: None,
-        //                     first_router_id: None,
-        //                     first_router_sn: None,
-        //                     timestamp: Some(hlc.new_timestamp().await),
-        //                     kind: None,
-        //                     encoding: None,
-        //                 }
-        //             )
-        //         }
-        //     },
-        //     None => $info,
-        // };
+        // if an HLC was configured (via Config.add_timestamp),
+        // check DataInfo and add a timestamp if there isn't
+        match $hlc {
+            Some(hlc) => {
+                if let Some(mut data_info) = $info {
+                    if let Some(ref ts) = data_info.timestamp {
+                        // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
+                        match hlc.update_with_timestamp(ts) {
+                            Ok(()) => Some(data_info),
+                            Err(e) => {
+                                log::error!(
+                                    "Error treating timestamp for received Data ({}): drop it!",
+                                    e
+                                );
+                                return;
+                            }
+                        }
+                    } else {
+                        // Timestamp not present; add one
+                        data_info.timestamp = Some(hlc.new_timestamp());
+                        log::trace!("Adding timestamp to DataInfo: {:?}", data_info.timestamp);
+                        Some(data_info)
+                    }
+                } else {
+                    // No DataInfo; add one with a Timestamp
+                    Some(
+                        DataInfo {
+                            source_id: None,
+                            source_sn: None,
+                            first_router_id: None,
+                            first_router_sn: None,
+                            timestamp: Some(hlc.new_timestamp()),
+                            kind: None,
+                            encoding: None,
+                        }
+                    )
+                }
+            },
+            None => $info,
+        };
     }
 }
 
