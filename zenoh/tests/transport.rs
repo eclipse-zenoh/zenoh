@@ -25,6 +25,7 @@ use zenoh::net::protocol::session::{
     SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -339,7 +340,8 @@ async fn run(
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_only() {
-    env_logger::init();
+    task::block_on(async { zasync_executor_init!(); });
+
     // Define the locators
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
@@ -359,6 +361,8 @@ fn transport_tcp_only() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn transport_udp_only() {
+    task::block_on(async { zasync_executor_init!(); });
+
     // Define the locator
     let locators: Vec<Locator> = vec!["udp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
@@ -378,6 +382,8 @@ fn transport_udp_only() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn transport_unix_only() {
+    task::block_on(async { zasync_executor_init!(); });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
     let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
@@ -402,6 +408,8 @@ fn transport_unix_only() {
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn transport_tcp_udp() {
+    task::block_on(async { zasync_executor_init!(); });
+
     // Define the locator
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:10448".parse().unwrap(),
@@ -428,6 +436,8 @@ fn transport_tcp_udp() {
 ))]
 #[test]
 fn transport_tcp_unix() {
+    task::block_on(async { zasync_executor_init!(); });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
@@ -459,6 +469,8 @@ fn transport_tcp_unix() {
 ))]
 #[test]
 fn transport_udp_unix() {
+    task::block_on(async { zasync_executor_init!(); });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
@@ -491,6 +503,8 @@ fn transport_udp_unix() {
 ))]
 #[test]
 fn transport_tcp_udp_unix() {
+    task::block_on(async { zasync_executor_init!(); });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
@@ -519,6 +533,8 @@ fn transport_tcp_udp_unix() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn transport_tls_only() {
+    task::block_on(async { zasync_executor_init!(); });
+
     use std::io::Cursor;
     use zenoh::net::protocol::link::tls::{
         internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
@@ -632,6 +648,8 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 #[cfg(feature = "transport_quic")]
 #[test]
 fn transport_quic_only() {
+    task::block_on(async { zasync_executor_init!(); });
+
     use zenoh::net::protocol::link::quic::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,

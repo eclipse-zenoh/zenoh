@@ -54,6 +54,9 @@ pub struct Runtime {
 
 impl Runtime {
     pub async fn new(version: u8, config: ConfigProperties, id: Option<&str>) -> ZResult<Runtime> {
+        // Make sure to have have enough threads spawned in the async futures executor
+        zasync_executor_init!();
+
         let pid = if let Some(s) = id {
             // filter-out '-' characters (in case s has UUID format)
             let s = s.replace('-', "");

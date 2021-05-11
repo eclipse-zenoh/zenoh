@@ -26,6 +26,7 @@ use zenoh::net::protocol::session::{
     SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::zasync_executor_init;
 
 const SLEEP: Duration = Duration::from_millis(100);
 
@@ -385,6 +386,10 @@ async fn authenticator_shared_memory(
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn authenticator_tcp() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let locator: Locator = "tcp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(locator.clone(), None).await;
@@ -396,6 +401,10 @@ fn authenticator_tcp() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn authenticator_udp() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let locator: Locator = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(locator.clone(), None).await;
@@ -407,6 +416,10 @@ fn authenticator_udp() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn authenticator_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
     let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-10.sock"
         .parse()
@@ -423,6 +436,10 @@ fn authenticator_unix() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn authenticator_tls() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use std::io::Cursor;
     use zenoh::net::protocol::link::tls::{
         internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
@@ -529,6 +546,10 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 #[cfg(feature = "transport_quic")]
 #[test]
 fn authenticator_quic() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use zenoh::net::protocol::link::quic::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,

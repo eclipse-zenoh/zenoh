@@ -22,6 +22,7 @@ use zenoh::net::protocol::session::{
     SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
@@ -444,7 +445,10 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_only() {
-    env_logger::init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let locator = "tcp/127.0.0.1:8447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }
@@ -452,6 +456,10 @@ fn session_tcp_only() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn session_udp_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let locator = "udp/127.0.0.1:8447".parse().unwrap();
     task::block_on(session_open_close(locator, None));
 }
@@ -459,6 +467,10 @@ fn session_udp_only() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn session_unix_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
     let locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
         .parse()
@@ -471,6 +483,10 @@ fn session_unix_only() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn session_tls_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use std::io::Cursor;
     use zenoh::net::protocol::link::tls::{
         internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
@@ -572,6 +588,10 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 #[cfg(feature = "transport_quic")]
 #[test]
 fn session_quic_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use zenoh::net::protocol::link::quic::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,

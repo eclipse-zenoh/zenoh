@@ -2906,6 +2906,7 @@ dependencies = [
 name = "zenoh"
 version = "0.5.0-dev"
 dependencies = [
+ "async-global-executor",
  "async-rustls",
  "async-std",
  "async-trait",

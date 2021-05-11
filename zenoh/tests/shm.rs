@@ -28,7 +28,7 @@ mod tests {
         SessionManagerConfig, SessionManagerOptionalConfig,
     };
     use zenoh_util::core::ZResult;
-    use zenoh_util::zlock;
+    use zenoh_util::{zasync_executor_init, zlock};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -370,6 +370,10 @@ mod tests {
     #[cfg(all(feature = "transport_tcp", feature = "zero-copy"))]
     #[test]
     fn session_tcp_shm() {
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
         let locator: Locator = "tcp/127.0.0.1:12447".parse().unwrap();
         task::block_on(run(&locator));
     }
