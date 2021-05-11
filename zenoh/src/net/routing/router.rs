@@ -420,55 +420,53 @@ impl LinkStateInterceptor {
 
     pub(crate) fn closing(&self) {
         self.demux.closing();
-        // @TOFIX
-        // std::thread::sleep(std::time::Duration::from_millis(*LINK_CLOSURE_DELAY));
-        let mut tables = zwrite!(self.tables);
-        match self.session.get_whatami() {
-            Ok(whatami) => match (tables.whatami, whatami) {
-                (whatami::ROUTER, whatami::ROUTER) => {
-                    for (_, removed_node) in tables
-                        .routers_net
-                        .as_mut()
-                        .unwrap()
-                        .remove_link(&self.session)
-                    {
-                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER);
-                        queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER);
-                    }
+        let tables_ref = self.tables.clone();
+        let pid = self.session.get_pid().unwrap();
+        let whatami = self.session.get_whatami();
+        async_std::task::spawn(async move {
+            async_std::task::sleep(std::time::Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
+            let mut tables = zwrite!(tables_ref);
+            match whatami {
+                Ok(whatami) => match (tables.whatami, whatami) {
+                    (whatami::ROUTER, whatami::ROUTER) => {
+                        for (_, removed_node) in
+                            tables.routers_net.as_mut().unwrap().remove_link(&pid)
+                        {
+                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER);
+                            queries_remove_node(&mut tables, &removed_node.pid, whatami::ROUTER);
+                        }
 
-                    tables.shared_nodes = shared_nodes(
-                        tables.routers_net.as_ref().unwrap(),
-                        tables.peers_net.as_ref().unwrap(),
-                    );
-
-                    tables.schedule_compute_trees(self.tables.clone(), whatami::ROUTER);
-                }
-                (whatami::ROUTER, whatami::PEER)
-                | (whatami::PEER, whatami::ROUTER)
-                | (whatami::PEER, whatami::PEER) => {
-                    for (_, removed_node) in tables
-                        .peers_net
-                        .as_mut()
-                        .unwrap()
-                        .remove_link(&self.session)
-                    {
-                        pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER);
-                        queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER);
-                    }
-
-                    if tables.whatami == whatami::ROUTER {
                         tables.shared_nodes = shared_nodes(
                             tables.routers_net.as_ref().unwrap(),
                             tables.peers_net.as_ref().unwrap(),
                         );
-                    }
 
-                    tables.schedule_compute_trees(self.tables.clone(), whatami::PEER);
-                }
-                _ => (),
-            },
-            Err(_) => log::error!("Unable to get whatami closing session!"),
-        };
+                        tables.schedule_compute_trees(tables_ref.clone(), whatami::ROUTER);
+                    }
+                    (whatami::ROUTER, whatami::PEER)
+                    | (whatami::PEER, whatami::ROUTER)
+                    | (whatami::PEER, whatami::PEER) => {
+                        for (_, removed_node) in
+                            tables.peers_net.as_mut().unwrap().remove_link(&pid)
+                        {
+                            pubsub_remove_node(&mut tables, &removed_node.pid, whatami::PEER);
+                            queries_remove_node(&mut tables, &removed_node.pid, whatami::PEER);
+                        }
+
+                        if tables.whatami == whatami::ROUTER {
+                            tables.shared_nodes = shared_nodes(
+                                tables.routers_net.as_ref().unwrap(),
+                                tables.peers_net.as_ref().unwrap(),
+                            );
+                        }
+
+                        tables.schedule_compute_trees(tables_ref.clone(), whatami::PEER);
+                    }
+                    _ => (),
+                },
+                Err(_) => log::error!("Unable to get whatami closing session!"),
+            };
+        });
     }
 
     pub(crate) fn closed(&self) {}

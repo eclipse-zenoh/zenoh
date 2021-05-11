@@ -39,14 +39,17 @@ impl std::fmt::Debug for Node {
 
 pub(crate) struct Link {
     pub(crate) session: Session,
+    pid: PeerId,
     mappings: VecMap<PeerId>,
     local_mappings: VecMap<ZInt>,
 }
 
 impl Link {
     fn new(session: Session) -> Self {
+        let pid = session.get_pid().unwrap();
         Link {
             session,
+            pid,
             mappings: VecMap::new(),
             local_mappings: VecMap::new(),
         }
@@ -143,9 +146,7 @@ impl Network {
 
     #[inline]
     pub(crate) fn get_link_from_pid(&self, pid: &PeerId) -> Option<&Link> {
-        self.links
-            .values()
-            .find(|link| link.session.get_pid().unwrap() == *pid)
+        self.links.values().find(|link| link.pid == *pid)
     }
 
     #[inline]
@@ -234,12 +235,7 @@ impl Network {
         let msg = self.make_msg(idxs);
         for link in self.links.values() {
             if predicate(link) {
-                log::trace!(
-                    "{} Send to {} {:?}",
-                    self.name,
-                    link.session.get_pid().unwrap(),
-                    msg
-                );
+                log::trace!("{} Send to {} {:?}", self.name, link.pid, msg);
                 if let Err(e) = link.session.handle_message(msg.clone()) {
                     log::error!("{} Error sending LinkStateList: {}", self.name, e);
                 }
@@ -271,10 +267,7 @@ impl Network {
         let graph = &self.graph;
         let links = &mut self.links;
 
-        let src_link = match links
-            .values_mut()
-            .find(|link| link.session.get_pid().unwrap() == src)
-        {
+        let src_link = match links.values_mut().find(|link| link.pid == src) {
             Some(link) => link,
             None => {
                 log::error!(
@@ -493,13 +486,12 @@ impl Network {
                 .map(|(_, idx1, _new_node)| (idx1, true))
                 .collect::<Vec<(NodeIndex, bool)>>();
             for link in self.links.values() {
-                let link_pid = link.session.get_pid().unwrap();
-                if link_pid != src {
+                if link.pid != src {
                     let updated_idxs: Vec<(NodeIndex, bool)> = updated_idxs
                         .clone()
                         .into_iter()
                         .filter_map(|(_, idx1, _)| {
-                            if link_pid != self.graph[idx1].pid {
+                            if link.pid != self.graph[idx1].pid {
                                 Some((idx1, false))
                             } else {
                                 None
@@ -556,13 +548,9 @@ impl Network {
         self.graph[self.idx].sn += 1;
 
         if new {
-            self.send_on_links(vec![(idx, true), (self.idx, false)], |link| {
-                link.session.get_pid().unwrap() != pid
-            });
+            self.send_on_links(vec![(idx, true), (self.idx, false)], |link| link.pid != pid);
         } else {
-            self.send_on_links(vec![(self.idx, false)], |link| {
-                link.session.get_pid().unwrap() != pid
-            });
+            self.send_on_links(vec![(self.idx, false)], |link| link.pid != pid);
         }
 
         let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
@@ -570,12 +558,10 @@ impl Network {
         free_index
     }
 
-    pub(crate) fn remove_link(&mut self, session: &Session) -> Vec<(NodeIndex, Node)> {
-        let pid = session.get_pid().unwrap();
+    pub(crate) fn remove_link(&mut self, pid: &PeerId) -> Vec<(NodeIndex, Node)> {
         log::trace!("{} remove_link {}", self.name, pid);
-        self.links
-            .retain(|_, link| link.session.get_pid().unwrap() != pid);
-        self.graph[self.idx].links.retain(|link| *link != pid);
+        self.links.retain(|_, link| link.pid != *pid);
+        self.graph[self.idx].links.retain(|link| *link != *pid);
 
         let idx = self.get_idx(&pid).unwrap();
         if let Some(edge) = self.graph.find_edge_undirected(self.idx, idx) {
@@ -588,13 +574,7 @@ impl Network {
         let links = self
             .links
             .values()
-            .map(|link| {
-                self.get_idx(&link.session.get_pid().unwrap())
-                    .unwrap()
-                    .index()
-                    .try_into()
-                    .unwrap()
-            })
+            .map(|link| self.get_idx(&link.pid).unwrap().index().try_into().unwrap())
             .collect::<Vec<ZInt>>();
 
         let msg = ZenohMessage::make_link_state_list(
@@ -611,7 +591,7 @@ impl Network {
 
         for link in self.links.values() {
             if let Err(e) = link.session.handle_message(msg.clone()) {
-                log::error!("{} Error sending LinkStateList: {}", self.name, e);
+                log::warn!("{} Error sending LinkStateList: {}", self.name, e);
             }
         }
 
