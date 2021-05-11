@@ -359,7 +359,9 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_concurrent() {
-    task::block_on(async { zasync_executor_init!(); });
+    task::block_on(async {
+        zasync_executor_init!();
+    });
 
     let locator01: Vec<Locator> = vec![
         "tcp/127.0.0.1:7447".parse().unwrap(),
