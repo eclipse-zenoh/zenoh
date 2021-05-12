@@ -101,7 +101,9 @@ impl SessionTransportLink {
                 let res = tx_task(pipeline, c_link.clone(), keep_alive).await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
-                    let _ = c_transport.del_link(&c_link).await;
+                    // Spawn a task to avoid a deadlock waiting for this same task
+                    // to finish in the close() joining its handle
+                    task::spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -136,7 +138,9 @@ impl SessionTransportLink {
                 c_active.store(false, Ordering::Release);
                 if let Err(e) = res {
                     log::debug!("{}", e);
-                    let _ = c_transport.del_link(&c_link).await;
+                    // Spawn a task to avoid a deadlock waiting for this same task
+                    // to finish in the close() joining its handle
+                    task::spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));

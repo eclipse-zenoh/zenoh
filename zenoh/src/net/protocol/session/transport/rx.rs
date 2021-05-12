@@ -50,11 +50,13 @@ macro_rules! zreceiveframe {
                 );
                 // Drop the guard before closing the session
                 drop($guard);
-                // Stop the link
+                // Stop now rx and tx tasks before doing the proper cleanup
                 let _ = $transport.stop_rx($link);
                 let _ = $transport.stop_tx($link);
                 // Delete the whole session
                 let tr = $transport.clone();
+                // Spawn a task to avoid a deadlock waiting for this same task
+                // to finish in the link close() joining the rx handle
                 task::spawn(async move {
                     let _ = tr.delete().await;
                 });
@@ -135,8 +137,11 @@ impl SessionTransport {
         let _ = self.stop_rx(link);
         let _ = self.stop_tx(link);
 
+        // Delete and clean up
         let c_transport = self.clone();
         let c_link = link.clone();
+        // Spawn a task to avoid a deadlock waiting for this same task
+        // to finish in the link close() joining the rx handle
         task::spawn(async move {
             if link_only {
                 let _ = c_transport.del_link(&c_link).await;
