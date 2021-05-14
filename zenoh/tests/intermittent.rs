@@ -31,7 +31,7 @@ use zenoh_util::zasync_executor_init;
 
 const MSG_SIZE: usize = 8;
 const MSG_COUNT: usize = 1_000_000;
-const TIMEOUT: Duration = Duration::from_secs(60);
+const TIMEOUT: Duration = Duration::from_secs(300);
 const SLEEP: Duration = Duration::from_millis(100);
 const USLEEP: Duration = Duration::from_millis(1);
 
@@ -397,29 +397,5 @@ fn session_tcp_intermittent() {
     });
 
     let locator = "tcp/127.0.0.1:12447".parse().unwrap();
-    task::block_on(session_intermittent(locator, None));
-}
-
-#[cfg(feature = "transport_udp")]
-#[test]
-fn session_udp_intermittent() {
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
-    let locator = "udp/127.0.0.1:12447".parse().unwrap();
-    task::block_on(session_intermittent(locator, None));
-}
-
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-#[test]
-fn session_unix_intermittent() {
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
-    let locator = "unixsock-stream/zenoh-test-unix-socket-11.sock"
-        .parse()
-        .unwrap();
     task::block_on(session_intermittent(locator, None));
 }
