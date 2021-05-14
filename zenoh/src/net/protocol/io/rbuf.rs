@@ -17,7 +17,9 @@ use super::ArcSlice;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
+#[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+#[cfg(feature = "zero-copy")]
 use zenoh_util::zerror;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -107,6 +109,15 @@ impl RBuf {
         }
     }
 
+    #[inline]
+    pub fn get_slice(&self, index: usize) -> Option<&ArcSlice> {
+        if index == 0 {
+            self.zero.as_ref()
+        } else {
+            self.slices.get(index - 1)
+        }
+    }
+
     pub fn as_ioslices(&self) -> Vec<IoSlice> {
         let mut result = vec![];
         if let Some(z) = self.zero.as_ref() {
@@ -114,6 +125,18 @@ impl RBuf {
             result.push(z.as_ioslice());
             for s in self.slices.iter() {
                 result.push(s.as_ioslice());
+            }
+        }
+        result
+    }
+
+    pub fn as_slices(&self) -> Vec<ArcSlice> {
+        let mut result = vec![];
+        if let Some(z) = self.zero.as_ref() {
+            result.reserve(1 + self.slices.len());
+            result.push(z.clone());
+            for s in self.slices.iter() {
+                result.push(s.clone());
             }
         }
         result
@@ -164,15 +187,6 @@ impl RBuf {
     #[inline(always)]
     pub fn get_pos(&self) -> RBufPos {
         self.pos
-    }
-
-    #[inline]
-    pub(super) fn get_slice(&self, index: usize) -> Option<&ArcSlice> {
-        if index == 0 {
-            self.zero.as_ref()
-        } else {
-            self.slices.get(index - 1)
-        }
     }
 
     #[inline]
