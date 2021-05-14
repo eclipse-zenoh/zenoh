@@ -20,12 +20,34 @@ use zenoh_util::zread;
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
+macro_rules! zclose {
+    ($transport:expr, $link:expr) => {
+        // Stop now rx and tx tasks before doing the proper cleanup
+        let _ = $transport.stop_rx($link);
+        let _ = $transport.stop_tx($link);
+        // Delete the whole session
+        let tr = $transport.clone();
+        // Spawn a task to avoid a deadlock waiting for this same task
+        // to finish in the link close() joining the rx handle
+        task::spawn(async move {
+            let _ = tr.delete().await;
+        });
+    };
+}
 macro_rules! zcallback {
-    ($transport:expr, $msg:expr) => {
+    ($transport:expr, $link:expr, $msg:expr) => {
         let callback = zread!($transport.callback).clone();
         match callback.as_ref() {
             Some(callback) => {
-                let _ = callback.handle_message($msg);
+                let res = callback.handle_message($msg);
+                if let Err(e) = res {
+                    log::trace!(
+                        "Session: {}. Error from callback: {}. Closing session.",
+                        $transport.pid,
+                        e
+                    );
+                    zclose!($transport, $link);
+                }
             }
             None => {
                 log::trace!(
@@ -51,15 +73,7 @@ macro_rules! zreceiveframe {
                 // Drop the guard before closing the session
                 drop($guard);
                 // Stop now rx and tx tasks before doing the proper cleanup
-                let _ = $transport.stop_rx($link);
-                let _ = $transport.stop_tx($link);
-                // Delete the whole session
-                let tr = $transport.clone();
-                // Spawn a task to avoid a deadlock waiting for this same task
-                // to finish in the link close() joining the rx handle
-                task::spawn(async move {
-                    let _ = tr.delete().await;
-                });
+                zclose!($transport, $link);
                 // Close the link
                 return;
             }
@@ -106,12 +120,12 @@ macro_rules! zreceiveframe {
                             return;
                         }
                     };
-                    zcallback!($transport, msg);
+                    zcallback!($transport, $link, msg);
                 }
             }
             FramePayload::Messages { mut messages } => {
                 for msg in messages.drain(..) {
-                    zcallback!($transport, msg);
+                    zcallback!($transport, $link, msg);
                 }
             }
         }
