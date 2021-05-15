@@ -58,13 +58,15 @@ macro_rules! zgetbatch {
                     return;
                 }
 
-                // Drop the guard and wait for the batches to be available
-                refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
-
                 // Verify that the pipeline is still active
                 if !$self.active.load(Ordering::Acquire) {
                     return;
                 }
+
+                // Drop the stage_in and refill guards and wait for the batches to be available
+                drop($stage_in);
+                refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
+                $stage_in = zlock!($self.stage_in[$priority]);
             }
 
             // Drain all the empty batches
@@ -372,8 +374,11 @@ impl TransmissionPipeline {
         &self,
         message: ZenohMessage,
         priority: usize,
-        mut in_guard: MutexGuard<'_, StageIn>,
+        stage_in: MutexGuard<'_, StageIn>,
     ) {
+        // Assign the stage_in to in_guard to avoid lifetime warnings
+        let mut in_guard = stage_in;
+
         // Take the expandable buffer and serialize the totality of the message
         let mut fragbuf = in_guard.fragbuf.take().unwrap();
         fragbuf.clear();
@@ -501,12 +506,12 @@ impl TransmissionPipeline {
                     }
                 }
 
-                // Check if the pipeline is still active
-                if !self.active.load(Ordering::Acquire) {
-                    return None;
-                }
-
                 if is_pipeline_really_empty {
+                    // Check if the pipeline is still active
+                    if !self.active.load(Ordering::Acquire) {
+                        return None;
+                    }
+
                     let waiter = self.cond_canpull.waiter(out_guard);
                     Action::Wait(waiter)
                 } else {
@@ -541,6 +546,8 @@ impl TransmissionPipeline {
         let _in_guards: Vec<MutexGuard<'_, StageIn>> =
             self.stage_in.iter().map(|x| zlock!(x)).collect();
         let _out_guard = zlock!(self.stage_out);
+        let _re_guards: Vec<MutexGuard<'_, StageRefill>> =
+            self.stage_refill.iter().map(|x| zlock!(x)).collect();
 
         // Unblock waiting pushers
         for cr in self.cond_canrefill.iter() {
@@ -592,7 +599,7 @@ mod tests {
     use super::super::io::RBuf;
     use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
     use super::super::session::defaults::{
-        QUEUE_PRIO_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION,
+        QUEUE_PRIO_DATA, QUEUE_SIZE_DATA, SESSION_BATCH_SIZE, SESSION_SEQ_NUM_RESOLUTION,
     };
     use super::*;
     use async_std::prelude::*;
@@ -602,10 +609,11 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
+    const SLEEP: Duration = Duration::from_millis(100);
     const TIMEOUT: Duration = Duration::from_secs(60);
 
     #[test]
-    fn tx_pipeline() {
+    fn tx_pipeline_flow() {
         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
@@ -629,7 +637,7 @@ mod tests {
             );
 
             println!(
-                ">>> Sending {} messages with payload size: {}",
+                "Pipeline Flow [>>>]: Sending {} messages with payload size of {} bytes",
                 num_msg, payload_size
             );
             for _ in 0..num_msg {
@@ -673,7 +681,7 @@ mod tests {
             }
 
             println!(
-                "<<< Received {} messages, {} bytes, {} batches, {} fragments",
+                "Pipeline Flow [<<<]: Received {} messages, {} bytes, {} batches, {} fragments",
                 msgs, bytes, batches, fragments
             );
         }
@@ -699,7 +707,7 @@ mod tests {
         // Total amount of bytes to send in each test
         let bytes: usize = 100_000_000;
         let max_msgs: usize = 1_000;
-        // Paylod size of the messages
+        // Payload size of the messages
         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
 
         task::block_on(async {
@@ -725,6 +733,110 @@ mod tests {
                 let res = t_c.join(t_s).timeout(TIMEOUT).await;
                 assert!(res.is_ok());
             }
+        });
+    }
+
+    #[test]
+    fn tx_pipeline_blocking() {
+        fn schedule(queue: Arc<TransmissionPipeline>, counter: Arc<AtomicUsize>) {
+            // Make sure to put only one message per batch: set the payload size
+            // to half of the batch in such a way the serialized zenoh message
+            // will be larger then half of the batch size (header + payload).
+            let payload_size: usize = *SESSION_BATCH_SIZE / 2;
+
+            // Send reliable messages
+            let key = ResKey::RName("test".to_string());
+            let payload = RBuf::from(vec![0u8; payload_size]);
+            let reliability = Reliability::Reliable;
+            let congestion_control = CongestionControl::Block;
+            let data_info = None;
+            let routing_context = None;
+            let reply_context = None;
+            let attachment = None;
+            let message = ZenohMessage::make_data(
+                key,
+                payload,
+                reliability,
+                congestion_control,
+                data_info,
+                routing_context,
+                reply_context,
+                attachment,
+            );
+
+            // The last push should block since there shouldn't any more batches
+            // available for serialization.
+            let num_msg = 1 + *QUEUE_SIZE_DATA;
+            for _ in 0..num_msg {
+                queue.push_zenoh_message(message.clone(), QUEUE_PRIO_DATA);
+                let c = counter.fetch_add(1, Ordering::AcqRel);
+                println!(
+                    "Pipeline Blocking [>>>]: Scheduled message #{} with payload size of {} bytes",
+                    c + 1,
+                    payload_size
+                );
+            }
+        }
+
+        // Queue
+        let batch_size = *SESSION_BATCH_SIZE;
+        let is_streamed = true;
+        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+            0,
+            *SESSION_SEQ_NUM_RESOLUTION,
+        )));
+        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
+            0,
+            *SESSION_SEQ_NUM_RESOLUTION,
+        )));
+        let queue = Arc::new(TransmissionPipeline::new(
+            batch_size,
+            is_streamed,
+            sn_reliable,
+            sn_best_effort,
+        ));
+
+        let counter = Arc::new(AtomicUsize::new(0));
+
+        let c_queue = queue.clone();
+        let c_counter = counter.clone();
+        let h1 = task::spawn_blocking(move || {
+            schedule(c_queue, c_counter);
+        });
+
+        let c_queue = queue.clone();
+        let c_counter = counter.clone();
+        let h2 = task::spawn_blocking(move || {
+            schedule(c_queue, c_counter);
+        });
+
+        task::block_on(async {
+            // Wait to have sent enough messages and to have blocked
+            println!(
+                "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
+                *QUEUE_SIZE_DATA
+            );
+            let check = async {
+                while counter.load(Ordering::Acquire) < *QUEUE_SIZE_DATA {
+                    task::sleep(SLEEP).await;
+                }
+            };
+            check.timeout(TIMEOUT).await.unwrap();
+
+            // Disable and drain the queue
+            task::spawn_blocking(move || {
+                println!("Pipeline Blocking [---]: disabling the queue");
+                queue.disable();
+                println!("Pipeline Blocking [---]: draining the queue");
+                let _ = queue.drain();
+            })
+            .timeout(TIMEOUT)
+            .await
+            .unwrap();
+
+            // Make sure that the tasks scheduling have been unblocked
+            println!("Pipeline Blocking [---]: waiting for schedule to be unblocked");
+            h1.join(h2).timeout(TIMEOUT).await.unwrap();
         });
     }
 
