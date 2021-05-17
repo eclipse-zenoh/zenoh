@@ -70,8 +70,8 @@ pub mod protocol;
 pub mod routing;
 pub mod runtime;
 
-use async_std::channel::bounded;
 use async_std::net::UdpSocket;
+use flume::bounded;
 use futures::prelude::*;
 use log::{debug, trace};
 use protocol::core::WhatAmI;
@@ -133,7 +133,7 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 /// }
 /// # })
 /// ```
-pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
+pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloReceiver {
     trace!("scout({}, {})", what, &config);
     let addr = config
         .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
@@ -142,7 +142,7 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
     let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
 
     let (hello_sender, hello_receiver) = bounded::<Hello>(1);
-    let (stop_sender, mut stop_receiver) = bounded::<()>(1);
+    let (stop_sender, stop_receiver) = bounded::<()>(1);
 
     let ifaces = SessionOrchestrator::get_interfaces(ifaces);
     if !ifaces.is_empty() {
@@ -153,8 +153,9 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
         if !sockets.is_empty() {
             async_std::task::spawn(async move {
                 let hello_sender = &hello_sender;
+                let mut stop_receiver = stop_receiver.stream();
                 let scout = SessionOrchestrator::scout(&sockets, what, &addr, async move |hello| {
-                    let _ = hello_sender.send(hello).await;
+                    let _ = hello_sender.send_async(hello).await;
                     Loop::Continue
                 });
                 let stop = async move {
@@ -166,10 +167,7 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
         }
     }
 
-    HelloStream {
-        hello_receiver,
-        stop_sender,
-    }
+    HelloReceiver::new(stop_sender, hello_receiver)
 }
 
 /// Open a zenoh-net [Session](Session).

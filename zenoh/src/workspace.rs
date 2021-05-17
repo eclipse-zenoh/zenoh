@@ -14,17 +14,15 @@
 use crate::net::queryable::EVAL;
 use crate::net::{
     data_kind, encoding, CallbackSubscriber, CongestionControl, DataInfo, Query,
-    QueryConsolidation, QueryTarget, Queryable, RBuf, Reliability, RepliesSender, Reply, ResKey,
-    Sample, Session, SubInfo, SubMode, Subscriber, ZInt,
+    QueryConsolidation, QueryTarget, Queryable, RBuf, Reliability, RepliesSender, Reply,
+    ReplyReceiver, ResKey, Sample, Session, SubInfo, SubMode, Subscriber, ZInt,
 };
 use crate::utils::new_reception_timestamp;
 use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
-use async_std::channel::Receiver;
 use async_std::pin::Pin;
-use async_std::stream::Stream;
 use async_std::task::{Context, Poll};
+use futures_lite::stream::{Stream, StreamExt};
 use log::{debug, warn};
-use pin_project_lite::pin_project;
 use std::convert::TryInto;
 use std::fmt;
 use zenoh_util::zerror;
@@ -417,15 +415,12 @@ fn reply_to_data(reply: Reply, decode_value: bool) -> ZResult<Data> {
     })
 }
 
-pin_project! {
-    /// A [`Stream`] of [`Data`] returned as a result of the [`Workspace::get()`] operation.
-    ///
-    /// [`Stream`]: async_std::stream::Stream
-    pub struct DataStream {
-        #[pin]
-        receiver: Receiver<Reply>,
-        decode_value: bool,
-    }
+/// A [`Stream`] of [`Data`] returned as a result of the [`Workspace::get()`] operation.
+///
+/// [`Stream`]: async_std::stream::Stream
+pub struct DataStream {
+    receiver: ReplyReceiver,
+    decode_value: bool,
 }
 
 impl Stream for DataStream {
@@ -434,7 +429,7 @@ impl Stream for DataStream {
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let decode_value = self.decode_value;
-        match self.project().receiver.poll_next(cx) {
+        match self.get_mut().receiver.poll_next(cx) {
             Poll::Ready(Some(reply)) => match reply_to_data(reply, decode_value) {
                 Ok(data) => Poll::Ready(Some(data)),
                 Err(err) => {
@@ -564,15 +559,12 @@ impl Change {
     }
 }
 
-pin_project! {
-    /// A [`Stream`] of [`Change`] returned as a result of the [`Workspace::subscribe()`] operation.
-    ///
-    /// [`Stream`]: async_std::stream::Stream
-    pub struct ChangeStream<'a> {
-        #[pin]
-        subscriber: Subscriber<'a>,
-        decode_value: bool,
-    }
+/// A [`Stream`] of [`Change`] returned as a result of the [`Workspace::subscribe()`] operation.
+///
+/// [`Stream`]: async_std::stream::Stream
+pub struct ChangeStream<'a> {
+    subscriber: Subscriber<'a>,
+    decode_value: bool,
 }
 
 impl ChangeStream<'_> {
@@ -588,7 +580,7 @@ impl Stream for ChangeStream<'_> {
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let decode_value = self.decode_value;
-        match async_std::pin::Pin::new(self.project().subscriber.stream()).poll_next(cx) {
+        match self.get_mut().subscriber.receiver().poll_next(cx) {
             Poll::Ready(Some(sample)) => match Change::from_sample(sample, decode_value) {
                 Ok(change) => Poll::Ready(Some(change)),
                 Err(err) => {
@@ -642,9 +634,7 @@ pub struct GetRequest {
 impl GetRequest {
     /// Send a [`Path`]/[`Value`] as a reply to the requester.
     pub async fn reply(&self, path: Path, value: Value) {
-        self.replies_sender
-            .send(path_value_to_sample(path, value))
-            .await
+        self.replies_sender.send(path_value_to_sample(path, value))
     }
 }
 
@@ -655,14 +645,11 @@ fn query_to_get(query: Query) -> ZResult<GetRequest> {
     })
 }
 
-pin_project! {
-    /// A [`Stream`] of [`GetRequest`] returned as a result of the [`Workspace::register_eval()`] operation.
-    ///
-    /// [`Stream`]: async_std::stream::Stream
-    pub struct GetRequestStream<'a> {
-        #[pin]
-        queryable: Queryable<'a>
-    }
+/// A [`Stream`] of [`GetRequest`] returned as a result of the [`Workspace::register_eval()`] operation.
+///
+/// [`Stream`]: async_std::stream::Stream
+pub struct GetRequestStream<'a> {
+    queryable: Queryable<'a>,
 }
 
 impl GetRequestStream<'_> {
@@ -677,7 +664,7 @@ impl Stream for GetRequestStream<'_> {
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match async_std::pin::Pin::new(self.project().queryable.stream()).poll_next(cx) {
+        match self.get_mut().queryable.receiver().poll_next(cx) {
             Poll::Ready(Some(query)) => match query_to_get(query) {
                 Ok(get) => Poll::Ready(Some(get)),
                 Err(err) => {

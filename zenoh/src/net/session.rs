@@ -14,9 +14,10 @@
 use super::info::*;
 use super::routing::face::Face;
 use super::*;
-use async_std::channel::{bounded, Receiver, Sender};
+// use async_std::channel::{bounded, Receiver, Sender};
 use async_std::sync::Arc;
 use async_std::task;
+use flume::{bounded, Sender};
 use log::{error, trace, warn};
 use protocol::{
     core::{
@@ -636,7 +637,7 @@ impl Session {
             session: self,
             state: sub_state,
             alive: true,
-            receiver,
+            receiver: SampleReceiver::new(receiver),
         })
     }
 
@@ -760,12 +761,12 @@ impl Session {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let (q_sender, q_receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
+        let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {
             id,
             reskey: resource.clone(),
             kind,
-            q_sender,
+            sender,
         });
         let twin_qable = state.queryables.values().any(|q| {
             state.localkey_to_resname(&q.reskey).unwrap()
@@ -784,7 +785,7 @@ impl Session {
             session: self,
             state: qable_state,
             alive: true,
-            q_receiver,
+            receiver: QueryReceiver::new(receiver),
         })
     }
 
@@ -915,19 +916,16 @@ impl Session {
                                     data_info: info,
                                 });
                             }
-                            SubscriberInvoker::Sender(sender) => async_std::task::block_on(async {
-                                if let Err(e) = sender
-                                    .send(Sample {
-                                        res_name: res.name.clone(),
-                                        payload,
-                                        data_info: info,
-                                    })
-                                    .await
-                                {
+                            SubscriberInvoker::Sender(sender) => {
+                                if let Err(e) = sender.send(Sample {
+                                    res_name: res.name.clone(),
+                                    payload,
+                                    data_info: info,
+                                }) {
                                     error!("SubscriberInvoker error: {}", e);
                                     return;
                                 }
-                            }),
+                            }
                         }
                     }
                     _ => {
@@ -942,19 +940,14 @@ impl Session {
                                     });
                                 }
                                 SubscriberInvoker::Sender(sender) => {
-                                    async_std::task::block_on(async {
-                                        if let Err(e) = sender
-                                            .send(Sample {
-                                                res_name: res.name.clone(),
-                                                payload: payload.clone(),
-                                                data_info: info.clone(),
-                                            })
-                                            .await
-                                        {
-                                            error!("SubscriberInvoker error: {}", e);
-                                            return;
-                                        }
-                                    })
+                                    if let Err(e) = sender.send(Sample {
+                                        res_name: res.name.clone(),
+                                        payload: payload.clone(),
+                                        data_info: info.clone(),
+                                    }) {
+                                        error!("SubscriberInvoker error: {}", e);
+                                        return;
+                                    }
                                 }
                             }
                         }
@@ -979,19 +972,14 @@ impl Session {
                                     });
                                 }
                                 SubscriberInvoker::Sender(sender) => {
-                                    async_std::task::block_on(async {
-                                        if let Err(e) = sender
-                                            .send(Sample {
-                                                res_name: resname.clone(),
-                                                payload: payload.clone(),
-                                                data_info: info.clone(),
-                                            })
-                                            .await
-                                        {
-                                            error!("SubscriberInvoker error: {}", e);
-                                            return;
-                                        }
-                                    })
+                                    if let Err(e) = sender.send(Sample {
+                                        res_name: resname.clone(),
+                                        payload: payload.clone(),
+                                        data_info: info.clone(),
+                                    }) {
+                                        error!("SubscriberInvoker error: {}", e);
+                                        return;
+                                    }
                                 }
                             }
                         }
@@ -1046,7 +1034,7 @@ impl Session {
         predicate: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> ZResult<Receiver<Reply>> {
+    ) -> ZResult<ReplyReceiver> {
         trace!(
             "query({:?}, {:?}, {:?}, {:?})",
             resource,
@@ -1086,7 +1074,7 @@ impl Session {
             self.handle_query(true, resource, predicate, qid, target, consolidation);
         }
 
-        Ok(rep_receiver)
+        Ok(ReplyReceiver::new(rep_receiver))
     }
 
     fn handle_query(
@@ -1122,7 +1110,7 @@ impl Session {
                                 }
                             },
                         )
-                        .map(|qable| (qable.kind, qable.q_sender.clone()))
+                        .map(|qable| (qable.kind, qable.sender.clone()))
                         .collect::<Vec<(ZInt, Sender<Query>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
@@ -1138,22 +1126,21 @@ impl Session {
         };
 
         let predicate = predicate.to_string();
-        let (rep_sender, mut rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
-        let pid = async_std::task::block_on(async {
-            for (kind, req_sender) in kinds_and_senders {
-                let _ = req_sender
-                    .send(Query {
-                        res_name: resname.clone(),
-                        predicate: predicate.clone(),
-                        replies_sender: RepliesSender {
-                            kind,
-                            sender: rep_sender.clone(),
-                        },
-                    })
-                    .await;
-            }
-            self.runtime.read().await.pid.clone() // @TODO build/use prebuilt specific pid
-        });
+        let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
+
+        // @TOFIX
+        let pid = async_std::task::block_on(async { self.runtime.read().await.pid.clone() }); // @TODO build/use prebuilt specific pid
+
+        for (kind, req_sender) in kinds_and_senders {
+            let _ = req_sender.send(Query {
+                res_name: resname.clone(),
+                predicate: predicate.clone(),
+                replies_sender: RepliesSender {
+                    kind,
+                    sender: rep_sender.clone(),
+                },
+            });
+        }
         drop(rep_sender); // all senders need to be dropped for the channel to close
 
         // router is not re-entrant
@@ -1161,7 +1148,7 @@ impl Session {
         if local {
             let this = self.clone();
             task::spawn(async move {
-                while let Some((kind, sample)) = rep_receiver.next().await {
+                while let Some((kind, sample)) = rep_receiver.stream().next().await {
                     this.send_reply_data(
                         qid,
                         kind,
@@ -1175,7 +1162,7 @@ impl Session {
             });
         } else {
             task::spawn(async move {
-                while let Some((kind, sample)) = rep_receiver.next().await {
+                while let Some((kind, sample)) = rep_receiver.stream().next().await {
                     primitives.send_reply_data(
                         qid,
                         kind,
@@ -1319,63 +1306,63 @@ impl Primitives for Session {
                     source_kind,
                     replier_id,
                 };
-                task::block_on(async move {
-                    match query.reception_mode {
-                        ConsolidationMode::None => {
-                            let _ = query.rep_sender.send(new_reply).await;
-                        }
-                        ConsolidationMode::Lazy => {
-                            match query
-                                .replies
-                                .as_ref()
-                                .unwrap()
-                                .get(&new_reply.data.res_name)
-                            {
-                                Some(reply) => {
-                                    if new_reply.data.data_info > reply.data.data_info {
-                                        query.replies.as_mut().unwrap().insert(
-                                            new_reply.data.res_name.clone(),
-                                            new_reply.clone(),
-                                        );
-                                        let _ = query.rep_sender.send(new_reply).await;
-                                    }
-                                }
-                                None => {
+                match query.reception_mode {
+                    ConsolidationMode::None => {
+                        let _ = query.rep_sender.send(new_reply);
+                    }
+                    ConsolidationMode::Lazy => {
+                        match query
+                            .replies
+                            .as_ref()
+                            .unwrap()
+                            .get(&new_reply.data.res_name)
+                        {
+                            Some(reply) => {
+                                if new_reply.data.data_info > reply.data.data_info {
                                     query
                                         .replies
                                         .as_mut()
                                         .unwrap()
                                         .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                                    let _ = query.rep_sender.send(new_reply).await;
+                                    let _ = query.rep_sender.send(new_reply);
                                 }
                             }
+                            None => {
+                                query
+                                    .replies
+                                    .as_mut()
+                                    .unwrap()
+                                    .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                let _ = query.rep_sender.send(new_reply);
+                            }
                         }
-                        ConsolidationMode::Full => {
-                            match query
-                                .replies
-                                .as_ref()
-                                .unwrap()
-                                .get(&new_reply.data.res_name)
-                            {
-                                Some(reply) => {
-                                    if new_reply.data.data_info > reply.data.data_info {
-                                        query.replies.as_mut().unwrap().insert(
-                                            new_reply.data.res_name.clone(),
-                                            new_reply.clone(),
-                                        );
-                                    }
-                                }
-                                None => {
+                    }
+                    ConsolidationMode::Full => {
+                        match query
+                            .replies
+                            .as_ref()
+                            .unwrap()
+                            .get(&new_reply.data.res_name)
+                        {
+                            Some(reply) => {
+                                if new_reply.data.data_info > reply.data.data_info {
                                     query
                                         .replies
                                         .as_mut()
                                         .unwrap()
                                         .insert(new_reply.data.res_name.clone(), new_reply.clone());
                                 }
-                            };
-                        }
+                            }
+                            None => {
+                                query
+                                    .replies
+                                    .as_mut()
+                                    .unwrap()
+                                    .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                            }
+                        };
                     }
-                })
+                }
             }
             None => {
                 warn!("Received ReplyData for unkown Query: {}", qid);
@@ -1392,11 +1379,9 @@ impl Primitives for Session {
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();
                     if query.reception_mode == ConsolidationMode::Full {
-                        task::block_on(async move {
-                            for (_, reply) in query.replies.unwrap().into_iter() {
-                                let _ = query.rep_sender.send(reply).await;
-                            }
-                        })
+                        for (_, reply) in query.replies.unwrap().into_iter() {
+                            let _ = query.rep_sender.send(reply);
+                        }
                     }
                 }
             }

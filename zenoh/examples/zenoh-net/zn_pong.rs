@@ -49,7 +49,7 @@ async fn main() {
         .await
         .unwrap();
 
-    while let Some(sample) = sub.stream().next().await {
+    while let Some(sample) = sub.receiver().next().await {
         session
             .write_ext(
                 &reskey_pong,

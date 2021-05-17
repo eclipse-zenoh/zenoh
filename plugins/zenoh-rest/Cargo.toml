@@ -34,6 +34,7 @@ crate-type = ["cdylib"]
 [dependencies]
 zenoh = { path = "../../zenoh" }
 async-std = "=1.9.0"
+flume = "0.10.5"
 futures = "0.3.12"
 http-types = "2.10.0"
 tide = "0.16.0"

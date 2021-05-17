@@ -68,7 +68,7 @@ async fn main() {
             .await
             .unwrap();
 
-        if let Some(sample) = sub.stream().next().await {
+        if let Some(sample) = sub.receiver().next().await {
             println!(
                 "{} bytes: seq={} time={:?}µs",
                 sample.payload.len(),

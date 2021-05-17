@@ -13,7 +13,6 @@
 //
 #![feature(async_closure)]
 
-use async_std::channel::Receiver;
 use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
@@ -106,7 +105,7 @@ fn sample_to_json(sample: Sample) -> String {
     }
 }
 
-async fn to_json(results: Receiver<Reply>) -> String {
+async fn to_json(results: ReplyReceiver) -> String {
     let values = results
         .filter_map(async move |reply| Some(sample_to_json(reply.data)))
         .collect::<Vec<String>>()
@@ -123,7 +122,7 @@ fn sample_to_html(sample: Sample) -> String {
     )
 }
 
-async fn to_html(results: Receiver<Reply>) -> String {
+async fn to_html(results: ReplyReceiver) -> String {
     let values = results
         .filter_map(async move |reply| Some(sample_to_html(reply.data)))
         .collect::<Vec<String>>()
@@ -229,7 +228,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         .await
                         .unwrap();
                     loop {
-                        let sample = sub.stream().next().await.unwrap();
+                        let sample = sub.receiver().next().await.unwrap();
                         let send = async {
                             if let Err(e) = sender
                                 .send(&get_kind_str(&sample), sample_to_json(sample), None)
@@ -276,18 +275,18 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             )
             .await
         {
-            Ok(stream) => {
+            Ok(receiver) => {
                 if first_accept == "text/html" {
                     Ok(response(
                         StatusCode::Ok,
                         Mime::from_str("text/html").unwrap(),
-                        &to_html(stream).await,
+                        &to_html(receiver).await,
                     ))
                 } else {
                     Ok(response(
                         StatusCode::Ok,
                         Mime::from_str("application/json").unwrap(),
-                        &to_json(stream).await,
+                        &to_json(receiver).await,
                     ))
                 }
             }

@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         select!(
-            sample = subscriber.stream().next().fuse() => {
+            sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
                 let sbuf = sample.payload.into_shm(&mut shm).unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
