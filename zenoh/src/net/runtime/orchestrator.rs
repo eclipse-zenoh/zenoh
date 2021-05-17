@@ -50,7 +50,7 @@ pub enum Loop {
 #[derive(Clone)]
 pub struct SessionOrchestrator {
     pub whatami: WhatAmI,
-    pub manager: Arc<async_std::sync::RwLock<Option<SessionManager>>>,
+    pub manager: Option<SessionManager>,
     pub sub_handler: Arc<Router>,
 }
 
@@ -58,22 +58,24 @@ impl SessionOrchestrator {
     pub fn new(whatami: WhatAmI, sub_handler: Arc<Router>) -> SessionOrchestrator {
         SessionOrchestrator {
             whatami,
-            manager: Arc::new(async_std::sync::RwLock::new(None)),
+            manager: None,
             sub_handler,
         }
     }
 
-    pub async fn init(
+    pub fn init(&mut self, manager: SessionManager) {
+        self.manager = Some(manager);
+    }
+
+    pub async fn start(
         &mut self,
-        manager: SessionManager,
         config: ConfigProperties,
         peers_autoconnect: bool,
     ) -> ZResult<()> {
-        *zasyncwrite!(self.manager) = Some(manager);
         match self.whatami {
-            whatami::CLIENT => self.init_client(config).await,
-            whatami::PEER => self.init_peer(config, peers_autoconnect).await,
-            whatami::ROUTER => self.init_broker(config).await,
+            whatami::CLIENT => self.start_client(config).await,
+            whatami::PEER => self.start_peer(config, peers_autoconnect).await,
+            whatami::ROUTER => self.start_router(config).await,
             _ => {
                 log::error!("Unknown mode");
                 zerror!(ZErrorKind::Other {
@@ -83,11 +85,11 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn manager(&self) -> SessionManager {
-        zasyncread!(self.manager).as_ref().unwrap().clone()
+    pub fn manager(&self) -> SessionManager {
+        self.manager.as_ref().unwrap().clone()
     }
 
-    async fn init_client(&mut self, config: ConfigProperties) -> ZResult<()> {
+    async fn start_client(&mut self, config: ConfigProperties) -> ZResult<()> {
         let peers = config
             .get_or(&ZN_PEER_KEY, "")
             .split(',')
@@ -143,7 +145,7 @@ impl SessionOrchestrator {
             }
             _ => {
                 for locator in &peers {
-                    match self.manager().await.open_session(&locator).await {
+                    match self.manager().open_session(&locator).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -156,7 +158,7 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn init_peer(
+    pub async fn start_peer(
         &mut self,
         config: ConfigProperties,
         peers_autoconnect: bool,
@@ -232,7 +234,7 @@ impl SessionOrchestrator {
         Ok(())
     }
 
-    pub async fn init_broker(&mut self, config: ConfigProperties) -> ZResult<()> {
+    pub async fn start_router(&mut self, config: ConfigProperties) -> ZResult<()> {
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
             .split(',')
@@ -288,7 +290,7 @@ impl SessionOrchestrator {
 
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
         for listener in listeners {
-            match self.manager().await.add_listener(&listener).await {
+            match self.manager().add_listener(&listener).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", listener, err);
@@ -301,7 +303,7 @@ impl SessionOrchestrator {
                 }
             }
         }
-        for locator in self.manager().await.get_locators() {
+        for locator in self.manager().get_locators() {
             log::info!("zenohd can be reached on {}", locator);
         }
         Ok(())
@@ -478,7 +480,7 @@ impl SessionOrchestrator {
         let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
-            if let Ok(session) = self.manager().await.open_session(&peer).await {
+            if let Ok(session) = self.manager().open_session(&peer).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
                 if let Some(orch_session) = session
                     .get_callback()
@@ -579,7 +581,7 @@ impl SessionOrchestrator {
 
     async fn connect(&self, locators: &[Locator]) -> ZResult<Session> {
         for locator in locators {
-            let session = self.manager().await.open_session(locator).await;
+            let session = self.manager().open_session(locator).await;
             if session.is_ok() {
                 return session;
             }
@@ -590,8 +592,8 @@ impl SessionOrchestrator {
     }
 
     pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
-        if pid != &self.manager().await.pid() {
-            if self.manager().await.get_session(pid).is_none() {
+        if pid != &self.manager().pid() {
+            if self.manager().get_session(pid).is_none() {
                 let session = self.connect(locators).await;
                 if session.is_ok() {
                     log::debug!("Successfully connected to newly scouted {}", pid);
@@ -705,14 +707,14 @@ impl SessionOrchestrator {
                     if what & self.whatami != 0 {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
                         let pid = if *pid_request {
-                            Some(self.manager().await.pid())
+                            Some(self.manager().pid())
                         } else {
                             None
                         };
                         let hello = SessionMessage::make_hello(
                             pid,
                             Some(self.whatami),
-                            Some(self.manager().await.get_locators().clone()),
+                            Some(self.manager().get_locators().clone()),
                             None,
                         );
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
@@ -743,7 +745,7 @@ impl SessionOrchestrator {
 
     pub async fn close(&mut self) -> ZResult<()> {
         log::trace!("SessionOrchestrator::close())");
-        for session in &mut self.manager().await.get_sessions() {
+        for session in &mut self.manager().get_sessions() {
             session.close().await?;
         }
         Ok(())

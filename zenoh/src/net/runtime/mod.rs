@@ -102,6 +102,8 @@ impl Runtime {
         let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
 
         let session_manager = SessionManager::new(sm_config, sm_opt_config);
+        orchestrator.init(session_manager);
+
         let peers_autoconnect = config
             .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
             .to_lowercase()
@@ -116,10 +118,7 @@ impl Runtime {
                 .init_link_state(orchestrator.clone(), peers_autoconnect)
                 .await;
         }
-        match orchestrator
-            .init(session_manager, config, peers_autoconnect)
-            .await
-        {
+        match orchestrator.start(config, peers_autoconnect).await {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
                     pid,

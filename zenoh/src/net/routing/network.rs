@@ -158,7 +158,7 @@ impl Network {
 
     #[inline]
     fn get_locators(&self) -> Vec<Locator> {
-        async_std::task::block_on(async { self.orchestrator.manager().await.get_locators() })
+        self.orchestrator.manager().get_locators()
     }
 
     fn add_node(&mut self, node: Node) -> NodeIndex {
