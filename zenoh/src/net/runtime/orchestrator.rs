@@ -17,13 +17,14 @@ use super::protocol::link::{Link, Locator};
 use super::protocol::proto::{
     Data, Hello, Scout, SessionBody, SessionMessage, ZenohBody, ZenohMessage,
 };
-use super::protocol::session::{Session, SessionEventDispatcher, SessionManager};
+use super::protocol::session::{Session, SessionEventHandler, SessionHandler, SessionManager};
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use async_std::net::UdpSocket;
 use async_std::sync::Arc;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
+use std::any::Any;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -479,8 +480,12 @@ impl SessionOrchestrator {
             log::trace!("Trying to connect to configured peer {}", peer);
             if let Ok(session) = self.manager().await.open_session(&peer).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
-                if let SessionEventDispatcher::OrchSession(orch_session) =
-                    session.get_callback().unwrap().unwrap()
+                if let Some(orch_session) = session
+                    .get_callback()
+                    .unwrap()
+                    .unwrap()
+                    .as_any()
+                    .downcast_ref::<OrchSession>()
                 {
                     *zwrite!(orch_session.locator) = Some(peer);
                 }
@@ -743,8 +748,10 @@ impl SessionOrchestrator {
         }
         Ok(())
     }
+}
 
-    pub(crate) fn new_session(&self, session: Session) -> ZResult<Arc<OrchSession>> {
+impl SessionHandler for SessionOrchestrator {
+    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
         Ok(Arc::new(OrchSession {
             orchestrator: self.clone(),
             locator: std::sync::RwLock::new(None),
@@ -759,8 +766,8 @@ pub struct OrchSession {
     sub_event_handler: Arc<LinkStateInterceptor>,
 }
 
-impl OrchSession {
-    pub(crate) fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+impl SessionEventHandler for OrchSession {
+    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         // critical path shortcut
         if msg.reply_context.is_none() {
             if let ZenohBody::Data(Data {
@@ -790,15 +797,15 @@ impl OrchSession {
         }
     }
 
-    pub(crate) fn new_link(&self, link: Link) {
+    fn new_link(&self, link: Link) {
         self.sub_event_handler.new_link(link)
     }
 
-    pub(crate) fn del_link(&self, link: Link) {
+    fn del_link(&self, link: Link) {
         self.sub_event_handler.del_link(link)
     }
 
-    pub(crate) fn closing(&self) {
+    fn closing(&self) {
         self.sub_event_handler.closing();
         if let Some(locator) = &*zread!(self.locator) {
             let locator = locator.clone();
@@ -807,7 +814,11 @@ impl OrchSession {
         }
     }
 
-    pub(crate) fn closed(&self) {
+    fn closed(&self) {
         self.sub_event_handler.closed()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

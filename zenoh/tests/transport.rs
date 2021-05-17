@@ -14,6 +14,7 @@
 use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
+use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
@@ -21,8 +22,8 @@ use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -82,6 +83,10 @@ impl SessionEventHandler for SCRouter {
     fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // Session Handler for the client
@@ -120,6 +125,10 @@ impl SessionEventHandler for SCClient {
     fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 async fn open_session(
@@ -136,7 +145,7 @@ async fn open_session(
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
+        handler: router_handler.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -156,7 +165,7 @@ async fn open_session(
         version: 0,
         whatami: whatami::CLIENT,
         id: client_id,
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClient::new())),
+        handler: Arc::new(SHClient::new()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,

@@ -14,6 +14,7 @@
 use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
+use std::any::Any;
 use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
@@ -23,8 +24,8 @@ use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    DummySessionEventHandler, Session, SessionDispatcher, SessionEventHandler, SessionHandler,
-    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
+    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -112,6 +113,10 @@ impl SessionEventHandler for SCClient {
     fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 async fn session_intermittent(locator: Locator, locator_property: Option<Vec<LocatorProperty>>) {
@@ -124,7 +129,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
+        handler: router_handler.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -150,7 +155,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         version: 0,
         whatami: whatami::CLIENT,
         id: client01_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientStable::new(counter.clone()))),
+        handler: Arc::new(SHClientStable::new(counter.clone())),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -170,7 +175,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         version: 0,
         whatami: whatami::CLIENT,
         id: client02_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientIntermittent::new())),
+        handler: Arc::new(SHClientIntermittent::new()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -190,7 +195,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         version: 0,
         whatami: whatami::CLIENT,
         id: client03_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientIntermittent::new())),
+        handler: Arc::new(SHClientIntermittent::new()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,

@@ -20,7 +20,7 @@ use super::routing;
 
 use super::protocol::core::{whatami, PeerId};
 use super::protocol::session::{
-    SessionDispatcher, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
+    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use super::routing::router::Router;
 pub use adminspace::AdminSpace;
@@ -97,7 +97,7 @@ impl Runtime {
             version,
             whatami,
             id: pid.clone(),
-            handler: SessionDispatcher::SessionOrchestrator(Arc::new(orchestrator.clone())),
+            handler: Arc::new(orchestrator.clone()),
         };
         let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
 

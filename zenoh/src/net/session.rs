@@ -25,8 +25,8 @@ use protocol::{
     },
     io::RBuf,
     proto::RoutingContext,
+    session::Primitives,
 };
-use routing::OutSession;
 use runtime::Runtime;
 use std::collections::HashMap;
 use std::fmt;
@@ -248,11 +248,7 @@ impl Session {
             state: state.clone(),
             alive: true,
         };
-        let primitives = Some(
-            router
-                .new_primitives(OutSession::User(Arc::new(session.clone())))
-                .await,
-        );
+        let primitives = Some(router.new_primitives(Arc::new(session.clone())).await);
         zwrite!(state).primitives = primitives;
         session
     }
@@ -1193,8 +1189,10 @@ impl Session {
             });
         }
     }
+}
 
-    pub(crate) fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+impl Primitives for Session {
+    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Decl Resource {} {:?}", rid, reskey);
         let state = &mut zwrite!(self.state);
         match state.remotekey_to_resname(reskey) {
@@ -1212,27 +1210,19 @@ impl Session {
         }
     }
 
-    pub(crate) fn forget_resource(&self, _rid: ZInt) {
+    fn forget_resource(&self, _rid: ZInt) {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    pub(crate) fn decl_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Decl Publisher {:?}", _reskey);
     }
 
-    pub(crate) fn forget_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    pub(crate) fn decl_subscriber(
+    fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
@@ -1241,31 +1231,19 @@ impl Session {
         trace!("recv Decl Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    pub(crate) fn forget_subscriber(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    pub(crate) fn decl_queryable(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Decl Queryable {:?}", _reskey);
     }
 
-    pub(crate) fn forget_queryable(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    pub(crate) fn send_data(
+    fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -1285,7 +1263,7 @@ impl Session {
         self.handle_data(false, reskey, info, payload)
     }
 
-    pub(crate) fn send_query(
+    fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -1304,7 +1282,7 @@ impl Session {
         self.handle_query(false, reskey, predicate, qid, target, consolidation)
     }
 
-    pub(crate) fn send_reply_data(
+    fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -1405,7 +1383,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
         let mut state = zwrite!(self.state);
         match state.queries.get_mut(&qid) {
@@ -1428,7 +1406,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn send_pull(
+    fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -1444,7 +1422,7 @@ impl Session {
         );
     }
 
-    pub(crate) fn send_close(&self) {
+    fn send_close(&self) {
         trace!("recv Close");
     }
 }

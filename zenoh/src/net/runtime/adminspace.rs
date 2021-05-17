@@ -18,9 +18,9 @@ use super::protocol::{
     },
     io::RBuf,
     proto::{encoding, DataInfo, RoutingContext},
+    session::Primitives,
 };
 use super::routing::face::Face;
-use super::routing::OutSession;
 use super::Runtime;
 use async_std::sync::Arc;
 use async_std::task;
@@ -84,7 +84,7 @@ impl AdminSpace {
             .read()
             .await
             .router
-            .new_primitives(OutSession::Admin(admin.clone()))
+            .new_primitives(admin.clone())
             .await;
         zlock!(admin.primitives).replace(primitives.clone());
 
@@ -100,8 +100,10 @@ impl AdminSpace {
             ResKey::RName(name) => Some(name.clone()),
         }
     }
+}
 
-    pub(crate) fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+impl Primitives for AdminSpace {
+    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
         match self.reskey_to_string(reskey) {
             Some(s) => {
@@ -111,27 +113,19 @@ impl AdminSpace {
         }
     }
 
-    pub(crate) fn forget_resource(&self, _rid: ZInt) {
+    fn forget_resource(&self, _rid: ZInt) {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    pub(crate) fn decl_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Publisher {:?}", _reskey);
     }
 
-    pub(crate) fn forget_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    pub(crate) fn decl_subscriber(
+    fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
@@ -140,31 +134,19 @@ impl AdminSpace {
         trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    pub(crate) fn forget_subscriber(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    pub(crate) fn decl_queryable(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    pub(crate) fn forget_queryable(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    pub(crate) fn send_data(
+    fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -183,7 +165,7 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) fn send_query(
+    fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -242,7 +224,7 @@ impl AdminSpace {
         });
     }
 
-    pub(crate) fn send_reply_data(
+    fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -262,11 +244,11 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 
-    pub(crate) fn send_pull(
+    fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -282,7 +264,7 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) fn send_close(&self) {
+    fn send_close(&self) {
         trace!("recv Close");
     }
 }

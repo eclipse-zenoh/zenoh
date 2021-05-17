@@ -23,13 +23,13 @@ use super::core::{PeerId, WhatAmI, ZInt};
 use super::io;
 use super::link;
 use super::link::Link;
-use super::orchestrator;
 use super::proto;
 use super::proto::{smsg, ZenohMessage};
 use super::session;
 use async_std::sync::{Arc, Weak};
 pub use manager::*;
 pub use primitives::*;
+use std::any::Any;
 use std::fmt;
 use transport::*;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -43,40 +43,11 @@ pub trait SessionEventHandler {
     fn del_link(&self, link: Link);
     fn closing(&self);
     fn closed(&self);
+    fn as_any(&self) -> &dyn Any;
 }
-
-zenoh_util::dispatcher!(
-SessionEventDispatcher(
-    OrchSession(Arc<orchestrator::OrchSession>),
-    SessionEventHandler(Arc<dyn SessionEventHandler + Send + Sync>),
-) {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
-    fn new_link(&self, link: Link);
-    fn del_link(&self, link: Link);
-    fn closing(&self);
-    fn closed(&self);
-});
 
 pub trait SessionHandler {
     fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>>;
-}
-
-#[derive(Clone)]
-pub enum SessionDispatcher {
-    SessionOrchestrator(Arc<orchestrator::SessionOrchestrator>),
-    SessionHandler(Arc<dyn SessionHandler + Send + Sync>),
-}
-impl SessionDispatcher {
-    fn new_session(&self, session: Session) -> ZResult<SessionEventDispatcher> {
-        match self {
-            SessionDispatcher::SessionOrchestrator(this) => this
-                .new_session(session)
-                .map(SessionEventDispatcher::OrchSession),
-            SessionDispatcher::SessionHandler(this) => this
-                .new_session(session)
-                .map(SessionEventDispatcher::SessionEventHandler),
-        }
-    }
 }
 
 // Define an empty SessionCallback for the listener session
@@ -98,6 +69,10 @@ impl SessionEventHandler for DummySessionEventHandler {
     fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /*************************************/
@@ -151,7 +126,7 @@ impl Session {
     }
 
     #[inline(always)]
-    pub fn get_callback(&self) -> ZResult<Option<SessionEventDispatcher>> {
+    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
         let transport = zweak!(self.0, STR_ERR);
         Ok(transport.get_callback())
     }

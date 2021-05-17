@@ -23,7 +23,6 @@ use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
 use zenoh::net::protocol::session::{DummyPrimitives, Primitives};
 use zenoh::net::routing::router::*;
-use zenoh::net::routing::OutSession;
 use zenoh_util::zlock;
 
 #[test]
@@ -34,11 +33,7 @@ fn base_test() {
         Some(HLC::default()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(
-        PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
-        OutSession::Primitives(primitives.clone()),
-    );
+    let face = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
     declare_resource(
         &mut tables,
         &mut face.upgrade().unwrap(),
@@ -133,11 +128,7 @@ fn match_test() {
         Some(HLC::default()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(
-        PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
-        OutSession::Primitives(primitives.clone()),
-    );
+    let face = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
     for (i, rname) in rnames.iter().enumerate() {
         declare_resource(
             &mut tables,
@@ -173,11 +164,7 @@ fn clean_test() {
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = tables.open_face(
-        PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
-        OutSession::Primitives(primitives.clone()),
-    );
+    let face0 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone());
     assert!(face0.upgrade().is_some());
 
     // --------------
@@ -485,7 +472,7 @@ fn client_test() {
     let face0 = tables.open_face(
         PeerId::new(0, [0; 16]),
         whatami::CLIENT,
-        OutSession::Primitives(primitives0.clone()),
+        primitives0.clone(),
     );
     declare_resource(
         &mut tables,
@@ -515,7 +502,7 @@ fn client_test() {
     let face1 = tables.open_face(
         PeerId::new(0, [0; 16]),
         whatami::CLIENT,
-        OutSession::Primitives(primitives1.clone()),
+        primitives1.clone(),
     );
     declare_resource(
         &mut tables,
@@ -545,7 +532,7 @@ fn client_test() {
     let face2 = tables.open_face(
         PeerId::new(0, [0; 16]),
         whatami::CLIENT,
-        OutSession::Primitives(primitives2.clone()),
+        primitives2.clone(),
     );
     declare_resource(
         &mut tables,

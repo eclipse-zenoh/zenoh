@@ -23,17 +23,12 @@ use zenoh::net::protocol::session::DummyPrimitives;
 use zenoh::net::routing::pubsub::*;
 use zenoh::net::routing::resource::*;
 use zenoh::net::routing::router::Tables;
-use zenoh::net::routing::OutSession;
 
 fn tables_bench(c: &mut Criterion) {
     let mut tables = Tables::new(PeerId::new(0, [0; 16]), whatami::ROUTER, None);
     let primitives = Arc::new(DummyPrimitives {});
 
-    let face0 = tables.open_face(
-        PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
-        OutSession::Primitives(primitives.clone()),
-    );
+    let face0 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone());
     declare_resource(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -49,11 +44,7 @@ fn tables_bench(c: &mut Criterion) {
         "/bench/tables/*",
     );
 
-    let face1 = tables.open_face(
-        PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
-        OutSession::Primitives(primitives.clone()),
-    );
+    let face1 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone());
 
     let mut tables_bench = c.benchmark_group("tables_bench");
     let sub_info = SubInfo {

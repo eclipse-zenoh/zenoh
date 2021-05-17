@@ -13,13 +13,14 @@
 //
 use async_std::sync::Arc;
 use async_std::task;
+use std::any::Any;
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -63,6 +64,10 @@ impl SessionEventHandler for SC {
     fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>>) {
@@ -71,7 +76,7 @@ async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>
         version: 0,
         whatami: whatami::PEER,
         id: PeerId::new(1, [0u8; PeerId::MAX_SIZE]),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SH::new())),
+        handler: Arc::new(SH::new()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,

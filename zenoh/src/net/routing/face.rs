@@ -17,8 +17,8 @@ use super::protocol::core::{
 };
 use super::protocol::io::RBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
+use super::protocol::session::Primitives;
 use super::router::*;
-use super::OutSession;
 use async_std::sync::Arc;
 use std::collections::HashMap;
 use std::fmt;
@@ -28,7 +28,7 @@ pub struct FaceState {
     pub(super) id: usize,
     pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
-    pub(super) primitives: OutSession,
+    pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) link_id: usize,
     pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
@@ -45,7 +45,7 @@ impl FaceState {
         id: usize,
         pid: PeerId,
         whatami: WhatAmI,
-        primitives: OutSession,
+        primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {

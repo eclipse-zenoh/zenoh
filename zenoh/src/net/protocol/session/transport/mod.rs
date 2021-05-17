@@ -25,7 +25,7 @@ use super::proto;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session;
 use super::session::defaults::QUEUE_PRIO_DATA;
-use super::session::{SessionEventDispatcher, SessionManager};
+use super::session::{SessionEventHandler, SessionManager};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use defragmentation::*;
 use link::*;
@@ -120,7 +120,7 @@ pub(crate) struct SessionTransport {
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[SessionTransportLink]>>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<SessionEventDispatcher>>>,
+    pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>>,
     // Mutex for notification
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The session transport can do shm
@@ -168,11 +168,11 @@ impl SessionTransport {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_callback(&self) -> Option<SessionEventDispatcher> {
+    pub(crate) fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler + Send + Sync>> {
         zread!(self.callback).clone()
     }
 
-    pub(crate) fn set_callback(&self, callback: SessionEventDispatcher) {
+    pub(crate) fn set_callback(&self, callback: Arc<dyn SessionEventHandler + Send + Sync>) {
         let mut guard = zwrite!(self.callback);
         *guard = Some(callback);
     }

@@ -24,7 +24,7 @@ use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
 };
 use super::transport::SessionTransport;
-use super::{Session, SessionDispatcher};
+use super::{Session, SessionHandler};
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
@@ -41,7 +41,7 @@ use zenoh_util::{zasynclock, zerror, zlock};
 /// ```
 /// use async_std::sync::Arc;
 /// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
-/// use zenoh::net::protocol::session::{DummySessionEventHandler, SessionEventHandler, Session, SessionDispatcher, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
+/// use zenoh::net::protocol::session::{DummySessionEventHandler, SessionEventHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
 ///
 /// use zenoh_util::core::ZResult;
 ///
@@ -67,7 +67,7 @@ use zenoh_util::{zasynclock, zerror, zlock};
 ///     version: 0,
 ///     whatami: whatami::PEER,
 ///     id: PeerId::from(uuid::Uuid::new_v4()),
-///     handler: SessionDispatcher::SessionHandler(Arc::new(MySH::new()))
+///     handler: Arc::new(MySH::new())
 /// };
 /// let manager = SessionManager::new(config, None);
 ///
@@ -76,7 +76,7 @@ use zenoh_util::{zasynclock, zerror, zlock};
 ///     version: 0,
 ///     whatami: whatami::PEER,
 ///     id: PeerId::from(uuid::Uuid::new_v4()),
-///     handler: SessionDispatcher::SessionHandler(Arc::new(MySH::new()))
+///     handler: Arc::new(MySH::new())
 /// };
 /// // Setting a value to None means to use the default value
 /// let opt_config = SessionManagerOptionalConfig {
@@ -96,7 +96,7 @@ pub struct SessionManagerConfig {
     pub version: u8,
     pub whatami: WhatAmI,
     pub id: PeerId,
-    pub handler: SessionDispatcher,
+    pub handler: Arc<dyn SessionHandler + Send + Sync>,
 }
 
 pub struct SessionManagerOptionalConfig {
@@ -159,7 +159,7 @@ pub(super) struct SessionManagerConfigInner {
     pub(super) peer_authenticator: Vec<PeerAuthenticator>,
     pub(super) link_authenticator: Vec<LinkAuthenticator>,
     pub(super) locator_property: HashMap<LocatorProtocol, LocatorProperty>,
-    pub(super) handler: SessionDispatcher,
+    pub(super) handler: Arc<dyn SessionHandler + Send + Sync>,
 }
 
 pub(super) struct Opened {

@@ -13,6 +13,7 @@
 //
 use async_std::sync::Arc;
 use async_std::task;
+use std::any::Any;
 use std::collections::HashMap;
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
@@ -22,8 +23,8 @@ use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::authenticator::SharedMemoryAuthenticator;
 use zenoh::net::protocol::session::authenticator::UserPasswordAuthenticator;
 use zenoh::net::protocol::session::{
-    DummySessionEventHandler, Session, SessionDispatcher, SessionEventHandler, SessionHandler,
-    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
+    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -64,6 +65,10 @@ impl SessionEventHandler for MHRouterAuthenticator {
     fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // Session Handler for the client
@@ -109,7 +114,7 @@ async fn authenticator_user_password(
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
+        handler: router_handler.clone(),
     };
 
     let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
@@ -135,7 +140,7 @@ async fn authenticator_user_password(
         version: 0,
         whatami: whatami::CLIENT,
         id: client01_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
+        handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client01 = UserPasswordAuthenticator::new(
@@ -160,7 +165,7 @@ async fn authenticator_user_password(
         version: 0,
         whatami: whatami::CLIENT,
         id: client02_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
+        handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client02 = UserPasswordAuthenticator::new(
@@ -185,7 +190,7 @@ async fn authenticator_user_password(
         version: 0,
         whatami: whatami::CLIENT,
         id: client03_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
+        handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client03 =
@@ -306,7 +311,7 @@ async fn authenticator_shared_memory(
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
+        handler: router_handler.clone(),
     };
 
     let peer_authenticator_router = SharedMemoryAuthenticator::new();
@@ -328,7 +333,7 @@ async fn authenticator_shared_memory(
         version: 0,
         whatami: whatami::CLIENT,
         id: client_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
+        handler: Arc::new(SHClientAuthenticator::new()),
     };
     let peer_authenticator_client = SharedMemoryAuthenticator::new();
     let opt_config = SessionManagerOptionalConfig {

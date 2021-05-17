@@ -21,8 +21,7 @@ use zenoh_util::sync::get_mut_unchecked;
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::protocol::link::Link;
 use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::protocol::session::{DeMux, Mux, Session};
-use super::OutSession;
+use super::protocol::session::{DeMux, Mux, Primitives, Session};
 
 use zenoh_util::core::ZResult;
 use zenoh_util::zconfigurable;
@@ -121,7 +120,7 @@ impl Tables {
         &mut self,
         pid: PeerId,
         whatami: WhatAmI,
-        primitives: OutSession,
+        primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
     ) -> Weak<FaceState> {
         let fid = self.face_counter;
@@ -144,7 +143,7 @@ impl Tables {
         &mut self,
         pid: PeerId,
         whatami: WhatAmI,
-        primitives: OutSession,
+        primitives: Arc<dyn Primitives + Send + Sync>,
     ) -> Weak<FaceState> {
         self.open_net_face(pid, whatami, primitives, 0)
     }
@@ -272,7 +271,7 @@ impl Router {
         }
     }
 
-    pub async fn new_primitives(&self, primitives: OutSession) -> Arc<Face> {
+    pub async fn new_primitives(&self, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<Face> {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
@@ -320,7 +319,7 @@ impl Router {
                     .open_net_face(
                         session.get_pid().unwrap(),
                         whatami,
-                        OutSession::Transport(Arc::new(Mux::new(session))),
+                        Arc::new(Mux::new(session)),
                         link_id,
                     )
                     .upgrade()

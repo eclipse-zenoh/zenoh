@@ -14,6 +14,7 @@
 use async_std::prelude::*;
 use async_std::sync::{Arc, Barrier};
 use async_std::task;
+use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -22,8 +23,8 @@ use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -80,6 +81,10 @@ impl SessionEventHandler for MHPeer {
     fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
@@ -98,7 +103,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_id01.clone(),
-        handler: SessionDispatcher::SessionHandler(peer_sh01.clone()),
+        handler: peer_sh01.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: Some(lease),
@@ -119,7 +124,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_id02.clone(),
-        handler: SessionDispatcher::SessionHandler(peer_sh02.clone()),
+        handler: peer_sh02.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: Some(lease),

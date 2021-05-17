@@ -18,8 +18,8 @@ use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::link::{Locator, LocatorProperty};
 use zenoh::net::protocol::session::{
-    DummySessionEventHandler, Session, SessionDispatcher, SessionEventHandler, SessionHandler,
-    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
+    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -73,7 +73,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
+        handler: router_handler.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -97,7 +97,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
         version: 0,
         whatami: whatami::CLIENT,
         id: client01_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientOpenClose::new())),
+        handler: Arc::new(SHClientOpenClose::new()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
@@ -117,7 +117,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
         version: 0,
         whatami: whatami::CLIENT,
         id: client02_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientOpenClose::new())),
+        handler: Arc::new(SHClientOpenClose::new()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
