@@ -618,7 +618,7 @@ impl Session {
     ///     period: None
     /// };
     /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// while let Some(sample) = subscriber.stream().next().await {
+    /// while let Some(sample) = subscriber.receiver().next().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
@@ -748,8 +748,8 @@ impl Session {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
-    /// while let Some(query) = queryable.stream().next().await {
-    ///     query.reply(Sample{
+    /// while let Some(query) = queryable.receiver().next().await {
+    ///     query.reply_async(Sample{
     ///         res_name: "/resource/name".to_string(),
     ///         payload: "value".as_bytes().into(),
     ///         data_info: None,

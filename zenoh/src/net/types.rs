@@ -382,7 +382,7 @@ impl Subscriber<'_> {
     /// #     period: None
     /// # };
     /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// async_std::task::spawn(subscriber.stream().clone().for_each(
+    /// async_std::task::spawn(subscriber.receiver().clone().for_each(
     ///     async move |sample| { println!("Received : {:?}", sample); }
     /// ));
     /// subscriber.pull();
