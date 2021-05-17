@@ -154,10 +154,11 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloReceiver {
             async_std::task::spawn(async move {
                 let hello_sender = &hello_sender;
                 let mut stop_receiver = stop_receiver.stream();
-                let scout = SessionOrchestrator::scout(&sockets, what, &addr, async move |hello| {
-                    let _ = hello_sender.send_async(hello).await;
-                    Loop::Continue
-                });
+                let scout =
+                    SessionOrchestrator::scout(&sockets, what, &addr, move |hello| async move {
+                        let _ = hello_sender.send_async(hello).await;
+                        Loop::Continue
+                    });
                 let stop = async move {
                     stop_receiver.next().await;
                     trace!("stop scout({}, {})", what, &config);

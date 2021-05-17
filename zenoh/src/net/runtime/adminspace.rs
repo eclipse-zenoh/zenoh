@@ -288,7 +288,7 @@ pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
         .collect();
 
     // sessions info
-    let sessions = future::join_all(session_mgr.get_sessions().iter().map(async move |session| {
+    let sessions = future::join_all(session_mgr.get_sessions().iter().map(move |session| async move {
         json!({
             "peer": session.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
             "links": session.get_links().map_or_else(

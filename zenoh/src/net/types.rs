@@ -370,7 +370,6 @@ impl Subscriber<'_> {
     ///
     /// # Examples
     /// ```
-    /// #![feature(async_closure)]
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
@@ -383,7 +382,7 @@ impl Subscriber<'_> {
     /// # };
     /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
     /// async_std::task::spawn(subscriber.receiver().clone().for_each(
-    ///     async move |sample| { println!("Received : {:?}", sample); }
+    ///     move |sample| async move { println!("Received : {:?}", sample); }
     /// ));
     /// subscriber.pull();
     /// # })

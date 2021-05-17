@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#![feature(async_closure)]
 
 use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
@@ -107,7 +106,7 @@ fn sample_to_json(sample: Sample) -> String {
 
 async fn to_json(results: ReplyReceiver) -> String {
     let values = results
-        .filter_map(async move |reply| Some(sample_to_json(reply.data)))
+        .filter_map(move |reply| async move { Some(sample_to_json(reply.data)) })
         .collect::<Vec<String>>()
         .await
         .join(",\n");
@@ -124,7 +123,7 @@ fn sample_to_html(sample: Sample) -> String {
 
 async fn to_html(results: ReplyReceiver) -> String {
     let values = results
-        .filter_map(async move |reply| Some(sample_to_html(reply.data)))
+        .filter_map(move |reply| async move { Some(sample_to_html(reply.data)) })
         .collect::<Vec<String>>()
         .await
         .join("\n");
@@ -212,7 +211,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
     if first_accept == "text/event-stream" {
         Ok(tide::sse::upgrade(
             req,
-            async move |req: Request<(Arc<Session>, String)>, sender: Sender| {
+            move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
                 let resource = path_to_resource(req.url().path(), &req.state().1);
                 async_std::task::spawn(async move {
                     log::debug!(

@@ -382,10 +382,10 @@ impl io::Write for WBuf {
         Ok(nwritten)
     }
 
-    #[inline]
-    fn is_write_vectored(&self) -> bool {
-        true
-    }
+    //#[inline]
+    //fn is_write_vectored(&self) -> bool {
+    //    true
+    //}
 
     #[inline]
     fn flush(&mut self) -> io::Result<()> {
