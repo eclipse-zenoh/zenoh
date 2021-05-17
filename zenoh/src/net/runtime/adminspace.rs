@@ -50,7 +50,7 @@ pub struct AdminSpace {
 
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr, version: String) {
-        let pid_str = runtime.get_pid_str().await;
+        let pid_str = runtime.get_pid_str();
         let root_path = format!("/@/router/{}", pid_str);
 
         let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
@@ -73,19 +73,14 @@ impl AdminSpace {
             version,
         });
         let admin = Arc::new(AdminSpace {
-            pid: runtime.read().await.pid.clone(),
+            pid: runtime.read().pid.clone(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
             context,
         });
 
-        let primitives = runtime
-            .read()
-            .await
-            .router
-            .new_primitives(admin.clone())
-            .await;
+        let primitives = runtime.read().router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.decl_queryable(&[&root_path, "/**"].concat().into(), None);
@@ -270,7 +265,7 @@ impl Primitives for AdminSpace {
 }
 
 pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
-    let session_mgr = context.runtime.read().await.orchestrator.manager().clone();
+    let session_mgr = context.runtime.read().orchestrator.manager().clone();
 
     // plugins info
     let plugins: Vec<serde_json::Value> = context
@@ -316,7 +311,7 @@ pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
 }
 
 pub async fn linkstate_routers_data(context: &AdminContext) -> (RBuf, ZInt) {
-    let runtime = &context.runtime.read().await;
+    let runtime = &context.runtime.read();
     let tables = zread!(runtime.router.tables);
 
     let res = (
@@ -332,7 +327,6 @@ pub async fn linkstate_peers_data(context: &AdminContext) -> (RBuf, ZInt) {
             context
                 .runtime
                 .read()
-                .await
                 .router
                 .tables
                 .read()

@@ -226,7 +226,7 @@ impl Session {
 
     /// Returns the identifier for this session.
     pub async fn id(&self) -> String {
-        self.runtime.get_pid_str().await
+        self.runtime.get_pid_str()
     }
 
     /// Initialize a Session with an existing Runtime.
@@ -238,7 +238,7 @@ impl Session {
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
     ) -> Session {
-        let router = runtime.read().await.router.clone();
+        let router = runtime.read().router.clone();
         let state = Arc::new(RwLock::new(SessionState::new(
             local_routing,
             join_subscriptions,
@@ -249,7 +249,7 @@ impl Session {
             state: state.clone(),
             alive: true,
         };
-        let primitives = Some(router.new_primitives(Arc::new(session.clone())).await);
+        let primitives = Some(router.new_primitives(Arc::new(session.clone())));
         zwrite!(state).primitives = primitives;
         session
     }
@@ -296,7 +296,7 @@ impl Session {
     /// ```
     pub async fn info(&self) -> InfoProperties {
         trace!("info()");
-        let runtime = self.runtime.read().await;
+        let runtime = self.runtime.read();
         let sessions = runtime.orchestrator.manager().get_sessions();
         let peer_pids = sessions
             .iter()
@@ -1128,8 +1128,7 @@ impl Session {
         let predicate = predicate.to_string();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
-        // @TOFIX
-        let pid = async_std::task::block_on(async { self.runtime.read().await.pid.clone() }); // @TODO build/use prebuilt specific pid
+        let pid = self.runtime.read().pid.clone(); // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
             let _ = req_sender.send(Query {

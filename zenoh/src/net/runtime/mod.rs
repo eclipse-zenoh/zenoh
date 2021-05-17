@@ -24,13 +24,14 @@ use super::protocol::session::{
 };
 use super::routing::router::Router;
 pub use adminspace::AdminSpace;
-use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use async_std::sync::Arc;
 use orchestrator::SessionOrchestrator;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::{zasyncwrite, zerror, zerror2};
+use zenoh_util::{zerror, zerror2, zwrite};
 
 pub struct RuntimeState {
     pub pid: PeerId,
@@ -130,19 +131,19 @@ impl Runtime {
         }
     }
 
-    pub async fn read(&self) -> RwLockReadGuard<'_, RuntimeState> {
-        zasyncread!(self.state)
+    pub fn read(&self) -> RwLockReadGuard<'_, RuntimeState> {
+        zread!(self.state)
     }
 
-    pub async fn write(&self) -> RwLockWriteGuard<'_, RuntimeState> {
-        zasyncwrite!(self.state)
+    pub fn write(&self) -> RwLockWriteGuard<'_, RuntimeState> {
+        zwrite!(self.state)
     }
 
     pub async fn close(&self) -> ZResult<()> {
-        self.write().await.orchestrator.close().await
+        self.write().orchestrator.close().await
     }
 
-    pub async fn get_pid_str(&self) -> String {
-        self.read().await.pid.to_string()
+    pub fn get_pid_str(&self) -> String {
+        self.read().pid.to_string()
     }
 }

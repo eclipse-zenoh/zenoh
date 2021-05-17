@@ -271,7 +271,7 @@ impl Router {
         }
     }
 
-    pub async fn new_primitives(&self, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<Face> {
+    pub fn new_primitives(&self, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<Face> {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
