@@ -85,8 +85,8 @@ impl SessionOrchestrator {
         }
     }
 
-    pub fn manager(&self) -> SessionManager {
-        self.manager.as_ref().unwrap().clone()
+    pub fn manager(&self) -> &SessionManager {
+        self.manager.as_ref().unwrap()
     }
 
     async fn start_client(&mut self, config: ConfigProperties) -> ZResult<()> {
