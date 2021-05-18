@@ -862,13 +862,6 @@ pub enum SessionMode {
     PushPull,
 }
 
-// The Payload of the Frame message
-#[derive(Debug, Clone, PartialEq)]
-pub enum FramePayload {
-    Fragment { buffer: RBuf, is_final: bool },
-    Messages { messages: Vec<ZenohMessage> },
-}
-
 /// # Scout message
 ///
 /// ```text
@@ -1219,6 +1212,30 @@ pub struct Frame {
     pub ch: Channel,
     pub sn: ZInt,
     pub payload: FramePayload,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FramePayload {
+    /// The Payload of a fragmented Frame
+    ///    
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// ~ payload bytes ~
+    /// +---------------+
+    Fragment { buffer: RBuf, is_final: bool },
+    /// The Payload of a batched Frame
+    ///
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// ~  ZenohMessage ~
+    /// +---------------+
+    /// ~      ...      ~ - Additional complete Zenoh messages.
+    /// +---------------+
+    ///
+    /// NOTE: A batched Frame must contain at least one complete Zenoh message.
+    ///       There is no upper limit to the number of Zenoh messages that can
+    ///       be batched together in the same frame.
+    Messages { messages: Vec<ZenohMessage> },
 }
 
 // Zenoh messages at zenoh-session level
