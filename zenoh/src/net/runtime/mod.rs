@@ -115,9 +115,7 @@ impl Runtime {
                 .to_lowercase()
                 == ZN_TRUE
         {
-            get_mut_unchecked(&mut router)
-                .init_link_state(orchestrator.clone(), peers_autoconnect)
-                .await;
+            get_mut_unchecked(&mut router).init_link_state(orchestrator.clone(), peers_autoconnect);
         }
         match orchestrator.start(config, peers_autoconnect).await {
             Ok(()) => Ok(Runtime {

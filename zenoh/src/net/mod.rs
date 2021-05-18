@@ -81,6 +81,7 @@ use zenoh_util::properties::config::*;
 #[cfg(feature = "zero-copy")]
 pub use protocol::io::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 
+#[macro_use]
 mod types;
 use git_version::git_version;
 pub use types::*;
@@ -127,13 +128,13 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 /// use zenoh::net::*;
 /// use futures::prelude::*;
 ///
-/// let mut stream = scout(whatami::PEER | whatami::ROUTER, config::default()).await;
-/// while let Some(hello) = stream.next().await {
+/// let mut receiver = scout(whatami::PEER | whatami::ROUTER, config::default());
+/// while let Some(hello) = receiver.next().await {
 ///     println!("{}", hello);
 /// }
 /// # })
 /// ```
-pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloReceiver {
+pub fn scout(what: WhatAmI, config: ConfigProperties) -> HelloReceiver {
     trace!("scout({}, {})", what, &config);
     let addr = config
         .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
@@ -220,8 +221,8 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloReceiver {
 /// let session = open(config.into()).await.unwrap();
 /// # })
 /// ```
-pub async fn open(config: ConfigProperties) -> ZResult<Session> {
+pub fn open(config: ConfigProperties) -> ZPendingFuture<ZResult<Session>> {
     debug!("Zenoh Rust API {}", GIT_VERSION);
     debug!("Config: {:?}", &config);
-    Session::new(config).await
+    Session::new(config)
 }

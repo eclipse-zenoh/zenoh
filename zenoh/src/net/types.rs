@@ -15,9 +15,13 @@ use crate::net::Session;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::*;
+use futures_lite::FutureExt;
 use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::RwLock;
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 /// A read-only bytes buffer.
@@ -103,6 +107,99 @@ pub use zenoh_util::core::ZErrorKind;
 
 /// A zenoh result.
 pub use zenoh_util::core::ZResult;
+
+pub trait ZFuture<T>: Future
+where
+    T: Unpin,
+{
+    fn wait(self) -> T;
+}
+
+pub struct ZResolvedFuture<T>
+where
+    T: Unpin,
+{
+    result: Option<T>,
+}
+
+impl<T> ZResolvedFuture<T>
+where
+    T: Unpin,
+{
+    #[inline(always)]
+    pub(crate) fn new(val: T) -> Self {
+        ZResolvedFuture { result: Some(val) }
+    }
+}
+
+macro_rules! zresolved {
+    ($val:expr) => {
+        ZResolvedFuture::new($val)
+    };
+}
+
+impl<T> Future for ZResolvedFuture<T>
+where
+    T: Unpin,
+{
+    type Output = T;
+
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.get_mut().result.take().unwrap())
+    }
+}
+
+impl<T> ZFuture<T> for ZResolvedFuture<T>
+where
+    T: Unpin,
+{
+    fn wait(self) -> T {
+        self.result.unwrap()
+    }
+}
+
+pub struct ZPendingFuture<T>
+where
+    T: Unpin,
+{
+    result: Pin<Box<dyn Future<Output = T>>>,
+}
+
+impl<T> ZPendingFuture<T>
+where
+    T: Unpin,
+{
+    #[inline(always)]
+    pub(crate) fn new(fut: Pin<Box<dyn Future<Output = T>>>) -> Self {
+        ZPendingFuture { result: fut }
+    }
+}
+
+macro_rules! zpending {
+    ($fut:expr) => {
+        ZPendingFuture::new(Box::pin($fut))
+    };
+}
+
+impl<T> Future for ZPendingFuture<T>
+where
+    T: Unpin,
+{
+    type Output = T;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.get_mut().result.poll(cx)
+    }
+}
+
+impl<T> ZFuture<T> for ZPendingFuture<T>
+where
+    T: Unpin,
+{
+    fn wait(self) -> T {
+        async_std::task::block_on(self.result)
+    }
+}
 
 pub trait Receiver<T> {
     fn recv(&self) -> Result<T, RecvError>;
@@ -297,9 +394,9 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        Session::undeclare_publisher(self.session, self.state.id).await
+        Session::undeclare_publisher(self.session, self.state.id)
     }
 }
 
@@ -388,8 +485,8 @@ impl Subscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.state.reskey).await
+    pub fn pull(&self) -> ZResolvedFuture<ZResult<()>> {
+        self.session.pull(&self.state.reskey)
     }
 
     /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
@@ -413,9 +510,9 @@ impl Subscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_subscriber(self.state.id).await
+        self.session.undeclare_subscriber(self.state.id)
     }
 }
 
@@ -469,8 +566,8 @@ impl CallbackSubscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.state.reskey).await
+    pub fn pull(&self) -> ZResolvedFuture<ZResult<()>> {
+        self.session.pull(&self.state.reskey)
     }
 
     /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
@@ -495,9 +592,9 @@ impl CallbackSubscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_subscriber(self.state.id).await
+        self.session.undeclare_subscriber(self.state.id)
     }
 }
 
@@ -577,9 +674,9 @@ impl Queryable<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_queryable(self.state.id).await
+        self.session.undeclare_queryable(self.state.id)
     }
 }
 
