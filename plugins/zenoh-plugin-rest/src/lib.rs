@@ -185,7 +185,7 @@ pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
 }
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
-    log::trace!("REST: {:?}", req);
+    log::trace!("Incoming GET request: {:?}", req);
     // Reconstruct Selector from req.url() (no easier way...)
     let url = req.url();
     let mut s = String::with_capacity(url.as_str().len());
@@ -308,7 +308,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
 }
 
 async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
-    log::trace!("REST: {:?}", req);
+    log::trace!("Incoming PUT request: {:?}", req);
     match req.body_bytes().await {
         Ok(bytes) => {
             let resource = path_to_resource(req.url().path(), &req.state().1);
@@ -352,6 +352,16 @@ pub async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     let session = Session::init(runtime, true, vec![], vec![]).await;
 
     let mut app = Server::with_state((Arc::new(session), pid));
+    app.with(
+        tide::security::CorsMiddleware::new()
+            .allow_methods(
+                "GET, PUT, PATCH, DELETE"
+                    .parse::<http_types::headers::HeaderValue>()
+                    .unwrap(),
+            )
+            .allow_origin(tide::security::Origin::from("*"))
+            .allow_credentials(false),
+    );
 
     app.at("/").get(query);
     app.at("*").get(query);
