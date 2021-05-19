@@ -108,23 +108,23 @@ pub use zenoh_util::core::ZErrorKind;
 /// A zenoh result.
 pub use zenoh_util::core::ZResult;
 
-pub trait ZFuture<T>: Future
+pub trait ZFuture<T>: Future + Send
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
     fn wait(self) -> T;
 }
 
 pub struct ZResolvedFuture<T>
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
     result: Option<T>,
 }
 
 impl<T> ZResolvedFuture<T>
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
     #[inline(always)]
     pub(crate) fn new(val: T) -> Self {
@@ -140,7 +140,7 @@ macro_rules! zresolved {
 
 impl<T> Future for ZResolvedFuture<T>
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
     type Output = T;
 
@@ -151,7 +151,7 @@ where
 
 impl<T> ZFuture<T> for ZResolvedFuture<T>
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
     fn wait(self) -> T {
         self.result.unwrap()
@@ -160,17 +160,17 @@ where
 
 pub struct ZPendingFuture<T>
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
-    result: Pin<Box<dyn Future<Output = T>>>,
+    result: Pin<Box<dyn Future<Output = T> + Send>>,
 }
 
 impl<T> ZPendingFuture<T>
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
     #[inline(always)]
-    pub(crate) fn new(fut: Pin<Box<dyn Future<Output = T>>>) -> Self {
+    pub(crate) fn new(fut: Pin<Box<dyn Future<Output = T> + Send>>) -> Self {
         ZPendingFuture { result: fut }
     }
 }
@@ -183,7 +183,7 @@ macro_rules! zpending {
 
 impl<T> Future for ZPendingFuture<T>
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
     type Output = T;
 
@@ -194,7 +194,7 @@ where
 
 impl<T> ZFuture<T> for ZPendingFuture<T>
 where
-    T: Unpin,
+    T: Unpin + Send,
 {
     fn wait(self) -> T {
         async_std::task::block_on(self.result)

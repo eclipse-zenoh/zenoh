@@ -138,7 +138,8 @@ impl Runtime {
     }
 
     pub async fn close(&self) -> ZResult<()> {
-        self.write().orchestrator.close().await
+        let mut orchestrator = self.write().orchestrator.clone();
+        orchestrator.close().await
     }
 
     pub fn get_pid_str(&self) -> String {
