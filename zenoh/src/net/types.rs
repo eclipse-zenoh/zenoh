@@ -144,8 +144,8 @@ where
 {
     type Output = T;
 
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(self.get_mut().result.take().unwrap())
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(self.result.take().unwrap())
     }
 }
 
@@ -187,8 +187,8 @@ where
 {
     type Output = T;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.get_mut().result.poll(cx)
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.result.poll(cx)
     }
 }
 
@@ -284,9 +284,9 @@ macro_rules! receiver{
             type Item = $recv_type;
 
             #[inline(always)]
-            fn poll_next(self: async_std::pin::Pin<&mut Self>, cx: &mut async_std::task::Context) -> async_std::task::Poll<Option<Self::Item>> {
+            fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
                 use futures_lite::StreamExt;
-                self.get_mut().stream.poll_next(cx)
+                self.stream.poll_next(cx)
             }
         }
     }
