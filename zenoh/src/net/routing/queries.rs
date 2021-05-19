@@ -661,7 +661,15 @@ fn insert_faces_for_qabls(
                             if let Some(face) = tables.get_face(&net.graph[direction].pid) {
                                 route.entry(face.id).or_insert_with(|| {
                                     let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                                    (face.clone(), reskey, Some(source as u64))
+                                    (
+                                        face.clone(),
+                                        reskey,
+                                        if source != 0 {
+                                            Some(source as u64)
+                                        } else {
+                                            None
+                                        },
+                                    )
                                 });
                             }
                         }
@@ -858,7 +866,7 @@ pub fn route_query(
                     whatami::ROUTER => {
                         let routers_net = tables.routers_net.as_ref().unwrap();
                         let local_context =
-                            routers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                            routers_net.get_local_context(routing_context, face.link_id);
                         Resource::get_resource(prefix, suffix)
                             .map(|res| res.routers_query_route(local_context))
                             .flatten()
@@ -875,7 +883,7 @@ pub fn route_query(
                     whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context =
-                            peers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                            peers_net.get_local_context(routing_context, face.link_id);
                         Resource::get_resource(prefix, suffix)
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
@@ -900,7 +908,7 @@ pub fn route_query(
                     whatami::ROUTER | whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context =
-                            peers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                            peers_net.get_local_context(routing_context, face.link_id);
                         Resource::get_resource(prefix, suffix)
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
