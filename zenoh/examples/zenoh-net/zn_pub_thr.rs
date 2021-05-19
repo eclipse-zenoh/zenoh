@@ -35,14 +35,13 @@ fn main() {
     let _publ = session.declare_publisher(&reskey).wait().unwrap();
 
     loop {
-        session
-            .write_ext(
-                &reskey,
-                data.clone(),
-                encoding::DEFAULT,
-                data_kind::DEFAULT,
-                CongestionControl::Block, // Make sure to not drop messages because of congestion control
-            );
+        session.write_ext(
+            &reskey,
+            data.clone(),
+            encoding::DEFAULT,
+            data_kind::DEFAULT,
+            CongestionControl::Block, // Make sure to not drop messages because of congestion control
+        );
     }
 }
 
