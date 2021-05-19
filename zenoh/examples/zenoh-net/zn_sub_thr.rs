@@ -11,25 +11,23 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::future;
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::net::ResKey::*;
 use zenoh::net::*;
 use zenoh::Properties;
 
-#[async_std::main]
-async fn main() {
+fn main() {
     // initiate logging
     env_logger::init();
 
     let (config, m, n) = parse_args();
 
-    let session = open(config.into()).await.unwrap();
+    let session = open(config.into()).wait().unwrap();
 
     let reskey = RId(session
         .declare_resource(&RName("/test/thr".to_string()))
-        .await
+        .wait()
         .unwrap());
 
     let mut count = 0u128;
@@ -57,11 +55,11 @@ async fn main() {
                 }
             }
         })
-        .await
+        .wait()
         .unwrap();
 
     // Stop forever
-    future::pending::<()>().await;
+    std::thread::park();
 }
 
 fn print_stats(start: Instant, n: u128) {

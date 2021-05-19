@@ -16,8 +16,7 @@ use zenoh::net::ResKey::*;
 use zenoh::net::*;
 use zenoh::Properties;
 
-#[async_std::main]
-async fn main() {
+fn main() {
     // initiate logging
     env_logger::init();
     let (config, size) = parse_args();
@@ -27,13 +26,13 @@ async fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    let session = open(config.into()).await.unwrap();
+    let session = open(config.into()).wait().unwrap();
 
     let reskey = RId(session
         .declare_resource(&RName("/test/thr".to_string()))
-        .await
+        .wait()
         .unwrap());
-    let _publ = session.declare_publisher(&reskey).await.unwrap();
+    let _publ = session.declare_publisher(&reskey).wait().unwrap();
 
     loop {
         session
@@ -43,9 +42,7 @@ async fn main() {
                 encoding::DEFAULT,
                 data_kind::DEFAULT,
                 CongestionControl::Block, // Make sure to not drop messages because of congestion control
-            )
-            .await
-            .unwrap();
+            );
     }
 }
 
