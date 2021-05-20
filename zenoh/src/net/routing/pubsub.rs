@@ -609,18 +609,32 @@ pub async fn forget_client_subscription(
     }
 }
 
-pub(crate) async fn pubsub_new_client_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(crate) async fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable, // TODO
         mode: SubMode::Push,
         period: None,
     };
-    for sub in &tables.router_subs {
-        get_mut_unchecked(face).local_subs.push(sub.clone());
-        let reskey = Resource::decl_key(&sub, face).await;
-        face.primitives
-            .decl_subscriber(&reskey, &sub_info, None)
-            .await;
+    if face.whatami == whatami::CLIENT && tables.whatami != whatami::CLIENT {
+        for sub in &tables.router_subs {
+            get_mut_unchecked(face).local_subs.push(sub.clone());
+            let reskey = Resource::decl_key(&sub, face).await;
+            face.primitives
+                .decl_subscriber(&reskey, &sub_info, None)
+                .await;
+        }
+    }
+    if tables.whatami == whatami::CLIENT {
+        for face in tables
+            .faces
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
+            for sub in &face.remote_subs {
+                propagate_simple_subscription(tables, &sub, &sub_info, &mut face.clone()).await;
+            }
+        }
     }
 }
 

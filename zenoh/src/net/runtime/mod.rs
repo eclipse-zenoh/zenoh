@@ -88,7 +88,7 @@ impl Runtime {
             None
         };
         let mut router = Arc::new(Router::new(pid.clone(), whatami, hlc));
-        let mut orchestrator = SessionOrchestrator::new(whatami, router.clone());
+        let mut orchestrator = SessionOrchestrator::new(whatami, router.clone(), config.clone());
 
         let sm_config = SessionManagerConfig {
             version,
@@ -124,7 +124,7 @@ impl Runtime {
                 )
                 .await;
         }
-        match orchestrator.init(session_manager, config).await {
+        match orchestrator.init(session_manager).await {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
                     pid,
