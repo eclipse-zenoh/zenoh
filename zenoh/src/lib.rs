@@ -81,9 +81,6 @@
     html_favicon_url = "http://zenoh.io/favicon-32x32.png",
     html_root_url = "https://eclipse-zenoh.github.io/zenoh/zenoh/"
 )]
-#![feature(async_closure)]
-#![feature(map_into_keys_values)]
-#![feature(can_vector)]
 #![recursion_limit = "256"]
 
 #[macro_use]

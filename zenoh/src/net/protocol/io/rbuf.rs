@@ -412,10 +412,10 @@ impl io::Read for RBuf {
         Ok(nread)
     }
 
-    #[inline]
-    fn is_read_vectored(&self) -> bool {
-        true
-    }
+    //#[inline]
+    //fn is_read_vectored(&self) -> bool {
+    //    true
+    //}
 }
 
 impl fmt::Display for RBuf {

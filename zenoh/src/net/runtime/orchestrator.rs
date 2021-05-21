@@ -614,7 +614,7 @@ impl SessionOrchestrator {
         timeout: std::time::Duration,
     ) -> ZResult<()> {
         let scout = async {
-            SessionOrchestrator::scout(sockets, what, addr, async move |hello| {
+            SessionOrchestrator::scout(sockets, what, addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if let Some(locators) = &hello.locators {
                     if self.connect(locators).await.is_ok() {
@@ -638,7 +638,7 @@ impl SessionOrchestrator {
     }
 
     async fn connect_all(&self, ucast_sockets: &[UdpSocket], what: WhatAmI, addr: &SocketAddr) {
-        SessionOrchestrator::scout(ucast_sockets, what, addr, async move |hello| {
+        SessionOrchestrator::scout(ucast_sockets, what, addr, move |hello| async move {
             match &hello.pid {
                 Some(pid) => {
                     if let Some(locators) = &hello.locators {
