@@ -52,9 +52,7 @@ fn send_sourced_queryable_to_net_childs(
                         someface.primitives.decl_queryable(&reskey, routing_context);
                     }
                 }
-                None => {
-                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                }
+                None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
             }
         }
     }
@@ -292,9 +290,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                             .forget_queryable(&reskey, routing_context);
                     }
                 }
-                None => {
-                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                }
+                None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
             }
         }
     }

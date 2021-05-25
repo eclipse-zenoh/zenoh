@@ -54,9 +54,7 @@ fn send_sourced_subscription_to_net_childs(
                             .decl_subscriber(&reskey, sub_info, routing_context);
                     }
                 }
-                None => {
-                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                }
+                None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
             }
         }
     }
@@ -336,9 +334,7 @@ fn send_forget_sourced_subscription_to_net_childs(
                             .forget_subscriber(&reskey, routing_context);
                     }
                 }
-                None => {
-                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                }
+                None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
             }
         }
     }
