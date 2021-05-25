@@ -34,7 +34,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zconfigurable, zerror};
+use zenoh_util::{zconfigurable, zerror, zpending, zresolved};
 
 zconfigurable! {
     static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;

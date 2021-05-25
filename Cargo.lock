@@ -3029,6 +3029,7 @@ dependencies = [
  "event-listener",
  "flume",
  "futures",
+ "futures-lite",
  "hex",
  "hmac 0.10.1",
  "home",

@@ -15,14 +15,11 @@ use crate::net::Session;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::*;
-use futures_lite::FutureExt;
 use std::collections::HashMap;
 use std::fmt;
-use std::future::Future;
 use std::pin::Pin;
 use std::sync::RwLock;
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
 
 /// A read-only bytes buffer.
 pub use super::protocol::io::RBuf;
@@ -83,6 +80,16 @@ pub use super::protocol::core::whatami;
 /// A zenoh Hello message.
 pub use super::protocol::proto::Hello;
 
+pub use zenoh_util::sync::channel::Iter;
+pub use zenoh_util::sync::channel::Receiver;
+pub use zenoh_util::sync::channel::RecvError;
+pub use zenoh_util::sync::channel::RecvTimeoutError;
+pub use zenoh_util::sync::channel::TryIter;
+pub use zenoh_util::sync::channel::TryRecvError;
+pub use zenoh_util::sync::ZFuture;
+pub use zenoh_util::sync::ZPendingFuture;
+pub use zenoh_util::sync::ZResolvedFuture;
+
 /// Some informations about the associated data.
 ///
 /// # Examples
@@ -108,191 +115,7 @@ pub use zenoh_util::core::ZErrorKind;
 /// A zenoh result.
 pub use zenoh_util::core::ZResult;
 
-pub trait ZFuture<T>: Future + Send
-where
-    T: Unpin + Send,
-{
-    fn wait(self) -> T;
-}
-
-pub struct ZResolvedFuture<T>
-where
-    T: Unpin + Send,
-{
-    result: Option<T>,
-}
-
-impl<T> ZResolvedFuture<T>
-where
-    T: Unpin + Send,
-{
-    #[inline(always)]
-    pub(crate) fn new(val: T) -> Self {
-        ZResolvedFuture { result: Some(val) }
-    }
-}
-
-macro_rules! zresolved {
-    ($val:expr) => {
-        ZResolvedFuture::new($val)
-    };
-}
-
-impl<T> Future for ZResolvedFuture<T>
-where
-    T: Unpin + Send,
-{
-    type Output = T;
-
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(self.result.take().unwrap())
-    }
-}
-
-impl<T> ZFuture<T> for ZResolvedFuture<T>
-where
-    T: Unpin + Send,
-{
-    fn wait(self) -> T {
-        self.result.unwrap()
-    }
-}
-
-pub struct ZPendingFuture<T>
-where
-    T: Unpin + Send,
-{
-    result: Pin<Box<dyn Future<Output = T> + Send>>,
-}
-
-impl<T> ZPendingFuture<T>
-where
-    T: Unpin + Send,
-{
-    #[inline(always)]
-    pub(crate) fn new(fut: Pin<Box<dyn Future<Output = T> + Send>>) -> Self {
-        ZPendingFuture { result: fut }
-    }
-}
-
-macro_rules! zpending {
-    ($fut:expr) => {
-        ZPendingFuture::new(Box::pin($fut))
-    };
-}
-
-impl<T> Future for ZPendingFuture<T>
-where
-    T: Unpin + Send,
-{
-    type Output = T;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.result.poll(cx)
-    }
-}
-
-impl<T> ZFuture<T> for ZPendingFuture<T>
-where
-    T: Unpin + Send,
-{
-    fn wait(self) -> T {
-        async_std::task::block_on(self.result)
-    }
-}
-
-pub trait Receiver<T> {
-    fn recv(&self) -> Result<T, RecvError>;
-
-    fn try_recv(&self) -> Result<T, TryRecvError>;
-
-    fn recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError>;
-
-    fn recv_deadline(&self, deadline: Instant) -> Result<T, RecvTimeoutError>;
-
-    fn iter(&self) -> Iter<'_, T>;
-
-    fn try_iter(&self) -> TryIter<'_, T>;
-}
-
-macro_rules! receiver{
-    (
-     $(#[$meta:meta])*
-     $vis:vis struct $struct_name:ident$(<$( $lt:lifetime ),+>)? : Receiver<$recv_type:ident> {
-        $(
-        $(#[$field_meta:meta])*
-        $field_vis:vis $field_name:ident : $field_type:ty,
-        )*
-    }
-    ) => {
-        $(#[$meta])*
-        $vis struct $struct_name$(<$( $lt ),+>)? {
-            $(
-            $(#[$field_meta:meta])*
-            $field_vis $field_name : $field_type,
-            )*
-            pub(crate) receiver: flume::Receiver<$recv_type>,
-            pub(crate) stream: flume::r#async::RecvStream<'static, $recv_type>,
-        }
-
-        impl$(<$( $lt ),+>)? $struct_name$(<$( $lt ),+>)? {
-            pub(crate) fn new(
-                $($field_name : $field_type,)*
-                receiver: flume::Receiver<$recv_type>)
-            -> Self {
-                $struct_name{
-                    $($field_name,)*
-                    receiver: receiver.clone(),
-                    stream: receiver.into_stream(),
-                }
-            }
-        }
-
-        impl$(<$( $lt ),+>)? Receiver<$recv_type> for $struct_name$(<$( $lt ),+>)? {
-            #[inline(always)]
-            fn recv(&self) -> Result<$recv_type, flume::RecvError> {
-                self.receiver.recv()
-            }
-
-            #[inline(always)]
-            fn try_recv(&self) -> Result<$recv_type, flume::TryRecvError> {
-                self.receiver.try_recv()
-            }
-
-            #[inline(always)]
-            fn recv_timeout(&self, timeout: std::time::Duration) -> Result<$recv_type, flume::RecvTimeoutError> {
-                self.receiver.recv_timeout(timeout)
-            }
-
-            #[inline(always)]
-            fn recv_deadline(&self, deadline: std::time::Instant) -> Result<$recv_type, flume::RecvTimeoutError> {
-                self.receiver.recv_deadline(deadline)
-            }
-
-            #[inline(always)]
-            fn iter(&self) -> flume::Iter<'_, $recv_type> {
-                self.receiver.iter()
-            }
-
-            #[inline(always)]
-            fn try_iter(&self) -> flume::TryIter<'_, $recv_type> {
-                self.receiver.try_iter()
-            }
-        }
-
-        impl$(<$( $lt ),+>)? async_std::stream::Stream for $struct_name$(<$( $lt ),+>)? {
-            type Item = $recv_type;
-
-            #[inline(always)]
-            fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-                use futures_lite::StreamExt;
-                self.stream.poll_next(cx)
-            }
-        }
-    }
-}
-
-receiver! {
+zreceiver! {
     #[derive(Clone)]
     pub struct HelloReceiver : Receiver<Hello> {
         pub(crate) stop_sender: Sender<()>,
@@ -443,7 +266,7 @@ impl fmt::Debug for SubscriberState {
     }
 }
 
-receiver! {
+zreceiver! {
     #[derive(Clone)]
     pub struct SampleReceiver : Receiver<Sample> {}
 }
@@ -618,7 +441,7 @@ impl fmt::Debug for CallbackSubscriber<'_> {
     }
 }
 
-receiver! {
+zreceiver! {
     #[derive(Clone)]
     pub struct ReplyReceiver : Receiver<Reply> {}
 }
@@ -636,7 +459,7 @@ impl fmt::Debug for QueryableState {
     }
 }
 
-receiver! {
+zreceiver! {
     #[derive(Clone)]
     pub struct QueryReceiver : Receiver<Query> {}
 }
