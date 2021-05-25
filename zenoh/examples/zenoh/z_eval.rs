@@ -78,7 +78,7 @@ async fn main() {
         }
         let s = format!("Eval from {}", name);
         println!(r#"   >> Returning string: "{}""#, s);
-        get_request.reply(path.clone(), s.into()).await;
+        get_request.reply_async(path.clone(), s.into()).await;
     }
 
     get_stream.close().await.unwrap();

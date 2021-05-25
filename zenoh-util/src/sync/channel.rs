@@ -81,7 +81,17 @@ macro_rules! zreceiver{
             }
         }
 
-        impl $struct_name$(<$( $lt ),+>)?{
+        impl$(<$( $lt ),+>)? async_std::stream::Stream for $struct_name$(<$( $lt ),+>)? {
+            type Item = $recv_type;
+
+            #[inline(always)]
+            fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+                use futures_lite::StreamExt;
+                self.stream.poll_next(cx)
+            }
+        }
+
+        impl $struct_name$(<$( $lt ),+>)? {
             #[inline(always)]
             fn iter(&self) -> Iter<'_, $recv_type> {
                 self.receiver.iter()
@@ -92,14 +102,125 @@ macro_rules! zreceiver{
                 self.receiver.try_iter()
             }
         }
+    }
+}
 
-        impl$(<$( $lt ),+>)? async_std::stream::Stream for $struct_name$(<$( $lt ),+>)? {
-            type Item = $recv_type;
+#[macro_export]
+macro_rules! ztranscoder {
+    (
+        $(#[$meta:meta])*
+        $vis:vis $dstrcv:ident$(<$( $lt:lifetime ),+>)? : Receiver<$dsttype:ident> <- $srcrcv:ident : Receiver<$srctype:ident>
+        with
+            $dstiter:ident : Iterator<$dstitertype:ident>,
+            $dsttryiter:ident : Iterator<$dsttryitertype:ident>,
+        {
+            $(
+            $(#[$field_meta:meta])*
+            $field_vis:vis $field_name:ident : $field_type:ty,
+            )*
+        }
+    ) => {
+        $(#[$meta])*
+        $vis struct $dstrcv$(<$( $lt ),+>)? {
+            receiver: $srcrcv,
+            $(
+            $(#[$field_meta:meta])*
+            $field_vis $field_name : $field_type,
+            )*
+        }
+
+        impl$(<$( $lt ),+>)? Receiver<$dsttype> for $dstrcv$(<$( $lt ),+>)? {
+            fn recv(&self) -> Result<$dsttype, RecvError> {
+                loop {
+                    match self.transcode(self.receiver.recv()?) {
+                        Err(err) => warn!("Received an invalid {} (drop it): {}", stringify!($srctype), err),
+                        Ok(data) => return Ok(data),
+                    }
+                }
+            }
+
+            fn try_recv(&self) -> Result<$dsttype, TryRecvError> {
+                loop {
+                    match self.transcode(self.receiver.try_recv()?) {
+                        Err(err) => warn!("Received an invalid {} (drop it): {}", stringify!($srctype), err),
+                        Ok(data) => return Ok(data),
+                    }
+                }
+            }
+
+            fn recv_timeout(&self, timeout: Duration) -> Result<$dsttype, RecvTimeoutError> {
+                loop {
+                    match self.transcode(self.receiver.recv_timeout(timeout)?) {
+                        Err(err) => warn!("Received an invalid {} (drop it): {}", stringify!($srctype), err),
+                        Ok(data) => return Ok(data),
+                    }
+                }
+            }
+
+            fn recv_deadline(&self, deadline: Instant) -> Result<$dsttype, RecvTimeoutError> {
+                loop {
+                    match self.transcode(self.receiver.recv_deadline(deadline)?) {
+                        Err(err) => warn!("Received an invalid {} (drop it): {}", stringify!($srctype), err),
+                        Ok(data) => return Ok(data),
+                    }
+                }
+            }
+        }
+
+        impl$(<$( $lt ),+>)? Stream for $dstrcv$(<$( $lt ),+>)? {
+            type Item = $dsttype;
 
             #[inline(always)]
             fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-                use futures_lite::StreamExt;
-                self.stream.poll_next(cx)
+                match self.receiver.poll_next(cx) {
+                    Poll::Ready(Some(src)) => match self.transcode(src) {
+                        Ok(dst) => Poll::Ready(Some(dst)),
+                        Err(err) => {
+                            warn!("Received an invalid Reply (drop it): {}", err);
+                            Poll::Pending
+                        }
+                    },
+                    Poll::Ready(None) => Poll::Ready(None),
+                    Poll::Pending => Poll::Pending,
+                }
+            }
+        }
+
+        impl$(<$( $lt ),+>)? $dstrcv$(<$( $lt ),+>)? {
+            pub fn iter(&self) -> $dstiter<'_, $($( $lt ),+)?> {
+                $dstiter{
+                    receiver: self,
+                }
+            }
+
+            pub fn try_iter(&self) -> $dsttryiter<'_, $($( $lt ),+)?> {
+                $dsttryiter{
+                    receiver: self,
+                }
+            }
+        }
+
+        pub struct $dstiter<'w, $($( $lt ),+)?> {
+            receiver: &'w $dstrcv$(<$( $lt ),+>)?,
+        }
+
+        impl<'w, $($( $lt ),+)?> Iterator for $dstiter<'w, $($( $lt ),+)?> {
+            type Item = $dsttype;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.receiver.recv().ok()
+            }
+        }
+
+        pub struct $dsttryiter<'w, $($( $lt ),+)?> {
+            receiver: &'w $dstrcv$(<$( $lt ),+>)?,
+        }
+
+        impl<'w, $($( $lt ),+)?> Iterator for $dsttryiter<'w, $($( $lt ),+)?> {
+            type Item = $dsttype;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.receiver.try_recv().ok()
             }
         }
     }

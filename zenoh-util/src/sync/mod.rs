@@ -61,6 +61,16 @@ macro_rules! zresolved {
     };
 }
 
+#[macro_export]
+macro_rules! zresolved_try {
+    ($val:expr) => {
+        ZResolvedFuture::new({
+            let f = || $val;
+            f()
+        })
+    };
+}
+
 impl<T> Future for ZResolvedFuture<T>
 where
     T: Unpin + Send,

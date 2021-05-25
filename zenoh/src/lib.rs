@@ -99,7 +99,7 @@ pub mod net;
 use net::info::ZN_INFO_ROUTER_PID_KEY;
 use net::runtime::Runtime;
 use net::Session;
-pub use net::{ZError, ZErrorKind, ZResult};
+pub use net::{ZError, ZErrorKind, ZFuture, ZPendingFuture, ZResolvedFuture, ZResult};
 
 mod workspace;
 pub use workspace::*;
@@ -175,19 +175,23 @@ impl Zenoh {
     /// let zenoh = Zenoh::new(config.into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn new(config: ConfigProperties) -> ZResult<Zenoh> {
-        Ok(Zenoh {
-            session: net::open(config).await?,
+    pub fn new(config: ConfigProperties) -> ZPendingFuture<ZResult<Zenoh>> {
+        zpending!(async {
+            Ok(Zenoh {
+                session: net::open(config).await?,
+            })
         })
     }
 
     /// Creates a Zenoh API with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    pub async fn init(runtime: Runtime) -> Zenoh {
-        Zenoh {
-            session: Session::init(runtime, true, vec![], vec![]).await,
-        }
+    pub fn init(runtime: Runtime) -> ZPendingFuture<Zenoh> {
+        zpending!(async {
+            Zenoh {
+                session: Session::init(runtime, true, vec![], vec![]).await,
+            }
+        })
     }
 
     /// Returns the zenoh-net [Session](net::Session) used by this zenoh session.
@@ -200,13 +204,15 @@ impl Zenoh {
     /// Returns the PeerId of the zenoh router this zenoh API is connected to (if any).
     /// This calls [Session::info()](net::Session::info) and returns the first router pid from
     /// the ZN_INFO_ROUTER_PID_KEY property.
-    pub async fn router_pid(&self) -> Option<String> {
-        match self.session().info().await.remove(&ZN_INFO_ROUTER_PID_KEY) {
-            None => None,
-            Some(s) if s.is_empty() => None,
-            Some(s) if !s.contains(',') => Some(s),
-            Some(s) => Some(s.split(',').next().unwrap().to_string()),
-        }
+    pub fn router_pid(&self) -> ZResolvedFuture<Option<String>> {
+        zresolved!(
+            match self.session().info().wait().remove(&ZN_INFO_ROUTER_PID_KEY) {
+                None => None,
+                Some(s) if s.is_empty() => None,
+                Some(s) if !s.contains(',') => Some(s),
+                Some(s) => Some(s.split(',').next().unwrap().to_string()),
+            }
+        )
     }
 
     /// Creates a [`Workspace`] with an optional [`Path`] as `prefix`.
@@ -229,9 +235,9 @@ impl Zenoh {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub async fn workspace(&self, prefix: Option<Path>) -> ZResult<Workspace<'_>> {
+    pub fn workspace(&self, prefix: Option<Path>) -> ZResolvedFuture<ZResult<Workspace<'_>>> {
         debug!("New workspace with prefix: {:?}", prefix);
-        Workspace::new(&self, prefix).await
+        Workspace::new(&self, prefix)
     }
 
     /// Closes the zenoh API and the associated zenoh-net session.
@@ -249,8 +255,8 @@ impl Zenoh {
     /// zenoh.close();
     /// # })
     /// ```
-    pub async fn close(self) -> ZResult<()> {
-        self.session.close().await
+    pub fn close(self) -> ZPendingFuture<ZResult<()>> {
+        self.session.close()
     }
 }
 
