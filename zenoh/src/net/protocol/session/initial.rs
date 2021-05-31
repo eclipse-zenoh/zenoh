@@ -17,13 +17,14 @@ use super::authenticator::{
 use super::core::{PeerId, Property, WhatAmI, ZInt};
 use super::defaults::SESSION_SEQ_NUM_RESOLUTION;
 use super::io::{RBuf, WBuf};
-use super::link::{Link, Locator};
+use super::link::Link;
 use super::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
 };
 use super::{Opened, Session, SessionManager};
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::crypto::hmac;
 use zenoh_util::{zasynclock, zerror};
 
 type IError = (ZError, Option<u8>);
@@ -73,8 +74,6 @@ struct Cookie {
     whatami: WhatAmI,
     pid: PeerId,
     sn_resolution: ZInt,
-    src: Locator,
-    dst: Locator,
     nonce: ZInt,
 }
 
@@ -83,8 +82,6 @@ impl WBuf {
         zcheck!(self.write_zint(cookie.whatami));
         zcheck!(self.write_peerid(&cookie.pid));
         zcheck!(self.write_zint(cookie.sn_resolution));
-        zcheck!(self.write_string(&cookie.src.to_string()));
-        zcheck!(self.write_string(&cookie.dst.to_string()));
         zcheck!(self.write_zint(cookie.nonce));
         true
     }
@@ -95,16 +92,12 @@ impl RBuf {
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
         let sn_resolution = self.read_zint()?;
-        let src: Locator = self.read_locator()?;
-        let dst: Locator = self.read_locator()?;
         let nonce = self.read_zint()?;
 
         Some(Cookie {
             whatami,
             pid,
             sn_resolution,
-            src,
-            dst,
             nonce,
         })
     }
@@ -665,8 +658,6 @@ async fn accept_send_init_ack(
         whatami: input.whatami,
         pid: input.pid.clone(),
         sn_resolution: agreed_sn_resolution,
-        src: link.get_src(),
-        dst: link.get_dst(),
         nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
     };
     wbuf.write_cookie(&cookie);
@@ -680,13 +671,18 @@ async fn accept_send_init_ack(
         Some(agreed_sn_resolution)
     };
 
-    // Use the BlockCipher to enncrypt the cookie
+    // Use the BlockCipher to encrypt the cookie
     let serialized = RBuf::from(wbuf).to_vec();
     let mut guard = zasynclock!(manager.prng);
     let encrypted = manager.cipher.encrypt(serialized, &mut *guard);
     drop(guard);
-    let cookie = RBuf::from(encrypted);
 
+    // Compute and store cookie hash
+    let hash = hmac::digest(&encrypted);
+    zasynclock!(manager.incoming).insert(link.clone(), Some(hash));
+
+    // Send the cookie
+    let cookie = RBuf::from(encrypted);
     let message = SessionMessage::make_init_ack(
         whatami,
         apid,
@@ -758,9 +754,38 @@ async fn accept_recv_open_syn(
             ));
         }
     };
+    let encrypted = open_syn_cookie.to_vec();
+
+    // Verify that the cookie is the one we sent
+    match zasynclock!(manager.incoming).get(link) {
+        Some(cookie_hash) => match cookie_hash {
+            Some(cookie_hash) => {
+                if cookie_hash != &hmac::digest(&encrypted) {
+                    let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link);
+                    return Err((
+                        zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                        Some(smsg::close_reason::INVALID),
+                    ));
+                }
+            }
+            None => {
+                let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link,);
+                return Err((
+                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    Some(smsg::close_reason::INVALID),
+                ));
+            }
+        },
+        None => {
+            let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link,);
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
+        }
+    }
 
     // Decrypt the cookie with the cyper
-    let encrypted = open_syn_cookie.to_vec();
     let decrypted = manager
         .cipher
         .decrypt(encrypted)

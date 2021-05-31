@@ -1216,14 +1216,17 @@ pub struct Frame {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FramePayload {
-    /// The Payload of a fragmented Frame
+    /// ```text
+    /// The Payload of a fragmented Frame.
     ///    
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// ~ payload bytes ~
     /// +---------------+
+    /// ```
     Fragment { buffer: RBuf, is_final: bool },
-    /// The Payload of a batched Frame
+    /// ```text
+    /// The Payload of a batched Frame.
     ///
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
@@ -1235,6 +1238,7 @@ pub enum FramePayload {
     /// NOTE: A batched Frame must contain at least one complete Zenoh message.
     ///       There is no upper limit to the number of Zenoh messages that can
     ///       be batched together in the same frame.
+    /// ```
     Messages { messages: Vec<ZenohMessage> },
 }
 

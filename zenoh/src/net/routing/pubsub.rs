@@ -468,15 +468,16 @@ pub fn forget_peer_subscription(
             Some(mut res) => {
                 undeclare_peer_subscription(tables, Some(face), &mut res, peer);
 
-                if tables.whatami == whatami::ROUTER
-                    && !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
-                    && !tables.peer_subs.iter().any(|res| {
+                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) };
+                let psubs = {
+                    tables.peer_subs.iter().any(|res| {
                         res.context()
                             .peer_subs
                             .iter()
                             .any(|peer| peer != &tables.pid)
                     })
-                {
+                };
+                if tables.whatami == whatami::ROUTER && !ctxs && !psubs {
                     undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
                 }
 
@@ -503,26 +504,30 @@ pub(crate) fn undeclare_client_subscription(
 
     match tables.whatami {
         whatami::ROUTER => {
-            if !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
-                && !tables.peer_subs.iter().any(|res| {
+            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) };
+            let psubs = {
+                tables.peer_subs.iter().any(|res| {
                     res.context()
                         .peer_subs
                         .iter()
                         .any(|peer| *peer != tables.pid)
                 })
-            {
+            };
+            if !ctxs && !psubs {
                 undeclare_router_subscription(tables, None, res, &tables.pid.clone());
             }
         }
         whatami::PEER => {
-            if !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
-                && !tables.peer_subs.iter().any(|res| {
+            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) };
+            let psubs = {
+                tables.peer_subs.iter().any(|res| {
                     res.context()
                         .peer_subs
                         .iter()
                         .any(|peer| *peer != tables.pid)
                 })
-            {
+            };
+            if !ctxs && !psubs {
                 undeclare_peer_subscription(tables, None, res, &tables.pid.clone());
             }
         }
@@ -544,20 +549,24 @@ pub(crate) fn undeclare_client_subscription(
             }
         })
         .collect();
-    if client_subs.len() == 1
-        && !tables.router_subs.iter().any(|res| {
+
+    let rsubs = {
+        tables.router_subs.iter().any(|res| {
             res.context()
                 .peer_subs
                 .iter()
                 .any(|peer| *peer != tables.pid)
         })
-        && !tables.peer_subs.iter().any(|res| {
+    };
+    let psubs = {
+        tables.peer_subs.iter().any(|res| {
             res.context()
                 .peer_subs
                 .iter()
                 .any(|peer| *peer != tables.pid)
         })
-    {
+    };
+    if client_subs.len() == 1 && !rsubs && !psubs {
         let face = &mut client_subs[0];
         if face.local_subs.contains(&res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
@@ -626,15 +635,16 @@ pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &PeerId, net_type: w
             {
                 unregister_peer_subscription(tables, &mut res, node);
 
-                if tables.whatami == whatami::ROUTER
-                    && !res.session_ctxs.values().any(|ctx| ctx.subs.is_some())
-                    && !tables.peer_subs.iter().any(|res| {
+                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) };
+                let psubs = {
+                    tables.peer_subs.iter().any(|res| {
                         res.context()
                             .peer_subs
                             .iter()
                             .any(|peer| peer != &tables.pid)
                     })
-                {
+                };
+                if tables.whatami == whatami::ROUTER && !ctxs && !psubs {
                     undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
                 }
 

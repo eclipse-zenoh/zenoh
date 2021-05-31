@@ -422,15 +422,16 @@ pub fn forget_peer_queryable(
             Some(mut res) => {
                 undeclare_peer_queryable(tables, Some(face), &mut res, peer);
 
-                if tables.whatami == whatami::ROUTER
-                    && !res.session_ctxs.values().any(|ctx| ctx.qabl)
-                    && !tables.peer_qabls.iter().any(|res| {
+                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
+                let pqabls = {
+                    tables.peer_qabls.iter().any(|res| {
                         res.context()
                             .peer_qabls
                             .iter()
                             .any(|peer| peer != &tables.pid)
                     })
-                {
+                };
+                if tables.whatami == whatami::ROUTER && !ctxs && !pqabls {
                     undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
                 }
 
@@ -457,26 +458,30 @@ pub(crate) fn undeclare_client_queryable(
 
     match tables.whatami {
         whatami::ROUTER => {
-            if !res.session_ctxs.values().any(|ctx| ctx.qabl)
-                && !tables.peer_qabls.iter().any(|res| {
+            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
+            let pqabls = {
+                tables.peer_qabls.iter().any(|res| {
                     res.context()
                         .peer_qabls
                         .iter()
                         .any(|peer| *peer != tables.pid)
                 })
-            {
+            };
+            if !ctxs && !pqabls {
                 undeclare_router_queryable(tables, None, res, &tables.pid.clone());
             }
         }
         whatami::PEER => {
-            if !res.session_ctxs.values().any(|ctx| ctx.qabl)
-                && !tables.peer_qabls.iter().any(|res| {
+            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
+            let pqabls = {
+                tables.peer_qabls.iter().any(|res| {
                     res.context()
                         .peer_qabls
                         .iter()
                         .any(|peer| *peer != tables.pid)
                 })
-            {
+            };
+            if !ctxs && !pqabls {
                 undeclare_peer_queryable(tables, None, res, &tables.pid.clone());
             }
         }
@@ -498,20 +503,24 @@ pub(crate) fn undeclare_client_queryable(
             }
         })
         .collect();
-    if client_qabls.len() == 1
-        && !tables.router_qabls.iter().any(|res| {
+
+    let rqabls = {
+        tables.router_qabls.iter().any(|res| {
             res.context()
                 .peer_qabls
                 .iter()
                 .any(|peer| *peer != tables.pid)
         })
-        && !tables.peer_qabls.iter().any(|res| {
+    };
+    let pqabls = {
+        tables.peer_qabls.iter().any(|res| {
             res.context()
                 .peer_qabls
                 .iter()
                 .any(|peer| *peer != tables.pid)
         })
-    {
+    };
+    if client_qabls.len() == 1 && !rqabls && !pqabls {
         let face = &mut client_qabls[0];
         if face.local_qabls.contains(&res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
@@ -575,15 +584,16 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId, net_type: 
             {
                 unregister_peer_queryable(tables, &mut res, node);
 
-                if tables.whatami == whatami::ROUTER
-                    && !res.session_ctxs.values().any(|ctx| ctx.qabl)
-                    && !tables.peer_qabls.iter().any(|res| {
+                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
+                let pqabls = {
+                    tables.peer_qabls.iter().any(|res| {
                         res.context()
                             .peer_qabls
                             .iter()
                             .any(|peer| peer != &tables.pid)
                     })
-                {
+                };
+                if tables.whatami == whatami::ROUTER && !ctxs && !pqabls {
                     undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
                 }
 
