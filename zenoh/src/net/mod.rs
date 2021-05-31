@@ -128,13 +128,13 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 /// use zenoh::net::*;
 /// use futures::prelude::*;
 ///
-/// let mut receiver = scout(whatami::PEER | whatami::ROUTER, config::default());
+/// let mut receiver = scout(whatami::PEER | whatami::ROUTER, config::default()).await;
 /// while let Some(hello) = receiver.next().await {
 ///     println!("{}", hello);
 /// }
 /// # })
 /// ```
-pub fn scout(what: WhatAmI, config: ConfigProperties) -> HelloReceiver {
+pub fn scout(what: WhatAmI, config: ConfigProperties) -> ZResolvedFuture<HelloReceiver> {
     trace!("scout({}, {})", what, &config);
     let addr = config
         .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
@@ -169,7 +169,7 @@ pub fn scout(what: WhatAmI, config: ConfigProperties) -> HelloReceiver {
         }
     }
 
-    HelloReceiver::new(stop_sender, hello_receiver)
+    zresolved!(HelloReceiver::new(stop_sender, hello_receiver))
 }
 
 /// Open a zenoh-net [Session](Session).
