@@ -93,12 +93,12 @@ macro_rules! zreceiver{
 
         impl $struct_name$(<$( $lt ),+>)? {
             #[inline(always)]
-            fn iter(&self) -> Iter<'_, $recv_type> {
+            pub fn iter(&self) -> Iter<'_, $recv_type> {
                 self.receiver.iter()
             }
 
             #[inline(always)]
-            fn try_iter(&self) -> TryIter<'_, $recv_type> {
+            pub fn try_iter(&self) -> TryIter<'_, $recv_type> {
                 self.receiver.try_iter()
             }
         }
