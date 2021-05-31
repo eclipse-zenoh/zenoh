@@ -115,9 +115,7 @@ impl Runtime {
                 .to_lowercase()
                 == ZN_TRUE
         {
-            get_mut_unchecked(&mut router)
-                .init_link_state(orchestrator.clone(), peers_autoconnect)
-                .await;
+            get_mut_unchecked(&mut router).init_link_state(orchestrator.clone(), peers_autoconnect);
         }
         match orchestrator.start(config, peers_autoconnect).await {
             Ok(()) => Ok(Runtime {
@@ -140,7 +138,8 @@ impl Runtime {
     }
 
     pub async fn close(&self) -> ZResult<()> {
-        self.write().orchestrator.close().await
+        let mut orchestrator = self.write().orchestrator.clone();
+        orchestrator.close().await
     }
 
     pub fn get_pid_str(&self) -> String {

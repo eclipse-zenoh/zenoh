@@ -14,8 +14,9 @@
 use crate::net::queryable::EVAL;
 use crate::net::{
     data_kind, encoding, CallbackSubscriber, CongestionControl, DataInfo, Query,
-    QueryConsolidation, QueryTarget, Queryable, RBuf, Reliability, RepliesSender, Reply,
-    ReplyReceiver, ResKey, Sample, Session, SubInfo, SubMode, Subscriber, ZInt,
+    QueryConsolidation, QueryTarget, Queryable, RBuf, Receiver, RecvError, RecvTimeoutError,
+    Reliability, RepliesSender, Reply, ReplyReceiver, ResKey, Sample, SampleReceiver, Session,
+    SubInfo, SubMode, Subscriber, TryRecvError, ZFuture, ZInt, ZResolvedFuture,
 };
 use crate::utils::new_reception_timestamp;
 use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
@@ -25,7 +26,8 @@ use futures_lite::stream::{Stream, StreamExt};
 use log::{debug, warn};
 use std::convert::TryInto;
 use std::fmt;
-use zenoh_util::zerror;
+use std::time::{Duration, Instant};
+use zenoh_util::{zerror, zresolved};
 
 /// A Workspace to operate on zenoh.
 ///
@@ -65,8 +67,11 @@ pub struct Workspace<'a> {
 const LOCAL_ROUTER_PREFIX: &str = "/@/router/local";
 
 impl Workspace<'_> {
-    pub(crate) async fn new(zenoh: &Zenoh, prefix: Option<Path>) -> ZResult<Workspace<'_>> {
-        Ok(Workspace { zenoh, prefix })
+    pub(crate) fn new(
+        zenoh: &Zenoh,
+        prefix: Option<Path>,
+    ) -> ZResolvedFuture<ZResult<Workspace<'_>>> {
+        zresolved!(Ok(Workspace { zenoh, prefix }))
     }
 
     /// Returns the prefix that was used to create this Workspace (calling [`Zenoh::workspace()`]).
@@ -81,7 +86,7 @@ impl Workspace<'_> {
         &self.zenoh.session
     }
 
-    async fn canonicalize(&self, path: &str) -> ZResult<String> {
+    fn canonicalize(&self, path: &str) -> ZResult<String> {
         let abs_path = if path.starts_with('/') {
             path.to_string()
         } else {
@@ -91,7 +96,7 @@ impl Workspace<'_> {
             }
         };
         if abs_path.starts_with(LOCAL_ROUTER_PREFIX) {
-            match self.zenoh.router_pid().await {
+            match self.zenoh.router_pid().wait() {
                 Some(pid) => Ok(format!(
                     "/@/router/{}{}",
                     pid,
@@ -106,12 +111,12 @@ impl Workspace<'_> {
         }
     }
 
-    async fn path_to_reskey(&self, path: &Path) -> ZResult<ResKey> {
-        self.canonicalize(path.as_str()).await.map(ResKey::from)
+    fn path_to_reskey(&self, path: &Path) -> ZResult<ResKey> {
+        self.canonicalize(path.as_str()).map(ResKey::from)
     }
 
-    async fn pathexpr_to_reskey(&self, path: &PathExpr) -> ZResult<ResKey> {
-        self.canonicalize(path.as_str()).await.map(ResKey::from)
+    fn pathexpr_to_reskey(&self, path: &PathExpr) -> ZResult<ResKey> {
+        self.canonicalize(path.as_str()).map(ResKey::from)
     }
 
     /// Put a [`Path`]/[`Value`] into zenoh.  
@@ -132,18 +137,19 @@ impl Workspace<'_> {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub async fn put(&self, path: &Path, value: Value) -> ZResult<()> {
+    pub fn put(&self, path: &Path, value: Value) -> ZResolvedFuture<ZResult<()>> {
         debug!("put on {:?}", path);
         let (encoding, payload) = value.encode();
-        self.session()
-            .write_ext(
-                &self.path_to_reskey(path).await?,
+        match self.path_to_reskey(path) {
+            Ok(reskey) => self.session().write_ext(
+                &reskey,
                 payload,
                 encoding,
                 data_kind::PUT,
                 CongestionControl::Drop, // TODO: Define the right congestion control value for the put
-            )
-            .await
+            ),
+            Err(e) => zresolved!(Err(e)),
+        }
     }
 
     /// Delete a [`Path`] and its [`Value`] from zenoh.  
@@ -163,17 +169,18 @@ impl Workspace<'_> {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub async fn delete(&self, path: &Path) -> ZResult<()> {
+    pub fn delete(&self, path: &Path) -> ZResolvedFuture<ZResult<()>> {
         debug!("delete on {:?}", path);
-        self.session()
-            .write_ext(
-                &self.path_to_reskey(path).await?,
+        match self.path_to_reskey(path) {
+            Ok(reskey) => self.session().write_ext(
+                &reskey,
                 RBuf::empty(),
                 encoding::NONE,
                 data_kind::DELETE,
                 CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
-            )
-            .await
+            ),
+            Err(e) => zresolved!(Err(e)),
+        }
     }
 
     /// Get a selection of [`Path`]/[`Value`] from zenoh.  
@@ -197,28 +204,30 @@ impl Workspace<'_> {
     /// }
     /// # })
     /// ```
-    pub async fn get(&self, selector: &Selector) -> ZResult<DataStream> {
+    pub fn get(&self, selector: &Selector) -> ZResolvedFuture<ZResult<DataReceiver>> {
         debug!("get on {}", selector);
-        let reskey = self.pathexpr_to_reskey(&selector.path_expr).await?;
-        let decode_value = !selector.properties.contains_key("raw");
-        let consolidation = if selector.has_time_range() {
-            QueryConsolidation::none()
-        } else {
-            QueryConsolidation::default()
-        };
+        zresolved_try!({
+            let reskey = self.pathexpr_to_reskey(&selector.path_expr)?;
+            let decode_value = !selector.properties.contains_key("raw");
+            let consolidation = if selector.has_time_range() {
+                QueryConsolidation::none()
+            } else {
+                QueryConsolidation::default()
+            };
 
-        self.session()
-            .query(
-                &reskey,
-                &selector.predicate,
-                QueryTarget::default(),
-                consolidation,
-            )
-            .await
-            .map(|receiver| DataStream {
-                receiver,
-                decode_value,
-            })
+            self.session()
+                .query(
+                    &reskey,
+                    &selector.predicate,
+                    QueryTarget::default(),
+                    consolidation,
+                )
+                .wait()
+                .map(|receiver| DataReceiver {
+                    receiver,
+                    decode_value,
+                })
+        })
     }
 
     /// Subscribe to changes for a selection of [`Path`]/[`Value`] (specified via a [`Selector`]) from zenoh.  
@@ -244,34 +253,37 @@ impl Workspace<'_> {
     /// }
     /// # })
     /// ```
-    pub async fn subscribe(&self, selector: &Selector) -> ZResult<ChangeStream<'_>> {
+    pub fn subscribe(&self, selector: &Selector) -> ZResolvedFuture<ZResult<ChangeReceiver<'_>>> {
         debug!("subscribe on {}", selector);
-        if selector.filter.is_some() {
-            return zerror!(ZErrorKind::Other {
-                descr: "Filter not supported in selector for subscribe()".into()
-            });
-        }
-        if selector.fragment.is_some() {
-            return zerror!(ZErrorKind::Other {
-                descr: "Fragment not supported in selector for subscribe()".into()
-            });
-        }
-        let decode_value = !selector.properties.contains_key("raw");
+        zresolved_try!({
+            if selector.filter.is_some() {
+                return zerror!(ZErrorKind::Other {
+                    descr: "Filter not supported in selector for subscribe()".into()
+                });
+            }
+            if selector.fragment.is_some() {
+                return zerror!(ZErrorKind::Other {
+                    descr: "Fragment not supported in selector for subscribe()".into()
+                });
+            }
+            let decode_value = !selector.properties.contains_key("raw");
 
-        let reskey = self.pathexpr_to_reskey(&selector.path_expr).await?;
-        let sub_info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        };
+            let reskey = self.pathexpr_to_reskey(&selector.path_expr)?;
+            let sub_info = SubInfo {
+                reliability: Reliability::Reliable,
+                mode: SubMode::Push,
+                period: None,
+            };
 
-        self.session()
-            .declare_subscriber(&reskey, &sub_info)
-            .await
-            .map(|subscriber| ChangeStream {
-                subscriber,
-                decode_value,
-            })
+            self.session()
+                .declare_subscriber(&reskey, &sub_info)
+                .wait()
+                .map(|mut subscriber| ChangeReceiver {
+                    receiver: subscriber.receiver().clone(),
+                    subscriber,
+                    decode_value,
+                })
+        })
     }
 
     /// Subscribe to changes for a selection of [`Path`]/[`Value`] (specified via a [`Selector`]) from zenoh.  
@@ -296,44 +308,46 @@ impl Workspace<'_> {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub async fn subscribe_with_callback<SubscribeCallback>(
+    pub fn subscribe_with_callback<SubscribeCallback>(
         &self,
         selector: &Selector,
         mut callback: SubscribeCallback,
-    ) -> ZResult<SubscriberHandle<'_>>
+    ) -> ZResolvedFuture<ZResult<SubscriberHandle<'_>>>
     where
         SubscribeCallback: FnMut(Change) + Send + Sync + 'static,
     {
         debug!("subscribe_with_callback on {}", selector);
-        if selector.filter.is_some() {
-            return zerror!(ZErrorKind::Other {
-                descr: "Filter not supported in selector for subscribe()".into()
-            });
-        }
-        if selector.fragment.is_some() {
-            return zerror!(ZErrorKind::Other {
-                descr: "Fragment not supported in selector for subscribe()".into()
-            });
-        }
-        let decode_value = !selector.properties.contains_key("raw");
+        zresolved_try!({
+            if selector.filter.is_some() {
+                return zerror!(ZErrorKind::Other {
+                    descr: "Filter not supported in selector for subscribe()".into()
+                });
+            }
+            if selector.fragment.is_some() {
+                return zerror!(ZErrorKind::Other {
+                    descr: "Fragment not supported in selector for subscribe()".into()
+                });
+            }
+            let decode_value = !selector.properties.contains_key("raw");
 
-        let reskey = self.pathexpr_to_reskey(&selector.path_expr).await?;
-        let sub_info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        };
+            let reskey = self.pathexpr_to_reskey(&selector.path_expr)?;
+            let sub_info = SubInfo {
+                reliability: Reliability::Reliable,
+                mode: SubMode::Push,
+                period: None,
+            };
 
-        let subscriber =
-            self.session()
+            let subscriber = self
+                .session()
                 .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
                     match Change::from_sample(sample, decode_value) {
                         Ok(change) => callback(change),
                         Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
                     }
                 })
-                .await?;
-        Ok(SubscriberHandle { subscriber })
+                .wait()?;
+            Ok(SubscriberHandle { subscriber })
+        })
     }
 
     /// Registers an evaluation function under the provided [`PathExpr`].  
@@ -361,18 +375,23 @@ impl Workspace<'_> {
     ///    );
     ///    // return the Value as a result of this evaluation function :
     ///    let v = Value::StringUtf8(format!("Result for get on {}", get_request.selector));
-    ///    get_request.reply("/demo/example/eval".try_into().unwrap(), v).await;
+    ///    get_request.reply_async("/demo/example/eval".try_into().unwrap(), v).await;
     /// }
     /// # })
     /// ```
-    pub async fn register_eval(&self, path_expr: &PathExpr) -> ZResult<GetRequestStream<'_>> {
+    pub fn register_eval(
+        &self,
+        path_expr: &PathExpr,
+    ) -> ZResolvedFuture<ZResult<GetRequestStream<'_>>> {
         debug!("eval on {}", path_expr);
-        let reskey = self.pathexpr_to_reskey(&path_expr).await?;
+        zresolved_try!({
+            let reskey = self.pathexpr_to_reskey(&path_expr)?;
 
-        self.session()
-            .declare_queryable(&reskey, EVAL)
-            .await
-            .map(|queryable| GetRequestStream { queryable })
+            self.session()
+                .declare_queryable(&reskey, EVAL)
+                .wait()
+                .map(|queryable| GetRequestStream { queryable })
+        })
     }
 }
 
@@ -393,53 +412,41 @@ pub struct Data {
     pub timestamp: Timestamp,
 }
 
-fn reply_to_data(reply: Reply, decode_value: bool) -> ZResult<Data> {
-    let path: Path = reply.data.res_name.try_into().unwrap();
-    let (encoding, timestamp) = if let Some(info) = reply.data.data_info {
-        (
-            info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
-            info.timestamp.unwrap_or_else(new_reception_timestamp),
-        )
-    } else {
-        (encoding::APP_OCTET_STREAM, new_reception_timestamp())
-    };
-    let value = if decode_value {
-        Value::decode(encoding, reply.data.payload)?
-    } else {
-        Value::Raw(encoding, reply.data.payload)
-    };
-    Ok(Data {
-        path,
-        value,
-        timestamp,
-    })
+ztranscoder! {
+    /// A [`Stream`] of [`Data`] returned as a result of the [`Workspace::get()`] operation.
+    ///
+    /// [`Stream`]: async_std::stream::Stream
+    #[derive(Clone)]
+    pub DataReceiver: Receiver<Data> <- ReplyReceiver: Receiver<Reply>
+    with
+        DataIter: Iterator<Data>,
+        DataTryIter: Iterator<Data>,
+    {
+        decode_value: bool,
+    }
 }
 
-/// A [`Stream`] of [`Data`] returned as a result of the [`Workspace::get()`] operation.
-///
-/// [`Stream`]: async_std::stream::Stream
-pub struct DataStream {
-    receiver: ReplyReceiver,
-    decode_value: bool,
-}
-
-impl Stream for DataStream {
-    type Item = Data;
-
-    #[inline(always)]
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let decode_value = self.decode_value;
-        match self.get_mut().receiver.poll_next(cx) {
-            Poll::Ready(Some(reply)) => match reply_to_data(reply, decode_value) {
-                Ok(data) => Poll::Ready(Some(data)),
-                Err(err) => {
-                    warn!("Received an invalid Reply (drop it): {}", err);
-                    Poll::Pending
-                }
-            },
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-        }
+impl DataReceiver {
+    fn transcode(&self, reply: Reply) -> ZResult<Data> {
+        let path: Path = reply.data.res_name.try_into().unwrap();
+        let (encoding, timestamp) = if let Some(info) = reply.data.data_info {
+            (
+                info.encoding.unwrap_or(encoding::APP_OCTET_STREAM),
+                info.timestamp.unwrap_or_else(new_reception_timestamp),
+            )
+        } else {
+            (encoding::APP_OCTET_STREAM, new_reception_timestamp())
+        };
+        let value = if self.decode_value {
+            Value::decode(encoding, reply.data.payload)?
+        } else {
+            Value::Raw(encoding, reply.data.payload)
+        };
+        Ok(Data {
+            path,
+            value,
+            timestamp,
+        })
     }
 }
 
@@ -559,38 +566,28 @@ impl Change {
     }
 }
 
-/// A [`Stream`] of [`Change`] returned as a result of the [`Workspace::subscribe()`] operation.
-///
-/// [`Stream`]: async_std::stream::Stream
-pub struct ChangeStream<'a> {
-    subscriber: Subscriber<'a>,
-    decode_value: bool,
-}
-
-impl ChangeStream<'_> {
-    // Closes the stream and the subscription.
-    pub async fn close(self) -> ZResult<()> {
-        self.subscriber.undeclare().await
+ztranscoder! {
+    /// A [`Stream`] of [`Change`] returned as a result of the [`Workspace::subscribe()`] operation.
+    ///
+    /// [`Stream`]: async_std::stream::Stream
+    pub ChangeReceiver<'a>: Receiver<Change> <- SampleReceiver: Receiver<Sample>
+    with
+        ChangeIter: Iterator<Change>,
+        ChangeTryIter: Iterator<Change>,
+    {
+        subscriber: Subscriber<'a>,
+        decode_value: bool,
     }
 }
 
-impl Stream for ChangeStream<'_> {
-    type Item = Change;
+impl ChangeReceiver<'_> {
+    fn transcode(&self, sample: Sample) -> ZResult<Change> {
+        Change::from_sample(sample, self.decode_value)
+    }
 
-    #[inline(always)]
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let decode_value = self.decode_value;
-        match self.get_mut().subscriber.receiver().poll_next(cx) {
-            Poll::Ready(Some(sample)) => match Change::from_sample(sample, decode_value) {
-                Ok(change) => Poll::Ready(Some(change)),
-                Err(err) => {
-                    warn!("Received an invalid Sample (drop it): {}", err);
-                    Poll::Pending
-                }
-            },
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-        }
+    // Closes the stream and the subscription.
+    pub fn close(self) -> ZResolvedFuture<ZResult<()>> {
+        self.subscriber.undeclare()
     }
 }
 
@@ -619,8 +616,8 @@ pub struct SubscriberHandle<'a> {
 
 impl SubscriberHandle<'_> {
     /// Closes the subscription.
-    pub async fn close(self) -> ZResult<()> {
-        self.subscriber.undeclare().await
+    pub fn close(self) -> ZResolvedFuture<ZResult<()>> {
+        self.subscriber.undeclare()
     }
 }
 
@@ -633,8 +630,17 @@ pub struct GetRequest {
 
 impl GetRequest {
     /// Send a [`Path`]/[`Value`] as a reply to the requester.
-    pub async fn reply(&self, path: Path, value: Value) {
+    #[inline(always)]
+    pub fn reply(&self, path: Path, value: Value) {
         self.replies_sender.send(path_value_to_sample(path, value))
+    }
+
+    /// Send a [`Path`]/[`Value`] as a reply to the requester.
+    #[inline(always)]
+    pub async fn reply_async(&self, path: Path, value: Value) {
+        self.replies_sender
+            .send_async(path_value_to_sample(path, value))
+            .await
     }
 }
 
@@ -654,8 +660,8 @@ pub struct GetRequestStream<'a> {
 
 impl GetRequestStream<'_> {
     /// Closes the stream and unregister the evaluation function.
-    pub async fn close(self) -> ZResult<()> {
-        self.queryable.undeclare().await
+    pub fn close(self) -> ZResolvedFuture<ZResult<()>> {
+        self.queryable.undeclare()
     }
 }
 

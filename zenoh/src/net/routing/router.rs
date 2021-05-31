@@ -245,11 +245,7 @@ impl Router {
         }
     }
 
-    pub async fn init_link_state(
-        &mut self,
-        orchestrator: SessionOrchestrator,
-        peers_autoconnect: bool,
-    ) {
+    pub fn init_link_state(&mut self, orchestrator: SessionOrchestrator, peers_autoconnect: bool) {
         let mut tables = zwrite!(self.tables);
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),

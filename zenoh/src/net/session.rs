@@ -14,7 +14,6 @@
 use super::info::*;
 use super::routing::face::Face;
 use super::*;
-// use async_std::channel::{bounded, Receiver, Sender};
 use async_std::sync::Arc;
 use async_std::task;
 use flume::{bounded, Sender};
@@ -35,7 +34,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zconfigurable, zerror};
+use zenoh_util::{zconfigurable, zerror, zpending, zresolved};
 
 zconfigurable! {
     static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -194,50 +193,52 @@ impl Session {
         }
     }
 
-    pub(super) async fn new(config: ConfigProperties) -> ZResult<Session> {
-        let local_routing = config
-            .get_or(&ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let join_subscriptions = match config.get(&ZN_JOIN_SUBSCRIPTIONS_KEY) {
-            Some(s) => s.split(',').map(|s| s.to_string()).collect(),
-            None => vec![],
-        };
-        let join_publications = match config.get(&ZN_JOIN_PUBLICATIONS_KEY) {
-            Some(s) => s.split(',').map(|s| s.to_string()).collect(),
-            None => vec![],
-        };
-        match Runtime::new(0, config.0.into(), None).await {
-            Ok(runtime) => {
-                let session = Self::init(
-                    runtime,
-                    local_routing,
-                    join_subscriptions,
-                    join_publications,
-                )
-                .await;
-                // Workaround for the declare_and_shoot problem
-                task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-                Ok(session)
+    pub(super) fn new(config: ConfigProperties) -> ZPendingFuture<ZResult<Session>> {
+        zpending!(async {
+            let local_routing = config
+                .get_or(&ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
+                .to_lowercase()
+                == ZN_TRUE;
+            let join_subscriptions = match config.get(&ZN_JOIN_SUBSCRIPTIONS_KEY) {
+                Some(s) => s.split(',').map(|s| s.to_string()).collect(),
+                None => vec![],
+            };
+            let join_publications = match config.get(&ZN_JOIN_PUBLICATIONS_KEY) {
+                Some(s) => s.split(',').map(|s| s.to_string()).collect(),
+                None => vec![],
+            };
+            match Runtime::new(0, config.0.into(), None).await {
+                Ok(runtime) => {
+                    let session = Self::init(
+                        runtime,
+                        local_routing,
+                        join_subscriptions,
+                        join_publications,
+                    )
+                    .await;
+                    // Workaround for the declare_and_shoot problem
+                    task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+                    Ok(session)
+                }
+                Err(err) => Err(err),
             }
-            Err(err) => Err(err),
-        }
+        })
     }
 
     /// Returns the identifier for this session.
-    pub async fn id(&self) -> String {
-        self.runtime.get_pid_str()
+    pub fn id(&self) -> ZResolvedFuture<String> {
+        zresolved!(self.runtime.get_pid_str())
     }
 
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    pub async fn init(
+    pub fn init(
         runtime: Runtime,
         local_routing: bool,
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
-    ) -> Session {
+    ) -> ZResolvedFuture<Session> {
         let router = runtime.read().router.clone();
         let state = Arc::new(RwLock::new(SessionState::new(
             local_routing,
@@ -251,17 +252,19 @@ impl Session {
         };
         let primitives = Some(router.new_primitives(Arc::new(session.clone())));
         zwrite!(state).primitives = primitives;
-        session
+        zresolved!(session)
     }
 
-    async fn close_alive(&self) -> ZResult<()> {
-        trace!("close()");
-        self.runtime.close().await?;
+    fn close_alive(self) -> ZPendingFuture<ZResult<()>> {
+        zpending!(async move {
+            trace!("close()");
+            self.runtime.close().await?;
 
-        let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-        primitives.send_close();
+            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
+            primitives.send_close();
 
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Close the zenoh-net [Session](Session).
@@ -278,9 +281,9 @@ impl Session {
     /// session.close().await.unwrap();
     /// # })
     /// ```
-    pub async fn close(mut self) -> ZResult<()> {
+    pub fn close(mut self) -> ZPendingFuture<ZResult<()>> {
         self.alive = false;
-        self.close_alive().await
+        self.close_alive()
     }
 
     /// Get informations about the zenoh-net [Session](Session).
@@ -294,7 +297,7 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub async fn info(&self) -> InfoProperties {
+    pub fn info(&self) -> ZResolvedFuture<InfoProperties> {
         trace!("info()");
         let runtime = self.runtime.read();
         let sessions = runtime.orchestrator.manager().get_sessions();
@@ -339,7 +342,7 @@ impl Session {
         info.insert(ZN_INFO_PEER_PID_KEY, peer_pids.join(","));
         info.insert(ZN_INFO_ROUTER_PID_KEY, router_pids.join(","));
         info.insert(ZN_INFO_PID_KEY, hex::encode_upper(runtime.pid.as_slice()));
-        info
+        zresolved!(info)
     }
 
     /// Associate a numerical Id with the given resource key.
@@ -360,39 +363,36 @@ impl Session {
     /// let rid = session.declare_resource(&"/resource/name".into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
-        self.sync_declare_resource(resource)
-    }
-
-    fn sync_declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
+    pub fn declare_resource(&self, resource: &ResKey) -> ZResolvedFuture<ZResult<ResourceId>> {
         trace!("declare_resource({:?})", resource);
         let mut state = zwrite!(self.state);
-        let resname = state.localkey_to_resname(resource)?;
 
-        match state
-            .local_resources
-            .iter()
-            .find(|(_rid, res)| res.name == resname)
-        {
-            Some((rid, _res)) => Ok(*rid),
-            None => {
-                let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
-                let mut res = Resource::new(resname.clone());
-                for sub in state.subscribers.values() {
-                    if rname::matches(&resname, &sub.resname) {
-                        res.subscribers.push(sub.clone());
+        zresolved!(state.localkey_to_resname(resource).map(|resname| {
+            match state
+                .local_resources
+                .iter()
+                .find(|(_rid, res)| res.name == resname)
+            {
+                Some((rid, _res)) => *rid,
+                None => {
+                    let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
+                    let mut res = Resource::new(resname.clone());
+                    for sub in state.subscribers.values() {
+                        if rname::matches(&resname, &sub.resname) {
+                            res.subscribers.push(sub.clone());
+                        }
                     }
+
+                    state.local_resources.insert(rid, res);
+
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
+                    primitives.decl_resource(rid, resource);
+
+                    rid
                 }
-
-                state.local_resources.insert(rid, res);
-
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                drop(state);
-                primitives.decl_resource(rid, resource);
-
-                Ok(rid)
             }
-        }
+        }))
     }
 
     /// Undeclare the *numerical Id/resource key* association previously declared
@@ -412,7 +412,7 @@ impl Session {
     /// session.undeclare_resource(rid).await;
     /// # })
     /// ```
-    pub async fn undeclare_resource(&self, rid: ResourceId) -> ZResult<()> {
+    pub fn undeclare_resource(&self, rid: ResourceId) -> ZResolvedFuture<ZResult<()>> {
         trace!("undeclare_resource({:?})", rid);
         let mut state = zwrite!(self.state);
         state.local_resources.remove(&rid);
@@ -421,7 +421,7 @@ impl Session {
         drop(state);
         primitives.forget_resource(rid);
 
-        Ok(())
+        zresolved!(Ok(()))
     }
 
     /// Declare a [Publisher](Publisher) for the given resource key.
@@ -443,58 +443,16 @@ impl Session {
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher<'_>> {
+    pub fn declare_publisher(&self, resource: &ResKey) -> ZResolvedFuture<ZResult<Publisher<'_>>> {
         trace!("declare_publisher({:?})", resource);
         let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(resource)?;
-        let pub_state = Arc::new(PublisherState {
-            id,
-            reskey: resource.clone(),
-        });
-        let declared_pub = match state
-            .join_publications
-            .iter()
-            .find(|s| rname::include(s, &resname))
-        {
-            Some(join_pub) => {
-                let joined_pub = state.publishers.values().any(|p| {
-                    rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
-                });
-                (!joined_pub).then(|| join_pub.clone().into())
-            }
-            None => {
-                let twin_pub = state.publishers.values().any(|p| {
-                    state.localkey_to_resname(&p.reskey).unwrap()
-                        == state.localkey_to_resname(&pub_state.reskey).unwrap()
-                });
-                (!twin_pub).then(|| resource.clone())
-            }
-        };
-
-        state.publishers.insert(id, pub_state.clone());
-
-        if let Some(res) = declared_pub {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.decl_publisher(&res, None);
-        }
-
-        Ok(Publisher {
-            session: self,
-            state: pub_state,
-            alive: true,
-        })
-    }
-
-    pub(crate) async fn undeclare_publisher(&self, pid: usize) -> ZResult<()> {
-        let mut state = zwrite!(self.state);
-        if let Some(pub_state) = state.publishers.remove(&pid) {
-            trace!("undeclare_publisher({:?})", pub_state);
-            // Note: there might be several Publishers on the same ResKey.
-            // Before calling forget_publisher(reskey), check if this was the last one.
-            let resname = state.localkey_to_resname(&pub_state.reskey)?;
-            match state
+        zresolved!(state.localkey_to_resname(resource).map(|resname| {
+            let pub_state = Arc::new(PublisherState {
+                id,
+                reskey: resource.clone(),
+            });
+            let declared_pub = match state
                 .join_publications
                 .iter()
                 .find(|s| rname::include(s, &resname))
@@ -503,27 +461,74 @@ impl Session {
                     let joined_pub = state.publishers.values().any(|p| {
                         rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
                     });
-                    if !joined_pub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        let reskey = join_pub.clone().into();
-                        drop(state);
-                        primitives.forget_publisher(&reskey, None);
-                    }
+                    (!joined_pub).then(|| join_pub.clone().into())
                 }
                 None => {
                     let twin_pub = state.publishers.values().any(|p| {
                         state.localkey_to_resname(&p.reskey).unwrap()
                             == state.localkey_to_resname(&pub_state.reskey).unwrap()
                     });
-                    if !twin_pub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.forget_publisher(&pub_state.reskey, None);
-                    }
+                    (!twin_pub).then(|| resource.clone())
                 }
             };
-        }
-        Ok(())
+
+            state.publishers.insert(id, pub_state.clone());
+
+            if let Some(res) = declared_pub {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.decl_publisher(&res, None);
+            }
+
+            Publisher {
+                session: self,
+                state: pub_state,
+                alive: true,
+            }
+        }))
+    }
+
+    pub(crate) fn undeclare_publisher(&self, pid: usize) -> ZResolvedFuture<ZResult<()>> {
+        let mut state = zwrite!(self.state);
+        zresolved!(if let Some(pub_state) = state.publishers.remove(&pid) {
+            trace!("undeclare_publisher({:?})", pub_state);
+            // Note: there might be several Publishers on the same ResKey.
+            // Before calling forget_publisher(reskey), check if this was the last one.
+            state.localkey_to_resname(&pub_state.reskey).map(|resname| {
+                match state
+                    .join_publications
+                    .iter()
+                    .find(|s| rname::include(s, &resname))
+                {
+                    Some(join_pub) => {
+                        let joined_pub = state.publishers.values().any(|p| {
+                            rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
+                        });
+                        if !joined_pub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            let reskey = join_pub.clone().into();
+                            drop(state);
+                            primitives.forget_publisher(&reskey, None);
+                        }
+                    }
+                    None => {
+                        let twin_pub = state.publishers.values().any(|p| {
+                            state.localkey_to_resname(&p.reskey).unwrap()
+                                == state.localkey_to_resname(&pub_state.reskey).unwrap()
+                        });
+                        if !twin_pub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            drop(state);
+                            primitives.forget_publisher(&pub_state.reskey, None);
+                        }
+                    }
+                };
+            })
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Unable to find publisher".into()
+            })
+        })
     }
 
     fn declare_any_subscriber(
@@ -581,11 +586,11 @@ impl Session {
             let reskey = match reskey {
                 ResKey::RName(name) => match name.find('*') {
                     Some(pos) => {
-                        let id = self.sync_declare_resource(&name[..pos].into())?;
+                        let id = self.declare_resource(&name[..pos].into()).wait()?;
                         ResKey::RIdWithSuffix(id, name[pos..].into())
                     }
                     None => {
-                        let id = self.sync_declare_resource(&name.into())?;
+                        let id = self.declare_resource(&name.into()).wait()?;
                         ResKey::RId(id)
                     }
                 },
@@ -623,22 +628,22 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub async fn declare_subscriber(
+    pub fn declare_subscriber(
         &self,
         reskey: &ResKey,
         info: &SubInfo,
-    ) -> ZResult<Subscriber<'_>> {
+    ) -> ZResolvedFuture<ZResult<Subscriber<'_>>> {
         trace!("declare_subscriber({:?})", reskey);
         let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
-        let sub_state =
-            self.declare_any_subscriber(reskey, SubscriberInvoker::Sender(sender), info)?;
 
-        Ok(Subscriber {
-            session: self,
-            state: sub_state,
-            alive: true,
-            receiver: SampleReceiver::new(receiver),
-        })
+        zresolved!(self
+            .declare_any_subscriber(reskey, SubscriberInvoker::Sender(sender), info)
+            .map(|sub_state| Subscriber {
+                session: self,
+                state: sub_state,
+                alive: true,
+                receiver: SampleReceiver::new(receiver),
+            }))
     }
 
     /// Declare a [CallbackSubscriber](CallbackSubscriber) for the given resource key.
@@ -665,30 +670,29 @@ impl Session {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_callback_subscriber<DataHandler>(
+    pub fn declare_callback_subscriber<DataHandler>(
         &self,
         reskey: &ResKey,
         info: &SubInfo,
         data_handler: DataHandler,
-    ) -> ZResult<CallbackSubscriber<'_>>
+    ) -> ZResolvedFuture<ZResult<CallbackSubscriber<'_>>>
     where
         DataHandler: FnMut(Sample) + Send + Sync + 'static,
     {
         trace!("declare_callback_subscriber({:?})", reskey);
         let dhandler = Arc::new(RwLock::new(data_handler));
-        let sub_state =
-            self.declare_any_subscriber(reskey, SubscriberInvoker::Handler(dhandler), info)?;
-
-        Ok(CallbackSubscriber {
-            session: self,
-            state: sub_state,
-            alive: true,
-        })
+        zresolved!(self
+            .declare_any_subscriber(reskey, SubscriberInvoker::Handler(dhandler), info)
+            .map(|sub_state| CallbackSubscriber {
+                session: self,
+                state: sub_state,
+                alive: true,
+            }))
     }
 
-    pub(crate) async fn undeclare_subscriber(&self, sid: usize) -> ZResult<()> {
+    pub(crate) fn undeclare_subscriber(&self, sid: usize) -> ZResolvedFuture<ZResult<()>> {
         let mut state = zwrite!(self.state);
-        if let Some(sub_state) = state.subscribers.remove(&sid) {
+        zresolved!(if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
             for res in state.local_resources.values_mut() {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
@@ -699,37 +703,41 @@ impl Session {
 
             // Note: there might be several Subscribers on the same ResKey.
             // Before calling forget_subscriber(reskey), check if this was the last one.
-            let resname = state.localkey_to_resname(&sub_state.reskey)?;
-            match state
-                .join_subscriptions
-                .iter()
-                .find(|s| rname::include(s, &resname))
-            {
-                Some(join_sub) => {
-                    let joined_sub = state.subscribers.values().any(|s| {
-                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                    });
-                    if !joined_sub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        let reskey = join_sub.clone().into();
-                        drop(state);
-                        primitives.forget_subscriber(&reskey, None);
+            state.localkey_to_resname(&sub_state.reskey).map(|resname| {
+                match state
+                    .join_subscriptions
+                    .iter()
+                    .find(|s| rname::include(s, &resname))
+                {
+                    Some(join_sub) => {
+                        let joined_sub = state.subscribers.values().any(|s| {
+                            rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                        });
+                        if !joined_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            let reskey = join_sub.clone().into();
+                            drop(state);
+                            primitives.forget_subscriber(&reskey, None);
+                        }
                     }
-                }
-                None => {
-                    let twin_sub = state.subscribers.values().any(|s| {
-                        state.localkey_to_resname(&s.reskey).unwrap()
-                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                    });
-                    if !twin_sub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.forget_subscriber(&sub_state.reskey, None);
+                    None => {
+                        let twin_sub = state.subscribers.values().any(|s| {
+                            state.localkey_to_resname(&s.reskey).unwrap()
+                                == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                        });
+                        if !twin_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            drop(state);
+                            primitives.forget_subscriber(&sub_state.reskey, None);
+                        }
                     }
-                }
-            };
-        }
-        Ok(())
+                };
+            })
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Unable to find publisher".into()
+            })
+        })
     }
 
     /// Declare a [Queryable](Queryable) for the given resource key.
@@ -757,7 +765,11 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable<'_>> {
+    pub fn declare_queryable(
+        &self,
+        resource: &ResKey,
+        kind: ZInt,
+    ) -> ZResolvedFuture<ZResult<Queryable<'_>>> {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
@@ -781,17 +793,17 @@ impl Session {
             primitives.decl_queryable(resource, None);
         }
 
-        Ok(Queryable {
+        zresolved!(Ok(Queryable {
             session: self,
             state: qable_state,
             alive: true,
             receiver: QueryReceiver::new(receiver),
-        })
+        }))
     }
 
-    pub(crate) async fn undeclare_queryable(&self, qid: usize) -> ZResult<()> {
+    pub(crate) fn undeclare_queryable(&self, qid: usize) -> ZResolvedFuture<ZResult<()>> {
         let mut state = zwrite!(self.state);
-        if let Some(qable_state) = state.queryables.remove(&qid) {
+        zresolved!(if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
             // Note: there might be several Queryables on the same ResKey.
             // Before calling forget_eval(reskey), check if this was the last one.
@@ -803,8 +815,12 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap();
                 primitives.forget_queryable(&qable_state.reskey, None);
             }
-        }
-        Ok(())
+            Ok(())
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Unable to find queryable".into()
+            })
+        })
     }
 
     /// Write data.
@@ -823,7 +839,7 @@ impl Session {
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn write(&self, resource: &ResKey, payload: RBuf) -> ZResult<()> {
+    pub fn write(&self, resource: &ResKey, payload: RBuf) -> ZResolvedFuture<ZResult<()>> {
         trace!("write({:?}, [...])", resource);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -840,7 +856,7 @@ impl Session {
         if local_routing {
             self.handle_data(true, resource, None, payload);
         }
-        Ok(())
+        zresolved!(Ok(()))
     }
 
     /// Write data with options.
@@ -862,14 +878,14 @@ impl Session {
     /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT, CongestionControl::Drop).await.unwrap();
     /// # })
     /// ```
-    pub async fn write_ext(
+    pub fn write_ext(
         &self,
         resource: &ResKey,
         payload: RBuf,
         encoding: ZInt,
         kind: ZInt,
         congestion_control: CongestionControl,
-    ) -> ZResult<()> {
+    ) -> ZResolvedFuture<ZResult<()>> {
         trace!("write_ext({:?}, [...])", resource);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -896,7 +912,7 @@ impl Session {
         if local_routing {
             self.handle_data(true, resource, data_info, payload);
         }
-        Ok(())
+        zresolved!(Ok(()))
     }
 
     fn handle_data(&self, local: bool, reskey: &ResKey, info: Option<DataInfo>, payload: RBuf) {
@@ -992,13 +1008,13 @@ impl Session {
         }
     }
 
-    pub(crate) async fn pull(&self, reskey: &ResKey) -> ZResult<()> {
+    pub(crate) fn pull(&self, reskey: &ResKey) -> ZResolvedFuture<ZResult<()>> {
         trace!("pull({:?})", reskey);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_pull(true, reskey, 0, &None);
-        Ok(())
+        zresolved!(Ok(()))
     }
 
     /// Query data from the matching queryables in the system.
@@ -1028,13 +1044,13 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub async fn query(
+    pub fn query(
         &self,
         resource: &ResKey,
         predicate: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> ZResult<ReplyReceiver> {
+    ) -> ZResolvedFuture<ZResult<ReplyReceiver>> {
         trace!(
             "query({:?}, {:?}, {:?}, {:?})",
             resource,
@@ -1074,7 +1090,7 @@ impl Session {
             self.handle_query(true, resource, predicate, qid, target, consolidation);
         }
 
-        Ok(ReplyReceiver::new(rep_receiver))
+        zresolved!(Ok(ReplyReceiver::new(rep_receiver)))
     }
 
     fn handle_query(

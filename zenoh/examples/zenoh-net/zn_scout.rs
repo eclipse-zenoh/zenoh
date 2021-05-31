@@ -21,7 +21,7 @@ async fn main() {
     env_logger::init();
 
     println!("Scouting...");
-    let mut stream = scout(whatami::PEER | whatami::ROUTER, config::default()).await;
+    let mut stream = scout(whatami::PEER | whatami::ROUTER, config::default());
 
     let scout = async {
         while let Some(hello) = stream.next().await {

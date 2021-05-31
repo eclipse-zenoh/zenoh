@@ -150,7 +150,8 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_local_context(&self, context: ZInt, link_id: usize) -> usize {
+    pub(crate) fn get_local_context(&self, context: Option<ZInt>, link_id: usize) -> usize {
+        let context = context.unwrap_or(0);
         (*self.get_link(link_id).get_local_psid(&context).unwrap())
             .try_into()
             .unwrap()

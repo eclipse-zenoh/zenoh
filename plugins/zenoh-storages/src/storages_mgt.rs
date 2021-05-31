@@ -123,7 +123,7 @@ pub(crate) async fn start_storage(
                 // on get request on storage_admin
                 get = storage_admin.next().fuse() => {
                     let get = get.unwrap();
-                    get.reply(admin_path.clone(), storage.get_admin_status().await).await;
+                    get.reply_async(admin_path.clone(), storage.get_admin_status().await).await;
                 },
                 // on sample for path_expr
                 sample = storage_sub.receiver().next().fuse() => {

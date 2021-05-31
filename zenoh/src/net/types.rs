@@ -17,8 +17,9 @@ use async_std::task;
 use flume::*;
 use std::collections::HashMap;
 use std::fmt;
+use std::pin::Pin;
 use std::sync::RwLock;
-use std::time::{Duration, Instant};
+use std::task::{Context, Poll};
 
 /// A read-only bytes buffer.
 pub use super::protocol::io::RBuf;
@@ -79,6 +80,16 @@ pub use super::protocol::core::whatami;
 /// A zenoh Hello message.
 pub use super::protocol::proto::Hello;
 
+pub use zenoh_util::sync::channel::Iter;
+pub use zenoh_util::sync::channel::Receiver;
+pub use zenoh_util::sync::channel::RecvError;
+pub use zenoh_util::sync::channel::RecvTimeoutError;
+pub use zenoh_util::sync::channel::TryIter;
+pub use zenoh_util::sync::channel::TryRecvError;
+pub use zenoh_util::sync::ZFuture;
+pub use zenoh_util::sync::ZPendingFuture;
+pub use zenoh_util::sync::ZResolvedFuture;
+
 /// Some informations about the associated data.
 ///
 /// # Examples
@@ -104,98 +115,7 @@ pub use zenoh_util::core::ZErrorKind;
 /// A zenoh result.
 pub use zenoh_util::core::ZResult;
 
-pub trait Receiver<T> {
-    fn recv(&self) -> Result<T, RecvError>;
-
-    fn try_recv(&self) -> Result<T, TryRecvError>;
-
-    fn recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError>;
-
-    fn recv_deadline(&self, deadline: Instant) -> Result<T, RecvTimeoutError>;
-
-    fn iter(&self) -> Iter<'_, T>;
-
-    fn try_iter(&self) -> TryIter<'_, T>;
-}
-
-macro_rules! receiver{
-    (
-     $(#[$meta:meta])*
-     $vis:vis struct $struct_name:ident$(<$( $lt:lifetime ),+>)? : Receiver<$recv_type:ident> {
-        $(
-        $(#[$field_meta:meta])*
-        $field_vis:vis $field_name:ident : $field_type:ty,
-        )*
-    }
-    ) => {
-        $(#[$meta])*
-        $vis struct $struct_name$(<$( $lt ),+>)? {
-            $(
-            $(#[$field_meta:meta])*
-            $field_vis $field_name : $field_type,
-            )*
-            pub(crate) receiver: flume::Receiver<$recv_type>,
-            pub(crate) stream: flume::r#async::RecvStream<'static, $recv_type>,
-        }
-
-        impl$(<$( $lt ),+>)? $struct_name$(<$( $lt ),+>)? {
-            pub(crate) fn new(
-                $($field_name : $field_type,)*
-                receiver: flume::Receiver<$recv_type>)
-            -> Self {
-                $struct_name{
-                    $($field_name,)*
-                    receiver: receiver.clone(),
-                    stream: receiver.into_stream(),
-                }
-            }
-        }
-
-        impl$(<$( $lt ),+>)? Receiver<$recv_type> for $struct_name$(<$( $lt ),+>)? {
-            #[inline(always)]
-            fn recv(&self) -> Result<$recv_type, flume::RecvError> {
-                self.receiver.recv()
-            }
-
-            #[inline(always)]
-            fn try_recv(&self) -> Result<$recv_type, flume::TryRecvError> {
-                self.receiver.try_recv()
-            }
-
-            #[inline(always)]
-            fn recv_timeout(&self, timeout: std::time::Duration) -> Result<$recv_type, flume::RecvTimeoutError> {
-                self.receiver.recv_timeout(timeout)
-            }
-
-            #[inline(always)]
-            fn recv_deadline(&self, deadline: std::time::Instant) -> Result<$recv_type, flume::RecvTimeoutError> {
-                self.receiver.recv_deadline(deadline)
-            }
-
-            #[inline(always)]
-            fn iter(&self) -> flume::Iter<'_, $recv_type> {
-                self.receiver.iter()
-            }
-
-            #[inline(always)]
-            fn try_iter(&self) -> flume::TryIter<'_, $recv_type> {
-                self.receiver.try_iter()
-            }
-        }
-
-        impl$(<$( $lt ),+>)? async_std::stream::Stream for $struct_name$(<$( $lt ),+>)? {
-            type Item = $recv_type;
-
-            #[inline(always)]
-            fn poll_next(self: async_std::pin::Pin<&mut Self>, cx: &mut async_std::task::Context) -> async_std::task::Poll<Option<Self::Item>> {
-                use futures_lite::StreamExt;
-                self.get_mut().stream.poll_next(cx)
-            }
-        }
-    }
-}
-
-receiver! {
+zreceiver! {
     #[derive(Clone)]
     pub struct HelloReceiver : Receiver<Hello> {
         pub(crate) stop_sender: Sender<()>,
@@ -297,9 +217,9 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        Session::undeclare_publisher(self.session, self.state.id).await
+        Session::undeclare_publisher(self.session, self.state.id)
     }
 }
 
@@ -346,7 +266,7 @@ impl fmt::Debug for SubscriberState {
     }
 }
 
-receiver! {
+zreceiver! {
     #[derive(Clone)]
     pub struct SampleReceiver : Receiver<Sample> {}
 }
@@ -370,7 +290,6 @@ impl Subscriber<'_> {
     ///
     /// # Examples
     /// ```
-    /// #![feature(async_closure)]
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
@@ -383,13 +302,13 @@ impl Subscriber<'_> {
     /// # };
     /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
     /// async_std::task::spawn(subscriber.receiver().clone().for_each(
-    ///     async move |sample| { println!("Received : {:?}", sample); }
+    ///     move |sample| async move { println!("Received : {:?}", sample); }
     /// ));
     /// subscriber.pull();
     /// # })
     /// ```
-    pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.state.reskey).await
+    pub fn pull(&self) -> ZResolvedFuture<ZResult<()>> {
+        self.session.pull(&self.state.reskey)
     }
 
     /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
@@ -413,9 +332,9 @@ impl Subscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_subscriber(self.state.id).await
+        self.session.undeclare_subscriber(self.state.id)
     }
 }
 
@@ -469,8 +388,8 @@ impl CallbackSubscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.state.reskey).await
+    pub fn pull(&self) -> ZResolvedFuture<ZResult<()>> {
+        self.session.pull(&self.state.reskey)
     }
 
     /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
@@ -495,9 +414,9 @@ impl CallbackSubscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_subscriber(self.state.id).await
+        self.session.undeclare_subscriber(self.state.id)
     }
 }
 
@@ -522,7 +441,7 @@ impl fmt::Debug for CallbackSubscriber<'_> {
     }
 }
 
-receiver! {
+zreceiver! {
     #[derive(Clone)]
     pub struct ReplyReceiver : Receiver<Reply> {}
 }
@@ -540,7 +459,7 @@ impl fmt::Debug for QueryableState {
     }
 }
 
-receiver! {
+zreceiver! {
     #[derive(Clone)]
     pub struct QueryReceiver : Receiver<Query> {}
 }
@@ -577,9 +496,9 @@ impl Queryable<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_queryable(self.state.id).await
+        self.session.undeclare_queryable(self.state.id)
     }
 }
 
