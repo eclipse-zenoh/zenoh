@@ -324,39 +324,67 @@ impl SessionTransport {
 
     pub(crate) fn start_tx(&self, link: &Link, keep_alive: ZInt, batch_size: usize) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        if let Some(l) = zlinkgetmut!(guard, link) {
-            l.start_tx(
-                keep_alive,
-                batch_size,
-                self.tx_sn_reliable.clone(),
-                self.tx_sn_best_effort.clone(),
-            );
+        match zlinkgetmut!(guard, link) {
+            Some(l) => {
+                l.start_tx(
+                    keep_alive,
+                    batch_size,
+                    self.tx_sn_reliable.clone(),
+                    self.tx_sn_best_effort.clone(),
+                );
+                Ok(())
+            }
+            None => {
+                zerror!(ZErrorKind::InvalidLink {
+                    descr: format!("Can not start Link TX {} with peer: {}", link, self.pid)
+                })
+            }
         }
-        Ok(())
     }
 
     pub(crate) fn stop_tx(&self, link: &Link) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        if let Some(l) = zlinkgetmut!(guard, link) {
-            l.stop_tx();
+        match zlinkgetmut!(guard, link) {
+            Some(l) => {
+                l.stop_tx();
+                Ok(())
+            }
+            None => {
+                zerror!(ZErrorKind::InvalidLink {
+                    descr: format!("Can not stop Link TX {} with peer: {}", link, self.pid)
+                })
+            }
         }
-        Ok(())
     }
 
     pub(crate) fn start_rx(&self, link: &Link, lease: ZInt) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        if let Some(l) = zlinkgetmut!(guard, link) {
-            l.start_rx(lease);
+        match zlinkgetmut!(guard, link) {
+            Some(l) => {
+                l.start_rx(lease);
+                Ok(())
+            }
+            None => {
+                zerror!(ZErrorKind::InvalidLink {
+                    descr: format!("Can not start Link RX {} with peer: {}", link, self.pid)
+                })
+            }
         }
-        Ok(())
     }
 
     pub(crate) fn stop_rx(&self, link: &Link) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        if let Some(l) = zlinkgetmut!(guard, link) {
-            l.stop_rx();
+        match zlinkgetmut!(guard, link) {
+            Some(l) => {
+                l.stop_rx();
+                Ok(())
+            }
+            None => {
+                zerror!(ZErrorKind::InvalidLink {
+                    descr: format!("Can not stop Link RX {} with peer: {}", link, self.pid)
+                })
+            }
         }
-        Ok(())
     }
 
     pub(crate) async fn del_link(&self, link: &Link) -> ZResult<()> {
