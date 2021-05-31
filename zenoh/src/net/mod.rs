@@ -65,9 +65,13 @@
 //!     }
 //! }
 //! ```
+#[doc(hidden)]
 pub mod plugins;
+#[doc(hidden)]
 pub mod protocol;
+#[doc(hidden)]
 pub mod routing;
+#[doc(hidden)]
 pub mod runtime;
 
 use async_std::net::UdpSocket;
@@ -95,6 +99,7 @@ pub use session::*;
 pub use protocol::proto::{data_kind, encoding};
 
 pub mod queryable {
+    #[doc(inline)]
     pub use super::protocol::core::queryable::*;
 }
 
