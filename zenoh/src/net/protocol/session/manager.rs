@@ -29,7 +29,7 @@ use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
 use rand::{RngCore, SeedableRng};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -174,7 +174,7 @@ pub struct SessionManager {
     // Outgoing and incoming opened (i.e. established) sessions
     pub(super) opened: AsyncArc<AsyncMutex<HashMap<PeerId, Opened>>>,
     // Incoming uninitialized sessions
-    pub(super) incoming: AsyncArc<AsyncMutex<HashSet<Link>>>,
+    pub(super) incoming: AsyncArc<AsyncMutex<HashMap<Link, Option<Vec<u8>>>>>,
     // Default PRNG
     pub(super) prng: AsyncArc<AsyncMutex<PseudoRng>>,
     // Default cipher for cookies
@@ -257,7 +257,7 @@ impl SessionManager {
             protocols: Arc::new(Mutex::new(HashMap::new())),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             opened: AsyncArc::new(AsyncMutex::new(HashMap::new())),
-            incoming: AsyncArc::new(AsyncMutex::new(HashSet::new())),
+            incoming: AsyncArc::new(AsyncMutex::new(HashMap::new())),
             prng: AsyncArc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
         }
@@ -497,7 +497,7 @@ impl SessionManager {
 
         // A new link is available
         log::trace!("New link waiting... {}", link);
-        guard.insert(link.clone());
+        guard.insert(link.clone(), None);
         drop(guard);
 
         let mut peer_id: Option<PeerId> = None;
