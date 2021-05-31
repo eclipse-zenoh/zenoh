@@ -21,7 +21,7 @@ pub use zenoh_util::properties::config::*;
 ///
 /// Multiple values are coma separated.
 ///
-/// The [IntKeyProperties](IntKeyProperties) can be built from (`String`/`String`)
+/// The [IntKeyProperties](zenoh_util::properties::IntKeyProperties) can be built from (`String`/`String`)
 /// [Properties](super::super::Properties) and reverse.
 
 /// Creates an empty zenoh net Session configuration.

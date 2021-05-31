@@ -19,7 +19,8 @@ pub type ConditionWaiter = EventListener;
 /// This is a Condition Variable similar to that provided by POSIX.
 /// As for POSIX condition variables, this assumes that a mutex is
 /// properly used to coordinate behaviour. In other terms there should
-/// not be race condition on [notify](Condition::notify).
+/// not be race condition on [notify_one](Condition::notify_one) or
+/// [notify_all](Condition::notify_all).
 ///
 pub struct Condition {
     event: Event,

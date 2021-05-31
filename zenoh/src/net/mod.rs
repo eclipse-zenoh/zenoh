@@ -113,9 +113,9 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 /// Scout for routers and/or peers.
 ///
 /// [scout](scout) spawns a task that periodically sends scout messages and returns
-/// a [HelloStream](HelloStream) : a stream of received [Hello](Hello) messages.
+/// a [HelloReceiver](HelloReceiver) : a stream of received [Hello](Hello) messages.
 ///
-/// Drop the returned [HelloStream](HelloStream) to stop the scouting task.
+/// Drop the returned [HelloReceiver](HelloReceiver) to stop the scouting task.
 ///
 /// # Arguments
 ///

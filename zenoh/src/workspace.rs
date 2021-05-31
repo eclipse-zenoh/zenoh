@@ -232,7 +232,7 @@ impl Workspace<'_> {
 
     /// Subscribe to changes for a selection of [`Path`]/[`Value`] (specified via a [`Selector`]) from zenoh.  
     /// The changes are returned as [`async_std::stream::Stream`] of [`Change`].
-    /// This Stream will never end unless it's dropped or explicitly closed via [`ChangeStream::close()`].
+    /// This Stream will never end unless it's dropped or explicitly closed via [`ChangeReceiver::close()`].
     /// Note that the [`Selector`] can be absolute or relative to this Workspace.
     ///
     /// # Examples
