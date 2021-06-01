@@ -734,10 +734,15 @@ pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<PeerId> {
     net1.graph
         .node_references()
         .filter_map(|(_, node1)| {
-            net2.graph
+            if net2
+                .graph
                 .node_references()
                 .any(|(_, node2)| node1.pid == node2.pid)
-                .then(|| node1.pid.clone())
+            {
+                Some(node1.pid.clone())
+            } else {
+                None
+            }
         })
         .collect()
 }

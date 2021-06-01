@@ -555,14 +555,22 @@ impl Session {
                 let joined_sub = state.subscribers.values().any(|s| {
                     rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
                 });
-                (!joined_sub).then(|| join_sub.clone().into())
+                if !joined_sub {
+                    Some(join_sub.clone().into())
+                } else {
+                    None
+                }
             }
             None => {
                 let twin_sub = state.subscribers.values().any(|s| {
                     state.localkey_to_resname(&s.reskey).unwrap()
                         == state.localkey_to_resname(&sub_state.reskey).unwrap()
                 });
-                (!twin_sub).then(|| sub_state.reskey.clone())
+                if !twin_sub {
+                    Some(sub_state.reskey.clone())
+                } else {
+                    None
+                }
             }
         };
 

@@ -148,8 +148,13 @@ impl Resource {
     #[inline(always)]
     pub fn routers_data_route(&self, context: usize) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => (ctx.routers_data_routes.len() > context)
-                .then(|| ctx.routers_data_routes[context].clone()),
+            Some(ctx) => {
+                if ctx.routers_data_routes.len() > context {
+                    Some(ctx.routers_data_routes[context].clone())
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -157,8 +162,13 @@ impl Resource {
     #[inline(always)]
     pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => (ctx.peers_data_routes.len() > context)
-                .then(|| ctx.peers_data_routes[context].clone()),
+            Some(ctx) => {
+                if ctx.peers_data_routes.len() > context {
+                    Some(ctx.peers_data_routes[context].clone())
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -174,8 +184,13 @@ impl Resource {
     #[inline(always)]
     pub fn routers_query_route(&self, context: usize) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => (ctx.routers_query_routes.len() > context)
-                .then(|| ctx.routers_query_routes[context].clone()),
+            Some(ctx) => {
+                if ctx.routers_query_routes.len() > context {
+                    Some(ctx.routers_query_routes[context].clone())
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -183,8 +198,13 @@ impl Resource {
     #[inline(always)]
     pub fn peers_query_route(&self, context: usize) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => (ctx.peers_query_routes.len() > context)
-                .then(|| ctx.peers_query_routes[context].clone()),
+            Some(ctx) => {
+                if ctx.peers_query_routes.len() > context {
+                    Some(ctx.peers_query_routes[context].clone())
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
