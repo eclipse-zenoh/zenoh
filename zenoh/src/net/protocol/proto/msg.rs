@@ -293,7 +293,7 @@ pub enum Declaration {
     /// +---------------+
     /// ~      RID      ~
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     Resource { rid: ZInt, key: ResKey },
@@ -313,7 +313,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|   PUB   |
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     Publisher { key: ResKey },
@@ -323,7 +323,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  F_PUB  |
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     ForgetPublisher { key: ResKey },
@@ -347,7 +347,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  F_SUB  |
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     ForgetSubscriber { key: ResKey },
@@ -357,7 +357,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  QABLE  |
     /// +---------------+
-    /// ~     ResKey    ~ if  K==1 then only numerical id
+    /// ~     ResKey    ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     Queryable { key: ResKey },
@@ -367,7 +367,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X| F_QABLE |
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     ForgetQueryable { key: ResKey },
@@ -395,8 +395,8 @@ pub struct Declare {
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+---------+
-/// ~X|G|F|E|D|C|B|A~ -- encoded as ZInt
-/// ~             |H~
+/// ~!|G|F|E|D|C|B|A~ -- encoded as ZInt.
+/// ~!|X|X|X|X|X|X|H~    Bit 7 is reserved for ZInt encoding.
 /// +---------------+
 /// ~   source_id   ~ if A==1
 /// +---------------+
