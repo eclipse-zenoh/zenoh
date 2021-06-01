@@ -26,12 +26,42 @@ impl ZenohMessage {
     }
 
     #[cfg(feature = "zero-copy")]
-    pub(crate) fn inc_ref_shm(&mut self) {
+    pub(crate) fn prepare_shm(&mut self) {
         if let Some(at) = self.attachment.as_mut() {
             at.buffer.inc_ref_shm();
         }
 
-        if let ZenohBody::Data(Data { payload, .. }) = &mut self.body {
+        if let ZenohBody::Data(Data {
+            payload, data_info, ..
+        }) = &mut self.body
+        {
+            if payload.is_shm() {
+                // Set the right data info SHM parameters
+                match data_info {
+                    Some(di) => {
+                        // Just update the is_shm field. This field can be
+                        // then used at receiver side to identify that the
+                        // actual content is stored in shared memory
+                        di.is_shm = true;
+                    }
+                    None => {
+                        // Create the DataInfo content
+                        *data_info = Some(DataInfo {
+                            source_id: None,
+                            source_sn: None,
+                            first_router_id: None,
+                            first_router_sn: None,
+                            timestamp: None,
+                            kind: None,
+                            encoding: None,
+                            is_shm: true,
+                        });
+                        // Set the DataInfo flag in the header
+                        self.header |= zmsg::flag::I;
+                    }
+                }
+            }
+            // Increment the reference counter
             payload.inc_ref_shm();
         }
     }
@@ -70,7 +100,7 @@ impl SessionMessage {
 
     #[allow(dead_code)]
     #[cfg(feature = "zero-copy")]
-    pub(crate) fn inc_ref_shm(&mut self) {
+    pub(crate) fn prepare_shm(&mut self) {
         if let Some(at) = self.attachment.as_mut() {
             at.buffer.inc_ref_shm();
         }
@@ -82,7 +112,7 @@ impl SessionMessage {
                 }
                 FramePayload::Messages { messages } => {
                     for m in messages {
-                        m.inc_ref_shm();
+                        m.prepare_shm();
                     }
                 }
             },

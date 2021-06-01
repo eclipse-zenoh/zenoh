@@ -28,9 +28,15 @@ macro_rules! gen {
     };
 }
 
+macro_rules! gen_bool {
+    () => {
+        thread_rng().gen_bool(0.5)
+    };
+}
+
 macro_rules! option_gen {
     ($e:expr) => {
-        if thread_rng().gen_bool(0.5) {
+        if gen_bool!() {
             Some($e)
         } else {
             None
@@ -191,6 +197,7 @@ fn gen_data_info() -> DataInfo {
         timestamp: option_gen!(gen_timestamp()),
         kind: option_gen!(gen!(ZInt)),
         encoding: option_gen!(gen!(ZInt)),
+        is_shm: gen_bool!(),
     }
 }
 

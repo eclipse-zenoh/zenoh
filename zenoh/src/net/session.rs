@@ -899,6 +899,7 @@ impl Session {
             timestamp: None,
             kind: Some(kind),
             encoding: Some(encoding),
+            is_shm: false,
         };
         let data_info = Some(info);
         primitives.send_data(

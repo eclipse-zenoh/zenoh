@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Allocating a Shared Memory Buffer...");
 
-    for idx in 1..=(K * N as u32) {
+    for idx in 0..(K * N as u32) {
         let mut sbuf = match shm.alloc(1024) {
             Some(buf) => buf,
             None => {
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // We reserve a small space at the beginning of the buffer to include the iteration index
         // of the write. This is simply to have the same format as zn_pub.
-        let mut prefix = format!("[{:6}] ", 0);
+        let prefix = format!("[{:4}] ", idx);
         let prefix_len = prefix.as_bytes().len();
 
         // Retrive a mutable slice from the SharedMemoryBuf.
@@ -72,8 +72,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // guarantee that your in applications only one process at the time will actually write.
         let slice = unsafe { sbuf.as_mut_slice() };
         let slice_len = prefix_len + value.as_bytes().len();
-        prefix = format!("[{:6}] ", idx);
         slice[0..prefix_len].copy_from_slice(&prefix.as_bytes());
+        slice[prefix_len..slice_len].copy_from_slice(&value.as_bytes());
 
         // Write the data
         println!(

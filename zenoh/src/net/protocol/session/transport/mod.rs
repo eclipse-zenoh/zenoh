@@ -279,7 +279,7 @@ impl SessionTransport {
     #[cfg(feature = "zero-copy")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
         if self.is_shm {
-            message.inc_ref_shm();
+            message.prepare_shm();
         } else {
             message.flatten_shm();
         }

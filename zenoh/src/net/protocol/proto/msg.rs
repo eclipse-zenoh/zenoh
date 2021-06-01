@@ -202,6 +202,7 @@ pub mod zmsg {
             pub const TS: ZInt = 1 << 4; // 0x10
             pub const KIND: ZInt = 1 << 5; // 0x20
             pub const ENC: ZInt = 1 << 6; // 0x40
+            pub const SHM: ZInt = 1 << 7; // 0x80
         }
     }
 
@@ -395,6 +396,7 @@ pub struct Declare {
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+---------+
 /// ~X|G|F|E|D|C|B|A~ -- encoded as ZInt
+/// ~             |H~
 /// +---------------+
 /// ~   source_id   ~ if A==1
 /// +---------------+
@@ -410,6 +412,8 @@ pub struct Declare {
 /// +---------------+
 /// ~   encoding    ~ if G==1
 /// +---------------+
+///
+/// - if H==1 then the message is a shared memory message.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
@@ -420,6 +424,7 @@ pub struct DataInfo {
     pub timestamp: Option<Timestamp>,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
+    pub is_shm: bool,
 }
 
 impl PartialOrd for DataInfo {

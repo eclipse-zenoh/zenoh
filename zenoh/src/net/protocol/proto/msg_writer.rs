@@ -269,25 +269,28 @@ impl WBuf {
     pub fn write_data_info(&mut self, info: &DataInfo) -> bool {
         let mut options: ZInt = 0;
         if info.source_id.is_some() {
-            options |= zmsg::data::info::SRCID
+            options |= zmsg::data::info::SRCID;
         }
         if info.source_sn.is_some() {
-            options |= zmsg::data::info::SRCSN
+            options |= zmsg::data::info::SRCSN;
         }
         if info.first_router_id.is_some() {
-            options |= zmsg::data::info::RTRID
+            options |= zmsg::data::info::RTRID;
         }
         if info.first_router_sn.is_some() {
-            options |= zmsg::data::info::RTRSN
+            options |= zmsg::data::info::RTRSN;
         }
         if info.timestamp.is_some() {
-            options |= zmsg::data::info::TS
+            options |= zmsg::data::info::TS;
         }
         if info.kind.is_some() {
-            options |= zmsg::data::info::KIND
+            options |= zmsg::data::info::KIND;
         }
         if info.encoding.is_some() {
-            options |= zmsg::data::info::ENC
+            options |= zmsg::data::info::ENC;
+        }
+        if info.is_shm {
+            options |= zmsg::data::info::SHM;
         }
         zcheck!(self.write_zint(options));
 

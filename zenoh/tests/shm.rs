@@ -89,7 +89,11 @@ mod tests {
                 Some(shm) => {
                     let mut shm = zlock!(shm);
                     match message.body {
-                        ZenohBody::Data(Data { payload, .. }) => {
+                        ZenohBody::Data(Data {
+                            payload, data_info, ..
+                        }) => {
+                            let info = data_info.unwrap();
+                            assert!(info.is_shm);
                             print!("s");
                             let sbuf = payload.into_shm(&mut shm).unwrap();
                             sbuf.as_slice().to_vec()
@@ -98,7 +102,10 @@ mod tests {
                     }
                 }
                 None => match message.body {
-                    ZenohBody::Data(Data { payload, .. }) => {
+                    ZenohBody::Data(Data {
+                        payload, data_info, ..
+                    }) => {
+                        assert!(data_info.is_none());
                         print!("n");
                         payload.to_vec()
                     }
