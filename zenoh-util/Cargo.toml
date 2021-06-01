@@ -48,6 +48,7 @@ hmac = "0.10.1"
 sha3 = "0.9.1"
 clap = "2"
 log = "0.4.14"
+rustversion = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["iphlpapi"] }

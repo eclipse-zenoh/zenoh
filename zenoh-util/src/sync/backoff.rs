@@ -13,7 +13,12 @@
 //
 use async_std::task;
 use std::fmt;
+
+#[rustversion::since(1.51)]
 use std::hint::spin_loop;
+
+#[rustversion::before(1.51)]
+use std::sync::atomic::spin_loop_hint;
 
 const SPIN_LIMIT: usize = 6;
 const YIELD_LIMIT: usize = 10;
@@ -28,6 +33,16 @@ pub struct Backoff {
 }
 
 impl Backoff {
+    #[rustversion::since(1.51)]
+    fn spin_wrapper(&self) {
+        spin_loop();
+    }
+
+    #[rustversion::before(1.51)]
+    fn spin_wrapper(&self) {
+        spin_loop_hint();
+    }
+
     #[inline]
     pub fn new() -> Self {
         Backoff { step: 0 }
@@ -41,7 +56,7 @@ impl Backoff {
     #[inline]
     pub fn spin(&mut self) {
         for _ in 0..1 << self.step.min(SPIN_LIMIT) {
-            spin_loop();
+            self.spin_wrapper();
         }
 
         if self.step <= SPIN_LIMIT {
@@ -53,7 +68,7 @@ impl Backoff {
     pub async fn snooze(&mut self) {
         if self.step <= SPIN_LIMIT {
             for _ in 0..1 << self.step {
-                spin_loop();
+                self.spin_wrapper();
             }
         } else {
             task::yield_now().await;
