@@ -20,8 +20,21 @@ impl ZenohMessage {
             at.buffer.flatten_shm();
         }
 
-        if let ZenohBody::Data(Data { payload, .. }) = &mut self.body {
+        if let ZenohBody::Data(Data {
+            payload, data_info, ..
+        }) = &mut self.body
+        {
             payload.flatten_shm();
+
+            // Set the right data info SHM parameters
+            if let Some(di) = data_info {
+                di.is_shm = false;
+                if !di.has_opts() {
+                    *data_info = None;
+                    // Unset the DataInfo flag in the header
+                    self.header &= !zmsg::flag::I;
+                }
+            }
         }
     }
 
@@ -36,7 +49,6 @@ impl ZenohMessage {
         }) = &mut self.body
         {
             if payload.is_shm() {
-                // Increment the reference counter
                 payload.inc_ref_shm();
 
                 // Set the right data info SHM parameters
@@ -68,62 +80,60 @@ impl ZenohMessage {
     }
 }
 
-impl SessionMessage {
-    // This function is not used at the moment but it might be used in the future.
-    // It's good to keep the message definitions aligned.
-    #[allow(dead_code)]
-    #[cfg(feature = "zero-copy")]
-    pub(crate) fn flatten_shm(&mut self) {
-        if let Some(at) = self.attachment.as_mut() {
-            at.buffer.flatten_shm();
-        }
+// These functions are not used at the moment but it might be used in the future.
+// It's a good practice to keep the message definitions aligned.
+// impl SessionMessage {
+//     #[cfg(feature = "zero-copy")]
+//     pub(crate) fn flatten_shm(&mut self) {
+//         if let Some(at) = self.attachment.as_mut() {
+//             at.buffer.flatten_shm();
+//         }
 
-        match &mut self.body {
-            SessionBody::Frame(Frame { payload, .. }) => match payload {
-                FramePayload::Fragment { buffer, .. } => {
-                    buffer.flatten_shm();
-                }
-                FramePayload::Messages { messages } => {
-                    for m in messages {
-                        m.flatten_shm();
-                    }
-                }
-            },
-            SessionBody::InitAck(InitAck { cookie, .. }) => {
-                cookie.flatten_shm();
-            }
-            SessionBody::OpenSyn(OpenSyn { cookie, .. }) => {
-                cookie.flatten_shm();
-            }
-            _ => {}
-        }
-    }
+//         match &mut self.body {
+//             SessionBody::Frame(Frame { payload, .. }) => match payload {
+//                 FramePayload::Fragment { buffer, .. } => {
+//                     buffer.flatten_shm();
+//                 }
+//                 FramePayload::Messages { messages } => {
+//                     for m in messages {
+//                         m.flatten_shm();
+//                     }
+//                 }
+//             },
+//             SessionBody::InitAck(InitAck { cookie, .. }) => {
+//                 cookie.flatten_shm();
+//             }
+//             SessionBody::OpenSyn(OpenSyn { cookie, .. }) => {
+//                 cookie.flatten_shm();
+//             }
+//             _ => {}
+//         }
+//     }
 
-    #[allow(dead_code)]
-    #[cfg(feature = "zero-copy")]
-    pub(crate) fn prepare_shm(&mut self) {
-        if let Some(at) = self.attachment.as_mut() {
-            at.buffer.inc_ref_shm();
-        }
+//     #[cfg(feature = "zero-copy")]
+//     pub(crate) fn prepare_shm(&mut self) {
+//         if let Some(at) = self.attachment.as_mut() {
+//             at.buffer.inc_ref_shm();
+//         }
 
-        match &mut self.body {
-            SessionBody::Frame(Frame { payload, .. }) => match payload {
-                FramePayload::Fragment { buffer, .. } => {
-                    buffer.inc_ref_shm();
-                }
-                FramePayload::Messages { messages } => {
-                    for m in messages {
-                        m.prepare_shm();
-                    }
-                }
-            },
-            SessionBody::InitAck(InitAck { cookie, .. }) => {
-                cookie.inc_ref_shm();
-            }
-            SessionBody::OpenSyn(OpenSyn { cookie, .. }) => {
-                cookie.inc_ref_shm();
-            }
-            _ => {}
-        }
-    }
-}
+//         match &mut self.body {
+//             SessionBody::Frame(Frame { payload, .. }) => match payload {
+//                 FramePayload::Fragment { buffer, .. } => {
+//                     buffer.inc_ref_shm();
+//                 }
+//                 FramePayload::Messages { messages } => {
+//                     for m in messages {
+//                         m.prepare_shm();
+//                     }
+//                 }
+//             },
+//             SessionBody::InitAck(InitAck { cookie, .. }) => {
+//                 cookie.inc_ref_shm();
+//             }
+//             SessionBody::OpenSyn(OpenSyn { cookie, .. }) => {
+//                 cookie.inc_ref_shm();
+//             }
+//             _ => {}
+//         }
+//     }
+// }

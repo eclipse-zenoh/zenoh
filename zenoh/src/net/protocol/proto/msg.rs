@@ -427,6 +427,19 @@ pub struct DataInfo {
     pub is_shm: bool,
 }
 
+impl DataInfo {
+    pub fn has_opts(&self) -> bool {
+        self.source_id.is_some()
+            || self.source_sn.is_some()
+            || self.first_router_id.is_some()
+            || self.first_router_sn.is_some()
+            || self.timestamp.is_some()
+            || self.kind.is_some()
+            || self.encoding.is_some()
+            || self.is_shm
+    }
+}
+
 impl PartialOrd for DataInfo {
     fn partial_cmp(&self, other: &DataInfo) -> Option<std::cmp::Ordering> {
         self.timestamp.partial_cmp(&other.timestamp)
