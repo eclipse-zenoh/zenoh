@@ -36,6 +36,9 @@ impl ZenohMessage {
         }) = &mut self.body
         {
             if payload.is_shm() {
+                // Increment the reference counter
+                payload.inc_ref_shm();
+
                 // Set the right data info SHM parameters
                 match data_info {
                     Some(di) => {
@@ -61,8 +64,6 @@ impl ZenohMessage {
                     }
                 }
             }
-            // Increment the reference counter
-            payload.inc_ref_shm();
         }
     }
 }
