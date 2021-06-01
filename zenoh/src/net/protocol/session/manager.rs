@@ -17,8 +17,8 @@ use super::authenticator::{
 };
 use super::core::{PeerId, WhatAmI, ZInt};
 use super::defaults::{
-    SESSION_BATCH_SIZE, SESSION_KEEP_ALIVE, SESSION_LEASE, SESSION_OPEN_MAX_CONCURRENT,
-    SESSION_OPEN_TIMEOUT, SESSION_SEQ_NUM_RESOLUTION,
+    ZNS_BATCH_SIZE, ZNS_KEEP_ALIVE, ZNS_LEASE, ZNS_OPEN_MAX_CONCURRENT, ZNS_OPEN_TIMEOUT,
+    ZNS_SEQ_NUM_RESOLUTION,
 };
 use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
@@ -191,10 +191,10 @@ impl SessionManager {
         mut opt_config: Option<SessionManagerOptionalConfig>,
     ) -> SessionManager {
         // Set default optional values
-        let mut lease = *SESSION_LEASE;
-        let mut keep_alive = *SESSION_KEEP_ALIVE;
-        let mut sn_resolution = *SESSION_SEQ_NUM_RESOLUTION;
-        let mut batch_size = *SESSION_BATCH_SIZE;
+        let mut lease = *ZNS_LEASE;
+        let mut keep_alive = *ZNS_KEEP_ALIVE;
+        let mut sn_resolution = *ZNS_SEQ_NUM_RESOLUTION;
+        let mut batch_size = *ZNS_BATCH_SIZE;
         let mut max_sessions = None;
         let mut max_links = None;
         let mut peer_authenticator = vec![DummyPeerAuthenticator::make()];
@@ -484,9 +484,9 @@ impl SessionManager {
 
     pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LocatorProperty>) {
         let mut guard = zasynclock!(self.incoming);
-        if guard.len() >= *SESSION_OPEN_MAX_CONCURRENT {
+        if guard.len() >= *ZNS_OPEN_MAX_CONCURRENT {
             // We reached the limit of concurrent incoming session, this means two things:
-            // - the values configured for SESSION_OPEN_MAX_CONCURRENT and SESSION_OPEN_TIMEOUT
+            // - the values configured for ZNS_OPEN_MAX_CONCURRENT and ZNS_OPEN_TIMEOUT
             //   are too small for the scenario zenoh is deployed in;
             // - there is a tentative of DoS attack.
             // In both cases, let's close the link straight away with no additional notification
@@ -537,7 +537,7 @@ impl SessionManager {
                 properties,
             };
 
-            let to = Duration::from_millis(*SESSION_OPEN_TIMEOUT);
+            let to = Duration::from_millis(*ZNS_OPEN_TIMEOUT);
             let res = super::initial::accept_link(&c_manager, &link, &auth_link)
                 .timeout(to)
                 .await;
