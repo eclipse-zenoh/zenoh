@@ -58,14 +58,21 @@ macro_rules! zgetbatch {
                     return;
                 }
 
+                // Drop the stage_in and refill guards and wait for the batches to be available
+                drop($stage_in);
+
                 // Verify that the pipeline is still active
                 if !$self.active.load(Ordering::Acquire) {
                     return;
                 }
 
-                // Drop the stage_in and refill guards and wait for the batches to be available
-                drop($stage_in);
                 refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
+
+                // Verify that the pipeline is still active
+                if !$self.active.load(Ordering::Acquire) {
+                    return;
+                }
+
                 $stage_in = zlock!($self.stage_in[$priority]);
             }
 
@@ -507,11 +514,6 @@ impl TransmissionPipeline {
                 }
 
                 if is_pipeline_really_empty {
-                    // Check if the pipeline is still active
-                    if !self.active.load(Ordering::Acquire) {
-                        return None;
-                    }
-
                     let waiter = self.cond_canpull.waiter(out_guard);
                     Action::Wait(waiter)
                 } else {
@@ -520,7 +522,19 @@ impl TransmissionPipeline {
             };
 
             match action {
-                Action::Wait(waiter) => waiter.await,
+                Action::Wait(waiter) => {
+                    // Check if the pipeline is still active
+                    if !self.active.load(Ordering::Acquire) {
+                        return None;
+                    }
+
+                    waiter.await;
+
+                    // Check if the pipeline is still active
+                    if !self.active.load(Ordering::Acquire) {
+                        return None;
+                    }
+                }
                 Action::Sleep => {
                     // Batches are being filled up, let's backoff and retry
                     task::sleep(backoff).await;
@@ -732,7 +746,7 @@ mod tests {
 
     #[test]
     fn tx_pipeline_blocking() {
-        fn schedule(queue: Arc<TransmissionPipeline>, counter: Arc<AtomicUsize>) {
+        fn schedule(queue: Arc<TransmissionPipeline>, counter: Arc<AtomicUsize>, id: usize) {
             // Make sure to put only one message per batch: set the payload size
             // to half of the batch in such a way the serialized zenoh message
             // will be larger then half of the batch size (header + payload).
@@ -761,12 +775,17 @@ mod tests {
             // The last push should block since there shouldn't any more batches
             // available for serialization.
             let num_msg = 1 + *ZNS_QUEUE_SIZE_DATA;
-            for _ in 0..num_msg {
+            for i in 0..num_msg {
+                println!(
+                    "Pipeline Blocking [>>>]: ({}) Scheduling message #{} with payload size of {} bytes",
+                    id, i,
+                    payload_size
+                );
                 queue.push_zenoh_message(message.clone(), ZNS_QUEUE_PRIO_DATA);
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
-                    "Pipeline Blocking [>>>]: Scheduled message #{} with payload size of {} bytes",
-                    c + 1,
+                    "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
+                    id, i, c + 1,
                     payload_size
                 );
             }
@@ -789,13 +808,13 @@ mod tests {
         let c_queue = queue.clone();
         let c_counter = counter.clone();
         let h1 = task::spawn_blocking(move || {
-            schedule(c_queue, c_counter);
+            schedule(c_queue, c_counter, 1);
         });
 
         let c_queue = queue.clone();
         let c_counter = counter.clone();
         let h2 = task::spawn_blocking(move || {
-            schedule(c_queue, c_counter);
+            schedule(c_queue, c_counter, 2);
         });
 
         task::block_on(async {
@@ -823,8 +842,113 @@ mod tests {
             .unwrap();
 
             // Make sure that the tasks scheduling have been unblocked
-            println!("Pipeline Blocking [---]: waiting for schedule to be unblocked");
-            h1.join(h2).timeout(TIMEOUT).await.unwrap();
+            println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
+            h1.timeout(TIMEOUT).await.unwrap();
+            println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
+            h2.timeout(TIMEOUT).await.unwrap();
+        });
+    }
+
+    #[test]
+    fn rx_pipeline_blocking() {
+        fn schedule(queue: Arc<TransmissionPipeline>, counter: Arc<AtomicUsize>) {
+            // Make sure to put only one message per batch: set the payload size
+            // to half of the batch in such a way the serialized zenoh message
+            // will be larger then half of the batch size (header + payload).
+            let payload_size: usize = *ZNS_BATCH_SIZE / 2;
+
+            // Send reliable messages
+            let key = ResKey::RName("test".to_string());
+            let payload = RBuf::from(vec![0u8; payload_size]);
+            let reliability = Reliability::Reliable;
+            let congestion_control = CongestionControl::Block;
+            let data_info = None;
+            let routing_context = None;
+            let reply_context = None;
+            let attachment = None;
+            let message = ZenohMessage::make_data(
+                key,
+                payload,
+                reliability,
+                congestion_control,
+                data_info,
+                routing_context,
+                reply_context,
+                attachment,
+            );
+
+            // The last push should block since there shouldn't any more batches
+            // available for serialization.
+            let num_msg = *ZNS_QUEUE_SIZE_DATA;
+            for i in 0..num_msg {
+                println!(
+                    "Pipeline Blocking [>>>]: Scheduling message #{} with payload size of {} bytes",
+                    i, payload_size
+                );
+                queue.push_zenoh_message(message.clone(), ZNS_QUEUE_PRIO_DATA);
+                let c = counter.fetch_add(1, Ordering::AcqRel);
+                println!(
+                    "Pipeline Blocking [>>>]: Scheduled message #{} with payload size of {} bytes",
+                    c, payload_size
+                );
+            }
+        }
+
+        // Queue
+        let batch_size = *ZNS_BATCH_SIZE;
+        let is_streamed = true;
+        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
+        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
+        let queue = Arc::new(TransmissionPipeline::new(
+            batch_size,
+            is_streamed,
+            sn_reliable,
+            sn_best_effort,
+        ));
+
+        let counter = Arc::new(AtomicUsize::new(0));
+
+        let c_counter = counter.clone();
+        let c_queue = queue.clone();
+        schedule(c_queue, c_counter);
+
+        let c_queue = queue.clone();
+        let h1 = task::spawn(async move {
+            loop {
+                if c_queue.pull().await.is_none() {
+                    println!("Pipeline Blocking [---]: pull unblocked");
+                    break;
+                }
+            }
+        });
+
+        task::block_on(async {
+            // Wait to have sent enough messages and to have blocked
+            println!(
+                "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
+                *ZNS_QUEUE_SIZE_DATA
+            );
+            let check = async {
+                while counter.load(Ordering::Acquire) < *ZNS_QUEUE_SIZE_DATA {
+                    task::sleep(SLEEP).await;
+                }
+            };
+            check.timeout(TIMEOUT).await.unwrap();
+
+            // Disable and drain the queue
+            task::spawn_blocking(move || {
+                println!("Pipeline Blocking [---]: disabling the queue");
+                queue.disable();
+                println!("Pipeline Blocking [---]: draining the queue");
+                let _ = queue.drain();
+            })
+            .timeout(TIMEOUT)
+            .await
+            .unwrap();
+
+            // Make sure that the tasks scheduling have been unblocked
+            println!("Pipeline Blocking [---]: waiting for consume to be unblocked");
+            h1.timeout(TIMEOUT).await.unwrap();
         });
     }
 
