@@ -12,7 +12,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh-storages"
+name = "zenoh-plugin-rest"
 version = "0.5.0-dev"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -23,29 +23,33 @@ authors = ["kydos <angelo@icorsaro.net>",
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "The zenoh storages plugin."
+description = "The zenoh REST plugin"
 
 
 [lib]
-name = "zplugin_storages"
-crate-type = ["cdylib"]
+name = "zplugin_rest"
+crate-type = ["cdylib", "rlib"]
 
 
 [dependencies]
-async-std = "=1.9.0"
 zenoh = { path = "../../zenoh" }
-zenoh-util = { path = "../../zenoh-util" }
-zenoh_backend_traits = { path = "../../backends/traits" }
-async-trait = "0.1"
+async-std = "=1.9.0"
+flume = "0.10.5"
 futures = "0.3.12"
-libloading = "0.7.0"
+http-types = "2.10.0"
+tide = "0.16.0"
+serde_json = "1.0"
+base64 = "0.13.0"
 clap = "2"
 log = "0.4"
 env_logger = "0.8.2"
-lazy_static = "1.4.0"
+
+[[example]]
+name = "zn_serve_sse"
+path = "examples/zenoh-net/zn_serve_sse.rs"
 
 [package.metadata.deb]
-name = "zenoh-storages"
+name = "zenoh-plugin-rest"
 maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2020 ADLINK Technology Inc."
 section = "net"

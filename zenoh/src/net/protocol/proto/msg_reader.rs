@@ -244,6 +244,9 @@ impl RBuf {
     pub fn read_zenoh_message(&mut self, reliability: Reliability) -> Option<ZenohMessage> {
         use super::zmsg::id::*;
 
+        #[cfg(feature = "stats")]
+        let start_readable = self.readable();
+
         // Message decorators
         let mut routing_context = None;
         let mut reply_context = None;
@@ -374,6 +377,9 @@ impl RBuf {
             }
         };
 
+        #[cfg(feature = "stats")]
+        let stop_readable = self.readable();
+
         Some(ZenohMessage {
             header,
             body,
@@ -382,6 +388,8 @@ impl RBuf {
             routing_context,
             reply_context,
             attachment,
+            #[cfg(feature = "stats")]
+            size: std::num::NonZeroUsize::new(start_readable - stop_readable),
         })
     }
 

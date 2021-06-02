@@ -133,8 +133,8 @@ impl Tables {
         log::debug!("New {}", newface);
 
         if whatami == whatami::CLIENT {
-            pubsub_new_client_face(self, &mut newface);
-            queries_new_client_face(self, &mut newface);
+            pubsub_new_face(self, &mut newface);
+            queries_new_face(self, &mut newface);
         }
         Arc::downgrade(&newface)
     }
@@ -206,6 +206,7 @@ impl Tables {
         tables_ref: Arc<RwLock<Tables>>,
         net_type: whatami::Type,
     ) {
+        log::trace!("Schedule computations");
         if (net_type == whatami::ROUTER && self.routers_trees_task.is_none())
             || (net_type == whatami::PEER && self.peers_trees_task.is_none())
         {
@@ -213,12 +214,18 @@ impl Tables {
                 async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
                     .await;
                 let mut tables = zwrite!(tables_ref);
+
+                log::trace!("Compute trees");
                 let new_childs = match net_type {
                     whatami::ROUTER => tables.routers_net.as_mut().unwrap().compute_trees(),
                     _ => tables.peers_net.as_mut().unwrap().compute_trees(),
                 };
+
+                log::trace!("Compute routes");
                 pubsub_tree_change(&mut tables, &new_childs, net_type);
                 queries_tree_change(&mut tables, &new_childs, net_type);
+
+                log::trace!("Computations completed");
                 match net_type {
                     whatami::ROUTER => tables.routers_trees_task = None,
                     _ => tables.peers_trees_task = None,
@@ -245,13 +252,19 @@ impl Router {
         }
     }
 
-    pub fn init_link_state(&mut self, orchestrator: SessionOrchestrator, peers_autoconnect: bool) {
+    pub fn init_link_state(
+        &mut self,
+        orchestrator: SessionOrchestrator,
+        peers_autoconnect: bool,
+        routers_autoconnect_gossip: bool,
+    ) {
         let mut tables = zwrite!(self.tables);
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
             tables.pid.clone(),
             orchestrator.clone(),
             peers_autoconnect,
+            routers_autoconnect_gossip,
         ));
         if orchestrator.whatami == whatami::ROUTER {
             tables.routers_net = Some(Network::new(
@@ -259,6 +272,7 @@ impl Router {
                 tables.pid.clone(),
                 orchestrator,
                 peers_autoconnect,
+                routers_autoconnect_gossip,
             ));
             tables.shared_nodes = shared_nodes(
                 tables.routers_net.as_ref().unwrap(),
@@ -354,6 +368,7 @@ impl LinkStateInterceptor {
     }
 
     pub(crate) fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+        log::trace!("Recv {:?}", msg);
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 let pid = self.session.get_pid().unwrap();

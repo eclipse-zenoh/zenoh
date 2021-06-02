@@ -50,14 +50,20 @@ pub enum Loop {
 #[derive(Clone)]
 pub struct SessionOrchestrator {
     pub whatami: WhatAmI,
+    pub config: ConfigProperties,
     pub manager: Option<SessionManager>,
     pub sub_handler: Arc<Router>,
 }
 
 impl SessionOrchestrator {
-    pub fn new(whatami: WhatAmI, sub_handler: Arc<Router>) -> SessionOrchestrator {
+    pub fn new(
+        whatami: WhatAmI,
+        sub_handler: Arc<Router>,
+        config: ConfigProperties,
+    ) -> SessionOrchestrator {
         SessionOrchestrator {
             whatami,
+            config,
             manager: None,
             sub_handler,
         }
@@ -67,15 +73,11 @@ impl SessionOrchestrator {
         self.manager = Some(manager);
     }
 
-    pub async fn start(
-        &mut self,
-        config: ConfigProperties,
-        peers_autoconnect: bool,
-    ) -> ZResult<()> {
+    pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami {
-            whatami::CLIENT => self.start_client(config).await,
-            whatami::PEER => self.start_peer(config, peers_autoconnect).await,
-            whatami::ROUTER => self.start_router(config).await,
+            whatami::CLIENT => self.start_client().await,
+            whatami::PEER => self.start_peer().await,
+            whatami::ROUTER => self.start_router().await,
             _ => {
                 log::error!("Unknown mode");
                 zerror!(ZErrorKind::Other {
@@ -89,7 +91,8 @@ impl SessionOrchestrator {
         self.manager.as_ref().unwrap()
     }
 
-    async fn start_client(&mut self, config: ConfigProperties) -> ZResult<()> {
+    async fn start_client(&mut self) -> ZResult<()> {
+        let config = &self.config;
         let peers = config
             .get_or(&ZN_PEER_KEY, "")
             .split(',')
@@ -158,11 +161,8 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn start_peer(
-        &mut self,
-        config: ConfigProperties,
-        peers_autoconnect: bool,
-    ) -> ZResult<()> {
+    async fn start_peer(&mut self) -> ZResult<()> {
+        let config = &self.config;
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, PEER_DEFAULT_LISTENER)
             .split(',')
@@ -181,6 +181,10 @@ impl SessionOrchestrator {
             .collect::<Vec<Locator>>();
         let scouting = config
             .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
+        let peers_autoconnect = config
+            .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
             .to_lowercase()
             == ZN_TRUE;
         let addr = config
@@ -234,7 +238,8 @@ impl SessionOrchestrator {
         Ok(())
     }
 
-    pub async fn start_router(&mut self, config: ConfigProperties) -> ZResult<()> {
+    async fn start_router(&mut self) -> ZResult<()> {
+        let config = &self.config;
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
             .split(',')
@@ -253,6 +258,13 @@ impl SessionOrchestrator {
             .collect::<Vec<Locator>>();
         let scouting = config
             .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
+            .to_lowercase()
+            == ZN_TRUE;
+        let routers_autoconnect_multicast = config
+            .get_or(
+                &ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY,
+                ZN_ROUTERS_AUTOCONNECT_MULTICAST_DEFAULT,
+            )
             .to_lowercase()
             == ZN_TRUE;
         let addr = config
@@ -278,9 +290,17 @@ impl SessionOrchestrator {
                     .collect();
                 if !sockets.is_empty() {
                     let this = self.clone();
-                    async_std::task::spawn(async move {
-                        this.responder(&mcast_socket, &sockets).await;
-                    });
+                    if routers_autoconnect_multicast {
+                        async_std::prelude::FutureExt::race(
+                            this.responder(&mcast_socket, &sockets),
+                            this.connect_all(&sockets, whatami::ROUTER, &addr),
+                        )
+                        .await;
+                    } else {
+                        async_std::task::spawn(async move {
+                            this.responder(&mcast_socket, &sockets).await;
+                        });
+                    }
                 }
             }
         }
@@ -499,8 +519,9 @@ impl SessionOrchestrator {
                 delay
             );
             async_std::task::sleep(Duration::from_millis(delay)).await;
-            if delay * CONNECTION_RETRY_PERIOD_INCREASE_FACTOR <= CONNECTION_RETRY_MAX_PERIOD {
-                delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+            delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+            if delay > CONNECTION_RETRY_MAX_PERIOD {
+                delay = CONNECTION_RETRY_MAX_PERIOD;
             }
         }
     }
@@ -809,10 +830,29 @@ impl SessionEventHandler for OrchSession {
 
     fn closing(&self) {
         self.sub_event_handler.closing();
-        if let Some(locator) = &*zread!(self.locator) {
-            let locator = locator.clone();
-            let orchestrator = self.orchestrator.clone();
-            async_std::task::spawn(async move { orchestrator.peer_connector(locator).await });
+        match self.orchestrator.whatami {
+            whatami::CLIENT => {
+                let mut orchestrator = self.orchestrator.clone();
+                async_std::task::spawn(async move {
+                    let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
+                    while orchestrator.start_client().await.is_err() {
+                        async_std::task::sleep(std::time::Duration::from_millis(delay)).await;
+                        delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+                        if delay > CONNECTION_RETRY_MAX_PERIOD {
+                            delay = CONNECTION_RETRY_MAX_PERIOD;
+                        }
+                    }
+                });
+            }
+            _ => {
+                if let Some(locator) = &*zread!(self.locator) {
+                    let locator = locator.clone();
+                    let orchestrator = self.orchestrator.clone();
+                    async_std::task::spawn(
+                        async move { orchestrator.peer_connector(locator).await },
+                    );
+                }
+            }
         }
     }
 

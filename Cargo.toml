@@ -17,8 +17,8 @@ members = [
   "zenoh",
   "zenoh-util",
   "plugins/example-plugin",
-  "plugins/zenoh-rest",
-  "plugins/zenoh-storages",
+  "plugins/zenoh-plugin-rest",
+  "plugins/zenoh-plugin-storages",
   "backends/traits",
 ]
 

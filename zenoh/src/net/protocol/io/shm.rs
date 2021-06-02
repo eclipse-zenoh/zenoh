@@ -277,7 +277,7 @@ impl SharedMemoryManager {
             self.garbage_collect();
         }
         if self.available >= required_len {
-            // The stragegy taken is the same for some Unix System V implementations -- as described in the
+            // The strategy taken is the same for some Unix System V implementations -- as described in the
             // famous Bach's book --  in essence keep an ordered list of free slot and always look for the
             // biggest as that will give the biggest left-over.
             match self.free_list.pop() {
@@ -303,7 +303,7 @@ impl SharedMemoryManager {
                 Some(c) => {
                     self.free_list.push(c);
                     log::debug!(
-                        "SharedMemoryManager::alloc({}) cannot find any available chunk",
+                        "SharedMemoryManager::alloc({}) cannot find any available chunk of the appropriate size.",
                         len
                     );
                     log::debug!("SharedMemoryManager::free_list = {:?}", self.free_list);
@@ -320,7 +320,7 @@ impl SharedMemoryManager {
             }
         } else {
             log::warn!(
-                "SharedMemoryManager does not sufficient free memory to allocate {} bytes, try defragmenting!",
+                "SharedMemoryManager does not sufficient free memory to allocate {} bytes, try de-fragmenting!",
                 len
             );
             None
@@ -379,10 +379,52 @@ impl SharedMemoryManager {
         let rc = unsafe { (*rc_ptr).load(atomic::Ordering::SeqCst) };
         rc == 0
     }
-
-    // Returns the amount of memory that it was able to degragment
-    pub fn defragment_memory(&mut self) -> usize {
-        0
+    fn try_merge_adjacent_chunks(a: &Chunk, b: &Chunk) -> Option<Chunk> {
+        let end_addr = unsafe { a.base_addr.add(a.size) };
+        if end_addr == b.base_addr {
+            Some(Chunk {
+                base_addr: a.base_addr,
+                size: a.size + b.size,
+                offset: a.offset,
+            })
+        } else {
+            None
+        }
+    }
+    // Returns the amount of memory that it was able to de-fragment
+    pub fn defragment(&mut self) -> usize {
+        if self.free_list.len() > 1 {
+            let mut fbs: Vec<Chunk> = self.free_list.drain().collect();
+            fbs.sort_by(|x, y| x.offset.partial_cmp(&y.offset).unwrap());
+            let mut current = fbs.remove(0);
+            let mut defrag_mem = 0;
+            let mut i = 0;
+            let n = fbs.len();
+            for chunk in fbs.iter() {
+                i += 1;
+                let next = *chunk;
+                match SharedMemoryManager::try_merge_adjacent_chunks(&current, &next) {
+                    Some(c) => {
+                        current = c;
+                        defrag_mem += current.size;
+                        if i == n {
+                            self.free_list.push(current)
+                        }
+                    }
+                    None => {
+                        self.free_list.push(current);
+                        if i == n {
+                            self.free_list.push(next);
+                        } else {
+                            current = next;
+                        }
+                    }
+                }
+            }
+            defrag_mem
+        } else {
+            0
+        }
     }
 
     /// Returns the amount of memory freed
@@ -413,6 +455,8 @@ impl std::fmt::Debug for SharedMemoryManager {
             .field("segment_path", &self.segment_path)
             .field("size", &self.size)
             .field("available", &self.available)
+            .field("free_list.len", &self.free_list.len())
+            .field("busy_list.len", &self.busy_list.len())
             .finish();
         f.debug_list()
             .entries(self.segments.keys().into_iter())

@@ -552,11 +552,25 @@ pub fn forget_client_queryable(
     }
 }
 
-pub(crate) fn queries_new_client_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    for qabl in &tables.router_qabls {
-        get_mut_unchecked(face).local_qabls.push(qabl.clone());
-        let reskey = Resource::decl_key(&qabl, face);
-        face.primitives.decl_queryable(&reskey, None);
+pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+    if face.whatami == whatami::CLIENT && tables.whatami != whatami::CLIENT {
+        for qabl in &tables.router_qabls {
+            get_mut_unchecked(face).local_qabls.push(qabl.clone());
+            let reskey = Resource::decl_key(&qabl, face);
+            face.primitives.decl_queryable(&reskey, None);
+        }
+    }
+    if tables.whatami == whatami::CLIENT {
+        for face in tables
+            .faces
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
+            for qabl in &face.remote_qabls {
+                propagate_simple_queryable(tables, &qabl, &mut face.clone());
+            }
+        }
     }
 }
 
