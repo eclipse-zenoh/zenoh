@@ -557,6 +557,7 @@ impl Change {
             timestamp: Some(self.timestamp),
             kind: Some(self.kind as u64),
             encoding,
+            is_shm: false,
         };
         Sample {
             res_name: self.path.to_string(),
@@ -601,6 +602,7 @@ fn path_value_to_sample(path: Path, value: Value) -> Sample {
         timestamp: None,
         kind: None,
         encoding: Some(encoding),
+        is_shm: false,
     };
     Sample {
         res_name: path.to_string(),

@@ -15,7 +15,7 @@ use super::authenticator::{
     AuthenticatedPeerLink, AuthenticatedPeerSession, PeerAuthenticatorOutput,
 };
 use super::core::{PeerId, Property, WhatAmI, ZInt};
-use super::defaults::SESSION_SEQ_NUM_RESOLUTION;
+use super::defaults::ZNS_SEQ_NUM_RESOLUTION;
 use super::io::{RBuf, WBuf};
 use super::link::Link;
 use super::proto::{
@@ -151,7 +151,7 @@ async fn open_send_init_syn(
     let init_syn_version = manager.config.version;
     let init_syn_whatami = manager.config.whatami;
     let init_syn_pid = manager.config.pid.clone();
-    let init_syn_sn_resolution = if manager.config.sn_resolution == *SESSION_SEQ_NUM_RESOLUTION {
+    let init_syn_sn_resolution = if manager.config.sn_resolution == *ZNS_SEQ_NUM_RESOLUTION {
         None
     } else {
         Some(manager.config.sn_resolution)
@@ -606,7 +606,7 @@ async fn accept_recv_init_syn(
     let init_syn_sn_resolution = if let Some(snr) = init_syn_sn_resolution {
         snr
     } else {
-        *SESSION_SEQ_NUM_RESOLUTION
+        *ZNS_SEQ_NUM_RESOLUTION
     };
 
     // Validate the InitSyn with the peer authenticators

@@ -973,6 +973,7 @@ macro_rules! treat_timestamp {
                             timestamp: Some(hlc.new_timestamp()),
                             kind: None,
                             encoding: None,
+                            is_shm: false,
                         }
                     )
                 }

@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[macro_use]
 pub mod fifo_queue;
 pub use fifo_queue::*;
 
@@ -20,9 +21,6 @@ pub use lifo_queue::*;
 pub mod object_pool;
 pub use object_pool::*;
 
-pub mod ordered_queue;
-pub use ordered_queue::*;
-
 pub(crate) mod ring_buffer;
 pub(crate) use ring_buffer::*;
 
@@ -31,9 +29,3 @@ pub(crate) use stack_buffer::*;
 
 pub mod timer;
 pub use timer::*;
-
-// pub mod credit_queue;
-// pub use credit_queue::*;
-
-// pub mod priority_queue;
-// pub use priority_queue::*;
