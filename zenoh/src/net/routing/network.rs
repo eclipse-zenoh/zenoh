@@ -221,12 +221,7 @@ impl Network {
 
     fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, session: &Session) {
         let msg = self.make_msg(idxs);
-        log::trace!(
-            "{} Send to {} {:?}",
-            self.name,
-            session.get_pid().unwrap(),
-            msg
-        );
+        log::trace!("{} Send to {:?} {:?}", self.name, session.get_pid(), msg);
         if let Err(e) = session.handle_message(msg) {
             log::error!("{} Error sending LinkStateList: {}", self.name, e);
         }
@@ -573,9 +568,12 @@ impl Network {
         self.links.retain(|_, link| link.pid != *pid);
         self.graph[self.idx].links.retain(|link| *link != *pid);
 
-        let idx = self.get_idx(&pid).unwrap();
-        if let Some(edge) = self.graph.find_edge_undirected(self.idx, idx) {
-            self.graph.remove_edge(edge.0);
+        if let Some((edge, _)) = self
+            .get_idx(&pid)
+            .map(|idx| self.graph.find_edge_undirected(self.idx, idx))
+            .flatten()
+        {
+            self.graph.remove_edge(edge);
         }
         let removed = self.remove_detached_nodes();
 
