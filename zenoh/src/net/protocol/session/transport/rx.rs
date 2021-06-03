@@ -11,20 +11,43 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{Channel, ZInt};
-use super::proto::{Frame, FramePayload, SessionBody, SessionMessage};
-use super::SessionTransport;
-use zenoh_util::{zasynclock, zasyncread};
+use super::core::{Channel, PeerId, ZInt};
+use super::proto::{Close, Frame, FramePayload, SessionBody, SessionMessage};
+use super::{Link, SessionTransport};
+use async_std::task;
+use zenoh_util::zread;
 
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
+macro_rules! zclose {
+    ($transport:expr, $link:expr) => {
+        // Stop now rx and tx tasks before doing the proper cleanup
+        let _ = $transport.stop_rx($link);
+        let _ = $transport.stop_tx($link);
+        // Delete the whole session
+        let tr = $transport.clone();
+        // Spawn a task to avoid a deadlock waiting for this same task
+        // to finish in the link close() joining the rx handle
+        task::spawn(async move {
+            let _ = tr.delete().await;
+        });
+    };
+}
 macro_rules! zcallback {
-    ($transport:expr, $msg:expr) => {
-        let callback = zasyncread!($transport.callback).clone();
+    ($transport:expr, $link:expr, $msg:expr) => {
+        let callback = zread!($transport.callback).clone();
         match callback.as_ref() {
             Some(callback) => {
-                let _ = callback.handle_message($msg).await;
+                let res = callback.handle_message($msg);
+                if let Err(e) = res {
+                    log::trace!(
+                        "Session: {}. Error from callback: {}. Closing session.",
+                        $transport.pid,
+                        e
+                    );
+                    zclose!($transport, $link);
+                }
             }
             None => {
                 log::trace!(
@@ -38,7 +61,7 @@ macro_rules! zcallback {
 }
 
 macro_rules! zreceiveframe {
-    ($transport:expr, $guard:expr, $sn:expr, $payload:expr) => {
+    ($transport:expr, $link:expr, $guard:expr, $sn:expr, $payload:expr) => {
         let precedes = match $guard.sn.precedes($sn) {
             Ok(precedes) => precedes,
             Err(e) => {
@@ -49,8 +72,8 @@ macro_rules! zreceiveframe {
                 );
                 // Drop the guard before closing the session
                 drop($guard);
-                // Delete the whole session
-                $transport.delete().await;
+                // Stop now rx and tx tasks before doing the proper cleanup
+                zclose!($transport, $link);
                 // Close the link
                 return;
             }
@@ -97,12 +120,12 @@ macro_rules! zreceiveframe {
                             return;
                         }
                     };
-                    zcallback!($transport, msg);
+                    zcallback!($transport, $link, msg);
                 }
             }
             FramePayload::Messages { mut messages } => {
                 for msg in messages.drain(..) {
-                    zcallback!($transport, msg);
+                    zcallback!($transport, $link, msg);
                 }
             }
         }
@@ -110,43 +133,68 @@ macro_rules! zreceiveframe {
 }
 
 impl SessionTransport {
+    fn handle_close(&self, link: &Link, pid: Option<PeerId>, reason: u8, link_only: bool) {
+        // Check if the PID is correct when provided
+        if let Some(pid) = pid {
+            if pid != self.pid {
+                log::warn!(
+                    "Received an invalid Close on link {} from peer {} with reason: {}. Ignoring.",
+                    link,
+                    pid,
+                    reason
+                );
+                return;
+            }
+        }
+
+        // Stop now rx and tx tasks before doing the proper cleanup
+        let _ = self.stop_rx(link);
+        let _ = self.stop_tx(link);
+
+        // Delete and clean up
+        let c_transport = self.clone();
+        let c_link = link.clone();
+        // Spawn a task to avoid a deadlock waiting for this same task
+        // to finish in the link close() joining the rx handle
+        task::spawn(async move {
+            if link_only {
+                let _ = c_transport.del_link(&c_link).await;
+            } else {
+                let _ = c_transport.delete().await;
+            }
+        });
+    }
+
     /*************************************/
     /*   MESSAGE RECEIVED FROM THE LINK  */
     /*************************************/
-    async fn handle_reliable_frame(&self, sn: ZInt, payload: FramePayload) {
+    fn handle_reliable_frame(&self, link: &Link, sn: ZInt, payload: FramePayload) {
         // @TODO: Implement the reordering and reliability. Wait for missing messages.
-        let mut guard = zasynclock!(self.rx_reliable);
-        zreceiveframe!(self, guard, sn, payload);
+        let mut guard = zlock!(self.rx_reliable);
+        zreceiveframe!(self, link, guard, sn, payload);
     }
 
-    async fn handle_best_effort_frame(&self, sn: ZInt, payload: FramePayload) {
-        let mut guard = zasynclock!(self.rx_best_effort);
-        zreceiveframe!(self, guard, sn, payload);
+    fn handle_best_effort_frame(&self, link: &Link, sn: ZInt, payload: FramePayload) {
+        let mut guard = zlock!(self.rx_best_effort);
+        zreceiveframe!(self, link, guard, sn, payload);
     }
 
     #[inline(always)]
-    pub(super) async fn receive_message(&self, message: SessionMessage) {
+    pub(super) fn receive_message(&self, message: SessionMessage, link: &Link) {
         // Process the received message
         match message.body {
             SessionBody::Frame(Frame { ch, sn, payload }) => match ch {
-                Channel::Reliable => self.handle_reliable_frame(sn, payload).await,
-                Channel::BestEffort => self.handle_best_effort_frame(sn, payload).await,
+                Channel::Reliable => self.handle_reliable_frame(link, sn, payload),
+                Channel::BestEffort => self.handle_best_effort_frame(link, sn, payload),
             },
-            SessionBody::Hello { .. } => {
-                log::trace!(
-                    "Session: {}. Handling of Hello Messages not yet implemented!",
-                    self.pid
-                );
-            }
-            SessionBody::Scout { .. } => {
-                log::trace!(
-                    "Session: {}. Handling of Scout Messages not yet implemented!",
-                    self.pid
-                );
-            }
+            SessionBody::Close(Close {
+                pid,
+                reason,
+                link_only,
+            }) => self.handle_close(link, pid, reason, link_only),
             _ => {
                 log::trace!(
-                    "Session: {}. Unexpected message received: {:?}",
+                    "Session: {}. Message handling not implemented: {:?}",
                     self.pid,
                     message
                 );

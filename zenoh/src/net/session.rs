@@ -14,10 +14,9 @@
 use super::info::*;
 use super::routing::face::Face;
 use super::*;
-use async_std::channel::{bounded, Receiver, Sender};
 use async_std::sync::Arc;
-use async_std::sync::RwLock;
 use async_std::task;
+use flume::{bounded, Sender};
 use log::{error, trace, warn};
 use protocol::{
     core::{
@@ -26,15 +25,16 @@ use protocol::{
     },
     io::RBuf,
     proto::RoutingContext,
+    session::Primitives,
 };
-use routing::OutSession;
 use runtime::Runtime;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zconfigurable, zerror};
+use zenoh_util::{zconfigurable, zerror, zpending, zresolved};
 
 zconfigurable! {
     static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -193,51 +193,53 @@ impl Session {
         }
     }
 
-    pub(super) async fn new(config: ConfigProperties) -> ZResult<Session> {
-        let local_routing = config
-            .get_or(&ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let join_subscriptions = match config.get(&ZN_JOIN_SUBSCRIPTIONS_KEY) {
-            Some(s) => s.split(',').map(|s| s.to_string()).collect(),
-            None => vec![],
-        };
-        let join_publications = match config.get(&ZN_JOIN_PUBLICATIONS_KEY) {
-            Some(s) => s.split(',').map(|s| s.to_string()).collect(),
-            None => vec![],
-        };
-        match Runtime::new(0, config.0.into(), None).await {
-            Ok(runtime) => {
-                let session = Self::init(
-                    runtime,
-                    local_routing,
-                    join_subscriptions,
-                    join_publications,
-                )
-                .await;
-                // Workaround for the declare_and_shoot problem
-                task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-                Ok(session)
+    pub(super) fn new(config: ConfigProperties) -> ZPendingFuture<ZResult<Session>> {
+        zpending!(async {
+            let local_routing = config
+                .get_or(&ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
+                .to_lowercase()
+                == ZN_TRUE;
+            let join_subscriptions = match config.get(&ZN_JOIN_SUBSCRIPTIONS_KEY) {
+                Some(s) => s.split(',').map(|s| s.to_string()).collect(),
+                None => vec![],
+            };
+            let join_publications = match config.get(&ZN_JOIN_PUBLICATIONS_KEY) {
+                Some(s) => s.split(',').map(|s| s.to_string()).collect(),
+                None => vec![],
+            };
+            match Runtime::new(0, config.0.into(), None).await {
+                Ok(runtime) => {
+                    let session = Self::init(
+                        runtime,
+                        local_routing,
+                        join_subscriptions,
+                        join_publications,
+                    )
+                    .await;
+                    // Workaround for the declare_and_shoot problem
+                    task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+                    Ok(session)
+                }
+                Err(err) => Err(err),
             }
-            Err(err) => Err(err),
-        }
+        })
     }
 
     /// Returns the identifier for this session.
-    pub async fn id(&self) -> String {
-        self.runtime.get_pid_str().await
+    pub fn id(&self) -> ZResolvedFuture<String> {
+        zresolved!(self.runtime.get_pid_str())
     }
 
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    pub async fn init(
+    pub fn init(
         runtime: Runtime,
         local_routing: bool,
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
-    ) -> Session {
-        let router = runtime.read().await.router.clone();
+    ) -> ZResolvedFuture<Session> {
+        let router = runtime.read().router.clone();
         let state = Arc::new(RwLock::new(SessionState::new(
             local_routing,
             join_subscriptions,
@@ -248,27 +250,21 @@ impl Session {
             state: state.clone(),
             alive: true,
         };
-        let primitives = Some(
-            router
-                .new_primitives(OutSession::User(Arc::new(session.clone())))
-                .await,
-        );
-        zasyncwrite!(state).primitives = primitives;
-        session
+        let primitives = Some(router.new_primitives(Arc::new(session.clone())));
+        zwrite!(state).primitives = primitives;
+        zresolved!(session)
     }
 
-    async fn close_alive(&self) -> ZResult<()> {
-        trace!("close()");
-        self.runtime.close().await?;
+    fn close_alive(self) -> ZPendingFuture<ZResult<()>> {
+        zpending!(async move {
+            trace!("close()");
+            self.runtime.close().await?;
 
-        let primitives = zasyncwrite!(self.state)
-            .primitives
-            .as_ref()
-            .unwrap()
-            .clone();
-        primitives.send_close().await;
+            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
+            primitives.send_close();
 
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Close the zenoh-net [Session](Session).
@@ -285,9 +281,9 @@ impl Session {
     /// session.close().await.unwrap();
     /// # })
     /// ```
-    pub async fn close(mut self) -> ZResult<()> {
+    pub fn close(mut self) -> ZPendingFuture<ZResult<()>> {
         self.alive = false;
-        self.close_alive().await
+        self.close_alive()
     }
 
     /// Get informations about the zenoh-net [Session](Session).
@@ -301,10 +297,10 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub async fn info(&self) -> InfoProperties {
+    pub fn info(&self) -> ZResolvedFuture<InfoProperties> {
         trace!("info()");
-        let runtime = self.runtime.read().await;
-        let sessions = runtime.orchestrator.manager().await.get_sessions().await;
+        let runtime = self.runtime.read();
+        let sessions = runtime.orchestrator.manager().get_sessions();
         let peer_pids = sessions
             .iter()
             .filter(|s| {
@@ -346,7 +342,7 @@ impl Session {
         info.insert(ZN_INFO_PEER_PID_KEY, peer_pids.join(","));
         info.insert(ZN_INFO_ROUTER_PID_KEY, router_pids.join(","));
         info.insert(ZN_INFO_PID_KEY, hex::encode_upper(runtime.pid.as_slice()));
-        info
+        zresolved!(info)
     }
 
     /// Associate a numerical Id with the given resource key.
@@ -367,35 +363,36 @@ impl Session {
     /// let rid = session.declare_resource(&"/resource/name".into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_resource(&self, resource: &ResKey) -> ZResult<ResourceId> {
+    pub fn declare_resource(&self, resource: &ResKey) -> ZResolvedFuture<ZResult<ResourceId>> {
         trace!("declare_resource({:?})", resource);
-        let mut state = zasyncwrite!(self.state);
-        let resname = state.localkey_to_resname(resource)?;
+        let mut state = zwrite!(self.state);
 
-        match state
-            .local_resources
-            .iter()
-            .find(|(_rid, res)| res.name == resname)
-        {
-            Some((rid, _res)) => Ok(*rid),
-            None => {
-                let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
-                let mut res = Resource::new(resname.clone());
-                for sub in state.subscribers.values() {
-                    if rname::matches(&resname, &sub.resname) {
-                        res.subscribers.push(sub.clone());
+        zresolved!(state.localkey_to_resname(resource).map(|resname| {
+            match state
+                .local_resources
+                .iter()
+                .find(|(_rid, res)| res.name == resname)
+            {
+                Some((rid, _res)) => *rid,
+                None => {
+                    let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
+                    let mut res = Resource::new(resname.clone());
+                    for sub in state.subscribers.values() {
+                        if rname::matches(&resname, &sub.resname) {
+                            res.subscribers.push(sub.clone());
+                        }
                     }
+
+                    state.local_resources.insert(rid, res);
+
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
+                    primitives.decl_resource(rid, resource);
+
+                    rid
                 }
-
-                state.local_resources.insert(rid, res);
-
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                drop(state);
-                primitives.decl_resource(rid, resource).await;
-
-                Ok(rid)
             }
-        }
+        }))
     }
 
     /// Undeclare the *numerical Id/resource key* association previously declared
@@ -415,16 +412,16 @@ impl Session {
     /// session.undeclare_resource(rid).await;
     /// # })
     /// ```
-    pub async fn undeclare_resource(&self, rid: ResourceId) -> ZResult<()> {
+    pub fn undeclare_resource(&self, rid: ResourceId) -> ZResolvedFuture<ZResult<()>> {
         trace!("undeclare_resource({:?})", rid);
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         state.local_resources.remove(&rid);
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.forget_resource(rid).await;
+        primitives.forget_resource(rid);
 
-        Ok(())
+        zresolved!(Ok(()))
     }
 
     /// Declare a [Publisher](Publisher) for the given resource key.
@@ -446,58 +443,16 @@ impl Session {
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_publisher(&self, resource: &ResKey) -> ZResult<Publisher<'_>> {
+    pub fn declare_publisher(&self, resource: &ResKey) -> ZResolvedFuture<ZResult<Publisher<'_>>> {
         trace!("declare_publisher({:?})", resource);
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(resource)?;
-        let pub_state = Arc::new(PublisherState {
-            id,
-            reskey: resource.clone(),
-        });
-        let declared_pub = match state
-            .join_publications
-            .iter()
-            .find(|s| rname::include(s, &resname))
-        {
-            Some(join_pub) => {
-                let joined_pub = state.publishers.values().any(|p| {
-                    rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
-                });
-                (!joined_pub).then(|| join_pub.clone().into())
-            }
-            None => {
-                let twin_pub = state.publishers.values().any(|p| {
-                    state.localkey_to_resname(&p.reskey).unwrap()
-                        == state.localkey_to_resname(&pub_state.reskey).unwrap()
-                });
-                (!twin_pub).then(|| resource.clone())
-            }
-        };
-
-        state.publishers.insert(id, pub_state.clone());
-
-        if let Some(res) = declared_pub {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.decl_publisher(&res, None).await;
-        }
-
-        Ok(Publisher {
-            session: self,
-            state: pub_state,
-            alive: true,
-        })
-    }
-
-    pub(crate) async fn undeclare_publisher(&self, pid: usize) -> ZResult<()> {
-        let mut state = zasyncwrite!(self.state);
-        if let Some(pub_state) = state.publishers.remove(&pid) {
-            trace!("undeclare_publisher({:?})", pub_state);
-            // Note: there might be several Publishers on the same ResKey.
-            // Before calling forget_publisher(reskey), check if this was the last one.
-            let resname = state.localkey_to_resname(&pub_state.reskey)?;
-            match state
+        zresolved!(state.localkey_to_resname(resource).map(|resname| {
+            let pub_state = Arc::new(PublisherState {
+                id,
+                reskey: resource.clone(),
+            });
+            let declared_pub = match state
                 .join_publications
                 .iter()
                 .find(|s| rname::include(s, &resname))
@@ -506,36 +461,83 @@ impl Session {
                     let joined_pub = state.publishers.values().any(|p| {
                         rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
                     });
-                    if !joined_pub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        let reskey = join_pub.clone().into();
-                        drop(state);
-                        primitives.forget_publisher(&reskey, None).await;
-                    }
+                    (!joined_pub).then(|| join_pub.clone().into())
                 }
                 None => {
                     let twin_pub = state.publishers.values().any(|p| {
                         state.localkey_to_resname(&p.reskey).unwrap()
                             == state.localkey_to_resname(&pub_state.reskey).unwrap()
                     });
-                    if !twin_pub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.forget_publisher(&pub_state.reskey, None).await;
-                    }
+                    (!twin_pub).then(|| resource.clone())
                 }
             };
-        }
-        Ok(())
+
+            state.publishers.insert(id, pub_state.clone());
+
+            if let Some(res) = declared_pub {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.decl_publisher(&res, None);
+            }
+
+            Publisher {
+                session: self,
+                state: pub_state,
+                alive: true,
+            }
+        }))
     }
 
-    async fn declare_any_subscriber(
+    pub(crate) fn undeclare_publisher(&self, pid: usize) -> ZResolvedFuture<ZResult<()>> {
+        let mut state = zwrite!(self.state);
+        zresolved!(if let Some(pub_state) = state.publishers.remove(&pid) {
+            trace!("undeclare_publisher({:?})", pub_state);
+            // Note: there might be several Publishers on the same ResKey.
+            // Before calling forget_publisher(reskey), check if this was the last one.
+            state.localkey_to_resname(&pub_state.reskey).map(|resname| {
+                match state
+                    .join_publications
+                    .iter()
+                    .find(|s| rname::include(s, &resname))
+                {
+                    Some(join_pub) => {
+                        let joined_pub = state.publishers.values().any(|p| {
+                            rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
+                        });
+                        if !joined_pub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            let reskey = join_pub.clone().into();
+                            drop(state);
+                            primitives.forget_publisher(&reskey, None);
+                        }
+                    }
+                    None => {
+                        let twin_pub = state.publishers.values().any(|p| {
+                            state.localkey_to_resname(&p.reskey).unwrap()
+                                == state.localkey_to_resname(&pub_state.reskey).unwrap()
+                        });
+                        if !twin_pub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            drop(state);
+                            primitives.forget_publisher(&pub_state.reskey, None);
+                        }
+                    }
+                };
+            })
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Unable to find publisher".into()
+            })
+        })
+    }
+
+    fn declare_any_subscriber(
         &self,
         reskey: &ResKey,
         invoker: SubscriberInvoker,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let resname = state.localkey_to_resname(reskey)?;
         let sub_state = Arc::new(SubscriberState {
@@ -584,18 +586,18 @@ impl Session {
             let reskey = match reskey {
                 ResKey::RName(name) => match name.find('*') {
                     Some(pos) => {
-                        let id = self.declare_resource(&name[..pos].into()).await?;
+                        let id = self.declare_resource(&name[..pos].into()).wait()?;
                         ResKey::RIdWithSuffix(id, name[pos..].into())
                     }
                     None => {
-                        let id = self.declare_resource(&name.into()).await?;
+                        let id = self.declare_resource(&name.into()).wait()?;
                         ResKey::RId(id)
                     }
                 },
                 reskey => reskey,
             };
 
-            primitives.decl_subscriber(&reskey, info, None).await;
+            primitives.decl_subscriber(&reskey, info, None);
         }
 
         Ok(sub_state)
@@ -621,28 +623,27 @@ impl Session {
     ///     period: None
     /// };
     /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// while let Some(sample) = subscriber.stream().next().await {
+    /// while let Some(sample) = subscriber.receiver().next().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
     /// ```
-    pub async fn declare_subscriber(
+    pub fn declare_subscriber(
         &self,
         reskey: &ResKey,
         info: &SubInfo,
-    ) -> ZResult<Subscriber<'_>> {
+    ) -> ZResolvedFuture<ZResult<Subscriber<'_>>> {
         trace!("declare_subscriber({:?})", reskey);
         let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
-        let sub_state = self
-            .declare_any_subscriber(reskey, SubscriberInvoker::Sender(sender), info)
-            .await?;
 
-        Ok(Subscriber {
-            session: self,
-            state: sub_state,
-            alive: true,
-            receiver,
-        })
+        zresolved!(self
+            .declare_any_subscriber(reskey, SubscriberInvoker::Sender(sender), info)
+            .map(|sub_state| Subscriber {
+                session: self,
+                state: sub_state,
+                alive: true,
+                receiver: SampleReceiver::new(receiver),
+            }))
     }
 
     /// Declare a [CallbackSubscriber](CallbackSubscriber) for the given resource key.
@@ -669,31 +670,29 @@ impl Session {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub async fn declare_callback_subscriber<DataHandler>(
+    pub fn declare_callback_subscriber<DataHandler>(
         &self,
         reskey: &ResKey,
         info: &SubInfo,
         data_handler: DataHandler,
-    ) -> ZResult<CallbackSubscriber<'_>>
+    ) -> ZResolvedFuture<ZResult<CallbackSubscriber<'_>>>
     where
         DataHandler: FnMut(Sample) + Send + Sync + 'static,
     {
         trace!("declare_callback_subscriber({:?})", reskey);
         let dhandler = Arc::new(RwLock::new(data_handler));
-        let sub_state = self
+        zresolved!(self
             .declare_any_subscriber(reskey, SubscriberInvoker::Handler(dhandler), info)
-            .await?;
-
-        Ok(CallbackSubscriber {
-            session: self,
-            state: sub_state,
-            alive: true,
-        })
+            .map(|sub_state| CallbackSubscriber {
+                session: self,
+                state: sub_state,
+                alive: true,
+            }))
     }
 
-    pub(crate) async fn undeclare_subscriber(&self, sid: usize) -> ZResult<()> {
-        let mut state = zasyncwrite!(self.state);
-        if let Some(sub_state) = state.subscribers.remove(&sid) {
+    pub(crate) fn undeclare_subscriber(&self, sid: usize) -> ZResolvedFuture<ZResult<()>> {
+        let mut state = zwrite!(self.state);
+        zresolved!(if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
             for res in state.local_resources.values_mut() {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
@@ -704,37 +703,41 @@ impl Session {
 
             // Note: there might be several Subscribers on the same ResKey.
             // Before calling forget_subscriber(reskey), check if this was the last one.
-            let resname = state.localkey_to_resname(&sub_state.reskey)?;
-            match state
-                .join_subscriptions
-                .iter()
-                .find(|s| rname::include(s, &resname))
-            {
-                Some(join_sub) => {
-                    let joined_sub = state.subscribers.values().any(|s| {
-                        rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
-                    });
-                    if !joined_sub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        let reskey = join_sub.clone().into();
-                        drop(state);
-                        primitives.forget_subscriber(&reskey, None).await;
+            state.localkey_to_resname(&sub_state.reskey).map(|resname| {
+                match state
+                    .join_subscriptions
+                    .iter()
+                    .find(|s| rname::include(s, &resname))
+                {
+                    Some(join_sub) => {
+                        let joined_sub = state.subscribers.values().any(|s| {
+                            rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                        });
+                        if !joined_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            let reskey = join_sub.clone().into();
+                            drop(state);
+                            primitives.forget_subscriber(&reskey, None);
+                        }
                     }
-                }
-                None => {
-                    let twin_sub = state.subscribers.values().any(|s| {
-                        state.localkey_to_resname(&s.reskey).unwrap()
-                            == state.localkey_to_resname(&sub_state.reskey).unwrap()
-                    });
-                    if !twin_sub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.forget_subscriber(&sub_state.reskey, None).await;
+                    None => {
+                        let twin_sub = state.subscribers.values().any(|s| {
+                            state.localkey_to_resname(&s.reskey).unwrap()
+                                == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                        });
+                        if !twin_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            drop(state);
+                            primitives.forget_subscriber(&sub_state.reskey, None);
+                        }
                     }
-                }
-            };
-        }
-        Ok(())
+                };
+            })
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Unable to find publisher".into()
+            })
+        })
     }
 
     /// Declare a [Queryable](Queryable) for the given resource key.
@@ -753,8 +756,8 @@ impl Session {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
-    /// while let Some(query) = queryable.stream().next().await {
-    ///     query.reply(Sample{
+    /// while let Some(query) = queryable.receiver().next().await {
+    ///     query.reply_async(Sample{
     ///         res_name: "/resource/name".to_string(),
     ///         payload: "value".as_bytes().into(),
     ///         data_info: None,
@@ -762,16 +765,20 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub async fn declare_queryable(&self, resource: &ResKey, kind: ZInt) -> ZResult<Queryable<'_>> {
+    pub fn declare_queryable(
+        &self,
+        resource: &ResKey,
+        kind: ZInt,
+    ) -> ZResolvedFuture<ZResult<Queryable<'_>>> {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let (q_sender, q_receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
+        let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {
             id,
             reskey: resource.clone(),
             kind,
-            q_sender,
+            sender,
         });
         let twin_qable = state.queryables.values().any(|q| {
             state.localkey_to_resname(&q.reskey).unwrap()
@@ -783,20 +790,20 @@ impl Session {
         if !twin_qable {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.decl_queryable(resource, None).await;
+            primitives.decl_queryable(resource, None);
         }
 
-        Ok(Queryable {
+        zresolved!(Ok(Queryable {
             session: self,
             state: qable_state,
             alive: true,
-            q_receiver,
-        })
+            receiver: QueryReceiver::new(receiver),
+        }))
     }
 
-    pub(crate) async fn undeclare_queryable(&self, qid: usize) -> ZResult<()> {
-        let mut state = zasyncwrite!(self.state);
-        if let Some(qable_state) = state.queryables.remove(&qid) {
+    pub(crate) fn undeclare_queryable(&self, qid: usize) -> ZResolvedFuture<ZResult<()>> {
+        let mut state = zwrite!(self.state);
+        zresolved!(if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
             // Note: there might be several Queryables on the same ResKey.
             // Before calling forget_eval(reskey), check if this was the last one.
@@ -806,10 +813,14 @@ impl Session {
             });
             if !twin_qable {
                 let primitives = state.primitives.as_ref().unwrap();
-                primitives.forget_queryable(&qable_state.reskey, None).await;
+                primitives.forget_queryable(&qable_state.reskey, None);
             }
-        }
-        Ok(())
+            Ok(())
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Unable to find queryable".into()
+            })
+        })
     }
 
     /// Write data.
@@ -828,26 +839,24 @@ impl Session {
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
-    pub async fn write(&self, resource: &ResKey, payload: RBuf) -> ZResult<()> {
+    pub fn write(&self, resource: &ResKey, payload: RBuf) -> ZResolvedFuture<ZResult<()>> {
         trace!("write({:?}, [...])", resource);
-        let state = zasyncread!(self.state);
+        let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
-        primitives
-            .send_data(
-                resource,
-                payload.clone(),
-                Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
-                CongestionControl::default(), // Default congestion control when writing data
-                None,
-                None,
-            )
-            .await;
+        primitives.send_data(
+            resource,
+            payload.clone(),
+            Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            CongestionControl::default(), // Default congestion control when writing data
+            None,
+            None,
+        );
         if local_routing {
-            self.handle_data(true, resource, None, payload).await;
+            self.handle_data(true, resource, None, payload);
         }
-        Ok(())
+        zresolved!(Ok(()))
     }
 
     /// Write data with options.
@@ -869,16 +878,16 @@ impl Session {
     /// session.write_ext(&"/resource/name".into(), "value".as_bytes().into(), encoding::TEXT_PLAIN, data_kind::PUT, CongestionControl::Drop).await.unwrap();
     /// # })
     /// ```
-    pub async fn write_ext(
+    pub fn write_ext(
         &self,
         resource: &ResKey,
         payload: RBuf,
         encoding: ZInt,
         kind: ZInt,
         congestion_control: CongestionControl,
-    ) -> ZResult<()> {
+    ) -> ZResolvedFuture<ZResult<()>> {
         trace!("write_ext({:?}, [...])", resource);
-        let state = zasyncread!(self.state);
+        let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
@@ -890,33 +899,25 @@ impl Session {
             timestamp: None,
             kind: Some(kind),
             encoding: Some(encoding),
+            is_shm: false,
         };
         let data_info = Some(info);
-        primitives
-            .send_data(
-                resource,
-                payload.clone(),
-                Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
-                congestion_control,
-                data_info.clone(),
-                None,
-            )
-            .await;
+        primitives.send_data(
+            resource,
+            payload.clone(),
+            Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+            congestion_control,
+            data_info.clone(),
+            None,
+        );
         if local_routing {
-            self.handle_data(true, resource, data_info.clone(), payload)
-                .await;
+            self.handle_data(true, resource, data_info, payload);
         }
-        Ok(())
+        zresolved!(Ok(()))
     }
 
-    async fn handle_data(
-        &self,
-        local: bool,
-        reskey: &ResKey,
-        info: Option<DataInfo>,
-        payload: RBuf,
-    ) {
-        let state = zasyncread!(self.state);
+    fn handle_data(&self, local: bool, reskey: &ResKey, info: Option<DataInfo>, payload: RBuf) {
+        let state = zread!(self.state);
         if let ResKey::RId(rid) = reskey {
             match state.get_res(rid, local) {
                 Some(res) => match res.subscribers.len() {
@@ -925,7 +926,7 @@ impl Session {
                         let sub = res.subscribers.get(0).unwrap();
                         match &sub.invoker {
                             SubscriberInvoker::Handler(handler) => {
-                                let handler = &mut *zasyncwrite!(handler);
+                                let handler = &mut *zwrite!(handler);
                                 handler(Sample {
                                     res_name: res.name.clone(),
                                     payload,
@@ -933,14 +934,11 @@ impl Session {
                                 });
                             }
                             SubscriberInvoker::Sender(sender) => {
-                                if let Err(e) = sender
-                                    .send(Sample {
-                                        res_name: res.name.clone(),
-                                        payload,
-                                        data_info: info,
-                                    })
-                                    .await
-                                {
+                                if let Err(e) = sender.send(Sample {
+                                    res_name: res.name.clone(),
+                                    payload,
+                                    data_info: info,
+                                }) {
                                     error!("SubscriberInvoker error: {}", e);
                                     return;
                                 }
@@ -951,7 +949,7 @@ impl Session {
                         for sub in &res.subscribers {
                             match &sub.invoker {
                                 SubscriberInvoker::Handler(handler) => {
-                                    let handler = &mut *zasyncwrite!(handler);
+                                    let handler = &mut *zwrite!(handler);
                                     handler(Sample {
                                         res_name: res.name.clone(),
                                         payload: payload.clone(),
@@ -959,14 +957,11 @@ impl Session {
                                     });
                                 }
                                 SubscriberInvoker::Sender(sender) => {
-                                    if let Err(e) = sender
-                                        .send(Sample {
-                                            res_name: res.name.clone(),
-                                            payload: payload.clone(),
-                                            data_info: info.clone(),
-                                        })
-                                        .await
-                                    {
+                                    if let Err(e) = sender.send(Sample {
+                                        res_name: res.name.clone(),
+                                        payload: payload.clone(),
+                                        data_info: info.clone(),
+                                    }) {
                                         error!("SubscriberInvoker error: {}", e);
                                         return;
                                     }
@@ -977,7 +972,6 @@ impl Session {
                 },
                 None => {
                     error!("Received Data for unkown rid: {}", rid);
-                    return;
                 }
             }
         } else {
@@ -987,7 +981,7 @@ impl Session {
                         if rname::matches(&sub.resname, &resname) {
                             match &sub.invoker {
                                 SubscriberInvoker::Handler(handler) => {
-                                    let handler = &mut *zasyncwrite!(handler);
+                                    let handler = &mut *zwrite!(handler);
                                     handler(Sample {
                                         res_name: resname.clone(),
                                         payload: payload.clone(),
@@ -995,14 +989,11 @@ impl Session {
                                     });
                                 }
                                 SubscriberInvoker::Sender(sender) => {
-                                    if let Err(e) = sender
-                                        .send(Sample {
-                                            res_name: resname.clone(),
-                                            payload: payload.clone(),
-                                            data_info: info.clone(),
-                                        })
-                                        .await
-                                    {
+                                    if let Err(e) = sender.send(Sample {
+                                        res_name: resname.clone(),
+                                        payload: payload.clone(),
+                                        data_info: info.clone(),
+                                    }) {
                                         error!("SubscriberInvoker error: {}", e);
                                         return;
                                     }
@@ -1013,19 +1004,18 @@ impl Session {
                 }
                 Err(err) => {
                     error!("Received Data for unkown reskey: {}", err);
-                    return;
                 }
             }
         }
     }
 
-    pub(crate) async fn pull(&self, reskey: &ResKey) -> ZResult<()> {
+    pub(crate) fn pull(&self, reskey: &ResKey) -> ZResolvedFuture<ZResult<()>> {
         trace!("pull({:?})", reskey);
-        let state = zasyncread!(self.state);
+        let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.send_pull(true, reskey, 0, &None).await;
-        Ok(())
+        primitives.send_pull(true, reskey, 0, &None);
+        zresolved!(Ok(()))
     }
 
     /// Query data from the matching queryables in the system.
@@ -1055,13 +1045,13 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub async fn query(
+    pub fn query(
         &self,
         resource: &ResKey,
         predicate: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> ZResult<Receiver<Reply>> {
+    ) -> ZResolvedFuture<ZResult<ReplyReceiver>> {
         trace!(
             "query({:?}, {:?}, {:?}, {:?})",
             resource,
@@ -1069,7 +1059,7 @@ impl Session {
             target,
             consolidation
         );
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE);
         state.queries.insert(
@@ -1089,25 +1079,22 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
-        primitives
-            .send_query(
-                resource,
-                predicate,
-                qid,
-                target.clone(),
-                consolidation.clone(),
-                None,
-            )
-            .await;
+        primitives.send_query(
+            resource,
+            predicate,
+            qid,
+            target.clone(),
+            consolidation.clone(),
+            None,
+        );
         if local_routing {
-            self.handle_query(true, resource, predicate, qid, target, consolidation)
-                .await;
+            self.handle_query(true, resource, predicate, qid, target, consolidation);
         }
 
-        Ok(rep_receiver)
+        zresolved!(Ok(ReplyReceiver::new(rep_receiver)))
     }
 
-    async fn handle_query(
+    fn handle_query(
         &self,
         local: bool,
         reskey: &ResKey,
@@ -1117,7 +1104,7 @@ impl Session {
         _consolidation: QueryConsolidation,
     ) {
         let (primitives, resname, kinds_and_senders) = {
-            let state = zasyncread!(self.state);
+            let state = zread!(self.state);
             match state.reskey_to_resname(reskey, local) {
                 Ok(resname) => {
                     let kinds_and_senders = state
@@ -1140,7 +1127,7 @@ impl Session {
                                 }
                             },
                         )
-                        .map(|qable| (qable.kind, qable.q_sender.clone()))
+                        .map(|qable| (qable.kind, qable.sender.clone()))
                         .collect::<Vec<(ZInt, Sender<Query>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
@@ -1156,20 +1143,19 @@ impl Session {
         };
 
         let predicate = predicate.to_string();
-        let (rep_sender, mut rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
-        let pid = self.runtime.read().await.pid.clone(); // @TODO build/use prebuilt specific pid
+        let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
+
+        let pid = self.runtime.read().pid.clone(); // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
-            let _ = req_sender
-                .send(Query {
-                    res_name: resname.clone(),
-                    predicate: predicate.clone(),
-                    replies_sender: RepliesSender {
-                        kind,
-                        sender: rep_sender.clone(),
-                    },
-                })
-                .await;
+            let _ = req_sender.send(Query {
+                res_name: resname.clone(),
+                predicate: predicate.clone(),
+                replies_sender: RepliesSender {
+                    kind,
+                    sender: rep_sender.clone(),
+                },
+            });
         }
         drop(rep_sender); // all senders need to be dropped for the channel to close
 
@@ -1178,7 +1164,7 @@ impl Session {
         if local {
             let this = self.clone();
             task::spawn(async move {
-                while let Some((kind, sample)) = rep_receiver.next().await {
+                while let Some((kind, sample)) = rep_receiver.stream().next().await {
                     this.send_reply_data(
                         qid,
                         kind,
@@ -1186,33 +1172,32 @@ impl Session {
                         ResKey::RName(sample.res_name),
                         sample.data_info,
                         sample.payload,
-                    )
-                    .await;
+                    );
                 }
-                this.send_reply_final(qid).await;
+                this.send_reply_final(qid);
             });
         } else {
             task::spawn(async move {
-                while let Some((kind, sample)) = rep_receiver.next().await {
-                    primitives
-                        .send_reply_data(
-                            qid,
-                            kind,
-                            pid.clone(),
-                            ResKey::RName(sample.res_name),
-                            sample.data_info,
-                            sample.payload,
-                        )
-                        .await;
+                while let Some((kind, sample)) = rep_receiver.stream().next().await {
+                    primitives.send_reply_data(
+                        qid,
+                        kind,
+                        pid.clone(),
+                        ResKey::RName(sample.res_name),
+                        sample.data_info,
+                        sample.payload,
+                    );
                 }
-                primitives.send_reply_final(qid).await;
+                primitives.send_reply_final(qid);
             });
         }
     }
+}
 
-    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+impl Primitives for Session {
+    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Decl Resource {} {:?}", rid, reskey);
-        let state = &mut zasyncwrite!(self.state);
+        let state = &mut zwrite!(self.state);
         match state.remotekey_to_resname(reskey) {
             Ok(resname) => {
                 let mut res = Resource::new(resname.clone());
@@ -1228,27 +1213,19 @@ impl Session {
         }
     }
 
-    pub(crate) async fn forget_resource(&self, _rid: ZInt) {
+    fn forget_resource(&self, _rid: ZInt) {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    pub(crate) async fn decl_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Decl Publisher {:?}", _reskey);
     }
 
-    pub(crate) async fn forget_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    pub(crate) async fn decl_subscriber(
+    fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
@@ -1257,31 +1234,19 @@ impl Session {
         trace!("recv Decl Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    pub(crate) async fn forget_subscriber(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    pub(crate) async fn decl_queryable(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Decl Queryable {:?}", _reskey);
     }
 
-    pub(crate) async fn forget_queryable(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    pub(crate) async fn send_data(
+    fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -1298,10 +1263,10 @@ impl Session {
             congestion_control,
             info,
         );
-        self.handle_data(false, reskey, info, payload).await
+        self.handle_data(false, reskey, info, payload)
     }
 
-    pub(crate) async fn send_query(
+    fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -1318,10 +1283,9 @@ impl Session {
             consolidation
         );
         self.handle_query(false, reskey, predicate, qid, target, consolidation)
-            .await
     }
 
-    pub(crate) async fn send_reply_data(
+    fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -1339,7 +1303,7 @@ impl Session {
             data_info,
             payload
         );
-        let state = &mut zasyncwrite!(self.state);
+        let state = &mut zwrite!(self.state);
         let res_name = match state.remotekey_to_resname(&reskey) {
             Ok(name) => name,
             Err(e) => {
@@ -1360,7 +1324,7 @@ impl Session {
                 };
                 match query.reception_mode {
                     ConsolidationMode::None => {
-                        let _ = query.rep_sender.send(new_reply).await;
+                        let _ = query.rep_sender.send(new_reply);
                     }
                     ConsolidationMode::Lazy => {
                         match query
@@ -1376,7 +1340,7 @@ impl Session {
                                         .as_mut()
                                         .unwrap()
                                         .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                                    let _ = query.rep_sender.send(new_reply).await;
+                                    let _ = query.rep_sender.send(new_reply);
                                 }
                             }
                             None => {
@@ -1385,7 +1349,7 @@ impl Session {
                                     .as_mut()
                                     .unwrap()
                                     .insert(new_reply.data.res_name.clone(), new_reply.clone());
-                                let _ = query.rep_sender.send(new_reply).await;
+                                let _ = query.rep_sender.send(new_reply);
                             }
                         }
                     }
@@ -1418,14 +1382,13 @@ impl Session {
             }
             None => {
                 warn!("Received ReplyData for unkown Query: {}", qid);
-                return;
             }
         }
     }
 
-    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
-        let mut state = zasyncwrite!(self.state);
+        let mut state = zwrite!(self.state);
         match state.queries.get_mut(&qid) {
             Some(mut query) => {
                 query.nb_final -= 1;
@@ -1433,7 +1396,7 @@ impl Session {
                     let query = state.queries.remove(&qid).unwrap();
                     if query.reception_mode == ConsolidationMode::Full {
                         for (_, reply) in query.replies.unwrap().into_iter() {
-                            let _ = query.rep_sender.send(reply).await;
+                            let _ = query.rep_sender.send(reply);
                         }
                     }
                 }
@@ -1444,7 +1407,7 @@ impl Session {
         }
     }
 
-    pub(crate) async fn send_pull(
+    fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -1460,7 +1423,7 @@ impl Session {
         );
     }
 
-    pub(crate) async fn send_close(&self) {
+    fn send_close(&self) {
         trace!("recv Close");
     }
 }

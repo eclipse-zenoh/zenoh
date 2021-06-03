@@ -12,13 +12,14 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::Session;
-use async_std::channel::{Receiver, Sender, TrySendError};
-use async_std::stream::Stream;
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use async_std::task;
-use pin_project_lite::pin_project;
+use flume::*;
 use std::collections::HashMap;
 use std::fmt;
+use std::pin::Pin;
+use std::sync::RwLock;
+use std::task::{Context, Poll};
 
 /// A read-only bytes buffer.
 pub use super::protocol::io::RBuf;
@@ -79,6 +80,16 @@ pub use super::protocol::core::whatami;
 /// A zenoh Hello message.
 pub use super::protocol::proto::Hello;
 
+pub use zenoh_util::sync::channel::Iter;
+pub use zenoh_util::sync::channel::Receiver;
+pub use zenoh_util::sync::channel::RecvError;
+pub use zenoh_util::sync::channel::RecvTimeoutError;
+pub use zenoh_util::sync::channel::TryIter;
+pub use zenoh_util::sync::channel::TryRecvError;
+pub use zenoh_util::sync::ZFuture;
+pub use zenoh_util::sync::ZPendingFuture;
+pub use zenoh_util::sync::ZResolvedFuture;
+
 /// Some informations about the associated data.
 ///
 /// # Examples
@@ -104,25 +115,10 @@ pub use zenoh_util::core::ZErrorKind;
 /// A zenoh result.
 pub use zenoh_util::core::ZResult;
 
-pin_project! {
-    /// A stream of [Hello](Hello) messages.
-    #[derive(Clone, Debug)]
-    pub struct HelloStream {
-        #[pin]
-        pub(crate) hello_receiver: Receiver<Hello>,
+zreceiver! {
+    #[derive(Clone)]
+    pub struct HelloReceiver : Receiver<Hello> {
         pub(crate) stop_sender: Sender<()>,
-    }
-}
-
-impl Stream for HelloStream {
-    type Item = Hello;
-
-    #[inline(always)]
-    fn poll_next(
-        self: async_std::pin::Pin<&mut Self>,
-        cx: &mut async_std::task::Context,
-    ) -> async_std::task::Poll<Option<Self::Item>> {
-        self.project().hello_receiver.poll_next(cx)
     }
 }
 
@@ -146,13 +142,18 @@ pub struct Query {
 
 impl Query {
     #[inline(always)]
-    pub async fn reply(&'_ self, msg: Sample) {
-        self.replies_sender.send(msg).await
+    pub fn reply(&'_ self, msg: Sample) {
+        self.replies_sender.send(msg)
     }
 
     #[inline(always)]
     pub fn try_reply(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
         self.replies_sender.try_send(msg)
+    }
+
+    #[inline(always)]
+    pub async fn reply_async(&'_ self, msg: Sample) {
+        self.replies_sender.send_async(msg).await
     }
 }
 
@@ -216,9 +217,9 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        Session::undeclare_publisher(self.session, self.state.id).await
+        Session::undeclare_publisher(self.session, self.state.id)
     }
 }
 
@@ -265,6 +266,11 @@ impl fmt::Debug for SubscriberState {
     }
 }
 
+zreceiver! {
+    #[derive(Clone)]
+    pub struct SampleReceiver : Receiver<Sample> {}
+}
+
 /// A subscriber that provides data through a stream.
 ///
 /// Subscribers are automatically undeclared when dropped.
@@ -272,32 +278,11 @@ pub struct Subscriber<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) alive: bool,
-    pub(crate) receiver: Receiver<Sample>,
+    pub(crate) receiver: SampleReceiver,
 }
 
 impl Subscriber<'_> {
-    /// Get the stream from a [Subscriber](Subscriber).
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    /// use futures::prelude::*;
-    ///
-    /// let session = open(config::peer()).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #    reliability: Reliability::Reliable,
-    /// #    mode: SubMode::Push,
-    /// #    period: None,
-    /// # };
-    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// while let Some(sample) = subscriber.stream().next().await {
-    ///     println!("Received : {:?}", sample);
-    /// }
-    /// # })
-    /// ```
-    #[inline]
-    pub fn stream(&mut self) -> &mut Receiver<Sample> {
+    pub fn receiver(&mut self) -> &mut SampleReceiver {
         &mut self.receiver
     }
 
@@ -305,7 +290,6 @@ impl Subscriber<'_> {
     ///
     /// # Examples
     /// ```
-    /// #![feature(async_closure)]
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
     /// use futures::prelude::*;
@@ -317,14 +301,14 @@ impl Subscriber<'_> {
     /// #     period: None
     /// # };
     /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-    /// async_std::task::spawn(subscriber.stream().clone().for_each(
-    ///     async move |sample| { println!("Received : {:?}", sample); }
+    /// async_std::task::spawn(subscriber.receiver().clone().for_each(
+    ///     move |sample| async move { println!("Received : {:?}", sample); }
     /// ));
     /// subscriber.pull();
     /// # })
     /// ```
-    pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.state.reskey).await
+    pub fn pull(&self) -> ZResolvedFuture<ZResult<()>> {
+        self.session.pull(&self.state.reskey)
     }
 
     /// Undeclare a [Subscriber](Subscriber) previously declared with [declare_subscriber](Session::declare_subscriber).
@@ -348,9 +332,9 @@ impl Subscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_subscriber(self.state.id).await
+        self.session.undeclare_subscriber(self.state.id)
     }
 }
 
@@ -404,8 +388,8 @@ impl CallbackSubscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    pub async fn pull(&self) -> ZResult<()> {
-        self.session.pull(&self.state.reskey).await
+    pub fn pull(&self) -> ZResolvedFuture<ZResult<()>> {
+        self.session.pull(&self.state.reskey)
     }
 
     /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
@@ -430,9 +414,9 @@ impl CallbackSubscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_subscriber(self.state.id).await
+        self.session.undeclare_subscriber(self.state.id)
     }
 }
 
@@ -457,17 +441,27 @@ impl fmt::Debug for CallbackSubscriber<'_> {
     }
 }
 
+zreceiver! {
+    #[derive(Clone)]
+    pub struct ReplyReceiver : Receiver<Reply> {}
+}
+
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) kind: ZInt,
-    pub(crate) q_sender: Sender<Query>,
+    pub(crate) sender: Sender<Query>,
 }
 
 impl fmt::Debug for QueryableState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Queryable{{ id:{}, reskey:{} }}", self.id, self.reskey)
     }
+}
+
+zreceiver! {
+    #[derive(Clone)]
+    pub struct QueryReceiver : Receiver<Query> {}
 }
 
 /// An entity able to reply to queries.
@@ -477,33 +471,12 @@ pub struct Queryable<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<QueryableState>,
     pub(crate) alive: bool,
-    pub(crate) q_receiver: Receiver<Query>,
+    pub(crate) receiver: QueryReceiver,
 }
 
 impl Queryable<'_> {
-    /// Get the stream from a [Queryable](Queryable).
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use zenoh::net::*;
-    /// use zenoh::net::queryable::EVAL;
-    /// use futures::prelude::*;
-    ///
-    /// let session = open(config::peer()).await.unwrap();
-    /// let mut queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
-    /// while let Some(query) = queryable.stream().next().await {
-    ///     query.reply(Sample{
-    ///         res_name: "/resource/name".to_string(),
-    ///         payload: "value".as_bytes().into(),
-    ///         data_info: None,
-    ///     }).await;
-    /// }
-    /// # })
-    /// ```
-    #[inline]
-    pub fn stream(&mut self) -> &mut Receiver<Query> {
-        &mut self.q_receiver
+    pub fn receiver(&mut self) -> &mut QueryReceiver {
+        &mut self.receiver
     }
 
     /// Undeclare a [Queryable](Queryable) previously declared with [declare_queryable](Session::declare_queryable).
@@ -523,9 +496,9 @@ impl Queryable<'_> {
     /// # })
     /// ```
     #[inline]
-    pub async fn undeclare(mut self) -> ZResult<()> {
+    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_queryable(self.state.id).await
+        self.session.undeclare_queryable(self.state.id)
     }
 }
 
@@ -559,8 +532,10 @@ pub struct RepliesSender {
 
 impl RepliesSender {
     #[inline(always)]
-    pub async fn send(&'_ self, msg: Sample) {
-        let _ = self.sender.send((self.kind, msg)).await;
+    pub fn send(&'_ self, msg: Sample) {
+        if let Err(e) = self.sender.send((self.kind, msg)) {
+            log::error!("Error sending reply: {}", e);
+        }
     }
 
     #[inline(always)]
@@ -568,7 +543,7 @@ impl RepliesSender {
         match self.sender.try_send((self.kind, msg)) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(sample)) => Err(TrySendError::Full(sample.1)),
-            Err(TrySendError::Closed(sample)) => Err(TrySendError::Closed(sample.1)),
+            Err(TrySendError::Disconnected(sample)) => Err(TrySendError::Disconnected(sample.1)),
         }
     }
 
@@ -591,4 +566,17 @@ impl RepliesSender {
     pub fn len(&self) -> usize {
         self.sender.len()
     }
+
+    #[inline(always)]
+    pub async fn send_async(&self, msg: Sample) {
+        if let Err(e) = self.sender.send_async((self.kind, msg)).await {
+            log::error!("Error sending reply: {}", e);
+        }
+    }
+
+    // @TODO
+    // #[inline(always)]
+    // pub fn sink(&self) -> flume::r#async::SendSink<'_, Sample> {
+    //     self.sender.sink()
+    // }
 }

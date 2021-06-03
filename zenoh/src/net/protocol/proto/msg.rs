@@ -202,6 +202,7 @@ pub mod zmsg {
             pub const TS: ZInt = 1 << 4; // 0x10
             pub const KIND: ZInt = 1 << 5; // 0x20
             pub const ENC: ZInt = 1 << 6; // 0x40
+            pub const SHM: ZInt = 1 << 7; // 0x80
         }
     }
 
@@ -292,7 +293,7 @@ pub enum Declaration {
     /// +---------------+
     /// ~      RID      ~
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     Resource { rid: ZInt, key: ResKey },
@@ -312,7 +313,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|   PUB   |
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     Publisher { key: ResKey },
@@ -322,7 +323,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  F_PUB  |
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     ForgetPublisher { key: ResKey },
@@ -346,7 +347,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  F_SUB  |
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     ForgetSubscriber { key: ResKey },
@@ -356,7 +357,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X|  QABLE  |
     /// +---------------+
-    /// ~     ResKey    ~ if  K==1 then only numerical id
+    /// ~     ResKey    ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     Queryable { key: ResKey },
@@ -366,7 +367,7 @@ pub enum Declaration {
     /// +-+-+-+-+-+-+-+-+
     /// |K|X|X| F_QABLE |
     /// +---------------+
-    /// ~    ResKey     ~ if  K==1 then only numerical id
+    /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
     /// ```
     ForgetQueryable { key: ResKey },
@@ -394,7 +395,8 @@ pub struct Declare {
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+---------+
-/// ~X|G|F|E|D|C|B|A~ -- encoded as ZInt
+/// ~!|G|F|E|D|C|B|A~ -- encoded as ZInt.
+/// ~!|X|X|X|X|X|X|H~    Bit 7 is reserved for ZInt encoding.
 /// +---------------+
 /// ~   source_id   ~ if A==1
 /// +---------------+
@@ -410,6 +412,8 @@ pub struct Declare {
 /// +---------------+
 /// ~   encoding    ~ if G==1
 /// +---------------+
+///
+/// - if H==1 then the message is a shared memory message.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
@@ -420,6 +424,20 @@ pub struct DataInfo {
     pub timestamp: Option<Timestamp>,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
+    pub is_shm: bool,
+}
+
+impl DataInfo {
+    pub fn has_opts(&self) -> bool {
+        self.source_id.is_some()
+            || self.source_sn.is_some()
+            || self.first_router_id.is_some()
+            || self.first_router_sn.is_some()
+            || self.timestamp.is_some()
+            || self.kind.is_some()
+            || self.encoding.is_some()
+            || self.is_shm
+    }
 }
 
 impl PartialOrd for DataInfo {
@@ -891,13 +909,6 @@ pub enum SessionMode {
     PushPull,
 }
 
-// The Payload of the Frame message
-#[derive(Debug, Clone, PartialEq)]
-pub enum FramePayload {
-    Fragment { buffer: RBuf, is_final: bool },
-    Messages { messages: Vec<ZenohMessage> },
-}
-
 /// # Scout message
 ///
 /// ```text
@@ -1248,6 +1259,34 @@ pub struct Frame {
     pub ch: Channel,
     pub sn: ZInt,
     pub payload: FramePayload,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FramePayload {
+    /// ```text
+    /// The Payload of a fragmented Frame.
+    ///    
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// ~ payload bytes ~
+    /// +---------------+
+    /// ```
+    Fragment { buffer: RBuf, is_final: bool },
+    /// ```text
+    /// The Payload of a batched Frame.
+    ///
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// ~  ZenohMessage ~
+    /// +---------------+
+    /// ~      ...      ~ - Additional complete Zenoh messages.
+    /// +---------------+
+    ///
+    /// NOTE: A batched Frame must contain at least one complete Zenoh message.
+    ///       There is no upper limit to the number of Zenoh messages that can
+    ///       be batched together in the same frame.
+    /// ```
+    Messages { messages: Vec<ZenohMessage> },
 }
 
 // Zenoh messages at zenoh-session level

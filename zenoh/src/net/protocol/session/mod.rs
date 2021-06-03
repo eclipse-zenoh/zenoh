@@ -23,14 +23,13 @@ use super::core::{PeerId, WhatAmI, ZInt};
 use super::io;
 use super::link;
 use super::link::Link;
-use super::orchestrator;
 use super::proto;
 use super::proto::{smsg, ZenohMessage};
 use super::session;
 use async_std::sync::{Arc, Weak};
-use async_trait::async_trait;
 pub use manager::*;
 pub use primitives::*;
+use std::any::Any;
 use std::fmt;
 use transport::*;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -38,53 +37,17 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 /*********************************************************/
 /* Session Callback to be implemented by the Upper Layer */
 /*********************************************************/
-#[async_trait]
 pub trait SessionEventHandler {
-    async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
-    async fn new_link(&self, link: Link);
-    async fn del_link(&self, link: Link);
-    async fn closing(&self);
-    async fn closed(&self);
+    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
+    fn new_link(&self, link: Link);
+    fn del_link(&self, link: Link);
+    fn closing(&self);
+    fn closed(&self);
+    fn as_any(&self) -> &dyn Any;
 }
 
-zenoh_util::dispatcher!(
-SessionEventDispatcher(
-    OrchSession(Arc<orchestrator::OrchSession>),
-    SessionEventHandler(Arc<dyn SessionEventHandler + Send + Sync>),
-) {
-    async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
-    async fn new_link(&self, link: Link);
-    async fn del_link(&self, link: Link);
-    async fn closing(&self);
-    async fn closed(&self);
-});
-
-#[async_trait]
 pub trait SessionHandler {
-    async fn new_session(
-        &self,
-        session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>>;
-}
-
-#[derive(Clone)]
-pub enum SessionDispatcher {
-    SessionOrchestrator(Arc<orchestrator::SessionOrchestrator>),
-    SessionHandler(Arc<dyn SessionHandler + Send + Sync>),
-}
-impl SessionDispatcher {
-    async fn new_session(&self, session: Session) -> ZResult<SessionEventDispatcher> {
-        match self {
-            SessionDispatcher::SessionOrchestrator(this) => this
-                .new_session(session)
-                .await
-                .map(SessionEventDispatcher::OrchSession),
-            SessionDispatcher::SessionHandler(this) => this
-                .new_session(session)
-                .await
-                .map(SessionEventDispatcher::SessionEventHandler),
-        }
-    }
+    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>>;
 }
 
 // Define an empty SessionCallback for the listener session
@@ -97,16 +60,19 @@ impl DummySessionEventHandler {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for DummySessionEventHandler {
-    async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
 
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /*************************************/
@@ -160,23 +126,27 @@ impl Session {
     }
 
     #[inline(always)]
-    pub async fn get_callback(&self) -> ZResult<Option<SessionEventDispatcher>> {
+    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
         let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.get_callback().await)
+        Ok(transport.get_callback())
     }
 
     #[inline(always)]
-    pub async fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        self.schedule(message).await
+    pub fn get_links(&self) -> ZResult<Vec<Link>> {
+        let transport = zweak!(self.0, STR_ERR);
+        Ok(transport.get_links())
     }
 
     #[inline(always)]
-    pub async fn close(&self) -> ZResult<()> {
-        // Return Ok if the session has already been closed
-        match self.0.upgrade() {
-            Some(transport) => transport.close(smsg::close_reason::GENERIC).await,
-            None => Ok(()),
-        }
+    pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
+        let transport = zweak!(self.0, STR_ERR);
+        transport.schedule(message);
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+        self.schedule(message)
     }
 
     #[inline(always)]
@@ -189,18 +159,12 @@ impl Session {
     }
 
     #[inline(always)]
-    pub async fn get_links(&self) -> ZResult<Vec<Link>> {
-        log::trace!("{:?}. Get links", self);
-        let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.get_links().await)
-    }
-
-    #[inline(always)]
-    pub async fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
-        log::trace!("{:?}. Schedule: {:?}", self, message);
-        let transport = zweak!(self.0, STR_ERR);
-        transport.schedule(message).await;
-        Ok(())
+    pub async fn close(&self) -> ZResult<()> {
+        // Return Ok if the session has already been closed
+        match self.0.upgrade() {
+            Some(transport) => transport.close(smsg::close_reason::GENERIC).await,
+            None => Ok(()),
+        }
     }
 }
 

@@ -20,17 +20,18 @@ use super::routing;
 
 use super::protocol::core::{whatami, PeerId};
 use super::protocol::session::{
-    SessionDispatcher, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
+    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use super::routing::router::Router;
 pub use adminspace::AdminSpace;
-use async_std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use async_std::sync::Arc;
 use orchestrator::SessionOrchestrator;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::{zasyncwrite, zerror, zerror2};
+use zenoh_util::{zerror, zerror2, zwrite};
 
 pub struct RuntimeState {
     pub pid: PeerId,
@@ -54,6 +55,9 @@ pub struct Runtime {
 
 impl Runtime {
     pub async fn new(version: u8, config: ConfigProperties, id: Option<&str>) -> ZResult<Runtime> {
+        // Make sure to have have enough threads spawned in the async futures executor
+        zasync_executor_init!();
+
         let pid = if let Some(s) = id {
             // filter-out '-' characters (in case s has UUID format)
             let s = s.replace('-', "");
@@ -94,11 +98,13 @@ impl Runtime {
             version,
             whatami,
             id: pid.clone(),
-            handler: SessionDispatcher::SessionOrchestrator(Arc::new(orchestrator.clone())),
+            handler: Arc::new(orchestrator.clone()),
         };
         let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
 
         let session_manager = SessionManager::new(sm_config, sm_opt_config);
+        orchestrator.init(session_manager);
+
         let peers_autoconnect = config
             .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
             .to_lowercase()
@@ -116,15 +122,13 @@ impl Runtime {
                 .to_lowercase()
                 == ZN_TRUE
         {
-            get_mut_unchecked(&mut router)
-                .init_link_state(
-                    orchestrator.clone(),
-                    peers_autoconnect,
-                    routers_autoconnect_gossip,
-                )
-                .await;
+            get_mut_unchecked(&mut router).init_link_state(
+                orchestrator.clone(),
+                peers_autoconnect,
+                routers_autoconnect_gossip,
+            );
         }
-        match orchestrator.init(session_manager).await {
+        match orchestrator.start().await {
             Ok(()) => Ok(Runtime {
                 state: Arc::new(RwLock::new(RuntimeState {
                     pid,
@@ -136,19 +140,20 @@ impl Runtime {
         }
     }
 
-    pub async fn read(&self) -> RwLockReadGuard<'_, RuntimeState> {
-        zasyncread!(self.state)
+    pub fn read(&self) -> RwLockReadGuard<'_, RuntimeState> {
+        zread!(self.state)
     }
 
-    pub async fn write(&self) -> RwLockWriteGuard<'_, RuntimeState> {
-        zasyncwrite!(self.state)
+    pub fn write(&self) -> RwLockWriteGuard<'_, RuntimeState> {
+        zwrite!(self.state)
     }
 
     pub async fn close(&self) -> ZResult<()> {
-        self.write().await.orchestrator.close().await
+        let mut orchestrator = self.write().orchestrator.clone();
+        orchestrator.close().await
     }
 
-    pub async fn get_pid_str(&self) -> String {
-        self.read().await.pid.to_string()
+    pub fn get_pid_str(&self) -> String {
+        self.read().pid.to_string()
     }
 }

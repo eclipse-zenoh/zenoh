@@ -32,7 +32,7 @@ pub(crate) struct Query {
 }
 
 #[inline]
-async fn send_sourced_queryable_to_net_childs(
+fn send_sourced_queryable_to_net_childs(
     tables: &Tables,
     net: &Network,
     childs: &[NodeIndex],
@@ -45,25 +45,20 @@ async fn send_sourced_queryable_to_net_childs(
             match tables.get_face(&net.graph[*child].pid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
-                        let reskey = Resource::decl_key(res, &mut someface).await;
+                        let reskey = Resource::decl_key(res, &mut someface);
 
                         log::debug!("Send queryable {} on {}", res.name(), someface);
 
-                        someface
-                            .primitives
-                            .decl_queryable(&reskey, routing_context)
-                            .await;
+                        someface.primitives.decl_queryable(&reskey, routing_context);
                     }
                 }
-                None => {
-                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                }
+                None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
             }
         }
     }
 }
 
-async fn propagate_simple_queryable(
+fn propagate_simple_queryable(
     tables: &mut Tables,
     res: &Arc<Resource>,
     src_face: &mut Arc<FaceState>,
@@ -78,13 +73,13 @@ async fn propagate_simple_queryable(
             }
         {
             get_mut_unchecked(dst_face).local_qabls.push(res.clone());
-            let reskey = Resource::decl_key(res, dst_face).await;
-            dst_face.primitives.decl_queryable(&reskey, None).await;
+            let reskey = Resource::decl_key(res, dst_face);
+            dst_face.primitives.decl_queryable(&reskey, None);
         }
     }
 }
 
-async fn propagate_sourced_queryable(
+fn propagate_sourced_queryable(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
@@ -102,10 +97,14 @@ async fn propagate_sourced_queryable(
                     res,
                     src_face,
                     Some(tree_sid.index() as ZInt),
-                )
-                .await;
+                );
             } else {
-                log::trace!("Tree for node {} not yet ready", source);
+                log::trace!(
+                    "Propagating qabl {}: tree for node {} sid:{} not yet ready",
+                    res.name(),
+                    tree_sid.index(),
+                    source
+                );
             }
         }
         None => log::error!(
@@ -116,7 +115,7 @@ async fn propagate_sourced_queryable(
     }
 }
 
-async fn register_router_queryable(
+fn register_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -138,19 +137,19 @@ async fn register_router_queryable(
         }
 
         // Propagate queryable to routers
-        propagate_sourced_queryable(tables, res, Some(face), &router, whatami::ROUTER).await;
+        propagate_sourced_queryable(tables, res, Some(face), &router, whatami::ROUTER);
 
         // Propagate queryable to peers
         if face.whatami != whatami::PEER {
-            register_peer_queryable(tables, face, res, tables.pid.clone()).await
+            register_peer_queryable(tables, face, res, tables.pid.clone())
         }
     }
 
     // Propagate queryable to clients
-    propagate_simple_queryable(tables, res, face).await;
+    propagate_simple_queryable(tables, res, face);
 }
 
-pub async fn declare_router_queryable(
+pub fn declare_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -161,7 +160,7 @@ pub async fn declare_router_queryable(
         Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
-            register_router_queryable(tables, face, &mut res, router).await;
+            register_router_queryable(tables, face, &mut res, router);
 
             compute_matches_query_routes(tables, &mut res);
         }
@@ -169,7 +168,7 @@ pub async fn declare_router_queryable(
     }
 }
 
-async fn register_peer_queryable(
+fn register_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -187,11 +186,11 @@ async fn register_peer_queryable(
         }
 
         // Propagate queryable to peers
-        propagate_sourced_queryable(tables, res, Some(face), &peer, whatami::PEER).await;
+        propagate_sourced_queryable(tables, res, Some(face), &peer, whatami::PEER);
     }
 }
 
-pub async fn declare_peer_queryable(
+pub fn declare_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -202,10 +201,10 @@ pub async fn declare_peer_queryable(
         Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
-            register_peer_queryable(tables, face, &mut res, peer).await;
+            register_peer_queryable(tables, face, &mut res, peer);
 
             if tables.whatami == whatami::ROUTER {
-                register_router_queryable(tables, face, &mut res, tables.pid.clone()).await;
+                register_router_queryable(tables, face, &mut res, tables.pid.clone());
             }
 
             compute_matches_query_routes(tables, &mut res);
@@ -214,7 +213,7 @@ pub async fn declare_peer_queryable(
     }
 }
 
-async fn register_client_queryable(
+fn register_client_queryable(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -243,7 +242,7 @@ async fn register_client_queryable(
     get_mut_unchecked(face).remote_qabls.push(res.clone());
 }
 
-pub async fn declare_client_queryable(
+pub fn declare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -254,16 +253,16 @@ pub async fn declare_client_queryable(
             let mut res = Resource::make_resource(tables, &mut prefix, suffix);
             Resource::match_resource(&tables, &mut res);
 
-            register_client_queryable(tables, face, &mut res).await;
+            register_client_queryable(tables, face, &mut res);
             match tables.whatami {
                 whatami::ROUTER => {
-                    register_router_queryable(tables, face, &mut res, tables.pid.clone()).await;
+                    register_router_queryable(tables, face, &mut res, tables.pid.clone());
                 }
                 whatami::PEER => {
-                    register_peer_queryable(tables, face, &mut res, tables.pid.clone()).await;
+                    register_peer_queryable(tables, face, &mut res, tables.pid.clone());
                 }
                 _ => {
-                    propagate_simple_queryable(tables, &res, face).await;
+                    propagate_simple_queryable(tables, &res, face);
                 }
             }
 
@@ -274,7 +273,7 @@ pub async fn declare_client_queryable(
 }
 
 #[inline]
-async fn send_forget_sourced_queryable_to_net_childs(
+fn send_forget_sourced_queryable_to_net_childs(
     tables: &Tables,
     net: &Network,
     childs: &[NodeIndex],
@@ -287,29 +286,26 @@ async fn send_forget_sourced_queryable_to_net_childs(
             match tables.get_face(&net.graph[*child].pid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
-                        let reskey = Resource::decl_key(res, &mut someface).await;
+                        let reskey = Resource::decl_key(res, &mut someface);
 
                         log::debug!("Send forget queryable {} on {}", res.name(), someface);
 
                         someface
                             .primitives
-                            .forget_queryable(&reskey, routing_context)
-                            .await;
+                            .forget_queryable(&reskey, routing_context);
                     }
                 }
-                None => {
-                    log::trace!("Unable to find face for pid {}", net.graph[*child].pid)
-                }
+                None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
             }
         }
     }
 }
 
-async fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
+fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>) {
     for face in tables.faces.values_mut() {
         if face.local_qabls.contains(res) {
             let reskey = Resource::get_best_key(res, "", face.id);
-            face.primitives.forget_queryable(&reskey, None).await;
+            face.primitives.forget_queryable(&reskey, None);
 
             get_mut_unchecked(face)
                 .local_qabls
@@ -318,7 +314,7 @@ async fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Re
     }
 }
 
-async fn propagate_forget_sourced_queryable(
+fn propagate_forget_sourced_queryable(
     tables: &mut Tables,
     res: &mut Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
@@ -328,29 +324,33 @@ async fn propagate_forget_sourced_queryable(
     let net = tables.get_net(net_type).unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
-            send_forget_sourced_queryable_to_net_childs(
-                tables,
-                net,
-                &net.trees[tree_sid.index()].childs,
-                res,
-                src_face,
-                Some(tree_sid.index() as ZInt),
-            )
-            .await;
+            if net.trees.len() > tree_sid.index() {
+                send_forget_sourced_queryable_to_net_childs(
+                    tables,
+                    net,
+                    &net.trees[tree_sid.index()].childs,
+                    res,
+                    src_face,
+                    Some(tree_sid.index() as ZInt),
+                );
+            } else {
+                log::trace!(
+                    "Propagating forget qabl {}: tree for node {} sid:{} not yet ready",
+                    res.name(),
+                    tree_sid.index(),
+                    source
+                );
+            }
         }
         None => log::error!(
-            "Error propagating qabl {}: cannot get index of {}!",
+            "Error propagating forget qabl {}: cannot get index of {}!",
             res.name(),
             source
         ),
     }
 }
 
-async fn unregister_router_queryable(
-    tables: &mut Tables,
-    res: &mut Arc<Resource>,
-    router: &PeerId,
-) {
+fn unregister_router_queryable(tables: &mut Tables, res: &mut Arc<Resource>, router: &PeerId) {
     log::debug!(
         "Unregister router queryable {} (router: {})",
         res.name(),
@@ -364,24 +364,24 @@ async fn unregister_router_queryable(
     if res.context().router_qabls.is_empty() {
         tables.router_qabls.retain(|qabl| !Arc::ptr_eq(qabl, &res));
 
-        undeclare_peer_queryable(tables, None, res, &tables.pid.clone()).await;
-        propagate_forget_simple_queryable(tables, res).await;
+        undeclare_peer_queryable(tables, None, res, &tables.pid.clone());
+        propagate_forget_simple_queryable(tables, res);
     }
 }
 
-async fn undeclare_router_queryable(
+fn undeclare_router_queryable(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     router: &PeerId,
 ) {
     if res.context().router_qabls.contains(router) {
-        unregister_router_queryable(tables, res, router).await;
-        propagate_forget_sourced_queryable(tables, res, face, router, whatami::ROUTER).await;
+        unregister_router_queryable(tables, res, router);
+        propagate_forget_sourced_queryable(tables, res, face, router, whatami::ROUTER);
     }
 }
 
-pub async fn forget_router_queryable(
+pub fn forget_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -391,7 +391,7 @@ pub async fn forget_router_queryable(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
-                undeclare_router_queryable(tables, Some(face), &mut res, router).await;
+                undeclare_router_queryable(tables, Some(face), &mut res, router);
                 Resource::clean(&mut res)
             }
             None => log::error!("Undeclare unknown router queryable!"),
@@ -400,7 +400,7 @@ pub async fn forget_router_queryable(
     }
 }
 
-async fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer: &PeerId) {
+fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>, peer: &PeerId) {
     log::debug!("Unregister peer queryable {} (peer: {})", res.name(), peer);
     get_mut_unchecked(res)
         .context_mut()
@@ -412,19 +412,19 @@ async fn unregister_peer_queryable(tables: &mut Tables, res: &mut Arc<Resource>,
     }
 }
 
-async fn undeclare_peer_queryable(
+fn undeclare_peer_queryable(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     peer: &PeerId,
 ) {
     if res.context().peer_qabls.contains(&peer) {
-        unregister_peer_queryable(tables, res, peer).await;
-        propagate_forget_sourced_queryable(tables, res, face, peer, whatami::PEER).await;
+        unregister_peer_queryable(tables, res, peer);
+        propagate_forget_sourced_queryable(tables, res, face, peer, whatami::PEER);
     }
 }
 
-pub async fn forget_peer_queryable(
+pub fn forget_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -434,18 +434,19 @@ pub async fn forget_peer_queryable(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
-                undeclare_peer_queryable(tables, Some(face), &mut res, peer).await;
+                undeclare_peer_queryable(tables, Some(face), &mut res, peer);
 
-                if tables.whatami == whatami::ROUTER
-                    && !res.session_ctxs.values().any(|ctx| ctx.qabl)
-                    && !tables.peer_qabls.iter().any(|res| {
+                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
+                let pqabls = {
+                    tables.peer_qabls.iter().any(|res| {
                         res.context()
                             .peer_qabls
                             .iter()
                             .any(|peer| peer != &tables.pid)
                     })
-                {
-                    undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone()).await;
+                };
+                if tables.whatami == whatami::ROUTER && !ctxs && !pqabls {
+                    undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
                 }
 
                 Resource::clean(&mut res)
@@ -456,7 +457,7 @@ pub async fn forget_peer_queryable(
     }
 }
 
-pub(crate) async fn undeclare_client_queryable(
+pub(crate) fn undeclare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -471,32 +472,36 @@ pub(crate) async fn undeclare_client_queryable(
 
     match tables.whatami {
         whatami::ROUTER => {
-            if !res.session_ctxs.values().any(|ctx| ctx.qabl)
-                && !tables.peer_qabls.iter().any(|res| {
+            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
+            let pqabls = {
+                tables.peer_qabls.iter().any(|res| {
                     res.context()
                         .peer_qabls
                         .iter()
                         .any(|peer| *peer != tables.pid)
                 })
-            {
-                undeclare_router_queryable(tables, None, res, &tables.pid.clone()).await;
+            };
+            if !ctxs && !pqabls {
+                undeclare_router_queryable(tables, None, res, &tables.pid.clone());
             }
         }
         whatami::PEER => {
-            if !res.session_ctxs.values().any(|ctx| ctx.qabl)
-                && !tables.peer_qabls.iter().any(|res| {
+            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
+            let pqabls = {
+                tables.peer_qabls.iter().any(|res| {
                     res.context()
                         .peer_qabls
                         .iter()
                         .any(|peer| *peer != tables.pid)
                 })
-            {
-                undeclare_peer_queryable(tables, None, res, &tables.pid.clone()).await;
+            };
+            if !ctxs && !pqabls {
+                undeclare_peer_queryable(tables, None, res, &tables.pid.clone());
             }
         }
         _ => {
             if !res.session_ctxs.values().any(|ctx| ctx.qabl) {
-                propagate_forget_simple_queryable(tables, res).await;
+                propagate_forget_simple_queryable(tables, res);
             }
         }
     }
@@ -512,24 +517,28 @@ pub(crate) async fn undeclare_client_queryable(
             }
         })
         .collect();
-    if client_qabls.len() == 1
-        && !tables.router_qabls.iter().any(|res| {
+
+    let rqabls = {
+        tables.router_qabls.iter().any(|res| {
             res.context()
                 .peer_qabls
                 .iter()
                 .any(|peer| *peer != tables.pid)
         })
-        && !tables.peer_qabls.iter().any(|res| {
+    };
+    let pqabls = {
+        tables.peer_qabls.iter().any(|res| {
             res.context()
                 .peer_qabls
                 .iter()
                 .any(|peer| *peer != tables.pid)
         })
-    {
+    };
+    if client_qabls.len() == 1 && !rqabls && !pqabls {
         let face = &mut client_qabls[0];
         if face.local_qabls.contains(&res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
-            face.primitives.forget_queryable(&reskey, None).await;
+            face.primitives.forget_queryable(&reskey, None);
 
             get_mut_unchecked(face)
                 .local_qabls
@@ -540,7 +549,7 @@ pub(crate) async fn undeclare_client_queryable(
     Resource::clean(res)
 }
 
-pub async fn forget_client_queryable(
+pub fn forget_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     prefixid: ZInt,
@@ -549,7 +558,7 @@ pub async fn forget_client_queryable(
     match tables.get_mapping(&face, &prefixid) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
-                undeclare_client_queryable(tables, face, &mut res).await;
+                undeclare_client_queryable(tables, face, &mut res);
             }
             None => log::error!("Undeclare unknown queryable!"),
         },
@@ -557,12 +566,12 @@ pub async fn forget_client_queryable(
     }
 }
 
-pub(crate) async fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     if face.whatami == whatami::CLIENT && tables.whatami != whatami::CLIENT {
         for qabl in &tables.router_qabls {
             get_mut_unchecked(face).local_qabls.push(qabl.clone());
-            let reskey = Resource::decl_key(&qabl, face).await;
-            face.primitives.decl_queryable(&reskey, None).await;
+            let reskey = Resource::decl_key(&qabl, face);
+            face.primitives.decl_queryable(&reskey, None);
         }
     }
     if tables.whatami == whatami::CLIENT {
@@ -573,17 +582,13 @@ pub(crate) async fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceSta
             .collect::<Vec<Arc<FaceState>>>()
         {
             for qabl in &face.remote_qabls {
-                propagate_simple_queryable(tables, &qabl, &mut face.clone()).await;
+                propagate_simple_queryable(tables, &qabl, &mut face.clone());
             }
         }
     }
 }
 
-pub(crate) async fn queries_remove_node(
-    tables: &mut Tables,
-    node: &PeerId,
-    net_type: whatami::Type,
-) {
+pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId, net_type: whatami::Type) {
     match net_type {
         whatami::ROUTER => {
             for mut res in tables
@@ -593,7 +598,7 @@ pub(crate) async fn queries_remove_node(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                unregister_router_queryable(tables, &mut res, node).await;
+                unregister_router_queryable(tables, &mut res, node);
                 Resource::clean(&mut res)
             }
         }
@@ -605,18 +610,19 @@ pub(crate) async fn queries_remove_node(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                unregister_peer_queryable(tables, &mut res, node).await;
+                unregister_peer_queryable(tables, &mut res, node);
 
-                if tables.whatami == whatami::ROUTER
-                    && !res.session_ctxs.values().any(|ctx| ctx.qabl)
-                    && !tables.peer_qabls.iter().any(|res| {
+                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
+                let pqabls = {
+                    tables.peer_qabls.iter().any(|res| {
                         res.context()
                             .peer_qabls
                             .iter()
                             .any(|peer| peer != &tables.pid)
                     })
-                {
-                    undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone()).await;
+                };
+                if tables.whatami == whatami::ROUTER && !ctxs && !pqabls {
+                    undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
                 }
 
                 Resource::clean(&mut res)
@@ -626,7 +632,7 @@ pub(crate) async fn queries_remove_node(
     }
 }
 
-pub(crate) async fn queries_tree_change(
+pub(crate) fn queries_tree_change(
     tables: &mut Tables,
     new_childs: &[Vec<NodeIndex>],
     net_type: whatami::Type,
@@ -658,8 +664,7 @@ pub(crate) async fn queries_tree_change(
                                 res,
                                 None,
                                 Some(tree_sid as ZInt),
-                            )
-                            .await;
+                            );
                         }
                     }
                 }
@@ -690,7 +695,15 @@ fn insert_faces_for_qabls(
                             if let Some(face) = tables.get_face(&net.graph[direction].pid) {
                                 route.entry(face.id).or_insert_with(|| {
                                     let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                                    (face.clone(), reskey, Some(source as u64))
+                                    (
+                                        face.clone(),
+                                        reskey,
+                                        if source != 0 {
+                                            Some(source as u64)
+                                        } else {
+                                            None
+                                        },
+                                    )
                                 });
                             }
                         }
@@ -699,7 +712,7 @@ fn insert_faces_for_qabls(
             }
         }
     } else {
-        log::trace!("Tree for node {} not yet ready", source);
+        log::trace!("Tree for node sid:{} not yet ready", source);
     }
 }
 
@@ -861,7 +874,7 @@ pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Re
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn route_query(
+pub fn route_query(
     tables: &mut Tables,
     face: &Arc<FaceState>,
     rid: ZInt,
@@ -887,7 +900,7 @@ pub async fn route_query(
                     whatami::ROUTER => {
                         let routers_net = tables.routers_net.as_ref().unwrap();
                         let local_context =
-                            routers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                            routers_net.get_local_context(routing_context, face.link_id);
                         Resource::get_resource(prefix, suffix)
                             .map(|res| res.routers_query_route(local_context))
                             .flatten()
@@ -904,7 +917,7 @@ pub async fn route_query(
                     whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context =
-                            peers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                            peers_net.get_local_context(routing_context, face.link_id);
                         Resource::get_resource(prefix, suffix)
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
@@ -929,7 +942,7 @@ pub async fn route_query(
                     whatami::ROUTER | whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context =
-                            peers_net.get_local_context(routing_context.unwrap(), face.link_id);
+                            peers_net.get_local_context(routing_context, face.link_id);
                         Resource::get_resource(prefix, suffix)
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
@@ -962,7 +975,7 @@ pub async fn route_query(
                 || (route.len() == 1 && route.iter().next().unwrap().1 .0.id == face.id)
             {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
-                face.primitives.clone().send_reply_final(qid).await
+                face.primitives.clone().send_reply_final(qid)
             } else {
                 let query = Arc::new(Query {
                     src_face: face.clone(),
@@ -979,30 +992,27 @@ pub async fn route_query(
 
                         log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
-                        outface
-                            .primitives
-                            .send_query(
-                                &reskey,
-                                predicate,
-                                qid,
-                                target.clone(),
-                                consolidation.clone(),
-                                *context,
-                            )
-                            .await
+                        outface.primitives.send_query(
+                            &reskey,
+                            predicate,
+                            qid,
+                            target.clone(),
+                            consolidation.clone(),
+                            *context,
+                        )
                     }
                 }
             }
         }
         None => {
             log::error!("Route query with unknown rid {}! Send final reply.", rid);
-            face.primitives.clone().send_reply_final(qid).await
+            face.primitives.clone().send_reply_final(qid)
         }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn route_send_reply_data(
+pub(crate) fn route_send_reply_data(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     qid: ZInt,
@@ -1014,29 +1024,20 @@ pub(crate) async fn route_send_reply_data(
 ) {
     match face.pending_queries.get(&qid) {
         Some(query) => {
-            query
-                .src_face
-                .primitives
-                .clone()
-                .send_reply_data(
-                    query.src_qid,
-                    source_kind,
-                    replier_id,
-                    reskey,
-                    info,
-                    payload,
-                )
-                .await;
+            query.src_face.primitives.clone().send_reply_data(
+                query.src_qid,
+                source_kind,
+                replier_id,
+                reskey,
+                info,
+                payload,
+            );
         }
         None => log::error!("Route reply for unknown query!"),
     }
 }
 
-pub(crate) async fn route_send_reply_final(
-    _tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    qid: ZInt,
-) {
+pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt) {
     match face.pending_queries.get(&qid) {
         Some(query) => {
             log::debug!(
@@ -1051,8 +1052,7 @@ pub(crate) async fn route_send_reply_final(
                     .src_face
                     .primitives
                     .clone()
-                    .send_reply_final(query.src_qid)
-                    .await;
+                    .send_reply_final(query.src_qid);
             }
             get_mut_unchecked(face).pending_queries.remove(&qid);
         }
@@ -1060,7 +1060,7 @@ pub(crate) async fn route_send_reply_final(
     }
 }
 
-pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(crate) fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
     for query in face.pending_queries.values() {
         log::debug!(
             "Finalize reply {}:{} for closing {}",
@@ -1074,8 +1074,7 @@ pub(crate) async fn finalize_pending_queries(_tables: &mut Tables, face: &mut Ar
                 .src_face
                 .primitives
                 .clone()
-                .send_reply_final(query.src_qid)
-                .await;
+                .send_reply_final(query.src_qid);
         }
     }
     get_mut_unchecked(face).pending_queries.clear();

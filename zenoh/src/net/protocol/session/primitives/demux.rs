@@ -28,46 +28,35 @@ impl DeMux {
         DeMux { primitives }
     }
 
-    pub async fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+    pub fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         match msg.body {
             ZenohBody::Declare(Declare { declarations, .. }) => {
                 for declaration in declarations {
                     match declaration {
                         Declaration::Resource { rid, key } => {
-                            self.primitives.decl_resource(rid, &key).await;
+                            self.primitives.decl_resource(rid, &key);
                         }
                         Declaration::Publisher { key } => {
-                            self.primitives
-                                .decl_publisher(&key, msg.routing_context)
-                                .await;
+                            self.primitives.decl_publisher(&key, msg.routing_context);
                         }
                         Declaration::Subscriber { key, info } => {
                             self.primitives
-                                .decl_subscriber(&key, &info, msg.routing_context)
-                                .await;
+                                .decl_subscriber(&key, &info, msg.routing_context);
                         }
                         Declaration::Queryable { key } => {
-                            self.primitives
-                                .decl_queryable(&key, msg.routing_context)
-                                .await;
+                            self.primitives.decl_queryable(&key, msg.routing_context);
                         }
                         Declaration::ForgetResource { rid } => {
-                            self.primitives.forget_resource(rid).await;
+                            self.primitives.forget_resource(rid);
                         }
                         Declaration::ForgetPublisher { key } => {
-                            self.primitives
-                                .forget_publisher(&key, msg.routing_context)
-                                .await;
+                            self.primitives.forget_publisher(&key, msg.routing_context);
                         }
                         Declaration::ForgetSubscriber { key } => {
-                            self.primitives
-                                .forget_subscriber(&key, msg.routing_context)
-                                .await;
+                            self.primitives.forget_subscriber(&key, msg.routing_context);
                         }
                         Declaration::ForgetQueryable { key } => {
-                            self.primitives
-                                .forget_queryable(&key, msg.routing_context)
-                                .await;
+                            self.primitives.forget_queryable(&key, msg.routing_context);
                         }
                     }
                 }
@@ -79,29 +68,25 @@ impl DeMux {
                 payload,
             }) => match msg.reply_context {
                 None => {
-                    self.primitives
-                        .send_data(
-                            &key,
-                            payload,
-                            msg.reliability,
-                            msg.congestion_control,
-                            data_info,
-                            msg.routing_context,
-                        )
-                        .await;
+                    self.primitives.send_data(
+                        &key,
+                        payload,
+                        msg.reliability,
+                        msg.congestion_control,
+                        data_info,
+                        msg.routing_context,
+                    );
                 }
                 Some(rep) => match rep.replier_id {
                     Some(replier_id) => {
-                        self.primitives
-                            .send_reply_data(
-                                rep.qid,
-                                rep.source_kind,
-                                replier_id,
-                                key,
-                                data_info,
-                                payload,
-                            )
-                            .await
+                        self.primitives.send_reply_data(
+                            rep.qid,
+                            rep.source_kind,
+                            replier_id,
+                            key,
+                            data_info,
+                            payload,
+                        );
                     }
                     None => {
                         return zerror!(ZErrorKind::Other {
@@ -114,7 +99,7 @@ impl DeMux {
             ZenohBody::Unit { .. } => {
                 if let Some(rep) = msg.reply_context {
                     if rep.is_final {
-                        self.primitives.send_reply_final(rep.qid).await
+                        self.primitives.send_reply_final(rep.qid);
                     }
                 }
             }
@@ -127,16 +112,14 @@ impl DeMux {
                 consolidation,
                 ..
             }) => {
-                self.primitives
-                    .send_query(
-                        &key,
-                        &predicate,
-                        qid,
-                        target.unwrap_or_default(),
-                        consolidation,
-                        msg.routing_context,
-                    )
-                    .await;
+                self.primitives.send_query(
+                    &key,
+                    &predicate,
+                    qid,
+                    target.unwrap_or_default(),
+                    consolidation,
+                    msg.routing_context,
+                );
             }
 
             ZenohBody::Pull(Pull {
@@ -145,14 +128,12 @@ impl DeMux {
                 max_samples,
                 ..
             }) => {
-                self.primitives
-                    .send_pull(
-                        zmsg::has_flag(msg.header, zmsg::flag::F),
-                        &key,
-                        pull_id,
-                        &max_samples,
-                    )
-                    .await;
+                self.primitives.send_pull(
+                    zmsg::has_flag(msg.header, zmsg::flag::F),
+                    &key,
+                    pull_id,
+                    &max_samples,
+                );
             }
 
             ZenohBody::LinkStateList(LinkStateList { .. }) => {}
@@ -161,13 +142,13 @@ impl DeMux {
         Ok(())
     }
 
-    pub async fn new_link(&self, _link: Link) {}
+    pub fn new_link(&self, _link: Link) {}
 
-    pub async fn del_link(&self, _link: Link) {}
+    pub fn del_link(&self, _link: Link) {}
 
-    pub async fn closing(&self) {
-        self.primitives.send_close().await;
+    pub fn closing(&self) {
+        self.primitives.send_close();
     }
 
-    pub async fn closed(&self) {}
+    pub fn closed(&self) {}
 }

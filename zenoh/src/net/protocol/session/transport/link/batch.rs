@@ -15,7 +15,8 @@ use super::core::{Channel, ZInt};
 use super::io::WBuf;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::SeqNumGenerator;
-use async_std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex};
+use zenoh_util::zlock;
 
 type LengthType = u16;
 const LENGTH_BYTES: [u8; 2] = [0u8, 0u8];
@@ -143,7 +144,7 @@ impl SerializationBatch {
 
     /// Get a `&[u8]` to access the internal memory buffer, usually for transmitting it on the network.
     #[inline(always)]
-    pub(super) fn get_buffer(&self) -> &[u8] {
+    pub(super) fn as_bytes(&self) -> &[u8] {
         self.buffer.get_first_slice(..)
     }
 
@@ -158,7 +159,7 @@ impl SerializationBatch {
     ///
     /// * `to_write` - The amount of bytes that still need to be fragmented.
     ///
-    pub(super) async fn serialize_zenoh_fragment(
+    pub(super) fn serialize_zenoh_fragment(
         &mut self,
         ch: Channel,
         sn: ZInt,
@@ -203,7 +204,7 @@ impl SerializationBatch {
     /// # Arguments
     /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
     ///
-    pub(super) async fn serialize_zenoh_message(&mut self, message: &ZenohMessage) -> bool {
+    pub(super) fn serialize_zenoh_message(&mut self, message: &ZenohMessage) -> bool {
         // Keep track of eventual new frame and new sn
         let mut new_frame = None;
 
@@ -241,9 +242,9 @@ impl SerializationBatch {
             // Acquire the lock on the sn generator
             let is_reliable = message.is_reliable();
             let mut guard = if is_reliable {
-                zasynclock!(self.sn_reliable)
+                zlock!(self.sn_reliable)
             } else {
-                zasynclock!(self.sn_best_effort)
+                zlock!(self.sn_best_effort)
             };
             // Get a new sequence number
             let sn = guard.get();
@@ -283,7 +284,7 @@ impl SerializationBatch {
     /// # Arguments
     /// * `message` - The [`SessionMessage`][SessionMessage] to serialize.
     ///
-    pub(super) async fn serialize_session_message(&mut self, message: &SessionMessage) -> bool {
+    pub(super) fn serialize_session_message(&mut self, message: &SessionMessage) -> bool {
         // Mark the write operation
         self.buffer.mark();
         let res = self.buffer.write_session_message(&message);
@@ -309,19 +310,15 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
-    use async_std::task;
-    use std::convert::TryFrom;
-
-    use super::*;
-
     use super::super::core::{CongestionControl, Reliability, ResKey};
     use super::super::io::{RBuf, WBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
-    use super::super::session::defaults::SESSION_SEQ_NUM_RESOLUTION;
+    use super::super::session::defaults::ZNS_SEQ_NUM_RESOLUTION;
+    use super::*;
+    use std::convert::TryFrom;
+    use zenoh_util::zlock;
 
-    use zenoh_util::zasynclock;
-
-    async fn serialize_no_fragmentation(batch_size: usize, payload_size: usize) {
+    fn serialize_no_fragmentation(batch_size: usize, payload_size: usize) {
         for is_streamed in [false, true].iter() {
             print!(
                 "Streamed: {}\t\tBatch: {}\t\tPload: {}",
@@ -329,14 +326,10 @@ mod tests {
             );
 
             // Create the serialization batch
-            let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
-                0,
-                *SESSION_SEQ_NUM_RESOLUTION,
-            )));
-            let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-                0,
-                *SESSION_SEQ_NUM_RESOLUTION,
-            )));
+            let sn_reliable =
+                Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
+            let sn_best_effort =
+                Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
             let mut batch = SerializationBatch::new(
                 batch_size,
                 *is_streamed,
@@ -358,7 +351,7 @@ mod tests {
                     let msg = SessionMessage::make_keep_alive(pid, attachment);
 
                     // Serialize the SessionMessage
-                    let res = batch.serialize_session_message(&msg).await;
+                    let res = batch.serialize_session_message(&msg);
                     if !res {
                         assert!(!zmsgs_in.is_empty());
                         break;
@@ -402,7 +395,7 @@ mod tests {
                     attachment,
                 );
                 // Serialize the ZenohMessage
-                let res = batch.serialize_zenoh_message(&msg).await;
+                let res = batch.serialize_zenoh_message(&msg);
                 if !res {
                     batch.write_len();
                     assert!(!zmsgs_in.is_empty());
@@ -440,17 +433,13 @@ mod tests {
         }
     }
 
-    async fn serialize_fragmentation(batch_size: usize, payload_size: usize) {
+    fn serialize_fragmentation(batch_size: usize, payload_size: usize) {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
-            let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
-                0,
-                *SESSION_SEQ_NUM_RESOLUTION,
-            )));
-            let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-                0,
-                *SESSION_SEQ_NUM_RESOLUTION,
-            )));
+            let sn_reliable =
+                Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
+            let sn_best_effort =
+                Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
 
             for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
                 for congestion_control in [CongestionControl::Drop, CongestionControl::Block].iter()
@@ -476,9 +465,9 @@ mod tests {
                     // Acquire the lock on the sn generators to ensure that we have
                     // sequential sequence numbers for all the fragments
                     let mut guard = if msg_in.is_reliable() {
-                        zasynclock!(sn_reliable)
+                        zlock!(sn_reliable)
                     } else {
-                        zasynclock!(sn_best_effort)
+                        zlock!(sn_best_effort)
                     };
 
                     // Serialize the message
@@ -507,9 +496,8 @@ mod tests {
                         } else {
                             Channel::BestEffort
                         };
-                        let written = batch
-                            .serialize_zenoh_fragment(ch, guard.get(), &mut wbuf, to_write)
-                            .await;
+                        let written =
+                            batch.serialize_zenoh_fragment(ch, guard.get(), &mut wbuf, to_write);
                         assert_ne!(written, 0);
                         // Keep serializing
                         to_write -= written;
@@ -556,28 +544,25 @@ mod tests {
 
     #[test]
     fn serialization_batch() {
-        task::block_on(async {
-            let batch_size: Vec<usize> =
-                vec![128, 512, 1_024, 4_096, 8_192, 16_384, 32_768, 65_535];
-            let mut payload_size: Vec<usize> = Vec::new();
-            let mut size: usize = 8;
-            for _ in 0..16 {
-                if ZInt::try_from(size).is_err() {
-                    break;
-                }
-                payload_size.push(size);
-                size *= 2;
+        let batch_size: Vec<usize> = vec![128, 512, 1_024, 4_096, 8_192, 16_384, 32_768, 65_535];
+        let mut payload_size: Vec<usize> = Vec::new();
+        let mut size: usize = 8;
+        for _ in 0..16 {
+            if ZInt::try_from(size).is_err() {
+                break;
             }
+            payload_size.push(size);
+            size *= 2;
+        }
 
-            for bs in batch_size.iter() {
-                for ps in payload_size.iter() {
-                    if ps < bs {
-                        serialize_no_fragmentation(*bs, *ps).await;
-                    } else {
-                        serialize_fragmentation(*bs, *ps).await;
-                    }
+        for bs in batch_size.iter() {
+            for ps in payload_size.iter() {
+                if ps < bs {
+                    serialize_no_fragmentation(*bs, *ps);
+                } else {
+                    serialize_fragmentation(*bs, *ps);
                 }
             }
-        });
+        }
     }
 }

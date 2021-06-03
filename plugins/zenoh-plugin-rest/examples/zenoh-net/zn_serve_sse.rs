@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#![feature(async_closure)]
 
 use clap::{App, Arg};
 use futures::prelude::*;
@@ -47,15 +46,20 @@ async fn main() {
     println!("Declaring Queryable on {}", path);
     let mut queryable = session.declare_queryable(&path.into(), EVAL).await.unwrap();
 
-    async_std::task::spawn(queryable.stream().clone().for_each(async move |request| {
-        request
-            .reply(Sample {
-                res_name: path.to_string(),
-                payload: HTML.as_bytes().into(),
-                data_info: None,
-            })
-            .await;
-    }));
+    async_std::task::spawn(
+        queryable
+            .receiver()
+            .clone()
+            .for_each(move |request| async move {
+                request
+                    .reply_async(Sample {
+                        res_name: path.to_string(),
+                        payload: HTML.as_bytes().into(),
+                        data_info: None,
+                    })
+                    .await;
+            }),
+    );
 
     let event_path = [path, "/event"].concat();
 

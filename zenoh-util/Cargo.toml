@@ -32,7 +32,9 @@ maintenance = { status = "actively-developed" }
 async-std = { version = "=1.9.0", features = ["unstable"] }
 async-trait = "0.1.42"
 event-listener = "2.5.1"
+flume = "0.10.5"
 futures = "0.3.12"
+futures-lite = "1.11.3"
 aes-soft = "0.6.4"
 lazy_static = "1.4.0"
 rand = "0.8.3"

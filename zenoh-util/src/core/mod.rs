@@ -11,9 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod dispatcher;
-pub use dispatcher::*;
-
 pub mod macros;
 pub use macros::*;
 

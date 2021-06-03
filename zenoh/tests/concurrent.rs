@@ -14,7 +14,7 @@
 use async_std::prelude::*;
 use async_std::sync::{Arc, Barrier};
 use async_std::task;
-use async_trait::async_trait;
+use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -23,11 +23,11 @@ use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
-
 use zenoh_util::core::ZResult;
+use zenoh_util::zasync_executor_init;
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: usize = 1_024;
@@ -51,9 +51,8 @@ impl SHPeer {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHPeer {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -72,17 +71,20 @@ impl MHPeer {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for MHPeer {
-    async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
@@ -101,15 +103,13 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_id01.clone(),
-        handler: SessionDispatcher::SessionHandler(peer_sh01.clone()),
+        handler: peer_sh01.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: Some(lease),
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -124,15 +124,13 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         version: 0,
         whatami: whatami::PEER,
         id: peer_id02.clone(),
-        handler: SessionDispatcher::SessionHandler(peer_sh02.clone()),
+        handler: peer_sh02.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: Some(lease),
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -157,12 +155,12 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         // Add the locators on the first peer
         for loc in c_loc01.iter() {
             let res = peer01_manager.add_listener(&loc).await;
-            println!("[Session Peer 01] => Adding locator {:?}: {:?}", loc, res);
+            println!("[Session Peer 01a] => Adding locator {:?}: {:?}", loc, res);
             assert!(res.is_ok());
         }
-        let locs = peer01_manager.get_listeners().await;
+        let locs = peer01_manager.get_listeners();
         println!(
-            "[Session Peer 01] => Getting locators: {:?} {:?}",
+            "[Session Peer 01b] => Getting locators: {:?} {:?}",
             c_loc01, locs
         );
         assert_eq!(c_loc01.len(), locs.len());
@@ -174,13 +172,13 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             let c_p01m = peer01_manager.clone();
             let c_loc = loc.clone();
             task::spawn(async move {
-                println!("[Session Peer 01] => Waiting for opening session");
+                println!("[Session Peer 01c] => Waiting for opening session");
                 // Syncrhonize before opening the sessions
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
                 let res = c_p01m.open_session(&c_loc).await;
                 println!(
-                    "[Session Peer 01] => Opening session with {:?}: {:?}",
+                    "[Session Peer 01d] => Opening session with {:?}: {:?}",
                     c_loc, res
                 );
                 assert!(res.is_ok());
@@ -192,12 +190,13 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
         // Syncrhonize after opening the sessions
         c_barod.wait().timeout(TIMEOUT).await.unwrap();
+        println!("[Session Peer 01e] => Waiting... OK");
 
         // Verify that the session has been correctly open
-        assert_eq!(peer01_manager.get_sessions().await.len(), 1);
-        let s02 = peer01_manager.get_session(&c_pid02).await.unwrap();
+        assert_eq!(peer01_manager.get_sessions().len(), 1);
+        let s02 = peer01_manager.get_session(&c_pid02).unwrap();
         assert_eq!(
-            s02.get_links().await.unwrap().len(),
+            s02.get_links().unwrap().len(),
             c_loc01.len() + c_loc02.len()
         );
 
@@ -223,9 +222,13 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
-        for _ in 0..MSG_COUNT {
-            s02.schedule(message.clone()).await.unwrap();
+        println!("[Session Peer 01f] => Waiting... OK");
+
+        for i in 0..MSG_COUNT {
+            println!("[Session Peer 01g] Scheduling message {}", i);
+            s02.schedule(message.clone()).unwrap();
         }
+        println!("[Session Peer 01g] => Scheduling OK");
 
         // Wait for the messages to arrive to the other side
         let count = async {
@@ -233,13 +236,15 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
                 task::sleep(SLEEP).await;
             }
         };
-        let res = count.timeout(TIMEOUT).await;
-        assert!(res.is_ok());
+        count.timeout(TIMEOUT).await.unwrap();
 
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
 
-        let _ = s02.close().await;
+        println!("[Session Peer 01h] => Closing {:?}...", s02);
+        let res = s02.close().timeout(TIMEOUT).await.unwrap();
+        println!("[Session Peer 01l] => Closing {:?}: {:?}", s02, res);
+        assert!(res.is_ok());
     });
 
     // Peer02
@@ -253,12 +258,12 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         // Add the locators on the first peer
         for loc in c_loc02.iter() {
             let res = peer02_manager.add_listener(&loc).await;
-            println!("[Session Peer 02] => Adding locator {:?}: {:?}", loc, res);
+            println!("[Session Peer 02a] => Adding locator {:?}: {:?}", loc, res);
             assert!(res.is_ok());
         }
-        let locs = peer02_manager.get_listeners().await;
+        let locs = peer02_manager.get_listeners();
         println!(
-            "[Session Peer 02] => Getting locators: {:?} {:?}",
+            "[Session Peer 02b] => Getting locators: {:?} {:?}",
             c_loc02, locs
         );
         assert_eq!(c_loc02.len(), locs.len());
@@ -270,13 +275,13 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             let c_p02m = peer02_manager.clone();
             let c_loc = loc.clone();
             task::spawn(async move {
-                println!("[Session Peer 02] => Waiting for opening session");
+                println!("[Session Peer 02c] => Waiting for opening session");
                 // Syncrhonize before opening the sessions
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
                 let res = c_p02m.open_session(&c_loc).await;
                 println!(
-                    "[Session Peer 02] => Opening session with {:?}: {:?}",
+                    "[Session Peer 02d] => Opening session with {:?}: {:?}",
                     c_loc, res
                 );
                 assert!(res.is_ok());
@@ -291,13 +296,13 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
         // Verify that the session has been correctly open
         println!(
-            "[Session Peer 02] => Sessions: {:?}",
-            peer02_manager.get_sessions().await
+            "[Session Peer 02e] => Sessions: {:?}",
+            peer02_manager.get_sessions()
         );
-        assert_eq!(peer02_manager.get_sessions().await.len(), 1);
-        let s01 = peer02_manager.get_session(&c_pid01).await.unwrap();
+        assert_eq!(peer02_manager.get_sessions().len(), 1);
+        let s01 = peer02_manager.get_session(&c_pid01).unwrap();
         assert_eq!(
-            s01.get_links().await.unwrap().len(),
+            s01.get_links().unwrap().len(),
             c_loc01.len() + c_loc02.len()
         );
 
@@ -323,9 +328,13 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
-        for _ in 0..MSG_COUNT {
-            s01.schedule(message.clone()).await.unwrap();
+        println!("[Session Peer 02f] => Waiting... OK");
+
+        for i in 0..MSG_COUNT {
+            println!("[Session Peer 02g] Scheduling message {}", i);
+            s01.schedule(message.clone()).unwrap();
         }
+        println!("[Session Peer 02g] => Scheduling OK");
 
         // Wait for the messages to arrive to the other side
         let count = async {
@@ -339,10 +348,15 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
 
-        let _ = s01.close().await;
+        println!("[Session Peer 02h] => Closing {:?}...", s01);
+        let res = s01.close().timeout(TIMEOUT).await.unwrap();
+        println!("[Session Peer 02l] => Closing {:?}: {:?}", s01, res);
+        assert!(res.is_ok());
     });
 
+    println!("[Session Current 01] => Starting...");
     peer01_task.join(peer02_task).await;
+    println!("[Session Current 02] => ...Stopped");
 
     task::sleep(SLEEP).await;
 }
@@ -350,6 +364,10 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_concurrent() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let locator01: Vec<Locator> = vec![
         "tcp/127.0.0.1:7447".parse().unwrap(),
         "tcp/127.0.0.1:7448".parse().unwrap(),

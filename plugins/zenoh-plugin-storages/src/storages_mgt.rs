@@ -14,8 +14,9 @@
 use async_std::channel::{bounded, Sender};
 use async_std::sync::{Arc, RwLock};
 use async_std::task;
-use futures::prelude::*;
 use futures::select;
+use futures::stream::StreamExt;
+use futures::FutureExt;
 use log::{debug, error, trace, warn};
 use zenoh::net::{
     queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode, Target,
@@ -122,10 +123,10 @@ pub(crate) async fn start_storage(
                 // on get request on storage_admin
                 get = storage_admin.next().fuse() => {
                     let get = get.unwrap();
-                    get.reply(admin_path.clone(), storage.get_admin_status().await).await;
+                    get.reply_async(admin_path.clone(), storage.get_admin_status().await).await;
                 },
                 // on sample for path_expr
-                sample = storage_sub.stream().next().fuse() => {
+                sample = storage_sub.receiver().next().fuse() => {
                     // Call incoming data interceptor (if any)
                     let sample = if let Some(ref interceptor) = in_interceptor {
                         interceptor.read().await.on_sample(sample.unwrap()).await
@@ -138,7 +139,7 @@ pub(crate) async fn start_storage(
                     }
                 },
                 // on query on path_expr
-                query = storage_queryable.stream().next().fuse() => {
+                query = storage_queryable.receiver().next().fuse() => {
                     let q = query.unwrap();
                     // wrap zenoh::net::Query in zenoh_backend_traits::Query
                     // with outgoing interceptor

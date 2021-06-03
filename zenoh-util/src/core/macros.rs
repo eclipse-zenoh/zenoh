@@ -12,9 +12,46 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-// This macro performs an async lock on Mutex<T>
+// This macro performs a standard lock on Mutex<T>
 // For performance reasons, it first performs a try_lock() and,
-// if it fails, it falls back on lock().await
+// if it fails, it falls back on lock().unwrap()
+#[macro_export]
+macro_rules! zlock {
+    ($var:expr) => {
+        match $var.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => $var.lock().unwrap(),
+        }
+    };
+}
+
+// This macro performs a standard read on RwLock<T>
+// For performance reasons, it first performs a try_read() and,
+// if it fails, it falls back on read()
+#[macro_export]
+macro_rules! zread {
+    ($var:expr) => {
+        match $var.try_read() {
+            Ok(guard) => guard,
+            Err(_) => $var.read().unwrap(),
+        }
+    };
+}
+
+// This macro performs a standard write on RwLock<T>
+// For performance reasons, it first performs a try_write() and,
+// if it fails, it falls back on write()
+#[macro_export]
+macro_rules! zwrite {
+    ($var:expr) => {
+        match $var.try_write() {
+            Ok(guard) => guard,
+            Err(_) => $var.write().unwrap(),
+        }
+    };
+}
+
+// This macro performs an async lock on Mutex<T>
 #[macro_export]
 macro_rules! zasynclock {
     ($var:expr) => {
@@ -202,5 +239,26 @@ macro_rules! to_zint {
                 ZInt::MAX
             )
         })
+    };
+}
+
+// This macro allows to spawn the right amount of threads in the
+// async_std executor
+#[macro_export]
+macro_rules! zasync_executor_init {
+    () => {
+        use async_global_executor;
+
+        // Zenoh requires at least 4 threads to run
+        const ASYNC_STD_THREAD_COUNT_MIN: usize = 4;
+
+        let count = async_global_executor::spawn_more_threads(ASYNC_STD_THREAD_COUNT_MIN)
+            .await
+            .unwrap();
+
+        log::trace!(
+            "Spawned {} additional threads in the async global executor",
+            count
+        );
     };
 }

@@ -89,3 +89,41 @@ impl<T> Default for Mvar<T> {
         Self::new()
     }
 }
+
+mod tests {
+    #[test]
+    fn mvar() {
+        use super::Mvar;
+        use async_std::prelude::*;
+        use async_std::sync::Arc;
+        use async_std::task;
+        use std::time::Duration;
+
+        const TIMEOUT: Duration = Duration::from_secs(60);
+
+        let count: usize = 1_000;
+        let mvar: Arc<Mvar<usize>> = Arc::new(Mvar::new());
+
+        let c_mvar = mvar.clone();
+        let ch = task::spawn(async move {
+            for _ in 0..count {
+                let n = c_mvar.take().await;
+                print!("-{} ", n);
+            }
+        });
+
+        let c_mvar = mvar.clone();
+        let ph = task::spawn(async move {
+            for i in 0..count {
+                c_mvar.put(i).await;
+                print!("+{} ", i);
+            }
+        });
+
+        task::block_on(async {
+            ph.timeout(TIMEOUT).await.unwrap();
+            ch.timeout(TIMEOUT).await.unwrap();
+        });
+        println!();
+    }
+}

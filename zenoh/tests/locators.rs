@@ -13,16 +13,17 @@
 //
 use async_std::sync::Arc;
 use async_std::task;
-use async_trait::async_trait;
+use std::any::Any;
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::zasync_executor_init;
 
 const SLEEP: Duration = Duration::from_millis(100);
 const RUNS: usize = 10;
@@ -36,9 +37,8 @@ impl SH {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SH {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -56,15 +56,18 @@ impl SC {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for SC {
-    async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>>) {
@@ -73,15 +76,13 @@ async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>
         version: 0,
         whatami: whatami::PEER,
         id: PeerId::new(1, [0u8; PeerId::MAX_SIZE]),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SH::new())),
+        handler: Arc::new(SH::new()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -116,6 +117,10 @@ async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn locator_tcp() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Define the locators
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:9447".parse().unwrap(),
@@ -128,6 +133,10 @@ fn locator_tcp() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn locator_udp() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Define the locators
     let locators: Vec<Locator> = vec![
         "udp/127.0.0.1:9447".parse().unwrap(),
@@ -140,6 +149,10 @@ fn locator_udp() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn locator_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Remove the files if they still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
@@ -163,6 +176,10 @@ fn locator_unix() {
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn locator_tcp_udp() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Define the locators
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:9449".parse().unwrap(),
@@ -180,6 +197,10 @@ fn locator_tcp_udp() {
 ))]
 #[test]
 fn locator_tcp_udp_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
     // Define the locators
@@ -203,6 +224,10 @@ fn locator_tcp_udp_unix() {
 ))]
 #[test]
 fn locator_tcp_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
     // Define the locators
@@ -225,6 +250,10 @@ fn locator_tcp_unix() {
 ))]
 #[test]
 fn locator_udp_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Remove the file if it still exists
     let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
     // Define the locators
@@ -243,6 +272,10 @@ fn locator_udp_unix() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn locator_tls() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use zenoh::net::protocol::link::tls::{NoClientAuth, ServerConfig};
 
     // Define the locators
@@ -254,6 +287,10 @@ fn locator_tls() {
 #[cfg(feature = "transport_quic")]
 #[test]
 fn locator_quic() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use zenoh::net::protocol::link::quic::ServerConfigBuilder;
 
     // Define the locators

@@ -13,7 +13,7 @@
 //
 use async_std::sync::Arc;
 use async_std::task;
-use async_trait::async_trait;
+use std::any::Any;
 use std::collections::HashMap;
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, PeerId};
@@ -23,10 +23,11 @@ use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::authenticator::SharedMemoryAuthenticator;
 use zenoh::net::protocol::session::authenticator::UserPasswordAuthenticator;
 use zenoh::net::protocol::session::{
-    DummySessionEventHandler, Session, SessionDispatcher, SessionEventHandler, SessionHandler,
-    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
+    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
+    SessionManagerConfig, SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::zasync_executor_init;
 
 const SLEEP: Duration = Duration::from_millis(100);
 
@@ -39,9 +40,8 @@ impl SHRouterAuthenticator {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHRouterAuthenticator {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -57,15 +57,18 @@ impl MHRouterAuthenticator {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for MHRouterAuthenticator {
-    async fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // Session Handler for the client
@@ -77,9 +80,8 @@ impl SHClientAuthenticator {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHClientAuthenticator {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -112,7 +114,7 @@ async fn authenticator_user_password(
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
+        handler: router_handler.clone(),
     };
 
     let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
@@ -125,8 +127,6 @@ async fn authenticator_user_password(
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_router.clone().into()]),
@@ -140,7 +140,7 @@ async fn authenticator_user_password(
         version: 0,
         whatami: whatami::CLIENT,
         id: client01_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
+        handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client01 = UserPasswordAuthenticator::new(
@@ -152,8 +152,6 @@ async fn authenticator_user_password(
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client01.into()]),
@@ -167,7 +165,7 @@ async fn authenticator_user_password(
         version: 0,
         whatami: whatami::CLIENT,
         id: client02_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
+        handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client02 = UserPasswordAuthenticator::new(
@@ -179,8 +177,6 @@ async fn authenticator_user_password(
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client02.into()]),
@@ -194,7 +190,7 @@ async fn authenticator_user_password(
         version: 0,
         whatami: whatami::CLIENT,
         id: client03_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
+        handler: Arc::new(SHClientAuthenticator::new()),
     };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client03 =
@@ -204,8 +200,6 @@ async fn authenticator_user_password(
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client03.into()]),
@@ -221,7 +215,7 @@ async fn authenticator_user_password(
     println!("Session Authenticator UserPassword [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Authenticator UserPassword [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = router_manager.get_listeners();
     println!("Session Authenticator UserPassword [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
@@ -317,7 +311,7 @@ async fn authenticator_shared_memory(
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
+        handler: router_handler.clone(),
     };
 
     let peer_authenticator_router = SharedMemoryAuthenticator::new();
@@ -326,8 +320,6 @@ async fn authenticator_shared_memory(
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_router.into()]),
@@ -341,7 +333,7 @@ async fn authenticator_shared_memory(
         version: 0,
         whatami: whatami::CLIENT,
         id: client_id.clone(),
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClientAuthenticator::new())),
+        handler: Arc::new(SHClientAuthenticator::new()),
     };
     let peer_authenticator_client = SharedMemoryAuthenticator::new();
     let opt_config = SessionManagerOptionalConfig {
@@ -349,8 +341,6 @@ async fn authenticator_shared_memory(
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: Some(vec![peer_authenticator_client.into()]),
@@ -366,7 +356,7 @@ async fn authenticator_shared_memory(
     println!("Session Authenticator SharedMemory [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Session Authenticator SharedMemory [1a2]");
-    let locators = router_manager.get_listeners().await;
+    let locators = router_manager.get_listeners();
     println!("Session Authenticator SharedMemory 1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
@@ -401,6 +391,10 @@ async fn authenticator_shared_memory(
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn authenticator_tcp() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let locator: Locator = "tcp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(locator.clone(), None).await;
@@ -412,6 +406,10 @@ fn authenticator_tcp() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn authenticator_udp() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let locator: Locator = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(locator.clone(), None).await;
@@ -423,6 +421,10 @@ fn authenticator_udp() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn authenticator_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
     let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-10.sock"
         .parse()
@@ -439,6 +441,10 @@ fn authenticator_unix() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn authenticator_tls() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use std::io::Cursor;
     use zenoh::net::protocol::link::tls::{
         internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
@@ -545,6 +551,10 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 #[cfg(feature = "transport_quic")]
 #[test]
 fn authenticator_quic() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use zenoh::net::protocol::link::quic::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,

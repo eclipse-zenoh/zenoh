@@ -60,13 +60,19 @@ impl fmt::Debug for Slice {
 }
 
 #[derive(Clone)]
+struct WBufMark {
+    slices: Vec<Slice>,
+    buf_idx: usize,
+}
+
+#[derive(Clone)]
 pub struct WBuf {
     slices: Vec<Slice>,
     buf: Vec<u8>,
     contiguous: bool,
     capacity: usize,
-    copy_pos: (usize, usize),  // (index in slices, index in the slice)
-    mark: (Vec<Slice>, usize), // (backup of slices, len of buf)
+    copy_pos: (usize, usize), // (index in slices, index in the slice)
+    mark: WBufMark,
 }
 
 impl WBuf {
@@ -74,7 +80,10 @@ impl WBuf {
         let buf = Vec::with_capacity(capacity);
         let slices = [Slice::Internal(0, None)].to_vec();
         WBuf {
-            mark: (slices.clone(), 0),
+            mark: WBufMark {
+                slices: slices.clone(),
+                buf_idx: 0,
+            },
             slices,
             buf,
             contiguous,
@@ -113,7 +122,8 @@ impl WBuf {
         self.slices.clear();
         self.slices.push(Slice::Internal(0, None));
         self.copy_pos = (0, 0);
-        self.mark = (self.slices.clone(), 0);
+        self.mark.slices.clear();
+        self.mark.buf_idx = 0;
     }
 
     pub fn as_arcslices(&self) -> Vec<ArcSlice> {
@@ -273,14 +283,17 @@ impl WBuf {
 
     #[inline]
     pub fn mark(&mut self) {
-        self.mark = (self.slices.clone(), self.buf.len());
+        self.mark.slices.clear();
+        self.mark.slices.extend_from_slice(self.slices.as_slice());
+        self.mark.buf_idx = self.buf.len();
     }
 
     #[inline]
     pub fn revert(&mut self) {
         // restaure slices and truncate buf to saved len
-        self.slices = self.mark.0.clone();
-        self.buf.truncate(self.mark.1);
+        self.slices.clear();
+        self.slices.extend_from_slice(self.mark.slices.as_slice());
+        self.buf.truncate(self.mark.buf_idx);
     }
 
     #[inline]
@@ -369,10 +382,10 @@ impl io::Write for WBuf {
         Ok(nwritten)
     }
 
-    #[inline]
-    fn is_write_vectored(&self) -> bool {
-        true
-    }
+    //#[inline]
+    //fn is_write_vectored(&self) -> bool {
+    //    true
+    //}
 
     #[inline]
     fn flush(&mut self) -> io::Result<()> {

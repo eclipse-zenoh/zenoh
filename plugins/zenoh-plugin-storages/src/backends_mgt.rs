@@ -87,7 +87,7 @@ pub(crate) async fn start_backend(
                 // on get request on backend_admin
                 get = backend_admin.next().fuse() => {
                     let get = get.unwrap();
-                    get.reply(admin_path.clone(), backend.get_admin_status().await).await;
+                    get.reply_async(admin_path.clone(), backend.get_admin_status().await).await;
                 },
 
                 // on change for storages_admin

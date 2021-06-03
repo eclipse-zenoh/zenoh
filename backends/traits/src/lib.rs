@@ -246,7 +246,7 @@ impl Query {
             sample
         };
         // Send reply
-        self.q.reply(sample).await
+        self.q.reply_async(sample).await
     }
 }
 

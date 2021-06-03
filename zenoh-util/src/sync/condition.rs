@@ -11,13 +11,16 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::MutexGuard;
-use event_listener::Event;
+use async_std::sync::MutexGuard as AysncMutexGuard;
+use event_listener::{Event, EventListener};
+use std::sync::MutexGuard;
 
+pub type ConditionWaiter = EventListener;
 /// This is a Condition Variable similar to that provided by POSIX.
 /// As for POSIX condition variables, this assumes that a mutex is
 /// properly used to coordinate behaviour. In other terms there should
-/// not be race condition on [notify](Condition::notify).
+/// not be race condition on [notify_one](Condition::notify_one) or
+/// [notify_all](Condition::notify_all).
 ///
 pub struct Condition {
     event: Event,
@@ -41,10 +44,17 @@ impl Condition {
 
     /// Waits for the condition to be notified
     #[inline]
-    pub async fn wait<T>(&self, guard: MutexGuard<'_, T>) {
+    pub async fn wait<T>(&self, guard: AysncMutexGuard<'_, T>) {
         let listener = self.event.listen();
         drop(guard);
         listener.await;
+    }
+
+    #[inline]
+    pub fn waiter<T>(&self, guard: MutexGuard<'_, T>) -> ConditionWaiter {
+        let listener = self.event.listen();
+        drop(guard);
+        listener
     }
 
     /// Notifies one pending listener

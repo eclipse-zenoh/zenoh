@@ -459,6 +459,7 @@ impl RBuf {
         } else {
             None
         };
+        let is_shm = zmsg::has_option(options, zmsg::data::info::SHM);
 
         Some(DataInfo {
             source_id,
@@ -468,6 +469,7 @@ impl RBuf {
             timestamp,
             kind,
             encoding,
+            is_shm,
         })
     }
 

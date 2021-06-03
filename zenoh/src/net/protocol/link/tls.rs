@@ -12,16 +12,16 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_rustls::{rustls::internal::pemfile, TlsAcceptor, TlsConnector, TlsStream};
-use async_std::channel::{bounded, Receiver, Sender};
 use async_std::fs;
 use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Barrier, Mutex, RwLock};
+use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
+use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
@@ -30,10 +30,13 @@ use std::fmt;
 use std::io::Cursor;
 use std::net::Shutdown;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
-use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
+use zenoh_util::sync::Signal;
+use zenoh_util::{zerror, zerror2, zread, zwrite};
 
 // Default MTU (TLS PDU) in bytes.
 // NOTE: Since TLS is a byte-stream oriented transport, theoretically it has
@@ -319,8 +322,8 @@ pub struct LinkTls {
     // The destination socket address of this link (address used on the local host)
     dst_addr: SocketAddr,
     // Make sure there are no concurrent read or writes
-    write_mtx: Mutex<()>,
-    read_mtx: Mutex<()>,
+    write_mtx: AsyncMutex<()>,
+    read_mtx: AsyncMutex<()>,
 }
 
 unsafe impl Send for LinkTls {}
@@ -359,8 +362,8 @@ impl LinkTls {
             inner: UnsafeCell::new(socket),
             src_addr,
             dst_addr,
-            write_mtx: Mutex::new(()),
-            read_mtx: Mutex::new(()),
+            write_mtx: AsyncMutex::new(()),
+            read_mtx: AsyncMutex::new(()),
         }
     }
 
@@ -371,8 +374,11 @@ impl LinkTls {
     fn get_sock_mut(&self) -> &mut TlsStream<TcpStream> {
         unsafe { &mut *self.inner.get() }
     }
+}
 
-    pub(crate) async fn close(&self) -> ZResult<()> {
+#[async_trait]
+impl LinkTrait for LinkTls {
+    async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
         let _guard = zasynclock!(self.write_mtx);
@@ -390,7 +396,7 @@ impl LinkTls {
         })
     }
 
-    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write(buffer).await.map_err(|e| {
             log::trace!("Write error on TLS link {}: {}", self, e);
@@ -400,7 +406,7 @@ impl LinkTls {
         })
     }
 
-    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write_all(buffer).await.map_err(|e| {
             log::trace!("Write error on TLS link {}: {}", self, e);
@@ -410,7 +416,7 @@ impl LinkTls {
         })
     }
 
-    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read(buffer).await.map_err(|e| {
             log::trace!("Read error on TLS link {}: {}", self, e);
@@ -420,7 +426,7 @@ impl LinkTls {
         })
     }
 
-    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
             log::trace!("Read error on TLS link {}: {}", self, e);
@@ -431,27 +437,27 @@ impl LinkTls {
     }
 
     #[inline(always)]
-    pub(crate) fn get_src(&self) -> Locator {
+    fn get_src(&self) -> Locator {
         Locator::Tls(LocatorTls::SocketAddr(self.src_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_dst(&self) -> Locator {
+    fn get_dst(&self) -> Locator {
         Locator::Tls(LocatorTls::SocketAddr(self.dst_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> usize {
         *TLS_DEFAULT_MTU
     }
 
     #[inline(always)]
-    pub(crate) fn is_reliable(&self) -> bool {
+    fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline(always)]
-    pub(crate) fn is_streamed(&self) -> bool {
+    fn is_streamed(&self) -> bool {
         true
     }
 }
@@ -484,40 +490,35 @@ impl fmt::Debug for LinkTls {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerTls {
-    socket: TcpListener,
-    acceptor: TlsAcceptor,
-    sender: Sender<()>,
-    receiver: Receiver<()>,
-    barrier: Arc<Barrier>,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerTls {
-    fn new(socket: TcpListener, acceptor: TlsAcceptor) -> ListenerTls {
-        // Create the channel necessary to break the accept loop
-        let (sender, receiver) = bounded::<()>(1);
-        // Create the barrier necessary to detect the termination of the accept loop
-        let barrier = Arc::new(Barrier::new(2));
-        // Update the list of active listeners on the manager
+    fn new(
+        active: Arc<AtomicBool>,
+        signal: Signal,
+        handle: JoinHandle<ZResult<()>>,
+    ) -> ListenerTls {
         ListenerTls {
-            socket,
-            acceptor,
-            sender,
-            receiver,
-            barrier,
+            active,
+            signal,
+            handle,
         }
     }
 }
 
 pub struct LinkManagerTls {
     manager: SessionManager,
-    listener: Arc<RwLock<HashMap<SocketAddr, Arc<ListenerTls>>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerTls>>>,
 }
 
 impl LinkManagerTls {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
-            listener: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -568,7 +569,7 @@ impl LinkManagerTrait for LinkManagerTls {
 
         let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
 
-        Ok(Link::Tls(link))
+        Ok(Link(link))
     }
 
     async fn new_listener(
@@ -608,20 +609,25 @@ impl LinkManagerTrait for LinkManagerTls {
 
         // Initialize the TlsAcceptor
         let acceptor = TlsAcceptor::from(config.clone());
-        let listener = Arc::new(ListenerTls::new(socket, acceptor));
-        // Update the list of active listeners on the manager
-        zasyncwrite!(self.listener).insert(local_addr, listener.clone());
+        let active = Arc::new(AtomicBool::new(true));
+        let signal = Signal::new();
 
         // Spawn the accept loop for the listener
-        let c_listeners = self.listener.clone();
-        let c_addr = local_addr;
+        let c_active = active.clone();
+        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
-        task::spawn(async move {
+        let c_listeners = self.listeners.clone();
+        let c_addr = local_addr;
+        let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(listener, c_manager).await;
-            // Delete the listener from the manager
-            zasyncwrite!(c_listeners).remove(&c_addr);
+            let res = accept_task(socket, acceptor, c_active, c_signal, c_manager).await;
+            zwrite!(c_listeners).remove(&c_addr);
+            res
         });
+
+        let listener = ListenerTls::new(active, signal, handle);
+        // Update the list of active listeners on the manager
+        zwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(Locator::Tls(LocatorTls::SocketAddr(local_addr)))
     }
@@ -630,37 +636,31 @@ impl LinkManagerTrait for LinkManagerTls {
         let addr = get_tls_addr(locator).await?;
 
         // Stop the listener
-        match zasyncwrite!(self.listener).remove(&addr) {
-            Some(listener) => {
-                // Send the stop signal
-                let res = listener.sender.send(()).await;
-                if res.is_ok() {
-                    // Wait for the accept loop to be stopped
-                    listener.barrier.wait().await;
-                }
-                Ok(())
-            }
-            None => {
-                let e = format!(
-                    "Can not delete the TLS listener because it has not been found: {}",
-                    addr
-                );
-                log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink { descr: e })
-            }
-        }
+        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+            let e = format!(
+                "Can not delete the TLS listener because it has not been found: {}",
+                addr
+            );
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        // Send the stop signal
+        listener.active.store(false, Ordering::Release);
+        listener.signal.trigger();
+        listener.handle.await
     }
 
-    async fn get_listeners(&self) -> Vec<Locator> {
-        zasyncread!(self.listener)
+    fn get_listeners(&self) -> Vec<Locator> {
+        zread!(self.listeners)
             .keys()
             .map(|x| Locator::Tls(LocatorTls::SocketAddr(*x)))
             .collect()
     }
 
-    async fn get_locators(&self) -> Vec<Locator> {
+    fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
-        for addr in zasyncread!(self.listener).keys() {
+        for addr in zread!(self.listeners).keys() {
             if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
@@ -683,70 +683,75 @@ impl LinkManagerTrait for LinkManagerTls {
     }
 }
 
-async fn accept_task(listener: Arc<ListenerTls>, manager: SessionManager) {
-    // The accept future
-    let accept_loop = async {
-        log::trace!(
-            "Ready to accept TLS connections on: {:?}",
-            listener.socket.local_addr()
-        );
-        loop {
-            // Wait for incoming connections
-            let tcp_stream = match listener.socket.accept().await {
-                Ok((stream, _)) => stream,
-                Err(e) => {
-                    log::warn!(
-                        "{}. Hint: you might want to increase the system open file limit",
-                        e
-                    );
-                    // Throttle the accept loop upon an error
-                    // NOTE: This might be due to various factors. However, the most common case is that
-                    //       the process has reached the maximum number of open files in the system. On
-                    //       Linux systems this limit can be changed by using the "ulimit" command line
-                    //       tool. In case of systemd-based systems, this can be changed by using the
-                    //       "sysctl" command line tool.
-                    task::sleep(Duration::from_micros(*TLS_ACCEPT_THROTTLE_TIME)).await;
-                    continue;
-                }
-            };
-            // Get the source and destination TLS addresses
-            let src_addr = match tcp_stream.local_addr() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    let e = format!("Can not accept TLS connection: {}", e);
-                    log::warn!("{}", e);
-                    continue;
-                }
-            };
-            let dst_addr = match tcp_stream.peer_addr() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    let e = format!("Can not accept TLS connection: {}", e);
-                    log::warn!("{}", e);
-                    continue;
-                }
-            };
+async fn accept_task(
+    socket: TcpListener,
+    acceptor: TlsAcceptor,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    manager: SessionManager,
+) -> ZResult<()> {
+    enum Action {
+        Accept((TcpStream, SocketAddr)),
+        Stop,
+    }
 
-            // Accept the TLS connection
-            let tls_stream = match listener.acceptor.accept(tcp_stream).await {
-                Ok(stream) => TlsStream::Server(stream),
-                Err(e) => {
-                    let e = format!("Can not accept TLS connection: {}", e);
-                    log::warn!("{}", e);
-                    continue;
-                }
-            };
+    async fn accept(socket: &TcpListener) -> ZResult<Action> {
+        let res = socket.accept().await.map_err(|e| {
+            zerror2!(ZErrorKind::IoError {
+                descr: e.to_string()
+            })
+        })?;
+        Ok(Action::Accept(res))
+    }
 
-            log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
-            // Create the new link object
-            let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
+    async fn stop(signal: Signal) -> ZResult<Action> {
+        signal.wait().await;
+        Ok(Action::Stop)
+    }
 
-            // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::Tls(link), None).await;
-        }
-    };
+    let src_addr = socket.local_addr().map_err(|e| {
+        let e = format!("Can not accept TLS connections: {}", e);
+        log::warn!("{}", e);
+        zerror2!(ZErrorKind::IoError { descr: e })
+    })?;
 
-    let stop = listener.receiver.recv();
-    let _ = accept_loop.race(stop).await;
-    listener.barrier.wait().await;
+    log::trace!("Ready to accept TLS connections on: {:?}", src_addr);
+    while active.load(Ordering::Acquire) {
+        // Wait for incoming connections
+        let (tcp_stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
+            Ok(action) => match action {
+                Action::Accept((tcp_stream, dst_addr)) => (tcp_stream, dst_addr),
+                Action::Stop => break,
+            },
+            Err(e) => {
+                log::warn!("{}. Hint: increase the system open file limit.", e);
+                // Throttle the accept loop upon an error
+                // NOTE: This might be due to various factors. However, the most common case is that
+                //       the process has reached the maximum number of open files in the system. On
+                //       Linux systems this limit can be changed by using the "ulimit" command line
+                //       tool. In case of systemd-based systems, this can be changed by using the
+                //       "sysctl" command line tool.
+                task::sleep(Duration::from_micros(*TLS_ACCEPT_THROTTLE_TIME)).await;
+                continue;
+            }
+        };
+        // Accept the TLS connection
+        let tls_stream = match acceptor.accept(tcp_stream).await {
+            Ok(stream) => TlsStream::Server(stream),
+            Err(e) => {
+                let e = format!("Can not accept TLS connection: {}", e);
+                log::warn!("{}", e);
+                continue;
+            }
+        };
+
+        log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
+        // Create the new link object
+        let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
+
+        // Communicate the new link to the initial session manager
+        manager.handle_new_link(Link(link), None).await;
+    }
+
+    Ok(())
 }

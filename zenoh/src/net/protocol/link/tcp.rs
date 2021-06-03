@@ -12,21 +12,23 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
-use async_std::channel::{bounded, Receiver, Sender};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Barrier, RwLock};
 use async_std::task;
+use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zasyncread, zasyncwrite, zerror, zerror2};
+use zenoh_util::sync::Signal;
+use zenoh_util::{zerror, zerror2, zread, zwrite};
 
 // Default MTU (TCP PDU) in bytes.
 // NOTE: Since TCP is a byte-stream oriented transport, theoretically it has
@@ -157,77 +159,74 @@ impl LinkTcp {
             dst_addr,
         }
     }
+}
 
-    pub(crate) async fn close(&self) -> ZResult<()> {
+#[async_trait]
+impl LinkTrait for LinkTcp {
+    async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TCP link: {}", self);
         // Close the underlying TCP socket
-        let res = self.socket.shutdown(Shutdown::Both);
-        log::trace!("TCP link shutdown {}: {:?}", self, res);
-        res.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string(),
-            })
+        self.socket.shutdown(Shutdown::Both).map_err(|e| {
+            let e = format!("TCP link shutdown {}: {:?}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
-    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         (&self.socket).write(buffer).await.map_err(|e| {
-            log::trace!("Write error on TCP link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            let e = format!("Write error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
-    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         (&self.socket).write_all(buffer).await.map_err(|e| {
-            log::trace!("Write error on TCP link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            let e = format!("Write error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
-    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         (&self.socket).read(buffer).await.map_err(|e| {
-            log::trace!("Read error on TCP link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            let e = format!("Read error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
-    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         (&self.socket).read_exact(buffer).await.map_err(|e| {
-            log::trace!("Read error on TCP link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            let e = format!("Read error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
         })
     }
 
     #[inline(always)]
-    pub(crate) fn get_src(&self) -> Locator {
+    fn get_src(&self) -> Locator {
         Locator::Tcp(LocatorTcp::SocketAddr(self.src_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_dst(&self) -> Locator {
+    fn get_dst(&self) -> Locator {
         Locator::Tcp(LocatorTcp::SocketAddr(self.dst_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> usize {
         *TCP_DEFAULT_MTU
     }
 
     #[inline(always)]
-    pub(crate) fn is_reliable(&self) -> bool {
+    fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline(always)]
-    pub(crate) fn is_streamed(&self) -> bool {
+    fn is_streamed(&self) -> bool {
         true
     }
 }
@@ -259,38 +258,35 @@ impl fmt::Debug for LinkTcp {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerTcp {
-    socket: TcpListener,
-    sender: Sender<()>,
-    receiver: Receiver<()>,
-    barrier: Arc<Barrier>,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    handle: JoinHandle<ZResult<()>>,
 }
 
 impl ListenerTcp {
-    fn new(socket: TcpListener) -> ListenerTcp {
-        // Create the channel necessary to break the accept loop
-        let (sender, receiver) = bounded::<()>(1);
-        // Create the barrier necessary to detect the termination of the accept loop
-        let barrier = Arc::new(Barrier::new(2));
-        // Update the list of active listeners on the manager
+    fn new(
+        active: Arc<AtomicBool>,
+        signal: Signal,
+        handle: JoinHandle<ZResult<()>>,
+    ) -> ListenerTcp {
         ListenerTcp {
-            socket,
-            sender,
-            receiver,
-            barrier,
+            active,
+            signal,
+            handle,
         }
     }
 }
 
 pub struct LinkManagerTcp {
     manager: SessionManager,
-    listener: Arc<RwLock<HashMap<SocketAddr, Arc<ListenerTcp>>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerTcp>>>,
 }
 
 impl LinkManagerTcp {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
-            listener: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -317,7 +313,7 @@ impl LinkManagerTrait for LinkManagerTcp {
 
         let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
 
-        Ok(Link::Tcp(link))
+        Ok(Link(link))
     }
 
     async fn new_listener(
@@ -337,20 +333,26 @@ impl LinkManagerTrait for LinkManagerTcp {
             let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
-        let listener = Arc::new(ListenerTcp::new(socket));
-        // Update the list of active listeners on the manager
-        zasyncwrite!(self.listener).insert(local_addr, listener.clone());
 
         // Spawn the accept loop for the listener
-        let c_listeners = self.listener.clone();
-        let c_addr = local_addr;
+        let active = Arc::new(AtomicBool::new(true));
+        let signal = Signal::new();
+
+        let c_active = active.clone();
+        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
-        task::spawn(async move {
+        let c_listeners = self.listeners.clone();
+        let c_addr = local_addr;
+        let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_task(listener, c_manager).await;
-            // Delete the listener from the manager
-            zasyncwrite!(c_listeners).remove(&c_addr);
+            let res = accept_task(socket, c_active, c_signal, c_manager).await;
+            zwrite!(c_listeners).remove(&c_addr);
+            res
         });
+
+        let listener = ListenerTcp::new(active, signal, handle);
+        // Update the list of active listeners on the manager
+        zwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(Locator::Tcp(LocatorTcp::SocketAddr(local_addr)))
     }
@@ -359,37 +361,31 @@ impl LinkManagerTrait for LinkManagerTcp {
         let addr = get_tcp_addr(locator).await?;
 
         // Stop the listener
-        match zasyncwrite!(self.listener).remove(&addr) {
-            Some(listener) => {
-                // Send the stop signal
-                let res = listener.sender.send(()).await;
-                if res.is_ok() {
-                    // Wait for the accept loop to be stopped
-                    listener.barrier.wait().await;
-                }
-                Ok(())
-            }
-            None => {
-                let e = format!(
-                    "Can not delete the TCP listener because it has not been found: {}",
-                    addr
-                );
-                log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink { descr: e })
-            }
-        }
+        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+            let e = format!(
+                "Can not delete the TCP listener because it has not been found: {}",
+                addr
+            );
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        // Send the stop signal
+        listener.active.store(false, Ordering::Release);
+        listener.signal.trigger();
+        listener.handle.await
     }
 
-    async fn get_listeners(&self) -> Vec<Locator> {
-        zasyncread!(self.listener)
+    fn get_listeners(&self) -> Vec<Locator> {
+        zread!(self.listeners)
             .keys()
             .map(|x| Locator::Tcp(LocatorTcp::SocketAddr(*x)))
             .collect()
     }
 
-    async fn get_locators(&self) -> Vec<Locator> {
+    fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
-        for addr in zasyncread!(self.listener).keys() {
+        for addr in zread!(self.listeners).keys() {
             if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
@@ -412,60 +408,65 @@ impl LinkManagerTrait for LinkManagerTcp {
     }
 }
 
-async fn accept_task(listener: Arc<ListenerTcp>, manager: SessionManager) {
-    // The accept future
-    let accept_loop = async {
-        log::trace!(
-            "Ready to accept TCP connections on: {:?}",
-            listener.socket.local_addr()
-        );
-        loop {
-            // Wait for incoming connections
-            let stream = match listener.socket.accept().await {
-                Ok((stream, _)) => stream,
-                Err(e) => {
-                    log::warn!(
-                        "{}. Hint: you might want to increase the system open file limit",
-                        e
-                    );
-                    // Throttle the accept loop upon an error
-                    // NOTE: This might be due to various factors. However, the most common case is that
-                    //       the process has reached the maximum number of open files in the system. On
-                    //       Linux systems this limit can be changed by using the "ulimit" command line
-                    //       tool. In case of systemd-based systems, this can be changed by using the
-                    //       "sysctl" command line tool.
-                    task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
-                    continue;
-                }
-            };
-            // Get the source and destination TCP addresses
-            let src_addr = match stream.local_addr() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    let e = format!("Can not accept TCP connection: {}", e);
-                    log::warn!("{}", e);
-                    continue;
-                }
-            };
-            let dst_addr = match stream.peer_addr() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    let e = format!("Can not accept TCP connection: {}", e);
-                    log::warn!("{}", e);
-                    continue;
-                }
-            };
+async fn accept_task(
+    socket: TcpListener,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    manager: SessionManager,
+) -> ZResult<()> {
+    enum Action {
+        Accept((TcpStream, SocketAddr)),
+        Stop,
+    }
 
-            log::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
-            // Create the new link object
-            let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
+    async fn accept(socket: &TcpListener) -> ZResult<Action> {
+        let res = socket.accept().await.map_err(|e| {
+            zerror2!(ZErrorKind::IoError {
+                descr: e.to_string()
+            })
+        })?;
+        Ok(Action::Accept(res))
+    }
 
-            // Communicate the new link to the initial session manager
-            manager.handle_new_link(Link::Tcp(link), None).await;
-        }
-    };
+    async fn stop(signal: Signal) -> ZResult<Action> {
+        signal.wait().await;
+        Ok(Action::Stop)
+    }
 
-    let stop = listener.receiver.recv();
-    let _ = accept_loop.race(stop).await;
-    listener.barrier.wait().await;
+    let src_addr = socket.local_addr().map_err(|e| {
+        let e = format!("Can not accept TCP connections: {}", e);
+        log::warn!("{}", e);
+        zerror2!(ZErrorKind::IoError { descr: e })
+    })?;
+
+    log::trace!("Ready to accept TCP connections on: {:?}", src_addr);
+    while active.load(Ordering::Acquire) {
+        // Wait for incoming connections
+        let (stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
+            Ok(action) => match action {
+                Action::Accept((stream, addr)) => (stream, addr),
+                Action::Stop => break,
+            },
+            Err(e) => {
+                log::warn!("{}. Hint: increase the system open file limit.", e);
+                // Throttle the accept loop upon an error
+                // NOTE: This might be due to various factors. However, the most common case is that
+                //       the process has reached the maximum number of open files in the system. On
+                //       Linux systems this limit can be changed by using the "ulimit" command line
+                //       tool. In case of systemd-based systems, this can be changed by using the
+                //       "sysctl" command line tool.
+                task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
+                continue;
+            }
+        };
+
+        log::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
+        // Create the new link object
+        let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
+
+        // Communicate the new link to the initial session manager
+        manager.handle_new_link(Link(link), None).await;
+    }
+
+    Ok(())
 }

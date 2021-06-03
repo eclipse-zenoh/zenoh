@@ -12,20 +12,22 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, Locator, LocatorProperty};
-use async_std::channel::{bounded, Receiver, Sender};
+use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
 use async_std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use async_std::prelude::*;
-use async_std::sync::{Arc, Barrier, Mutex, Weak};
+use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
+use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 use zenoh_util::collections::{RecyclingObject, RecyclingObjectPool};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::sync::Mvar;
+use zenoh_util::sync::{Mvar, Signal};
 use zenoh_util::{zasynclock, zerror};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
@@ -74,7 +76,7 @@ async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve TCP locator: {}", addr);
+                        let e = format!("Couldn't resolve UDP locator: {}", addr);
                         zerror!(ZErrorKind::InvalidLocator { descr: e })
                     }
                 }
@@ -85,7 +87,7 @@ async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
             },
         },
         _ => {
-            let e = format!("Not a TCP locator: {}", locator);
+            let e = format!("Not a UDP locator: {}", locator);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }
@@ -163,7 +165,7 @@ struct LinkUdpUnconnected {
     socket: Weak<UdpSocket>,
     links: LinkHashMap,
     input: Mvar<LinkInput>,
-    leftover: Mutex<Option<LinkLeftOver>>,
+    leftover: AsyncMutex<Option<LinkLeftOver>>,
 }
 
 impl LinkUdpUnconnected {
@@ -210,8 +212,7 @@ impl LinkUdpUnconnected {
 
     async fn close(&self, src_addr: SocketAddr, dst_addr: SocketAddr) -> ZResult<()> {
         // Delete the link from the list of links
-        let mut guard = zasynclock!(self.links);
-        guard.remove(&(src_addr, dst_addr));
+        zlock!(self.links).remove(&(src_addr, dst_addr));
         Ok(())
     }
 }
@@ -238,8 +239,11 @@ impl LinkUdp {
             variant,
         }
     }
+}
 
-    pub(crate) async fn close(&self) -> ZResult<()> {
+#[async_trait]
+impl LinkTrait for LinkUdp {
+    async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
         match &self.variant {
             LinkUdpVariant::Connected(link) => link.close().await,
@@ -247,14 +251,14 @@ impl LinkUdp {
         }
     }
 
-    pub(crate) async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match &self.variant {
             LinkUdpVariant::Connected(link) => link.write(buffer).await,
             LinkUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await,
         }
     }
 
-    pub(crate) async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut written: usize = 0;
         while written < buffer.len() {
             written += self.write(&buffer[written..]).await?;
@@ -262,14 +266,14 @@ impl LinkUdp {
         Ok(())
     }
 
-    pub(crate) async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match &self.variant {
             LinkUdpVariant::Connected(link) => link.read(buffer).await,
             LinkUdpVariant::Unconnected(link) => link.read(buffer).await,
         }
     }
 
-    pub(crate) async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let mut read: usize = 0;
         loop {
             let n = self.read(&mut buffer[read..]).await?;
@@ -281,27 +285,27 @@ impl LinkUdp {
     }
 
     #[inline(always)]
-    pub(crate) fn get_src(&self) -> Locator {
+    fn get_src(&self) -> Locator {
         Locator::Udp(LocatorUdp::SocketAddr(self.src_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_dst(&self) -> Locator {
+    fn get_dst(&self) -> Locator {
         Locator::Udp(LocatorUdp::SocketAddr(self.dst_addr))
     }
 
     #[inline(always)]
-    pub(crate) fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> usize {
         *UDP_DEFAULT_MTU
     }
 
     #[inline(always)]
-    pub(crate) fn is_reliable(&self) -> bool {
+    fn is_reliable(&self) -> bool {
         false
     }
 
     #[inline(always)]
-    pub(crate) fn is_streamed(&self) -> bool {
+    fn is_streamed(&self) -> bool {
         false
     }
 }
@@ -325,16 +329,36 @@ impl fmt::Debug for LinkUdp {
 /*************************************/
 /*          LISTENER                 */
 /*************************************/
+struct ListenerUdp {
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    handle: JoinHandle<ZResult<()>>,
+}
+
+impl ListenerUdp {
+    fn new(
+        active: Arc<AtomicBool>,
+        signal: Signal,
+        handle: JoinHandle<ZResult<()>>,
+    ) -> ListenerUdp {
+        ListenerUdp {
+            active,
+            signal,
+            handle,
+        }
+    }
+}
+
 pub struct LinkManagerUdp {
     manager: SessionManager,
-    listeners: Arc<Mutex<HashMap<SocketAddr, Arc<ListenerUdp>>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUdp>>>,
 }
 
 impl LinkManagerUdp {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
-            listeners: Arc::new(Mutex::new(HashMap::new())),
+            listeners: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -385,9 +409,8 @@ impl LinkManagerTrait for LinkManagerUdp {
                 socket: Arc::new(socket),
             }),
         ));
-        let lobj = Link::Udp(link);
 
-        Ok(lobj)
+        Ok(Link(link))
     }
 
     async fn new_listener(
@@ -397,203 +420,187 @@ impl LinkManagerTrait for LinkManagerUdp {
     ) -> ZResult<Locator> {
         let addr = get_udp_addr(locator).await?;
 
-        if let Some(listener) = zasynclock!(self.listeners).get(&addr) {
-            match listener.socket.local_addr() {
-                Ok(addr) => return Ok(Locator::Udp(LocatorUdp::SocketAddr(addr))),
-                Err(e) => {
-                    let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
-                    log::warn!("{}", e);
-                    return zerror!(ZErrorKind::InvalidLink { descr: e });
-                }
-            };
-        }
-
         // Bind the UDP socket
-        let socket = match UdpSocket::bind(addr).await {
-            Ok(socket) => Arc::new(socket),
-            Err(e) => {
-                let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
-                log::warn!("{}", e);
-                return zerror!(ZErrorKind::InvalidLink { descr: e });
-            }
-        };
+        let socket = UdpSocket::bind(addr).await.map_err(|e| {
+            let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
 
         let local_addr = socket.local_addr().map_err(|e| {
             let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
             log::warn!("{}", e);
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
-        let listener = Arc::new(ListenerUdp::new(socket));
-        // Update the list of active listeners on the manager
-        zasynclock!(self.listeners).insert(local_addr, listener.clone());
 
         // Spawn the accept loop for the listener
+        let active = Arc::new(AtomicBool::new(true));
+        let signal = Signal::new();
+
+        let c_active = active.clone();
+        let c_signal = signal.clone();
+        let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
-        let c_manager = self.manager.clone();
-        task::spawn(async move {
+        let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            accept_read_task(listener, c_manager).await;
-            // Delete the listener from the manager
-            zasynclock!(c_listeners).remove(&c_addr);
+            let res = accept_read_task(socket, c_active, c_signal, c_manager).await;
+            zwrite!(c_listeners).remove(&c_addr);
+            res
         });
+
+        let listener = ListenerUdp::new(active, signal, handle);
+        // Update the list of active listeners on the manager
+        zwrite!(self.listeners).insert(local_addr, listener);
+
         Ok(Locator::Udp(LocatorUdp::SocketAddr(local_addr)))
     }
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
         let addr = get_udp_addr(locator).await?;
+
         // Stop the listener
-        let mut guard = zasynclock!(self.listeners);
-        match guard.remove(&addr) {
-            Some(listener) => {
-                let res = listener.sender.send(()).await;
-                zasynclock!(listener.links).clear();
-                if res.is_ok() {
-                    // Wait for the accept loop to be stopped
-                    listener.barrier.wait().await;
-                }
-                Ok(())
-            }
-            None => {
-                let e = format!(
-                    "Can not delete the UDP listener because it has not been found: {}",
-                    addr
-                );
-                log::trace!("{}", e);
-                zerror!(ZErrorKind::InvalidLink { descr: e })
-            }
-        }
+        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+            let e = format!(
+                "Can not delete the UDP listener because it has not been found: {}",
+                addr
+            );
+            log::trace!("{}", e);
+            zerror2!(ZErrorKind::InvalidLink { descr: e })
+        })?;
+
+        // Send the stop signal
+        listener.active.store(false, Ordering::Release);
+        listener.signal.trigger();
+        listener.handle.await
     }
 
-    async fn get_listeners(&self) -> Vec<Locator> {
-        zasynclock!(self.listeners)
+    fn get_listeners(&self) -> Vec<Locator> {
+        zread!(self.listeners)
             .keys()
             .map(|x| Locator::Udp(LocatorUdp::SocketAddr(*x)))
             .collect()
     }
 
-    async fn get_locators(&self) -> Vec<Locator> {
-        self.get_listeners().await
+    fn get_locators(&self) -> Vec<Locator> {
+        self.get_listeners()
     }
 }
 
-struct ListenerUdp {
-    socket: Arc<UdpSocket>,
-    links: LinkHashMap,
-    sender: Sender<()>,
-    receiver: Receiver<()>,
-    barrier: Arc<Barrier>,
-}
+async fn accept_read_task(
+    socket: UdpSocket,
+    active: Arc<AtomicBool>,
+    signal: Signal,
+    manager: SessionManager,
+) -> ZResult<()> {
+    let socket = Arc::new(socket);
+    let links: LinkHashMap = Arc::new(Mutex::new(HashMap::new()));
 
-impl ListenerUdp {
-    fn new(socket: Arc<UdpSocket>) -> Self {
-        // Create the channel necessary to break the accept loop
-        let (sender, receiver) = bounded::<()>(1);
-        // Update the list of active listeners on the manager
-        Self {
-            socket,
-            links: Arc::new(Mutex::new(HashMap::new())),
-            sender,
-            receiver,
-            barrier: Arc::new(Barrier::new(2)),
-        }
+    macro_rules! zaddlink {
+        ($src:expr, $dst:expr, $link:expr) => {
+            zlock!(links).insert(($src, $dst), $link);
+        };
     }
-}
 
-async fn accept_read_task(listener: Arc<ListenerUdp>, manager: SessionManager) {
-    // The accept/read future
-    let accept_read_loop = async {
-        macro_rules! zaddlink {
-            ($src:expr, $dst:expr, $link:expr) => {
-                zasynclock!(listener.links).insert(($src, $dst), $link);
-            };
-        }
+    macro_rules! zdellink {
+        ($src:expr, $dst:expr) => {
+            zlock!(links).remove(&($src, $dst));
+        };
+    }
 
-        macro_rules! zdellink {
-            ($src:expr, $dst:expr) => {
-                zasynclock!(listener.links).remove(&($src, $dst));
-            };
-        }
+    macro_rules! zgetlink {
+        ($src:expr, $dst:expr) => {
+            zlock!(links).get(&($src, $dst)).map(|link| link.clone())
+        };
+    }
 
-        macro_rules! zgetlink {
-            ($src:expr, $dst:expr) => {
-                zasynclock!(listener.links)
-                    .get(&($src, $dst))
-                    .map(|link| link.clone())
-            };
-        }
+    enum Action {
+        Receive((usize, SocketAddr)),
+        Stop,
+    }
 
-        let src_addr = match listener.socket.local_addr() {
-            Ok(addr) => addr,
+    async fn receive(socket: Arc<UdpSocket>, buffer: &mut [u8]) -> ZResult<Action> {
+        let res = socket.recv_from(buffer).await.map_err(|e| {
+            zerror2!(ZErrorKind::IoError {
+                descr: e.to_string()
+            })
+        })?;
+        Ok(Action::Receive(res))
+    }
+
+    async fn stop(signal: Signal) -> ZResult<Action> {
+        signal.wait().await;
+        Ok(Action::Stop)
+    }
+
+    let src_addr = socket.local_addr().map_err(|e| {
+        let e = format!("Can not accept UDP connections: {}", e);
+        log::warn!("{}", e);
+        zerror2!(ZErrorKind::IoError { descr: e })
+    })?;
+
+    log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
+    // Buffers for deserialization
+    let pool = RecyclingObjectPool::new(1, || vec![0u8; UDP_MAX_MTU].into_boxed_slice());
+    while active.load(Ordering::Acquire) {
+        let mut buff = pool.take().await;
+        // Wait for incoming connections
+        let (n, dst_addr) = match receive(socket.clone(), &mut buff)
+            .race(stop(signal.clone()))
+            .await
+        {
+            Ok(action) => match action {
+                Action::Receive((n, addr)) => (n, addr),
+                Action::Stop => break,
+            },
             Err(e) => {
-                let e = format!("Can not accept UDP connections: {}", e);
-                log::warn!("{}", e);
-                return Ok(());
+                log::warn!("{}. Hint: increase the system open file limit.", e);
+                // Throttle the accept loop upon an error
+                // NOTE: This might be due to various factors. However, the most common case is that
+                //       the process has reached the maximum number of open files in the system. On
+                //       Linux systems this limit can be changed by using the "ulimit" command line
+                //       tool. In case of systemd-based systems, this can be changed by using the
+                //       "sysctl" command line tool.
+                task::sleep(Duration::from_micros(*UDP_ACCEPT_THROTTLE_TIME)).await;
+                continue;
             }
         };
 
-        log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
-        // Buffers for deserialization
-        let pool = RecyclingObjectPool::new(1, || vec![0u8; UDP_MAX_MTU].into_boxed_slice());
-        loop {
-            let mut buff = pool.take().await;
-            // Wait for incoming connections
-            let (n, dst_addr) = match listener.socket.recv_from(&mut buff).await {
-                Ok((n, dst_addr)) => (n, dst_addr),
-                Err(e) => {
-                    log::warn!(
-                        "{}. Hint: you might want to increase the system open file limit",
-                        e
-                    );
-                    // Throttle the accept loop upon an error
-                    // NOTE: This might be due to various factors. However, the most common case is that
-                    //       the process has reached the maximum number of open files in the system. On
-                    //       Linux systems this limit can be changed by using the "ulimit" command line
-                    //       tool. In case of systemd-based systems, this can be changed by using the
-                    //       "sysctl" command line tool.
-                    task::sleep(Duration::from_micros(*UDP_ACCEPT_THROTTLE_TIME)).await;
-                    continue;
-                }
-            };
-
-            let link = loop {
-                let res = zgetlink!(src_addr, dst_addr);
-                match res {
-                    Some(link) => break link.upgrade(),
-                    None => {
-                        // A new peers has sent data to this socket
-                        log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
-                        let unconnected = Arc::new(LinkUdpUnconnected {
-                            socket: Arc::downgrade(&listener.socket),
-                            links: listener.links.clone(),
-                            input: Mvar::new(),
-                            leftover: Mutex::new(None),
-                        });
-                        zaddlink!(src_addr, dst_addr, Arc::downgrade(&unconnected));
-                        // Create the new link object
-                        let link = Arc::new(LinkUdp::new(
-                            src_addr,
-                            dst_addr,
-                            LinkUdpVariant::Unconnected(unconnected),
-                        ));
-                        // Add the new link to the set of connected peers
-                        manager.handle_new_link(Link::Udp(link), None).await;
-                    }
-                }
-            };
-
-            match link {
-                Some(link) => {
-                    link.received(buff, n).await;
-                }
+        let link = loop {
+            let res = zgetlink!(src_addr, dst_addr);
+            match res {
+                Some(link) => break link.upgrade(),
                 None => {
-                    zdellink!(src_addr, dst_addr);
+                    // A new peers has sent data to this socket
+                    log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
+                    let unconnected = Arc::new(LinkUdpUnconnected {
+                        socket: Arc::downgrade(&socket),
+                        links: links.clone(),
+                        input: Mvar::new(),
+                        leftover: AsyncMutex::new(None),
+                    });
+                    zaddlink!(src_addr, dst_addr, Arc::downgrade(&unconnected));
+                    // Create the new link object
+                    let link = Arc::new(LinkUdp::new(
+                        src_addr,
+                        dst_addr,
+                        LinkUdpVariant::Unconnected(unconnected),
+                    ));
+                    // Add the new link to the set of connected peers
+                    manager.handle_new_link(Link(link), None).await;
                 }
             }
-        }
-    };
+        };
 
-    let stop = listener.receiver.recv();
-    let _ = accept_read_loop.race(stop).await;
-    listener.barrier.wait().await;
+        match link {
+            Some(link) => {
+                link.received(buff, n).await;
+            }
+            None => {
+                zdellink!(src_addr, dst_addr);
+            }
+        }
+    }
+
+    Ok(())
 }

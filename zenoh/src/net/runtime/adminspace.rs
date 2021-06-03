@@ -18,17 +18,18 @@ use super::protocol::{
     },
     io::RBuf,
     proto::{encoding, DataInfo, RoutingContext},
+    session::Primitives,
 };
 use super::routing::face::Face;
-use super::routing::OutSession;
 use super::Runtime;
-use async_std::sync::{Arc, Mutex};
+use async_std::sync::Arc;
 use async_std::task;
 use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 pub struct AdminContext {
     runtime: Runtime,
@@ -49,7 +50,7 @@ pub struct AdminSpace {
 
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr, version: String) {
-        let pid_str = runtime.get_pid_str().await;
+        let pid_str = runtime.get_pid_str();
         let root_path = format!("/@/router/{}", pid_str);
 
         let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
@@ -72,70 +73,54 @@ impl AdminSpace {
             version,
         });
         let admin = Arc::new(AdminSpace {
-            pid: runtime.read().await.pid.clone(),
+            pid: runtime.read().pid.clone(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
             context,
         });
 
-        let primitives = runtime
-            .read()
-            .await
-            .router
-            .new_primitives(OutSession::Admin(admin.clone()))
-            .await;
-        admin.primitives.lock().await.replace(primitives.clone());
+        let primitives = runtime.read().router.new_primitives(admin.clone());
+        zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives
-            .decl_queryable(&[&root_path, "/**"].concat().into(), None)
-            .await;
+        primitives.decl_queryable(&[&root_path, "/**"].concat().into(), None);
     }
 
-    pub async fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
+    pub fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
         match key {
-            ResKey::RId(id) => self.mappings.lock().await.get(&id).cloned(),
-            ResKey::RIdWithSuffix(id, suffix) => self
-                .mappings
-                .lock()
-                .await
+            ResKey::RId(id) => zlock!(self.mappings).get(&id).cloned(),
+            ResKey::RIdWithSuffix(id, suffix) => zlock!(self.mappings)
                 .get(&id)
                 .map(|prefix| format!("{}{}", prefix, suffix)),
             ResKey::RName(name) => Some(name.clone()),
         }
     }
+}
 
-    pub(crate) async fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+impl Primitives for AdminSpace {
+    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         trace!("recv Resource {} {:?}", rid, reskey);
-        match self.reskey_to_string(reskey).await {
+        match self.reskey_to_string(reskey) {
             Some(s) => {
-                self.mappings.lock().await.insert(rid, s);
+                zlock!(self.mappings).insert(rid, s);
             }
             None => error!("Unknown rid {}!", rid),
         }
     }
 
-    pub(crate) async fn forget_resource(&self, _rid: ZInt) {
+    fn forget_resource(&self, _rid: ZInt) {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    pub(crate) async fn decl_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Publisher {:?}", _reskey);
     }
 
-    pub(crate) async fn forget_publisher(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _reskey);
     }
 
-    pub(crate) async fn decl_subscriber(
+    fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
@@ -144,31 +129,19 @@ impl AdminSpace {
         trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
     }
 
-    pub(crate) async fn forget_subscriber(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    pub(crate) async fn decl_queryable(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    pub(crate) async fn forget_queryable(
-        &self,
-        _reskey: &ResKey,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
-    pub(crate) async fn send_data(
+    fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -187,7 +160,7 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) async fn send_query(
+    fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -205,10 +178,10 @@ impl AdminSpace {
         );
         let pid = self.pid.clone();
         let context = self.context.clone();
-        let primitives = self.primitives.lock().await.as_ref().unwrap().clone();
+        let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
         let mut matching_handlers = vec![];
-        match self.reskey_to_string(reskey).await {
+        match self.reskey_to_string(reskey) {
             Some(name) => {
                 for (path, handler) in &self.handlers {
                     if rname::intersect(&name, path) {
@@ -231,24 +204,23 @@ impl AdminSpace {
                     timestamp: None,
                     kind: None,
                     encoding: Some(encoding),
+                    is_shm: false,
                 };
-                primitives
-                    .send_reply_data(
-                        qid,
-                        EVAL,
-                        pid.clone(),
-                        ResKey::RName(path),
-                        Some(data_info),
-                        payload,
-                    )
-                    .await;
+                primitives.send_reply_data(
+                    qid,
+                    EVAL,
+                    pid.clone(),
+                    ResKey::RName(path),
+                    Some(data_info),
+                    payload,
+                );
             }
 
-            primitives.send_reply_final(qid).await;
+            primitives.send_reply_final(qid);
         });
     }
 
-    pub(crate) async fn send_reply_data(
+    fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -268,11 +240,11 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) async fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 
-    pub(crate) async fn send_pull(
+    fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -288,20 +260,13 @@ impl AdminSpace {
         );
     }
 
-    pub(crate) async fn send_close(&self) {
+    fn send_close(&self) {
         trace!("recv Close");
     }
 }
 
 pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
-    let session_mgr = context
-        .runtime
-        .read()
-        .await
-        .orchestrator
-        .manager()
-        .await
-        .clone();
+    let session_mgr = context.runtime.read().orchestrator.manager().clone();
 
     // plugins info
     let plugins: Vec<serde_json::Value> = context
@@ -319,21 +284,21 @@ pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
     // locators info
     let locators: Vec<serde_json::Value> = session_mgr
         .get_locators()
-        .await
         .iter()
         .map(|locator| json!(locator.to_string()))
         .collect();
 
     // sessions info
-    let sessions = future::join_all(session_mgr.get_sessions().await.iter().map(async move |session|
+    let sessions = future::join_all(session_mgr.get_sessions().iter().map(move |session| async move {
         json!({
             "peer": session.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
-            "links": session.get_links().await.map_or_else(
+            "links": session.get_links().map_or_else(
                 |_| Vec::new(),
                 |links| links.iter().map(|link| link.get_dst().to_string()).collect()
             )
         })
-    )).await;
+    }))
+    .await;
 
     let json = json!({
         "pid": context.pid_str,
@@ -347,8 +312,8 @@ pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
 }
 
 pub async fn linkstate_routers_data(context: &AdminContext) -> (RBuf, ZInt) {
-    let runtime = &context.runtime.read().await;
-    let tables = runtime.router.tables.read().await;
+    let runtime = &context.runtime.read();
+    let tables = zread!(runtime.router.tables);
 
     let res = (
         RBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
@@ -363,11 +328,10 @@ pub async fn linkstate_peers_data(context: &AdminContext) -> (RBuf, ZInt) {
             context
                 .runtime
                 .read()
-                .await
                 .router
                 .tables
                 .read()
-                .await
+                .unwrap()
                 .peers_net
                 .as_ref()
                 .unwrap()

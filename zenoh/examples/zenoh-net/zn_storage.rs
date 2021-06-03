@@ -56,14 +56,14 @@ async fn main() {
     let mut input = [0u8];
     loop {
         select!(
-            sample = subscriber.stream().next().fuse() => {
+            sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
                     sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
                 stored.insert(sample.res_name, (sample.payload, sample.data_info));
             },
 
-            query = queryable.stream().next().fuse() => {
+            query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
                 println!(">> [Query handler        ] Handling '{}{}'", query.res_name, query.predicate);
                 for (stored_name, (data, data_info)) in stored.iter() {
@@ -72,7 +72,7 @@ async fn main() {
                             res_name: stored_name.clone(),
                             payload: data.clone(),
                             data_info: data_info.clone(),
-                        }).await;
+                        });
                     }
                 }
             },

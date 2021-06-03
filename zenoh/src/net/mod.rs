@@ -42,7 +42,7 @@
 //!         period: None
 //!     };
 //!     let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
-//!     while let Some(sample) = subscriber.stream().next().await { println!("Received : {:?}", sample); };
+//!     while let Some(sample) = subscriber.receiver().next().await { println!("Received : {:?}", sample); };
 //! }
 //! ```
 //!
@@ -65,13 +65,17 @@
 //!     }
 //! }
 //! ```
+#[doc(hidden)]
 pub mod plugins;
+#[doc(hidden)]
 pub mod protocol;
+#[doc(hidden)]
 pub mod routing;
+#[doc(hidden)]
 pub mod runtime;
 
-use async_std::channel::bounded;
 use async_std::net::UdpSocket;
+use flume::bounded;
 use futures::prelude::*;
 use log::{debug, trace};
 use protocol::core::WhatAmI;
@@ -81,6 +85,7 @@ use zenoh_util::properties::config::*;
 #[cfg(feature = "zero-copy")]
 pub use protocol::io::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 
+#[macro_use]
 mod types;
 use git_version::git_version;
 pub use types::*;
@@ -94,6 +99,7 @@ pub use session::*;
 pub use protocol::proto::{data_kind, encoding};
 
 pub mod queryable {
+    #[doc(inline)]
     pub use super::protocol::core::queryable::*;
 }
 
@@ -112,9 +118,9 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 /// Scout for routers and/or peers.
 ///
 /// [scout](scout) spawns a task that periodically sends scout messages and returns
-/// a [HelloStream](HelloStream) : a stream of received [Hello](Hello) messages.
+/// a [HelloReceiver](HelloReceiver) : a stream of received [Hello](Hello) messages.
 ///
-/// Drop the returned [HelloStream](HelloStream) to stop the scouting task.
+/// Drop the returned [HelloReceiver](HelloReceiver) to stop the scouting task.
 ///
 /// # Arguments
 ///
@@ -127,13 +133,13 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 /// use zenoh::net::*;
 /// use futures::prelude::*;
 ///
-/// let mut stream = scout(whatami::PEER | whatami::ROUTER, config::default()).await;
-/// while let Some(hello) = stream.next().await {
+/// let mut receiver = scout(whatami::PEER | whatami::ROUTER, config::default()).await.unwrap();
+/// while let Some(hello) = receiver.next().await {
 ///     println!("{}", hello);
 /// }
 /// # })
 /// ```
-pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
+pub fn scout(what: WhatAmI, config: ConfigProperties) -> ZResolvedFuture<ZResult<HelloReceiver>> {
     trace!("scout({}, {})", what, &config);
     let addr = config
         .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
@@ -142,7 +148,7 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
     let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
 
     let (hello_sender, hello_receiver) = bounded::<Hello>(1);
-    let (stop_sender, mut stop_receiver) = bounded::<()>(1);
+    let (stop_sender, stop_receiver) = bounded::<()>(1);
 
     let ifaces = SessionOrchestrator::get_interfaces(ifaces);
     if !ifaces.is_empty() {
@@ -153,10 +159,12 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
         if !sockets.is_empty() {
             async_std::task::spawn(async move {
                 let hello_sender = &hello_sender;
-                let scout = SessionOrchestrator::scout(&sockets, what, &addr, async move |hello| {
-                    let _ = hello_sender.send(hello).await;
-                    Loop::Continue
-                });
+                let mut stop_receiver = stop_receiver.stream();
+                let scout =
+                    SessionOrchestrator::scout(&sockets, what, &addr, move |hello| async move {
+                        let _ = hello_sender.send_async(hello).await;
+                        Loop::Continue
+                    });
                 let stop = async move {
                     stop_receiver.next().await;
                     trace!("stop scout({}, {})", what, &config);
@@ -166,10 +174,7 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
         }
     }
 
-    HelloStream {
-        hello_receiver,
-        stop_sender,
-    }
+    zresolved!(Ok(HelloReceiver::new(stop_sender, hello_receiver)))
 }
 
 /// Open a zenoh-net [Session](Session).
@@ -222,8 +227,8 @@ pub async fn scout(what: WhatAmI, config: ConfigProperties) -> HelloStream {
 /// let session = open(config.into()).await.unwrap();
 /// # })
 /// ```
-pub async fn open(config: ConfigProperties) -> ZResult<Session> {
+pub fn open(config: ConfigProperties) -> ZPendingFuture<ZResult<Session>> {
     debug!("Zenoh Rust API {}", GIT_VERSION);
     debug!("Config: {:?}", &config);
-    Session::new(config).await
+    Session::new(config)
 }

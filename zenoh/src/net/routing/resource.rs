@@ -348,7 +348,7 @@ impl Resource {
     }
 
     #[inline]
-    pub async fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey {
+    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -375,8 +375,7 @@ impl Resource {
                             .local_mappings
                             .insert(rid, nonwild_prefix.clone());
                         face.primitives
-                            .decl_resource(rid, &nonwild_prefix.name().into())
-                            .await;
+                            .decl_resource(rid, &nonwild_prefix.name().into());
                         rid
                     }
                 };
@@ -505,7 +504,7 @@ impl Resource {
     }
 }
 
-pub async fn declare_resource(
+pub fn declare_resource(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     rid: ZInt,
@@ -545,9 +544,7 @@ pub async fn declare_resource(
                         .local_mappings
                         .insert(local_rid, res.clone());
 
-                    face.primitives
-                        .decl_resource(local_rid, &res.name().into())
-                        .await;
+                    face.primitives.decl_resource(local_rid, &res.name().into());
                 }
 
                 get_mut_unchecked(face)
@@ -560,7 +557,7 @@ pub async fn declare_resource(
     }
 }
 
-pub async fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
+pub fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
     match get_mut_unchecked(face).remote_mappings.remove(&rid) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),

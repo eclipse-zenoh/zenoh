@@ -31,19 +31,10 @@ use async_std::sync::Arc;
 use async_trait::async_trait;
 pub use locator::*;
 pub use manager::*;
-#[cfg(feature = "transport_quic")]
-use quic::LinkQuic;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-#[cfg(feature = "transport_tcp")]
-use tcp::LinkTcp;
-#[cfg(feature = "transport_tls")]
-use tls::LinkTls;
-#[cfg(feature = "transport_udp")]
-use udp::LinkUdp;
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-use unixsock_stream::LinkUnixSocketStream;
+use std::ops::Deref;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*************************************/
@@ -51,19 +42,11 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 /*************************************/
 const WBUF_SIZE: usize = 64;
 
-zenoh_util::dispatcher!(
-Link(
-    #[cfg(feature = "transport_tcp")]
-    Tcp(Arc<LinkTcp>),
-    #[cfg(feature = "transport_udp")]
-    Udp(Arc<LinkUdp>),
-    #[cfg(feature = "transport_tls")]
-    Tls(Arc<LinkTls>),
-    #[cfg(feature = "transport_quic")]
-    Quic(Arc<LinkQuic>),
-    #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-    UnixSocketStream(Arc<LinkUnixSocketStream>),
-) {
+#[derive(Clone)]
+pub struct Link(Arc<dyn LinkTrait + Send + Sync>);
+
+#[async_trait]
+pub trait LinkTrait {
     fn get_mtu(&self) -> usize;
     fn get_src(&self) -> Locator;
     fn get_dst(&self) -> Locator;
@@ -74,7 +57,7 @@ Link(
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
-});
+}
 
 impl Link {
     pub(crate) async fn write_session_message(&self, msg: SessionMessage) -> ZResult<()> {
@@ -96,7 +79,7 @@ impl Link {
         wbuf.copy_into_slice(&mut buffer[..]);
 
         // Send the message on the link
-        self.write_all(&buffer).await
+        self.0.write_all(&buffer).await
     }
 
     pub(crate) async fn read_session_message(&self) -> ZResult<Vec<SessionMessage>> {
@@ -134,11 +117,19 @@ impl Link {
     }
 }
 
+impl Deref for Link {
+    type Target = Arc<dyn LinkTrait + Send + Sync>;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl Eq for Link {}
 
 impl PartialEq for Link {
     fn eq(&self, other: &Self) -> bool {
-        (self.get_src() == other.get_src()) && (self.get_dst() == other.get_dst())
+        self.get_src() == other.get_src() && self.get_dst() == other.get_dst()
     }
 }
 
@@ -167,6 +158,12 @@ impl fmt::Debug for Link {
     }
 }
 
+impl From<Arc<dyn LinkTrait + Send + Sync>> for Link {
+    fn from(link: Arc<dyn LinkTrait + Send + Sync>) -> Link {
+        Link(link)
+    }
+}
+
 /*************************************/
 /*           LINK MANAGER            */
 /*************************************/
@@ -179,8 +176,8 @@ pub trait LinkManagerTrait {
         property: Option<&LocatorProperty>,
     ) -> ZResult<Locator>;
     async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
-    async fn get_listeners(&self) -> Vec<Locator>;
-    async fn get_locators(&self) -> Vec<Locator>;
+    fn get_listeners(&self) -> Vec<Locator>;
+    fn get_locators(&self) -> Vec<Locator>;
 }
 
 pub type LinkManager = Arc<dyn LinkManagerTrait + Send + Sync>;

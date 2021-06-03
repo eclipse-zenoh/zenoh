@@ -25,30 +25,28 @@ use super::core::{
 };
 use super::io::RBuf;
 use super::proto::{DataInfo, RoutingContext};
-use async_trait::async_trait;
 pub use demux::*;
 pub use mux::*;
 
-#[async_trait]
 pub trait Primitives {
-    async fn decl_resource(&self, rid: ZInt, reskey: &ResKey);
-    async fn forget_resource(&self, rid: ZInt);
+    fn decl_resource(&self, rid: ZInt, reskey: &ResKey);
+    fn forget_resource(&self, rid: ZInt);
 
-    async fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
-    async fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn decl_subscriber(
+    fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     );
-    async fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
-    async fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    async fn send_data(
+    fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -58,7 +56,7 @@ pub trait Primitives {
         routing_context: Option<RoutingContext>,
     );
 
-    async fn send_query(
+    fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -68,7 +66,7 @@ pub trait Primitives {
         routing_context: Option<RoutingContext>,
     );
 
-    async fn send_reply_data(
+    fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -78,17 +76,11 @@ pub trait Primitives {
         payload: RBuf,
     );
 
-    async fn send_reply_final(&self, qid: ZInt);
+    fn send_reply_final(&self, qid: ZInt);
 
-    async fn send_pull(
-        &self,
-        is_final: bool,
-        reskey: &ResKey,
-        pull_id: ZInt,
-        max_samples: &Option<ZInt>,
-    );
+    fn send_pull(&self, is_final: bool, reskey: &ResKey, pull_id: ZInt, max_samples: &Option<ZInt>);
 
-    async fn send_close(&self);
+    fn send_close(&self);
 }
 
 #[derive(Default)]
@@ -100,27 +92,26 @@ impl DummyPrimitives {
     }
 }
 
-#[async_trait]
 impl Primitives for DummyPrimitives {
-    async fn decl_resource(&self, _rid: ZInt, _reskey: &ResKey) {}
-    async fn forget_resource(&self, _rid: ZInt) {}
+    fn decl_resource(&self, _rid: ZInt, _reskey: &ResKey) {}
+    fn forget_resource(&self, _rid: ZInt) {}
 
-    async fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
-    async fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn decl_subscriber(
+    fn decl_subscriber(
         &self,
         _reskey: &ResKey,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    async fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
-    async fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    async fn send_data(
+    fn send_data(
         &self,
         _reskey: &ResKey,
         _payload: RBuf,
@@ -130,7 +121,7 @@ impl Primitives for DummyPrimitives {
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    async fn send_query(
+    fn send_query(
         &self,
         _reskey: &ResKey,
         _predicate: &str,
@@ -140,7 +131,7 @@ impl Primitives for DummyPrimitives {
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    async fn send_reply_data(
+    fn send_reply_data(
         &self,
         _qid: ZInt,
         _source_kind: ZInt,
@@ -150,8 +141,8 @@ impl Primitives for DummyPrimitives {
         _payload: RBuf,
     ) {
     }
-    async fn send_reply_final(&self, _qid: ZInt) {}
-    async fn send_pull(
+    fn send_reply_final(&self, _qid: ZInt) {}
+    fn send_pull(
         &self,
         _is_final: bool,
         _reskey: &ResKey,
@@ -160,5 +151,5 @@ impl Primitives for DummyPrimitives {
     ) {
     }
 
-    async fn send_close(&self) {}
+    fn send_close(&self) {}
 }

@@ -352,7 +352,7 @@ impl RBuf {
         match bincode::deserialize::<SharedMemoryBufInfo>(&self.to_vec()) {
             Ok(info) => m.try_make_buf(info),
             _ => zerror!(ZErrorKind::ValueDecodingFailed {
-                descr: String::from("Unable to deserialize ShareMemoryInfo"),
+                descr: String::from("Unable to deserialize SharedMemoryInfo"),
             }),
         }
     }
@@ -372,6 +372,12 @@ impl RBuf {
         if let Some(shm) = self.shm_buf.as_mut() {
             shm.inc_ref_count();
         }
+    }
+
+    #[cfg(feature = "zero-copy")]
+    #[inline]
+    pub(crate) fn is_shm(&mut self) -> bool {
+        self.shm_buf.is_some()
     }
 }
 
@@ -412,10 +418,10 @@ impl io::Read for RBuf {
         Ok(nread)
     }
 
-    #[inline]
-    fn is_read_vectored(&self) -> bool {
-        true
-    }
+    //#[inline]
+    //fn is_read_vectored(&self) -> bool {
+    //    true
+    //}
 }
 
 impl fmt::Display for RBuf {

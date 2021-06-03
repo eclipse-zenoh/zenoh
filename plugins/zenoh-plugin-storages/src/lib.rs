@@ -82,7 +82,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     let backends_prefix = format!(
         "/@/router/{}/plugin/storages/backend",
-        runtime.get_pid_str().await
+        runtime.get_pid_str()
     );
 
     let zenoh = Arc::new(Zenoh::init(runtime).await);

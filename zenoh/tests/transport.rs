@@ -14,7 +14,7 @@
 use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
-use async_trait::async_trait;
+use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
@@ -22,10 +22,11 @@ use zenoh::net::protocol::io::RBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
-    Session, SessionDispatcher, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -51,9 +52,8 @@ impl SHRouter {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHRouter {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -73,17 +73,20 @@ impl SCRouter {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for SCRouter {
-    async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // Session Handler for the client
@@ -95,9 +98,8 @@ impl SHClient {
     }
 }
 
-#[async_trait]
 impl SessionHandler for SHClient {
-    async fn new_session(
+    fn new_session(
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
@@ -114,16 +116,19 @@ impl SCClient {
     }
 }
 
-#[async_trait]
 impl SessionEventHandler for SCClient {
-    async fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
 
-    async fn new_link(&self, _link: Link) {}
-    async fn del_link(&self, _link: Link) {}
-    async fn closing(&self) {}
-    async fn closed(&self) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 async fn open_session(
@@ -140,15 +145,13 @@ async fn open_session(
         version: 0,
         whatami: whatami::ROUTER,
         id: router_id.clone(),
-        handler: SessionDispatcher::SessionHandler(router_handler.clone()),
+        handler: router_handler.clone(),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -162,15 +165,13 @@ async fn open_session(
         version: 0,
         whatami: whatami::CLIENT,
         id: client_id,
-        handler: SessionDispatcher::SessionHandler(Arc::new(SHClient::new())),
+        handler: Arc::new(SHClient::new()),
     };
     let opt_config = SessionManagerOptionalConfig {
         lease: None,
         keep_alive: None,
         sn_resolution: None,
         batch_size: None,
-        timeout: None,
-        retries: None,
         max_sessions: None,
         max_links: None,
         peer_authenticator: None,
@@ -202,12 +203,7 @@ async fn open_session(
             .unwrap();
     }
 
-    let client_session = client_manager
-        .get_session(&router_id)
-        .timeout(TIMEOUT)
-        .await
-        .unwrap()
-        .unwrap();
+    let client_session = client_manager.get_session(&router_id).unwrap();
 
     // Return the handlers
     (router_manager, router_handler, client_session)
@@ -279,7 +275,7 @@ async fn single_run(
         MSG_COUNT, reliability, congestion_control, msg_size
     );
     for _ in 0..MSG_COUNT {
-        client_session.schedule(message.clone()).await.unwrap();
+        client_session.schedule(message.clone()).unwrap();
     }
 
     macro_rules! some {
@@ -353,6 +349,10 @@ async fn run(
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Define the locators
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
@@ -372,6 +372,10 @@ fn transport_tcp_only() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn transport_udp_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Define the locator
     let locators: Vec<Locator> = vec!["udp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
@@ -391,6 +395,10 @@ fn transport_udp_only() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn transport_unix_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
     let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
@@ -415,6 +423,10 @@ fn transport_unix_only() {
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn transport_tcp_udp() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     // Define the locator
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:10448".parse().unwrap(),
@@ -441,6 +453,10 @@ fn transport_tcp_udp() {
 ))]
 #[test]
 fn transport_tcp_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
@@ -472,6 +488,10 @@ fn transport_tcp_unix() {
 ))]
 #[test]
 fn transport_udp_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
@@ -504,6 +524,10 @@ fn transport_udp_unix() {
 ))]
 #[test]
 fn transport_tcp_udp_unix() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
     let locators: Vec<Locator> = vec![
@@ -531,7 +555,11 @@ fn transport_tcp_udp_unix() {
 
 #[cfg(feature = "transport_tls")]
 #[test]
-fn transport_tls() {
+fn transport_tls_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use std::io::Cursor;
     use zenoh::net::protocol::link::tls::{
         internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
@@ -644,7 +672,11 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
 #[cfg(feature = "transport_quic")]
 #[test]
-fn transport_quic() {
+fn transport_quic_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
     use zenoh::net::protocol::link::quic::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,
