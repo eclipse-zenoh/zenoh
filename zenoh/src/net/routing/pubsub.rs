@@ -104,7 +104,12 @@ fn propagate_sourced_subscription(
                     Some(tree_sid.index() as ZInt),
                 );
             } else {
-                log::trace!("Tree for node {} not yet ready", source);
+                log::trace!(
+                    "Propagating sub {}: tree for node {} sid:{} not yet ready",
+                    res.name(),
+                    tree_sid.index(),
+                    source
+                );
             }
         }
         None => log::error!(
@@ -361,17 +366,26 @@ fn propagate_forget_sourced_subscription(
     let net = tables.get_net(net_type).unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
-            send_forget_sourced_subscription_to_net_childs(
-                tables,
-                net,
-                &net.trees[tree_sid.index()].childs,
-                res,
-                src_face,
-                Some(tree_sid.index() as ZInt),
-            );
+            if net.trees.len() > tree_sid.index() {
+                send_forget_sourced_subscription_to_net_childs(
+                    tables,
+                    net,
+                    &net.trees[tree_sid.index()].childs,
+                    res,
+                    src_face,
+                    Some(tree_sid.index() as ZInt),
+                );
+            } else {
+                log::trace!(
+                    "Propagating forget sub {}: tree for node {} sid:{} not yet ready",
+                    res.name(),
+                    tree_sid.index(),
+                    source
+                );
+            }
         }
         None => log::error!(
-            "Error propagating sub {}: cannot get index of {}!",
+            "Error propagating forget sub {}: cannot get index of {}!",
             res.name(),
             source
         ),
@@ -755,7 +769,7 @@ fn insert_faces_for_subs(
             }
         }
     } else {
-        log::trace!("Tree for node {} not yet ready", source);
+        log::trace!("Tree for node sid:{} not yet ready", source);
     }
 }
 

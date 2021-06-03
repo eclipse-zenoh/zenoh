@@ -99,7 +99,12 @@ fn propagate_sourced_queryable(
                     Some(tree_sid.index() as ZInt),
                 );
             } else {
-                log::trace!("Tree for node {} not yet ready", source);
+                log::trace!(
+                    "Propagating qabl {}: tree for node {} sid:{} not yet ready",
+                    res.name(),
+                    tree_sid.index(),
+                    source
+                );
             }
         }
         None => log::error!(
@@ -319,17 +324,26 @@ fn propagate_forget_sourced_queryable(
     let net = tables.get_net(net_type).unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
-            send_forget_sourced_queryable_to_net_childs(
-                tables,
-                net,
-                &net.trees[tree_sid.index()].childs,
-                res,
-                src_face,
-                Some(tree_sid.index() as ZInt),
-            );
+            if net.trees.len() > tree_sid.index() {
+                send_forget_sourced_queryable_to_net_childs(
+                    tables,
+                    net,
+                    &net.trees[tree_sid.index()].childs,
+                    res,
+                    src_face,
+                    Some(tree_sid.index() as ZInt),
+                );
+            } else {
+                log::trace!(
+                    "Propagating forget qabl {}: tree for node {} sid:{} not yet ready",
+                    res.name(),
+                    tree_sid.index(),
+                    source
+                );
+            }
         }
         None => log::error!(
-            "Error propagating qabl {}: cannot get index of {}!",
+            "Error propagating forget qabl {}: cannot get index of {}!",
             res.name(),
             source
         ),
@@ -698,7 +712,7 @@ fn insert_faces_for_qabls(
             }
         }
     } else {
-        log::trace!("Tree for node {} not yet ready", source);
+        log::trace!("Tree for node sid:{} not yet ready", source);
     }
 }
 
