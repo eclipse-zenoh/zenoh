@@ -14,9 +14,9 @@
 use super::PseudoRng;
 use crate::core::{ZError, ZErrorKind, ZResult};
 use crate::zerror;
-use aes_soft::cipher::generic_array::GenericArray;
-use aes_soft::cipher::{BlockCipher as AesBlockCipher, NewBlockCipher};
-use aes_soft::Aes128;
+use aes::cipher::generic_array::GenericArray;
+use aes::cipher::NewBlockCipher;
+use aes::{Aes128, BlockDecrypt, BlockEncrypt};
 use rand::Rng;
 
 pub struct BlockCipher {
@@ -28,7 +28,7 @@ impl BlockCipher {
 
     pub fn new(key: [u8; Self::BLOCK_SIZE]) -> BlockCipher {
         BlockCipher {
-            inner: aes_soft::Aes128::new(&key.into()),
+            inner: aes::Aes128::new(&key.into()),
         }
     }
 
