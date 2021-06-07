@@ -21,7 +21,7 @@ use zenoh_util::sync::get_mut_unchecked;
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::protocol::link::Link;
 use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::protocol::session::{DeMux, Mux, Primitives, Session};
+use super::protocol::session::{DeMux, Mux, Primitives, Session, SessionEventHandler};
 
 use zenoh_util::core::ZResult;
 use zenoh_util::zconfigurable;
@@ -323,7 +323,7 @@ impl Router {
         let handler = Arc::new(LinkStateInterceptor::new(
             session.clone(),
             self.tables.clone(),
-            DeMux::new(Face {
+            Face {
                 tables: self.tables.clone(),
                 state: tables
                     .open_net_face(
@@ -334,7 +334,7 @@ impl Router {
                     )
                     .upgrade()
                     .unwrap(),
-            }),
+            },
         ));
 
         match (self.whatami, whatami) {
@@ -355,15 +355,17 @@ impl Router {
 pub struct LinkStateInterceptor {
     pub(crate) session: Session,
     pub(crate) tables: Arc<RwLock<Tables>>,
-    pub(crate) demux: DeMux,
+    pub(crate) face: Face,
+    pub(crate) demux: DeMux<Face>,
 }
 
 impl LinkStateInterceptor {
-    fn new(session: Session, tables: Arc<RwLock<Tables>>, demux: DeMux) -> Self {
+    fn new(session: Session, tables: Arc<RwLock<Tables>>, face: Face) -> Self {
         LinkStateInterceptor {
             session,
             tables,
-            demux,
+            face: face.clone(),
+            demux: DeMux::new(face),
         }
     }
 

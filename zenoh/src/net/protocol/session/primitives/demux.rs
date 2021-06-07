@@ -11,24 +11,28 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::super::super::routing::face::Face;
+use super::super::SessionEventHandler;
 use super::link::Link;
 use super::proto::{
     zmsg, Data, Declaration, Declare, LinkStateList, Pull, Query, ZenohBody, ZenohMessage,
 };
+use super::Primitives;
+use std::any::Any;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
-pub struct DeMux {
-    pub(crate) primitives: Face,
+pub struct DeMux<P: Primitives + Send + Sync> {
+    primitives: P,
 }
 
-impl DeMux {
-    pub fn new(primitives: Face) -> DeMux {
+impl<P: Primitives + Send + Sync> DeMux<P> {
+    pub fn new(primitives: P) -> DeMux<P> {
         DeMux { primitives }
     }
+}
 
-    pub fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
+    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         match msg.body {
             ZenohBody::Declare(Declare { declarations, .. }) => {
                 for declaration in declarations {
@@ -142,13 +146,17 @@ impl DeMux {
         Ok(())
     }
 
-    pub fn new_link(&self, _link: Link) {}
+    fn new_link(&self, _link: Link) {}
 
-    pub fn del_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
 
-    pub fn closing(&self) {
+    fn closing(&self) {
         self.primitives.send_close();
     }
 
-    pub fn closed(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }

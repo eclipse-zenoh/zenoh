@@ -800,7 +800,7 @@ impl SessionEventHandler for OrchSession {
             }) = msg.body
             {
                 let (rid, suffix) = (&key).into();
-                let face = &self.sub_event_handler.demux.primitives.state;
+                let face = &self.sub_event_handler.face.state;
                 full_reentrant_route_data(
                     &self.sub_event_handler.tables,
                     face,

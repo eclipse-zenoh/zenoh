@@ -89,24 +89,25 @@ impl fmt::Display for FaceState {
     }
 }
 
+#[derive(Clone)]
 pub struct Face {
     pub(crate) tables: Arc<RwLock<Tables>>,
     pub(crate) state: Arc<FaceState>,
 }
 
-impl Face {
-    pub fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+impl Primitives for Face {
+    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix);
     }
 
-    pub fn forget_resource(&self, rid: ZInt) {
+    fn forget_resource(&self, rid: ZInt) {
         let mut tables = zwrite!(self.tables);
         undeclare_resource(&mut tables, &mut self.state.clone(), rid);
     }
 
-    pub fn decl_subscriber(
+    fn decl_subscriber(
         &self,
         reskey: &ResKey,
         sub_info: &SubInfo,
@@ -193,7 +194,7 @@ impl Face {
         }
     }
 
-    pub fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
@@ -267,11 +268,11 @@ impl Face {
         }
     }
 
-    pub fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    pub fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    pub fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
@@ -345,7 +346,7 @@ impl Face {
         }
     }
 
-    pub fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
@@ -419,7 +420,7 @@ impl Face {
         }
     }
 
-    pub fn send_data(
+    fn send_data(
         &self,
         reskey: &ResKey,
         payload: RBuf,
@@ -441,7 +442,7 @@ impl Face {
         );
     }
 
-    pub fn send_query(
+    fn send_query(
         &self,
         reskey: &ResKey,
         predicate: &str,
@@ -465,7 +466,7 @@ impl Face {
         );
     }
 
-    pub fn send_reply_data(
+    fn send_reply_data(
         &self,
         qid: ZInt,
         source_kind: ZInt,
@@ -487,12 +488,12 @@ impl Face {
         );
     }
 
-    pub fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: ZInt) {
         let mut tables = zwrite!(self.tables);
         route_send_reply_final(&mut tables, &mut self.state.clone(), qid);
     }
 
-    pub fn send_pull(
+    fn send_pull(
         &self,
         is_final: bool,
         reskey: &ResKey,
@@ -512,7 +513,7 @@ impl Face {
         );
     }
 
-    pub fn send_close(&self) {
+    fn send_close(&self) {
         zwrite!(self.tables).close_face(&Arc::downgrade(&self.state));
     }
 }
