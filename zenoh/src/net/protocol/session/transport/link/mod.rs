@@ -18,7 +18,7 @@ use super::super::super::link::Link;
 use super::core;
 use super::core::ZInt;
 use super::io;
-use super::io::{ArcSlice, RBuf};
+use super::io::{RBuf, ZSlice};
 use super::proto;
 use super::proto::SessionMessage;
 use super::session;
@@ -263,7 +263,7 @@ async fn rx_task_stream(
             })??;
         match action {
             Action::Read(n) => {
-                rbuf.add_slice(ArcSlice::new(buffer.into(), 0, n));
+                rbuf.add_slice(ZSlice::new(buffer.into(), 0, n));
 
                 while rbuf.can_read() {
                     match rbuf.read_session_message() {
@@ -333,7 +333,7 @@ async fn rx_task_dgram(
                 }
 
                 // Add the received bytes to the RBuf for deserialization
-                rbuf.add_slice(ArcSlice::new(buffer.into(), 0, n));
+                rbuf.add_slice(ZSlice::new(buffer.into(), 0, n));
 
                 // Deserialize all the messages from the current RBuf
                 while rbuf.can_read() {

@@ -13,7 +13,7 @@
 //
 use super::core::{PeerId, ZInt, ZINT_MAX_BYTES};
 use super::link::Locator;
-use super::{ArcSlice, RBuf, WBuf};
+use super::{RBuf, WBuf, ZSlice};
 
 macro_rules! read_zint {
     ($buf:expr, $res:ty) => {
@@ -142,7 +142,7 @@ impl WBuf {
     }
 
     // Similar than write_bytes_array but zero-copy as slice is shared
-    pub fn write_bytes_slice(&mut self, slice: &ArcSlice) -> bool {
+    pub fn write_bytes_slice(&mut self, slice: &ZSlice) -> bool {
         self.write_usize_as_zint(slice.len()) && self.write_slice(slice.clone())
     }
 
