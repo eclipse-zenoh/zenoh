@@ -166,12 +166,12 @@ impl Tables {
                     Resource::clean(&mut res);
                 }
                 face.local_mappings.clear();
-                while let Some(mut res) = face.remote_subs.pop() {
+                for mut res in face.remote_subs.drain() {
                     get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
                     undeclare_client_subscription(self, &mut face_clone, &mut res);
                     Resource::clean(&mut res);
                 }
-                while let Some(mut res) = face.remote_qabls.pop() {
+                for mut res in face.remote_qabls.drain() {
                     get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
                     undeclare_client_queryable(self, &mut face_clone, &mut res);
                     Resource::clean(&mut res);

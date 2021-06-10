@@ -72,7 +72,7 @@ fn propagate_simple_queryable(
                 _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
             }
         {
-            get_mut_unchecked(dst_face).local_qabls.push(res.clone());
+            get_mut_unchecked(dst_face).local_qabls.insert(res.clone());
             let reskey = Resource::decl_key(res, dst_face);
             dst_face.primitives.decl_queryable(&reskey, None);
         }
@@ -239,7 +239,7 @@ fn register_client_queryable(
             }
         }
     }
-    get_mut_unchecked(face).remote_qabls.push(res.clone());
+    get_mut_unchecked(face).remote_qabls.insert(res.clone());
 }
 
 pub fn declare_client_queryable(
@@ -307,9 +307,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
             let reskey = Resource::get_best_key(res, "", face.id);
             face.primitives.forget_queryable(&reskey, None);
 
-            get_mut_unchecked(face)
-                .local_qabls
-                .retain(|qabl| qabl != res);
+            get_mut_unchecked(face).local_qabls.remove(res);
         }
     }
 }
@@ -466,9 +464,7 @@ pub(crate) fn undeclare_client_queryable(
     if let Some(mut ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(&mut ctx).qabl = false;
     }
-    get_mut_unchecked(face)
-        .remote_qabls
-        .retain(|x| !Arc::ptr_eq(&x, &res));
+    get_mut_unchecked(face).remote_qabls.remove(res);
 
     match tables.whatami {
         whatami::ROUTER => {
@@ -536,13 +532,11 @@ pub(crate) fn undeclare_client_queryable(
     };
     if client_qabls.len() == 1 && !rqabls && !pqabls {
         let face = &mut client_qabls[0];
-        if face.local_qabls.contains(&res) {
+        if face.local_qabls.contains(res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
             face.primitives.forget_queryable(&reskey, None);
 
-            get_mut_unchecked(face)
-                .local_qabls
-                .retain(|qabl| qabl != &(*res));
+            get_mut_unchecked(face).local_qabls.remove(res);
         }
     }
 
@@ -569,7 +563,7 @@ pub fn forget_client_queryable(
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     if face.whatami == whatami::CLIENT && tables.whatami != whatami::CLIENT {
         for qabl in &tables.router_qabls {
-            get_mut_unchecked(face).local_qabls.push(qabl.clone());
+            get_mut_unchecked(face).local_qabls.insert(qabl.clone());
             let reskey = Resource::decl_key(&qabl, face);
             face.primitives.decl_queryable(&reskey, None);
         }

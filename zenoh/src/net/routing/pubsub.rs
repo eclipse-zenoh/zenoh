@@ -75,7 +75,7 @@ fn propagate_simple_subscription(
                 _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
             }
         {
-            get_mut_unchecked(dst_face).local_subs.push(res.clone());
+            get_mut_unchecked(dst_face).local_subs.insert(res.clone());
             let reskey = Resource::decl_key(res, dst_face);
             dst_face.primitives.decl_subscriber(&reskey, sub_info, None);
         }
@@ -266,7 +266,7 @@ fn register_client_subscription(
             }
         }
     }
-    get_mut_unchecked(face).remote_subs.push(res.clone());
+    get_mut_unchecked(face).remote_subs.insert(res.clone());
 }
 
 pub fn declare_client_subscription(
@@ -351,7 +351,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
             let reskey = Resource::get_best_key(res, "", face.id);
             face.primitives.forget_subscriber(&reskey, None);
 
-            get_mut_unchecked(face).local_subs.retain(|sub| sub != res);
+            get_mut_unchecked(face).local_subs.remove(res);
         }
     }
 }
@@ -512,9 +512,7 @@ pub(crate) fn undeclare_client_subscription(
     if let Some(mut ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(&mut ctx).subs = None;
     }
-    get_mut_unchecked(face)
-        .remote_subs
-        .retain(|x| !Arc::ptr_eq(&x, &res));
+    get_mut_unchecked(face).remote_subs.remove(res);
 
     match tables.whatami {
         whatami::ROUTER => {
@@ -582,13 +580,11 @@ pub(crate) fn undeclare_client_subscription(
     };
     if client_subs.len() == 1 && !rsubs && !psubs {
         let face = &mut client_subs[0];
-        if face.local_subs.contains(&res) {
+        if face.local_subs.contains(res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
             face.primitives.forget_subscriber(&reskey, None);
 
-            get_mut_unchecked(face)
-                .local_subs
-                .retain(|sub| sub != &(*res));
+            get_mut_unchecked(face).local_subs.remove(res);
         }
     }
 
@@ -620,7 +616,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     };
     if face.whatami == whatami::CLIENT && tables.whatami != whatami::CLIENT {
         for sub in &tables.router_subs {
-            get_mut_unchecked(face).local_subs.push(sub.clone());
+            get_mut_unchecked(face).local_subs.insert(sub.clone());
             let reskey = Resource::decl_key(&sub, face);
             face.primitives.decl_subscriber(&reskey, &sub_info, None);
         }
