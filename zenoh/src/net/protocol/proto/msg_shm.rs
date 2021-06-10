@@ -11,46 +11,63 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "zero-copy")]
+use super::io::SharedMemoryManager;
 use super::msg::*;
+#[cfg(feature = "zero-copy")]
+use zenoh_util::core::ZResult;
 
 impl ZenohMessage {
     #[cfg(feature = "zero-copy")]
-    pub(crate) fn flatten_shm(&mut self) {
+    pub(crate) fn from_shm_info_to_shm_buff(
+        &mut self,
+        shmm: &mut SharedMemoryManager,
+    ) -> ZResult<bool> {
+        let mut res = false;
+
         if let Some(at) = self.attachment.as_mut() {
-            at.buffer.flatten_shm();
+            res |= at.buffer.from_shm_info_to_shm_buff(shmm)?;
         }
 
         if let ZenohBody::Data(Data {
             payload, data_info, ..
         }) = &mut self.body
         {
-            payload.flatten_shm();
+            let is_shm = payload.from_shm_info_to_shm_buff(shmm)?;
 
-            // Set the right data info SHM parameters
-            if let Some(di) = data_info {
-                di.is_shm = false;
-                if !di.has_opts() {
-                    *data_info = None;
-                    // Unset the DataInfo flag in the header
-                    self.header &= !zmsg::flag::I;
+            if is_shm {
+                // Set the right data info SHM parameters
+                if let Some(di) = data_info {
+                    di.is_shm = false;
+                    if !di.has_opts() {
+                        *data_info = None;
+                        // Unset the DataInfo flag in the header
+                        self.header &= !zmsg::flag::I;
+                    }
                 }
             }
+
+            res |= is_shm;
         }
+
+        Ok(res)
     }
 
     #[cfg(feature = "zero-copy")]
-    pub(crate) fn prepare_shm(&mut self) {
+    pub(crate) fn from_shm_buff_to_shm_info(&mut self) -> ZResult<bool> {
+        let mut res = false;
+
         if let Some(at) = self.attachment.as_mut() {
-            at.buffer.inc_ref_shm();
+            res |= at.buffer.from_shm_buff_to_shm_info()?;
         }
 
         if let ZenohBody::Data(Data {
             payload, data_info, ..
         }) = &mut self.body
         {
-            if payload.is_shm() {
-                payload.inc_ref_shm();
+            let is_shm = payload.from_shm_buff_to_shm_info()?;
 
+            if is_shm {
                 // Set the right data info SHM parameters
                 match data_info {
                     Some(di) => {
@@ -76,7 +93,11 @@ impl ZenohMessage {
                     }
                 }
             }
+
+            res |= is_shm;
         }
+
+        Ok(res)
     }
 }
 

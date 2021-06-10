@@ -20,6 +20,8 @@ mod tx;
 use super::core;
 use super::core::{PeerId, Reliability, WhatAmI, ZInt};
 use super::io;
+#[cfg(feature = "zero-copy")]
+use super::io::SharedMemoryManager;
 use super::link::Link;
 use super::proto;
 use super::proto::{SessionMessage, ZenohMessage};
@@ -124,7 +126,9 @@ pub(crate) struct SessionTransport {
     // Mutex for notification
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The session transport can do shm
-    pub(super) is_shm: bool,
+    is_shm: bool,
+    #[cfg(feature = "zero-copy")]
+    pub(super) shm: Arc<Mutex<SharedMemoryManager>>,
 }
 
 impl SessionTransport {
@@ -137,6 +141,9 @@ impl SessionTransport {
         initial_sn_rx: ZInt,
         is_shm: bool,
     ) -> SessionTransport {
+        let amp = manager.pid();
+        let cpd = pid.clone();
+
         SessionTransport {
             manager,
             pid,
@@ -162,12 +169,20 @@ impl SessionTransport {
             callback: Arc::new(RwLock::new(None)),
             alive: AsyncArc::new(AsyncMutex::new(true)),
             is_shm,
+            #[cfg(feature = "zero-copy")]
+            shm: Arc::new(Mutex::new(
+                SharedMemoryManager::new(format!("ZSHM.{}.{}", amp, cpd), 1_024).unwrap(),
+            )),
         }
     }
 
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
+    pub(crate) fn is_shm(&self) -> bool {
+        self.is_shm
+    }
+
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler + Send + Sync>> {
         zread!(self.callback).clone()
     }
@@ -278,10 +293,14 @@ impl SessionTransport {
     /// Schedule a Zenoh message on the transmission queue    
     #[cfg(feature = "zero-copy")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
-        if self.is_shm {
-            message.prepare_shm();
+        let res = if self.is_shm {
+            message.from_shm_buff_to_shm_info()
         } else {
-            message.flatten_shm();
+            let mut guard = zlock!(self.shm);
+            message.from_shm_info_to_shm_buff(&mut *guard)
+        };
+        if res.is_err() {
+            return;
         }
         self.schedule_first_fit(message);
     }

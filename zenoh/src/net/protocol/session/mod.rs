@@ -122,7 +122,7 @@ impl Session {
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
         let transport = zweak!(self.0, STR_ERR);
-        Ok(transport.is_shm)
+        Ok(transport.is_shm())
     }
 
     #[inline(always)]
@@ -182,7 +182,7 @@ impl fmt::Debug for Session {
             f.debug_struct("Session")
                 .field("peer", &transport.pid)
                 .field("sn_resolution", &transport.sn_resolution)
-                .field("is_shm", &transport.is_shm)
+                .field("is_shm", &transport.is_shm())
                 .finish()
         } else {
             write!(f, "{}", STR_ERR)

@@ -219,7 +219,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     ) -> ZResult<PeerAuthenticatorOutput> {
         let init_syn_property = InitSynProperty {
             version: SHM_VERSION,
-            shm: self.buffer.clone().into(),
+            shm: self.buffer.info.serialize().unwrap().into(),
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_syn_property_shm(&init_syn_property);
@@ -280,9 +280,6 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         log::debug!("Authenticating Shared Memory Access...");
 
         let xs = sbuf.as_slice();
-        log::debug!("Extracted Slice creating array... printing content:");
-        log::debug!("Slice: {:?}", xs);
-
         let bytes: [u8; SHM_SIZE] = match xs.try_into() {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -295,7 +292,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Create the InitAck attachment
         let init_ack_property = InitAckProperty {
             challenge,
-            shm: self.buffer.clone().into(),
+            shm: self.buffer.info.serialize().unwrap().into(),
         };
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);

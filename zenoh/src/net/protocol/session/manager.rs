@@ -406,10 +406,12 @@ impl SessionManager {
                 return zerror!(ZErrorKind::Other { descr: e });
             }
 
-            if session.is_shm != is_shm {
+            if session.is_shm() != is_shm {
                 let e = format!(
                     "Session with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
-                    peer, is_shm, session.is_shm
+                    peer,
+                    is_shm,
+                    session.is_shm()
                 );
                 log::trace!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });

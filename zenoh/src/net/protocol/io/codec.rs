@@ -13,7 +13,13 @@
 //
 use super::core::{PeerId, ZInt, ZINT_MAX_BYTES};
 use super::link::Locator;
+#[cfg(feature = "zero-copy")]
+use super::SharedMemoryBufInfo;
 use super::{RBuf, WBuf, ZSlice};
+#[cfg(feature = "zero-copy")]
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+#[cfg(feature = "zero-copy")]
+use zenoh_util::zerror;
 
 macro_rules! read_zint {
     ($buf:expr, $res:ty) => {
@@ -35,6 +41,26 @@ macro_rules! read_zint {
             return None;
         }
     };
+}
+
+#[cfg(feature = "zero-copy")]
+impl SharedMemoryBufInfo {
+    pub fn serialize(&self) -> ZResult<Vec<u8>> {
+        bincode::serialize(self).map_err(|e| {
+            zerror2!(ZErrorKind::ValueEncodingFailed {
+                descr: format!("Unable to serialize SharedMemoryBufInfo: {}", e)
+            })
+        })
+    }
+
+    pub fn deserialize(bs: &[u8]) -> ZResult<SharedMemoryBufInfo> {
+        match bincode::deserialize::<SharedMemoryBufInfo>(&bs) {
+            Ok(info) => Ok(info),
+            Err(e) => zerror!(ZErrorKind::ValueDecodingFailed {
+                descr: format!("Unable to deserialize SharedMemoryBufInfo: {}", e)
+            }),
+        }
+    }
 }
 
 impl RBuf {

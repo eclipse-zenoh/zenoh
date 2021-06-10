@@ -18,16 +18,21 @@ use std::fmt;
 use std::io;
 use std::io::IoSlice;
 #[cfg(feature = "zero-copy")]
+use std::sync::Arc;
+#[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 #[cfg(feature = "zero-copy")]
 use zenoh_util::zerror;
 
+/*************************************/
+/*           RBUF POSITION           */
+/*************************************/
 #[derive(Clone, Copy, PartialEq)]
 pub struct RBufPos {
-    slice: usize,
-    byte: usize,
-    len: usize,
-    read: usize,
+    slice: usize, // The ZSlice index
+    byte: usize,  // The byte in the ZSlice
+    len: usize,   // The total lenght in bytes of the RBuf
+    read: usize,  // The amount read so far in the RBuf
 }
 
 impl RBufPos {
@@ -70,12 +75,9 @@ impl fmt::Debug for RBufPos {
     }
 }
 
-#[derive(Clone, Default)]
-pub struct RBuf {
-    slices: RBufInner,
-    pos: RBufPos,
-}
-
+/*************************************/
+/*            RBUF INNER             */
+/*************************************/
 #[derive(Clone)]
 enum RBufInner {
     Single(ZSlice),
@@ -87,6 +89,15 @@ impl Default for RBufInner {
     fn default() -> RBufInner {
         RBufInner::Empty
     }
+}
+
+/*************************************/
+/*              RBUF                 */
+/*************************************/
+#[derive(Clone, Default)]
+pub struct RBuf {
+    slices: RBufInner,
+    pos: RBufPos,
 }
 
 impl RBuf {
@@ -136,6 +147,15 @@ impl RBuf {
     }
 
     #[inline]
+    pub fn get_slices_num(&self) -> usize {
+        match &self.slices {
+            RBufInner::Single(_) => 1,
+            RBufInner::Multiple(m) => m.len(),
+            RBufInner::Empty => 0,
+        }
+    }
+
+    #[inline]
     pub fn get_slice_mut(&mut self, index: usize) -> Option<&mut ZSlice> {
         match &mut self.slices {
             RBufInner::Single(s) => match index {
@@ -147,18 +167,18 @@ impl RBuf {
         }
     }
 
-    pub fn as_ioslices(&self) -> Vec<IoSlice> {
-        match &self.slices {
-            RBufInner::Single(s) => vec![s.as_ioslice()],
-            RBufInner::Multiple(m) => m.iter().map(|s| s.as_ioslice()).collect(),
-            RBufInner::Empty => vec![],
-        }
-    }
-
     pub fn as_slices(&self) -> Vec<ZSlice> {
         match &self.slices {
             RBufInner::Single(s) => vec![s.clone()],
             RBufInner::Multiple(m) => m.clone(),
+            RBufInner::Empty => vec![],
+        }
+    }
+
+    pub fn as_ioslices(&self) -> Vec<IoSlice> {
+        match &self.slices {
+            RBufInner::Single(s) => vec![s.as_ioslice()],
+            RBufInner::Multiple(m) => m.iter().map(|s| s.as_ioslice()).collect(),
             RBufInner::Empty => vec![],
         }
     }
@@ -201,6 +221,7 @@ impl RBuf {
                 return true;
             }
         }
+
         false
     }
 
@@ -273,7 +294,7 @@ impl RBuf {
             let remaining = slice.len() - pos.1;
             let to_read = remaining.min(bs.len() - written);
             bs[written..written + to_read]
-                .copy_from_slice(slice.get_sub_slice(pos.1, pos.1 + to_read));
+                .copy_from_slice(&slice.as_slice()[pos.1..pos.1 + to_read]);
             written += to_read;
             pos = (pos.0 + 1, 0);
         }
@@ -317,6 +338,16 @@ impl RBuf {
         vec
     }
 
+    // returns a ZSlice that may allocate in case of RBuf being composed of multiple ZSlices
+    #[inline]
+    pub fn flatten(&self) -> ZSlice {
+        match &self.slices {
+            RBufInner::Single(s) => s.clone(),
+            RBufInner::Multiple(_) => self.to_vec().into(),
+            RBufInner::Empty => vec![].into(),
+        }
+    }
+
     // Read 'len' bytes from 'self' and add those to 'dest'
     // This is 0-copy, only ZSlices from 'self' are added to 'dest', without cloning the original buffer.
     pub fn read_into_rbuf(&mut self, dest: &mut RBuf, len: usize) -> bool {
@@ -344,6 +375,7 @@ impl RBuf {
         self.read_into_rbuf(dest, self.readable())
     }
 
+    // @TODO: remove
     #[cfg(feature = "zero-copy")]
     pub fn into_shm(self, m: &mut SharedMemoryManager) -> ZResult<SharedMemoryBuf> {
         match bincode::deserialize::<SharedMemoryBufInfo>(&self.to_vec()) {
@@ -354,33 +386,166 @@ impl RBuf {
         }
     }
 
-    // @TODO
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub(crate) fn flatten_shm(&mut self) {
-        // if let Some(shm) = self.shm_buf.take() {
-        //     self.clear();
-        //     self.add_slice(shm.into());
-        // }
+    pub(crate) fn from_shm_info_to_shm_buff(
+        &mut self,
+        shmm: &mut SharedMemoryManager,
+    ) -> ZResult<bool> {
+        self.pos.clear();
+
+        let mut res = false;
+        match &mut self.slices {
+            RBufInner::Single(s) => {
+                res = s.from_shm_info_to_shm_buff(shmm)?;
+                self.pos.len += s.len();
+            }
+            RBufInner::Multiple(m) => {
+                for s in m.iter_mut() {
+                    res = res || s.from_shm_info_to_shm_buff(shmm)?;
+                    self.pos.len += s.len();
+                }
+            }
+            RBufInner::Empty => {}
+        }
+
+        Ok(res)
     }
 
-    // @TODO
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub(crate) fn inc_ref_shm(&mut self) {
-        // if let Some(shm) = self.shm_buf.as_mut() {
-        //     shm.inc_ref_count();
-        // }
-    }
+    pub(crate) fn from_shm_buff_to_shm_info(&mut self) -> ZResult<bool> {
+        self.pos.clear();
 
-    #[cfg(feature = "zero-copy")]
-    #[inline]
-    pub(crate) fn is_shm(&mut self) -> bool {
-        // self.shm_buf.is_some()
-        false
+        let mut res = false;
+        match &mut self.slices {
+            RBufInner::Single(s) => {
+                res = s.from_shm_buff_to_shm_info()?;
+                self.pos.len = s.len();
+            }
+            RBufInner::Multiple(m) => {
+                for s in m.iter_mut() {
+                    res = res || s.from_shm_buff_to_shm_info()?;
+                    self.pos.len += s.len();
+                }
+            }
+            RBufInner::Empty => {}
+        }
+
+        Ok(res)
     }
 }
 
+impl fmt::Display for RBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "RBuf{{ pos: {:?}, content: {} }}",
+            self.get_pos(),
+            hex::encode_upper(self.to_vec())
+        )
+    }
+}
+
+impl fmt::Debug for RBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "RBuf{{ pos: {:?}, ", self.pos)?;
+        write!(f, "slices: [")?;
+        match &self.slices {
+            RBufInner::Single(s) => {
+                #[cfg(feature = "zero-copy")]
+                {
+                    if s.is_shm() {
+                        write!(f, " SHM:")?;
+                    } else {
+                        write!(f, " BUF:")?;
+                    }
+                }
+                #[cfg(not(feature = "zero-copy"))]
+                {
+                    write!(f, " BUF:")?;
+                }
+                write!(f, "{}", hex::encode_upper(s.as_slice()))?;
+            }
+            RBufInner::Multiple(m) => {
+                for s in m.iter() {
+                    #[cfg(feature = "zero-copy")]
+                    {
+                        if s.is_shm() {
+                            write!(f, " SHM:")?;
+                        } else {
+                            write!(f, " BUF:")?;
+                        }
+                    }
+                    #[cfg(not(feature = "zero-copy"))]
+                    {
+                        write!(f, " BUF:")?;
+                    }
+                    write!(f, " {},", hex::encode_upper(s.as_slice()))?;
+                }
+            }
+            RBufInner::Empty => {
+                write!(f, " None")?;
+            }
+        }
+        write!(f, " ] }}")
+    }
+}
+
+/*************************************/
+/*           RBUF ITERATOR           */
+/*************************************/
+pub struct RBufIterator {
+    index: usize,
+    slices: RBufInner,
+}
+
+impl Iterator for RBufIterator {
+    type Item = ZSlice;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &self.slices {
+            RBufInner::Single(s) => {
+                let s = s.clone();
+                self.slices = RBufInner::Empty;
+                Some(s)
+            }
+            RBufInner::Multiple(m) => {
+                let s = m.get(self.index)?.clone();
+                self.index += 1;
+                Some(s)
+            }
+            RBufInner::Empty => None,
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &self.slices {
+            RBufInner::Single(_) => (1, Some(1)),
+            RBufInner::Multiple(m) => {
+                let remaining = m.len() - self.index;
+                (remaining, Some(remaining))
+            }
+            RBufInner::Empty => (0, Some(0)),
+        }
+    }
+}
+
+impl IntoIterator for RBuf {
+    type Item = ZSlice;
+    type IntoIter = RBufIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        RBufIterator {
+            index: 0,
+            slices: self.slices,
+        }
+    }
+}
+
+/*************************************/
+/*            RBUF READ              */
+/*************************************/
 impl io::Read for RBuf {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -424,38 +589,9 @@ impl io::Read for RBuf {
     //}
 }
 
-impl fmt::Display for RBuf {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "RBuf{{ pos: {:?}, content: {} }}",
-            self.get_pos(),
-            hex::encode_upper(self.to_vec())
-        )
-    }
-}
-
-impl fmt::Debug for RBuf {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "RBuf{{ pos: {:?}, ", self.pos)?;
-        write!(f, "slices:")?;
-        match &self.slices {
-            RBufInner::Single(s) => {
-                write!(f, " {}", hex::encode_upper(s.as_slice()))?;
-            }
-            RBufInner::Multiple(m) => {
-                for s in m.iter() {
-                    write!(f, " {},", hex::encode_upper(s.as_slice()))?;
-                }
-            }
-            RBufInner::Empty => {
-                write!(f, " None")?;
-            }
-        }
-        write!(f, " }}")
-    }
-}
-
+/*************************************/
+/*            RBUF FROM              */
+/*************************************/
 impl From<ZSlice> for RBuf {
     fn from(slice: ZSlice) -> RBuf {
         let mut rbuf = RBuf::new();
@@ -527,25 +663,30 @@ impl PartialEq for RBuf {
     }
 }
 
-// @TODO
+#[cfg(feature = "zero-copy")]
+impl From<Arc<SharedMemoryBuf>> for RBuf {
+    fn from(smb: Arc<SharedMemoryBuf>) -> RBuf {
+        let mut rbuf = RBuf::new();
+        rbuf.add_slice(smb.into());
+        rbuf
+    }
+}
+
 #[cfg(feature = "zero-copy")]
 impl From<Box<SharedMemoryBuf>> for RBuf {
-    fn from(_smb: Box<SharedMemoryBuf>) -> RBuf {
-        // let bs = bincode::serialize(&smb.info).unwrap();
-        // let len = bs.len();
-        // let slice = ZSlice::new(bs.into(), 0, len);
-        // let mut rbuf = RBuf::new();
-        // rbuf.add_slice(slice);
-        // rbuf.shm_buf = Some(smb);
-        // rbuf
-        RBuf::empty()
+    fn from(smb: Box<SharedMemoryBuf>) -> RBuf {
+        let mut rbuf = RBuf::new();
+        rbuf.add_slice(smb.into());
+        rbuf
     }
 }
 
 #[cfg(feature = "zero-copy")]
 impl From<SharedMemoryBuf> for RBuf {
     fn from(smb: SharedMemoryBuf) -> RBuf {
-        RBuf::from(Box::new(smb))
+        let mut rbuf = RBuf::new();
+        rbuf.add_slice(smb.into());
+        rbuf
     }
 }
 

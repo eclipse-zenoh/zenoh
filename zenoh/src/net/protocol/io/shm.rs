@@ -204,7 +204,7 @@ unsafe impl Send for SharedMemoryManager {}
 impl SharedMemoryManager {
     /// Creates a new SharedMemoryManager managing allocations of a region of the
     /// given size.
-    pub fn new(id: String, size: usize) -> Result<SharedMemoryManager, ShmemError> {
+    pub fn new(id: String, size: usize) -> ZResult<SharedMemoryManager> {
         let mut temp_dir = std::env::temp_dir();
         let file_name: String = format!("{}_{}", ZENOH_SHM_PREFIX, id);
         temp_dir.push(file_name);
@@ -218,10 +218,18 @@ impl SharedMemoryManager {
         {
             Ok(m) => m,
             Err(ShmemError::LinkExists) => {
-                log::trace!("Shared Memory already exists, opening it");
-                ShmemConf::new().flink(path.clone()).open()?
+                log::trace!("SharedMemory already exists, opening it");
+                ShmemConf::new().flink(path.clone()).open().map_err(|e| {
+                    zerror2!(ZErrorKind::SharedMemoryError {
+                        descr: format!("Unable to open SharedMemoryManager: {}", e)
+                    })
+                })?
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                return zerror!(ZErrorKind::SharedMemoryError {
+                    descr: format!("Unable to open SharedMemoryManager: {}", e)
+                })
+            }
         };
         let base_ptr = shmem.as_ptr();
 
