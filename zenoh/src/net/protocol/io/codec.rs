@@ -15,6 +15,8 @@ use super::core::{PeerId, ZInt, ZINT_MAX_BYTES};
 use super::link::Locator;
 #[cfg(feature = "zero-copy")]
 use super::SharedMemoryBufInfo;
+#[cfg(feature = "zero-copy")]
+use super::ZSliceBufferShm;
 use super::{RBuf, WBuf, ZSlice};
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -96,6 +98,15 @@ impl RBuf {
         } else {
             None
         }
+    }
+
+    #[cfg(feature = "zero-copy")]
+    pub fn read_shminfo(&mut self) -> Option<RBuf> {
+        let info = self.read_bytes_array()?;
+        let mut rbuf = RBuf::new();
+        let slice = ZSliceBufferShm::Info(info.into());
+        rbuf.add_slice(slice.into());
+        Some(rbuf)
     }
 
     pub fn read_string(&mut self) -> Option<String> {

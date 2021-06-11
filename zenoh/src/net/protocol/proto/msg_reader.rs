@@ -13,7 +13,6 @@
 //
 use super::core::*;
 use super::io::RBuf;
-
 use super::msg::*;
 
 impl RBuf {
@@ -267,12 +266,18 @@ impl RBuf {
                         CongestionControl::Block
                     };
                     let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
-                    let data_info = if zmsg::has_flag(header, zmsg::flag::I) {
-                        Some(self.read_data_info()?)
+                    let (data_info, is_shm) = if zmsg::has_flag(header, zmsg::flag::I) {
+                        let di = self.read_data_info()?;
+                        let is_shm = di.is_shm;
+                        (Some(di), is_shm)
                     } else {
-                        None
+                        (None, false)
                     };
-                    let payload = self.read_rbuf()?;
+                    let payload = if is_shm {
+                        self.read_shminfo()?
+                    } else {
+                        self.read_rbuf()?
+                    };
 
                     let body = ZenohBody::Data(Data {
                         key,

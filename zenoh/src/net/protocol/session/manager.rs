@@ -20,6 +20,8 @@ use super::defaults::{
     ZNS_BATCH_SIZE, ZNS_KEEP_ALIVE, ZNS_LEASE, ZNS_OPEN_MAX_CONCURRENT, ZNS_OPEN_TIMEOUT,
     ZNS_SEQ_NUM_RESOLUTION,
 };
+#[cfg(feature = "zero-copy")]
+use super::io::SharedMemoryReader;
 use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
 };
@@ -30,7 +32,7 @@ use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
@@ -183,6 +185,8 @@ pub struct SessionManager {
     protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManager>>>,
     // Established sessions
     sessions: Arc<Mutex<HashMap<PeerId, Arc<SessionTransport>>>>,
+    #[cfg(feature = "zero-copy")]
+    pub(super) shmr: Arc<RwLock<SharedMemoryReader>>,
 }
 
 impl SessionManager {
@@ -260,6 +264,8 @@ impl SessionManager {
             incoming: AsyncArc::new(AsyncMutex::new(HashMap::new())),
             prng: AsyncArc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
+            #[cfg(feature = "zero-copy")]
+            shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
         }
     }
 

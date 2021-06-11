@@ -33,11 +33,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
 
-    let id = session.id().await;
-    println!("Creating Shared Memory Manager...");
-    let mut shm = SharedMemoryManager::new(id, 8_192).unwrap();
-    println!("{:?}", &shm);
-
     println!("Declaring Subscriber on {}", selector);
 
     let sub_info = SubInfo {
@@ -58,18 +53,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         select!(
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
-                let is_shm = match sample.data_info {
-                    Some(info) => info.is_shm,
-                    None => false
-                };
-
-                if is_shm {
-                    let sbuf = sample.payload.into_shm(&mut shm).unwrap();
-                    println!(">> [Subscription listener] Received SHM ('{}': '{}')", sample.res_name, String::from_utf8_lossy(&sbuf.as_slice()));
-                } else {
-                    let nbuf = sample.payload.to_vec();
-                    println!(">> [Subscription listener] Received NET ('{}': '{}')", sample.res_name, String::from_utf8_lossy(&nbuf.as_slice()));
-                }
+                let sbuf = sample.payload.flatten();
+                println!(">> [Subscription listener] Received SHM ('{}': '{}')", sample.res_name, String::from_utf8_lossy(&sbuf.as_slice()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

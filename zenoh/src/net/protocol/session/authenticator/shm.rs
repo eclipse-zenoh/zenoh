@@ -77,7 +77,7 @@ impl WBuf {
 impl RBuf {
     fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
-        let shm = self.read_rbuf()?;
+        let shm = self.read_shminfo()?;
         Some(InitSynProperty { version, shm })
     }
 }
@@ -108,7 +108,7 @@ impl WBuf {
 impl RBuf {
     fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty> {
         let challenge = self.read_zint()?;
-        let shm = self.read_rbuf()?;
+        let shm = self.read_shminfo()?;
         Some(InitAckProperty { challenge, shm })
     }
 }
@@ -252,7 +252,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
                 return Ok(PeerAuthenticatorOutput::default());
             }
         };
-        let init_syn_property = match rbuf.read_init_syn_property_shm() {
+        let mut init_syn_property = match rbuf.read_init_syn_property_shm() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -269,18 +269,26 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
         // Try to read from the shared memory
         let mut manager = zasynclock!(self.manager);
-        let sbuf = match init_syn_property.shm.into_shm(&mut manager) {
-            Ok(sbuf) => sbuf,
-            Err(_) => {
-                log::debug!("Peer {} can not operate over shared memory", peer_id);
+        match init_syn_property.shm.map_to_shmbuf(&mut manager.reader) {
+            Ok(res) => {
+                if !res {
+                    log::debug!(
+                        "Peer {} can not operate over shared memory: not a SHM buffer",
+                        peer_id
+                    );
+                    return Ok(PeerAuthenticatorOutput::default());
+                }
+            }
+            Err(e) => {
+                log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);
                 return Ok(PeerAuthenticatorOutput::default());
             }
-        };
+        }
 
         log::debug!("Authenticating Shared Memory Access...");
 
-        let xs = sbuf.as_slice();
-        let bytes: [u8; SHM_SIZE] = match xs.try_into() {
+        let xs = init_syn_property.shm.flatten();
+        let bytes: [u8; SHM_SIZE] = match xs.as_slice().try_into() {
             Ok(bytes) => bytes,
             Err(e) => {
                 log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);
@@ -325,7 +333,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
                 return Ok(PeerAuthenticatorOutput::default());
             }
         };
-        let init_ack_property = match rbuf.read_init_ack_property_shm() {
+        let mut init_ack_property = match rbuf.read_init_ack_property_shm() {
             Some(iaa) => iaa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -336,15 +344,23 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
         // Try to read from the shared memory
         let mut manager = zasynclock!(self.manager);
-        let sbuf = match init_ack_property.shm.into_shm(&mut manager) {
-            Ok(sbuf) => sbuf,
-            Err(_) => {
-                log::debug!("Peer {} can not operate over shared memory", peer_id);
+        match init_ack_property.shm.map_to_shmbuf(&mut manager.reader) {
+            Ok(res) => {
+                if !res {
+                    log::debug!(
+                        "Peer {} can not operate over shared memory: not a SHM buffer",
+                        peer_id
+                    );
+                    return Ok(PeerAuthenticatorOutput::default());
+                }
+            }
+            Err(e) => {
+                log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);
                 return Ok(PeerAuthenticatorOutput::default());
             }
-        };
+        }
 
-        let bytes: [u8; SHM_SIZE] = match sbuf.as_slice().try_into() {
+        let bytes: [u8; SHM_SIZE] = match init_ack_property.shm.flatten().as_slice().try_into() {
             Ok(bytes) => bytes,
             Err(e) => {
                 log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);

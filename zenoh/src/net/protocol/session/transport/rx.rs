@@ -39,6 +39,21 @@ macro_rules! zcallback {
         let callback = zread!($transport.callback).clone();
         match callback.as_ref() {
             Some(callback) => {
+                #[cfg(feature = "zero-copy")]
+                {
+                    // First, try in read mode allowing concurrenct lookups
+                    let r_guard = zread!($transport.manager.shmr);
+                    let res = $msg.try_map_to_shmbuf(&*r_guard).or_else(|_| {
+                        // Next, try in write mode to eventual link the remote shm
+                        drop(r_guard);
+                        let mut w_guard = zwrite!($transport.manager.shmr);
+                        $msg.map_to_shmbuf(&mut *w_guard)
+                    });
+                    if res.is_err() {
+                        return;
+                    }
+                }
+
                 let res = callback.handle_message($msg);
                 if let Err(e) = res {
                     log::trace!(
@@ -113,7 +128,7 @@ macro_rules! zreceiveframe {
                 }
 
                 if is_final {
-                    let msg = match $guard.defrag_buffer.defragment() {
+                    let mut msg = match $guard.defrag_buffer.defragment() {
                         Some(msg) => msg,
                         None => {
                             log::trace!("Session: {}. Defragmentation error.", $transport.pid);
@@ -124,7 +139,7 @@ macro_rules! zreceiveframe {
                 }
             }
             FramePayload::Messages { mut messages } => {
-                for msg in messages.drain(..) {
+                for mut msg in messages.drain(..) {
                     zcallback!($transport, $link, msg);
                 }
             }

@@ -17,7 +17,7 @@ mod tests {
     use async_std::task;
     use std::any::Any;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
     use zenoh::net::protocol::io::{RBuf, SharedMemoryManager};
@@ -29,7 +29,7 @@ mod tests {
         SessionManagerOptionalConfig,
     };
     use zenoh_util::core::ZResult;
-    use zenoh_util::{zasync_executor_init, zlock};
+    use zenoh_util::zasync_executor_init;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -41,18 +41,14 @@ mod tests {
     // Session Handler for the router
     struct SHPeer {
         count: Arc<AtomicUsize>,
-        shm: Option<Arc<Mutex<SharedMemoryManager>>>,
+        is_shm: bool,
     }
 
     impl SHPeer {
-        fn new(mut shm: Option<SharedMemoryManager>) -> Self {
-            let shm = match shm.take() {
-                Some(shm) => Some(Arc::new(Mutex::new(shm))),
-                None => None,
-            };
+        fn new(is_shm: bool) -> Self {
             Self {
                 count: Arc::new(AtomicUsize::new(0)),
-                shm,
+                is_shm,
             }
         }
 
@@ -66,7 +62,7 @@ mod tests {
             &self,
             _session: Session,
         ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-            let arc = Arc::new(SCPeer::new(self.count.clone(), self.shm.clone()));
+            let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
         }
     }
@@ -74,43 +70,25 @@ mod tests {
     // Session Callback for the peer
     pub struct SCPeer {
         count: Arc<AtomicUsize>,
-        shm: Option<Arc<Mutex<SharedMemoryManager>>>,
+        is_shm: bool,
     }
 
     impl SCPeer {
-        pub fn new(count: Arc<AtomicUsize>, shm: Option<Arc<Mutex<SharedMemoryManager>>>) -> Self {
-            Self { count, shm }
+        pub fn new(count: Arc<AtomicUsize>, is_shm: bool) -> Self {
+            Self { count, is_shm }
         }
     }
 
     impl SessionEventHandler for SCPeer {
         fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-            let payload = match self.shm.as_ref() {
-                Some(shm) => {
-                    let mut shm = zlock!(shm);
-                    match message.body {
-                        ZenohBody::Data(Data {
-                            payload, data_info, ..
-                        }) => {
-                            let info = data_info.unwrap();
-                            assert!(info.is_shm);
-                            print!("s");
-                            let sbuf = payload.into_shm(&mut shm).unwrap();
-                            sbuf.as_slice().to_vec()
-                        }
-                        _ => panic!("Unsolicited message"),
-                    }
-                }
-                None => match message.body {
-                    ZenohBody::Data(Data {
-                        payload, data_info, ..
-                    }) => {
-                        assert!(data_info.is_none());
-                        print!("n");
-                        payload.to_vec()
-                    }
-                    _ => panic!("Unsolicited message"),
-                },
+            if self.is_shm {
+                print!("s");
+            } else {
+                print!("n");
+            }
+            let payload = match message.body {
+                ZenohBody::Data(Data { payload, .. }) => payload.flatten(),
+                _ => panic!("Unsolicited message"),
             };
             assert_eq!(payload.len(), MSG_SIZE);
 
@@ -142,10 +120,9 @@ mod tests {
 
         // Create the SharedMemoryManager
         let mut shm01 = SharedMemoryManager::new("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
-        let shm02 = SharedMemoryManager::new("peer_shm02".to_string(), 2 * MSG_SIZE).unwrap();
 
         // Create a peer manager with zero-copy authenticator enabled
-        let peer_shm01_handler = Arc::new(SHPeer::new(None));
+        let peer_shm01_handler = Arc::new(SHPeer::new(false));
         let config = SessionManagerConfig {
             version: 0,
             whatami: whatami::PEER,
@@ -166,7 +143,7 @@ mod tests {
         let peer_shm01_manager = SessionManager::new(config, Some(opt_config));
 
         // Create a peer manager with zero-copy authenticator enabled
-        let peer_shm02_handler = Arc::new(SHPeer::new(Some(shm02)));
+        let peer_shm02_handler = Arc::new(SHPeer::new(true));
         let config = SessionManagerConfig {
             version: 0,
             whatami: whatami::PEER,
@@ -187,7 +164,7 @@ mod tests {
         let peer_shm02_manager = SessionManager::new(config, Some(opt_config));
 
         // Create a peer manager with zero-copy authenticator disabled
-        let peer_net01_handler = Arc::new(SHPeer::new(None));
+        let peer_net01_handler = Arc::new(SHPeer::new(false));
         let config = SessionManagerConfig {
             version: 0,
             whatami: whatami::PEER,
@@ -382,6 +359,7 @@ mod tests {
     #[cfg(all(feature = "transport_tcp", feature = "zero-copy"))]
     #[test]
     fn session_tcp_shm() {
+        env_logger::init();
         task::block_on(async {
             zasync_executor_init!();
         });

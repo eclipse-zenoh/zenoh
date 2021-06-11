@@ -20,8 +20,6 @@ mod tx;
 use super::core;
 use super::core::{PeerId, Reliability, WhatAmI, ZInt};
 use super::io;
-#[cfg(feature = "zero-copy")]
-use super::io::SharedMemoryManager;
 use super::link::Link;
 use super::proto;
 use super::proto::{SessionMessage, ZenohMessage};
@@ -127,8 +125,6 @@ pub(crate) struct SessionTransport {
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The session transport can do shm
     is_shm: bool,
-    #[cfg(feature = "zero-copy")]
-    pub(super) shm: Arc<Mutex<SharedMemoryManager>>,
 }
 
 impl SessionTransport {
@@ -141,9 +137,6 @@ impl SessionTransport {
         initial_sn_rx: ZInt,
         is_shm: bool,
     ) -> SessionTransport {
-        let amp = manager.pid();
-        let cpd = pid.clone();
-
         SessionTransport {
             manager,
             pid,
@@ -169,10 +162,6 @@ impl SessionTransport {
             callback: Arc::new(RwLock::new(None)),
             alive: AsyncArc::new(AsyncMutex::new(true)),
             is_shm,
-            #[cfg(feature = "zero-copy")]
-            shm: Arc::new(Mutex::new(
-                SharedMemoryManager::new(format!("ZSHM.{}.{}", amp, cpd), 1_024).unwrap(),
-            )),
         }
     }
 
@@ -294,10 +283,16 @@ impl SessionTransport {
     #[cfg(feature = "zero-copy")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
         let res = if self.is_shm {
-            message.from_shm_buff_to_shm_info()
+            message.map_to_shminfo()
         } else {
-            let mut guard = zlock!(self.shm);
-            message.from_shm_info_to_shm_buff(&mut *guard)
+            // First, try in read mode allowing concurrenct lookups
+            let r_guard = zread!(self.manager.shmr);
+            message.try_map_to_shmbuf(&*r_guard).or_else(|_| {
+                // Next, try in write mode to eventual link the remote shm
+                drop(r_guard);
+                let mut w_guard = zwrite!(self.manager.shmr);
+                message.map_to_shmbuf(&mut *w_guard)
+            })
         };
         if res.is_err() {
             return;

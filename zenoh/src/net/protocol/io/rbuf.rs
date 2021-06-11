@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #[cfg(feature = "zero-copy")]
-use super::shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
+use super::shm::{SharedMemoryBuf, SharedMemoryReader};
 use super::ZSlice;
 use std::fmt;
 use std::io;
@@ -20,9 +20,7 @@ use std::io::IoSlice;
 #[cfg(feature = "zero-copy")]
 use std::sync::Arc;
 #[cfg(feature = "zero-copy")]
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-#[cfg(feature = "zero-copy")]
-use zenoh_util::zerror;
+use zenoh_util::core::ZResult;
 
 /*************************************/
 /*           RBUF POSITION           */
@@ -375,34 +373,20 @@ impl RBuf {
         self.read_into_rbuf(dest, self.readable())
     }
 
-    // @TODO: remove
-    #[cfg(feature = "zero-copy")]
-    pub fn into_shm(self, m: &mut SharedMemoryManager) -> ZResult<SharedMemoryBuf> {
-        match bincode::deserialize::<SharedMemoryBufInfo>(&self.to_vec()) {
-            Ok(info) => m.try_make_buf(info),
-            _ => zerror!(ZErrorKind::ValueDecodingFailed {
-                descr: String::from("Unable to deserialize SharedMemoryInfo"),
-            }),
-        }
-    }
-
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub(crate) fn from_shm_info_to_shm_buff(
-        &mut self,
-        shmm: &mut SharedMemoryManager,
-    ) -> ZResult<bool> {
+    pub fn map_to_shmbuf(&mut self, shmr: &mut SharedMemoryReader) -> ZResult<bool> {
         self.pos.clear();
 
         let mut res = false;
         match &mut self.slices {
             RBufInner::Single(s) => {
-                res = s.from_shm_info_to_shm_buff(shmm)?;
+                res = s.map_to_shmbuf(shmr)?;
                 self.pos.len += s.len();
             }
             RBufInner::Multiple(m) => {
                 for s in m.iter_mut() {
-                    res = res || s.from_shm_info_to_shm_buff(shmm)?;
+                    res = res || s.map_to_shmbuf(shmr)?;
                     self.pos.len += s.len();
                 }
             }
@@ -414,18 +398,41 @@ impl RBuf {
 
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub(crate) fn from_shm_buff_to_shm_info(&mut self) -> ZResult<bool> {
+    pub fn try_map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
         self.pos.clear();
 
         let mut res = false;
         match &mut self.slices {
             RBufInner::Single(s) => {
-                res = s.from_shm_buff_to_shm_info()?;
+                res = s.try_map_to_shmbuf(shmr)?;
+                self.pos.len += s.len();
+            }
+            RBufInner::Multiple(m) => {
+                for s in m.iter_mut() {
+                    res = res || s.try_map_to_shmbuf(shmr)?;
+                    self.pos.len += s.len();
+                }
+            }
+            RBufInner::Empty => {}
+        }
+
+        Ok(res)
+    }
+
+    #[cfg(feature = "zero-copy")]
+    #[inline]
+    pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        self.pos.clear();
+
+        let mut res = false;
+        match &mut self.slices {
+            RBufInner::Single(s) => {
+                res = s.map_to_shminfo()?;
                 self.pos.len = s.len();
             }
             RBufInner::Multiple(m) => {
                 for s in m.iter_mut() {
-                    res = res || s.from_shm_buff_to_shm_info()?;
+                    res = res || s.map_to_shminfo()?;
                     self.pos.len += s.len();
                 }
             }
@@ -449,13 +456,11 @@ impl fmt::Display for RBuf {
 
 impl fmt::Debug for RBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "RBuf{{ pos: {:?}, ", self.pos)?;
-        write!(f, "slices: [")?;
-        match &self.slices {
-            RBufInner::Single(s) => {
+        macro_rules! zsliceprint {
+            ($slice:expr) => {
                 #[cfg(feature = "zero-copy")]
                 {
-                    if s.is_shm() {
+                    if $slice.is_shm() {
                         write!(f, " SHM:")?;
                     } else {
                         write!(f, " BUF:")?;
@@ -465,22 +470,19 @@ impl fmt::Debug for RBuf {
                 {
                     write!(f, " BUF:")?;
                 }
+            };
+        }
+
+        write!(f, "RBuf{{ pos: {:?}, ", self.pos)?;
+        write!(f, "slices: [")?;
+        match &self.slices {
+            RBufInner::Single(s) => {
+                zsliceprint!(s);
                 write!(f, "{}", hex::encode_upper(s.as_slice()))?;
             }
             RBufInner::Multiple(m) => {
                 for s in m.iter() {
-                    #[cfg(feature = "zero-copy")]
-                    {
-                        if s.is_shm() {
-                            write!(f, " SHM:")?;
-                        } else {
-                            write!(f, " BUF:")?;
-                        }
-                    }
-                    #[cfg(not(feature = "zero-copy"))]
-                    {
-                        write!(f, " BUF:")?;
-                    }
+                    zsliceprint!(s);
                     write!(f, " {},", hex::encode_upper(s.as_slice()))?;
                 }
             }
