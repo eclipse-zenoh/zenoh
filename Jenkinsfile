@@ -7,8 +7,8 @@ pipeline {
                  description: 'The Git tag to checkout. If not specified "master" will be checkout.',
                  defaultValue: 'master')
     string(name: 'RUST_TOOLCHAIN',
-           description: 'The version of rust toolchain to use (e.g. nightly-2020-12-20)',
-           defaultValue: 'nightly')
+           description: 'The version of rust toolchain to use (e.g. stable)',
+           defaultValue: 'stable')
     string(name: 'DOCKER_TAG',
            description: 'An extra Docker tag (e.g. "latest"). By default GIT_TAG will also be used as Docker tag',
            defaultValue: '')

@@ -16,7 +16,7 @@
 
 # List of installed tools:
 #  * for zenoh:
-#    - Rust with nightly toolchain
+#    - Rust with stable toolchain
 #    - curl gcc musl-dev
 #  * for zbackend_influxdb:
 #    - openssl-dev
@@ -34,4 +34,4 @@ ENV PATH /root/.cargo/bin:$PATH
 ENV RUSTFLAGS '-Ctarget-feature=-crt-static'
 ENV CARGO_BUILD_TARGET_DIR=target/${target}
 
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host ${target} --default-toolchain nightly
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host ${target} --default-toolchain stable
