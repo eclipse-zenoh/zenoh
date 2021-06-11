@@ -20,7 +20,7 @@ use super::protocol::proto::{DataInfo, RoutingContext};
 use super::protocol::session::Primitives;
 use super::router::*;
 use async_std::sync::Arc;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::RwLock;
 
@@ -32,10 +32,10 @@ pub struct FaceState {
     pub(super) link_id: usize,
     pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
-    pub(super) local_subs: Vec<Arc<Resource>>,
-    pub(super) remote_subs: Vec<Arc<Resource>>,
-    pub(super) local_qabls: Vec<Arc<Resource>>,
-    pub(super) remote_qabls: Vec<Arc<Resource>>,
+    pub(super) local_subs: HashSet<Arc<Resource>>,
+    pub(super) remote_subs: HashSet<Arc<Resource>>,
+    pub(super) local_qabls: HashSet<Arc<Resource>>,
+    pub(super) remote_qabls: HashSet<Arc<Resource>>,
     pub(super) next_qid: ZInt,
     pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
 }
@@ -56,10 +56,10 @@ impl FaceState {
             link_id,
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
-            local_subs: Vec::new(),
-            remote_subs: Vec::new(),
-            local_qabls: Vec::new(),
-            remote_qabls: Vec::new(),
+            local_subs: HashSet::new(),
+            remote_subs: HashSet::new(),
+            local_qabls: HashSet::new(),
+            remote_qabls: HashSet::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
         })

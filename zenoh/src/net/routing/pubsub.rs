@@ -75,7 +75,7 @@ fn propagate_simple_subscription(
                 _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
             }
         {
-            get_mut_unchecked(dst_face).local_subs.push(res.clone());
+            get_mut_unchecked(dst_face).local_subs.insert(res.clone());
             let reskey = Resource::decl_key(res, dst_face);
             dst_face.primitives.decl_subscriber(&reskey, sub_info, None);
         }
@@ -266,7 +266,7 @@ fn register_client_subscription(
             }
         }
     }
-    get_mut_unchecked(face).remote_subs.push(res.clone());
+    get_mut_unchecked(face).remote_subs.insert(res.clone());
 }
 
 pub fn declare_client_subscription(
@@ -317,6 +317,40 @@ pub fn declare_client_subscription(
 }
 
 #[inline]
+fn remote_router_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
+    res.context.is_some()
+        && res
+            .context()
+            .router_subs
+            .iter()
+            .any(|peer| peer != &tables.pid)
+}
+
+#[inline]
+fn remote_peer_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
+    res.context.is_some()
+        && res
+            .context()
+            .peer_subs
+            .iter()
+            .any(|peer| peer != &tables.pid)
+}
+
+#[inline]
+fn client_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+    res.session_ctxs
+        .values()
+        .filter_map(|ctx| {
+            if ctx.subs.is_some() {
+                Some(ctx.face.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+#[inline]
 fn send_forget_sourced_subscription_to_net_childs(
     tables: &Tables,
     net: &Network,
@@ -351,7 +385,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
             let reskey = Resource::get_best_key(res, "", face.id);
             face.primitives.forget_subscriber(&reskey, None);
 
-            get_mut_unchecked(face).local_subs.retain(|sub| sub != res);
+            get_mut_unchecked(face).local_subs.remove(res);
         }
     }
 }
@@ -482,17 +516,12 @@ pub fn forget_peer_subscription(
             Some(mut res) => {
                 undeclare_peer_subscription(tables, Some(face), &mut res, peer);
 
-                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) };
-                let psubs = {
-                    tables.peer_subs.iter().any(|res| {
-                        res.context()
-                            .peer_subs
-                            .iter()
-                            .any(|peer| peer != &tables.pid)
-                    })
-                };
-                if tables.whatami == whatami::ROUTER && !ctxs && !psubs {
-                    undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
+                if tables.whatami == whatami::ROUTER {
+                    let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
+                    let peer_subs = remote_peer_subs(tables, &res);
+                    if !client_subs && !peer_subs {
+                        undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
+                    }
                 }
 
                 Resource::clean(&mut res)
@@ -512,83 +541,35 @@ pub(crate) fn undeclare_client_subscription(
     if let Some(mut ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(&mut ctx).subs = None;
     }
-    get_mut_unchecked(face)
-        .remote_subs
-        .retain(|x| !Arc::ptr_eq(&x, &res));
+    get_mut_unchecked(face).remote_subs.remove(res);
 
+    let mut client_subs = client_subs(res);
+    let router_subs = remote_router_subs(tables, res);
+    let peer_subs = remote_peer_subs(tables, res);
     match tables.whatami {
         whatami::ROUTER => {
-            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) };
-            let psubs = {
-                tables.peer_subs.iter().any(|res| {
-                    res.context()
-                        .peer_subs
-                        .iter()
-                        .any(|peer| *peer != tables.pid)
-                })
-            };
-            if !ctxs && !psubs {
+            if client_subs.is_empty() && !peer_subs {
                 undeclare_router_subscription(tables, None, res, &tables.pid.clone());
             }
         }
         whatami::PEER => {
-            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) };
-            let psubs = {
-                tables.peer_subs.iter().any(|res| {
-                    res.context()
-                        .peer_subs
-                        .iter()
-                        .any(|peer| *peer != tables.pid)
-                })
-            };
-            if !ctxs && !psubs {
+            if client_subs.is_empty() {
                 undeclare_peer_subscription(tables, None, res, &tables.pid.clone());
             }
         }
         _ => {
-            if !res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) {
+            if client_subs.is_empty() {
                 propagate_forget_simple_subscription(tables, res);
             }
         }
     }
-
-    let mut client_subs: Vec<Arc<FaceState>> = res
-        .session_ctxs
-        .values()
-        .filter_map(|ctx| {
-            if ctx.subs.is_some() {
-                Some(ctx.face.clone())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let rsubs = {
-        tables.router_subs.iter().any(|res| {
-            res.context()
-                .peer_subs
-                .iter()
-                .any(|peer| *peer != tables.pid)
-        })
-    };
-    let psubs = {
-        tables.peer_subs.iter().any(|res| {
-            res.context()
-                .peer_subs
-                .iter()
-                .any(|peer| *peer != tables.pid)
-        })
-    };
-    if client_subs.len() == 1 && !rsubs && !psubs {
+    if client_subs.len() == 1 && !router_subs && !peer_subs {
         let face = &mut client_subs[0];
-        if face.local_subs.contains(&res) {
+        if face.local_subs.contains(res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
             face.primitives.forget_subscriber(&reskey, None);
 
-            get_mut_unchecked(face)
-                .local_subs
-                .retain(|sub| sub != &(*res));
+            get_mut_unchecked(face).local_subs.remove(res);
         }
     }
 
@@ -620,7 +601,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     };
     if face.whatami == whatami::CLIENT && tables.whatami != whatami::CLIENT {
         for sub in &tables.router_subs {
-            get_mut_unchecked(face).local_subs.push(sub.clone());
+            get_mut_unchecked(face).local_subs.insert(sub.clone());
             let reskey = Resource::decl_key(&sub, face);
             face.primitives.decl_subscriber(&reskey, &sub_info, None);
         }
@@ -663,17 +644,12 @@ pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &PeerId, net_type: w
             {
                 unregister_peer_subscription(tables, &mut res, node);
 
-                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.subs.is_some()) };
-                let psubs = {
-                    tables.peer_subs.iter().any(|res| {
-                        res.context()
-                            .peer_subs
-                            .iter()
-                            .any(|peer| peer != &tables.pid)
-                    })
-                };
-                if tables.whatami == whatami::ROUTER && !ctxs && !psubs {
-                    undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
+                if tables.whatami == whatami::ROUTER {
+                    let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
+                    let peer_subs = remote_peer_subs(tables, &res);
+                    if !client_subs && !peer_subs {
+                        undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
+                    }
                 }
 
                 Resource::clean(&mut res)

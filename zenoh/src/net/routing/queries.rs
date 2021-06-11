@@ -72,7 +72,7 @@ fn propagate_simple_queryable(
                 _ => (src_face.whatami == whatami::CLIENT || dst_face.whatami == whatami::CLIENT),
             }
         {
-            get_mut_unchecked(dst_face).local_qabls.push(res.clone());
+            get_mut_unchecked(dst_face).local_qabls.insert(res.clone());
             let reskey = Resource::decl_key(res, dst_face);
             dst_face.primitives.decl_queryable(&reskey, None);
         }
@@ -239,7 +239,7 @@ fn register_client_queryable(
             }
         }
     }
-    get_mut_unchecked(face).remote_qabls.push(res.clone());
+    get_mut_unchecked(face).remote_qabls.insert(res.clone());
 }
 
 pub fn declare_client_queryable(
@@ -270,6 +270,40 @@ pub fn declare_client_queryable(
         }
         None => log::error!("Declare queryable for unknown rid {}!", prefixid),
     }
+}
+
+#[inline]
+fn remote_router_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
+    res.context.is_some()
+        && res
+            .context()
+            .router_qabls
+            .iter()
+            .any(|peer| peer != &tables.pid)
+}
+
+#[inline]
+fn remote_peer_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
+    res.context.is_some()
+        && res
+            .context()
+            .peer_qabls
+            .iter()
+            .any(|peer| peer != &tables.pid)
+}
+
+#[inline]
+fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+    res.session_ctxs
+        .values()
+        .filter_map(|ctx| {
+            if ctx.qabl {
+                Some(ctx.face.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 #[inline]
@@ -307,9 +341,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
             let reskey = Resource::get_best_key(res, "", face.id);
             face.primitives.forget_queryable(&reskey, None);
 
-            get_mut_unchecked(face)
-                .local_qabls
-                .retain(|qabl| qabl != res);
+            get_mut_unchecked(face).local_qabls.remove(res);
         }
     }
 }
@@ -436,17 +468,12 @@ pub fn forget_peer_queryable(
             Some(mut res) => {
                 undeclare_peer_queryable(tables, Some(face), &mut res, peer);
 
-                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
-                let pqabls = {
-                    tables.peer_qabls.iter().any(|res| {
-                        res.context()
-                            .peer_qabls
-                            .iter()
-                            .any(|peer| peer != &tables.pid)
-                    })
-                };
-                if tables.whatami == whatami::ROUTER && !ctxs && !pqabls {
-                    undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
+                if tables.whatami == whatami::ROUTER {
+                    let client_qabls = res.session_ctxs.values().any(|ctx| ctx.qabl);
+                    let peer_qabls = remote_peer_qabls(tables, &res);
+                    if !client_qabls && !peer_qabls {
+                        undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
+                    }
                 }
 
                 Resource::clean(&mut res)
@@ -466,83 +493,37 @@ pub(crate) fn undeclare_client_queryable(
     if let Some(mut ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(&mut ctx).qabl = false;
     }
-    get_mut_unchecked(face)
-        .remote_qabls
-        .retain(|x| !Arc::ptr_eq(&x, &res));
+    get_mut_unchecked(face).remote_qabls.remove(res);
+
+    let mut client_qabls = client_qabls(res);
+    let router_qabls = remote_router_qabls(tables, &res);
+    let peer_qabls = remote_peer_qabls(tables, &res);
 
     match tables.whatami {
         whatami::ROUTER => {
-            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
-            let pqabls = {
-                tables.peer_qabls.iter().any(|res| {
-                    res.context()
-                        .peer_qabls
-                        .iter()
-                        .any(|peer| *peer != tables.pid)
-                })
-            };
-            if !ctxs && !pqabls {
+            if client_qabls.is_empty() && !peer_qabls {
                 undeclare_router_queryable(tables, None, res, &tables.pid.clone());
             }
         }
         whatami::PEER => {
-            let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
-            let pqabls = {
-                tables.peer_qabls.iter().any(|res| {
-                    res.context()
-                        .peer_qabls
-                        .iter()
-                        .any(|peer| *peer != tables.pid)
-                })
-            };
-            if !ctxs && !pqabls {
+            if client_qabls.is_empty() {
                 undeclare_peer_queryable(tables, None, res, &tables.pid.clone());
             }
         }
         _ => {
-            if !res.session_ctxs.values().any(|ctx| ctx.qabl) {
+            if client_qabls.is_empty() {
                 propagate_forget_simple_queryable(tables, res);
             }
         }
     }
 
-    let mut client_qabls: Vec<Arc<FaceState>> = res
-        .session_ctxs
-        .values()
-        .filter_map(|ctx| {
-            if ctx.qabl {
-                Some(ctx.face.clone())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let rqabls = {
-        tables.router_qabls.iter().any(|res| {
-            res.context()
-                .peer_qabls
-                .iter()
-                .any(|peer| *peer != tables.pid)
-        })
-    };
-    let pqabls = {
-        tables.peer_qabls.iter().any(|res| {
-            res.context()
-                .peer_qabls
-                .iter()
-                .any(|peer| *peer != tables.pid)
-        })
-    };
-    if client_qabls.len() == 1 && !rqabls && !pqabls {
+    if client_qabls.len() == 1 && !router_qabls && !peer_qabls {
         let face = &mut client_qabls[0];
-        if face.local_qabls.contains(&res) {
+        if face.local_qabls.contains(res) {
             let reskey = Resource::get_best_key(&res, "", face.id);
             face.primitives.forget_queryable(&reskey, None);
 
-            get_mut_unchecked(face)
-                .local_qabls
-                .retain(|qabl| qabl != &(*res));
+            get_mut_unchecked(face).local_qabls.remove(res);
         }
     }
 
@@ -569,7 +550,7 @@ pub fn forget_client_queryable(
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     if face.whatami == whatami::CLIENT && tables.whatami != whatami::CLIENT {
         for qabl in &tables.router_qabls {
-            get_mut_unchecked(face).local_qabls.push(qabl.clone());
+            get_mut_unchecked(face).local_qabls.insert(qabl.clone());
             let reskey = Resource::decl_key(&qabl, face);
             face.primitives.decl_queryable(&reskey, None);
         }
@@ -612,17 +593,12 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId, net_type: 
             {
                 unregister_peer_queryable(tables, &mut res, node);
 
-                let ctxs = { res.session_ctxs.values().any(|ctx| ctx.qabl) };
-                let pqabls = {
-                    tables.peer_qabls.iter().any(|res| {
-                        res.context()
-                            .peer_qabls
-                            .iter()
-                            .any(|peer| peer != &tables.pid)
-                    })
-                };
-                if tables.whatami == whatami::ROUTER && !ctxs && !pqabls {
-                    undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
+                if tables.whatami == whatami::ROUTER {
+                    let client_qabls = res.session_ctxs.values().any(|ctx| ctx.qabl);
+                    let peer_qabls = remote_peer_qabls(tables, &res);
+                    if !client_qabls && !peer_qabls {
+                        undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
+                    }
                 }
 
                 Resource::clean(&mut res)
