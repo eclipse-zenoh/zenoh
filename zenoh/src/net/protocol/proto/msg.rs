@@ -424,7 +424,7 @@ pub struct DataInfo {
     pub timestamp: Option<Timestamp>,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
-    pub(crate) is_shm: bool,
+    pub is_shm: bool,
 }
 
 impl DataInfo {

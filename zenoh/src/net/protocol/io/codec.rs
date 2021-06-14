@@ -188,8 +188,7 @@ impl WBuf {
     }
 
     pub fn write_locator(&mut self, locator: &Locator) -> bool {
-        zcheck!(self.write_string(&locator.to_string()));
-        true
+        self.write_string(&locator.to_string())
     }
 
     pub fn write_locators(&mut self, locators: &[Locator]) -> bool {
@@ -203,11 +202,7 @@ impl WBuf {
 
     // Similar than write_bytes_array but zero-copy as RBuf contains slices that are shared
     pub fn write_rbuf(&mut self, rbuf: &RBuf) -> bool {
-        if self.write_usize_as_zint(rbuf.len()) {
-            self.write_rbuf_slices(&rbuf)
-        } else {
-            false
-        }
+        self.write_usize_as_zint(rbuf.len()) && self.write_rbuf_slices(&rbuf)
     }
 
     // Writes all the slices of a given RBuf

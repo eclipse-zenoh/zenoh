@@ -25,7 +25,7 @@ use super::{Opened, Session, SessionManager};
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::hmac;
-use zenoh_util::{zasynclock, zerror};
+use zenoh_util::{zasynclock, zerror, zerror2};
 
 type IError = (ZError, Option<u8>);
 type IResult<T> = Result<T, IError>;
@@ -57,14 +57,10 @@ fn properties_from_attachment(mut att: Attachment) -> ZResult<Vec<Property>> {
         return zerror!(ZErrorKind::Other { descr: e });
     }
 
-    let res = att.buffer.read_properties();
-    match res {
-        Some(ps) => Ok(ps),
-        None => {
-            let e = "Error while decoding properties".to_string();
-            zerror!(ZErrorKind::Other { descr: e })
-        }
-    }
+    att.buffer.read_properties().ok_or_else(|| {
+        let e = "Error while decoding properties".to_string();
+        zerror2!(ZErrorKind::Other { descr: e })
+    })
 }
 
 /*************************************/
