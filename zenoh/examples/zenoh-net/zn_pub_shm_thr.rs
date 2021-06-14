@@ -91,10 +91,9 @@ fn parse_args() -> (Properties, usize, usize) {
         * 1024;
 
     let size = args
-        .value_of("shared-memory")
+        .value_of("PAYLOAD_SIZE")
         .unwrap()
         .parse::<usize>()
-        .unwrap()
-        * 1024;
+        .unwrap();
     (config, sm_size, size)
 }
