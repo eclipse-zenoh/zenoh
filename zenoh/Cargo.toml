@@ -160,10 +160,6 @@ name = "zn_sub"
 path = "examples/zenoh-net/zn_sub.rs"
 
 [[example]]
-name = "zn_sub_shm"
-path = "examples/zenoh-net/zn_sub_shm.rs"
-
-[[example]]
 name = "zn_pull"
 path = "examples/zenoh-net/zn_pull.rs"
 
@@ -190,10 +186,6 @@ path = "examples/zenoh-net/zn_sub_thr.rs"
 [[example]]
 name = "zn_pub_shm_thr"
 path = "examples/zenoh-net/zn_pub_shm_thr.rs"
-
-[[example]]
-name = "zn_sub_shm_thr"
-path = "examples/zenoh-net/zn_sub_shm_thr.rs"
 
 [[example]]
 name = "zn_ping"
