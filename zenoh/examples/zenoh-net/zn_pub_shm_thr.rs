@@ -70,7 +70,15 @@ fn parse_args() -> (Properties, usize, usize) {
             Arg::from_usage("-s, --shared-memory=[MB]  'shared memory size in MBytes'")
                 .default_value("32"),
         )
-        .arg(Arg::from_usage("-p, --payload=[KB] 'payload in KBytes'").default_value("1"))
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(Arg::from_usage(
+            "-c, --config=[FILE]      'A configuration file.'",
+        ))
+        .arg(Arg::from_usage(
+            "<PAYLOAD_SIZE>           'Sets the size of the payload to publish'",
+        ))
         .get_matches();
 
     let config = Properties::default();
