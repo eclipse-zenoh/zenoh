@@ -37,7 +37,7 @@ async fn main() {
     }
 
     let reskey = RId(z
-        .declare_resource(&RName("/test/shm/thr".to_string()))
+        .declare_resource(&RName("/test/thr".to_string()))
         .await
         .unwrap());
     let _publ = z.declare_publisher(&reskey).await.unwrap();
