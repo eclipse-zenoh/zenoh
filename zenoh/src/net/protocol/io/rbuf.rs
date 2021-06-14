@@ -13,7 +13,7 @@
 //
 #[cfg(feature = "zero-copy")]
 use super::shm::{SharedMemoryBuf, SharedMemoryReader};
-use super::ZSlice;
+use super::{ZSlice, ZSliceType};
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
@@ -441,6 +441,26 @@ impl RBuf {
 
         Ok(res)
     }
+
+    #[cfg(feature = "zero-copy")]
+    pub fn has_shminfo(&self) -> bool {
+        macro_rules! is_shminfo {
+            ($slice:expr) => {
+                match $slice.get_type() {
+                    ZSliceType::ShmInfo => true,
+                    _ => false,
+                }
+            };
+        }
+
+        match &self.slices {
+            RBufInner::Single(s) => is_shminfo!(s),
+            RBufInner::Multiple(m) => m
+                .iter()
+                .fold(false, |has_shminfo, s| has_shminfo || is_shminfo!(s)),
+            RBufInner::Empty => false,
+        }
+    }
 }
 
 impl fmt::Display for RBuf {
@@ -460,10 +480,10 @@ impl fmt::Debug for RBuf {
             ($slice:expr) => {
                 #[cfg(feature = "zero-copy")]
                 {
-                    if $slice.is_shm() {
-                        write!(f, " SHM:")?;
-                    } else {
-                        write!(f, " BUF:")?;
+                    match $slice.get_type() {
+                        ZSliceType::Net => write!(f, " BUF:")?,
+                        ZSliceType::ShmBuf => write!(f, " SHM_BUF:")?,
+                        ZSliceType::ShmInfo => write!(f, " SHM_INFO:")?,
                     }
                 }
                 #[cfg(not(feature = "zero-copy"))]

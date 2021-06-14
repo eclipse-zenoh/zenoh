@@ -330,6 +330,12 @@ impl From<SharedMemoryBuf> for ZSliceBuffer {
 /*************************************/
 /*               ZSLICE              */
 /*************************************/
+pub enum ZSliceType {
+    Net,
+    ShmInfo,
+    ShmBuf,
+}
+
 #[derive(Clone)]
 pub struct ZSlice {
     buf: ZSliceBuffer,
@@ -376,10 +382,11 @@ impl ZSlice {
 
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub fn is_shm(&self) -> bool {
+    pub fn get_type(&self) -> ZSliceType {
         match &self.buf {
-            ZSliceBuffer::ZSliceBufferNet(_) => false,
-            ZSliceBuffer::ZSliceBufferShm(_) => true,
+            ZSliceBuffer::ZSliceBufferNet(_) => ZSliceType::Net,
+            ZSliceBuffer::ZSliceBufferShm(ZSliceBufferShm::Buffer(_)) => ZSliceType::ShmBuf,
+            ZSliceBuffer::ZSliceBufferShm(ZSliceBufferShm::Info(_)) => ZSliceType::ShmInfo,
         }
     }
 

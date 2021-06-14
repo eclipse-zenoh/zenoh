@@ -197,7 +197,7 @@ fn gen_data_info() -> DataInfo {
         timestamp: option_gen!(gen_timestamp()),
         kind: option_gen!(gen!(ZInt)),
         encoding: option_gen!(gen!(ZInt)),
-        is_shm: gen_bool!(),
+        is_sliced: gen_bool!(),
     }
 }
 

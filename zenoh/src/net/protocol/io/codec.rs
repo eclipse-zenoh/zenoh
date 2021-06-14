@@ -17,11 +17,18 @@ use super::link::Locator;
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
 use super::ZSliceBufferShm;
-use super::{RBuf, WBuf, ZSlice};
+use super::{RBuf, WBuf, ZSlice, ZSliceType};
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 #[cfg(feature = "zero-copy")]
 use zenoh_util::zerror;
+
+mod zslice {
+    pub(crate) mod kind {
+        pub(crate) const RAW: u8 = 0;
+        pub(crate) const SHM_INFO: u8 = 1;
+    }
+}
 
 macro_rules! read_zint {
     ($buf:expr, $res:ty) => {
@@ -89,26 +96,6 @@ impl RBuf {
         }
     }
 
-    // Same as read_bytes_array but 0 copy on RBuf.
-    pub fn read_rbuf(&mut self) -> Option<RBuf> {
-        let len = self.read_zint_as_usize()?;
-        let mut rbuf = RBuf::new();
-        if self.read_into_rbuf(&mut rbuf, len) {
-            Some(rbuf)
-        } else {
-            None
-        }
-    }
-
-    #[cfg(feature = "zero-copy")]
-    pub fn read_shminfo(&mut self) -> Option<RBuf> {
-        let info = self.read_bytes_array()?;
-        let mut rbuf = RBuf::new();
-        let slice = ZSliceBufferShm::Info(info.into());
-        rbuf.add_slice(slice.into());
-        Some(rbuf)
-    }
-
     pub fn read_string(&mut self) -> Option<String> {
         let bytes = self.read_bytes_array()?;
         Some(String::from(String::from_utf8_lossy(&bytes)))
@@ -139,6 +126,53 @@ impl RBuf {
             vec.push(self.read_locator()?);
         }
         Some(vec)
+    }
+
+    // Same as read_bytes_array but 0 copy on RBuf.
+    pub fn read_rbuf(&mut self) -> Option<RBuf> {
+        let len = self.read_zint_as_usize()?;
+        let mut rbuf = RBuf::new();
+        if self.read_into_rbuf(&mut rbuf, len) {
+            Some(rbuf)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(feature = "zero-copy")]
+    pub fn read_shminfo(&mut self) -> Option<RBuf> {
+        let info = self.read_bytes_array()?;
+        let mut rbuf = RBuf::new();
+        let slice = ZSliceBufferShm::Info(info.into());
+        rbuf.add_slice(slice.into());
+        Some(rbuf)
+    }
+
+    // Similar than write_bytes_array but zero-copy as RBuf contains slices that are shared
+    pub fn read_rbuf_as_slices(&mut self) -> Option<RBuf> {
+        let num = self.read_zint_as_usize()?;
+        let mut rbuf = RBuf::new();
+        for _ in 0..num {
+            let kind = self.read()?;
+            let len = self.read_zint_as_usize()?;
+            match kind {
+                zslice::kind::RAW => {
+                    if !self.read_into_rbuf(&mut rbuf, len) {
+                        return None;
+                    }
+                }
+                zslice::kind::SHM_INFO => {
+                    let mut info = vec![0; len];
+                    if !self.read_bytes(info.as_mut_slice()) {
+                        return None;
+                    }
+                    let slice = ZSliceBufferShm::Info(info.into());
+                    rbuf.add_slice(slice.into());
+                }
+                _ => return None,
+            }
+        }
+        Some(rbuf)
     }
 }
 
@@ -196,7 +230,6 @@ impl WBuf {
         for l in locators {
             zcheck!(self.write_locator(&l));
         }
-
         true
     }
 
@@ -209,9 +242,27 @@ impl WBuf {
     pub fn write_rbuf_slices(&mut self, rbuf: &RBuf) -> bool {
         let mut idx = 0;
         while let Some(slice) = rbuf.get_slice(idx) {
-            if !self.write_slice(slice.clone()) {
-                return false;
+            zcheck!(self.write_slice(slice.clone()));
+            idx += 1;
+        }
+        true
+    }
+
+    // Similar than write_bytes_array but zero-copy as RBuf contains slices that are shared
+    pub fn write_rbuf_as_slices(&mut self, rbuf: &RBuf) -> bool {
+        self.write_usize_as_zint(rbuf.get_slices_num()) && self.write_rbuf_slices_with_type(rbuf)
+    }
+
+    // Writes all the slices of a given RBuf
+    pub fn write_rbuf_slices_with_type(&mut self, rbuf: &RBuf) -> bool {
+        let mut idx = 0;
+        while let Some(slice) = rbuf.get_slice(idx) {
+            match slice.get_type() {
+                ZSliceType::ShmInfo => zcheck!(self.write(zslice::kind::SHM_INFO)),
+                _ => zcheck!(self.write(zslice::kind::RAW)),
             }
+            zcheck!(self.write_usize_as_zint(slice.len()));
+            zcheck!(self.write_slice(slice.clone()));
             idx += 1;
         }
         true

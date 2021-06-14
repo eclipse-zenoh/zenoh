@@ -266,15 +266,15 @@ impl RBuf {
                         CongestionControl::Block
                     };
                     let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
-                    let (data_info, is_shm) = if zmsg::has_flag(header, zmsg::flag::I) {
+                    let (data_info, is_sliced) = if zmsg::has_flag(header, zmsg::flag::I) {
                         let di = self.read_data_info()?;
-                        let is_shm = di.is_shm;
-                        (Some(di), is_shm)
+                        let is_sliced = di.is_sliced;
+                        (Some(di), is_sliced)
                     } else {
                         (None, false)
                     };
-                    let payload = if is_shm {
-                        self.read_shminfo()?
+                    let payload = if is_sliced {
+                        self.read_rbuf_as_slices()?
                     } else {
                         self.read_rbuf()?
                     };
@@ -464,7 +464,7 @@ impl RBuf {
         } else {
             None
         };
-        let is_shm = zmsg::has_option(options, zmsg::data::info::SHM);
+        let is_sliced = zmsg::has_option(options, zmsg::data::info::SLICED);
 
         Some(DataInfo {
             source_id,
@@ -474,7 +474,7 @@ impl RBuf {
             timestamp,
             kind,
             encoding,
-            is_shm,
+            is_sliced,
         })
     }
 

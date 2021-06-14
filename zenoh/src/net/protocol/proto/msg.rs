@@ -202,7 +202,7 @@ pub mod zmsg {
             pub const TS: ZInt = 1 << 4; // 0x10
             pub const KIND: ZInt = 1 << 5; // 0x20
             pub const ENC: ZInt = 1 << 6; // 0x40
-            pub const SHM: ZInt = 1 << 7; // 0x80
+            pub const SLICED: ZInt = 1 << 7; // 0x80
         }
     }
 
@@ -424,7 +424,7 @@ pub struct DataInfo {
     pub timestamp: Option<Timestamp>,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
-    pub is_shm: bool,
+    pub is_sliced: bool,
 }
 
 impl DataInfo {
@@ -436,7 +436,7 @@ impl DataInfo {
             || self.timestamp.is_some()
             || self.kind.is_some()
             || self.encoding.is_some()
-            || self.is_shm
+            || self.is_sliced
     }
 }
 

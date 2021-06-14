@@ -183,10 +183,17 @@ impl WBuf {
                 payload,
             }) => {
                 zcheck!(self.write_reskey(&key));
-                if let Some(data_info) = data_info {
+                let is_sliced = if let Some(data_info) = data_info {
                     zcheck!(self.write_data_info(data_info));
+                    data_info.is_sliced
+                } else {
+                    false
+                };
+                if is_sliced {
+                    zcheck!(self.write_rbuf_as_slices(&payload));
+                } else {
+                    zcheck!(self.write_rbuf(&payload));
                 }
-                zcheck!(self.write_rbuf(&payload));
             }
 
             ZenohBody::Declare(Declare { declarations }) => {
@@ -289,8 +296,8 @@ impl WBuf {
         if info.encoding.is_some() {
             options |= zmsg::data::info::ENC;
         }
-        if info.is_shm {
-            options |= zmsg::data::info::SHM;
+        if info.is_sliced {
+            options |= zmsg::data::info::SLICED;
         }
         zcheck!(self.write_zint(options));
 

@@ -204,7 +204,7 @@ impl Primitives for AdminSpace {
                     timestamp: None,
                     kind: None,
                     encoding: Some(encoding),
-                    is_shm: false,
+                    is_sliced: false,
                 };
                 primitives.send_reply_data(
                     qid,
