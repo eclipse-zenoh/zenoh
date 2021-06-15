@@ -50,7 +50,12 @@ macro_rules! zcallback {
                         $msg.map_to_shmbuf(&mut *w_guard)
                     });
                     if res.is_err() {
-                        return;
+                        log::trace!(
+                            "Session: {}. Error from SharedMemory: {}. Closing session.",
+                            $transport.pid,
+                            e
+                        );
+                        zclose!($transport, $link);
                     }
                 }
 
@@ -128,6 +133,8 @@ macro_rules! zreceiveframe {
                 }
 
                 if is_final {
+                    // When zero-copy feature is disabled, msg does not need to be mutable
+                    #[allow(unused_mut)]
                     let mut msg = match $guard.defrag_buffer.defragment() {
                         Some(msg) => msg,
                         None => {
@@ -139,6 +146,8 @@ macro_rules! zreceiveframe {
                 }
             }
             FramePayload::Messages { mut messages } => {
+                // When zero-copy feature is disabled, msg does not need to be mutable
+                #[allow(unused_mut)]
                 for mut msg in messages.drain(..) {
                     zcallback!($transport, $link, msg);
                 }

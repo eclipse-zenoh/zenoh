@@ -17,7 +17,9 @@ use super::link::Locator;
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
 use super::ZSliceBufferShm;
-use super::{RBuf, WBuf, ZSlice, ZSliceType};
+#[cfg(feature = "zero-copy")]
+use super::ZSliceType;
+use super::{RBuf, WBuf, ZSlice};
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 #[cfg(feature = "zero-copy")]
@@ -26,6 +28,7 @@ use zenoh_util::zerror;
 mod zslice {
     pub(crate) mod kind {
         pub(crate) const RAW: u8 = 0;
+        #[cfg(feature = "zero-copy")]
         pub(crate) const SHM_INFO: u8 = 1;
     }
 }
@@ -161,6 +164,7 @@ impl RBuf {
                         return None;
                     }
                 }
+                #[cfg(feature = "zero-copy")]
                 zslice::kind::SHM_INFO => {
                     let mut info = vec![0; len];
                     if !self.read_bytes(info.as_mut_slice()) {
@@ -258,9 +262,11 @@ impl WBuf {
         let mut idx = 0;
         while let Some(slice) = rbuf.get_slice(idx) {
             match slice.get_type() {
+                #[cfg(feature = "zero-copy")]
                 ZSliceType::ShmInfo => zcheck!(self.write(zslice::kind::SHM_INFO)),
                 _ => zcheck!(self.write(zslice::kind::RAW)),
             }
+
             zcheck!(self.write_usize_as_zint(slice.len()));
             zcheck!(self.write_slice(slice.clone()));
             idx += 1;

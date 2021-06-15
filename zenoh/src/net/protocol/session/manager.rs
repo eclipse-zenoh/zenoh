@@ -32,7 +32,9 @@ use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+#[cfg(feature = "zero-copy")]
+use std::sync::RwLock;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};

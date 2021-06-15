@@ -13,7 +13,9 @@
 //
 #[cfg(feature = "zero-copy")]
 use super::shm::{SharedMemoryBuf, SharedMemoryReader};
-use super::{ZSlice, ZSliceType};
+use super::ZSlice;
+#[cfg(feature = "zero-copy")]
+use super::ZSliceType;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;

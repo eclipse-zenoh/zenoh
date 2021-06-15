@@ -17,6 +17,7 @@ use super::msg::*;
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::ZResult;
 
+#[cfg(feature = "zero-copy")]
 macro_rules! set_shminfo {
     ($msg:expr, $data_info:expr) => {
         // Set the right data info SHM parameters
@@ -31,6 +32,7 @@ macro_rules! set_shminfo {
     };
 }
 
+#[cfg(feature = "zero-copy")]
 macro_rules! unset_shminfo {
     ($msg:expr, $data_info:expr) => {
         match $data_info {

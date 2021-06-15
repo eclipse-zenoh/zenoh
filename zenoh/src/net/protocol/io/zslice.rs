@@ -380,12 +380,13 @@ impl ZSlice {
         IoSlice::new(self.as_slice())
     }
 
-    #[cfg(feature = "zero-copy")]
     #[inline]
     pub fn get_type(&self) -> ZSliceType {
         match &self.buf {
             ZSliceBuffer::ZSliceBufferNet(_) => ZSliceType::Net,
+            #[cfg(feature = "zero-copy")]
             ZSliceBuffer::ZSliceBufferShm(ZSliceBufferShm::Buffer(_)) => ZSliceType::ShmBuf,
+            #[cfg(feature = "zero-copy")]
             ZSliceBuffer::ZSliceBufferShm(ZSliceBufferShm::Info(_)) => ZSliceType::ShmInfo,
         }
     }
@@ -560,6 +561,7 @@ impl From<ZSliceBufferNet> for ZSlice {
     }
 }
 
+#[cfg(feature = "zero-copy")]
 impl From<ZSliceBufferShm> for ZSlice {
     fn from(buf: ZSliceBufferShm) -> Self {
         let len = buf.len();
