@@ -49,7 +49,7 @@ macro_rules! zcallback {
                         let mut w_guard = zwrite!($transport.manager.shmr);
                         $msg.map_to_shmbuf(&mut *w_guard)
                     });
-                    if res.is_err() {
+                    if let Err(e) = res {
                         log::trace!(
                             "Session: {}. Error from SharedMemory: {}. Closing session.",
                             $transport.pid,
