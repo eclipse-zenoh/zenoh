@@ -39,8 +39,7 @@ transport_udp = []
 transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
 transport_unixsock-stream = ["nix"]
 zero-copy = ["bincode", "shared_memory"]
-#default = ["zero-copy", "transport_tcp", "transport_udp", "transport_tls", "transport_quic", "transport_unixsock-stream"]
-default = ["transport_tcp", "transport_udp", "transport_tls", "transport_quic", "transport_unixsock-stream"]
+default = ["zero-copy", "transport_tcp", "transport_udp", "transport_tls", "transport_quic", "transport_unixsock-stream"]
 
 [dependencies]
 zenoh-util = { path = "../zenoh-util" }
