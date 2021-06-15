@@ -16,7 +16,7 @@ use super::link::Locator;
 #[cfg(feature = "zero-copy")]
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
-use super::ZSliceBufferShm;
+use super::ZSliceBuffer;
 #[cfg(feature = "zero-copy")]
 use super::ZSliceType;
 use super::{RBuf, WBuf, ZSlice};
@@ -146,7 +146,7 @@ impl RBuf {
     pub fn read_shminfo(&mut self) -> Option<RBuf> {
         let info = self.read_bytes_array()?;
         let mut rbuf = RBuf::new();
-        let slice = ZSliceBufferShm::Info(info.into());
+        let slice = ZSliceBuffer::ShmInfo(info.into());
         rbuf.add_slice(slice.into());
         Some(rbuf)
     }
@@ -170,7 +170,7 @@ impl RBuf {
                     if !self.read_bytes(info.as_mut_slice()) {
                         return None;
                     }
-                    let slice = ZSliceBufferShm::Info(info.into());
+                    let slice = ZSliceBuffer::ShmInfo(info.into());
                     rbuf.add_slice(slice.into());
                 }
                 _ => return None,
