@@ -17,7 +17,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use zenoh_util::sync::get_mut_unchecked;
 
-use super::protocol::core::{whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt};
+use super::protocol::core::{
+    queryable, whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt,
+};
 use super::protocol::io::RBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 
@@ -808,34 +810,39 @@ pub(crate) fn queries_tree_change(
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn insert_faces_for_qabls(
     route: &mut Route,
     prefix: &Arc<Resource>,
     suffix: &str,
+    kind: ZInt,
     tables: &Tables,
     net: &Network,
     source: usize,
     qabls: &HashMap<PeerId, ZInt>,
 ) {
     if net.trees.len() > source {
-        for qabl in qabls.keys() {
-            if let Some(qabl_idx) = net.get_idx(qabl) {
-                if net.trees[source].directions.len() > qabl_idx.index() {
-                    if let Some(direction) = net.trees[source].directions[qabl_idx.index()] {
-                        if net.graph.contains_node(direction) {
-                            if let Some(face) = tables.get_face(&net.graph[direction].pid) {
-                                route.entry(face.id).or_insert_with(|| {
-                                    let reskey = Resource::get_best_key(prefix, suffix, face.id);
-                                    (
-                                        face.clone(),
-                                        reskey,
-                                        if source != 0 {
-                                            Some(source as u64)
-                                        } else {
-                                            None
-                                        },
-                                    )
-                                });
+        for (qabl, qabl_kind) in qabls.iter() {
+            if kind == queryable::ALL_KINDS || (kind & qabl_kind != 0) {
+                if let Some(qabl_idx) = net.get_idx(qabl) {
+                    if net.trees[source].directions.len() > qabl_idx.index() {
+                        if let Some(direction) = net.trees[source].directions[qabl_idx.index()] {
+                            if net.graph.contains_node(direction) {
+                                if let Some(face) = tables.get_face(&net.graph[direction].pid) {
+                                    route.entry(face.id).or_insert_with(|| {
+                                        let reskey =
+                                            Resource::get_best_key(prefix, suffix, face.id);
+                                        (
+                                            face.clone(),
+                                            reskey,
+                                            if source != 0 {
+                                                Some(source as u64)
+                                            } else {
+                                                None
+                                            },
+                                        )
+                                    });
+                                }
                             }
                         }
                     }
@@ -851,6 +858,7 @@ fn compute_query_route(
     tables: &Tables,
     prefix: &Arc<Resource>,
     suffix: &str,
+    kind: ZInt,
     source: Option<usize>,
     source_type: whatami::Type,
 ) -> Arc<Route> {
@@ -880,6 +888,7 @@ fn compute_query_route(
                     &mut route,
                     prefix,
                     suffix,
+                    kind,
                     tables,
                     net,
                     router_source,
@@ -897,6 +906,7 @@ fn compute_query_route(
                     &mut route,
                     prefix,
                     suffix,
+                    kind,
                     tables,
                     net,
                     peer_source,
@@ -915,6 +925,7 @@ fn compute_query_route(
                 &mut route,
                 prefix,
                 suffix,
+                kind,
                 tables,
                 net,
                 peer_source,
@@ -954,8 +965,14 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
             routers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
             for idx in &indexes {
-                routers_query_routes[idx.index()] =
-                    compute_query_route(tables, res, "", Some(idx.index()), whatami::ROUTER);
+                routers_query_routes[idx.index()] = compute_query_route(
+                    tables,
+                    res,
+                    "",
+                    queryable::ALL_KINDS,
+                    Some(idx.index()),
+                    whatami::ROUTER,
+                );
             }
         }
         if tables.whatami == whatami::ROUTER || tables.whatami == whatami::PEER {
@@ -972,13 +989,25 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
             peers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
             for idx in &indexes {
-                peers_query_routes[idx.index()] =
-                    compute_query_route(tables, res, "", Some(idx.index()), whatami::PEER);
+                peers_query_routes[idx.index()] = compute_query_route(
+                    tables,
+                    res,
+                    "",
+                    queryable::ALL_KINDS,
+                    Some(idx.index()),
+                    whatami::PEER,
+                );
             }
         }
         if tables.whatami == whatami::CLIENT {
-            res_mut.context_mut().client_query_route =
-                Some(compute_query_route(tables, res, "", None, whatami::CLIENT));
+            res_mut.context_mut().client_query_route = Some(compute_query_route(
+                tables,
+                res,
+                "",
+                queryable::ALL_KINDS,
+                None,
+                whatami::CLIENT,
+            ));
         }
     }
 }
@@ -1032,7 +1061,9 @@ pub fn route_query(
                         let routers_net = tables.routers_net.as_ref().unwrap();
                         let local_context =
                             routers_net.get_local_context(routing_context, face.link_id);
-                        Resource::get_resource(prefix, suffix)
+                        (target.kind == queryable::ALL_KINDS)
+                            .then(|| Resource::get_resource(prefix, suffix))
+                            .flatten()
                             .map(|res| res.routers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
@@ -1040,6 +1071,7 @@ pub fn route_query(
                                     tables,
                                     prefix,
                                     suffix,
+                                    target.kind,
                                     Some(local_context),
                                     whatami::ROUTER,
                                 )
@@ -1049,7 +1081,9 @@ pub fn route_query(
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context =
                             peers_net.get_local_context(routing_context, face.link_id);
-                        Resource::get_resource(prefix, suffix)
+                        (target.kind == queryable::ALL_KINDS)
+                            .then(|| Resource::get_resource(prefix, suffix))
+                            .flatten()
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
@@ -1057,16 +1091,26 @@ pub fn route_query(
                                     tables,
                                     prefix,
                                     suffix,
+                                    target.kind,
                                     Some(local_context),
                                     whatami::PEER,
                                 )
                             })
                     }
-                    _ => Resource::get_resource(prefix, suffix)
+                    _ => (target.kind == queryable::ALL_KINDS)
+                        .then(|| Resource::get_resource(prefix, suffix))
+                        .flatten()
                         .map(|res| res.routers_query_route(0))
                         .flatten()
                         .unwrap_or_else(|| {
-                            compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
+                            compute_query_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                target.kind,
+                                None,
+                                whatami::CLIENT,
+                            )
                         }),
                 },
                 whatami::PEER => match face.whatami {
@@ -1074,7 +1118,9 @@ pub fn route_query(
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context =
                             peers_net.get_local_context(routing_context, face.link_id);
-                        Resource::get_resource(prefix, suffix)
+                        (target.kind == queryable::ALL_KINDS)
+                            .then(|| Resource::get_resource(prefix, suffix))
+                            .flatten()
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
@@ -1082,23 +1128,42 @@ pub fn route_query(
                                     tables,
                                     prefix,
                                     suffix,
+                                    target.kind,
                                     Some(local_context),
                                     whatami::PEER,
                                 )
                             })
                     }
-                    _ => Resource::get_resource(prefix, suffix)
+                    _ => (target.kind == queryable::ALL_KINDS)
+                        .then(|| Resource::get_resource(prefix, suffix))
+                        .flatten()
                         .map(|res| res.peers_query_route(0))
                         .flatten()
                         .unwrap_or_else(|| {
-                            compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
+                            compute_query_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                target.kind,
+                                None,
+                                whatami::CLIENT,
+                            )
                         }),
                 },
-                _ => Resource::get_resource(prefix, suffix)
+                _ => (target.kind == queryable::ALL_KINDS)
+                    .then(|| Resource::get_resource(prefix, suffix))
+                    .flatten()
                     .map(|res| res.client_query_route())
                     .flatten()
                     .unwrap_or_else(|| {
-                        compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
+                        compute_query_route(
+                            tables,
+                            prefix,
+                            suffix,
+                            target.kind,
+                            None,
+                            whatami::CLIENT,
+                        )
                     }),
             };
 
