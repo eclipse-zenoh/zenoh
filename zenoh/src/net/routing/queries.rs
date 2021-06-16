@@ -545,6 +545,8 @@ pub fn forget_router_queryable(
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
                 undeclare_router_queryable(tables, Some(face), &mut res, router);
+
+                compute_matches_query_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
             None => log::error!("Undeclare unknown router queryable!"),
@@ -606,6 +608,7 @@ pub fn forget_peer_queryable(
                     }
                 }
 
+                compute_matches_query_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
             None => log::error!("Undeclare unknown peer queryable!"),
@@ -671,6 +674,7 @@ pub(crate) fn undeclare_client_queryable(
         }
     }
 
+    compute_matches_query_routes(tables, res);
     Resource::clean(res)
 }
 
@@ -727,6 +731,8 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId, net_type: 
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_router_queryable(tables, &mut res, node);
+
+                compute_matches_query_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -757,6 +763,7 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId, net_type: 
                     }
                 }
 
+                compute_matches_query_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
