@@ -31,16 +31,15 @@ pub(super) struct SessionContext {
     pub(super) local_rid: Option<ZInt>,
     pub(super) remote_rid: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
-    #[allow(dead_code)]
-    pub(super) qabl: bool,
+    pub(super) qabl: Option<ZInt>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, RBuf)>,
 }
 
 pub(super) struct ResourceContext {
     pub(super) router_subs: HashSet<PeerId>,
     pub(super) peer_subs: HashSet<PeerId>,
-    pub(super) router_qabls: HashSet<PeerId>,
-    pub(super) peer_qabls: HashSet<PeerId>,
+    pub(super) router_qabls: HashMap<PeerId, ZInt>,
+    pub(super) peer_qabls: HashMap<PeerId, ZInt>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
@@ -56,8 +55,8 @@ impl ResourceContext {
         ResourceContext {
             router_subs: HashSet::new(),
             peer_subs: HashSet::new(),
-            router_qabls: HashSet::new(),
-            peer_qabls: HashSet::new(),
+            router_qabls: HashMap::new(),
+            peer_qabls: HashMap::new(),
             matches: Vec::new(),
             matching_pulls: Arc::new(Vec::new()),
             routers_data_routes: Vec::new(),
@@ -361,7 +360,7 @@ impl Resource {
                             local_rid: None,
                             remote_rid: None,
                             subs: None,
-                            qabl: false,
+                            qabl: None,
                             last_values: HashMap::new(),
                         })
                     });
@@ -530,7 +529,7 @@ pub fn declare_resource(
                             local_rid: None,
                             remote_rid: Some(rid),
                             subs: None,
-                            qabl: false,
+                            qabl: None,
                             last_values: HashMap::new(),
                         })
                     })
@@ -563,6 +562,25 @@ pub fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: 
         None => log::error!("Undeclare unknown resource!"),
     }
 }
+
+// pub(super) struct QueryableRef {
+//     pub(super) res: Arc<Resource>,
+//     pub(super) kind: ZInt,
+// }
+
+// impl PartialEq for QueryableRef {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.res.eq(&other.res)
+//     }
+// }
+
+// impl Eq for QueryableRef {}
+
+// impl Hash for QueryableRef {
+//     fn hash<H: Hasher>(&self, state: &mut H) {
+//         self.res.hash(state)
+//     }
+// }
 
 #[inline]
 pub(super) fn elect_router<'a>(res_name: &str, routers: &'a [PeerId]) -> &'a PeerId {

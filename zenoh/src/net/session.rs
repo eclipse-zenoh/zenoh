@@ -740,6 +740,17 @@ impl Session {
         })
     }
 
+    fn compute_local_queryable_kind(state: &mut SessionState, key: &ResKey) -> Option<ZInt> {
+        let res_name = state.localkey_to_resname(key).unwrap();
+        state.queryables.values().fold(None, |accu, q| {
+            if state.localkey_to_resname(&q.reskey).unwrap() == res_name {
+                Some(accu.unwrap_or(0) | q.kind)
+            } else {
+                accu
+            }
+        })
+    }
+
     /// Declare a [Queryable](Queryable) for the given resource key.
     ///
     /// # Arguments
@@ -780,17 +791,25 @@ impl Session {
             kind,
             sender,
         });
-        let twin_qable = state.queryables.values().any(|q| {
-            state.localkey_to_resname(&q.reskey).unwrap()
-                == state.localkey_to_resname(&qable_state.reskey).unwrap()
-        });
+        let computed_kind = Session::compute_local_queryable_kind(&mut state, &qable_state.reskey);
 
         state.queryables.insert(id, qable_state.clone());
 
-        if !twin_qable {
+        let send_kind = match computed_kind {
+            Some(computed_kind) => {
+                if computed_kind != computed_kind | kind {
+                    Some(computed_kind | kind)
+                } else {
+                    None
+                }
+            }
+            None => Some(kind),
+        };
+
+        if let Some(send_kind) = send_kind {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.decl_queryable(resource, 1, None); //TODO
+            primitives.decl_queryable(resource, send_kind, None);
         }
 
         zresolved!(Ok(Queryable {
@@ -805,13 +824,16 @@ impl Session {
         let mut state = zwrite!(self.state);
         zresolved!(if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
-            // Note: there might be several Queryables on the same ResKey.
-            // Before calling forget_eval(reskey), check if this was the last one.
-            let twin_qable = state.queryables.values().any(|q| {
-                state.localkey_to_resname(&q.reskey).unwrap()
-                    == state.localkey_to_resname(&qable_state.reskey).unwrap()
-            });
-            if !twin_qable {
+            let computed_kind =
+                Session::compute_local_queryable_kind(&mut state, &qable_state.reskey);
+            if let Some(computed_kind) = computed_kind {
+                if computed_kind != computed_kind | qable_state.kind {
+                    // There still exist Queryables on the same ResKey and the merge kind changed
+                    let primitives = state.primitives.as_ref().unwrap();
+                    primitives.decl_queryable(&qable_state.reskey, computed_kind, None);
+                }
+            } else {
+                // There are no more Queryables on the same ResKey.
                 let primitives = state.primitives.as_ref().unwrap();
                 primitives.forget_queryable(&qable_state.reskey, None);
             }
