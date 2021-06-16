@@ -43,7 +43,7 @@ pub trait Primitives {
     );
     fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn decl_queryable(&self, reskey: &ResKey, kind: ZInt, routing_context: Option<RoutingContext>);
     fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
     fn send_data(
@@ -108,7 +108,13 @@ impl Primitives for DummyPrimitives {
     }
     fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn decl_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
+    }
     fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
     fn send_data(

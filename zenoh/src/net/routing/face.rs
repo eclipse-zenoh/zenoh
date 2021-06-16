@@ -34,7 +34,7 @@ pub struct FaceState {
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) local_subs: HashSet<Arc<Resource>>,
     pub(super) remote_subs: HashSet<Arc<Resource>>,
-    pub(super) local_qabls: HashSet<Arc<Resource>>,
+    pub(super) local_qabls: HashMap<Arc<Resource>, ZInt>,
     pub(super) remote_qabls: HashSet<Arc<Resource>>,
     pub(super) next_qid: ZInt,
     pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
@@ -58,7 +58,7 @@ impl FaceState {
             remote_mappings: HashMap::new(),
             local_subs: HashSet::new(),
             remote_subs: HashSet::new(),
-            local_qabls: HashSet::new(),
+            local_qabls: HashMap::new(),
             remote_qabls: HashSet::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
@@ -272,7 +272,7 @@ impl Primitives for Face {
 
     fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn decl_queryable(&self, reskey: &ResKey, kind: ZInt, routing_context: Option<RoutingContext>) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
@@ -300,6 +300,7 @@ impl Primitives for Face {
                         &mut self.state.clone(),
                         prefixid,
                         suffix,
+                        kind,
                         router,
                     )
                 }
@@ -334,6 +335,7 @@ impl Primitives for Face {
                         &mut self.state.clone(),
                         prefixid,
                         suffix,
+                        kind,
                         peer,
                     )
                 }
@@ -342,7 +344,13 @@ impl Primitives for Face {
                     log::error!("Received peer queryable with no routing context");
                 }
             },
-            _ => declare_client_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix),
+            _ => declare_client_queryable(
+                &mut tables,
+                &mut self.state.clone(),
+                prefixid,
+                suffix,
+                kind,
+            ),
         }
     }
 
