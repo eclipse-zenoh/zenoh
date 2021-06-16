@@ -790,7 +790,7 @@ impl Session {
         if !twin_qable {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.decl_queryable(resource, None);
+            primitives.decl_queryable(resource, 1, None); //TODO
         }
 
         zresolved!(Ok(Queryable {
@@ -1238,7 +1238,12 @@ impl Primitives for Session {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    fn decl_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Decl Queryable {:?}", _reskey);
     }
 

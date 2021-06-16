@@ -95,9 +95,10 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn decl_queryable(&self, reskey: &ResKey, kind: ZInt, routing_context: Option<RoutingContext>) {
         let d = Declaration::Queryable {
             key: reskey.clone(),
+            kind,
         };
         let decls = vec![d];
         let _ =

@@ -272,7 +272,12 @@ impl Primitives for Face {
 
     fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    fn decl_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn decl_queryable(
+        &self,
+        reskey: &ResKey,
+        _kind: ZInt,
+        routing_context: Option<RoutingContext>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {

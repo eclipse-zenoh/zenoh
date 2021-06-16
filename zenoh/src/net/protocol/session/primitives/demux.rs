@@ -47,8 +47,9 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                             self.primitives
                                 .decl_subscriber(&key, &info, msg.routing_context);
                         }
-                        Declaration::Queryable { key } => {
-                            self.primitives.decl_queryable(&key, msg.routing_context);
+                        Declaration::Queryable { key, kind } => {
+                            self.primitives
+                                .decl_queryable(&key, kind, msg.routing_context);
                         }
                         Declaration::ForgetResource { rid } => {
                             self.primitives.forget_resource(rid);

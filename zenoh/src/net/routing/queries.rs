@@ -17,7 +17,9 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use zenoh_util::sync::get_mut_unchecked;
 
-use super::protocol::core::{whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt};
+use super::protocol::core::{
+    queryable, whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt,
+};
 use super::protocol::io::RBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 
@@ -49,7 +51,11 @@ fn send_sourced_queryable_to_net_childs(
 
                         log::debug!("Send queryable {} on {}", res.name(), someface);
 
-                        someface.primitives.decl_queryable(&reskey, routing_context);
+                        someface.primitives.decl_queryable(
+                            &reskey,
+                            queryable::ALL_KINDS,
+                            routing_context,
+                        ); // TODO
                     }
                 }
                 None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
@@ -74,7 +80,9 @@ fn propagate_simple_queryable(
         {
             get_mut_unchecked(dst_face).local_qabls.insert(res.clone());
             let reskey = Resource::decl_key(res, dst_face);
-            dst_face.primitives.decl_queryable(&reskey, None);
+            dst_face
+                .primitives
+                .decl_queryable(&reskey, queryable::ALL_KINDS, None); // TODO
         }
     }
 }
@@ -552,7 +560,8 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         for qabl in &tables.router_qabls {
             get_mut_unchecked(face).local_qabls.insert(qabl.clone());
             let reskey = Resource::decl_key(&qabl, face);
-            face.primitives.decl_queryable(&reskey, None);
+            face.primitives
+                .decl_queryable(&reskey, queryable::ALL_KINDS, None); // TODO
         }
     }
     if tables.whatami == whatami::CLIENT {
