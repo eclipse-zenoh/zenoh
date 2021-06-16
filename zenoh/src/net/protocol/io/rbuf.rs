@@ -377,7 +377,7 @@ impl RBuf {
 
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub fn map_to_shmbuf(&mut self, shmr: &mut SharedMemoryReader) -> ZResult<bool> {
+    pub(crate) fn map_to_shmbuf(&mut self, shmr: &mut SharedMemoryReader) -> ZResult<bool> {
         self.pos.clear();
 
         let mut res = false;
@@ -400,7 +400,7 @@ impl RBuf {
 
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub fn try_map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
+    pub(crate) fn try_map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
         self.pos.clear();
 
         let mut res = false;
@@ -423,7 +423,7 @@ impl RBuf {
 
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
+    pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         self.pos.clear();
 
         let mut res = false;
@@ -445,7 +445,7 @@ impl RBuf {
     }
 
     #[cfg(feature = "zero-copy")]
-    pub fn has_shminfo(&self) -> bool {
+    pub(crate) fn has_shminfo(&self) -> bool {
         macro_rules! is_shminfo {
             ($slice:expr) => {
                 match $slice.get_type() {
@@ -457,9 +457,7 @@ impl RBuf {
 
         match &self.slices {
             RBufInner::Single(s) => is_shminfo!(s),
-            RBufInner::Multiple(m) => m
-                .iter()
-                .fold(false, |has_shminfo, s| has_shminfo || is_shminfo!(s)),
+            RBufInner::Multiple(m) => m.iter().any(|s| is_shminfo!(s)),
             RBufInner::Empty => false,
         }
     }
