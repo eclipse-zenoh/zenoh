@@ -73,14 +73,14 @@ impl AdminSpace {
             version,
         });
         let admin = Arc::new(AdminSpace {
-            pid: runtime.read().pid.clone(),
+            pid: runtime.pid.clone(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
             context,
         });
 
-        let primitives = runtime.read().router.new_primitives(admin.clone());
+        let primitives = runtime.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.decl_queryable(&[&root_path, "/**"].concat().into(), EVAL, None);
@@ -271,7 +271,7 @@ impl Primitives for AdminSpace {
 }
 
 pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
-    let session_mgr = context.runtime.read().orchestrator.manager().clone();
+    let session_mgr = context.runtime.orchestrator.manager().clone();
 
     // plugins info
     let plugins: Vec<serde_json::Value> = context
@@ -317,8 +317,7 @@ pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
 }
 
 pub async fn linkstate_routers_data(context: &AdminContext) -> (RBuf, ZInt) {
-    let runtime = &context.runtime.read();
-    let tables = zread!(runtime.router.tables);
+    let tables = zread!(context.runtime.router.tables);
 
     let res = (
         RBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
@@ -332,7 +331,6 @@ pub async fn linkstate_peers_data(context: &AdminContext) -> (RBuf, ZInt) {
         RBuf::from(
             context
                 .runtime
-                .read()
                 .router
                 .tables
                 .read()

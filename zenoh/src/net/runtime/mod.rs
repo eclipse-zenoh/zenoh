@@ -26,12 +26,11 @@ use super::routing::router::Router;
 pub use adminspace::AdminSpace;
 use async_std::sync::Arc;
 use orchestrator::SessionOrchestrator;
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::{zerror, zerror2, zwrite};
+use zenoh_util::{zerror, zerror2};
 
 pub struct RuntimeState {
     pub pid: PeerId,
@@ -50,7 +49,15 @@ pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
 
 #[derive(Clone)]
 pub struct Runtime {
-    state: Arc<RwLock<RuntimeState>>,
+    state: Arc<RuntimeState>,
+}
+
+impl std::ops::Deref for Runtime {
+    type Target = RuntimeState;
+
+    fn deref(&self) -> &RuntimeState {
+        self.state.deref()
+    }
 }
 
 impl Runtime {
@@ -130,30 +137,22 @@ impl Runtime {
         }
         match orchestrator.start().await {
             Ok(()) => Ok(Runtime {
-                state: Arc::new(RwLock::new(RuntimeState {
+                state: Arc::new(RuntimeState {
                     pid,
                     router,
                     orchestrator,
-                })),
+                }),
             }),
             Err(err) => Err(err),
         }
     }
 
-    pub fn read(&self) -> RwLockReadGuard<'_, RuntimeState> {
-        zread!(self.state)
-    }
-
-    pub fn write(&self) -> RwLockWriteGuard<'_, RuntimeState> {
-        zwrite!(self.state)
-    }
-
     pub async fn close(&self) -> ZResult<()> {
-        let mut orchestrator = self.write().orchestrator.clone();
+        let mut orchestrator = self.orchestrator.clone();
         orchestrator.close().await
     }
 
     pub fn get_pid_str(&self) -> String {
-        self.read().pid.to_string()
+        self.pid.to_string()
     }
 }
