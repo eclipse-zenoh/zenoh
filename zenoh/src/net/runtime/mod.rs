@@ -16,16 +16,19 @@ pub mod orchestrator;
 
 use super::plugins;
 use super::protocol;
-use super::routing;
-
-use super::protocol::core::{whatami, PeerId};
+use super::protocol::core::{whatami, PeerId, WhatAmI};
+use super::protocol::link::{Link, Locator};
+use super::protocol::proto::{Data, ZenohBody, ZenohMessage};
 use super::protocol::session::{
-    SessionManager, SessionManagerConfig, SessionManagerOptionalConfig,
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    SessionManagerOptionalConfig,
 };
-use super::routing::router::Router;
+use super::routing;
+use super::routing::pubsub::full_reentrant_route_data;
+use super::routing::router::{LinkStateInterceptor, Router};
 pub use adminspace::AdminSpace;
 use async_std::sync::Arc;
-use orchestrator::SessionOrchestrator;
+use std::any::Any;
 use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
@@ -34,8 +37,10 @@ use zenoh_util::{zerror, zerror2};
 
 pub struct RuntimeState {
     pub pid: PeerId,
+    pub whatami: WhatAmI,
     pub router: Arc<Router>,
-    pub orchestrator: SessionOrchestrator,
+    pub config: ConfigProperties,
+    pub manager: SessionManager,
 }
 
 pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
@@ -98,19 +103,31 @@ impl Runtime {
         } else {
             None
         };
-        let mut router = Arc::new(Router::new(pid.clone(), whatami, hlc));
-        let mut orchestrator = SessionOrchestrator::new(whatami, router.clone(), config.clone());
 
+        let router = Arc::new(Router::new(pid.clone(), whatami, hlc));
+
+        let handler = Arc::new(RuntimeSessionHandler {
+            runtime: std::sync::RwLock::new(None),
+        });
         let sm_config = SessionManagerConfig {
             version,
             whatami,
             id: pid.clone(),
-            handler: Arc::new(orchestrator.clone()),
+            handler: handler.clone(),
         };
         let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
 
         let session_manager = SessionManager::new(sm_config, sm_opt_config);
-        orchestrator.init(session_manager);
+        let mut runtime = Runtime {
+            state: Arc::new(RuntimeState {
+                pid,
+                whatami,
+                router,
+                config: config.clone(),
+                manager: session_manager,
+            }),
+        };
+        *handler.runtime.write().unwrap() = Some(runtime.clone());
 
         let peers_autoconnect = config
             .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
@@ -129,30 +146,110 @@ impl Runtime {
                 .to_lowercase()
                 == ZN_TRUE
         {
-            get_mut_unchecked(&mut router).init_link_state(
-                orchestrator.clone(),
+            get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
+                runtime.clone(),
                 peers_autoconnect,
                 routers_autoconnect_gossip,
             );
         }
-        match orchestrator.start().await {
-            Ok(()) => Ok(Runtime {
-                state: Arc::new(RuntimeState {
-                    pid,
-                    router,
-                    orchestrator,
-                }),
-            }),
+        match runtime.start().await {
+            Ok(()) => Ok(runtime),
             Err(err) => Err(err),
         }
     }
 
+    #[inline(always)]
+    pub fn manager(&self) -> &SessionManager {
+        &self.manager
+    }
+
     pub async fn close(&self) -> ZResult<()> {
-        let mut orchestrator = self.orchestrator.clone();
-        orchestrator.close().await
+        log::trace!("Runtime::close())");
+        for session in &mut self.manager().get_sessions() {
+            session.close().await?;
+        }
+        Ok(())
     }
 
     pub fn get_pid_str(&self) -> String {
         self.pid.to_string()
+    }
+}
+
+struct RuntimeSessionHandler {
+    runtime: std::sync::RwLock<Option<Runtime>>,
+}
+
+impl SessionHandler for RuntimeSessionHandler {
+    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+        match &*self.runtime.read().unwrap() {
+            Some(runtime) => Ok(Arc::new(RuntimeSession {
+                runtime: runtime.clone(),
+                locator: std::sync::RwLock::new(None),
+                sub_event_handler: runtime.router.new_session(session).unwrap(),
+            })),
+            None => zerror!(ZErrorKind::Other {
+                descr: "Runtime not yet ready!".to_string()
+            }),
+        }
+    }
+}
+
+pub(super) struct RuntimeSession {
+    pub(super) runtime: Runtime,
+    pub(super) locator: std::sync::RwLock<Option<Locator>>,
+    pub(super) sub_event_handler: Arc<LinkStateInterceptor>,
+}
+
+impl SessionEventHandler for RuntimeSession {
+    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+        // critical path shortcut
+        if msg.reply_context.is_none() {
+            if let ZenohBody::Data(Data {
+                key,
+                data_info,
+                payload,
+            }) = msg.body
+            {
+                let (rid, suffix) = (&key).into();
+                let face = &self.sub_event_handler.face.state;
+                full_reentrant_route_data(
+                    &self.sub_event_handler.tables,
+                    face,
+                    rid,
+                    suffix,
+                    msg.congestion_control,
+                    data_info,
+                    payload,
+                    msg.routing_context,
+                );
+                Ok(())
+            } else {
+                self.sub_event_handler.handle_message(msg)
+            }
+        } else {
+            self.sub_event_handler.handle_message(msg)
+        }
+    }
+
+    fn new_link(&self, link: Link) {
+        self.sub_event_handler.new_link(link)
+    }
+
+    fn del_link(&self, link: Link) {
+        self.sub_event_handler.del_link(link)
+    }
+
+    fn closing(&self) {
+        self.sub_event_handler.closing();
+        Runtime::closing_session(self);
+    }
+
+    fn closed(&self) {
+        self.sub_event_handler.closed()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

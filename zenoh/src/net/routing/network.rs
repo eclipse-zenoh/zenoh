@@ -21,7 +21,7 @@ use super::protocol::link::Locator;
 use super::protocol::proto::{LinkState, ZenohMessage};
 use super::protocol::session::Session;
 
-use super::runtime::orchestrator::SessionOrchestrator;
+use super::runtime::Runtime;
 
 pub(crate) struct Node {
     pub(crate) pid: PeerId,
@@ -92,14 +92,14 @@ pub(crate) struct Network {
     pub(crate) links: VecMap<Link>,
     pub(crate) trees: Vec<Tree>,
     pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
-    pub(crate) orchestrator: SessionOrchestrator,
+    pub(crate) runtime: Runtime,
 }
 
 impl Network {
     pub(crate) fn new(
         name: String,
         pid: PeerId,
-        orchestrator: SessionOrchestrator,
+        runtime: Runtime,
         peers_autoconnect: bool,
         routers_autoconnect_gossip: bool,
     ) -> Self {
@@ -107,7 +107,7 @@ impl Network {
         log::debug!("{} Add node (self) {}", name, pid);
         let idx = graph.add_node(Node {
             pid,
-            whatami: orchestrator.whatami,
+            whatami: runtime.whatami,
             locators: None,
             sn: 1,
             links: vec![],
@@ -124,7 +124,7 @@ impl Network {
                 directions: vec![None],
             }],
             graph,
-            orchestrator,
+            runtime,
         }
     }
 
@@ -162,7 +162,7 @@ impl Network {
 
     #[inline]
     fn get_locators(&self) -> Vec<Locator> {
-        self.orchestrator.manager().get_locators()
+        self.runtime.manager().get_locators()
     }
 
     fn add_node(&mut self, node: Node) -> NodeIndex {
@@ -449,19 +449,18 @@ impl Network {
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
             .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
 
-        if (self.peers_autoconnect && self.orchestrator.whatami == whatami::PEER)
-            || (self.routers_autoconnect_gossip && self.orchestrator.whatami == whatami::ROUTER)
+        if (self.peers_autoconnect && self.runtime.whatami == whatami::PEER)
+            || (self.routers_autoconnect_gossip && self.runtime.whatami == whatami::ROUTER)
         {
             // Connect discovered peers
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
-                if (self.orchestrator.whatami == whatami::PEER
+                if (self.runtime.whatami == whatami::PEER
                     && (node.whatami == whatami::PEER || node.whatami == whatami::ROUTER))
-                    || (self.orchestrator.whatami == whatami::ROUTER
-                        && node.whatami == whatami::ROUTER)
+                    || (self.runtime.whatami == whatami::ROUTER && node.whatami == whatami::ROUTER)
                 {
                     if let Some(locators) = &node.locators {
-                        let orchestrator = self.orchestrator.clone();
+                        let runtime = self.runtime.clone();
                         let pid = node.pid.clone();
                         let locators = locators.clone();
                         async_std::task::spawn(async move {
@@ -470,7 +469,7 @@ impl Network {
                                 rand::random::<u64>() % 100,
                             ))
                             .await;
-                            orchestrator.connect_peer(&pid, &locators).await;
+                            runtime.connect_peer(&pid, &locators).await;
                         });
                     }
                 }

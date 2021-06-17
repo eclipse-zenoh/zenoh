@@ -31,7 +31,7 @@ use super::network::{shared_nodes, Network};
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
-use super::runtime::orchestrator::SessionOrchestrator;
+use super::runtime::Runtime;
 
 zconfigurable! {
     static ref LINK_CLOSURE_DELAY: u64 = 200;
@@ -254,7 +254,7 @@ impl Router {
 
     pub fn init_link_state(
         &mut self,
-        orchestrator: SessionOrchestrator,
+        runtime: Runtime,
         peers_autoconnect: bool,
         routers_autoconnect_gossip: bool,
     ) {
@@ -262,15 +262,15 @@ impl Router {
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
             tables.pid.clone(),
-            orchestrator.clone(),
+            runtime.clone(),
             peers_autoconnect,
             routers_autoconnect_gossip,
         ));
-        if orchestrator.whatami == whatami::ROUTER {
+        if runtime.whatami == whatami::ROUTER {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
                 tables.pid.clone(),
-                orchestrator,
+                runtime,
                 peers_autoconnect,
                 routers_autoconnect_gossip,
             ));
