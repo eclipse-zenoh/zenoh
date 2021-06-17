@@ -583,10 +583,10 @@ impl RBuf {
             FORGET_PUBLISHER => read_key_delc!(self, header, ForgetPublisher),
             QUERYABLE => {
                 let key = self.read_reskey(zmsg::has_flag(header, zmsg::flag::K))?;
-                let kind = if zmsg::has_flag(header, zmsg::flag::I) {
+                let kind = if zmsg::has_flag(header, zmsg::flag::Q) {
                     self.read_zint()?
                 } else {
-                    2
+                    queryable::STORAGE
                 };
                 Some(Declaration::Queryable { key, kind })
             }
