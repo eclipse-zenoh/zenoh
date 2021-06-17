@@ -82,6 +82,8 @@ async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>
         lease: None,
         keep_alive: None,
         sn_resolution: None,
+        open_timeout: None,
+        open_incoming_pending: None,
         batch_size: None,
         max_sessions: None,
         max_links: None,

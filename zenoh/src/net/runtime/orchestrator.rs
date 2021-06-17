@@ -13,18 +13,13 @@
 //
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::io::{RBuf, WBuf};
-use super::protocol::link::{Link, Locator};
-use super::protocol::proto::{
-    Data, Hello, Scout, SessionBody, SessionMessage, ZenohBody, ZenohMessage,
-};
-use super::protocol::session::{Session, SessionEventHandler, SessionHandler, SessionManager};
-use super::routing::pubsub::full_reentrant_route_data;
-use super::routing::router::{LinkStateInterceptor, Router};
+use super::protocol::link::Locator;
+use super::protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
+use super::protocol::session::Session;
+use super::{Runtime, RuntimeSession};
 use async_std::net::UdpSocket;
-use async_std::sync::Arc;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
-use std::any::Any;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -47,32 +42,7 @@ pub enum Loop {
     Break,
 }
 
-#[derive(Clone)]
-pub struct SessionOrchestrator {
-    pub whatami: WhatAmI,
-    pub config: ConfigProperties,
-    pub manager: Option<SessionManager>,
-    pub sub_handler: Arc<Router>,
-}
-
-impl SessionOrchestrator {
-    pub fn new(
-        whatami: WhatAmI,
-        sub_handler: Arc<Router>,
-        config: ConfigProperties,
-    ) -> SessionOrchestrator {
-        SessionOrchestrator {
-            whatami,
-            config,
-            manager: None,
-            sub_handler,
-        }
-    }
-
-    pub fn init(&mut self, manager: SessionManager) {
-        self.manager = Some(manager);
-    }
-
+impl Runtime {
     pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami {
             whatami::CLIENT => self.start_client().await,
@@ -87,11 +57,7 @@ impl SessionOrchestrator {
         }
     }
 
-    pub fn manager(&self) -> &SessionManager {
-        self.manager.as_ref().unwrap()
-    }
-
-    async fn start_client(&mut self) -> ZResult<()> {
+    async fn start_client(&self) -> ZResult<()> {
         let config = &self.config;
         let peers = config
             .get_or(&ZN_PEER_KEY, "")
@@ -120,7 +86,7 @@ impl SessionOrchestrator {
             0 => {
                 if scouting {
                     log::info!("Scouting for router ...");
-                    let ifaces = SessionOrchestrator::get_interfaces(ifaces);
+                    let ifaces = Runtime::get_interfaces(ifaces);
                     if ifaces.is_empty() {
                         zerror!(ZErrorKind::IoError {
                             descr: "Unable to find multicast interface!".to_string()
@@ -128,7 +94,7 @@ impl SessionOrchestrator {
                     } else {
                         let sockets: Vec<UdpSocket> = ifaces
                             .into_iter()
-                            .filter_map(|iface| SessionOrchestrator::bind_ucast_port(iface).ok())
+                            .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
                             .collect();
                         if sockets.is_empty() {
                             zerror!(ZErrorKind::IoError {
@@ -161,7 +127,7 @@ impl SessionOrchestrator {
         }
     }
 
-    async fn start_peer(&mut self) -> ZResult<()> {
+    async fn start_peer(&self) -> ZResult<()> {
         let config = &self.config;
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, PEER_DEFAULT_LISTENER)
@@ -207,12 +173,12 @@ impl SessionOrchestrator {
         }
 
         if scouting {
-            let ifaces = SessionOrchestrator::get_interfaces(ifaces);
-            let mcast_socket = SessionOrchestrator::bind_mcast_port(&addr, &ifaces).await?;
+            let ifaces = Runtime::get_interfaces(ifaces);
+            let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
             if !ifaces.is_empty() {
                 let sockets: Vec<UdpSocket> = ifaces
                     .into_iter()
-                    .filter_map(|iface| SessionOrchestrator::bind_ucast_port(iface).ok())
+                    .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
                     .collect();
                 if !sockets.is_empty() {
                     let this = self.clone();
@@ -238,7 +204,7 @@ impl SessionOrchestrator {
         Ok(())
     }
 
-    async fn start_router(&mut self) -> ZResult<()> {
+    async fn start_router(&self) -> ZResult<()> {
         let config = &self.config;
         let listeners = config
             .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
@@ -281,12 +247,12 @@ impl SessionOrchestrator {
         }
 
         if scouting {
-            let ifaces = SessionOrchestrator::get_interfaces(ifaces);
-            let mcast_socket = SessionOrchestrator::bind_mcast_port(&addr, &ifaces).await?;
+            let ifaces = Runtime::get_interfaces(ifaces);
+            let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
             if !ifaces.is_empty() {
                 let sockets: Vec<UdpSocket> = ifaces
                     .into_iter()
-                    .filter_map(|iface| SessionOrchestrator::bind_ucast_port(iface).ok())
+                    .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
                     .collect();
                 if !sockets.is_empty() {
                     let this = self.clone();
@@ -507,7 +473,7 @@ impl SessionOrchestrator {
                     .unwrap()
                     .unwrap()
                     .as_any()
-                    .downcast_ref::<OrchSession>()
+                    .downcast_ref::<super::RuntimeSession>()
                 {
                     *zwrite!(orch_session.locator) = Some(peer);
                 }
@@ -635,7 +601,7 @@ impl SessionOrchestrator {
         timeout: std::time::Duration,
     ) -> ZResult<()> {
         let scout = async {
-            SessionOrchestrator::scout(sockets, what, addr, move |hello| async move {
+            Runtime::scout(sockets, what, addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if let Some(locators) = &hello.locators {
                     if self.connect(locators).await.is_ok() {
@@ -659,7 +625,7 @@ impl SessionOrchestrator {
     }
 
     async fn connect_all(&self, ucast_sockets: &[UdpSocket], what: WhatAmI, addr: &SocketAddr) {
-        SessionOrchestrator::scout(ucast_sockets, what, addr, move |hello| async move {
+        Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
             match &hello.pid {
                 Some(pid) => {
                     if let Some(locators) = &hello.locators {
@@ -764,78 +730,13 @@ impl SessionOrchestrator {
         }
     }
 
-    pub async fn close(&mut self) -> ZResult<()> {
-        log::trace!("SessionOrchestrator::close())");
-        for session in &mut self.manager().get_sessions() {
-            session.close().await?;
-        }
-        Ok(())
-    }
-}
-
-impl SessionHandler for SessionOrchestrator {
-    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(OrchSession {
-            orchestrator: self.clone(),
-            locator: std::sync::RwLock::new(None),
-            sub_event_handler: self.sub_handler.new_session(session).unwrap(),
-        }))
-    }
-}
-
-pub struct OrchSession {
-    orchestrator: SessionOrchestrator,
-    locator: std::sync::RwLock<Option<Locator>>,
-    sub_event_handler: Arc<LinkStateInterceptor>,
-}
-
-impl SessionEventHandler for OrchSession {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
-        // critical path shortcut
-        if msg.reply_context.is_none() {
-            if let ZenohBody::Data(Data {
-                key,
-                data_info,
-                payload,
-            }) = msg.body
-            {
-                let (rid, suffix) = (&key).into();
-                let face = &self.sub_event_handler.face.state;
-                full_reentrant_route_data(
-                    &self.sub_event_handler.tables,
-                    face,
-                    rid,
-                    suffix,
-                    msg.congestion_control,
-                    data_info,
-                    payload,
-                    msg.routing_context,
-                );
-                Ok(())
-            } else {
-                self.sub_event_handler.handle_message(msg)
-            }
-        } else {
-            self.sub_event_handler.handle_message(msg)
-        }
-    }
-
-    fn new_link(&self, link: Link) {
-        self.sub_event_handler.new_link(link)
-    }
-
-    fn del_link(&self, link: Link) {
-        self.sub_event_handler.del_link(link)
-    }
-
-    fn closing(&self) {
-        self.sub_event_handler.closing();
-        match self.orchestrator.whatami {
+    pub(super) fn closing_session(session: &RuntimeSession) {
+        match session.runtime.whatami {
             whatami::CLIENT => {
-                let mut orchestrator = self.orchestrator.clone();
+                let runtime = session.runtime.clone();
                 async_std::task::spawn(async move {
                     let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
-                    while orchestrator.start_client().await.is_err() {
+                    while runtime.start_client().await.is_err() {
                         async_std::task::sleep(std::time::Duration::from_millis(delay)).await;
                         delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
                         if delay > CONNECTION_RETRY_MAX_PERIOD {
@@ -845,22 +746,12 @@ impl SessionEventHandler for OrchSession {
                 });
             }
             _ => {
-                if let Some(locator) = &*zread!(self.locator) {
+                if let Some(locator) = &*zread!(session.locator) {
                     let locator = locator.clone();
-                    let orchestrator = self.orchestrator.clone();
-                    async_std::task::spawn(
-                        async move { orchestrator.peer_connector(locator).await },
-                    );
+                    let runtime = session.runtime.clone();
+                    async_std::task::spawn(async move { runtime.peer_connector(locator).await });
                 }
             }
         }
-    }
-
-    fn closed(&self) {
-        self.sub_event_handler.closed()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }

@@ -271,7 +271,7 @@ impl Primitives for AdminSpace {
 }
 
 pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
-    let session_mgr = context.runtime.orchestrator.manager().clone();
+    let session_mgr = context.runtime.manager().clone();
 
     // plugins info
     let plugins: Vec<serde_json::Value> = context

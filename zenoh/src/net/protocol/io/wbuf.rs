@@ -114,7 +114,7 @@ impl WBuf {
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.buf.is_empty() && self.slices.iter().find(|s| s.is_external()).is_none()
+        self.buf.is_empty() && !self.slices.iter().any(|s| s.is_external())
     }
 
     pub fn clear(&mut self) {

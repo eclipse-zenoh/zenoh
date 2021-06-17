@@ -299,7 +299,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> ZResolvedFuture<InfoProperties> {
         trace!("info()");
-        let sessions = self.runtime.orchestrator.manager().get_sessions();
+        let sessions = self.runtime.manager().get_sessions();
         let peer_pids = sessions
             .iter()
             .filter(|s| {
@@ -316,7 +316,7 @@ impl Session {
             })
             .collect::<Vec<String>>();
         let mut router_pids = vec![];
-        if self.runtime.orchestrator.whatami & whatami::ROUTER != 0 {
+        if self.runtime.whatami & whatami::ROUTER != 0 {
             router_pids.push(hex::encode_upper(self.runtime.pid.as_slice()));
         }
         router_pids.extend(
