@@ -468,6 +468,8 @@ pub fn forget_router_subscription(
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
                 undeclare_router_subscription(tables, Some(face), &mut res, router);
+
+                compute_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
             None => log::error!("Undeclare unknown router subscription!"),
@@ -524,6 +526,7 @@ pub fn forget_peer_subscription(
                     }
                 }
 
+                compute_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
             None => log::error!("Undeclare unknown peer subscription!"),
@@ -573,6 +576,7 @@ pub(crate) fn undeclare_client_subscription(
         }
     }
 
+    compute_matches_data_routes(tables, res);
     Resource::clean(res)
 }
 
@@ -631,6 +635,8 @@ pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &PeerId, net_type: w
                 .collect::<Vec<Arc<Resource>>>()
             {
                 unregister_router_subscription(tables, &mut res, node);
+
+                compute_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -652,6 +658,7 @@ pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &PeerId, net_type: w
                     }
                 }
 
+                compute_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
