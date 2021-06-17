@@ -423,7 +423,13 @@ impl WBuf {
             Declaration::ForgetSubscriber { key } => write_key_decl!(self, FORGET_SUBSCRIBER, key),
             Declaration::Publisher { key } => write_key_decl!(self, PUBLISHER, key),
             Declaration::ForgetPublisher { key } => write_key_decl!(self, FORGET_PUBLISHER, key),
-            Declaration::Queryable { key } => write_key_decl!(self, QUERYABLE, key),
+            Declaration::Queryable { key, kind } => {
+                let kflag = if key.is_numerical() { zmsg::flag::K } else { 0 };
+                let iflag = if *kind == 2 { 0 } else { zmsg::flag::I };
+                self.write(QUERYABLE | iflag | kflag)
+                    && self.write_reskey(key)
+                    && (iflag == 0 || self.write_zint(*kind))
+            }
             Declaration::ForgetQueryable { key } => write_key_decl!(self, FORGET_QUERYABLE, key),
         }
     }

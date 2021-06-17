@@ -137,7 +137,18 @@ fn gen_declarations() -> Vec<Declaration> {
         },
     });
     decls.push(ForgetSubscriber { key: gen_key() });
-    decls.push(Queryable { key: gen_key() });
+    decls.push(Queryable {
+        key: gen_key(),
+        kind: queryable::ALL_KINDS,
+    });
+    decls.push(Queryable {
+        key: gen_key(),
+        kind: queryable::STORAGE,
+    });
+    decls.push(Queryable {
+        key: gen_key(),
+        kind: queryable::EVAL,
+    });
     decls.push(ForgetQueryable { key: gen_key() });
     decls
 }

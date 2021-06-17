@@ -83,7 +83,7 @@ impl AdminSpace {
         let primitives = runtime.read().router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives.decl_queryable(&[&root_path, "/**"].concat().into(), None);
+        primitives.decl_queryable(&[&root_path, "/**"].concat().into(), EVAL, None);
     }
 
     pub fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
@@ -133,7 +133,12 @@ impl Primitives for AdminSpace {
         trace!("recv Forget Subscriber {:?}", _reskey);
     }
 
-    fn decl_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    fn decl_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Queryable {:?}", _reskey);
     }
 

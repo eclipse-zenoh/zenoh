@@ -16,13 +16,9 @@ Check the website [zenoh.io](http://zenoh.io) for more detailed information.
 -------------------------------
 ## How to build it
 
-Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Currently, zenoh requires a nightly version of Rust, type the following to install it after you have followed the previous instructions:
-
-```bash
-$ rustup default nightly
-```
-
-And then build zenoh with:
+Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). 
+Zenoh can be succesfully compiled with Rust stable (>= 1.5.1), so no special configuraiton is required from your side. 
+To build zenoh, just type the following command after having followed the previous instructions:
 
 ```bash
 $ cargo build --release --all-targets

@@ -21,7 +21,7 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, selector) = parse_args();
+    let (config, selector, kind) = parse_args();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
@@ -31,7 +31,10 @@ async fn main() {
         .query(
             &selector.into(),
             "",
-            QueryTarget::default(),
+            QueryTarget {
+                kind,
+                target: Target::default(),
+            },
             QueryConsolidation::default(),
         )
         .await
@@ -45,7 +48,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Properties, String) {
+fn parse_args() -> (Properties, String, ZInt) {
     let args = App::new("zenoh-net query example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -60,6 +63,11 @@ fn parse_args() -> (Properties, String) {
         .arg(
             Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to query'")
                 .default_value("/demo/example/**"),
+        )
+        .arg(
+            Arg::from_usage("-k, --kind=[KIND] 'The target KIND to query'")
+                .possible_values(&["ALL_KINDS", "STORAGE", "EVAL"])
+                .default_value("ALL_KINDS"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -82,5 +90,12 @@ fn parse_args() -> (Properties, String) {
 
     let selector = args.value_of("selector").unwrap().to_string();
 
-    (config, selector)
+    let kind = match args.value_of("kind") {
+        Some(kind) if kind == "STORAGE" => queryable::STORAGE,
+        Some(kind) if kind == "EVAL" => queryable::EVAL,
+        Some(_) => queryable::ALL_KINDS,
+        None => queryable::ALL_KINDS,
+    };
+
+    (config, selector, kind)
 }
