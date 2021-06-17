@@ -15,6 +15,7 @@ use crate::net::*;
 use async_std::pin::Pin;
 use async_std::task::{Context, Poll};
 use futures_lite::stream::Stream;
+use futures_lite::StreamExt;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
@@ -69,7 +70,7 @@ impl QueryingSubscriber<'_> {
 
     pub fn start_query(&mut self) -> ZResult<()> {
         if self.receiver.query_replies_recv.is_none() {
-            log::info!(
+            log::debug!(
                 "Start query on {}?{}",
                 self.query_reskey,
                 self.query_predicate
@@ -105,57 +106,56 @@ pub struct QueryingReceiver {
     merge_queue: Vec<Sample>,
 }
 
-impl QueryingReceiver {
-    fn complete_pending_query(&mut self) {
-        // if a query is in progress
-        if let Some(receiver) = &self.query_replies_recv {
-            log::info!("Complete query in progress ...");
-            // get all replies and add them to merge_queue
-            while let Ok(mut reply) = receiver.recv() {
-                reply.data.ensure_timestamp();
-                self.merge_queue.push(reply.data);
-            }
-            self.query_replies_recv = None;
-            log::info!("Received {} replies", self.merge_queue.len());
-
-            // get all publications received during the query and add them to merge_queue
-            while let Ok(mut sample) = self.subscriber_recv.try_recv() {
-                sample.ensure_timestamp();
-                self.merge_queue.push(sample);
-            }
-
-            // remove duplicates and sort merge_queue
-            self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
-            self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
-            self.merge_queue.reverse();
-            log::info!(
-                "Merged received publications - {} samples to propagate",
-                self.merge_queue.len()
-            );
-        }
-    }
-}
 
 impl Stream for QueryingReceiver {
     type Item = Sample;
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        log::info!("poll_next");
         let mself = self.get_mut();
 
-        // complete any query in progress
-        mself.complete_pending_query();
+        // if a query is in progress
+        if let Some(receiver) = &mut mself.query_replies_recv {
+            // get all replies and add them to merge_queue
+            loop {
+                match receiver.poll_next(cx) {
+                    Poll::Pending => return Poll::Pending,  // query still in progress - return Pending
+                    Poll::Ready(Some(mut reply)) => {
+                        log::trace!("Reply received: {}", reply.data.res_name);
+                        reply.data.ensure_timestamp();
+                        mself.merge_queue.push(reply.data);
+                    },
+                    Poll::Ready(None) => break,
+                }
+            }
+            mself.query_replies_recv = None;
+            log::debug!("Query completed, received {} replies", mself.merge_queue.len());
+
+            // get all publications received during the query and add them to merge_queue
+            while let Poll::Ready(Some(mut sample)) = mself.subscriber_recv.poll_next(cx) {
+                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                sample.ensure_timestamp();
+                mself.merge_queue.push(sample);
+            }
+
+            // remove duplicates and sort merge_queue
+            mself.merge_queue
+                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            mself.merge_queue
+                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            mself.merge_queue.reverse();
+            log::debug!(
+                "Merged received publications - {} samples to propagate",
+                mself.merge_queue.len()
+            );
+        }
 
         if mself.merge_queue.is_empty() {
-            log::info!("poll_next: receiving from subscriber...");
+            log::trace!("poll_next: receiving from subscriber...");
             // if merge_queue is empty, receive from subscriber
-            use futures_lite::StreamExt;
             mself.subscriber_recv.poll_next(cx)
         } else {
-            log::info!(
+            log::trace!(
                 "poll_next: pop sample from merge_queue (len={})",
                 mself.merge_queue.len()
             );
