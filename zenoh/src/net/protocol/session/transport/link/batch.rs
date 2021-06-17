@@ -313,7 +313,7 @@ mod tests {
     use super::super::core::{CongestionControl, Reliability, ResKey};
     use super::super::io::{RBuf, WBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
-    use super::super::session::defaults::ZNS_SEQ_NUM_RESOLUTION;
+    use super::super::session::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
     use super::*;
     use std::convert::TryFrom;
     use zenoh_util::zlock;
@@ -326,10 +326,14 @@ mod tests {
             );
 
             // Create the serialization batch
-            let sn_reliable =
-                Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
-            let sn_best_effort =
-                Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
+            let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+                0,
+                ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            )));
+            let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
+                0,
+                ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            )));
             let mut batch = SerializationBatch::new(
                 batch_size,
                 *is_streamed,
@@ -436,10 +440,14 @@ mod tests {
     fn serialize_fragmentation(batch_size: usize, payload_size: usize) {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
-            let sn_reliable =
-                Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
-            let sn_best_effort =
-                Arc::new(Mutex::new(SeqNumGenerator::new(0, *ZNS_SEQ_NUM_RESOLUTION)));
+            let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+                0,
+                ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            )));
+            let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
+                0,
+                ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            )));
 
             for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
                 for congestion_control in [CongestionControl::Drop, CongestionControl::Block].iter()

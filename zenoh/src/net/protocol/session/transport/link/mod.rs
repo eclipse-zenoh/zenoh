@@ -22,7 +22,7 @@ use super::io::{ArcSlice, RBuf};
 use super::proto;
 use super::proto::SessionMessage;
 use super::session;
-use super::session::defaults::{ZNS_QUEUE_PRIO_CTRL, ZNS_RX_BUFF_SIZE};
+use super::session::defaults::{ZN_QUEUE_PRIO_CTRL, ZN_RX_BUFF_SIZE};
 use super::{SeqNumGenerator, SessionTransport};
 use async_std::prelude::*;
 use async_std::task;
@@ -192,7 +192,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
                 let pid = None;
                 let attachment = None;
                 let message = SessionMessage::make_keep_alive(pid, attachment);
-                pipeline.push_session_message(message, ZNS_QUEUE_PRIO_CTRL);
+                pipeline.push_session_message(message, ZN_QUEUE_PRIO_CTRL);
             }
         }
     }
@@ -243,7 +243,7 @@ async fn rx_task_stream(
     // The RBuf to read a message batch onto
     let mut rbuf = RBuf::new();
     // The pool of buffers
-    let n = 1 + (*ZNS_RX_BUFF_SIZE / link.get_mtu());
+    let n = 1 + (*ZN_RX_BUFF_SIZE / link.get_mtu());
     let pool = RecyclingObjectPool::new(n, || vec![0u8; link.get_mtu()].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the RBuf
@@ -307,7 +307,7 @@ async fn rx_task_dgram(
     // The RBuf to read a message batch onto
     let mut rbuf = RBuf::new();
     // The pool of buffers
-    let n = 1 + (*ZNS_RX_BUFF_SIZE / link.get_mtu());
+    let n = 1 + (*ZN_RX_BUFF_SIZE / link.get_mtu());
     let pool = RecyclingObjectPool::new(n, || vec![0u8; link.get_mtu()].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the rbuf

@@ -19,10 +19,10 @@ use criterion::Criterion;
 use zenoh::net::protocol::core::{Channel, CongestionControl, Reliability, ResKey};
 use zenoh::net::protocol::io::{RBuf, WBuf};
 use zenoh::net::protocol::proto::ZenohMessage;
-use zenoh::net::protocol::session::defaults::ZNS_BATCH_SIZE;
+use zenoh::net::protocol::session::defaults::ZN_BATCH_SIZE;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let batch_size = *ZNS_BATCH_SIZE;
+    let batch_size = *ZN_BATCH_SIZE;
     let mut current = 8;
     let mut pld = Vec::new();
     while current < batch_size {

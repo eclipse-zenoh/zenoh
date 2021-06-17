@@ -17,8 +17,8 @@ use super::authenticator::{
 };
 use super::core::{PeerId, WhatAmI, ZInt};
 use super::defaults::{
-    ZNS_BATCH_SIZE, ZNS_KEEP_ALIVE, ZNS_LEASE, ZNS_OPEN_MAX_CONCURRENT, ZNS_OPEN_TIMEOUT,
-    ZNS_SEQ_NUM_RESOLUTION,
+    ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_LINK_KEEP_ALIVE, ZN_LINK_LEASE,
+    ZN_OPEN_INCOMING_PENDING, ZN_OPEN_TIMEOUT,
 };
 use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
@@ -35,6 +35,11 @@ use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::properties::config::ConfigProperties;
+use zenoh_util::properties::config::{
+    ZN_LINK_KEEP_ALIVE_KEY, ZN_LINK_KEEP_ALIVE_STR, ZN_LINK_LEASE_KEY, ZN_LINK_LEASE_STR,
+    ZN_OPEN_INCOMING_PENDING_KEY, ZN_OPEN_INCOMING_PENDING_STR, ZN_OPEN_TIMEOUT_KEY,
+    ZN_OPEN_TIMEOUT_STR, ZN_SEQ_NUM_RESOLUTION_KEY, ZN_SEQ_NUM_RESOLUTION_STR,
+};
 use zenoh_util::{zasynclock, zerror, zlock};
 
 /// # Examples
@@ -103,6 +108,8 @@ pub struct SessionManagerOptionalConfig {
     pub lease: Option<ZInt>,
     pub keep_alive: Option<ZInt>,
     pub sn_resolution: Option<ZInt>,
+    pub open_timeout: Option<ZInt>,
+    pub open_incoming_pending: Option<usize>,
     pub batch_size: Option<usize>,
     pub max_sessions: Option<usize>,
     pub max_links: Option<usize>,
@@ -115,14 +122,42 @@ impl SessionManagerOptionalConfig {
     pub async fn from_properties(
         config: &ConfigProperties,
     ) -> ZResult<Option<SessionManagerOptionalConfig>> {
+        macro_rules! zparse {
+            ($key:expr, $str:expr) => {
+                match config.get(&$key) {
+                    Some(snr) => {
+                        let snr = snr.parse().map_err(|_| {
+                            let e = format!(
+                                "Failed to read configuration {}: {} is not a valid entry",
+                                $str, snr
+                            );
+                            log::warn!("{}", e);
+                            zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
+                        })?;
+                        Some(snr)
+                    }
+                    None => None,
+                }
+            };
+        }
+
         let peer_authenticator = PeerAuthenticator::from_properties(config).await?;
         let link_authenticator = LinkAuthenticator::from_properties(config).await?;
         let locator_property = LocatorProperty::from_properties(config).await?;
 
+        let lease = zparse!(ZN_LINK_LEASE_KEY, ZN_LINK_LEASE_STR);
+        let keep_alive = zparse!(ZN_LINK_KEEP_ALIVE_KEY, ZN_LINK_KEEP_ALIVE_STR);
+        let sn_resolution = zparse!(ZN_SEQ_NUM_RESOLUTION_KEY, ZN_SEQ_NUM_RESOLUTION_STR);
+        let open_timeout = zparse!(ZN_OPEN_TIMEOUT_KEY, ZN_OPEN_TIMEOUT_STR);
+        let open_incoming_pending =
+            zparse!(ZN_OPEN_INCOMING_PENDING_KEY, ZN_OPEN_INCOMING_PENDING_STR);
+
         let opt_config = SessionManagerOptionalConfig {
-            lease: None,
-            keep_alive: None,
-            sn_resolution: None,
+            lease,
+            keep_alive,
+            sn_resolution,
+            open_timeout,
+            open_incoming_pending,
             batch_size: None,
             max_sessions: None,
             max_links: None,
@@ -153,6 +188,8 @@ pub(super) struct SessionManagerConfigInner {
     pub(super) lease: ZInt,
     pub(super) keep_alive: ZInt,
     pub(super) sn_resolution: ZInt,
+    pub(super) open_timeout: ZInt,
+    pub(super) open_incoming_pending: usize,
     pub(super) batch_size: usize,
     pub(super) max_sessions: Option<usize>,
     pub(super) max_links: Option<usize>,
@@ -191,10 +228,12 @@ impl SessionManager {
         mut opt_config: Option<SessionManagerOptionalConfig>,
     ) -> SessionManager {
         // Set default optional values
-        let mut lease = *ZNS_LEASE;
-        let mut keep_alive = *ZNS_KEEP_ALIVE;
-        let mut sn_resolution = *ZNS_SEQ_NUM_RESOLUTION;
-        let mut batch_size = *ZNS_BATCH_SIZE;
+        let mut lease = *ZN_LINK_LEASE;
+        let mut keep_alive = *ZN_LINK_KEEP_ALIVE;
+        let mut sn_resolution = ZN_DEFAULT_SEQ_NUM_RESOLUTION;
+        let mut open_timeout = *ZN_OPEN_TIMEOUT;
+        let mut open_incoming_pending = *ZN_OPEN_INCOMING_PENDING;
+        let mut batch_size = ZN_DEFAULT_BATCH_SIZE;
         let mut max_sessions = None;
         let mut max_links = None;
         let mut peer_authenticator = vec![DummyPeerAuthenticator::make()];
@@ -211,6 +250,12 @@ impl SessionManager {
             }
             if let Some(v) = opt.sn_resolution.take() {
                 sn_resolution = v;
+            }
+            if let Some(v) = opt.open_timeout.take() {
+                open_timeout = v;
+            }
+            if let Some(v) = opt.open_incoming_pending.take() {
+                open_incoming_pending = v;
             }
             if let Some(v) = opt.batch_size.take() {
                 batch_size = v;
@@ -237,6 +282,8 @@ impl SessionManager {
             lease,
             keep_alive,
             sn_resolution,
+            open_timeout,
+            open_incoming_pending,
             batch_size,
             max_sessions,
             max_links,
@@ -484,9 +531,9 @@ impl SessionManager {
 
     pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LocatorProperty>) {
         let mut guard = zasynclock!(self.incoming);
-        if guard.len() >= *ZNS_OPEN_MAX_CONCURRENT {
+        if guard.len() >= self.config.open_incoming_pending {
             // We reached the limit of concurrent incoming session, this means two things:
-            // - the values configured for ZNS_OPEN_MAX_CONCURRENT and ZNS_OPEN_TIMEOUT
+            // - the values configured for ZN_OPEN_INCOMING_PENDING and ZN_OPEN_TIMEOUT
             //   are too small for the scenario zenoh is deployed in;
             // - there is a tentative of DoS attack.
             // In both cases, let's close the link straight away with no additional notification
@@ -537,9 +584,9 @@ impl SessionManager {
                 properties,
             };
 
-            let to = Duration::from_millis(*ZNS_OPEN_TIMEOUT);
+            let timeout = Duration::from_millis(c_manager.config.open_timeout);
             let res = super::initial::accept_link(&c_manager, &link, &auth_link)
-                .timeout(to)
+                .timeout(timeout)
                 .await;
             match res {
                 Ok(res) => {
