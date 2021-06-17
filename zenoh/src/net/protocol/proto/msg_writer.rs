@@ -425,7 +425,11 @@ impl WBuf {
             Declaration::ForgetPublisher { key } => write_key_decl!(self, FORGET_PUBLISHER, key),
             Declaration::Queryable { key, kind } => {
                 let kflag = if key.is_numerical() { zmsg::flag::K } else { 0 };
-                let iflag = if *kind == 2 { 0 } else { zmsg::flag::I };
+                let iflag = if *kind == queryable::STORAGE {
+                    0
+                } else {
+                    zmsg::flag::Q
+                };
                 self.write(QUERYABLE | iflag | kflag)
                     && self.write_reskey(key)
                     && (iflag == 0 || self.write_zint(*kind))

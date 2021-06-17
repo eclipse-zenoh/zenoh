@@ -239,7 +239,7 @@ impl Session {
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
     ) -> ZResolvedFuture<Session> {
-        let router = runtime.read().router.clone();
+        let router = runtime.router.clone();
         let state = Arc::new(RwLock::new(SessionState::new(
             local_routing,
             join_subscriptions,
@@ -299,8 +299,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> ZResolvedFuture<InfoProperties> {
         trace!("info()");
-        let runtime = self.runtime.read();
-        let sessions = runtime.orchestrator.manager().get_sessions();
+        let sessions = self.runtime.orchestrator.manager().get_sessions();
         let peer_pids = sessions
             .iter()
             .filter(|s| {
@@ -317,8 +316,8 @@ impl Session {
             })
             .collect::<Vec<String>>();
         let mut router_pids = vec![];
-        if runtime.orchestrator.whatami & whatami::ROUTER != 0 {
-            router_pids.push(hex::encode_upper(runtime.pid.as_slice()));
+        if self.runtime.orchestrator.whatami & whatami::ROUTER != 0 {
+            router_pids.push(hex::encode_upper(self.runtime.pid.as_slice()));
         }
         router_pids.extend(
             sessions
@@ -341,7 +340,10 @@ impl Session {
         let mut info = InfoProperties::default();
         info.insert(ZN_INFO_PEER_PID_KEY, peer_pids.join(","));
         info.insert(ZN_INFO_ROUTER_PID_KEY, router_pids.join(","));
-        info.insert(ZN_INFO_PID_KEY, hex::encode_upper(runtime.pid.as_slice()));
+        info.insert(
+            ZN_INFO_PID_KEY,
+            hex::encode_upper(self.runtime.pid.as_slice()),
+        );
         zresolved!(info)
     }
 
@@ -1167,7 +1169,7 @@ impl Session {
         let predicate = predicate.to_string();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
-        let pid = self.runtime.read().pid.clone(); // @TODO build/use prebuilt specific pid
+        let pid = self.runtime.pid.clone(); // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
             let _ = req_sender.send(Query {
