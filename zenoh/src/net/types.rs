@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::Session;
+use crate::utils::new_reception_timestamp;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::*;
@@ -20,6 +21,7 @@ use std::fmt;
 use std::pin::Pin;
 use std::sync::RwLock;
 use std::task::{Context, Poll};
+use uhlc::Timestamp;
 
 /// A read-only bytes buffer.
 pub use super::protocol::io::RBuf;
@@ -128,6 +130,31 @@ pub struct Sample {
     pub res_name: String,
     pub payload: RBuf,
     pub data_info: Option<DataInfo>,
+}
+
+impl Sample {
+    /// Returns the associated Timestamp, if any.
+    pub fn get_timestamp(&self) -> Option<&Timestamp> {
+        self.data_info
+            .as_ref()
+            .and_then(|info| info.timestamp.as_ref())
+    }
+
+    /// Ensure that an associated Timestamp is present in this Sample.
+    /// If not, a new one is created with the current system time and 0x00 as id.
+    pub fn ensure_timestamp(&mut self) {
+        if let Some(data_info) = &mut self.data_info {
+            if data_info.timestamp.is_none() {
+                data_info.timestamp = Some(new_reception_timestamp());
+            }
+        } else {
+            let data_info = DataInfo {
+                timestamp: Some(new_reception_timestamp()),
+                ..Default::default()
+            };
+            self.data_info = Some(data_info);
+        }
+    }
 }
 
 /// The callback that will be called on each data for a [CallbackSubscriber](CallbackSubscriber).
