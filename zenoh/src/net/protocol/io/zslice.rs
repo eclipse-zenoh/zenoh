@@ -13,6 +13,7 @@
 //
 #[cfg(feature = "zero-copy")]
 use super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
+use std::convert::AsRef;
 use std::fmt;
 use std::io::IoSlice;
 use std::ops::{
@@ -71,6 +72,12 @@ impl Deref for ZSliceBuffer {
 
     fn deref(&self) -> &Self::Target {
         self.as_slice()
+    }
+}
+
+impl AsRef<[u8]> for ZSliceBuffer {
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
     }
 }
 
@@ -323,6 +330,12 @@ impl Deref for ZSlice {
 
     fn deref(&self) -> &Self::Target {
         self.as_slice()
+    }
+}
+
+impl AsRef<[u8]> for ZSlice {
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
     }
 }
 

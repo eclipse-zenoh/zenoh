@@ -469,7 +469,7 @@ impl fmt::Display for RBuf {
             f,
             "RBuf{{ pos: {:?}, content: {} }}",
             self.get_pos(),
-            hex::encode_upper(self.to_vec())
+            hex::encode_upper(self.flatten())
         )
     }
 }

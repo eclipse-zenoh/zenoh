@@ -117,7 +117,7 @@ fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.res_name,
-        String::from_utf8_lossy(&sample.payload.to_vec())
+        String::from_utf8_lossy(&sample.payload.flatten())
     )
 }
 
