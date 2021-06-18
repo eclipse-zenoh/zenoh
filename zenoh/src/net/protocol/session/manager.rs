@@ -89,15 +89,17 @@ use zenoh_util::{zasynclock, zerror, zlock};
 /// };
 /// // Setting a value to None means to use the default value
 /// let opt_config = SessionManagerOptionalConfig {
-///     lease: Some(1_000),         // Set the default lease to 1s
-///     keep_alive: Some(100),      // Set the default keep alive interval to 100ms
-///     sn_resolution: None,        // Use the default sequence number resolution
-///     batch_size: None,           // Use the default batch size
-///     max_sessions: Some(5),      // Accept any number of sessions
-///     max_links: None,            // Allow any number of links in a single session
-///     peer_authenticator: None,   // Accept any incoming session
-///     link_authenticator: None,   // Accept any incoming link
-///     locator_property: None,     // No specific link property
+///     lease: Some(1_000),             // Set the default lease to 1s
+///     keep_alive: Some(100),          // Set the default keep alive interval to 100ms
+///     sn_resolution: None,            // Use the default sequence number resolution
+///     open_timeout: None,             // Use the default open timeout
+///     open_incoming_pending: None,    // Use the default amount of pending incoming sessions
+///     batch_size: None,               // Use the default batch size
+///     max_sessions: Some(5),          // Accept any number of sessions
+///     max_links: None,                // Allow any number of links in a single session
+///     peer_authenticator: None,       // Accept any incoming session
+///     link_authenticator: None,       // Accept any incoming link
+///     locator_property: None,         // No specific link property
 /// };
 /// let manager_opt = SessionManager::new(config, Some(opt_config));
 /// ```

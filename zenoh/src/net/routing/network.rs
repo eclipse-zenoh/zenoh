@@ -223,7 +223,7 @@ impl Network {
         let msg = self.make_msg(idxs);
         log::trace!("{} Send to {:?} {:?}", self.name, session.get_pid(), msg);
         if let Err(e) = session.handle_message(msg) {
-            log::error!("{} Error sending LinkStateList: {}", self.name, e);
+            log::debug!("{} Error sending LinkStateList: {}", self.name, e);
         }
     }
 
@@ -236,7 +236,7 @@ impl Network {
             if predicate(link) {
                 log::trace!("{} Send to {} {:?}", self.name, link.pid, msg);
                 if let Err(e) = link.session.handle_message(msg.clone()) {
-                    log::error!("{} Error sending LinkStateList: {}", self.name, e);
+                    log::debug!("{} Error sending LinkStateList: {}", self.name, e);
                 }
             }
         }
@@ -598,7 +598,7 @@ impl Network {
 
         for link in self.links.values() {
             if let Err(e) = link.session.handle_message(msg.clone()) {
-                log::warn!("{} Error sending LinkStateList: {}", self.name, e);
+                log::debug!("{} Error sending LinkStateList: {}", self.name, e);
             }
         }
 
