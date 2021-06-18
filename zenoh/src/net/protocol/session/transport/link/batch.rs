@@ -525,7 +525,7 @@ mod tests {
                             SessionBody::Frame(Frame { payload, .. }) => match payload {
                                 FramePayload::Fragment { buffer, is_final } => {
                                     assert!(!buffer.is_empty());
-                                    fragments.write_rbuf_slices(&buffer);
+                                    fragments.write_zslice(buffer.clone());
                                     if is_final {
                                         break;
                                     }

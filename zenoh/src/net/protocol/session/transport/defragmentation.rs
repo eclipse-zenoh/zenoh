@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{Reliability, ZInt};
-use super::io::RBuf;
+use super::io::{RBuf, ZSlice};
 use super::proto::ZenohMessage;
 use super::SeqNum;
 
@@ -53,7 +53,7 @@ impl DefragBuffer {
         self.sn.set(sn)
     }
 
-    pub(super) fn push(&mut self, sn: ZInt, mut buffer: RBuf) -> ZResult<()> {
+    pub(super) fn push(&mut self, sn: ZInt, zslice: ZSlice) -> ZResult<()> {
         if sn != self.sn.get() {
             self.clear();
             return zerror!(ZErrorKind::InvalidMessage {
@@ -61,7 +61,7 @@ impl DefragBuffer {
             });
         }
 
-        buffer.drain_into_rbuf(&mut self.buffer);
+        self.buffer.add_slice(zslice);
         self.sn.increment();
 
         Ok(())

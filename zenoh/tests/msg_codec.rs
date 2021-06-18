@@ -83,7 +83,7 @@ fn gen_attachment() -> Attachment {
     wbuf.write_properties(&props);
 
     let rbuf = RBuf::from(&wbuf);
-    Attachment::make(0, rbuf)
+    Attachment::make(rbuf)
 }
 
 fn gen_declarations() -> Vec<Declaration> {
@@ -208,7 +208,7 @@ fn gen_data_info() -> DataInfo {
         timestamp: option_gen!(gen_timestamp()),
         kind: option_gen!(gen!(ZInt)),
         encoding: option_gen!(gen!(ZInt)),
-        is_sliced: gen_bool!(),
+        is_sliced: false,
     }
 }
 
@@ -317,7 +317,7 @@ fn codec_init() {
                         *w,
                         gen_pid(),
                         *s,
-                        RBuf::from(gen_buffer(64)),
+                        gen_buffer(64).into(),
                         a.clone(),
                     );
                     test_write_read_session_message(msg);
@@ -336,7 +336,7 @@ fn codec_open() {
             let msg = SessionMessage::make_open_syn(
                 gen!(ZInt),
                 gen!(ZInt),
-                RBuf::from(gen_buffer(64)),
+                gen_buffer(64).into(),
                 a.clone(),
             );
             test_write_read_session_message(msg);
@@ -457,11 +457,11 @@ fn codec_frame() {
 
         let mut payload = Vec::new();
         payload.push(FramePayload::Fragment {
-            buffer: RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+            buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
             is_final: false,
         });
         payload.push(FramePayload::Fragment {
-            buffer: RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+            buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
             is_final: true,
         });
         for cc in congestion_control.iter() {

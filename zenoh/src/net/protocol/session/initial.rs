@@ -16,7 +16,7 @@ use super::authenticator::{
 };
 use super::core::{PeerId, Property, WhatAmI, ZInt};
 use super::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
-use super::io::{RBuf, WBuf};
+use super::io::{RBuf, WBuf, ZSlice};
 use super::link::Link;
 use super::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
@@ -43,22 +43,14 @@ fn attachment_from_properties(ps: &[Property]) -> ZResult<Attachment> {
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_properties(ps);
         let rbuf: RBuf = wbuf.into();
-        let attachment = Attachment::make(smsg::attachment::PROPERTIES, rbuf);
+        let attachment = Attachment::make(rbuf);
         Ok(attachment)
     }
 }
 
 fn properties_from_attachment(mut att: Attachment) -> ZResult<Vec<Property>> {
-    if att.encoding != smsg::attachment::PROPERTIES {
-        let e = format!(
-            "Invalid attachment encoding for properties: {}",
-            att.encoding
-        );
-        return zerror!(ZErrorKind::Other { descr: e });
-    }
-
     att.buffer.read_properties().ok_or_else(|| {
-        let e = "Error while decoding properties".to_string();
+        let e = "Error while decoding attachment properties".to_string();
         zerror2!(ZErrorKind::Other { descr: e })
     })
 }
@@ -179,7 +171,7 @@ struct OpenInitAckOutput {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     initial_sn_tx: ZInt,
-    cookie: RBuf,
+    cookie: ZSlice,
     open_syn_attachment: Option<Attachment>,
     auth_session: AuthenticatedPeerSession,
 }
@@ -678,7 +670,7 @@ async fn accept_send_init_ack(
     zasynclock!(manager.incoming).insert(link.clone(), Some(hash));
 
     // Send the cookie
-    let cookie = RBuf::from(encrypted);
+    let cookie: ZSlice = encrypted.into();
     let message = SessionMessage::make_init_ack(
         whatami,
         apid,

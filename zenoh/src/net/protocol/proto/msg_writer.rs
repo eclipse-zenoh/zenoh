@@ -25,7 +25,7 @@ impl WBuf {
         attachment: Option<Attachment>,
     ) -> bool {
         if let Some(attachment) = attachment {
-            zcheck!(self.write_deco_attachment(&attachment, true));
+            zcheck!(self.write_deco_attachment(&attachment));
         }
 
         let header = SessionMessage::make_frame_header(ch, is_fragment);
@@ -35,19 +35,19 @@ impl WBuf {
 
     pub fn write_session_message(&mut self, msg: &SessionMessage) -> bool {
         if let Some(attachment) = msg.get_attachment() {
-            zcheck!(self.write_deco_attachment(attachment, true));
-        };
+            zcheck!(self.write_deco_attachment(attachment));
+        }
 
         zcheck!(self.write(msg.header));
-        match msg.get_body() {
+        match &msg.body {
             SessionBody::Frame(Frame { sn, payload, .. }) => {
                 zcheck!(self.write_zint(*sn));
                 match payload {
                     FramePayload::Fragment { buffer, .. } => {
-                        zcheck!(self.write_rbuf_slices(&buffer));
+                        zcheck!(self.write_zslice(buffer.clone()));
                     }
                     FramePayload::Messages { messages } => {
-                        for m in messages {
+                        for m in messages.iter() {
                             zcheck!(self.write_zenoh_message(m));
                         }
                     }
@@ -103,7 +103,7 @@ impl WBuf {
                 if let Some(snr) = *sn_resolution {
                     zcheck!(self.write_zint(snr));
                 }
-                zcheck!(self.write_rbuf(cookie));
+                zcheck!(self.write_zslice_element(cookie.clone()));
             }
 
             SessionBody::OpenSyn(OpenSyn {
@@ -117,7 +117,7 @@ impl WBuf {
                     zcheck!(self.write_zint(*lease));
                 }
                 zcheck!(self.write_zint(*initial_sn));
-                zcheck!(self.write_rbuf(cookie));
+                zcheck!(self.write_zslice_element(cookie.clone()));
             }
 
             SessionBody::OpenAck(OpenAck { lease, initial_sn }) => {
@@ -169,7 +169,7 @@ impl WBuf {
             zcheck!(self.write_deco_routing_context(*routing_context));
         }
         if let Some(attachment) = &msg.attachment {
-            zcheck!(self.write_deco_attachment(attachment, false));
+            zcheck!(self.write_deco_attachment(attachment));
         }
         if let Some(reply_context) = &msg.reply_context {
             zcheck!(self.write_deco_reply_context(reply_context));
@@ -189,11 +189,7 @@ impl WBuf {
                 } else {
                     false
                 };
-                if is_sliced {
-                    zcheck!(self.write_rbuf_as_slices(&payload));
-                } else {
-                    zcheck!(self.write_rbuf(&payload));
-                }
+                zcheck!(self.write_rbuf(&payload, is_sliced));
             }
 
             ZenohBody::Declare(Declare { declarations }) => {
@@ -248,13 +244,21 @@ impl WBuf {
         true
     }
 
-    fn write_deco_attachment(&mut self, attachment: &Attachment, session: bool) -> bool {
-        if session {
-            zcheck!(self.write(attachment.encoding | smsg::id::ATTACHMENT));
-        } else {
-            zcheck!(self.write(attachment.encoding | zmsg::id::ATTACHMENT));
+    fn write_deco_attachment(&mut self, attachment: &Attachment) -> bool {
+        #[cfg(feature = "zero-copy")]
+        {
+            if attachment.buffer.has_shminfo() {
+                self.write(smsg::id::ATTACHMENT | smsg::flag::Z)
+                    && self.write_rbuf(&attachment.buffer, true)
+            } else {
+                self.write(smsg::id::ATTACHMENT) && self.write_rbuf(&attachment.buffer, false)
+            }
         }
-        self.write_rbuf(&attachment.buffer)
+
+        #[cfg(not(feature = "zero-copy"))]
+        {
+            self.write(smsg::id::ATTACHMENT) && self.write_rbuf(&attachment.properties)
+        }
     }
 
     fn write_deco_reply_context(&mut self, reply_context: &ReplyContext) -> bool {
@@ -275,11 +279,23 @@ impl WBuf {
 
     pub fn write_data_info(&mut self, info: &DataInfo) -> bool {
         let mut options: ZInt = 0;
+        if info.kind.is_some() {
+            options |= zmsg::data::info::KIND;
+        }
+        if info.encoding.is_some() {
+            options |= zmsg::data::info::ENC;
+        }
+        if info.timestamp.is_some() {
+            options |= zmsg::data::info::TS;
+        }
         if info.source_id.is_some() {
             options |= zmsg::data::info::SRCID;
         }
         if info.source_sn.is_some() {
             options |= zmsg::data::info::SRCSN;
+        }
+        if info.is_sliced {
+            options |= zmsg::data::info::SLICED;
         }
         if info.first_router_id.is_some() {
             options |= zmsg::data::info::RTRID;
@@ -287,20 +303,17 @@ impl WBuf {
         if info.first_router_sn.is_some() {
             options |= zmsg::data::info::RTRSN;
         }
-        if info.timestamp.is_some() {
-            options |= zmsg::data::info::TS;
-        }
-        if info.kind.is_some() {
-            options |= zmsg::data::info::KIND;
-        }
-        if info.encoding.is_some() {
-            options |= zmsg::data::info::ENC;
-        }
-        if info.is_sliced {
-            options |= zmsg::data::info::SLICED;
-        }
         zcheck!(self.write_zint(options));
 
+        if let Some(kind) = &info.kind {
+            zcheck!(self.write_zint(*kind));
+        }
+        if let Some(enc) = &info.encoding {
+            zcheck!(self.write_zint(*enc));
+        }
+        if let Some(ts) = &info.timestamp {
+            zcheck!(self.write_timestamp(&ts));
+        }
         if let Some(pid) = &info.source_id {
             zcheck!(self.write_peerid(pid));
         }
@@ -312,15 +325,6 @@ impl WBuf {
         }
         if let Some(sn) = &info.first_router_sn {
             zcheck!(self.write_zint(*sn));
-        }
-        if let Some(ts) = &info.timestamp {
-            zcheck!(self.write_timestamp(&ts));
-        }
-        if let Some(kind) = &info.kind {
-            zcheck!(self.write_zint(*kind));
-        }
-        if let Some(enc) = &info.encoding {
-            zcheck!(self.write_zint(*enc));
         }
 
         true

@@ -375,6 +375,21 @@ impl RBuf {
         self.read_into_rbuf(dest, self.readable())
     }
 
+    pub(crate) fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
+        let slice = self.curr_slice()?;
+        if slice.len() < len {
+            let slice = slice.new_sub_slice(self.pos.byte, self.pos.byte + len);
+            self.skip_bytes_no_check(len);
+            Some(slice)
+        } else {
+            let mut slice = vec![0u8; len];
+            match self.read_bytes(&mut slice) {
+                true => Some(slice.into()),
+                false => None,
+            }
+        }
+    }
+
     #[cfg(feature = "zero-copy")]
     #[inline]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: &mut SharedMemoryReader) -> ZResult<bool> {

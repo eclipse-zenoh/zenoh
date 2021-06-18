@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{PeerId, Property, ZInt};
-use super::io::{RBuf, SharedMemoryBuf, SharedMemoryManager, WBuf};
+use super::io::{RBuf, SharedMemoryBuf, SharedMemoryManager, WBuf, ZSlice};
 use super::{
     attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
@@ -32,25 +32,6 @@ const SHM_NAME: &str = "shmauth";
 // Let's use a ZInt as a challenge
 const SHM_SIZE: usize = std::mem::size_of::<ZInt>();
 
-/// # Attachment decorator
-///
-/// ```text
-/// The Attachment can decorate any message (i.e., SessionMessage and ZenohMessage) and it allows to
-/// append to the message any additional information. Since the information contained in the
-/// Attachement is relevant only to the layer that provided them (e.g., Session, Zenoh, User) it
-/// is the duty of that layer to serialize and de-serialize the attachment whenever deemed necessary.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// | ENC |  ATTCH  |
-/// +-+-+-+---------+
-/// ~   Attachment  ~
-/// +---------------+
-///
-/// ENC values:
-/// - 0x00 => Zenoh Properties
-/// ```
-
 /*************************************/
 /*             InitSyn               */
 /*************************************/
@@ -64,13 +45,13 @@ const SHM_SIZE: usize = std::mem::size_of::<ZInt>();
 /// +---------------+
 struct InitSynProperty {
     version: ZInt,
-    shm: RBuf,
+    shm: ZSlice,
 }
 
 impl WBuf {
     fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool {
         zcheck!(self.write_zint(init_syn_property.version));
-        self.write_rbuf(&init_syn_property.shm)
+        self.write_zslice_element(init_syn_property.shm.clone())
     }
 }
 
@@ -95,13 +76,13 @@ impl RBuf {
 /// +---------------+
 struct InitAckProperty {
     challenge: ZInt,
-    shm: RBuf,
+    shm: ZSlice,
 }
 
 impl WBuf {
     fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool {
         zcheck!(self.write_zint(init_ack_property.challenge));
-        self.write_rbuf(&init_ack_property.shm)
+        self.write_zslice_element(init_ack_property.shm.clone())
     }
 }
 
@@ -287,7 +268,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
         log::debug!("Authenticating Shared Memory Access...");
 
-        let xs = init_syn_property.shm.flatten();
+        let xs = init_syn_property.shm;
         let bytes: [u8; SHM_SIZE] = match xs.as_slice().try_into() {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -360,7 +341,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         }
 
-        let bytes: [u8; SHM_SIZE] = match init_ack_property.shm.flatten().as_slice().try_into() {
+        let bytes: [u8; SHM_SIZE] = match init_ack_property.shm.as_slice().try_into() {
             Ok(bytes) => bytes,
             Err(e) => {
                 log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);

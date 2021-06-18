@@ -313,7 +313,7 @@ impl WBuf {
         }
     }
 
-    // NOTE: this is different from write_slice() as this makes a copy of bytes into WBuf.
+    // NOTE: this is different from write_zslice() as this makes a copy of bytes into WBuf.
     pub fn write_bytes(&mut self, s: &[u8]) -> bool {
         if self.can_write_in_buf(s.len()) {
             self.buf.extend_from_slice(s);
@@ -325,7 +325,7 @@ impl WBuf {
 
     // NOTE: if not-contiguous, this is 0-copy (the slice is just added to slices list)
     //       otherwise, it's a copy into buf, if doesn't exceed the capacity.
-    pub fn write_slice(&mut self, slice: ZSlice) -> bool {
+    pub fn write_zslice(&mut self, zslice: ZSlice) -> bool {
         if !self.contiguous {
             // If last slice was an internal without end, set it
             if let Some(&mut Slice::Internal(start, None)) = self.slices.last_mut() {
@@ -334,13 +334,13 @@ impl WBuf {
                     .push(Slice::Internal(start, Some(self.buf.len())));
             }
             // Push the ZSlice in slices list
-            self.slices.push(Slice::External(slice));
+            self.slices.push(Slice::External(zslice));
             // Push a new internal slice ready for future writes
             self.slices.push(Slice::Internal(self.buf.len(), None));
             true
-        } else if self.buf.len() + slice.len() <= self.buf.capacity() {
+        } else if self.buf.len() + zslice.len() <= self.buf.capacity() {
             // Copy the ZSlice into buf
-            self.buf.extend_from_slice(slice.as_slice());
+            self.buf.extend_from_slice(zslice.as_slice());
             true
         } else {
             false
@@ -373,7 +373,7 @@ impl io::Write for WBuf {
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         let mut nwritten = 0;
         for buf in bufs {
-            if self.write_slice(buf.into()) {
+            if self.write_zslice(buf.into()) {
                 nwritten += buf.len();
             } else {
                 break;
@@ -536,24 +536,24 @@ mod tests {
     }
 
     #[test]
-    fn wbuf_contiguous_write_slice() {
+    fn wbuf_contiguous_write_zslice() {
         let mut buf = WBuf::new(6, true);
-        assert!(buf.write_slice(ZSlice::from(&[0u8, 1, 2] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[0u8, 1, 2] as &[u8])));
         assert_eq!(buf.len(), 3);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2]]);
 
-        assert!(buf.write_slice(ZSlice::from(&[3u8, 4] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[3u8, 4] as &[u8])));
         assert_eq!(buf.len(), 5);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
-        assert!(!buf.write_slice(ZSlice::from(&[5u8, 6] as &[u8])));
+        assert!(!buf.write_zslice(ZSlice::from(&[5u8, 6] as &[u8])));
         assert_eq!(buf.len(), 5);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
-        assert!(buf.write_slice(ZSlice::from(&[5u8] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[5u8] as &[u8])));
         assert_eq!(buf.len(), 6);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4, 5]]);
@@ -605,7 +605,7 @@ mod tests {
     #[test]
     fn wbuf_contiguous_copy_into_slice() {
         let mut buf = WBuf::new(6, true);
-        assert!(buf.write_slice(ZSlice::from(&[0u8, 1, 2, 3, 4, 5] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[0u8, 1, 2, 3, 4, 5] as &[u8])));
 
         let mut copy = vec![0; 10];
         buf.copy_into_slice(&mut copy[0..3]);
@@ -617,7 +617,7 @@ mod tests {
     #[test]
     fn wbuf_contiguous_copy_into_wbuf() {
         let mut buf = WBuf::new(6, true);
-        assert!(buf.write_slice(ZSlice::from(&[0u8, 1, 2, 3, 4, 5] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[0u8, 1, 2, 3, 4, 5] as &[u8])));
 
         let mut copy = WBuf::new(10, true);
         buf.copy_into_wbuf(&mut copy, 3);
@@ -691,24 +691,24 @@ mod tests {
     }
 
     #[test]
-    fn wbuf_noncontiguous_write_slice() {
+    fn wbuf_noncontiguous_write_zslice() {
         let mut buf = WBuf::new(6, false);
-        assert!(buf.write_slice(ZSlice::from(&[0u8, 1, 2] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[0u8, 1, 2] as &[u8])));
         assert_eq!(buf.len(), 3);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2]]);
 
-        assert!(buf.write_slice(ZSlice::from(&[3u8, 4] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[3u8, 4] as &[u8])));
         assert_eq!(buf.len(), 5);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2], vec![3, 4]]);
 
-        assert!(buf.write_slice(ZSlice::from(&[5u8, 6] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[5u8, 6] as &[u8])));
         assert_eq!(buf.len(), 7);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2], vec![3, 4], vec![5, 6]]);
 
-        assert!(buf.write_slice(ZSlice::from(&[7u8] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[7u8] as &[u8])));
         assert_eq!(buf.len(), 8);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(
@@ -724,7 +724,7 @@ mod tests {
         assert!(buf.write(1));
         assert_eq!(to_vec_vec!(buf), [[0, 1]]);
 
-        assert!(buf.write_slice(ZSlice::from(&[2u8, 3, 4] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[2u8, 3, 4] as &[u8])));
         assert_eq!(to_vec_vec!(buf), [vec![0, 1], vec![2, 3, 4]]);
 
         assert!(buf.write(5));
@@ -735,7 +735,7 @@ mod tests {
             [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8]]
         );
 
-        assert!(buf.write_slice(ZSlice::from(&[9u8, 10, 11] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[9u8, 10, 11] as &[u8])));
         assert_eq!(
             to_vec_vec!(buf),
             [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8], vec![9, 10, 11]]
@@ -752,7 +752,7 @@ mod tests {
         // write some bytes
         assert!(buf.write_bytes(&[1, 2, 3, 4, 5]));
         // add an ZSlice
-        assert!(buf.write_slice(ZSlice::from(&[6u8, 7, 8, 9, 10] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[6u8, 7, 8, 9, 10] as &[u8])));
 
         // prepend size in 2 bytes
         let prefix: &mut [u8] = buf.get_first_slice_mut(..2);
@@ -777,43 +777,43 @@ mod tests {
         buf.revert();
         assert!(to_vec_vec!(buf).is_empty());
 
-        assert!(buf.write_slice(ZSlice::from(&[0u8, 1] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[0u8, 1] as &[u8])));
         buf.revert();
         assert!(to_vec_vec!(buf).is_empty());
 
         assert!(buf.write_bytes(&[0, 1, 2]));
         buf.mark();
         assert!(buf.write_bytes(&[3, 4]));
-        assert!(buf.write_slice(ZSlice::from(&[5u8, 6] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[5u8, 6] as &[u8])));
         assert!(buf.write(7));
-        assert!(buf.write_slice(ZSlice::from(&[8u8, 9] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[8u8, 9] as &[u8])));
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2]]);
 
         assert!(buf.write_bytes(&[3, 4]));
         buf.mark();
-        assert!(buf.write_slice(ZSlice::from(&[5u8, 6] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[5u8, 6] as &[u8])));
         assert!(buf.write(7));
-        assert!(buf.write_slice(ZSlice::from(&[8u8, 9] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[8u8, 9] as &[u8])));
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
-        assert!(buf.write_slice(ZSlice::from(&[5u8, 6] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[5u8, 6] as &[u8])));
         buf.mark();
         assert!(buf.write(7));
-        assert!(buf.write_slice(ZSlice::from(&[8u8, 9] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[8u8, 9] as &[u8])));
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2, 3, 4], vec![5, 6]]);
 
         assert!(buf.write(7));
         buf.mark();
-        assert!(buf.write_slice(ZSlice::from(&[8u8, 9] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[8u8, 9] as &[u8])));
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2, 3, 4], vec![5, 6], vec![7]]);
 
-        assert!(buf.write_slice(ZSlice::from(&[8u8, 9] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[8u8, 9] as &[u8])));
         buf.mark();
-        assert!(buf.write_slice(ZSlice::from(&[10u8, 11] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[10u8, 11] as &[u8])));
         buf.revert();
         assert_eq!(
             to_vec_vec!(buf),
@@ -826,11 +826,11 @@ mod tests {
         let mut buf = WBuf::new(6, false);
         assert!(buf.write(0));
         assert!(buf.write(1));
-        assert!(buf.write_slice(ZSlice::from(&[2u8, 3, 4] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[2u8, 3, 4] as &[u8])));
         assert!(buf.write(5));
         assert!(buf.write_bytes(&[6, 7]));
         assert!(buf.write(8));
-        assert!(buf.write_slice(ZSlice::from(&[9u8, 10, 11] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[9u8, 10, 11] as &[u8])));
         assert_eq!(
             to_vec_vec!(buf),
             [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8], vec![9, 10, 11]]
@@ -852,11 +852,11 @@ mod tests {
         let mut buf = WBuf::new(6, false);
         assert!(buf.write(0));
         assert!(buf.write(1));
-        assert!(buf.write_slice(ZSlice::from(&[2u8, 3, 4] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[2u8, 3, 4] as &[u8])));
         assert!(buf.write(5));
         assert!(buf.write_bytes(&[6, 7]));
         assert!(buf.write(8));
-        assert!(buf.write_slice(ZSlice::from(&[9u8, 10, 11] as &[u8])));
+        assert!(buf.write_zslice(ZSlice::from(&[9u8, 10, 11] as &[u8])));
         assert_eq!(
             to_vec_vec!(buf),
             [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8], vec![9, 10, 11]]

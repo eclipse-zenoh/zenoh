@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::*;
-use super::io::RBuf;
+use super::io::{RBuf, ZSlice};
 use super::link::Locator;
 use std::fmt;
 
@@ -29,26 +29,23 @@ use std::fmt;
 /// append to the message any additional information. Since the information contained in the
 /// Attachement is relevant only to the layer that provided them (e.g., Session, Zenoh, User) it
 /// is the duty of that layer to serialize and de-serialize the attachment whenever deemed necessary.
+/// The attachement always contains serialized properties.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// | ENC |  ATTCH  |
+/// |X|X|Z|  ATTCH  |
 /// +-+-+-+---------+
 /// ~   Attachment  ~
 /// +---------------+
-///
-/// ENC values:
-/// - 0x00 => Zenoh Properties
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attachment {
-    pub encoding: u8,
     pub buffer: RBuf,
 }
 
 impl Attachment {
-    pub fn make(encoding: u8, buffer: RBuf) -> Attachment {
-        Attachment { encoding, buffer }
+    pub fn make(buffer: RBuf) -> Attachment {
+        Attachment { buffer }
     }
 }
 
@@ -136,10 +133,6 @@ mod imsg {
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
     }
-
-    pub(super) mod attachment {
-        pub(crate) const PROPERTIES: u8 = 0x00;
-    }
 }
 
 /*************************************/
@@ -167,12 +160,6 @@ pub mod zmsg {
         pub const ROUTING_CONTEXT: u8 = imsg::id::ROUTING_CONTEXT;
     }
 
-    pub mod attachment {
-        use super::imsg;
-
-        pub const PROPERTIES: u8 = imsg::attachment::PROPERTIES;
-    }
-
     // Zenoh message flags
     pub mod flag {
         pub const D: u8 = 1 << 5; // 0x20 Dropping      if D==1 then the message can be dropped
@@ -185,25 +172,27 @@ pub mod zmsg {
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SubMode       if S==1 then the declaration SubMode is indicated
         pub const T: u8 = 1 << 5; // 0x20 QueryTarget   if T==1 then the query target is present
+        pub const Z: u8 = 1 << 5; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
         pub const X: u8 = 0; // Unused flags are set to zero
     }
 
     // Options used for DataInfo
     pub mod data {
+        use super::flag;
         use super::ZInt;
 
         pub mod info {
             use super::ZInt;
 
-            pub const SRCID: ZInt = 1; // 0x01
-            pub const SRCSN: ZInt = 1 << 1; // 0x02
-            pub const RTRID: ZInt = 1 << 2; // 0x04
-            pub const RTRSN: ZInt = 1 << 3; // 0x08
-            pub const TS: ZInt = 1 << 4; // 0x10
-            pub const KIND: ZInt = 1 << 5; // 0x20
-            pub const ENC: ZInt = 1 << 6; // 0x40
-            pub const SLICED: ZInt = 1 << 7; // 0x80
+            pub const KIND: ZInt = 1 << 0; // 0x01
+            pub const ENC: ZInt = 1 << 1; // 0x02
+            pub const TS: ZInt = 1 << 2; // 0x04
+            pub const SRCID: ZInt = 1 << 3; // 0x08
+            pub const SRCSN: ZInt = 1 << 4; // 0x10
+            pub const SLICED: ZInt = super::flag::Z as ZInt; // (1 << 5 ) 0x20
+            pub const RTRID: ZInt = 1 << 8; // 0x100
+            pub const RTRSN: ZInt = 1 << 9; // 0x200
         }
     }
 
@@ -396,50 +385,64 @@ pub struct Declare {
 /// DataInfo data structure is optionally included in Data messages
 ///
 /// ```text
+///
+/// Options bits
+/// -  0: Payload kind
+/// -  1: Payload encoding
+/// -  2: Payload timestamp
+/// -  3: Payload source_id
+/// -  4: Payload source_sn
+/// -  5: Payload is sliced
+/// -  6: Reserved
+/// -  7: Reserved
+/// -  8: First router_id
+/// -  9: First router_sn
+/// - 10-63: Reserved
+///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+---------+
-/// ~!|G|F|E|D|C|B|A~ -- encoded as ZInt.
-/// ~!|X|X|X|X|X|X|H~    Bit 7 is reserved for ZInt encoding.
+/// ~    options    ~
 /// +---------------+
-/// ~   source_id   ~ if A==1
+/// ~      kind     ~ if options & (1 << 0)
 /// +---------------+
-/// ~   source_sn   ~ if B==1
+/// ~   encoding    ~ if options & (1 << 1)
 /// +---------------+
-/// ~first_router_id~ if C==1
+/// ~   timestamp   ~ if options & (1 << 2)
 /// +---------------+
-/// ~first_router_sn~ if D==1
+/// ~   source_id   ~ if options & (1 << 3)
 /// +---------------+
-/// ~   timestamp   ~ if E==1
+/// ~   source_sn   ~ if options & (1 << 4)
 /// +---------------+
-/// ~      kind     ~ if F==1
+/// ~first_router_id~ if options & (1 << 8)
 /// +---------------+
-/// ~   encoding    ~ if G==1
+/// ~first_router_sn~ if options & (1 << 9)
 /// +---------------+
 ///
-/// - if H==1 then the message is a shared memory message.
+/// - if options & (1 << 5) then the payload is sliced
+///
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
-    pub source_id: Option<PeerId>,
-    pub source_sn: Option<ZInt>,
-    pub first_router_id: Option<PeerId>,
-    pub first_router_sn: Option<ZInt>,
-    pub timestamp: Option<Timestamp>,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
+    pub timestamp: Option<Timestamp>,
+    pub source_id: Option<PeerId>,
+    pub source_sn: Option<ZInt>,
     pub is_sliced: bool,
+    pub first_router_id: Option<PeerId>,
+    pub first_router_sn: Option<ZInt>,
 }
 
 impl DataInfo {
     pub fn has_opts(&self) -> bool {
-        self.source_id.is_some()
+        self.kind.is_some()
+            || self.encoding.is_some()
+            || self.timestamp.is_some()
+            || self.source_id.is_some()
             || self.source_sn.is_some()
+            || self.is_sliced
             || self.first_router_id.is_some()
             || self.first_router_sn.is_some()
-            || self.timestamp.is_some()
-            || self.kind.is_some()
-            || self.encoding.is_some()
-            || self.is_sliced
     }
 }
 
@@ -854,12 +857,6 @@ pub mod smsg {
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
     }
 
-    pub mod attachment {
-        use super::imsg;
-
-        pub const PROPERTIES: u8 = imsg::attachment::PROPERTIES;
-    }
-
     // Session message flags
     pub mod flag {
         pub const A: u8 = 1 << 5; // 0x20 Ack           if A==1 then the message is an acknowledgment
@@ -875,6 +872,7 @@ pub mod smsg {
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
         pub const T: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
         pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
+        pub const Z: u8 = 1 << 5; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
         pub const X: u8 = 0; // Unused flags are set to zero
     }
@@ -1040,7 +1038,7 @@ pub struct InitAck {
     pub whatami: WhatAmI,
     pub pid: PeerId,
     pub sn_resolution: Option<ZInt>,
-    pub cookie: RBuf,
+    pub cookie: ZSlice,
 }
 
 /// # Open message
@@ -1072,7 +1070,7 @@ pub struct InitAck {
 pub struct OpenSyn {
     pub lease: ZInt,
     pub initial_sn: ZInt,
-    pub cookie: RBuf,
+    pub cookie: ZSlice,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenAck {
@@ -1274,7 +1272,7 @@ pub enum FramePayload {
     /// ~ payload bytes ~
     /// +---------------+
     /// ```
-    Fragment { buffer: RBuf, is_final: bool },
+    Fragment { buffer: ZSlice, is_final: bool },
     /// ```text
     /// The Payload of a batched Frame.
     ///
@@ -1390,7 +1388,7 @@ impl SessionMessage {
         whatami: WhatAmI,
         pid: PeerId,
         sn_resolution: Option<ZInt>,
-        cookie: RBuf,
+        cookie: ZSlice,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         let sflag = if sn_resolution.is_some() {
@@ -1415,7 +1413,7 @@ impl SessionMessage {
     pub fn make_open_syn(
         lease: ZInt,
         initial_sn: ZInt,
-        cookie: RBuf,
+        cookie: ZSlice,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         let tflag = if lease % 1_000 == 0 { smsg::flag::T } else { 0 };

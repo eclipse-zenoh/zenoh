@@ -39,13 +39,11 @@ impl RBuf {
                     let payload = if smsg::has_flag(header, smsg::flag::F) {
                         // A fragmented frame is not supposed to be followed by
                         // any other frame in the same batch. Read all the bytes.
-                        let mut buffer = RBuf::new();
-                        self.drain_into_rbuf(&mut buffer);
+                        let buffer = self.read_zslice(self.readable())?;
                         let is_final = smsg::has_flag(header, smsg::flag::E);
 
                         FramePayload::Fragment { buffer, is_final }
                     } else {
-                        // @TODO: modify the get_pos/set_pos to mark/revert
                         let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
                         while self.can_read() {
                             let pos = self.get_pos();
@@ -115,7 +113,7 @@ impl RBuf {
                         } else {
                             None
                         };
-                        let cookie = self.read_rbuf()?;
+                        let cookie = self.read_zslice_element()?;
 
                         SessionBody::InitAck(InitAck {
                             whatami,
@@ -153,7 +151,7 @@ impl RBuf {
                     if smsg::has_flag(header, smsg::flag::A) {
                         SessionBody::OpenAck(OpenAck { lease, initial_sn })
                     } else {
-                        let cookie = self.read_rbuf()?;
+                        let cookie = self.read_zslice_element()?;
                         SessionBody::OpenSyn(OpenSyn {
                             lease,
                             initial_sn,
@@ -273,11 +271,7 @@ impl RBuf {
                     } else {
                         (None, false)
                     };
-                    let payload = if is_sliced {
-                        self.read_rbuf_as_slices()?
-                    } else {
-                        self.read_rbuf()?
-                    };
+                    let payload = self.read_rbuf(is_sliced)?;
 
                     let body = ZenohBody::Data(Data {
                         key,
@@ -403,9 +397,26 @@ impl RBuf {
     }
 
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
-        let encoding = smsg::flags(header);
-        let buffer = self.read_rbuf()?;
-        Some(Attachment { encoding, buffer })
+        let buffer = {
+            #[cfg(feature = "zero-copy")]
+            {
+                if smsg::has_flag(header, smsg::flag::Z) {
+                    self.read_rbuf(true)?
+                } else {
+                    self.read_rbuf(false)?
+                }
+            }
+
+            #[cfg(not(feature = "zero-copy"))]
+            {
+                if smsg::has_flag(header, smsg::flag::Z) {
+                    return None;
+                } else {
+                    self.read_rbuf(false)?
+                }
+            }
+        };
+        Some(Attachment { buffer })
     }
 
     // @TODO: Update the ReplyContext format
@@ -429,31 +440,6 @@ impl RBuf {
 
     pub fn read_data_info(&mut self) -> Option<DataInfo> {
         let options = self.read_zint()?;
-        let source_id = if zmsg::has_option(options, zmsg::data::info::SRCID) {
-            Some(self.read_peerid()?)
-        } else {
-            None
-        };
-        let source_sn = if zmsg::has_option(options, zmsg::data::info::SRCSN) {
-            Some(self.read_zint()?)
-        } else {
-            None
-        };
-        let first_router_id = if zmsg::has_option(options, zmsg::data::info::RTRID) {
-            Some(self.read_peerid()?)
-        } else {
-            None
-        };
-        let first_router_sn = if zmsg::has_option(options, zmsg::data::info::RTRSN) {
-            Some(self.read_zint()?)
-        } else {
-            None
-        };
-        let timestamp = if zmsg::has_option(options, zmsg::data::info::TS) {
-            Some(self.read_timestamp()?)
-        } else {
-            None
-        };
         let kind = if zmsg::has_option(options, zmsg::data::info::KIND) {
             Some(self.read_zint()?)
         } else {
@@ -464,17 +450,42 @@ impl RBuf {
         } else {
             None
         };
+        let timestamp = if zmsg::has_option(options, zmsg::data::info::TS) {
+            Some(self.read_timestamp()?)
+        } else {
+            None
+        };
+        let source_id = if zmsg::has_option(options, zmsg::data::info::SRCID) {
+            Some(self.read_peerid()?)
+        } else {
+            None
+        };
+        let source_sn = if zmsg::has_option(options, zmsg::data::info::SRCSN) {
+            Some(self.read_zint()?)
+        } else {
+            None
+        };
         let is_sliced = zmsg::has_option(options, zmsg::data::info::SLICED);
+        let first_router_id = if zmsg::has_option(options, zmsg::data::info::RTRID) {
+            Some(self.read_peerid()?)
+        } else {
+            None
+        };
+        let first_router_sn = if zmsg::has_option(options, zmsg::data::info::RTRSN) {
+            Some(self.read_zint()?)
+        } else {
+            None
+        };
 
         Some(DataInfo {
-            source_id,
-            source_sn,
-            first_router_id,
-            first_router_sn,
-            timestamp,
             kind,
             encoding,
+            timestamp,
+            source_id,
+            source_sn,
             is_sliced,
+            first_router_id,
+            first_router_sn,
         })
     }
 
