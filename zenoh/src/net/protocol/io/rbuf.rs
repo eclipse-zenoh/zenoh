@@ -20,7 +20,7 @@ use std::fmt;
 use std::io;
 use std::io::IoSlice;
 #[cfg(feature = "zero-copy")]
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::ZResult;
 
@@ -108,10 +108,6 @@ impl RBuf {
         }
     }
 
-    pub fn empty() -> RBuf {
-        RBuf::new()
-    }
-
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -135,7 +131,7 @@ impl RBuf {
     }
 
     #[inline]
-    pub fn get_slice(&self, index: usize) -> Option<&ZSlice> {
+    pub fn get_zslice(&self, index: usize) -> Option<&ZSlice> {
         match &self.slices {
             RBufInner::Single(s) => match index {
                 0 => Some(s),
@@ -147,7 +143,7 @@ impl RBuf {
     }
 
     #[inline]
-    pub fn get_slices_num(&self) -> usize {
+    pub fn zslices_num(&self) -> usize {
         match &self.slices {
             RBufInner::Single(_) => 1,
             RBufInner::Multiple(m) => m.len(),
@@ -156,7 +152,7 @@ impl RBuf {
     }
 
     #[inline]
-    pub fn get_slice_mut(&mut self, index: usize) -> Option<&mut ZSlice> {
+    pub fn get_zslice_mut(&mut self, index: usize) -> Option<&mut ZSlice> {
         match &mut self.slices {
             RBufInner::Single(s) => match index {
                 0 => Some(s),
@@ -167,7 +163,7 @@ impl RBuf {
         }
     }
 
-    pub fn as_slices(&self) -> Vec<ZSlice> {
+    pub fn as_zslices(&self) -> Vec<ZSlice> {
         match &self.slices {
             RBufInner::Single(s) => vec![s.clone()],
             RBufInner::Multiple(m) => m.clone(),
@@ -205,7 +201,7 @@ impl RBuf {
     }
 
     #[inline(always)]
-    pub fn reset_pos(&mut self) {
+    pub fn reset(&mut self) {
         self.pos.reset();
     }
 
@@ -215,7 +211,7 @@ impl RBuf {
             return true;
         }
 
-        if let Some(slice) = self.get_slice(pos.slice) {
+        if let Some(slice) = self.get_zslice(pos.slice) {
             if pos.byte < slice.len() {
                 self.pos = pos;
                 return true;
@@ -232,12 +228,12 @@ impl RBuf {
 
     #[inline(always)]
     fn curr_slice(&self) -> Option<&ZSlice> {
-        self.get_slice(self.pos.slice)
+        self.get_zslice(self.pos.slice)
     }
 
     #[inline(always)]
     fn curr_slice_mut(&mut self) -> Option<&mut ZSlice> {
-        self.get_slice_mut(self.pos.slice)
+        self.get_zslice_mut(self.pos.slice)
     }
 
     fn skip_bytes_no_check(&mut self, mut n: usize) {
@@ -258,13 +254,24 @@ impl RBuf {
         }
     }
 
-    pub fn skip_bytes(&mut self, n: usize) -> bool {
-        if n <= self.readable() {
-            self.skip_bytes_no_check(n);
-            true
-        } else {
-            false
+    // same than read_bytes() but not moving read position (allow non-mutable self)
+    fn copy_bytes(&self, bs: &mut [u8], mut pos: (usize, usize)) -> bool {
+        let len = bs.len();
+        if self.readable() < len {
+            return false;
         }
+
+        let mut written = 0;
+        while written < len {
+            let slice = self.get_zslice(pos.0).unwrap();
+            let remaining = slice.len() - pos.1;
+            let to_read = remaining.min(bs.len() - written);
+            bs[written..written + to_read]
+                .copy_from_slice(&slice.as_slice()[pos.1..pos.1 + to_read]);
+            written += to_read;
+            pos = (pos.0 + 1, 0);
+        }
+        true
     }
 
     // same than read() but not moving read position (allow not mutable self)
@@ -281,26 +288,6 @@ impl RBuf {
         res
     }
 
-    // same than read_bytes() but not moving read position (allow non-mutable self)
-    pub fn copy_bytes(&self, bs: &mut [u8], mut pos: (usize, usize)) -> bool {
-        let len = bs.len();
-        if self.readable() < len {
-            return false;
-        }
-
-        let mut written = 0;
-        while written < len {
-            let slice = self.get_slice(pos.0).unwrap();
-            let remaining = slice.len() - pos.1;
-            let to_read = remaining.min(bs.len() - written);
-            bs[written..written + to_read]
-                .copy_from_slice(&slice.as_slice()[pos.1..pos.1 + to_read]);
-            written += to_read;
-            pos = (pos.0 + 1, 0);
-        }
-        true
-    }
-
     #[inline]
     pub fn read_bytes(&mut self, bs: &mut [u8]) -> bool {
         if !self.copy_bytes(bs, (self.pos.slice, self.pos.byte)) {
@@ -311,22 +298,9 @@ impl RBuf {
     }
 
     #[inline]
-    pub fn get_bytes(&self, bs: &mut [u8]) -> bool {
-        self.copy_bytes(bs, (self.pos.slice, self.pos.byte))
-    }
-
-    #[inline]
     pub fn read_vec(&mut self) -> Vec<u8> {
         let mut vec = vec![0u8; self.readable()];
         self.read_bytes(&mut vec);
-        vec
-    }
-
-    // same than read_vec() but not moving read position (allow not mutable self)
-    #[inline]
-    pub fn get_vec(&self) -> Vec<u8> {
-        let mut vec = vec![0u8; self.readable()];
-        self.get_bytes(&mut vec);
         vec
     }
 
@@ -375,24 +349,21 @@ impl RBuf {
         self.read_into_rbuf(dest, self.readable())
     }
 
+    // Read a subslice of current slice
     pub(crate) fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
         let slice = self.curr_slice()?;
-        if slice.len() < len {
+        if len <= slice.len() {
             let slice = slice.new_sub_slice(self.pos.byte, self.pos.byte + len);
             self.skip_bytes_no_check(len);
             Some(slice)
         } else {
-            let mut slice = vec![0u8; len];
-            match self.read_bytes(&mut slice) {
-                true => Some(slice.into()),
-                false => None,
-            }
+            None
         }
     }
 
     #[cfg(feature = "zero-copy")]
     #[inline]
-    pub(crate) fn map_to_shmbuf(&mut self, shmr: &mut SharedMemoryReader) -> ZResult<bool> {
+    pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         self.pos.clear();
 
         let mut res = false;
@@ -403,30 +374,7 @@ impl RBuf {
             }
             RBufInner::Multiple(m) => {
                 for s in m.iter_mut() {
-                    res = res || s.map_to_shmbuf(shmr)?;
-                    self.pos.len += s.len();
-                }
-            }
-            RBufInner::Empty => {}
-        }
-
-        Ok(res)
-    }
-
-    #[cfg(feature = "zero-copy")]
-    #[inline]
-    pub(crate) fn try_map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
-        self.pos.clear();
-
-        let mut res = false;
-        match &mut self.slices {
-            RBufInner::Single(s) => {
-                res = s.try_map_to_shmbuf(shmr)?;
-                self.pos.len += s.len();
-            }
-            RBufInner::Multiple(m) => {
-                for s in m.iter_mut() {
-                    res = res || s.try_map_to_shmbuf(shmr)?;
+                    res = res || s.map_to_shmbuf(shmr.clone())?;
                     self.pos.len += s.len();
                 }
             }
@@ -669,7 +617,7 @@ impl<'a> From<Vec<IoSlice<'a>>> for RBuf {
 
 impl From<&super::WBuf> for RBuf {
     fn from(wbuf: &super::WBuf) -> RBuf {
-        RBuf::from(wbuf.as_slices())
+        RBuf::from(wbuf.as_zslices())
     }
 }
 
@@ -682,9 +630,9 @@ impl From<super::WBuf> for RBuf {
 impl PartialEq for RBuf {
     fn eq(&self, other: &Self) -> bool {
         let mut rbuf1 = self.clone();
-        rbuf1.reset_pos();
+        rbuf1.reset();
         let mut rbuf2 = other.clone();
-        rbuf2.reset_pos();
+        rbuf2.reset();
 
         while let Some(b1) = rbuf1.read() {
             if let Some(b2) = rbuf2.read() {
@@ -798,8 +746,8 @@ mod tests {
         }
         assert!(buf1.can_read());
 
-        // test reset_pos
-        buf1.reset_pos();
+        // test reset
+        buf1.reset();
         println!("[04] {:?}", buf1);
         assert!(!buf1.is_empty());
         assert!(buf1.can_read());
@@ -808,7 +756,7 @@ mod tests {
         assert_eq!(3, buf1.as_ioslices().len());
 
         // test set_pos / get_pos
-        buf1.reset_pos();
+        buf1.reset();
         println!("[05] {:?}", buf1);
         assert_eq!(30, buf1.readable());
         let mut bytes = [0u8; 10];
@@ -834,7 +782,7 @@ mod tests {
         assert!(!buf1.set_pos(pos));
 
         // test read_bytes
-        buf1.reset_pos();
+        buf1.reset();
         println!("[06] {:?}", buf1);
         let mut bytes = [0u8; 3];
         for i in 0..10 {
@@ -875,7 +823,7 @@ mod tests {
         }
 
         // test read_into_rbuf
-        buf1.reset_pos();
+        buf1.reset();
         println!("[09] {:?}", buf1);
         let _ = buf1.read();
         let mut dest = RBuf::new();
@@ -893,7 +841,7 @@ mod tests {
         assert_eq!(Some(&[20u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
 
         // test drain_into_rbuf
-        buf1.reset_pos();
+        buf1.reset();
         println!("[10] {:?}", buf1);
         let mut dest = RBuf::new();
         assert!(buf1.drain_into_rbuf(&mut dest));

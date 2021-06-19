@@ -103,7 +103,7 @@ impl WBuf {
                 if let Some(snr) = *sn_resolution {
                     zcheck!(self.write_zint(snr));
                 }
-                zcheck!(self.write_zslice_element(cookie.clone()));
+                zcheck!(self.write_zslice_array(cookie.clone()));
             }
 
             SessionBody::OpenSyn(OpenSyn {
@@ -117,7 +117,7 @@ impl WBuf {
                     zcheck!(self.write_zint(*lease));
                 }
                 zcheck!(self.write_zint(*initial_sn));
-                zcheck!(self.write_zslice_element(cookie.clone()));
+                zcheck!(self.write_zslice_array(cookie.clone()));
             }
 
             SessionBody::OpenAck(OpenAck { lease, initial_sn }) => {

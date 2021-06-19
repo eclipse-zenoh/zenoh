@@ -20,6 +20,8 @@ use std::ops::{
     Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
 use std::sync::Arc;
+#[cfg(feature = "zero-copy")]
+use std::sync::RwLock;
 use zenoh_util::collections::RecyclingObject;
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::ZResult;
@@ -29,7 +31,7 @@ use zenoh_util::core::ZResult;
 /*************************************/
 #[derive(Clone)]
 pub enum ZSliceBuffer {
-    NetRecyclingObject(Arc<RecyclingObject<Box<[u8]>>>),
+    NetSharedBuffer(Arc<RecyclingObject<Box<[u8]>>>),
     NetOwnedBuffer(Arc<Vec<u8>>),
     #[cfg(feature = "zero-copy")]
     ShmBuffer(Arc<SharedMemoryBuf>),
@@ -40,7 +42,7 @@ pub enum ZSliceBuffer {
 impl ZSliceBuffer {
     fn as_slice(&self) -> &[u8] {
         match self {
-            Self::NetRecyclingObject(buf) => buf,
+            Self::NetSharedBuffer(buf) => buf,
             Self::NetOwnedBuffer(buf) => buf.as_slice(),
             #[cfg(feature = "zero-copy")]
             Self::ShmBuffer(buf) => buf.as_slice(),
@@ -53,7 +55,7 @@ impl ZSliceBuffer {
     #[allow(clippy::mut_from_ref)]
     unsafe fn as_mut_slice(&self) -> &mut [u8] {
         match self {
-            Self::NetRecyclingObject(buf) => {
+            Self::NetSharedBuffer(buf) => {
                 &mut (*(Arc::as_ptr(buf) as *mut RecyclingObject<Box<[u8]>>))
             }
             Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
@@ -139,13 +141,13 @@ impl Index<RangeToInclusive<usize>> for ZSliceBuffer {
 
 impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSliceBuffer {
     fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
-        Self::NetRecyclingObject(buf)
+        Self::NetSharedBuffer(buf)
     }
 }
 
 impl From<RecyclingObject<Box<[u8]>>> for ZSliceBuffer {
     fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
-        Self::NetRecyclingObject(buf.into())
+        Self::NetSharedBuffer(buf.into())
     }
 }
 
@@ -250,9 +252,7 @@ impl ZSlice {
     #[inline]
     pub fn get_type(&self) -> ZSliceType {
         match &self.buf {
-            ZSliceBuffer::NetRecyclingObject(_) | ZSliceBuffer::NetOwnedBuffer(_) => {
-                ZSliceType::Net
-            }
+            ZSliceBuffer::NetSharedBuffer(_) | ZSliceBuffer::NetOwnedBuffer(_) => ZSliceType::Net,
             #[cfg(feature = "zero-copy")]
             ZSliceBuffer::ShmBuffer(_) => ZSliceType::ShmBuf,
             #[cfg(feature = "zero-copy")]
@@ -270,30 +270,21 @@ impl ZSlice {
     }
 
     #[cfg(feature = "zero-copy")]
-    pub(crate) fn map_to_shmbuf(&mut self, shmr: &mut SharedMemoryReader) -> ZResult<bool> {
+    pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         match &self.buf {
             ZSliceBuffer::ShmInfo(info) => {
                 // Deserialize the shmb info into shm buff
                 let shmbinfo = SharedMemoryBufInfo::deserialize(&info)?;
-                let smb = shmr.read_shmbuf(shmbinfo)?;
-                // Replace the content of the slice
-                self.buf = ZSliceBuffer::ShmBuffer(smb.into());
-                // Update the indexes
-                self.start = 0;
-                self.end = self.buf.len();
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
-    }
 
-    #[cfg(feature = "zero-copy")]
-    pub(crate) fn try_map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
-        match &self.buf {
-            ZSliceBuffer::ShmInfo(info) => {
-                // Deserialize the shmb info into shm buff
-                let shmbinfo = SharedMemoryBufInfo::deserialize(&info)?;
-                let smb = shmr.try_read_shmbuf(shmbinfo)?;
+                // First, try in read mode allowing concurrenct lookups
+                let r_guard = zread!(shmr);
+                let smb = r_guard.try_read_shmbuf(&shmbinfo).or_else(|_| {
+                    // Next, try in write mode to eventual link the remote shm
+                    drop(r_guard);
+                    let mut w_guard = zwrite!(shmr);
+                    w_guard.read_shmbuf(&shmbinfo)
+                })?;
+
                 // Replace the content of the slice
                 self.buf = ZSliceBuffer::ShmBuffer(smb.into());
                 // Update the indexes

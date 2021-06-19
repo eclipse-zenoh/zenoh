@@ -165,7 +165,7 @@ impl RBuf {
     }
 
     #[inline]
-    pub fn read_zslice_element(&mut self) -> Option<ZSlice> {
+    pub fn read_zslice_array(&mut self) -> Option<ZSlice> {
         let len = self.read_zint_as_usize()?;
         self.read_zslice(len)
     }
@@ -272,7 +272,7 @@ impl WBuf {
     }
 
     #[inline]
-    pub fn write_zslice_element(&mut self, slice: ZSlice) -> bool {
+    pub fn write_zslice_array(&mut self, slice: ZSlice) -> bool {
         self.write_usize_as_zint(slice.len()) && self.write_zslice(slice)
     }
 
@@ -281,16 +281,16 @@ impl WBuf {
             zcheck!(self.write_usize_as_zint(rbuf.len()));
             self.write_rbuf_slices(rbuf)
         } else {
-            zcheck!(self.write_usize_as_zint(rbuf.get_slices_num()));
+            zcheck!(self.write_usize_as_zint(rbuf.zslices_num()));
             let mut idx = 0;
-            while let Some(slice) = rbuf.get_slice(idx) {
+            while let Some(slice) = rbuf.get_zslice(idx) {
                 match slice.get_type() {
                     #[cfg(feature = "zero-copy")]
                     ZSliceType::ShmInfo => zcheck!(self.write(zslice::kind::SHM_INFO)),
                     _ => zcheck!(self.write(zslice::kind::RAW)),
                 }
 
-                zcheck!(self.write_zslice_element(slice.clone()));
+                zcheck!(self.write_zslice_array(slice.clone()));
                 idx += 1;
             }
             true
@@ -299,7 +299,7 @@ impl WBuf {
 
     pub fn write_rbuf_slices(&mut self, rbuf: &RBuf) -> bool {
         let mut idx = 0;
-        while let Some(slice) = rbuf.get_slice(idx) {
+        while let Some(slice) = rbuf.get_zslice(idx) {
             zcheck!(self.write_zslice(slice.clone()));
             idx += 1;
         }

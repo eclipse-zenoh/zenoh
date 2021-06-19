@@ -216,10 +216,10 @@ impl SharedMemoryReader {
         }
     }
 
-    pub fn connect_map_to_shm(&mut self, info: SharedMemoryBufInfo) -> ZResult<()> {
+    pub fn connect_map_to_shm(&mut self, info: &SharedMemoryBufInfo) -> ZResult<()> {
         match ShmemConf::new().flink(&info.shm_manager).open() {
             Ok(shm) => {
-                self.segments.insert(info.shm_manager, shm);
+                self.segments.insert(info.shm_manager.clone(), shm);
                 Ok(())
             }
             Err(e) => {
@@ -233,7 +233,7 @@ impl SharedMemoryReader {
         }
     }
 
-    pub fn try_read_shmbuf(&self, info: SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
+    pub fn try_read_shmbuf(&self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
         // Try read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented for us.
         match self.segments.get(&info.shm_manager) {
@@ -246,7 +246,7 @@ impl SharedMemoryReader {
                     rc_ptr,
                     buf: AtomicPtr::new(buf),
                     len: info.length - CHUNK_HEADER_SIZE,
-                    info,
+                    info: info.clone(),
                 };
                 Ok(shmb)
             }
@@ -258,11 +258,11 @@ impl SharedMemoryReader {
         }
     }
 
-    pub fn read_shmbuf(&mut self, info: SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
+    pub fn read_shmbuf(&mut self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
         // Read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented for us.
-        self.try_read_shmbuf(info.clone()).or_else(|_| {
-            self.connect_map_to_shm(info.clone())?;
+        self.try_read_shmbuf(info).or_else(|_| {
+            self.connect_map_to_shm(info)?;
             Ok(self.try_read_shmbuf(info).unwrap())
         })
     }
@@ -292,7 +292,6 @@ pub struct SharedMemoryManager {
     free_list: BinaryHeap<Chunk>,
     busy_list: Vec<Chunk>,
     alignment: usize,
-    pub reader: SharedMemoryReader,
 }
 
 unsafe impl Send for SharedMemoryManager {}
@@ -345,7 +344,6 @@ impl SharedMemoryManager {
             free_list,
             busy_list,
             alignment: align_of::<ChunkHeaderType>(),
-            reader: SharedMemoryReader::new(),
         };
         log::trace!(
             "Created SharedMemoryManager for {:?}",
@@ -513,7 +511,6 @@ impl fmt::Debug for SharedMemoryManager {
             .field("available", &self.available)
             .field("free_list.len", &self.free_list.len())
             .field("busy_list.len", &self.busy_list.len())
-            .field("reader", &self.reader)
             .finish()
     }
 }

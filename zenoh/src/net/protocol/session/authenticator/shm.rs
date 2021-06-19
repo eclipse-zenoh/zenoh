@@ -12,19 +12,19 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{PeerId, Property, ZInt};
-use super::io::{RBuf, SharedMemoryBuf, SharedMemoryManager, WBuf, ZSlice};
+use super::io::{RBuf, SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZSlice};
 use super::{
     attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
 };
-use async_std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use std::convert::TryInto;
+use std::sync::{Arc, RwLock};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::PseudoRng;
 use zenoh_util::properties::config::*;
-use zenoh_util::{zasynclock, zcheck};
+use zenoh_util::zcheck;
 
 const WBUF_SIZE: usize = 64;
 const SHM_VERSION: ZInt = 0;
@@ -51,7 +51,7 @@ struct InitSynProperty {
 impl WBuf {
     fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool {
         zcheck!(self.write_zint(init_syn_property.version));
-        self.write_zslice_element(init_syn_property.shm.clone())
+        self.write_zslice_array(init_syn_property.shm.clone())
     }
 }
 
@@ -82,7 +82,7 @@ struct InitAckProperty {
 impl WBuf {
     fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool {
         zcheck!(self.write_zint(init_ack_property.challenge));
-        self.write_zslice_element(init_ack_property.shm.clone())
+        self.write_zslice_array(init_ack_property.shm.clone())
     }
 }
 
@@ -128,7 +128,8 @@ pub struct SharedMemoryAuthenticator {
     // Rust guarantees that fields are dropped in the order of declaration.
     // Buffer needs to be dropped before the manager.
     buffer: SharedMemoryBuf,
-    manager: Mutex<SharedMemoryManager>,
+    _manager: SharedMemoryManager,
+    reader: Arc<RwLock<SharedMemoryReader>>,
 }
 
 impl SharedMemoryAuthenticator {
@@ -136,17 +137,18 @@ impl SharedMemoryAuthenticator {
         let mut prng = PseudoRng::from_entropy();
         let challenge = prng.gen::<ZInt>();
 
-        let mut manager =
+        let mut _manager =
             SharedMemoryManager::new(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE).unwrap();
 
-        let mut buffer = manager.alloc(SHM_SIZE).unwrap();
+        let mut buffer = _manager.alloc(SHM_SIZE).unwrap();
         let slice = unsafe { buffer.as_mut_slice() };
         slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
         SharedMemoryAuthenticator {
             challenge,
             buffer,
-            manager: Mutex::new(manager),
+            _manager,
+            reader: Arc::new(RwLock::new(SharedMemoryReader::new())),
         }
     }
 
@@ -158,7 +160,7 @@ impl SharedMemoryAuthenticator {
             let mut prng = PseudoRng::from_entropy();
             let challenge = prng.gen::<ZInt>();
 
-            let mut manager =
+            let mut _manager =
                 SharedMemoryManager::new(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE).map_err(
                     |e| {
                         zerror2!(ZErrorKind::Other {
@@ -167,14 +169,15 @@ impl SharedMemoryAuthenticator {
                     },
                 )?;
 
-            let mut buffer = manager.alloc(SHM_SIZE).unwrap();
+            let mut buffer = _manager.alloc(SHM_SIZE).unwrap();
             let slice = unsafe { buffer.as_mut_slice() };
             slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
             let sma = SharedMemoryAuthenticator {
                 challenge,
                 buffer,
-                manager: Mutex::new(manager),
+                _manager,
+                reader: Arc::new(RwLock::new(SharedMemoryReader::new())),
             };
             return Ok(Some(sma));
         }
@@ -249,8 +252,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         }
 
         // Try to read from the shared memory
-        let mut manager = zasynclock!(self.manager);
-        match init_syn_property.shm.map_to_shmbuf(&mut manager.reader) {
+        match init_syn_property.shm.map_to_shmbuf(self.reader.clone()) {
             Ok(res) => {
                 if !res {
                     log::debug!(
@@ -324,8 +326,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         };
 
         // Try to read from the shared memory
-        let mut manager = zasynclock!(self.manager);
-        match init_ack_property.shm.map_to_shmbuf(&mut manager.reader) {
+        match init_ack_property.shm.map_to_shmbuf(self.reader.clone()) {
             Ok(res) => {
                 if !res {
                     log::debug!(

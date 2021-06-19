@@ -18,7 +18,7 @@ extern crate rand;
 use criterion::{black_box, Criterion};
 
 use zenoh::net::protocol::core::{Channel, CongestionControl, Reliability, ResKey, ZInt};
-use zenoh::net::protocol::io::{RBuf, WBuf};
+use zenoh::net::protocol::io::{RBuf, WBuf, ZSlice};
 use zenoh::net::protocol::proto::{Attachment, FramePayload, SessionMessage, ZenohMessage};
 
 fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
@@ -132,7 +132,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     ];
     let _ns: [ZInt; 4] = [0; 4];
     let len = String::from("u8");
-    let payload = RBuf::from(vec![0u8, 32]);
+    let bytes = vec![0u8; 32];
+    let payload: RBuf = bytes.clone().into();
+    let fragment: ZSlice = bytes.into();
     let data = ZenohMessage::make_data(
         ResKey::RId(10),
         payload.clone(),
@@ -228,7 +230,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("bench_make_frame_frag", |b| {
         b.iter(|| {
             let frame_frag_payload = FramePayload::Fragment {
-                buffer: payload.clone(),
+                buffer: fragment.clone(),
                 is_final: false,
             };
             let _ = bench_make_frame_frag(frame_frag_payload);
@@ -236,7 +238,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     let frame_frag_payload = FramePayload::Fragment {
-        buffer: payload.clone(),
+        buffer: fragment.clone(),
         is_final: false,
     };
     let frame_frag = SessionMessage::make_frame(Channel::BestEffort, 42, frame_frag_payload, None);

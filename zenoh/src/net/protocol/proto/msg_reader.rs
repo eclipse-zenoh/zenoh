@@ -113,7 +113,7 @@ impl RBuf {
                         } else {
                             None
                         };
-                        let cookie = self.read_zslice_element()?;
+                        let cookie = self.read_zslice_array()?;
 
                         SessionBody::InitAck(InitAck {
                             whatami,
@@ -151,7 +151,7 @@ impl RBuf {
                     if smsg::has_flag(header, smsg::flag::A) {
                         SessionBody::OpenAck(OpenAck { lease, initial_sn })
                     } else {
-                        let cookie = self.read_zslice_element()?;
+                        let cookie = self.read_zslice_array()?;
                         SessionBody::OpenSyn(OpenSyn {
                             lease,
                             initial_sn,

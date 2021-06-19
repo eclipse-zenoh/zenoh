@@ -285,14 +285,7 @@ impl SessionTransport {
         let res = if self.is_shm {
             message.map_to_shminfo()
         } else {
-            // First, try in read mode allowing concurrenct lookups
-            let r_guard = zread!(self.manager.shmr);
-            message.try_map_to_shmbuf(&*r_guard).or_else(|_| {
-                // Next, try in write mode to eventual link the remote shm
-                drop(r_guard);
-                let mut w_guard = zwrite!(self.manager.shmr);
-                message.map_to_shmbuf(&mut *w_guard)
-            })
+            message.map_to_shmbuf(self.manager.shmr.clone())
         };
         if res.is_err() {
             return;

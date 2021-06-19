@@ -41,14 +41,7 @@ macro_rules! zcallback {
             Some(callback) => {
                 #[cfg(feature = "zero-copy")]
                 {
-                    // First, try in read mode allowing concurrenct lookups
-                    let r_guard = zread!($transport.manager.shmr);
-                    let res = $msg.try_map_to_shmbuf(&*r_guard).or_else(|_| {
-                        // Next, try in write mode to eventual link the remote shm
-                        drop(r_guard);
-                        let mut w_guard = zwrite!($transport.manager.shmr);
-                        $msg.map_to_shmbuf(&mut *w_guard)
-                    });
+                    let res = $msg.map_to_shmbuf($transport.manager.shmr.clone());
                     if let Err(e) = res {
                         log::trace!(
                             "Session: {}. Error from SharedMemory: {}. Closing session.",

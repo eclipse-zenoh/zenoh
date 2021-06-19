@@ -174,7 +174,7 @@ impl Workspace<'_> {
         match self.path_to_reskey(path) {
             Ok(reskey) => self.session().write_ext(
                 &reskey,
-                RBuf::empty(),
+                RBuf::new(),
                 encoding::NONE,
                 data_kind::DELETE,
                 CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
@@ -547,7 +547,7 @@ impl Change {
                 let (e, p) = v.encode();
                 (Some(e), p)
             }
-            None => (None, RBuf::empty()),
+            None => (None, RBuf::new()),
         };
         let info = DataInfo {
             source_id: None,

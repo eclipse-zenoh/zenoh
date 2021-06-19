@@ -143,7 +143,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
                     let mut rbuf = RBuf::from(&wbuf);
                     b.iter(|| {
-                        rbuf.reset_pos();
+                        rbuf.reset();
                         let _ = rbuf.read_session_message().unwrap();
                     })
                 },
@@ -165,7 +165,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
                     let mut rbuf = RBuf::from(&wbuf);
                     b.iter(|| {
-                        rbuf.reset_pos();
+                        rbuf.reset();
                         let _ = rbuf.read_session_message().unwrap();
                     })
                 },

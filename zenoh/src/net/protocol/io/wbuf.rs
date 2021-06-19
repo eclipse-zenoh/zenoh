@@ -126,7 +126,7 @@ impl WBuf {
         self.mark.buf_idx = 0;
     }
 
-    pub fn as_slices(&self) -> Vec<ZSlice> {
+    pub fn as_zslices(&self) -> Vec<ZSlice> {
         let arc_buf = Arc::new(self.buf.clone());
         if self.contiguous {
             if !self.buf.is_empty() {
@@ -217,7 +217,7 @@ impl WBuf {
         }
     }
 
-    fn get_slice_to_copy(&self) -> &[u8] {
+    fn get_zslice_to_copy(&self) -> &[u8] {
         match self.slices.get(self.copy_pos.0) {
             Some(Slice::External(ref s)) => s.as_slice(),
             Some(Slice::Internal(start, Some(end))) => &self.buf[*start..*end],
@@ -230,7 +230,7 @@ impl WBuf {
         if self.copy_pos.0 >= self.slices.len() {
             panic!("Not enough bytes to copy into dest");
         }
-        let src = self.get_slice_to_copy();
+        let src = self.get_zslice_to_copy();
         let dest_len = dest.len();
         if src.len() - self.copy_pos.1 >= dest_len {
             // Copy a sub-part of src into dest
@@ -256,7 +256,7 @@ impl WBuf {
         if self.copy_pos.0 >= self.slices.len() {
             panic!("Not enough bytes to copy into dest");
         }
-        let src = self.get_slice_to_copy();
+        let src = self.get_zslice_to_copy();
         if src.len() - self.copy_pos.1 >= dest_len {
             // Copy a sub-part of src into dest
             let end_pos = self.copy_pos.1 + dest_len;

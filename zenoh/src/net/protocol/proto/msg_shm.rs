@@ -15,6 +15,8 @@
 use super::io::SharedMemoryReader;
 use super::msg::*;
 #[cfg(feature = "zero-copy")]
+use std::sync::{Arc, RwLock};
+#[cfg(feature = "zero-copy")]
 use zenoh_util::core::ZResult;
 
 #[cfg(feature = "zero-copy")]
@@ -63,32 +65,15 @@ macro_rules! unset_shminfo {
 
 impl ZenohMessage {
     #[cfg(feature = "zero-copy")]
-    pub(crate) fn map_to_shmbuf(&mut self, shmm: &mut SharedMemoryReader) -> ZResult<bool> {
+    pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;
 
         if let ZenohBody::Data(Data {
             payload, data_info, ..
         }) = &mut self.body
         {
-            res = payload.map_to_shmbuf(shmm)?;
+            res = payload.map_to_shmbuf(shmr)?;
 
-            if !payload.has_shminfo() {
-                set_shminfo!(self, data_info);
-            }
-        }
-
-        Ok(res)
-    }
-
-    #[cfg(feature = "zero-copy")]
-    pub(crate) fn try_map_to_shmbuf(&mut self, shmm: &SharedMemoryReader) -> ZResult<bool> {
-        let mut res = false;
-
-        if let ZenohBody::Data(Data {
-            payload, data_info, ..
-        }) = &mut self.body
-        {
-            res = payload.try_map_to_shmbuf(shmm)?;
             if !payload.has_shminfo() {
                 set_shminfo!(self, data_info);
             }
