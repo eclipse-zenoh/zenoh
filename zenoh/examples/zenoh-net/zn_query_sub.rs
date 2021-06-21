@@ -36,10 +36,6 @@ async fn main() {
         period: None,
     };
 
-    // let mut subscriber = session
-    //     .declare_subscriber(&selector.into(), &sub_info)
-    //     .await
-    //     .unwrap();
     let reskey: ResKey = selector.into();
     let mut subscriber =
         QueryingSubscriber::new(&session, &reskey, &sub_info, &reskey, "").unwrap();
