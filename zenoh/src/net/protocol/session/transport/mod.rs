@@ -24,7 +24,7 @@ use super::link::Link;
 use super::proto;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session;
-use super::session::defaults::ZNS_QUEUE_PRIO_DATA;
+use super::session::defaults::ZN_QUEUE_PRIO_DATA;
 use super::session::{SessionEventHandler, SessionManager};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use defragmentation::*;
@@ -238,7 +238,7 @@ impl SessionTransport {
                 let attachment = None; // No attachment here
                 let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-                pipeline.push_session_message(msg, ZNS_QUEUE_PRIO_DATA);
+                pipeline.push_session_message(msg, ZN_QUEUE_PRIO_DATA);
             }
 
             // Remove the link from the channel
@@ -266,7 +266,7 @@ impl SessionTransport {
             let attachment = None; // No attachment here
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            p.push_session_message(msg, ZNS_QUEUE_PRIO_DATA);
+            p.push_session_message(msg, ZN_QUEUE_PRIO_DATA);
         }
         // Terminate and clean up the session
         self.delete().await

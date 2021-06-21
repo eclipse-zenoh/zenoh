@@ -81,7 +81,8 @@ use flume::bounded;
 use futures::prelude::*;
 use log::{debug, trace};
 use protocol::core::WhatAmI;
-use runtime::orchestrator::{Loop, SessionOrchestrator};
+use runtime::orchestrator::Loop;
+use runtime::Runtime;
 use zenoh_util::properties::config::*;
 // Shared memory and zero-copy
 #[cfg(feature = "zero-copy")]
@@ -152,21 +153,20 @@ pub fn scout(what: WhatAmI, config: ConfigProperties) -> ZResolvedFuture<ZResult
     let (hello_sender, hello_receiver) = bounded::<Hello>(1);
     let (stop_sender, stop_receiver) = bounded::<()>(1);
 
-    let ifaces = SessionOrchestrator::get_interfaces(ifaces);
+    let ifaces = Runtime::get_interfaces(ifaces);
     if !ifaces.is_empty() {
         let sockets: Vec<UdpSocket> = ifaces
             .into_iter()
-            .filter_map(|iface| SessionOrchestrator::bind_ucast_port(iface).ok())
+            .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
             .collect();
         if !sockets.is_empty() {
             async_std::task::spawn(async move {
                 let hello_sender = &hello_sender;
                 let mut stop_receiver = stop_receiver.stream();
-                let scout =
-                    SessionOrchestrator::scout(&sockets, what, &addr, move |hello| async move {
-                        let _ = hello_sender.send_async(hello).await;
-                        Loop::Continue
-                    });
+                let scout = Runtime::scout(&sockets, what, &addr, move |hello| async move {
+                    let _ = hello_sender.send_async(hello).await;
+                    Loop::Continue
+                });
                 let stop = async move {
                     stop_receiver.next().await;
                     trace!("stop scout({}, {})", what, &config);

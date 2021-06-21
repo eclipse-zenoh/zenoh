@@ -356,11 +356,11 @@ pub enum Declaration {
     /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |K|I|X|  QABLE  |
+    /// |K|Q|X|  QABLE  |
     /// +---------------+
     /// ~    ResKey     ~ if K==1 then only numerical id
     /// +---------------+
-    /// ~     Kind      ~ if I==1. Otherwise: STORAGE (0x02)
+    /// ~     Kind      ~ if Q==1. Otherwise: STORAGE (0x02)
     /// +---------------+
     /// ```
     Queryable { key: ResKey, kind: ZInt },

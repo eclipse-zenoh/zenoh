@@ -154,7 +154,7 @@ mod consts {
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_STR: &str = "tls_root_ca_certificate";
 
     /// Indicates if the zero-copy features should be used.
-    /// String key : `"ser_copy"`.
+    /// String key : `"zero_copy"`.
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"true"`.
     pub const ZN_ZERO_COPY_KEY: u64 = 0x51;
@@ -192,6 +192,41 @@ mod consts {
 
     pub const ZN_JOIN_PUBLICATIONS_KEY: u64 = 0x62;
     pub const ZN_JOIN_PUBLICATIONS_STR: &str = "join_publications";
+
+    /// Configures the link lease expressed in milliseconds.
+    /// String key : `"link_lease"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `10000 (10 seconds)`.
+    pub const ZN_LINK_LEASE_KEY: u64 = 0x63;
+    pub const ZN_LINK_LEASE_STR: &str = "link_lease";
+
+    /// Configures the link keep alive expressed in milliseconds.
+    /// String key : `"link_keep_alive"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `2500 (2.5 seconds)`.
+    pub const ZN_LINK_KEEP_ALIVE_KEY: u64 = 0x64;
+    pub const ZN_LINK_KEEP_ALIVE_STR: &str = "link_keep_alive";
+
+    /// Configures the sequence number resolution.
+    /// String key : `"seq_num_resolution"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `268435456 (2^28)`.
+    pub const ZN_SEQ_NUM_RESOLUTION_KEY: u64 = 0x65;
+    pub const ZN_SEQ_NUM_RESOLUTION_STR: &str = "seq_num_resolution";
+
+    /// Configures the timeout in milliseconds when opening a link.
+    /// String key : `"open_timeout"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `10000 (10 seconds)`.
+    pub const ZN_OPEN_TIMEOUT_KEY: u64 = 0x66;
+    pub const ZN_OPEN_TIMEOUT_STR: &str = "open_timeout";
+
+    /// Configures the number of open session that can be in pending state.
+    /// String key : `"open_incoming_pending"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `1024`.
+    pub const ZN_OPEN_INCOMING_PENDING_KEY: u64 = 0x67;
+    pub const ZN_OPEN_INCOMING_PENDING_STR: &str = "open_incoming_pending";
 }
 
 pub use consts::*;
@@ -226,6 +261,11 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_LOCAL_ROUTING_STR => Some(ZN_LOCAL_ROUTING_KEY),
             ZN_JOIN_SUBSCRIPTIONS_STR => Some(ZN_JOIN_SUBSCRIPTIONS_KEY),
             ZN_JOIN_PUBLICATIONS_STR => Some(ZN_JOIN_PUBLICATIONS_KEY),
+            ZN_LINK_LEASE_STR => Some(ZN_LINK_LEASE_KEY),
+            ZN_LINK_KEEP_ALIVE_STR => Some(ZN_LINK_KEEP_ALIVE_KEY),
+            ZN_SEQ_NUM_RESOLUTION_STR => Some(ZN_SEQ_NUM_RESOLUTION_KEY),
+            ZN_OPEN_TIMEOUT_STR => Some(ZN_OPEN_TIMEOUT_KEY),
+            ZN_OPEN_INCOMING_PENDING_STR => Some(ZN_OPEN_INCOMING_PENDING_KEY),
             _ => None,
         }
     }
@@ -259,6 +299,11 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_LOCAL_ROUTING_KEY => Some(ZN_LOCAL_ROUTING_STR.to_string()),
             ZN_JOIN_SUBSCRIPTIONS_KEY => Some(ZN_JOIN_SUBSCRIPTIONS_STR.to_string()),
             ZN_JOIN_PUBLICATIONS_KEY => Some(ZN_JOIN_PUBLICATIONS_STR.to_string()),
+            ZN_LINK_LEASE_KEY => Some(ZN_LINK_LEASE_STR.to_string()),
+            ZN_LINK_KEEP_ALIVE_KEY => Some(ZN_LINK_KEEP_ALIVE_STR.to_string()),
+            ZN_SEQ_NUM_RESOLUTION_KEY => Some(ZN_SEQ_NUM_RESOLUTION_STR.to_string()),
+            ZN_OPEN_TIMEOUT_KEY => Some(ZN_OPEN_TIMEOUT_STR.to_string()),
+            ZN_OPEN_INCOMING_PENDING_KEY => Some(ZN_OPEN_INCOMING_PENDING_STR.to_string()),
             _ => None,
         }
     }
