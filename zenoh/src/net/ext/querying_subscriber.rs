@@ -22,32 +22,83 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh_util::{zerror, zwrite};
 
-pub struct QueryingSubscriber<'a> {
-    session: &'a Session,
-    subscriber: Subscriber<'a>,
+pub struct QueryingSubscriberConf {
+    sub_reskey: ResKey,
+    info: SubInfo,
     query_reskey: ResKey,
     query_predicate: String,
+}
+
+impl QueryingSubscriberConf {
+    pub fn new(sub_reskey: ResKey) -> QueryingSubscriberConf {
+        let info = SubInfo {
+            reliability: Reliability::Reliable,
+            mode: SubMode::Push,
+            period: None,
+        };
+        let query_reskey = sub_reskey.clone();
+        QueryingSubscriberConf {
+            sub_reskey,
+            info,
+            query_reskey,
+            query_predicate: "".to_string(),
+        }
+    }
+
+    pub fn with_query_reskey(&mut self, query_reskey: ResKey) -> &Self {
+        self.query_reskey = query_reskey;
+        self
+    }
+
+    pub fn with_query_predicate(&mut self, query_predicate: String) -> &Self {
+        self.query_predicate = query_predicate;
+        self
+    }
+
+    pub fn with_sub_info(&mut self, sub_info: SubInfo) -> &Self {
+        self.info = sub_info;
+        self
+    }
+}
+
+impl From<ResKey> for QueryingSubscriberConf {
+    fn from(reskey: ResKey) -> Self {
+        QueryingSubscriberConf::new(reskey)
+    }
+}
+
+impl From<String> for QueryingSubscriberConf {
+    fn from(reskey: String) -> Self {
+        QueryingSubscriberConf::new(reskey.into())
+    }
+}
+
+impl From<&str> for QueryingSubscriberConf {
+    fn from(reskey: &str) -> Self {
+        QueryingSubscriberConf::new(reskey.into())
+    }
+}
+
+pub struct QueryingSubscriber<'a> {
+    session: &'a Session,
+    conf: QueryingSubscriberConf,
+    subscriber: Subscriber<'a>,
     receiver: QueryingSubscriberReceiver,
 }
 
 impl QueryingSubscriber<'_> {
-    pub fn new<'a>(
-        session: &'a Session,
-        sub_reskey: &ResKey,
-        info: &SubInfo,
-        query_reskey: &ResKey,
-        query_predicate: &str,
-    ) -> ZResult<QueryingSubscriber<'a>> {
+    pub fn new(session: &Session, conf: QueryingSubscriberConf) -> ZResult<QueryingSubscriber<'_>> {
         // declare subscriber at first
-        let mut subscriber = session.declare_subscriber(sub_reskey, info).wait()?;
+        let mut subscriber = session
+            .declare_subscriber(&conf.sub_reskey, &conf.info)
+            .wait()?;
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());
 
         let mut query_subscriber = QueryingSubscriber {
             session,
+            conf,
             subscriber,
-            query_reskey: query_reskey.clone(),
-            query_predicate: query_predicate.to_string(),
             receiver,
         };
 
@@ -73,14 +124,14 @@ impl QueryingSubscriber<'_> {
         if state.query_replies_recv.is_none() {
             log::debug!(
                 "Start query on {}?{}",
-                self.query_reskey,
-                self.query_predicate
+                self.conf.query_reskey,
+                self.conf.query_predicate
             );
             state.query_replies_recv = Some(
                 self.session
                     .query(
-                        &self.query_reskey,
-                        &self.query_predicate,
+                        &self.conf.query_reskey,
+                        &self.conf.query_predicate,
                         QueryTarget::default(),
                         QueryConsolidation::default(),
                     )
@@ -90,8 +141,8 @@ impl QueryingSubscriber<'_> {
         } else {
             log::error!(
                 "Cannot start query on {}?{} - one is already in progress",
-                self.query_reskey,
-                self.query_predicate
+                self.conf.query_reskey,
+                self.conf.query_predicate
             );
             zerror!(ZErrorKind::Other {
                 descr: "Query already in progress".to_string()

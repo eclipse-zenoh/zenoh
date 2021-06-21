@@ -29,16 +29,7 @@ async fn main() {
     let session = open(config.into()).await.unwrap();
 
     println!("Declaring Subscriber on {}", selector);
-
-    let sub_info = SubInfo {
-        reliability: Reliability::Reliable,
-        mode: SubMode::Push,
-        period: None,
-    };
-
-    let reskey: ResKey = selector.into();
-    let mut subscriber =
-        QueryingSubscriber::new(&session, &reskey, &sub_info, &reskey, "").unwrap();
+    let mut subscriber = QueryingSubscriber::new(&session, selector.into()).unwrap();
 
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
