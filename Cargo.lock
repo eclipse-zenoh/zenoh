@@ -1421,18 +1421,6 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa9b4819da1bc61c0ea48b63b7bc8604064dd43013e7cc325df098d49cd7c18a"
-dependencies = [
- "bitflags",
- "cc",
- "cfg-if 1.0.0",
- "libc",
-]
-
-[[package]]
-name = "nix"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c3728fec49d363a50a8828a190b379a446cc5cf085c06259bbbeb34447e4ec7"
@@ -2232,7 +2220,7 @@ checksum = "b854a362375dfe8ab12ea8a98228040d37293c988f85fbac9fa0f83336387966"
 dependencies = [
  "cfg-if 0.1.10",
  "libc",
- "nix 0.21.0",
+ "nix",
  "quick-error",
  "rand 0.8.3",
  "winapi",
@@ -2903,7 +2891,7 @@ dependencies = [
  "lazy_static",
  "libloading",
  "log",
- "nix 0.20.0",
+ "nix",
  "petgraph",
  "quinn",
  "rand 0.8.3",

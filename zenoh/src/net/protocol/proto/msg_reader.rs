@@ -383,7 +383,8 @@ impl RBuf {
             let di = self.read_data_info()?;
             #[cfg(feature = "zero-copy")]
             {
-                (Some(di), di.is_sliced)
+                let is_sliced = di.is_sliced;
+                (Some(di), is_sliced)
             }
             #[cfg(not(feature = "zero-copy"))]
             {
