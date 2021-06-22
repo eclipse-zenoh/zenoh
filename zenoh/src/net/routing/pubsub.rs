@@ -101,7 +101,7 @@ fn propagate_sourced_subscription(
                     res,
                     src_face,
                     sub_info,
-                    Some(tree_sid.index() as ZInt),
+                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -407,7 +407,7 @@ fn propagate_forget_sourced_subscription(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(tree_sid.index() as ZInt),
+                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -703,7 +703,7 @@ pub(crate) fn pubsub_tree_change(
                                 res,
                                 None,
                                 &sub_info,
-                                Some(tree_sid as ZInt),
+                                Some(RoutingContext::make(tree_sid as ZInt)),
                             );
                         }
                     }
@@ -739,7 +739,7 @@ fn insert_faces_for_subs(
                                         face.clone(),
                                         reskey,
                                         if source != 0 {
-                                            Some(source as u64)
+                                            Some(RoutingContext::make(source as ZInt))
                                         } else {
                                             None
                                         },
@@ -1007,7 +1007,8 @@ fn get_data_route(
         whatami::ROUTER => match face.whatami {
             whatami::ROUTER => {
                 let routers_net = tables.routers_net.as_ref().unwrap();
-                let local_context = routers_net.get_local_context(routing_context, face.link_id);
+                let local_context = routers_net
+                    .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
                     .map(|res| res.routers_data_route(local_context))
                     .flatten()
@@ -1023,7 +1024,8 @@ fn get_data_route(
             }
             whatami::PEER => {
                 let peers_net = tables.peers_net.as_ref().unwrap();
-                let local_context = peers_net.get_local_context(routing_context, face.link_id);
+                let local_context =
+                    peers_net.get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
                     .map(|res| res.peers_data_route(local_context))
                     .flatten()
@@ -1048,7 +1050,8 @@ fn get_data_route(
         whatami::PEER => match face.whatami {
             whatami::ROUTER | whatami::PEER => {
                 let peers_net = tables.peers_net.as_ref().unwrap();
-                let local_context = peers_net.get_local_context(routing_context, face.link_id);
+                let local_context =
+                    peers_net.get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
                     .map(|res| res.peers_data_route(local_context))
                     .flatten()

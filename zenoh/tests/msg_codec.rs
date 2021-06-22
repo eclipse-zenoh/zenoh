@@ -67,7 +67,7 @@ fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
 }
 
 fn gen_routing_context() -> RoutingContext {
-    gen!(ZInt)
+    RoutingContext::make(gen!(ZInt))
 }
 
 fn gen_reply_context(is_final: bool) -> ReplyContext {
@@ -87,32 +87,35 @@ fn gen_attachment() -> Attachment {
 }
 
 fn gen_declarations() -> Vec<Declaration> {
-    use zenoh::net::protocol::proto::Declaration::*;
     let mut decls = Vec::new();
-    decls.push(Resource {
+    decls.push(Declaration::Resource(Resource {
         rid: gen!(ZInt),
         key: gen_key(),
-    });
-    decls.push(ForgetResource { rid: gen!(ZInt) });
-    decls.push(Publisher { key: gen_key() });
-    decls.push(ForgetPublisher { key: gen_key() });
-    decls.push(Subscriber {
+    }));
+    decls.push(Declaration::ForgetResource(ForgetResource {
+        rid: gen!(ZInt),
+    }));
+    decls.push(Declaration::Publisher(Publisher { key: gen_key() }));
+    decls.push(Declaration::ForgetPublisher(ForgetPublisher {
+        key: gen_key(),
+    }));
+    decls.push(Declaration::Subscriber(Subscriber {
         key: gen_key(),
         info: SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
             period: None,
         },
-    });
-    decls.push(Subscriber {
+    }));
+    decls.push(Declaration::Subscriber(Subscriber {
         key: gen_key(),
         info: SubInfo {
             reliability: Reliability::BestEffort,
             mode: SubMode::Pull,
             period: None,
         },
-    });
-    decls.push(Subscriber {
+    }));
+    decls.push(Declaration::Subscriber(Subscriber {
         key: gen_key(),
         info: SubInfo {
             reliability: Reliability::Reliable,
@@ -123,8 +126,8 @@ fn gen_declarations() -> Vec<Declaration> {
                 duration: gen!(ZInt),
             }),
         },
-    });
-    decls.push(Subscriber {
+    }));
+    decls.push(Declaration::Subscriber(Subscriber {
         key: gen_key(),
         info: SubInfo {
             reliability: Reliability::BestEffort,
@@ -135,21 +138,25 @@ fn gen_declarations() -> Vec<Declaration> {
                 duration: gen!(ZInt),
             }),
         },
-    });
-    decls.push(ForgetSubscriber { key: gen_key() });
-    decls.push(Queryable {
+    }));
+    decls.push(Declaration::ForgetSubscriber(ForgetSubscriber {
+        key: gen_key(),
+    }));
+    decls.push(Declaration::Queryable(Queryable {
         key: gen_key(),
         kind: queryable::ALL_KINDS,
-    });
-    decls.push(Queryable {
+    }));
+    decls.push(Declaration::Queryable(Queryable {
         key: gen_key(),
         kind: queryable::STORAGE,
-    });
-    decls.push(Queryable {
+    }));
+    decls.push(Declaration::Queryable(Queryable {
         key: gen_key(),
         kind: queryable::EVAL,
-    });
-    decls.push(ForgetQueryable { key: gen_key() });
+    }));
+    decls.push(Declaration::ForgetQueryable(ForgetQueryable {
+        key: gen_key(),
+    }));
     decls
 }
 
@@ -219,7 +226,7 @@ fn test_write_read_session_message(msg: SessionMessage) {
     println!("Read message from: {:?}", buf);
     let mut result = RBuf::from(&buf).read_session_message().unwrap();
     println!("Message read: {:?}", result);
-    if let Some(attachment) = result.get_attachment_mut() {
+    if let Some(attachment) = result.attachment.as_mut() {
         let properties = attachment.buffer.read_properties();
         println!("Properties read: {:?}", properties);
     }
@@ -227,14 +234,12 @@ fn test_write_read_session_message(msg: SessionMessage) {
     assert_eq!(msg, result);
 }
 
-fn test_write_read_zenoh_message(msg: ZenohMessage) {
+fn test_write_read_zenoh_message(msg: ZenohMessage, reliability: Reliability) {
     let mut buf = WBuf::new(164, false);
     println!("\nWrite message: {:?}", msg);
     buf.write_zenoh_message(&msg);
     println!("Read message from: {:?}", buf);
-    let mut result = RBuf::from(&buf)
-        .read_zenoh_message(msg.reliability)
-        .unwrap();
+    let mut result = RBuf::from(&buf).read_zenoh_message(reliability).unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = &mut result.attachment {
         let properties = attachment.buffer.read_properties();
@@ -444,7 +449,7 @@ fn codec_frame() {
     let msg_payload_count = 4;
 
     for _ in 0..NUM_ITER {
-        let ch = [Channel::Reliable, Channel::BestEffort];
+        let reliability = [Reliability::BestEffort, Reliability::Reliable];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
         let routing_context = [None, Some(gen_routing_context())];
@@ -455,57 +460,50 @@ fn codec_frame() {
         ];
         let attachment = [None, Some(gen_attachment())];
 
-        let mut payload = Vec::new();
-        payload.push(FramePayload::Fragment {
-            buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
-            is_final: false,
-        });
-        payload.push(FramePayload::Fragment {
-            buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
-            is_final: true,
-        });
-        for cc in congestion_control.iter() {
-            for di in data_info.iter() {
-                for rec in reply_context.iter() {
-                    for roc in routing_context.iter() {
-                        for a in attachment.iter() {
-                            payload.push(FramePayload::Messages {
-                                messages: vec![
-                                    ZenohMessage::make_data(
-                                        gen_key(),
-                                        RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                                        Reliability::BestEffort,
-                                        *cc,
-                                        di.clone(),
-                                        roc.clone(),
-                                        rec.clone(),
-                                        a.clone(),
-                                    );
-                                    msg_payload_count
-                                ],
-                            });
+        for rl in reliability.iter() {
+            let mut payload = Vec::new();
+            payload.push(FramePayload::Fragment {
+                buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
+                is_final: false,
+            });
+            payload.push(FramePayload::Fragment {
+                buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
+                is_final: true,
+            });
+
+            for cc in congestion_control.iter() {
+                for di in data_info.iter() {
+                    for rec in reply_context.iter() {
+                        for roc in routing_context.iter() {
+                            for a in attachment.iter() {
+                                payload.push(FramePayload::Messages {
+                                    messages: vec![
+                                        ZenohMessage::make_data(
+                                            gen_key(),
+                                            RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                            *rl,
+                                            *cc,
+                                            di.clone(),
+                                            roc.clone(),
+                                            rec.clone(),
+                                            a.clone(),
+                                        );
+                                        msg_payload_count
+                                    ],
+                                });
+                            }
                         }
                     }
                 }
             }
-        }
 
-        for c in ch.iter() {
-            for mut p in payload.drain(..) {
+            for p in payload.drain(..) {
                 for a in attachment.iter() {
-                    // Put in accordance ZenohMessage reliability and Session channel
-                    match p {
-                        FramePayload::Fragment { .. } => {}
-                        FramePayload::Messages { ref mut messages } => {
-                            for m in messages.iter_mut() {
-                                match c {
-                                    Channel::Reliable => m.reliability = Reliability::Reliable,
-                                    Channel::BestEffort => m.reliability = Reliability::BestEffort,
-                                }
-                            }
-                        }
-                    }
-                    let msg = SessionMessage::make_frame(*c, gen!(ZInt), p.clone(), a.clone());
+                    let ch = match *rl {
+                        Reliability::Reliable => Channel::Reliable,
+                        Reliability::BestEffort => Channel::BestEffort,
+                    };
+                    let msg = SessionMessage::make_frame(ch, gen!(ZInt), p.clone(), a.clone());
                     test_write_read_session_message(msg);
                 }
             }
@@ -610,13 +608,17 @@ fn codec_frame_batching() {
 #[test]
 fn codec_declare() {
     for _ in 0..NUM_ITER {
+        let reliability = [Reliability::BestEffort, Reliability::Reliable];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
 
-        for roc in routing_context.iter() {
-            for a in attachment.iter() {
-                let msg = ZenohMessage::make_declare(gen_declarations(), roc.clone(), a.clone());
-                test_write_read_zenoh_message(msg);
+        for rl in reliability.iter() {
+            for roc in routing_context.iter() {
+                for a in attachment.iter() {
+                    let msg =
+                        ZenohMessage::make_declare(gen_declarations(), roc.clone(), a.clone());
+                    test_write_read_zenoh_message(msg, *rl);
+                }
             }
         }
     }
@@ -652,7 +654,7 @@ fn codec_data() {
                                     rec.clone(),
                                     a.clone(),
                                 );
-                                test_write_read_zenoh_message(msg);
+                                test_write_read_zenoh_message(msg, *rl);
                             }
                         }
                     }
@@ -679,7 +681,7 @@ fn codec_unit() {
                 for rc in reply_context.iter() {
                     for a in attachment.iter() {
                         let msg = ZenohMessage::make_unit(*rl, *cc, rc.clone(), a.clone());
-                        test_write_read_zenoh_message(msg);
+                        test_write_read_zenoh_message(msg, *rl);
                     }
                 }
             }
@@ -690,16 +692,24 @@ fn codec_unit() {
 #[test]
 fn codec_pull() {
     for _ in 0..NUM_ITER {
-        let is_final = [false, true];
+        let reliability = [Reliability::Reliable, Reliability::BestEffort];
         let max_samples = [None, Some(gen!(ZInt))];
         let attachment = [None, Some(gen_attachment())];
+        let is_final = [false, true];
 
-        for f in is_final.iter() {
-            for m in max_samples.iter() {
-                for a in attachment.iter() {
-                    let msg =
-                        ZenohMessage::make_pull(*f, gen_key(), gen!(ZInt), m.clone(), a.clone());
-                    test_write_read_zenoh_message(msg);
+        for rl in reliability.iter() {
+            for f in is_final.iter() {
+                for m in max_samples.iter() {
+                    for a in attachment.iter() {
+                        let msg = ZenohMessage::make_pull(
+                            *f,
+                            gen_key(),
+                            gen!(ZInt),
+                            m.clone(),
+                            a.clone(),
+                        );
+                        test_write_read_zenoh_message(msg, *rl);
+                    }
                 }
             }
         }
@@ -713,21 +723,24 @@ fn codec_query() {
         let target = [None, Some(gen_query_target())];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
+        let reliability = [Reliability::BestEffort, Reliability::Reliable];
 
-        for p in predicate.iter() {
-            for t in target.iter() {
-                for roc in routing_context.iter() {
-                    for a in attachment.iter() {
-                        let msg = ZenohMessage::make_query(
-                            gen_key(),
-                            p.clone(),
-                            gen!(ZInt),
-                            t.clone(),
-                            gen_consolidation(),
-                            roc.clone(),
-                            a.clone(),
-                        );
-                        test_write_read_zenoh_message(msg);
+        for rl in reliability.iter() {
+            for p in predicate.iter() {
+                for t in target.iter() {
+                    for roc in routing_context.iter() {
+                        for a in attachment.iter() {
+                            let msg = ZenohMessage::make_query(
+                                gen_key(),
+                                p.clone(),
+                                gen!(ZInt),
+                                t.clone(),
+                                gen_consolidation(),
+                                roc.clone(),
+                                a.clone(),
+                            );
+                            test_write_read_zenoh_message(msg, *rl);
+                        }
                     }
                 }
             }

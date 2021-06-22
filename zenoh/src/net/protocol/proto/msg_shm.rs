@@ -25,10 +25,8 @@ macro_rules! set_shminfo {
         // Set the right data info SHM parameters
         if let Some(di) = $data_info {
             di.is_sliced = false;
-            if !di.has_opts() {
+            if !di.has_options() {
                 *$data_info = None;
-                // Unset the DataInfo flag in the header
-                $msg.header &= !zmsg::flag::I;
             }
         }
     };
@@ -47,32 +45,34 @@ macro_rules! unset_shminfo {
             None => {
                 // Create the DataInfo content
                 *$data_info = Some(DataInfo {
+                    kind: None,
+                    encoding: None,
+                    timestamp: None,
+                    is_sliced: true,
                     source_id: None,
                     source_sn: None,
                     first_router_id: None,
                     first_router_sn: None,
-                    timestamp: None,
-                    kind: None,
-                    encoding: None,
-                    is_sliced: true,
                 });
-                // Set the DataInfo flag in the header
-                $msg.header |= zmsg::flag::I;
             }
         }
     };
 }
 
+#[cfg(feature = "zero-copy")]
 impl ZenohMessage {
-    #[cfg(feature = "zero-copy")]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;
+
+        if let Some(attachment) = self.attachment.as_mut() {
+            res = attachment.buffer.map_to_shmbuf(shmr.clone())?;
+        }
 
         if let ZenohBody::Data(Data {
             payload, data_info, ..
         }) = &mut self.body
         {
-            res = payload.map_to_shmbuf(shmr)?;
+            res = res || payload.map_to_shmbuf(shmr)?;
 
             if !payload.has_shminfo() {
                 set_shminfo!(self, data_info);
@@ -82,18 +82,45 @@ impl ZenohMessage {
         Ok(res)
     }
 
-    #[cfg(feature = "zero-copy")]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         let mut res = false;
+
+        if let Some(attachment) = self.attachment.as_mut() {
+            res = attachment.buffer.map_to_shminfo()?;
+        }
 
         if let ZenohBody::Data(Data {
             payload, data_info, ..
         }) = &mut self.body
         {
-            res = payload.map_to_shminfo()?;
+            res = res || payload.map_to_shminfo()?;
             if payload.has_shminfo() {
                 unset_shminfo!(self, data_info);
             }
+        }
+
+        Ok(res)
+    }
+}
+
+#[allow(dead_code)]
+#[cfg(feature = "zero-copy")]
+impl SessionMessage {
+    pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
+        let mut res = false;
+
+        if let Some(attachment) = self.attachment.as_mut() {
+            res = attachment.buffer.map_to_shmbuf(shmr)?;
+        }
+
+        Ok(res)
+    }
+
+    pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        let mut res = false;
+
+        if let Some(attachment) = self.attachment.as_mut() {
+            res = attachment.buffer.map_to_shminfo()?;
         }
 
         Ok(res)

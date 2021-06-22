@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{PeerId, ZInt, ZINT_MAX_BYTES};
+use super::core::{PeerId, Property, ZInt, ZINT_MAX_BYTES};
 use super::link::Locator;
 #[cfg(feature = "zero-copy")]
 use super::SharedMemoryBufInfo;
@@ -213,6 +213,21 @@ impl RBuf {
             Some(rbuf)
         }
     }
+
+    pub fn read_properties(&mut self) -> Option<Vec<Property>> {
+        let len = self.read_zint()?;
+        let mut vec: Vec<Property> = Vec::new();
+        for _ in 0..len {
+            vec.push(self.read_property()?);
+        }
+        Some(vec)
+    }
+
+    fn read_property(&mut self) -> Option<Property> {
+        let key = self.read_zint()?;
+        let value = self.read_bytes_array()?;
+        Some(Property { key, value })
+    }
 }
 
 macro_rules! write_zint {
@@ -304,5 +319,16 @@ impl WBuf {
             idx += 1;
         }
         true
+    }
+
+    pub fn write_properties(&mut self, props: &[Property]) {
+        self.write_usize_as_zint(props.len());
+        for p in props {
+            self.write_property(p);
+        }
+    }
+
+    fn write_property(&mut self, p: &Property) -> bool {
+        self.write_zint(p.key) && self.write_bytes_array(&p.value)
     }
 }

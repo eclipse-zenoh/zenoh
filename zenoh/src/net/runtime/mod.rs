@@ -209,6 +209,8 @@ impl SessionEventHandler for RuntimeSession {
                 key,
                 data_info,
                 payload,
+                congestion_control,
+                ..
             }) = msg.body
             {
                 let (rid, suffix) = (&key).into();
@@ -218,7 +220,7 @@ impl SessionEventHandler for RuntimeSession {
                     face,
                     rid,
                     suffix,
-                    msg.congestion_control,
+                    congestion_control,
                     data_info,
                     payload,
                     msg.routing_context,

@@ -174,7 +174,7 @@ fn propagate_sourced_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
                     res,
                     kind,
                     src_face,
-                    Some(tree_sid.index() as ZInt),
+                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -484,7 +484,7 @@ fn propagate_forget_sourced_queryable(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(tree_sid.index() as ZInt),
+                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -803,7 +803,7 @@ pub(crate) fn queries_tree_change(
                                 res,
                                 *kind,
                                 None,
-                                Some(tree_sid as ZInt),
+                                Some(RoutingContext::make(tree_sid as ZInt)),
                             );
                         }
                     }
@@ -843,7 +843,7 @@ fn insert_faces_for_qabls(
                                             face.clone(),
                                             reskey,
                                             if source != 0 {
-                                                Some(source as u64)
+                                                Some(RoutingContext::make(source as ZInt))
                                             } else {
                                                 None
                                             },
@@ -1066,8 +1066,8 @@ pub fn route_query(
                 whatami::ROUTER => match face.whatami {
                     whatami::ROUTER => {
                         let routers_net = tables.routers_net.as_ref().unwrap();
-                        let local_context =
-                            routers_net.get_local_context(routing_context, face.link_id);
+                        let local_context = routers_net
+                            .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                         (target.kind == queryable::ALL_KINDS)
                             .then(|| Resource::get_resource(prefix, suffix))
                             .flatten()
@@ -1086,8 +1086,8 @@ pub fn route_query(
                     }
                     whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context =
-                            peers_net.get_local_context(routing_context, face.link_id);
+                        let local_context = peers_net
+                            .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                         (target.kind == queryable::ALL_KINDS)
                             .then(|| Resource::get_resource(prefix, suffix))
                             .flatten()
@@ -1123,8 +1123,8 @@ pub fn route_query(
                 whatami::PEER => match face.whatami {
                     whatami::ROUTER | whatami::PEER => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context =
-                            peers_net.get_local_context(routing_context, face.link_id);
+                        let local_context = peers_net
+                            .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                         (target.kind == queryable::ALL_KINDS)
                             .then(|| Resource::get_resource(prefix, suffix))
                             .flatten()

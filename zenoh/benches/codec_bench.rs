@@ -19,7 +19,7 @@ use criterion::{black_box, Criterion};
 
 use zenoh::net::protocol::core::{Channel, CongestionControl, Reliability, ResKey, ZInt};
 use zenoh::net::protocol::io::{RBuf, WBuf, ZSlice};
-use zenoh::net::protocol::proto::{Attachment, FramePayload, SessionMessage, ZenohMessage};
+use zenoh::net::protocol::proto::{Attachment, Frame, FramePayload, SessionMessage, ZenohMessage};
 
 fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
     buf.write_zint(v);
@@ -77,7 +77,7 @@ fn bench_write_data(buf: &mut WBuf, data: &ZenohMessage) {
 }
 
 fn bench_make_frame_header(ch: Channel, is_fragment: Option<bool>) {
-    let _ = SessionMessage::make_frame_header(ch, is_fragment);
+    let _ = Frame::make_header(ch, is_fragment);
 }
 
 fn bench_write_frame_header(

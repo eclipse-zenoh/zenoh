@@ -14,7 +14,7 @@
 use super::super::SessionEventHandler;
 use super::link::Link;
 use super::proto::{
-    zmsg, Data, Declaration, Declare, LinkStateList, Pull, Query, ZenohBody, ZenohMessage,
+    Data, Declaration, Declare, LinkStateList, Pull, Query, ZenohBody, ZenohMessage,
 };
 use super::Primitives;
 use std::any::Any;
@@ -37,31 +37,34 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
             ZenohBody::Declare(Declare { declarations, .. }) => {
                 for declaration in declarations {
                     match declaration {
-                        Declaration::Resource { rid, key } => {
-                            self.primitives.decl_resource(rid, &key);
+                        Declaration::Resource(r) => {
+                            self.primitives.decl_resource(r.rid, &r.key);
                         }
-                        Declaration::Publisher { key } => {
-                            self.primitives.decl_publisher(&key, msg.routing_context);
+                        Declaration::Publisher(p) => {
+                            self.primitives.decl_publisher(&p.key, msg.routing_context);
                         }
-                        Declaration::Subscriber { key, info } => {
+                        Declaration::Subscriber(s) => {
                             self.primitives
-                                .decl_subscriber(&key, &info, msg.routing_context);
+                                .decl_subscriber(&s.key, &s.info, msg.routing_context);
                         }
-                        Declaration::Queryable { key, kind } => {
+                        Declaration::Queryable(q) => {
                             self.primitives
-                                .decl_queryable(&key, kind, msg.routing_context);
+                                .decl_queryable(&q.key, q.kind, msg.routing_context);
                         }
-                        Declaration::ForgetResource { rid } => {
-                            self.primitives.forget_resource(rid);
+                        Declaration::ForgetResource(fr) => {
+                            self.primitives.forget_resource(fr.rid);
                         }
-                        Declaration::ForgetPublisher { key } => {
-                            self.primitives.forget_publisher(&key, msg.routing_context);
+                        Declaration::ForgetPublisher(fp) => {
+                            self.primitives
+                                .forget_publisher(&fp.key, msg.routing_context);
                         }
-                        Declaration::ForgetSubscriber { key } => {
-                            self.primitives.forget_subscriber(&key, msg.routing_context);
+                        Declaration::ForgetSubscriber(fs) => {
+                            self.primitives
+                                .forget_subscriber(&fs.key, msg.routing_context);
                         }
-                        Declaration::ForgetQueryable { key } => {
-                            self.primitives.forget_queryable(&key, msg.routing_context);
+                        Declaration::ForgetQueryable(q) => {
+                            self.primitives
+                                .forget_queryable(&q.key, msg.routing_context);
                         }
                     }
                 }
@@ -71,13 +74,15 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 key,
                 data_info,
                 payload,
+                reliability,
+                congestion_control,
             }) => match msg.reply_context {
                 None => {
                     self.primitives.send_data(
                         &key,
                         payload,
-                        msg.reliability,
-                        msg.congestion_control,
+                        reliability,
+                        congestion_control,
                         data_info,
                         msg.routing_context,
                     );
@@ -103,7 +108,7 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
 
             ZenohBody::Unit { .. } => {
                 if let Some(rep) = msg.reply_context {
-                    if rep.is_final {
+                    if rep.is_final() {
                         self.primitives.send_reply_final(rep.qid);
                     }
                 }
@@ -131,14 +136,10 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 key,
                 pull_id,
                 max_samples,
-                ..
+                is_final,
             }) => {
-                self.primitives.send_pull(
-                    zmsg::has_flag(msg.header, zmsg::flag::F),
-                    &key,
-                    pull_id,
-                    &max_samples,
-                );
+                self.primitives
+                    .send_pull(is_final, &key, pull_id, &max_samples);
             }
 
             ZenohBody::LinkStateList(LinkStateList { .. }) => {}

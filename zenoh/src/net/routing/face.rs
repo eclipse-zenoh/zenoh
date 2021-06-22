@@ -123,13 +123,13 @@ impl Primitives for Face {
                         .as_ref()
                         .unwrap()
                         .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
+                        .get_pid(&routing_context.tree_id)
                     {
                         Some(router) => router.clone(),
                         None => {
                             log::error!(
                                 "Received router subscription with unknown routing context id {}",
-                                routing_context
+                                routing_context.tree_id
                             );
                             return;
                         }
@@ -158,13 +158,13 @@ impl Primitives for Face {
                         .as_ref()
                         .unwrap()
                         .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
+                        .get_pid(&routing_context.tree_id)
                     {
                         Some(peer) => peer.clone(),
                         None => {
                             log::error!(
                                 "Received peer subscription with unknown routing context id {}",
-                                routing_context
+                                routing_context.tree_id
                             );
                             return;
                         }
@@ -205,13 +205,13 @@ impl Primitives for Face {
                         .as_ref()
                         .unwrap()
                         .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
+                        .get_pid(&routing_context.tree_id)
                     {
                         Some(router) => router.clone(),
                         None => {
                             log::error!(
                                 "Received router forget subscription with unknown routing context id {}",
-                                routing_context
+                                routing_context.tree_id
                             );
                             return;
                         }
@@ -239,13 +239,13 @@ impl Primitives for Face {
                         .as_ref()
                         .unwrap()
                         .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
+                        .get_pid(&routing_context.tree_id)
                     {
                         Some(peer) => peer.clone(),
                         None => {
                             log::error!(
                                 "Received peer forget subscription with unknown routing context id {}",
-                                routing_context
+                                routing_context.tree_id
                             );
                             return;
                         }
@@ -283,13 +283,13 @@ impl Primitives for Face {
                         .as_ref()
                         .unwrap()
                         .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
+                        .get_pid(&routing_context.tree_id)
                     {
                         Some(router) => router.clone(),
                         None => {
                             log::error!(
                                 "Received router queryable with unknown routing context id {}",
-                                routing_context
+                                routing_context.tree_id
                             );
                             return;
                         }
@@ -318,13 +318,13 @@ impl Primitives for Face {
                         .as_ref()
                         .unwrap()
                         .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
+                        .get_pid(&routing_context.tree_id)
                     {
                         Some(peer) => peer.clone(),
                         None => {
                             log::error!(
                                 "Received peer queryable with unknown routing context id {}",
-                                routing_context
+                                routing_context.tree_id
                             );
                             return;
                         }
@@ -365,13 +365,13 @@ impl Primitives for Face {
                         .as_ref()
                         .unwrap()
                         .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
+                        .get_pid(&routing_context.tree_id)
                     {
                         Some(router) => router.clone(),
                         None => {
                             log::error!(
                                 "Received router forget queryable with unknown routing context id {}",
-                                routing_context
+                                routing_context.tree_id
                             );
                             return;
                         }
@@ -399,13 +399,13 @@ impl Primitives for Face {
                         .as_ref()
                         .unwrap()
                         .get_link(self.state.link_id)
-                        .get_pid(&routing_context)
+                        .get_pid(&routing_context.tree_id)
                     {
                         Some(peer) => peer.clone(),
                         None => {
                             log::error!(
                                 "Received peer forget queryable with unknown routing context id {}",
-                                routing_context
+                                routing_context.tree_id
                             );
                             return;
                         }

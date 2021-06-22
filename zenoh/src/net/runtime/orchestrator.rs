@@ -511,7 +511,7 @@ impl Runtime {
                 for socket in sockets {
                     log::trace!(
                         "Send {:?} to {} on interface {}",
-                        scout.get_body(),
+                        scout.body,
                         mcast_addr,
                         socket
                             .local_addr()
@@ -523,7 +523,7 @@ impl Runtime {
                     {
                         log::warn!(
                             "Unable to send {:?} to {} on interface {} : {}",
-                            scout.get_body(),
+                            scout.body,
                             mcast_addr,
                             socket
                                 .local_addr()
@@ -545,15 +545,15 @@ impl Runtime {
                     let (n, peer) = socket.recv_from(&mut buf).await.unwrap();
                     let mut rbuf = RBuf::from(&buf[..n]);
                     if let Some(msg) = rbuf.read_session_message() {
-                        log::trace!("Received {:?} from {}", msg.get_body(), peer);
-                        if let SessionBody::Hello(hello) = msg.get_body() {
+                        log::trace!("Received {:?} from {}", msg.body, peer);
+                        if let SessionBody::Hello(hello) = &msg.body {
                             let whatami = hello.whatami.or(Some(whatami::ROUTER)).unwrap();
                             if whatami & what != 0 {
                                 if let Loop::Break = f(hello.clone()).await {
                                     break;
                                 }
                             } else {
-                                log::warn!("Received unexpected Hello : {:?}", msg.get_body());
+                                log::warn!("Received unexpected Hello : {:?}", msg.body);
                             }
                         }
                     } else {
@@ -685,10 +685,10 @@ impl Runtime {
 
             let mut rbuf = RBuf::from(&buf[..n]);
             if let Some(msg) = rbuf.read_session_message() {
-                log::trace!("Received {:?} from {}", msg.get_body(), peer);
+                log::trace!("Received {:?} from {}", msg.body, peer);
                 if let SessionBody::Scout(Scout {
                     what, pid_request, ..
-                }) = msg.get_body()
+                }) = &msg.body
                 {
                     let what = what.or(Some(whatami::ROUTER)).unwrap();
                     if what & self.whatami != 0 {
@@ -707,7 +707,7 @@ impl Runtime {
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
                         log::trace!(
                             "Send {:?} to {} on interface {}",
-                            hello.get_body(),
+                            hello.body,
                             peer,
                             socket
                                 .local_addr()
@@ -715,12 +715,7 @@ impl Runtime {
                         );
                         wbuf.write_session_message(&hello);
                         if let Err(err) = socket.send_to(&RBuf::from(&wbuf).flatten(), peer).await {
-                            log::error!(
-                                "Unable to send {:?} to {} : {}",
-                                hello.get_body(),
-                                peer,
-                                err
-                            );
+                            log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);
                         }
                     }
                 }
