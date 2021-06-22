@@ -25,7 +25,7 @@ macro_rules! set_shminfo {
     ($msg:expr, $data_info:expr) => {
         // Set the right data info SHM parameters
         if let Some(di) = $data_info {
-            di.sliced(false);
+            di.sliced = false;
             if !di.has_options() {
                 *$data_info = None;
             }
@@ -45,8 +45,8 @@ macro_rules! unset_shminfo {
             }
             None => {
                 // Create the DataInfo content
-                let mut di = DataInfo::default();
-                di.sliced(true);
+                let mut di = DataInfo::new();
+                di.sliced = true;
                 *$data_info = Some(di);
             }
         }

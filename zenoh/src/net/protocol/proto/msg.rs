@@ -443,45 +443,8 @@ pub struct DataInfo {
 }
 
 impl DataInfo {
-    pub fn kind(&mut self, kind: ZInt) -> &mut DataInfo {
-        self.kind = Some(kind);
-        self
-    }
-
-    pub fn encoding(&mut self, encoding: ZInt) -> &mut DataInfo {
-        self.encoding = Some(encoding);
-        self
-    }
-
-    pub fn timestamp(&mut self, timestamp: Timestamp) -> &mut DataInfo {
-        self.timestamp = Some(timestamp);
-        self
-    }
-
-    #[cfg(feature = "zero-copy")]
-    pub fn sliced(&mut self, sliced: bool) -> &mut DataInfo {
-        self.sliced = sliced;
-        self
-    }
-
-    pub fn source_id(&mut self, source_id: PeerId) -> &mut DataInfo {
-        self.source_id = Some(source_id);
-        self
-    }
-
-    pub fn source_sn(&mut self, source_sn: ZInt) -> &mut DataInfo {
-        self.source_sn = Some(source_sn);
-        self
-    }
-
-    pub fn first_router_id(&mut self, first_router_id: PeerId) -> &mut DataInfo {
-        self.first_router_id = Some(first_router_id);
-        self
-    }
-
-    pub fn first_router_sn(&mut self, first_router_sn: ZInt) -> &mut DataInfo {
-        self.first_router_sn = Some(first_router_sn);
-        self
+    pub fn new() -> DataInfo {
+        DataInfo::default()
     }
 }
 

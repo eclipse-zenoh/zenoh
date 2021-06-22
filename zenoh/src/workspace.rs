@@ -542,13 +542,14 @@ impl Change {
 
     /// Convert this [`Change`] into a [`Sample`] to be sent via zenoh-net.
     pub fn into_sample(self) -> Sample {
-        let mut info = DataInfo::default();
-        info.kind(self.kind as ZInt).timestamp(self.timestamp);
+        let mut info = DataInfo::new();
+        info.kind = Some(self.kind as ZInt);
+        info.timestamp = Some(self.timestamp);
 
         let payload = match self.value {
             Some(v) => {
                 let (e, p) = v.encode();
-                info.encoding(e);
+                info.encoding = Some(e);
                 p
             }
             None => RBuf::new(),
@@ -589,8 +590,8 @@ impl ChangeReceiver<'_> {
 
 fn path_value_to_sample(path: Path, value: Value) -> Sample {
     let (encoding, payload) = value.encode();
-    let mut info = DataInfo::default();
-    info.encoding(encoding);
+    let mut info = DataInfo::new();
+    info.encoding = Some(encoding);
 
     Sample {
         res_name: path.to_string(),

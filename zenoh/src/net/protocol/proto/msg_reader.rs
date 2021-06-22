@@ -391,33 +391,33 @@ impl RBuf {
     }
 
     pub fn read_data_info(&mut self) -> Option<DataInfo> {
-        let mut info = DataInfo::default();
+        let mut info = DataInfo::new();
 
         let options = self.read_zint()?;
         if imsg::has_option(options, zmsg::data::info::KIND) {
-            info.kind(self.read_zint()?);
+            info.kind = Some(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::ENC) {
-            info.encoding(self.read_zint()?);
+            info.encoding = Some(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::TS) {
-            info.timestamp(self.read_timestamp()?);
+            info.timestamp = Some(self.read_timestamp()?);
         }
         #[cfg(feature = "zero-copy")]
         {
-            info.sliced(imsg::has_option(options, zmsg::data::info::SLICED));
+            info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
         }
         if imsg::has_option(options, zmsg::data::info::SRCID) {
-            info.source_id(self.read_peerid()?);
+            info.source_id = Some(self.read_peerid()?);
         }
         if imsg::has_option(options, zmsg::data::info::SRCSN) {
-            info.source_sn(self.read_zint()?);
+            info.source_sn = Some(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::RTRID) {
-            info.first_router_id(self.read_peerid()?);
+            info.first_router_id = Some(self.read_peerid()?);
         }
         if imsg::has_option(options, zmsg::data::info::RTRSN) {
-            info.first_router_sn(self.read_zint()?);
+            info.first_router_sn = Some(self.read_zint()?);
         }
 
         Some(info)
