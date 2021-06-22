@@ -16,28 +16,33 @@ use async_std::pin::Pin;
 use async_std::task::{Context, Poll};
 use futures_lite::stream::Stream;
 use futures_lite::StreamExt;
+use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
+use zenoh_util::sync::ZFuture;
 use zenoh_util::{zerror, zwrite};
 
-pub struct QueryingSubscriberConf {
+#[derive(Clone)]
+pub struct QueryingSubscriberBuilder<'a> {
+    session: &'a Session,
     sub_reskey: ResKey,
     info: SubInfo,
     query_reskey: ResKey,
     query_predicate: String,
 }
 
-impl QueryingSubscriberConf {
-    pub fn new(sub_reskey: ResKey) -> QueryingSubscriberConf {
+impl QueryingSubscriberBuilder<'_> {
+    pub fn new(session: &Session, sub_reskey: ResKey) -> QueryingSubscriberBuilder<'_> {
         let info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
             period: None,
         };
         let query_reskey = sub_reskey.clone();
-        QueryingSubscriberConf {
+        QueryingSubscriberBuilder {
+            session,
             sub_reskey,
             info,
             query_reskey,
@@ -45,65 +50,77 @@ impl QueryingSubscriberConf {
         }
     }
 
-    pub fn with_query_reskey(&mut self, query_reskey: ResKey) -> &Self {
+    pub fn query_reskey(mut self, query_reskey: ResKey) -> Self {
         self.query_reskey = query_reskey;
         self
     }
 
-    pub fn with_query_predicate(&mut self, query_predicate: String) -> &Self {
+    pub fn query_predicate(mut self, query_predicate: String) -> Self {
         self.query_predicate = query_predicate;
         self
     }
 
-    pub fn with_sub_info(&mut self, sub_info: SubInfo) -> &Self {
-        self.info = sub_info;
+    pub fn reliable(mut self) -> Self {
+        self.info.reliability = Reliability::Reliable;
+        self
+    }
+
+    pub fn best_effort(mut self) -> Self {
+        self.info.reliability = Reliability::BestEffort;
+        self
+    }
+
+    pub fn push_mode(mut self) -> Self {
+        self.info.mode = SubMode::Push;
+        self.info.period = None;
+        self
+    }
+
+    pub fn pull_mode(mut self, period: Option<Period>) -> Self {
+        self.info.mode = SubMode::Pull;
+        self.info.period = period;
         self
     }
 }
 
-impl From<ResKey> for QueryingSubscriberConf {
-    fn from(reskey: ResKey) -> Self {
-        QueryingSubscriberConf::new(reskey)
+impl<'a> Future for QueryingSubscriberBuilder<'a> {
+    type Output = ZResult<QueryingSubscriber<'a>>;
+
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(QueryingSubscriber::new(Pin::into_inner(self).clone()))
     }
 }
 
-impl From<String> for QueryingSubscriberConf {
-    fn from(reskey: String) -> Self {
-        QueryingSubscriberConf::new(reskey.into())
-    }
-}
-
-impl From<&str> for QueryingSubscriberConf {
-    fn from(reskey: &str) -> Self {
-        QueryingSubscriberConf::new(reskey.into())
+impl<'a> ZFuture<ZResult<QueryingSubscriber<'a>>> for QueryingSubscriberBuilder<'a> {
+    fn wait(self) -> ZResult<QueryingSubscriber<'a>> {
+        QueryingSubscriber::new(self)
     }
 }
 
 pub struct QueryingSubscriber<'a> {
-    session: &'a Session,
-    conf: QueryingSubscriberConf,
+    conf: QueryingSubscriberBuilder<'a>,
     subscriber: Subscriber<'a>,
     receiver: QueryingSubscriberReceiver,
 }
 
 impl QueryingSubscriber<'_> {
-    pub fn new(session: &Session, conf: QueryingSubscriberConf) -> ZResult<QueryingSubscriber<'_>> {
+    fn new(conf: QueryingSubscriberBuilder<'_>) -> ZResult<QueryingSubscriber<'_>> {
         // declare subscriber at first
-        let mut subscriber = session
+        let mut subscriber = conf
+            .session
             .declare_subscriber(&conf.sub_reskey, &conf.info)
             .wait()?;
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());
 
         let mut query_subscriber = QueryingSubscriber {
-            session,
             conf,
             subscriber,
             receiver,
         };
 
         // start query
-        query_subscriber.start_query()?;
+        query_subscriber.do_query()?;
 
         Ok(query_subscriber)
     }
@@ -118,7 +135,7 @@ impl QueryingSubscriber<'_> {
         &mut self.receiver
     }
 
-    pub fn start_query(&mut self) -> ZResult<()> {
+    pub fn do_query(&mut self) -> ZResult<()> {
         let mut state = zwrite!(self.receiver.state);
 
         if state.query_replies_recv.is_none() {
@@ -128,7 +145,8 @@ impl QueryingSubscriber<'_> {
                 self.conf.query_predicate
             );
             state.query_replies_recv = Some(
-                self.session
+                self.conf
+                    .session
                     .query(
                         &self.conf.query_reskey,
                         &self.conf.query_predicate,

@@ -13,4 +13,4 @@
 //
 
 mod querying_subscriber;
-pub use querying_subscriber::QueryingSubscriber;
+pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};

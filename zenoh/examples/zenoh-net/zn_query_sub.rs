@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
-use zenoh::net::ext::QueryingSubscriber;
+use zenoh::net::ext::QueryingSubscriberBuilder;
 use zenoh::net::*;
 use zenoh::Properties;
 
@@ -23,14 +23,19 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, selector) = parse_args();
+    let (config, selector, query) = parse_args();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
 
     println!("Declaring Subscriber on {}", selector);
-    let mut subscriber = QueryingSubscriber::new(&session, selector.into()).unwrap();
+    let mut builder = QueryingSubscriberBuilder::new(&session, selector.into());
+    if let Some(reskey) = query {
+        builder = builder.query_reskey(reskey.into());
+    }
+    let mut subscriber = builder.await.unwrap();
 
+    println!("Enter 'd' to issue the query again, or 'q' to quit.");
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
     loop {
@@ -43,12 +48,16 @@ async fn main() {
 
             _ = stdin.read_exact(&mut input).fuse() => {
                 if input[0] == b'q' {break}
+                else if input[0] == b'd' {
+                    println!("Do query again...");
+                    subscriber.do_query().unwrap()
+                }
             }
         );
     }
 }
 
-fn parse_args() -> (Properties, String) {
+fn parse_args() -> (Properties, String, Option<String>) {
     let args = App::new("zenoh-net sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -63,6 +72,9 @@ fn parse_args() -> (Properties, String) {
         .arg(
             Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to subscribe'")
                 .default_value("/demo/example/**"),
+        )
+        .arg(
+            Arg::from_usage("-q, --query=[SELECTOR] 'The selection of resources to query on (by default it's same than 'selector' option)'"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -84,6 +96,7 @@ fn parse_args() -> (Properties, String) {
     }
 
     let selector = args.value_of("selector").unwrap().to_string();
+    let query = args.value_of("query").map(ToString::to_string);
 
-    (config, selector)
+    (config, selector, query)
 }
