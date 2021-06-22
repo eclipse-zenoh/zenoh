@@ -816,6 +816,11 @@ pub(crate) fn queries_tree_change(
     compute_query_routes_from(tables, &mut tables.root_res.clone());
 }
 
+#[inline(always)]
+fn matching_kind(query_kind: ZInt, qabl_kind: ZInt) -> bool {
+    (query_kind & queryable::ALL_KINDS != 0) || (query_kind & qabl_kind != 0)
+}
+
 #[inline]
 #[allow(clippy::too_many_arguments)]
 fn insert_faces_for_qabls(
@@ -830,7 +835,7 @@ fn insert_faces_for_qabls(
 ) {
     if net.trees.len() > source {
         for (qabl, qabl_kind) in qabls.iter() {
-            if kind == queryable::ALL_KINDS || (kind & qabl_kind != 0) {
+            if matching_kind(kind, *qabl_kind) {
                 if let Some(qabl_idx) = net.get_idx(qabl) {
                     if net.trees[source].directions.len() > qabl_idx.index() {
                         if let Some(direction) = net.trees[source].directions[qabl_idx.index()] {
@@ -943,7 +948,7 @@ fn compute_query_route(
         if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
             for (sid, context) in &mres.session_ctxs {
                 if let Some(qabl_kind) = context.qabl {
-                    if kind == queryable::ALL_KINDS || (kind & qabl_kind != 0) {
+                    if matching_kind(kind, qabl_kind) {
                         route.entry(*sid).or_insert_with(|| {
                             let reskey = Resource::get_best_key(prefix, suffix, *sid);
                             (context.face.clone(), reskey, None)
