@@ -285,6 +285,7 @@ pub struct Attachment {
 
 impl Header for Attachment {
     fn header(&self) -> u8 {
+        #[allow(unused_mut)]
         let mut header = smsg::id::ATTACHMENT;
         #[cfg(feature = "zero-copy")]
         if self.buffer.has_shminfo() {

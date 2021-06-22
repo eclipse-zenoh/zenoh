@@ -13,6 +13,7 @@
 //
 #[cfg(feature = "zero-copy")]
 use super::io::SharedMemoryReader;
+#[cfg(feature = "zero-copy")]
 use super::msg::*;
 #[cfg(feature = "zero-copy")]
 use std::sync::{Arc, RwLock};

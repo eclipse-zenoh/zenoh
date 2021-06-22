@@ -22,11 +22,13 @@ use zenoh::net::*;
 #[cfg(feature = "zero-copy")]
 use zenoh::Properties;
 
+#[cfg(feature = "zero-copy")]
 const N: usize = 10;
+#[cfg(feature = "zero-copy")]
 const K: u32 = 3;
+
 #[cfg(feature = "zero-copy")]
 #[async_std::main]
-
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initiate logging
     env_logger::init();

@@ -977,14 +977,15 @@ macro_rules! treat_timestamp {
                     // No DataInfo; add one with a Timestamp
                     Some(
                         DataInfo {
+                            kind: None,
+                            encoding: None,
+                            timestamp: Some(hlc.new_timestamp()),
+                            #[cfg(feature = "zero-copy")]
+                            is_sliced: false,
                             source_id: None,
                             source_sn: None,
                             first_router_id: None,
                             first_router_sn: None,
-                            timestamp: Some(hlc.new_timestamp()),
-                            kind: None,
-                            encoding: None,
-                            is_sliced: false,
                         }
                     )
                 }

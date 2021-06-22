@@ -202,14 +202,15 @@ impl Primitives for AdminSpace {
             for (path, handler) in matching_handlers {
                 let (payload, encoding) = handler(&context).await;
                 let data_info = DataInfo {
+                    kind: None,
+                    encoding: Some(encoding),
+                    timestamp: None,
+                    #[cfg(feature = "zero-copy")]
+                    is_sliced: false,
                     source_id: None,
                     source_sn: None,
                     first_router_id: None,
                     first_router_sn: None,
-                    timestamp: None,
-                    kind: None,
-                    encoding: Some(encoding),
-                    is_sliced: false,
                 };
                 primitives.send_reply_data(
                     qid,

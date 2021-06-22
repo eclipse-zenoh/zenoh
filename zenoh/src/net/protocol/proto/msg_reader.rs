@@ -381,8 +381,14 @@ impl RBuf {
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
         let (data_info, is_sliced) = if imsg::has_flag(header, zmsg::flag::I) {
             let di = self.read_data_info()?;
-            let is_sliced = di.is_sliced;
-            (Some(di), is_sliced)
+            #[cfg(feature = "zero-copy")]
+            {
+                (Some(di), di.is_sliced)
+            }
+            #[cfg(not(feature = "zero-copy"))]
+            {
+                (Some(di), false)
+            }
         } else {
             (None, false)
         };

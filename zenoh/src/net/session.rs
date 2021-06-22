@@ -916,14 +916,15 @@ impl Session {
         let local_routing = state.local_routing;
         drop(state);
         let info = protocol::proto::DataInfo {
+            kind: Some(kind),
+            encoding: Some(encoding),
+            timestamp: None,
+            #[cfg(feature = "zero-copy")]
+            is_sliced: false,
             source_id: None,
             source_sn: None,
             first_router_id: None,
             first_router_sn: None,
-            timestamp: None,
-            kind: Some(kind),
-            encoding: Some(encoding),
-            is_sliced: false,
         };
         let data_info = Some(info);
         primitives.send_data(

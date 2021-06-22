@@ -255,7 +255,14 @@ impl WBuf {
         zcheck!(self.write_reskey(&data.key));
         let is_sliced = if let Some(data_info) = data.data_info.as_ref() {
             zcheck!(self.write_data_info(data_info));
-            data_info.is_sliced
+            #[cfg(feature = "zero-copy")]
+            {
+                data_info.is_sliced
+            }
+            #[cfg(not(feature = "zero-copy"))]
+            {
+                false
+            }
         } else {
             false
         };
