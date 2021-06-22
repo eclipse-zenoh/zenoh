@@ -203,10 +203,6 @@ path = "examples/zenoh-net/zn_ping.rs"
 name = "zn_pong"
 path = "examples/zenoh-net/zn_pong.rs"
 
-[[example]]
-name = "zn_query_sub"
-path = "examples/zenoh-net/zn_query_sub.rs"
-
 [[bench]]
 name = "codec_bench"
 harness = false

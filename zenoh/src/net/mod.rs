@@ -65,8 +65,6 @@
 //!     }
 //! }
 //! ```
-pub mod ext;
-
 #[doc(hidden)]
 pub mod plugins;
 #[doc(hidden)]

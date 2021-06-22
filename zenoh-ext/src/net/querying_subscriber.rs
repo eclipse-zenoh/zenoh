@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::net::*;
 use async_std::pin::Pin;
 use async_std::task::{Context, Poll};
 use futures_lite::stream::Stream;
@@ -19,11 +18,13 @@ use futures_lite::StreamExt;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use zenoh::net::*;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh_util::sync::ZFuture;
 use zenoh_util::{zerror, zwrite};
 
+/// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
 pub struct QueryingSubscriberBuilder<'a> {
     session: &'a Session,
@@ -34,48 +35,56 @@ pub struct QueryingSubscriberBuilder<'a> {
 }
 
 impl QueryingSubscriberBuilder<'_> {
-    pub fn new(session: &Session, sub_reskey: ResKey) -> QueryingSubscriberBuilder<'_> {
+    pub(crate) fn new<'a>(
+        session: &'a Session,
+        sub_reskey: &ResKey,
+    ) -> QueryingSubscriberBuilder<'a> {
         let info = SubInfo {
             reliability: Reliability::Reliable,
             mode: SubMode::Push,
             period: None,
         };
-        let query_reskey = sub_reskey.clone();
         QueryingSubscriberBuilder {
             session,
-            sub_reskey,
+            sub_reskey: sub_reskey.clone(),
             info,
-            query_reskey,
+            query_reskey: sub_reskey.clone(),
             query_predicate: "".to_string(),
         }
     }
 
+    /// Change the resource key to be used for queries.
     pub fn query_reskey(mut self, query_reskey: ResKey) -> Self {
         self.query_reskey = query_reskey;
         self
     }
 
+    /// Change the predicate to be used for queries.
     pub fn query_predicate(mut self, query_predicate: String) -> Self {
         self.query_predicate = query_predicate;
         self
     }
 
+    /// Change the subscription reliability to Reliable.
     pub fn reliable(mut self) -> Self {
         self.info.reliability = Reliability::Reliable;
         self
     }
 
+    /// Change the subscription reliability to BestEffort.
     pub fn best_effort(mut self) -> Self {
         self.info.reliability = Reliability::BestEffort;
         self
     }
 
+    /// Change the subscription mode to Push.
     pub fn push_mode(mut self) -> Self {
         self.info.mode = SubMode::Push;
         self.info.period = None;
         self
     }
 
+    /// Change the subscription mode to Pull with an optional Period.
     pub fn pull_mode(mut self, period: Option<Period>) -> Self {
         self.info.mode = SubMode::Pull;
         self.info.period = period;
@@ -125,16 +134,19 @@ impl QueryingSubscriber<'_> {
         Ok(query_subscriber)
     }
 
+    /// Undeclare this QueryingSubscriber
     #[inline]
     pub fn undeclare(self) -> ZResolvedFuture<ZResult<()>> {
         self.subscriber.undeclare()
     }
 
+    /// Return the QueryingSubscriberReceiver associated to this subscriber.
     #[inline]
     pub fn receiver(&mut self) -> &mut QueryingSubscriberReceiver {
         &mut self.receiver
     }
 
+    /// Issue a new query using the configured resrouce key and predicate.
     pub fn do_query(&mut self) -> ZResult<()> {
         let mut state = zwrite!(self.receiver.state);
 
