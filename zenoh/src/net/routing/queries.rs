@@ -942,11 +942,13 @@ fn compute_query_route(
 
         if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
             for (sid, context) in &mres.session_ctxs {
-                if context.qabl.is_some() {
-                    route.entry(*sid).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, *sid);
-                        (context.face.clone(), reskey, None)
-                    });
+                if let Some(qabl_kind) = context.qabl {
+                    if kind == queryable::ALL_KINDS || (kind & qabl_kind != 0) {
+                        route.entry(*sid).or_insert_with(|| {
+                            let reskey = Resource::get_best_key(prefix, suffix, *sid);
+                            (context.face.clone(), reskey, None)
+                        });
+                    }
                 }
             }
         }
