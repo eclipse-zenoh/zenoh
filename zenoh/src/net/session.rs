@@ -915,17 +915,10 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
-        let info = protocol::proto::DataInfo {
-            kind: Some(kind),
-            encoding: Some(encoding),
-            timestamp: None,
-            #[cfg(feature = "zero-copy")]
-            is_sliced: false,
-            source_id: None,
-            source_sn: None,
-            first_router_id: None,
-            first_router_sn: None,
-        };
+        let mut info = protocol::proto::DataInfo::default();
+        info.kind = Some(kind);
+        info.encoding = Some(encoding);
+
         let data_info = Some(info);
         primitives.send_data(
             resource,

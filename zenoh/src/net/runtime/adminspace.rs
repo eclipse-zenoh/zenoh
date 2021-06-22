@@ -201,17 +201,9 @@ impl Primitives for AdminSpace {
         task::spawn(async move {
             for (path, handler) in matching_handlers {
                 let (payload, encoding) = handler(&context).await;
-                let data_info = DataInfo {
-                    kind: None,
-                    encoding: Some(encoding),
-                    timestamp: None,
-                    #[cfg(feature = "zero-copy")]
-                    is_sliced: false,
-                    source_id: None,
-                    source_sn: None,
-                    first_router_id: None,
-                    first_router_sn: None,
-                };
+                let mut data_info = DataInfo::default();
+                data_info.encoding = Some(encoding);
+
                 primitives.send_reply_data(
                     qid,
                     EVAL,

@@ -406,56 +406,36 @@ impl RBuf {
     }
 
     pub fn read_data_info(&mut self) -> Option<DataInfo> {
-        let options = self.read_zint()?;
-        let kind = if imsg::has_option(options, zmsg::data::info::KIND) {
-            Some(self.read_zint()?)
-        } else {
-            None
-        };
-        let encoding = if imsg::has_option(options, zmsg::data::info::ENC) {
-            Some(self.read_zint()?)
-        } else {
-            None
-        };
-        let timestamp = if imsg::has_option(options, zmsg::data::info::TS) {
-            Some(self.read_timestamp()?)
-        } else {
-            None
-        };
-        #[cfg(feature = "zero-copy")]
-        let is_sliced = imsg::has_option(options, zmsg::data::info::SLICED);
-        let source_id = if imsg::has_option(options, zmsg::data::info::SRCID) {
-            Some(self.read_peerid()?)
-        } else {
-            None
-        };
-        let source_sn = if imsg::has_option(options, zmsg::data::info::SRCSN) {
-            Some(self.read_zint()?)
-        } else {
-            None
-        };
-        let first_router_id = if imsg::has_option(options, zmsg::data::info::RTRID) {
-            Some(self.read_peerid()?)
-        } else {
-            None
-        };
-        let first_router_sn = if imsg::has_option(options, zmsg::data::info::RTRSN) {
-            Some(self.read_zint()?)
-        } else {
-            None
-        };
+        let mut info = DataInfo::default();
 
-        Some(DataInfo {
-            kind,
-            encoding,
-            timestamp,
-            #[cfg(feature = "zero-copy")]
-            is_sliced,
-            source_id,
-            source_sn,
-            first_router_id,
-            first_router_sn,
-        })
+        let options = self.read_zint()?;
+        if imsg::has_option(options, zmsg::data::info::KIND) {
+            info.kind = Some(self.read_zint()?);
+        }
+        if imsg::has_option(options, zmsg::data::info::ENC) {
+            info.encoding = Some(self.read_zint()?);
+        }
+        if imsg::has_option(options, zmsg::data::info::TS) {
+            info.timestamp = Some(self.read_timestamp()?);
+        }
+        #[cfg(feature = "zero-copy")]
+        {
+            info.is_sliced = imsg::has_option(options, zmsg::data::info::SLICED);
+        }
+        if imsg::has_option(options, zmsg::data::info::SRCID) {
+            info.source_id = Some(self.read_peerid()?);
+        }
+        if imsg::has_option(options, zmsg::data::info::SRCSN) {
+            info.source_sn = Some(self.read_zint()?);
+        }
+        if imsg::has_option(options, zmsg::data::info::RTRID) {
+            info.first_router_id = Some(self.read_peerid()?);
+        }
+        if imsg::has_option(options, zmsg::data::info::RTRSN) {
+            info.first_router_sn = Some(self.read_zint()?);
+        }
+
+        Some(info)
     }
 
     fn read_unit(&mut self, header: u8, reliability: Reliability) -> Option<ZenohBody> {

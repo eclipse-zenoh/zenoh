@@ -975,19 +975,9 @@ macro_rules! treat_timestamp {
                     }
                 } else {
                     // No DataInfo; add one with a Timestamp
-                    Some(
-                        DataInfo {
-                            kind: None,
-                            encoding: None,
-                            timestamp: Some(hlc.new_timestamp()),
-                            #[cfg(feature = "zero-copy")]
-                            is_sliced: false,
-                            source_id: None,
-                            source_sn: None,
-                            first_router_id: None,
-                            first_router_sn: None,
-                        }
-                    )
+                    let mut data_info = DataInfo::default();
+                    data_info.timestamp = Some(hlc.new_timestamp());
+                    Some(data_info)
                 }
             },
             None => $info,

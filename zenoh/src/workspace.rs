@@ -549,17 +549,10 @@ impl Change {
             }
             None => (None, RBuf::new()),
         };
-        let info = DataInfo {
-            kind: Some(self.kind as u64),
-            encoding,
-            timestamp: Some(self.timestamp),
-            #[cfg(feature = "zero-copy")]
-            is_sliced: false,
-            source_id: None,
-            source_sn: None,
-            first_router_id: None,
-            first_router_sn: None,
-        };
+        let mut info = DataInfo::default();
+        info.kind = Some(self.kind as u64);
+        info.encoding = encoding;
+        info.timestamp = Some(self.timestamp);
         Sample {
             res_name: self.path.to_string(),
             payload,
@@ -595,17 +588,9 @@ impl ChangeReceiver<'_> {
 
 fn path_value_to_sample(path: Path, value: Value) -> Sample {
     let (encoding, payload) = value.encode();
-    let info = DataInfo {
-        kind: None,
-        encoding: Some(encoding),
-        timestamp: None,
-        #[cfg(feature = "zero-copy")]
-        is_sliced: false,
-        source_id: None,
-        source_sn: None,
-        first_router_id: None,
-        first_router_sn: None,
-    };
+    let mut info = DataInfo::default();
+    info.encoding = Some(encoding);
+
     Sample {
         res_name: path.to_string(),
         payload,

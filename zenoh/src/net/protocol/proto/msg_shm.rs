@@ -45,16 +45,9 @@ macro_rules! unset_shminfo {
             }
             None => {
                 // Create the DataInfo content
-                *$data_info = Some(DataInfo {
-                    kind: None,
-                    encoding: None,
-                    timestamp: None,
-                    is_sliced: true,
-                    source_id: None,
-                    source_sn: None,
-                    first_router_id: None,
-                    first_router_sn: None,
-                });
+                let mut di = DataInfo::default();
+                di.is_sliced = true;
+                *$data_info = Some(di);
             }
         }
     };

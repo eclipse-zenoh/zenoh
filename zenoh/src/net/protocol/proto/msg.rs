@@ -442,6 +442,22 @@ pub struct DataInfo {
     pub first_router_sn: Option<ZInt>,
 }
 
+impl Default for DataInfo {
+    fn default() -> DataInfo {
+        DataInfo {
+            kind: None,
+            encoding: None,
+            timestamp: None,
+            #[cfg(feature = "zero-copy")]
+            is_sliced: false,
+            source_id: None,
+            source_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
+        }
+    }
+}
+
 impl Options for DataInfo {
     fn options(&self) -> ZInt {
         let mut options = 0;
