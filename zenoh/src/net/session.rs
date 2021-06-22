@@ -916,8 +916,7 @@ impl Session {
         let local_routing = state.local_routing;
         drop(state);
         let mut info = protocol::proto::DataInfo::default();
-        info.kind = Some(kind);
-        info.encoding = Some(encoding);
+        info.kind(kind).encoding(encoding);
 
         let data_info = Some(info);
         primitives.send_data(

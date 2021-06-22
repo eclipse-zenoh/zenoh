@@ -181,8 +181,8 @@ impl RBuf {
     }
 
     // Same as read_bytes_array but 0 copy on RBuf.
-    pub fn read_rbuf(&mut self, is_sliced: bool) -> Option<RBuf> {
-        if !is_sliced {
+    pub fn read_rbuf(&mut self, sliced: bool) -> Option<RBuf> {
+        if !sliced {
             let len = self.read_zint_as_usize()?;
             let mut rbuf = RBuf::new();
             if self.read_into_rbuf(&mut rbuf, len) {
@@ -291,8 +291,8 @@ impl WBuf {
         self.write_usize_as_zint(slice.len()) && self.write_zslice(slice)
     }
 
-    pub fn write_rbuf(&mut self, rbuf: &RBuf, is_sliced: bool) -> bool {
-        if !is_sliced {
+    pub fn write_rbuf(&mut self, rbuf: &RBuf, sliced: bool) -> bool {
+        if !sliced {
             zcheck!(self.write_usize_as_zint(rbuf.len()));
             self.write_rbuf_slices(rbuf)
         } else {

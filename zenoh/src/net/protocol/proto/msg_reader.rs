@@ -17,25 +17,13 @@ use super::msg::*;
 
 impl RBuf {
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
-        let buffer = {
-            #[cfg(feature = "zero-copy")]
-            {
-                if imsg::has_flag(header, smsg::flag::Z) {
-                    self.read_rbuf(true)?
-                } else {
-                    self.read_rbuf(false)?
-                }
-            }
-
-            #[cfg(not(feature = "zero-copy"))]
-            {
-                if imsg::has_flag(header, smsg::flag::Z) {
-                    return None;
-                } else {
-                    self.read_rbuf(false)?
-                }
-            }
-        };
+        #[allow(unused_assignments)]
+        let mut sliced = false;
+        #[cfg(feature = "zero-copy")]
+        {
+            sliced = imsg::has_flag(header, smsg::flag::Z);
+        }
+        let buffer = self.read_rbuf(sliced)?;
         Some(Attachment { buffer })
     }
 
@@ -379,21 +367,18 @@ impl RBuf {
             CongestionControl::Block
         };
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-        let (data_info, is_sliced) = if imsg::has_flag(header, zmsg::flag::I) {
+        let mut sliced = false;
+        let data_info = if imsg::has_flag(header, zmsg::flag::I) {
             let di = self.read_data_info()?;
             #[cfg(feature = "zero-copy")]
             {
-                let is_sliced = di.is_sliced;
-                (Some(di), is_sliced)
+                sliced = di.sliced;
             }
-            #[cfg(not(feature = "zero-copy"))]
-            {
-                (Some(di), false)
-            }
+            Some(di)
         } else {
-            (None, false)
+            None
         };
-        let payload = self.read_rbuf(is_sliced)?;
+        let payload = self.read_rbuf(sliced)?;
 
         let body = ZenohBody::Data(Data {
             key,
@@ -410,29 +395,29 @@ impl RBuf {
 
         let options = self.read_zint()?;
         if imsg::has_option(options, zmsg::data::info::KIND) {
-            info.kind = Some(self.read_zint()?);
+            info.kind(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::ENC) {
-            info.encoding = Some(self.read_zint()?);
+            info.encoding(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::TS) {
-            info.timestamp = Some(self.read_timestamp()?);
+            info.timestamp(self.read_timestamp()?);
         }
         #[cfg(feature = "zero-copy")]
         {
-            info.is_sliced = imsg::has_option(options, zmsg::data::info::SLICED);
+            info.sliced(imsg::has_option(options, zmsg::data::info::SLICED));
         }
         if imsg::has_option(options, zmsg::data::info::SRCID) {
-            info.source_id = Some(self.read_peerid()?);
+            info.source_id(self.read_peerid()?);
         }
         if imsg::has_option(options, zmsg::data::info::SRCSN) {
-            info.source_sn = Some(self.read_zint()?);
+            info.source_sn(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::RTRID) {
-            info.first_router_id = Some(self.read_peerid()?);
+            info.first_router_id(self.read_peerid()?);
         }
         if imsg::has_option(options, zmsg::data::info::RTRSN) {
-            info.first_router_sn = Some(self.read_zint()?);
+            info.first_router_sn(self.read_zint()?);
         }
 
         Some(info)

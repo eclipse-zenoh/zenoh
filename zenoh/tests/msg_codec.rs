@@ -216,7 +216,7 @@ fn gen_data_info() -> DataInfo {
         kind: option_gen!(gen!(ZInt)),
         encoding: option_gen!(gen!(ZInt)),
         #[cfg(feature = "zero-copy")]
-        is_sliced: false,
+        sliced: false,
     }
 }
 

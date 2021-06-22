@@ -253,11 +253,11 @@ impl WBuf {
     fn write_data(&mut self, data: &Data) -> bool {
         zcheck!(self.write(data.header()));
         zcheck!(self.write_reskey(&data.key));
-        let is_sliced = if let Some(data_info) = data.data_info.as_ref() {
+        let sliced = if let Some(data_info) = data.data_info.as_ref() {
             zcheck!(self.write_data_info(data_info));
             #[cfg(feature = "zero-copy")]
             {
-                data_info.is_sliced
+                data_info.sliced
             }
             #[cfg(not(feature = "zero-copy"))]
             {
@@ -266,7 +266,7 @@ impl WBuf {
         } else {
             false
         };
-        self.write_rbuf(&data.payload, is_sliced)
+        self.write_rbuf(&data.payload, sliced)
     }
 
     pub fn write_data_info(&mut self, info: &DataInfo) -> bool {

@@ -435,11 +435,54 @@ pub struct DataInfo {
     pub encoding: Option<ZInt>,
     pub timestamp: Option<Timestamp>,
     #[cfg(feature = "zero-copy")]
-    pub is_sliced: bool,
+    pub sliced: bool,
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
     pub first_router_id: Option<PeerId>,
     pub first_router_sn: Option<ZInt>,
+}
+
+impl DataInfo {
+    pub fn kind(&mut self, kind: ZInt) -> &mut DataInfo {
+        self.kind = Some(kind);
+        self
+    }
+
+    pub fn encoding(&mut self, encoding: ZInt) -> &mut DataInfo {
+        self.encoding = Some(encoding);
+        self
+    }
+
+    pub fn timestamp(&mut self, timestamp: Timestamp) -> &mut DataInfo {
+        self.timestamp = Some(timestamp);
+        self
+    }
+
+    #[cfg(feature = "zero-copy")]
+    pub fn sliced(&mut self, sliced: bool) -> &mut DataInfo {
+        self.sliced = sliced;
+        self
+    }
+
+    pub fn source_id(&mut self, source_id: PeerId) -> &mut DataInfo {
+        self.source_id = Some(source_id);
+        self
+    }
+
+    pub fn source_sn(&mut self, source_sn: ZInt) -> &mut DataInfo {
+        self.source_sn = Some(source_sn);
+        self
+    }
+
+    pub fn first_router_id(&mut self, first_router_id: PeerId) -> &mut DataInfo {
+        self.first_router_id = Some(first_router_id);
+        self
+    }
+
+    pub fn first_router_sn(&mut self, first_router_sn: ZInt) -> &mut DataInfo {
+        self.first_router_sn = Some(first_router_sn);
+        self
+    }
 }
 
 impl Default for DataInfo {
@@ -449,7 +492,7 @@ impl Default for DataInfo {
             encoding: None,
             timestamp: None,
             #[cfg(feature = "zero-copy")]
-            is_sliced: false,
+            sliced: false,
             source_id: None,
             source_sn: None,
             first_router_id: None,
@@ -471,7 +514,7 @@ impl Options for DataInfo {
             options |= zmsg::data::info::TS;
         }
         #[cfg(feature = "zero-copy")]
-        if self.is_sliced {
+        if self.sliced {
             options |= zmsg::data::info::SLICED;
         }
         if self.source_id.is_some() {
@@ -490,11 +533,11 @@ impl Options for DataInfo {
     }
 
     fn has_options(&self) -> bool {
-        macro_rules! is_sliced {
+        macro_rules! sliced {
             ($info:expr) => {{
                 #[cfg(feature = "zero-copy")]
                 {
-                    $info.is_sliced
+                    $info.sliced
                 }
                 #[cfg(not(feature = "zero-copy"))]
                 {
@@ -506,7 +549,7 @@ impl Options for DataInfo {
         self.kind.is_some()
             || self.encoding.is_some()
             || self.timestamp.is_some()
-            || is_sliced!(self)
+            || sliced!(self)
             || self.source_id.is_some()
             || self.source_sn.is_some()
             || self.first_router_id.is_some()

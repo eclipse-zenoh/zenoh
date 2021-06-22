@@ -976,7 +976,7 @@ macro_rules! treat_timestamp {
                 } else {
                     // No DataInfo; add one with a Timestamp
                     let mut data_info = DataInfo::default();
-                    data_info.timestamp = Some(hlc.new_timestamp());
+                    data_info.timestamp(hlc.new_timestamp());
                     Some(data_info)
                 }
             },

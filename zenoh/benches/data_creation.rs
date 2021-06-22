@@ -50,7 +50,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     kind: Some(0),
                     encoding: Some(0),
                     #[cfg(feature = "zero-copy")]
-                    is_sliced: false,
+                    sliced: false,
                 });
                 let payload = RBuf::from(vec![0; *s]);
 
@@ -107,7 +107,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         kind: Some(0),
         encoding: Some(0),
         #[cfg(feature = "zero-copy")]
-        is_sliced: false,
+        sliced: false,
     });
     let payload = RBuf::from(vec![0; 1024]);
     let msg = Arc::new(ZenohMessage::make_data(

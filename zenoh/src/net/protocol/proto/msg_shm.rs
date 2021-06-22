@@ -25,7 +25,7 @@ macro_rules! set_shminfo {
     ($msg:expr, $data_info:expr) => {
         // Set the right data info SHM parameters
         if let Some(di) = $data_info {
-            di.is_sliced = false;
+            di.sliced(false);
             if !di.has_options() {
                 *$data_info = None;
             }
@@ -41,12 +41,12 @@ macro_rules! unset_shminfo {
                 // Just update the is_shm field. This field can be
                 // then used at receiver side to identify that the
                 // actual content is stored in shared memory
-                di.is_sliced = true;
+                di.sliced = true;
             }
             None => {
                 // Create the DataInfo content
                 let mut di = DataInfo::default();
-                di.is_sliced = true;
+                di.sliced(true);
                 *$data_info = Some(di);
             }
         }

@@ -202,7 +202,7 @@ impl Primitives for AdminSpace {
             for (path, handler) in matching_handlers {
                 let (payload, encoding) = handler(&context).await;
                 let mut data_info = DataInfo::default();
-                data_info.encoding = Some(encoding);
+                data_info.encoding(encoding);
 
                 primitives.send_reply_data(
                     qid,
