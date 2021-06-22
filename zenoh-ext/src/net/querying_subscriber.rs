@@ -32,6 +32,8 @@ pub struct QueryingSubscriberBuilder<'a> {
     info: SubInfo,
     query_reskey: ResKey,
     query_predicate: String,
+    query_target: QueryTarget,
+    query_consolidation: QueryConsolidation,
 }
 
 impl QueryingSubscriberBuilder<'_> {
@@ -50,19 +52,9 @@ impl QueryingSubscriberBuilder<'_> {
             info,
             query_reskey: sub_reskey.clone(),
             query_predicate: "".to_string(),
+            query_target: QueryTarget::default(),
+            query_consolidation: QueryConsolidation::default(),
         }
-    }
-
-    /// Change the resource key to be used for queries.
-    pub fn query_reskey(mut self, query_reskey: ResKey) -> Self {
-        self.query_reskey = query_reskey;
-        self
-    }
-
-    /// Change the predicate to be used for queries.
-    pub fn query_predicate(mut self, query_predicate: String) -> Self {
-        self.query_predicate = query_predicate;
-        self
     }
 
     /// Change the subscription reliability to Reliable.
@@ -88,6 +80,29 @@ impl QueryingSubscriberBuilder<'_> {
     pub fn pull_mode(mut self, period: Option<Period>) -> Self {
         self.info.mode = SubMode::Pull;
         self.info.period = period;
+        self
+    }
+    /// Change the resource key to be used for queries.
+    pub fn query_reskey(mut self, query_reskey: ResKey) -> Self {
+        self.query_reskey = query_reskey;
+        self
+    }
+
+    /// Change the predicate to be used for queries.
+    pub fn query_predicate(mut self, query_predicate: String) -> Self {
+        self.query_predicate = query_predicate;
+        self
+    }
+
+    /// Change the target to be used for queries.
+    pub fn query_target(mut self, query_target: QueryTarget) -> Self {
+        self.query_target = query_target;
+        self
+    }
+
+    /// Change the consolidation mode to be used for queries.
+    pub fn query_consolidation(mut self, query_consolidation: QueryConsolidation) -> Self {
+        self.query_consolidation = query_consolidation;
         self
     }
 }
@@ -151,11 +166,19 @@ impl QueryingSubscriber<'_> {
         self.query_on(
             &self.conf.query_reskey.clone(),
             &self.conf.query_predicate.clone(),
+            self.conf.query_target.clone(),
+            self.conf.query_consolidation.clone(),
         )
     }
 
     /// Issue a new query on the specified resource key and predicate.
-    pub fn query_on(&mut self, reskey: &ResKey, predicate: &str) -> ZResult<()> {
+    pub fn query_on(
+        &mut self,
+        reskey: &ResKey,
+        predicate: &str,
+        target: QueryTarget,
+        consolidation: QueryConsolidation,
+    ) -> ZResult<()> {
         let mut state = zwrite!(self.receiver.state);
 
         if state.query_replies_recv.is_none() {
@@ -163,12 +186,7 @@ impl QueryingSubscriber<'_> {
             state.query_replies_recv = Some(
                 self.conf
                     .session
-                    .query(
-                        reskey,
-                        predicate,
-                        QueryTarget::default(),
-                        QueryConsolidation::default(),
-                    )
+                    .query(reskey, predicate, target, consolidation)
                     .wait()?,
             );
             Ok(())
