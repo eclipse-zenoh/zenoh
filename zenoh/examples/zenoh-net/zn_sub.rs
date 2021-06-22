@@ -47,7 +47,7 @@ async fn main() {
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.payload.flatten()));
+                    sample.res_name, String::from_utf8_lossy(&sample.payload.contigous()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

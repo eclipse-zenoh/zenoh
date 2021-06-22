@@ -314,7 +314,7 @@ impl RBuf {
 
     // returns a ZSlice that may allocate in case of RBuf being composed of multiple ZSlices
     #[inline]
-    pub fn flatten(&self) -> ZSlice {
+    pub fn contigous(&self) -> ZSlice {
         match &self.slices {
             RBufInner::Single(s) => s.clone(),
             RBufInner::Multiple(_) => self.to_vec().into(),
@@ -428,12 +428,17 @@ impl RBuf {
 
 impl fmt::Display for RBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "RBuf{{ pos: {:?}, content: {} }}",
-            self.get_pos(),
-            hex::encode_upper(self.flatten())
-        )
+        write!(f, "RBuf{{ pos: {:?}, content: ", self.get_pos(),)?;
+        match &self.slices {
+            RBufInner::Single(s) => write!(f, "{}", hex::encode_upper(s.as_slice()))?,
+            RBufInner::Multiple(m) => {
+                for s in m.iter() {
+                    write!(f, "{}", hex::encode_upper(s.as_slice()))?;
+                }
+            }
+            RBufInner::Empty => {}
+        }
+        write!(f, " }}")
     }
 }
 
@@ -477,53 +482,29 @@ impl fmt::Debug for RBuf {
     }
 }
 
-/*************************************/
-/*           RBUF ITERATOR           */
-/*************************************/
-pub struct RBufIterator {
-    index: usize,
-    slices: RBufInner,
-}
-
-impl Iterator for RBufIterator {
+impl Iterator for RBuf {
     type Item = ZSlice;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match &self.slices {
-            RBufInner::Single(s) => {
-                let s = s.clone();
-                self.slices = RBufInner::Empty;
-                Some(s)
-            }
-            RBufInner::Multiple(m) => {
-                let s = m.get(self.index)?.clone();
-                self.index += 1;
-                Some(s)
-            }
-            RBufInner::Empty => None,
+        let mut slice = self.curr_slice()?.clone();
+        if self.pos.byte > 0 {
+            slice = slice.new_sub_slice(self.pos.byte, slice.len());
+            self.pos.byte = 0;
         }
+        self.pos.slice += 1;
+        self.pos.read += slice.len();
+
+        Some(slice)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         match &self.slices {
             RBufInner::Single(_) => (1, Some(1)),
             RBufInner::Multiple(m) => {
-                let remaining = m.len() - self.index;
+                let remaining = m.len() - self.pos.slice;
                 (remaining, Some(remaining))
             }
             RBufInner::Empty => (0, Some(0)),
-        }
-    }
-}
-
-impl IntoIterator for RBuf {
-    type Item = ZSlice;
-    type IntoIter = RBufIterator;
-
-    fn into_iter(self) -> Self::IntoIter {
-        RBufIterator {
-            index: 0,
-            slices: self.slices,
         }
     }
 }
