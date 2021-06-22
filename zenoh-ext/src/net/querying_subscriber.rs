@@ -129,7 +129,7 @@ impl QueryingSubscriber<'_> {
         };
 
         // start query
-        query_subscriber.do_query()?;
+        query_subscriber.query()?;
 
         Ok(query_subscriber)
     }
@@ -146,22 +146,26 @@ impl QueryingSubscriber<'_> {
         &mut self.receiver
     }
 
-    /// Issue a new query using the configured resrouce key and predicate.
-    pub fn do_query(&mut self) -> ZResult<()> {
+    /// Issue a new query using the configured resource key and predicate.
+    pub fn query(&mut self) -> ZResult<()> {
+        self.query_on(
+            &self.conf.query_reskey.clone(),
+            &self.conf.query_predicate.clone(),
+        )
+    }
+
+    /// Issue a new query on the specified resource key and predicate.
+    pub fn query_on(&mut self, reskey: &ResKey, predicate: &str) -> ZResult<()> {
         let mut state = zwrite!(self.receiver.state);
 
         if state.query_replies_recv.is_none() {
-            log::debug!(
-                "Start query on {}?{}",
-                self.conf.query_reskey,
-                self.conf.query_predicate
-            );
+            log::debug!("Start query on {}?{}", reskey, predicate);
             state.query_replies_recv = Some(
                 self.conf
                     .session
                     .query(
-                        &self.conf.query_reskey,
-                        &self.conf.query_predicate,
+                        reskey,
+                        predicate,
                         QueryTarget::default(),
                         QueryConsolidation::default(),
                     )
@@ -171,8 +175,8 @@ impl QueryingSubscriber<'_> {
         } else {
             log::error!(
                 "Cannot start query on {}?{} - one is already in progress",
-                self.conf.query_reskey,
-                self.conf.query_predicate
+                reskey,
+                predicate
             );
             zerror!(ZErrorKind::Other {
                 descr: "Query already in progress".to_string()

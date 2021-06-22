@@ -54,7 +54,7 @@ async fn main() {
                 if input[0] == b'q' {break}
                 else if input[0] == b'd' {
                     println!("Do query again...");
-                    subscriber.do_query().unwrap()
+                    subscriber.query().unwrap()
                 }
             }
         );

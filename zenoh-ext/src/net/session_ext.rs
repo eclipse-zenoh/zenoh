@@ -22,7 +22,8 @@ pub trait SessionExt {
     /// As soon as built (calling `.wait()` or `.await` on the QueryingSubscriberBuilder), the QueryingSubscriber
     /// will issue a query on a given resource key (by default it uses the same resource key than it subscribes to).
     /// The results of the query will be merged with the received publications and made available in the receiver.
-    /// Later on, new queries can be issued again, calling [QueryingSubscriber::do_query()](super::QueryingSubscriber::do_query()).
+    /// Later on, new queries can be issued again, calling [QueryingSubscriber::query()](super::QueryingSubscriber::query()) or
+    /// [QueryingSubscriber::query_on()](super::QueryingSubscriber::query_on()).
     ///
     /// A typical usage of the QueryingSubscriber is to retrieve publications that were made in the past, but stored in some zenoh Storage.
     ///
