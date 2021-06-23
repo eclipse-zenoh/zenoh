@@ -287,7 +287,8 @@ impl SessionTransport {
         } else {
             message.map_to_shmbuf(self.manager.shmr.clone())
         };
-        if res.is_err() {
+        if let Err(e) = res {
+            log::trace!("Failed SHM conversion: {}", e);
             return;
         }
         self.schedule_first_fit(message);
