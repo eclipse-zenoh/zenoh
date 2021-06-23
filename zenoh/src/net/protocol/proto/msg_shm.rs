@@ -68,9 +68,7 @@ impl ZenohMessage {
         {
             if payload.has_shminfo() {
                 res = res || payload.map_to_shmbuf(shmr)?;
-                if !payload.has_shminfo() {
-                    unset_sliced!(self, data_info);
-                }
+                unset_sliced!(self, data_info);
             }
         }
 
@@ -90,9 +88,7 @@ impl ZenohMessage {
         {
             if payload.has_shmbuf() {
                 res = res || payload.map_to_shminfo()?;
-                if payload.has_shminfo() {
-                    set_sliced!(self, data_info);
-                }
+                set_sliced!(self, data_info);
             }
         }
 
