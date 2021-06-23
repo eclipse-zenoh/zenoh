@@ -21,7 +21,7 @@ use std::sync::{Arc, RwLock};
 use zenoh_util::core::ZResult;
 
 #[cfg(feature = "zero-copy")]
-macro_rules! set_shminfo {
+macro_rules! unset_sliced {
     ($msg:expr, $data_info:expr) => {
         // Set the right data info SHM parameters
         if let Some(di) = $data_info {
@@ -34,7 +34,7 @@ macro_rules! set_shminfo {
 }
 
 #[cfg(feature = "zero-copy")]
-macro_rules! unset_shminfo {
+macro_rules! set_sliced {
     ($msg:expr, $data_info:expr) => {
         match $data_info {
             Some(di) => {
@@ -66,10 +66,11 @@ impl ZenohMessage {
             payload, data_info, ..
         }) = &mut self.body
         {
-            res = res || payload.map_to_shmbuf(shmr)?;
-
-            if !payload.has_shminfo() {
-                set_shminfo!(self, data_info);
+            if payload.has_shminfo() {
+                res = res || payload.map_to_shmbuf(shmr)?;
+                if !payload.has_shminfo() {
+                    unset_sliced!(self, data_info);
+                }
             }
         }
 
@@ -87,9 +88,11 @@ impl ZenohMessage {
             payload, data_info, ..
         }) = &mut self.body
         {
-            res = res || payload.map_to_shminfo()?;
-            if payload.has_shminfo() {
-                unset_shminfo!(self, data_info);
+            if payload.has_shmbuf() {
+                res = res || payload.map_to_shminfo()?;
+                if payload.has_shminfo() {
+                    set_sliced!(self, data_info);
+                }
             }
         }
 

@@ -98,6 +98,10 @@ impl Default for RBufInner {
 pub struct RBuf {
     slices: RBufInner,
     pos: RBufPos,
+    #[cfg(feature = "zero-copy")]
+    has_shminfo: bool,
+    #[cfg(feature = "zero-copy")]
+    has_shmbuf: bool,
 }
 
 impl RBuf {
@@ -105,6 +109,10 @@ impl RBuf {
         RBuf {
             slices: RBufInner::default(),
             pos: RBufPos::default(),
+            #[cfg(feature = "zero-copy")]
+            has_shminfo: false,
+            #[cfg(feature = "zero-copy")]
+            has_shmbuf: false,
         }
     }
 
@@ -115,6 +123,13 @@ impl RBuf {
 
     #[inline]
     pub fn add_slice(&mut self, slice: ZSlice) {
+        #[cfg(feature = "zero-copy")]
+        match slice.get_type() {
+            ZSliceType::ShmInfo => self.has_shminfo = true,
+            ZSliceType::ShmBuf => self.has_shmbuf = true,
+            _ => {}
+        }
+
         self.pos.len += slice.len();
         match &mut self.slices {
             RBufInner::Single(s) => {
@@ -362,8 +377,11 @@ impl RBuf {
     }
 
     #[cfg(feature = "zero-copy")]
-    #[inline]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
+        if !self.has_shminfo {
+            return Ok(false);
+        }
+
         self.pos.clear();
 
         let mut res = false;
@@ -380,13 +398,18 @@ impl RBuf {
             }
             RBufInner::Empty => {}
         }
+        self.has_shminfo = false;
+        self.has_shmbuf = true;
 
         Ok(res)
     }
 
     #[cfg(feature = "zero-copy")]
-    #[inline]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        if !self.has_shmbuf {
+            return Ok(false);
+        }
+
         self.pos.clear();
 
         let mut res = false;
@@ -403,26 +426,22 @@ impl RBuf {
             }
             RBufInner::Empty => {}
         }
+        self.has_shminfo = true;
+        self.has_shmbuf = false;
 
         Ok(res)
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(always)]
     pub(crate) fn has_shminfo(&self) -> bool {
-        macro_rules! is_shminfo {
-            ($slice:expr) => {
-                match $slice.get_type() {
-                    ZSliceType::ShmInfo => true,
-                    _ => false,
-                }
-            };
-        }
+        self.has_shminfo
+    }
 
-        match &self.slices {
-            RBufInner::Single(s) => is_shminfo!(s),
-            RBufInner::Multiple(m) => m.iter().any(|s| is_shminfo!(s)),
-            RBufInner::Empty => false,
-        }
+    #[cfg(feature = "zero-copy")]
+    #[inline(always)]
+    pub(crate) fn has_shmbuf(&self) -> bool {
+        self.has_shmbuf
     }
 }
 
