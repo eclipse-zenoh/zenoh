@@ -373,7 +373,7 @@ impl RBuf {
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
 
         #[cfg(feature = "zero-copy")]
-        let sliced = false;
+        let mut sliced = false;
 
         let data_info = if imsg::has_flag(header, zmsg::flag::I) {
             let di = self.read_data_info()?;
