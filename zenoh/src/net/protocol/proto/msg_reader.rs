@@ -16,8 +16,9 @@ use super::io::RBuf;
 use super::msg::*;
 
 impl RBuf {
+    #[allow(unused_variables)]
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
-        #[allow(unused_assignments)]
+        #[allow(unused_mut)]
         let mut sliced = false;
         #[cfg(feature = "zero-copy")]
         {
@@ -367,6 +368,7 @@ impl RBuf {
             CongestionControl::Block
         };
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+        #[allow(unused_mut)]
         let mut sliced = false;
         let data_info = if imsg::has_flag(header, zmsg::flag::I) {
             let di = self.read_data_info()?;

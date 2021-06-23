@@ -214,7 +214,7 @@ pub struct ZSlice {
 
 impl ZSlice {
     pub fn new(buf: ZSliceBuffer, start: usize, end: usize) -> ZSlice {
-        assert!(end <= (&buf).len());
+        assert!(end <= buf.as_slice().len());
         ZSlice { buf, start, end }
     }
 
