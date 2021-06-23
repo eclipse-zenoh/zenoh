@@ -19,10 +19,13 @@ use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use zenoh::net::*;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::ZResult;
 use zenoh_util::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh_util::sync::ZFuture;
-use zenoh_util::{zerror, zwrite};
+use zenoh_util::{zresolved, zwrite};
+
+const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
+const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
@@ -144,7 +147,7 @@ impl QueryingSubscriber<'_> {
         };
 
         // start query
-        query_subscriber.query()?;
+        query_subscriber.query().wait()?;
 
         Ok(query_subscriber)
     }
@@ -162,7 +165,7 @@ impl QueryingSubscriber<'_> {
     }
 
     /// Issue a new query using the configured resource key and predicate.
-    pub fn query(&mut self) -> ZResult<()> {
+    pub fn query(&mut self) -> ZResolvedFuture<ZResult<()>> {
         self.query_on(
             &self.conf.query_reskey.clone(),
             &self.conf.query_predicate.clone(),
@@ -178,27 +181,20 @@ impl QueryingSubscriber<'_> {
         predicate: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> ZResult<()> {
+    ) -> ZResolvedFuture<ZResult<()>> {
         let mut state = zwrite!(self.receiver.state);
-
-        if state.query_replies_recv.is_none() {
-            log::debug!("Start query on {}?{}", reskey, predicate);
-            state.query_replies_recv = Some(
-                self.conf
-                    .session
-                    .query(reskey, predicate, target, consolidation)
-                    .wait()?,
-            );
-            Ok(())
-        } else {
-            log::error!(
-                "Cannot start query on {}?{} - one is already in progress",
-                reskey,
-                predicate
-            );
-            zerror!(ZErrorKind::Other {
-                descr: "Query already in progress".to_string()
-            })
+        log::debug!("Start query on {}?{}", reskey, predicate);
+        match self
+            .conf
+            .session
+            .query(reskey, predicate, target, consolidation)
+            .wait()
+        {
+            Ok(recv) => {
+                state.replies_recv_queue.push(recv);
+                zresolved!(Ok(()))
+            }
+            Err(err) => zresolved!(Err(err)),
         }
     }
 }
@@ -212,8 +208,8 @@ impl QueryingSubscriberReceiver {
         QueryingSubscriberReceiver {
             state: Arc::new(RwLock::new(InnerState {
                 subscriber_recv,
-                query_replies_recv: None,
-                merge_queue: Vec::new(),
+                replies_recv_queue: Vec::with_capacity(REPLIES_RECV_QUEUE_INITIAL_CAPCITY),
+                merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
             })),
         }
     }
@@ -253,7 +249,7 @@ impl Receiver<Sample> for QueryingSubscriberReceiver {
 
 struct InnerState {
     subscriber_recv: SampleReceiver,
-    query_replies_recv: Option<ReplyReceiver>,
+    replies_recv_queue: Vec<ReplyReceiver>,
     merge_queue: Vec<Sample>,
 }
 
@@ -263,40 +259,52 @@ impl Stream for InnerState {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let mself = self.get_mut();
 
-        // if a query is in progress
-        if let Some(query_replies_recv) = &mut mself.query_replies_recv {
-            // get all replies and add them to merge_queue
-            loop {
-                match query_replies_recv.poll_next(cx) {
-                    Poll::Ready(Some(mut reply)) => {
-                        log::trace!("Reply received: {}", reply.data.res_name);
-                        reply.data.ensure_timestamp();
-                        mself.merge_queue.push(reply.data);
+        // if there are queries is in progress
+        if !mself.replies_recv_queue.is_empty() {
+            // get all available replies and add them to merge_queue
+            let mut i = 0;
+            while i < mself.replies_recv_queue.len() {
+                loop {
+                    match mself.replies_recv_queue[i].poll_next(cx) {
+                        Poll::Ready(Some(mut reply)) => {
+                            log::trace!("Reply received: {}", reply.data.res_name);
+                            reply.data.ensure_timestamp();
+                            mself.merge_queue.push(reply.data);
+                        }
+                        Poll::Ready(None) => {
+                            // query completed - remove the receiver and break loop
+                            mself.replies_recv_queue.remove(i);
+                            break;
+                        }
+                        Poll::Pending => break, // query still in progress - break loop
                     }
-                    Poll::Ready(None) => break, // query completed - break loop
-                    Poll::Pending => return Poll::Pending, // query still in progress - return the same
                 }
+                i += 1;
+            }
+
+            // if the receivers queue is still not empty, it means there are remaining queries
+            if !mself.replies_recv_queue.is_empty() {
+                return Poll::Pending;
             }
             log::debug!(
-                "Query completed, received {} replies",
+                "All queries completed, received {} replies",
                 mself.merge_queue.len()
             );
-            mself.query_replies_recv = None;
 
-            // get all publications received during the query and add them to merge_queue
+            // get all publications received during the queries and add them to merge_queue
             while let Poll::Ready(Some(mut sample)) = mself.subscriber_recv.poll_next(cx) {
                 log::trace!("Pub received in parallel of query: {}", sample.res_name);
                 sample.ensure_timestamp();
                 mself.merge_queue.push(sample);
             }
 
-            // remove duplicates and sort merge_queue
-            mself
-                .merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            // sort and remove duplicates from merge_queue
             mself
                 .merge_queue
                 .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            mself
+                .merge_queue
+                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
             mself.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -321,19 +329,20 @@ impl Stream for InnerState {
 
 impl InnerState {
     fn recv(&mut self) -> Result<Sample, RecvError> {
-        // if a query is in progress
-        if let Some(query_replies_recv) = &mut self.query_replies_recv {
+        // if there are queries is in progress
+        if !self.replies_recv_queue.is_empty() {
             // get all replies and add them to merge_queue
-            while let Ok(mut reply) = query_replies_recv.recv() {
-                log::trace!("Reply received: {}", reply.data.res_name);
-                reply.data.ensure_timestamp();
-                self.merge_queue.push(reply.data);
+            for recv in self.replies_recv_queue.drain(..) {
+                while let Ok(mut reply) = recv.recv() {
+                    log::trace!("Reply received: {}", reply.data.res_name);
+                    reply.data.ensure_timestamp();
+                    self.merge_queue.push(reply.data);
+                }
             }
             log::debug!(
-                "Query completed, received {} replies",
+                "All queries completed, received {} replies",
                 self.merge_queue.len()
             );
-            self.query_replies_recv = None;
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
@@ -342,11 +351,11 @@ impl InnerState {
                 self.merge_queue.push(sample);
             }
 
-            // remove duplicates and sort merge_queue
-            self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            // sort and remove duplicates from merge_queue
             self.merge_queue
                 .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            self.merge_queue
+                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -369,25 +378,37 @@ impl InnerState {
     }
 
     fn try_recv(&mut self) -> Result<Sample, TryRecvError> {
-        // if a query is in progress
-        if let Some(query_replies_recv) = &mut self.query_replies_recv {
-            // get all replies and add them to merge_queue
-            loop {
-                match query_replies_recv.try_recv() {
-                    Ok(mut reply) => {
-                        log::trace!("Reply received: {}", reply.data.res_name);
-                        reply.data.ensure_timestamp();
-                        self.merge_queue.push(reply.data);
+        // if there are queries is in progress
+        if !self.replies_recv_queue.is_empty() {
+            // get all available replies and add them to merge_queue
+            let mut i = 0;
+            while i < self.replies_recv_queue.len() {
+                loop {
+                    match self.replies_recv_queue[i].try_recv() {
+                        Ok(mut reply) => {
+                            log::trace!("Reply received: {}", reply.data.res_name);
+                            reply.data.ensure_timestamp();
+                            self.merge_queue.push(reply.data);
+                        }
+                        Err(TryRecvError::Disconnected) => {
+                            // query completed - remove the receiver and break loop
+                            self.replies_recv_queue.remove(i);
+                            break;
+                        }
+                        Err(TryRecvError::Empty) => break, // query still in progress - break loop
                     }
-                    Err(TryRecvError::Disconnected) => break, // query completed - break loop
-                    Err(TryRecvError::Empty) => return Err(TryRecvError::Empty), // query still in progress - return the same
                 }
+                i += 1;
+            }
+
+            // if the receivers queue is still not empty, it means there are remaining queries
+            if !self.replies_recv_queue.is_empty() {
+                return Err(TryRecvError::Empty);
             }
             log::debug!(
-                "Query completed, received {} replies",
+                "All queries completed, received {} replies",
                 self.merge_queue.len()
             );
-            self.query_replies_recv = None;
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
@@ -396,11 +417,11 @@ impl InnerState {
                 self.merge_queue.push(sample);
             }
 
-            // remove duplicates and sort merge_queue
-            self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            // sort and remove duplicates from merge_queue
             self.merge_queue
                 .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            self.merge_queue
+                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -428,25 +449,37 @@ impl InnerState {
     }
 
     fn recv_deadline(&mut self, deadline: Instant) -> Result<Sample, RecvTimeoutError> {
-        // if a query is in progress
-        if let Some(query_replies_recv) = &mut self.query_replies_recv {
-            // get all replies and add them to merge_queue
-            loop {
-                match query_replies_recv.recv_deadline(deadline) {
-                    Ok(mut reply) => {
-                        log::trace!("Reply received: {}", reply.data.res_name);
-                        reply.data.ensure_timestamp();
-                        self.merge_queue.push(reply.data);
+        // if there are queries is in progress
+        if !self.replies_recv_queue.is_empty() {
+            // get all available replies and add them to merge_queue
+            let mut i = 0;
+            while i < self.replies_recv_queue.len() {
+                loop {
+                    match self.replies_recv_queue[i].recv_deadline(deadline) {
+                        Ok(mut reply) => {
+                            log::trace!("Reply received: {}", reply.data.res_name);
+                            reply.data.ensure_timestamp();
+                            self.merge_queue.push(reply.data);
+                        }
+                        Err(RecvTimeoutError::Disconnected) => {
+                            // query completed - remove the receiver and break loop
+                            self.replies_recv_queue.remove(i);
+                            break;
+                        }
+                        Err(RecvTimeoutError::Timeout) => break, // query still in progress - break loop
                     }
-                    Err(RecvTimeoutError::Disconnected) => break, // query completed - break loop
-                    Err(RecvTimeoutError::Timeout) => return Err(RecvTimeoutError::Timeout), // timeout - return the same
                 }
+                i += 1;
+            }
+
+            // if the receivers queue is still not empty, it means there are remaining queries, and that a timeout occured
+            if !self.replies_recv_queue.is_empty() {
+                return Err(RecvTimeoutError::Timeout);
             }
             log::debug!(
-                "Query completed, received {} replies",
+                "All queries completed, received {} replies",
                 self.merge_queue.len()
             );
-            self.query_replies_recv = None;
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
@@ -455,11 +488,11 @@ impl InnerState {
                 self.merge_queue.push(sample);
             }
 
-            // remove duplicates and sort merge_queue
-            self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            // sort and remove duplicates from merge_queue
             self.merge_queue
                 .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+            self.merge_queue
+                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",

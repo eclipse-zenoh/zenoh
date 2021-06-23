@@ -51,10 +51,10 @@ async fn main() {
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' {break}
+                if input[0] == b'q' { break }
                 else if input[0] == b'd' {
                     println!("Do query again...");
-                    subscriber.query().unwrap()
+                    subscriber.query().await.unwrap()
                 }
             }
         );
