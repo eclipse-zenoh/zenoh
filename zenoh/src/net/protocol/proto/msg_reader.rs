@@ -18,14 +18,17 @@ use super::msg::*;
 impl RBuf {
     #[allow(unused_variables)]
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
-        #[allow(unused_mut)]
-        let mut sliced = false;
         #[cfg(feature = "zero-copy")]
         {
-            sliced = imsg::has_flag(header, smsg::flag::Z);
+            let buffer = self.read_rbuf(imsg::has_flag(header, smsg::flag::Z))?;
+            Some(Attachment { buffer })
         }
-        let buffer = self.read_rbuf(sliced)?;
-        Some(Attachment { buffer })
+
+        #[cfg(not(feature = "zero-copy"))]
+        {
+            let buffer = self.read_rbuf()?;
+            Some(Attachment { buffer })
+        }
     }
 
     /*************************************/
@@ -368,8 +371,10 @@ impl RBuf {
             CongestionControl::Block
         };
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-        #[allow(unused_mut)]
-        let mut sliced = false;
+
+        #[cfg(feature = "zero-copy")]
+        let sliced = false;
+
         let data_info = if imsg::has_flag(header, zmsg::flag::I) {
             let di = self.read_data_info()?;
             #[cfg(feature = "zero-copy")]
@@ -380,7 +385,11 @@ impl RBuf {
         } else {
             None
         };
+
+        #[cfg(feature = "zero-copy")]
         let payload = self.read_rbuf(sliced)?;
+        #[cfg(not(feature = "zero-copy"))]
+        let payload = self.read_rbuf()?;
 
         let body = ZenohBody::Data(Data {
             key,

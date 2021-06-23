@@ -21,16 +21,12 @@ impl WBuf {
         zcheck!(self.write(attachment.header()));
         #[cfg(feature = "zero-copy")]
         {
-            if attachment.buffer.has_shminfo() {
-                self.write_rbuf(&attachment.buffer, true)
-            } else {
-                self.write_rbuf(&attachment.buffer, false)
-            }
+            self.write_rbuf(&attachment.buffer, attachment.buffer.has_shminfo())
         }
 
         #[cfg(not(feature = "zero-copy"))]
         {
-            self.write_rbuf(&attachment.buffer, false)
+            self.write_rbuf(&attachment.buffer)
         }
     }
 
@@ -253,20 +249,26 @@ impl WBuf {
     fn write_data(&mut self, data: &Data) -> bool {
         zcheck!(self.write(data.header()));
         zcheck!(self.write_reskey(&data.key));
-        let sliced = if let Some(data_info) = data.data_info.as_ref() {
+
+        #[cfg(feature = "zero-copy")]
+        let mut sliced = false;
+
+        if let Some(data_info) = data.data_info.as_ref() {
             zcheck!(self.write_data_info(data_info));
             #[cfg(feature = "zero-copy")]
             {
-                data_info.sliced
+                sliced = data_info.sliced
             }
-            #[cfg(not(feature = "zero-copy"))]
-            {
-                false
-            }
-        } else {
-            false
-        };
-        self.write_rbuf(&data.payload, sliced)
+        }
+
+        #[cfg(feature = "zero-copy")]
+        {
+            self.write_rbuf(&data.payload, sliced)
+        }
+        #[cfg(not(feature = "zero-copy"))]
+        {
+            self.write_rbuf(&data.payload)
+        }
     }
 
     pub fn write_data_info(&mut self, info: &DataInfo) -> bool {
