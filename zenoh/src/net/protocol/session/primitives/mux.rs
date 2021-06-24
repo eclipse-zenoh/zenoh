@@ -13,7 +13,7 @@
 //
 use super::core::{CongestionControl, PeerId, Reliability, ResKey, ZInt};
 use super::core::{QueryConsolidation, QueryTarget, SubInfo};
-use super::io::RBuf;
+use super::io::ZBuf;
 use super::proto::{
     zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
     ForgetSubscriber, Publisher, Queryable, ReplyContext, Resource, RoutingContext, Subscriber,
@@ -123,7 +123,7 @@ impl Primitives for Mux {
     fn send_data(
         &self,
         reskey: &ResKey,
-        payload: RBuf,
+        payload: ZBuf,
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
@@ -173,7 +173,7 @@ impl Primitives for Mux {
         replier_id: PeerId,
         reskey: ResKey,
         data_info: Option<DataInfo>,
-        payload: RBuf,
+        payload: ZBuf,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             reskey,

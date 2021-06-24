@@ -22,7 +22,7 @@ use zenoh_util::zread;
 use super::protocol::core::{
     whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode, ZInt,
 };
-use super::protocol::io::RBuf;
+use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
@@ -1149,7 +1149,7 @@ pub fn route_data(
     suffix: &str,
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
-    payload: RBuf,
+    payload: ZBuf,
     routing_context: Option<RoutingContext>,
 ) {
     match tables.get_mapping(&face, &rid).cloned() {
@@ -1190,7 +1190,7 @@ pub fn full_reentrant_route_data(
     suffix: &str,
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
-    payload: RBuf,
+    payload: ZBuf,
     routing_context: Option<RoutingContext>,
 ) {
     let tables = zread!(tables_ref);

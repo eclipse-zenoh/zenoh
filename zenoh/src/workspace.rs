@@ -14,9 +14,9 @@
 use crate::net::queryable::EVAL;
 use crate::net::{
     data_kind, encoding, CallbackSubscriber, CongestionControl, DataInfo, Query,
-    QueryConsolidation, QueryTarget, Queryable, RBuf, Receiver, RecvError, RecvTimeoutError,
-    Reliability, RepliesSender, Reply, ReplyReceiver, ResKey, Sample, SampleReceiver, Session,
-    SubInfo, SubMode, Subscriber, TryRecvError, ZFuture, ZInt, ZResolvedFuture,
+    QueryConsolidation, QueryTarget, Queryable, Receiver, RecvError, RecvTimeoutError, Reliability,
+    RepliesSender, Reply, ReplyReceiver, ResKey, Sample, SampleReceiver, Session, SubInfo, SubMode,
+    Subscriber, TryRecvError, ZBuf, ZFuture, ZInt, ZResolvedFuture,
 };
 use crate::utils::new_reception_timestamp;
 use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
@@ -174,7 +174,7 @@ impl Workspace<'_> {
         match self.path_to_reskey(path) {
             Ok(reskey) => self.session().write_ext(
                 &reskey,
-                RBuf::new(),
+                ZBuf::new(),
                 encoding::NONE,
                 data_kind::DELETE,
                 CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
@@ -552,7 +552,7 @@ impl Change {
                 info.encoding = Some(e);
                 p
             }
-            None => RBuf::new(),
+            None => ZBuf::new(),
         };
 
         Sample {

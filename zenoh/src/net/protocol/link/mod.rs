@@ -24,7 +24,7 @@ pub mod udp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 pub mod unixsock_stream;
 
-use super::io::{RBuf, WBuf};
+use super::io::{WBuf, ZBuf};
 use super::proto::SessionMessage;
 use super::session;
 use async_std::sync::Arc;
@@ -101,10 +101,10 @@ impl Link {
             buffer
         };
 
-        let mut rbuf = RBuf::from(buffer);
+        let mut zbuf = ZBuf::from(buffer);
         let mut messages: Vec<SessionMessage> = Vec::with_capacity(1);
-        while rbuf.can_read() {
-            match rbuf.read_session_message() {
+        while zbuf.can_read() {
+            match zbuf.read_session_message() {
                 Some(msg) => messages.push(msg),
                 None => {
                     let e = format!("Decoding error on link: {}", self);

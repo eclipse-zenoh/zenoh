@@ -14,8 +14,8 @@
 mod zslice;
 pub use zslice::*;
 
-mod rbuf;
-pub use rbuf::*;
+mod zbuf;
+pub use zbuf::*;
 
 mod wbuf;
 pub use wbuf::*;

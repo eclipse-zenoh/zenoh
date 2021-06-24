@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::encoding::*;
-use crate::net::{RBuf, Sample, WBuf, ZInt};
+use crate::net::{Sample, WBuf, ZBuf, ZInt};
 use crate::workspace::ChangeKind;
 use crate::Properties;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -21,12 +21,12 @@ use zenoh_util::{zerror, zerror2};
 /// A user value that is associated with a [Path](super::Path) in zenoh.
 #[derive(Clone, Debug)]
 pub enum Value {
-    /// A value as a bytes buffer (_RBuf_) and an encoding flag.  
+    /// A value as a bytes buffer (_ZBuf_) and an encoding flag.  
     /// See [zenoh::net::enocding](crate::net::encoding) for available flags.
-    Raw(ZInt, RBuf),
+    Raw(ZInt, ZBuf),
     /// A value as a bytes buffer and an encoding description (free String).  
     /// Note: this is equivalent to `Raw(APP_CUSTOM, buf)` where buf contains the encoding description and the data.
-    Custom { encoding_descr: String, data: RBuf },
+    Custom { encoding_descr: String, data: ZBuf },
     /// A String value.  
     /// Note: this is equivalent to `Raw(STRING, buf)` where buf contains the String
     StringUtf8(String),
@@ -75,7 +75,7 @@ impl Value {
     }
 
     /// Encodes the Value and return the resulting buffer and its encoding flag.
-    pub fn encode(self) -> (ZInt, RBuf) {
+    pub fn encode(self) -> (ZInt, ZBuf) {
         use Value::*;
         match self {
             Raw(encoding, buf) => (encoding, buf),
@@ -85,25 +85,25 @@ impl Value {
             } => {
                 let mut buf = WBuf::new(64, false);
                 buf.write_string(&encoding_descr);
-                buf.write_rbuf_slices(&data);
+                buf.write_zbuf_slices(&data);
                 (APP_CUSTOM, buf.into())
             }
-            StringUtf8(s) => (STRING, RBuf::from(s.as_bytes())),
-            Properties(props) => (APP_PROPERTIES, RBuf::from(props.to_string().as_bytes())),
-            Json(s) => (APP_JSON, RBuf::from(s.as_bytes())),
-            Integer(i) => (APP_INTEGER, RBuf::from(i.to_string().as_bytes())),
-            Float(f) => (APP_FLOAT, RBuf::from(f.to_string().as_bytes())),
+            StringUtf8(s) => (STRING, ZBuf::from(s.as_bytes())),
+            Properties(props) => (APP_PROPERTIES, ZBuf::from(props.to_string().as_bytes())),
+            Json(s) => (APP_JSON, ZBuf::from(s.as_bytes())),
+            Integer(i) => (APP_INTEGER, ZBuf::from(i.to_string().as_bytes())),
+            Float(f) => (APP_FLOAT, ZBuf::from(f.to_string().as_bytes())),
         }
     }
 
     /// Decodes the payload according to the encoding flag.
-    pub fn decode(encoding: ZInt, mut payload: RBuf) -> ZResult<Value> {
+    pub fn decode(encoding: ZInt, mut payload: ZBuf) -> ZResult<Value> {
         use Value::*;
         match encoding {
             APP_CUSTOM => {
                 if let Some(encoding_descr) = payload.read_string() {
-                    let mut data = RBuf::new();
-                    payload.drain_into_rbuf(&mut data);
+                    let mut data = ZBuf::new();
+                    payload.drain_into_zbuf(&mut data);
                     Ok(Custom {
                         encoding_descr,
                         data,
@@ -321,21 +321,21 @@ impl Value {
     }
 }
 
-impl From<RBuf> for Value {
-    fn from(buf: RBuf) -> Self {
+impl From<ZBuf> for Value {
+    fn from(buf: ZBuf) -> Self {
         Value::Raw(APP_OCTET_STREAM, buf)
     }
 }
 
 impl From<Vec<u8>> for Value {
     fn from(buf: Vec<u8>) -> Self {
-        Value::from(RBuf::from(buf))
+        Value::from(ZBuf::from(buf))
     }
 }
 
 impl From<&[u8]> for Value {
     fn from(buf: &[u8]) -> Self {
-        Value::from(RBuf::from(buf))
+        Value::from(ZBuf::from(buf))
     }
 }
 

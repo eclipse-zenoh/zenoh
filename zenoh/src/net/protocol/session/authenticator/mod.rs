@@ -20,7 +20,7 @@ use super::core;
 use super::core::{PeerId, Property, ZInt};
 #[cfg(feature = "zero-copy")]
 use super::io;
-use super::io::{RBuf, WBuf};
+use super::io::{WBuf, ZBuf};
 use super::link::{Link, Locator, LocatorProperty};
 use async_std::sync::Arc;
 use async_trait::async_trait;

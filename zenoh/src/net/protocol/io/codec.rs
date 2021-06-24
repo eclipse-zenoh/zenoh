@@ -17,7 +17,7 @@ use super::link::Locator;
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
 use super::ZSliceBuffer;
-use super::{RBuf, WBuf, ZSlice};
+use super::{WBuf, ZBuf, ZSlice};
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 #[cfg(feature = "zero-copy")]
@@ -73,15 +73,15 @@ impl SharedMemoryBufInfo {
     }
 }
 
-// RBuf encoding
+// ZBuf encoding
 //
 // When non-sliced:
 //
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// ~  rbuf length  ~
+// ~  zbuf length  ~
 // +---------------+
-// ~  rbuf bytes   ~
+// ~  zbuf bytes   ~
 // +---------------+
 //
 //
@@ -106,7 +106,7 @@ impl SharedMemoryBufInfo {
 // ~  slice bytes  ~
 // +---------------+
 
-impl RBuf {
+impl ZBuf {
     #[inline(always)]
     pub fn read_zint(&mut self) -> Option<ZInt> {
         read_zint!(self, ZInt);
@@ -188,11 +188,11 @@ impl RBuf {
     }
 
     #[inline(always)]
-    fn read_rbuf_flat(&mut self) -> Option<RBuf> {
+    fn read_zbuf_flat(&mut self) -> Option<ZBuf> {
         let len = self.read_zint_as_usize()?;
-        let mut rbuf = RBuf::new();
-        if self.read_into_rbuf(&mut rbuf, len) {
-            Some(rbuf)
+        let mut zbuf = ZBuf::new();
+        if self.read_into_zbuf(&mut zbuf, len) {
+            Some(zbuf)
         } else {
             None
         }
@@ -200,43 +200,43 @@ impl RBuf {
 
     #[cfg(feature = "zero-copy")]
     #[inline(always)]
-    fn read_rbuf_sliced(&mut self) -> Option<RBuf> {
+    fn read_zbuf_sliced(&mut self) -> Option<ZBuf> {
         let num = self.read_zint_as_usize()?;
-        let mut rbuf = RBuf::new();
+        let mut zbuf = ZBuf::new();
         for _ in 0..num {
             let kind = self.read()?;
             match kind {
                 zslice::kind::RAW => {
                     let len = self.read_zint_as_usize()?;
-                    if !self.read_into_rbuf(&mut rbuf, len) {
+                    if !self.read_into_zbuf(&mut zbuf, len) {
                         return None;
                     }
                 }
                 zslice::kind::SHM_INFO => {
                     let slice = self.read_shminfo()?;
-                    rbuf.add_slice(slice);
+                    zbuf.add_slice(slice);
                 }
                 _ => return None,
             }
         }
-        Some(rbuf)
+        Some(zbuf)
     }
 
-    // Same as read_bytes_array but 0 copy on RBuf.
+    // Same as read_bytes_array but 0 copy on ZBuf.
     #[cfg(feature = "zero-copy")]
     #[inline(always)]
-    pub fn read_rbuf(&mut self, sliced: bool) -> Option<RBuf> {
+    pub fn read_zbuf(&mut self, sliced: bool) -> Option<ZBuf> {
         if !sliced {
-            self.read_rbuf_flat()
+            self.read_zbuf_flat()
         } else {
-            self.read_rbuf_sliced()
+            self.read_zbuf_sliced()
         }
     }
 
     #[cfg(not(feature = "zero-copy"))]
     #[inline(always)]
-    pub fn read_rbuf(&mut self) -> Option<RBuf> {
-        self.read_rbuf_flat()
+    pub fn read_zbuf(&mut self) -> Option<ZBuf> {
+        self.read_zbuf_flat()
     }
 
     pub fn read_properties(&mut self) -> Option<Vec<Property>> {
@@ -321,17 +321,17 @@ impl WBuf {
     }
 
     #[inline(always)]
-    fn write_rbuf_flat(&mut self, rbuf: &RBuf) -> bool {
-        zcheck!(self.write_usize_as_zint(rbuf.len()));
-        self.write_rbuf_slices(rbuf)
+    fn write_zbuf_flat(&mut self, zbuf: &ZBuf) -> bool {
+        zcheck!(self.write_usize_as_zint(zbuf.len()));
+        self.write_zbuf_slices(zbuf)
     }
 
     #[cfg(feature = "zero-copy")]
     #[inline(always)]
-    fn write_rbuf_sliced(&mut self, rbuf: &RBuf) -> bool {
-        zcheck!(self.write_usize_as_zint(rbuf.zslices_num()));
+    fn write_zbuf_sliced(&mut self, zbuf: &ZBuf) -> bool {
+        zcheck!(self.write_usize_as_zint(zbuf.zslices_num()));
         let mut idx = 0;
-        while let Some(slice) = rbuf.get_zslice(idx) {
+        while let Some(slice) = zbuf.get_zslice(idx) {
             match &slice.buf {
                 ZSliceBuffer::ShmInfo(_) => zcheck!(self.write(zslice::kind::SHM_INFO)),
                 _ => zcheck!(self.write(zslice::kind::RAW)),
@@ -345,24 +345,24 @@ impl WBuf {
 
     #[cfg(feature = "zero-copy")]
     #[inline(always)]
-    pub fn write_rbuf(&mut self, rbuf: &RBuf, sliced: bool) -> bool {
+    pub fn write_zbuf(&mut self, zbuf: &ZBuf, sliced: bool) -> bool {
         if !sliced {
-            self.write_rbuf_flat(rbuf)
+            self.write_zbuf_flat(zbuf)
         } else {
-            self.write_rbuf_sliced(rbuf)
+            self.write_zbuf_sliced(zbuf)
         }
     }
 
     #[cfg(not(feature = "zero-copy"))]
     #[inline(always)]
-    pub fn write_rbuf(&mut self, rbuf: &RBuf) -> bool {
-        self.write_rbuf_flat(rbuf)
+    pub fn write_zbuf(&mut self, zbuf: &ZBuf) -> bool {
+        self.write_zbuf_flat(zbuf)
     }
 
     #[inline(always)]
-    pub fn write_rbuf_slices(&mut self, rbuf: &RBuf) -> bool {
+    pub fn write_zbuf_slices(&mut self, zbuf: &ZBuf) -> bool {
         let mut idx = 0;
-        while let Some(slice) = rbuf.get_zslice(idx) {
+        while let Some(slice) = zbuf.get_zslice(idx) {
             zcheck!(self.write_zslice(slice.clone()));
             idx += 1;
         }

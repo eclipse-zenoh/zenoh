@@ -15,7 +15,7 @@ use super::protocol::core::{
     whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
     SubInfo, WhatAmI, ZInt,
 };
-use super::protocol::io::RBuf;
+use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 use super::protocol::session::Primitives;
 use super::router::*;
@@ -431,7 +431,7 @@ impl Primitives for Face {
     fn send_data(
         &self,
         reskey: &ResKey,
-        payload: RBuf,
+        payload: ZBuf,
         _reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
@@ -481,7 +481,7 @@ impl Primitives for Face {
         replier_id: PeerId,
         reskey: ResKey,
         info: Option<DataInfo>,
-        payload: RBuf,
+        payload: ZBuf,
     ) {
         let mut tables = zwrite!(self.tables);
         route_send_reply_data(

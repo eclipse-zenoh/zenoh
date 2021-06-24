@@ -20,7 +20,7 @@ use zenoh_util::sync::get_mut_unchecked;
 use super::protocol::core::{
     queryable, whatami, PeerId, QueryConsolidation, QueryTarget, ResKey, ZInt,
 };
-use super::protocol::io::RBuf;
+use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
@@ -1223,7 +1223,7 @@ pub(crate) fn route_send_reply_data(
     replier_id: PeerId,
     reskey: ResKey,
     info: Option<DataInfo>,
-    payload: RBuf,
+    payload: ZBuf,
 ) {
     match face.pending_queries.get(&qid) {
         Some(query) => {

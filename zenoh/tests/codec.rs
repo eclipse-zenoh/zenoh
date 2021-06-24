@@ -12,12 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use zenoh::net::protocol::core::{ZInt, ZINT_MAX_BYTES};
-use zenoh::net::protocol::io::{RBuf, WBuf};
+use zenoh::net::protocol::io::{WBuf, ZBuf};
 
 fn test_zint(v: ZInt) {
     let mut buf = WBuf::new(32, true);
     buf.write_zint(v);
-    assert_eq!(v, RBuf::from(&buf).read_zint().unwrap());
+    assert_eq!(v, ZBuf::from(&buf).read_zint().unwrap());
 }
 
 #[test]

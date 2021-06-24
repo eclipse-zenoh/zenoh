@@ -29,7 +29,7 @@ async fn main() {
 
     let (config, selector) = parse_args();
 
-    let mut stored: HashMap<String, (RBuf, Option<DataInfo>)> = HashMap::new();
+    let mut stored: HashMap<String, (ZBuf, Option<DataInfo>)> = HashMap::new();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();

@@ -14,7 +14,7 @@
 use super::face::FaceState;
 use super::protocol::core::rname;
 use super::protocol::core::{PeerId, ResKey, SubInfo, ZInt};
-use super::protocol::io::RBuf;
+use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 use super::router::Tables;
 use async_std::sync::{Arc, Weak};
@@ -32,7 +32,7 @@ pub(super) struct SessionContext {
     pub(super) remote_rid: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
     pub(super) qabl: Option<ZInt>,
-    pub(super) last_values: HashMap<String, (Option<DataInfo>, RBuf)>,
+    pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
 }
 
 pub(super) struct ResourceContext {

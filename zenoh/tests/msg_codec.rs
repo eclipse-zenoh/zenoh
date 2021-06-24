@@ -14,7 +14,7 @@
 use rand::*;
 use uhlc::Timestamp;
 use zenoh::net::protocol::core::*;
-use zenoh::net::protocol::io::{RBuf, WBuf};
+use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::*;
 
 const NUM_ITER: usize = 100;
@@ -82,8 +82,8 @@ fn gen_attachment() -> Attachment {
     let props = gen_props(PROPS_LENGTH, PROP_MAX_SIZE);
     wbuf.write_properties(&props);
 
-    let rbuf = RBuf::from(&wbuf);
-    Attachment::make(rbuf)
+    let zbuf = ZBuf::from(&wbuf);
+    Attachment::make(zbuf)
 }
 
 fn gen_declarations() -> Vec<Declaration> {
@@ -225,7 +225,7 @@ fn test_write_read_session_message(msg: SessionMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_session_message(&msg);
     println!("Read message from: {:?}", buf);
-    let mut result = RBuf::from(&buf).read_session_message().unwrap();
+    let mut result = ZBuf::from(&buf).read_session_message().unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = result.attachment.as_mut() {
         let properties = attachment.buffer.read_properties();
@@ -240,7 +240,7 @@ fn test_write_read_zenoh_message(msg: ZenohMessage, reliability: Reliability) {
     println!("\nWrite message: {:?}", msg);
     buf.write_zenoh_message(&msg);
     println!("Read message from: {:?}", buf);
-    let mut result = RBuf::from(&buf).read_zenoh_message(reliability).unwrap();
+    let mut result = ZBuf::from(&buf).read_zenoh_message(reliability).unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = &mut result.attachment {
         let properties = attachment.buffer.read_properties();
@@ -481,7 +481,7 @@ fn codec_frame() {
                                     messages: vec![
                                         ZenohMessage::make_data(
                                             gen_key(),
-                                            RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                            ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
                                             *rl,
                                             *cc,
                                             di.clone(),
@@ -532,7 +532,7 @@ fn codec_frame_batching() {
 
         // Create data message
         let key = ResKey::RName("test".to_string());
-        let payload = RBuf::from(vec![0u8; 1]);
+        let payload = ZBuf::from(vec![0u8; 1]);
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;
         let data_info = None;
@@ -584,15 +584,15 @@ fn codec_frame_batching() {
         written.push(SessionMessage::make_frame(ch, sn, payload, sattachment));
 
         // Deserialize from the buffer
-        let mut rbuf = RBuf::from(&wbuf);
+        let mut zbuf = ZBuf::from(&wbuf);
 
         let mut read: Vec<SessionMessage> = Vec::new();
         loop {
-            let pos = rbuf.get_pos();
-            match rbuf.read_session_message() {
+            let pos = zbuf.get_pos();
+            match zbuf.read_session_message() {
                 Some(msg) => read.push(msg),
                 None => {
-                    assert!(rbuf.set_pos(pos));
+                    assert!(zbuf.set_pos(pos));
                     break;
                 }
             }
@@ -647,7 +647,7 @@ fn codec_data() {
                             for a in attachment.iter() {
                                 let msg = ZenohMessage::make_data(
                                     gen_key(),
-                                    RBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                    ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
                                     *rl,
                                     *cc,
                                     di.clone(),

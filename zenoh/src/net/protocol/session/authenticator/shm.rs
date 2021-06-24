@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{PeerId, Property, ZInt};
-use super::io::{RBuf, SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZSlice};
+use super::io::{SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice};
 use super::{
     attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
@@ -55,7 +55,7 @@ impl WBuf {
     }
 }
 
-impl RBuf {
+impl ZBuf {
     fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
         let shm = self.read_shminfo()?;
@@ -86,7 +86,7 @@ impl WBuf {
     }
 }
 
-impl RBuf {
+impl ZBuf {
     fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty> {
         let challenge = self.read_zint()?;
         let shm = self.read_shminfo()?;
@@ -113,7 +113,7 @@ impl WBuf {
     }
 }
 
-impl RBuf {
+impl ZBuf {
     fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty> {
         let challenge = self.read_zint()?;
         Some(OpenSynProperty { challenge })
@@ -207,11 +207,11 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_syn_property_shm(&init_syn_property);
-        let rbuf: RBuf = wbuf.into();
+        let zbuf: ZBuf = wbuf.into();
 
         let prop = Property {
             key: attachment::authorization::SHM,
-            value: rbuf.to_vec(),
+            value: zbuf.to_vec(),
         };
         let mut res = PeerAuthenticatorOutput::default();
         res.properties.push(prop);
@@ -229,14 +229,14 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::SHM);
-        let mut rbuf: RBuf = match res {
+        let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
                 log::debug!("Peer {} did not express interest in shared memory", peer_id);
                 return Ok(PeerAuthenticatorOutput::default());
             }
         };
-        let mut init_syn_property = match rbuf.read_init_syn_property_shm() {
+        let mut init_syn_property = match zbuf.read_init_syn_property_shm() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -288,11 +288,11 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_ack_property_shm(&init_ack_property);
-        let rbuf: RBuf = wbuf.into();
+        let zbuf: ZBuf = wbuf.into();
 
         let prop = Property {
             key: attachment::authorization::SHM,
-            value: rbuf.to_vec(),
+            value: zbuf.to_vec(),
         };
         let mut res = PeerAuthenticatorOutput::default();
         res.properties.push(prop);
@@ -309,14 +309,14 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::SHM);
-        let mut rbuf: RBuf = match res {
+        let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
                 log::debug!("Peer {} did not express interest in shared memory", peer_id);
                 return Ok(PeerAuthenticatorOutput::default());
             }
         };
-        let mut init_ack_property = match rbuf.read_init_ack_property_shm() {
+        let mut init_ack_property = match zbuf.read_init_ack_property_shm() {
             Some(iaa) => iaa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -356,11 +356,11 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Encode the OpenSyn property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_open_syn_property_shm(&open_syn_property);
-        let rbuf: RBuf = wbuf.into();
+        let zbuf: ZBuf = wbuf.into();
 
         let prop = Property {
             key: attachment::authorization::SHM,
-            value: rbuf.to_vec(),
+            value: zbuf.to_vec(),
         };
 
         let mut res = PeerAuthenticatorOutput::default();
@@ -379,14 +379,14 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::SHM);
-        let mut rbuf: RBuf = match res {
+        let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
                 log::debug!("Received OpenSyn with no SHM attachment on link: {}", link);
                 return Ok(PeerAuthenticatorOutput::default());
             }
         };
-        let open_syn_property = match rbuf.read_open_syn_property_shm() {
+        let open_syn_property = match zbuf.read_open_syn_property_shm() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {

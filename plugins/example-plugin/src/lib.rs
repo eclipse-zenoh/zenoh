@@ -41,7 +41,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     let session = Session::init(runtime, true, vec![], vec![]).await;
 
-    let mut stored: HashMap<String, (RBuf, Option<DataInfo>)> = HashMap::new();
+    let mut stored: HashMap<String, (ZBuf, Option<DataInfo>)> = HashMap::new();
 
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,

@@ -17,7 +17,7 @@ extern crate criterion;
 use criterion::Criterion;
 
 use zenoh::net::protocol::core::{Channel, CongestionControl, Reliability, ResKey};
-use zenoh::net::protocol::io::{RBuf, WBuf};
+use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::defaults::ZN_DEFAULT_BATCH_SIZE;
 
@@ -43,7 +43,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             let res_key = r.clone();
             let info = None;
-            let payload = RBuf::from(vec![0; *p]);
+            let payload = ZBuf::from(vec![0; *p]);
 
             let msg = ZenohMessage::make_data(
                 res_key,
@@ -74,7 +74,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                             let congestion_control = CongestionControl::Block;
                             let res_key = r.clone();
                             let info = None;
-                            let payload = RBuf::from(vec![0; *p]);
+                            let payload = ZBuf::from(vec![0; *p]);
 
                             let msg = ZenohMessage::make_data(
                                 res_key,
@@ -141,10 +141,10 @@ fn criterion_benchmark(c: &mut Criterion) {
                         wbuf.write_zenoh_message(&msg);
                     }
 
-                    let mut rbuf = RBuf::from(&wbuf);
+                    let mut zbuf = ZBuf::from(&wbuf);
                     b.iter(|| {
-                        rbuf.reset();
-                        let _ = rbuf.read_session_message().unwrap();
+                        zbuf.reset();
+                        let _ = zbuf.read_session_message().unwrap();
                     })
                 },
             );
@@ -163,10 +163,10 @@ fn criterion_benchmark(c: &mut Criterion) {
                         wbuf.write_zenoh_message(&msg);
                     }
 
-                    let mut rbuf = RBuf::from(&wbuf);
+                    let mut zbuf = ZBuf::from(&wbuf);
                     b.iter(|| {
-                        rbuf.reset();
-                        let _ = rbuf.read_session_message().unwrap();
+                        zbuf.reset();
+                        let _ = zbuf.read_session_message().unwrap();
                     })
                 },
             );

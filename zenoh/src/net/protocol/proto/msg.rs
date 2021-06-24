@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::*;
-use super::io::{RBuf, ZSlice};
+use super::io::{ZBuf, ZSlice};
 use super::link::Locator;
 use std::fmt;
 
@@ -280,7 +280,7 @@ pub(crate) trait Control {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attachment {
-    pub buffer: RBuf,
+    pub buffer: ZBuf,
 }
 
 impl Header for Attachment {
@@ -296,7 +296,7 @@ impl Header for Attachment {
 }
 
 impl Attachment {
-    pub fn make(buffer: RBuf) -> Attachment {
+    pub fn make(buffer: ZBuf) -> Attachment {
         Attachment { buffer }
     }
 }
@@ -546,7 +546,7 @@ impl PartialOrd for DataInfo {
 pub struct Data {
     pub key: ResKey,
     pub data_info: Option<DataInfo>,
-    pub payload: RBuf,
+    pub payload: ZBuf,
     pub reliability: Reliability,
     pub congestion_control: CongestionControl,
 }
@@ -1107,7 +1107,7 @@ impl ZenohMessage {
     #[inline(always)]
     pub fn make_data(
         key: ResKey,
-        payload: RBuf,
+        payload: ZBuf,
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,

@@ -18,7 +18,7 @@ use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
-use zenoh::net::protocol::io::RBuf;
+use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
@@ -258,7 +258,7 @@ async fn single_run(
 ) {
     // Create the message to send
     let key = ResKey::RName("/test".to_string());
-    let payload = RBuf::from(vec![0u8; msg_size]);
+    let payload = ZBuf::from(vec![0u8; msg_size]);
     let data_info = None;
     let routing_context = None;
     let reply_context = None;

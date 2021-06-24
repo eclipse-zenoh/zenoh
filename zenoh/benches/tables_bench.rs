@@ -18,7 +18,7 @@ use criterion::{BenchmarkId, Criterion};
 use zenoh::net::protocol::core::{
     whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode,
 };
-use zenoh::net::protocol::io::RBuf;
+use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::session::DummyPrimitives;
 use zenoh::net::routing::pubsub::*;
 use zenoh::net::routing::resource::*;
@@ -72,7 +72,7 @@ fn tables_bench(c: &mut Criterion) {
         }
 
         let face0 = face0.upgrade().unwrap();
-        let payload = RBuf::new();
+        let payload = ZBuf::new();
 
         tables_bench.bench_function(BenchmarkId::new("direct_route", p), |b| {
             b.iter(|| {

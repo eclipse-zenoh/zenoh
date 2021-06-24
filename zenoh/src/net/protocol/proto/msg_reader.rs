@@ -12,22 +12,22 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::*;
-use super::io::RBuf;
+use super::io::ZBuf;
 use super::msg::*;
 
-impl RBuf {
+impl ZBuf {
     #[allow(unused_variables)]
     #[inline(always)]
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
         #[cfg(feature = "zero-copy")]
         {
-            let buffer = self.read_rbuf(imsg::has_flag(header, smsg::flag::Z))?;
+            let buffer = self.read_zbuf(imsg::has_flag(header, smsg::flag::Z))?;
             Some(Attachment { buffer })
         }
 
         #[cfg(not(feature = "zero-copy"))]
         {
-            let buffer = self.read_rbuf()?;
+            let buffer = self.read_zbuf()?;
             Some(Attachment { buffer })
         }
     }
@@ -392,9 +392,9 @@ impl RBuf {
         };
 
         #[cfg(feature = "zero-copy")]
-        let payload = self.read_rbuf(sliced)?;
+        let payload = self.read_zbuf(sliced)?;
         #[cfg(not(feature = "zero-copy"))]
-        let payload = self.read_rbuf()?;
+        let payload = self.read_zbuf()?;
 
         let body = ZenohBody::Data(Data {
             key,
@@ -697,9 +697,9 @@ impl RBuf {
     fn read_consolidation(&mut self) -> Option<QueryConsolidation> {
         let modes = self.read_zint()?;
         Some(QueryConsolidation {
-            first_routers: RBuf::read_consolidation_mode((modes >> 4) & 0x03)?,
-            last_router: RBuf::read_consolidation_mode((modes >> 2) & 0x03)?,
-            reception: RBuf::read_consolidation_mode(modes & 0x03)?,
+            first_routers: ZBuf::read_consolidation_mode((modes >> 4) & 0x03)?,
+            last_router: ZBuf::read_consolidation_mode((modes >> 2) & 0x03)?,
+            reception: ZBuf::read_consolidation_mode(modes & 0x03)?,
         })
     }
 

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{Reliability, ZInt};
-use super::io::{RBuf, ZSlice};
+use super::io::{ZBuf, ZSlice};
 use super::proto::ZenohMessage;
 use super::SeqNum;
 
@@ -21,7 +21,7 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 pub(crate) struct DefragBuffer {
     // Keep track of the next expected fragment
     sn: SeqNum,
-    buffer: RBuf,
+    buffer: ZBuf,
     reliability: Reliability,
 }
 
@@ -33,7 +33,7 @@ impl DefragBuffer {
     ) -> DefragBuffer {
         DefragBuffer {
             sn: SeqNum::new(initial_sn, sn_resolution),
-            buffer: RBuf::new(),
+            buffer: ZBuf::new(),
             reliability,
         }
     }

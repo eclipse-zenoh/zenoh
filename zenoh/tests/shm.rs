@@ -20,7 +20,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
-    use zenoh::net::protocol::io::{RBuf, SharedMemoryManager};
+    use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::link::{Link, Locator};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::protocol::session::authenticator::SharedMemoryAuthenticator;
@@ -233,7 +233,7 @@ mod tests {
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let key = ResKey::RName("/test".to_string());
-            let payload: RBuf = sbuf.into();
+            let payload: ZBuf = sbuf.into();
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -289,7 +289,7 @@ mod tests {
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
             let key = ResKey::RName("/test".to_string());
-            let payload: RBuf = sbuf.into();
+            let payload: ZBuf = sbuf.into();
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;

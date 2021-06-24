@@ -16,7 +16,7 @@ use super::authenticator::{
 };
 use super::core::{PeerId, Property, WhatAmI, ZInt};
 use super::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
-use super::io::{RBuf, WBuf, ZSlice};
+use super::io::{WBuf, ZBuf, ZSlice};
 use super::link::Link;
 use super::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
@@ -42,8 +42,8 @@ fn attachment_from_properties(ps: &[Property]) -> ZResult<Attachment> {
     } else {
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_properties(ps);
-        let rbuf: RBuf = wbuf.into();
-        let attachment = Attachment::make(rbuf);
+        let zbuf: ZBuf = wbuf.into();
+        let attachment = Attachment::make(zbuf);
         Ok(attachment)
     }
 }
@@ -75,7 +75,7 @@ impl WBuf {
     }
 }
 
-impl RBuf {
+impl ZBuf {
     fn read_cookie(&mut self) -> Option<Cookie> {
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
@@ -660,7 +660,7 @@ async fn accept_send_init_ack(
     };
 
     // Use the BlockCipher to encrypt the cookie
-    let serialized = RBuf::from(wbuf).to_vec();
+    let serialized = ZBuf::from(wbuf).to_vec();
     let mut guard = zasynclock!(manager.prng);
     let encrypted = manager.cipher.encrypt(serialized, &mut *guard);
     drop(guard);
@@ -778,7 +778,7 @@ async fn accept_recv_open_syn(
         .cipher
         .decrypt(encrypted)
         .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
-    let mut open_syn_cookie = RBuf::from(decrypted);
+    let mut open_syn_cookie = ZBuf::from(decrypted);
 
     // Verify the cookie
     let cookie = match open_syn_cookie.read_cookie() {

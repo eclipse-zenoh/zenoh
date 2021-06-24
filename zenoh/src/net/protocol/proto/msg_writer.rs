@@ -22,12 +22,12 @@ impl WBuf {
         zcheck!(self.write(attachment.header()));
         #[cfg(feature = "zero-copy")]
         {
-            self.write_rbuf(&attachment.buffer, attachment.buffer.has_shminfo())
+            self.write_zbuf(&attachment.buffer, attachment.buffer.has_shminfo())
         }
 
         #[cfg(not(feature = "zero-copy"))]
         {
-            self.write_rbuf(&attachment.buffer)
+            self.write_zbuf(&attachment.buffer)
         }
     }
 
@@ -258,11 +258,11 @@ impl WBuf {
 
         #[cfg(feature = "zero-copy")]
         {
-            self.write_rbuf(&data.payload, sliced)
+            self.write_zbuf(&data.payload, sliced)
         }
         #[cfg(not(feature = "zero-copy"))]
         {
-            self.write_rbuf(&data.payload)
+            self.write_zbuf(&data.payload)
         }
     }
 

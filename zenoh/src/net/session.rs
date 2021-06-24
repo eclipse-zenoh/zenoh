@@ -23,7 +23,7 @@ use protocol::{
         queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget, ResKey,
         ResourceId, ZInt,
     },
-    io::RBuf,
+    io::ZBuf,
     proto::RoutingContext,
     session::Primitives,
 };
@@ -863,7 +863,7 @@ impl Session {
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
-    pub fn write(&self, resource: &ResKey, payload: RBuf) -> ZResolvedFuture<ZResult<()>> {
+    pub fn write(&self, resource: &ResKey, payload: ZBuf) -> ZResolvedFuture<ZResult<()>> {
         trace!("write({:?}, [...])", resource);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -905,7 +905,7 @@ impl Session {
     pub fn write_ext(
         &self,
         resource: &ResKey,
-        payload: RBuf,
+        payload: ZBuf,
         encoding: ZInt,
         kind: ZInt,
         congestion_control: CongestionControl,
@@ -935,7 +935,7 @@ impl Session {
         zresolved!(Ok(()))
     }
 
-    fn handle_data(&self, local: bool, reskey: &ResKey, info: Option<DataInfo>, payload: RBuf) {
+    fn handle_data(&self, local: bool, reskey: &ResKey, info: Option<DataInfo>, payload: ZBuf) {
         let state = zread!(self.state);
         if let ResKey::RId(rid) = reskey {
             match state.get_res(rid, local) {
@@ -1273,7 +1273,7 @@ impl Primitives for Session {
     fn send_data(
         &self,
         reskey: &ResKey,
-        payload: RBuf,
+        payload: ZBuf,
         reliability: Reliability,
         congestion_control: CongestionControl,
         info: Option<DataInfo>,
@@ -1316,7 +1316,7 @@ impl Primitives for Session {
         replier_id: PeerId,
         reskey: ResKey,
         data_info: Option<DataInfo>,
-        payload: RBuf,
+        payload: ZBuf,
     ) {
         trace!(
             "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
