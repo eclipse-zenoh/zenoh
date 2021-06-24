@@ -12,155 +12,54 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{Channel, PeerId, ZInt};
-use super::proto::{Close, Frame, FramePayload, SessionBody, SessionMessage};
-use super::{Link, SessionTransport};
+use super::proto::{Close, Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
+use super::{Link, SessionTransport, SessionTransportChannel};
 use async_std::task;
-use zenoh_util::zread;
+use std::sync::MutexGuard;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::{zerror2, zread};
 
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
-macro_rules! zclose {
-    ($transport:expr, $link:expr) => {
-        // Stop now rx and tx tasks before doing the proper cleanup
-        let _ = $transport.stop_rx($link);
-        let _ = $transport.stop_tx($link);
-        // Delete the whole session
-        let tr = $transport.clone();
-        // Spawn a task to avoid a deadlock waiting for this same task
-        // to finish in the link close() joining the rx handle
-        task::spawn(async move {
-            let _ = tr.delete().await;
-        });
-    };
-}
-macro_rules! zcallback {
-    ($transport:expr, $link:expr, $msg:expr) => {
-        let callback = zread!($transport.callback).clone();
+impl SessionTransport {
+    #[allow(unused_mut)]
+    fn trigger_callback(&self, mut msg: ZenohMessage) -> ZResult<()> {
+        let callback = zread!(self.callback).clone();
         match callback.as_ref() {
             Some(callback) => {
                 #[cfg(feature = "zero-copy")]
-                {
-                    let res = $msg.map_to_shmbuf($transport.manager.shmr.clone());
-                    if let Err(e) = res {
-                        log::trace!(
-                            "Session: {}. Error from SharedMemory: {}. Closing session.",
-                            $transport.pid,
-                            e
-                        );
-                        zclose!($transport, $link);
-                    }
-                }
-
-                let res = callback.handle_message($msg);
-                if let Err(e) = res {
-                    log::trace!(
-                        "Session: {}. Error from callback: {}. Closing session.",
-                        $transport.pid,
-                        e
-                    );
-                    zclose!($transport, $link);
-                }
+                let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
+                callback.handle_message(msg)
             }
             None => {
-                log::trace!(
+                log::debug!(
                     "Session: {}. No callback available, dropping message: {}",
-                    $transport.pid,
-                    $msg
+                    self.pid,
+                    msg
                 );
+                Ok(())
             }
         }
-    };
-}
+    }
 
-macro_rules! zreceiveframe {
-    ($transport:expr, $link:expr, $guard:expr, $sn:expr, $payload:expr) => {
-        let precedes = match $guard.sn.precedes($sn) {
-            Ok(precedes) => precedes,
-            Err(e) => {
-                log::warn!(
-                    "Session: {}. Invalid SN in frame: {}. Closing the session.",
-                    $transport.pid,
-                    e
-                );
-                // Drop the guard before closing the session
-                drop($guard);
-                // Stop now rx and tx tasks before doing the proper cleanup
-                zclose!($transport, $link);
-                // Close the link
-                return;
-            }
-        };
-        if !precedes {
-            log::warn!(
-                "Session: {}. Frame with invalid SN dropped: {}. Expected: {}.",
-                $transport.pid,
-                $sn,
-                $guard.sn.get()
-            );
-            // Drop the fragments if needed
-            if !$guard.defrag_buffer.is_empty() {
-                $guard.defrag_buffer.clear();
-            }
-            // Keep reading
-            return;
-        }
-
-        // Set will always return OK because we have already checked
-        // with precedes() that the sn has the right resolution
-        let _ = $guard.sn.set($sn);
-        match $payload {
-            FramePayload::Fragment { buffer, is_final } => {
-                if $guard.defrag_buffer.is_empty() {
-                    let _ = $guard.defrag_buffer.sync($sn);
-                }
-                let res = $guard.defrag_buffer.push($sn, buffer);
-                if let Err(e) = res {
-                    log::trace!(
-                        "Session: {}. Defragmentation error: {:?}",
-                        $transport.pid,
-                        e
-                    );
-                    $guard.defrag_buffer.clear();
-                    return;
-                }
-
-                if is_final {
-                    // When zero-copy feature is disabled, msg does not need to be mutable
-                    #[allow(unused_mut)]
-                    let mut msg = match $guard.defrag_buffer.defragment() {
-                        Some(msg) => msg,
-                        None => {
-                            log::trace!("Session: {}. Defragmentation error.", $transport.pid);
-                            return;
-                        }
-                    };
-                    zcallback!($transport, $link, msg);
-                }
-            }
-            FramePayload::Messages { mut messages } => {
-                // When zero-copy feature is disabled, msg does not need to be mutable
-                #[allow(unused_mut)]
-                for mut msg in messages.drain(..) {
-                    zcallback!($transport, $link, msg);
-                }
-            }
-        }
-    };
-}
-
-impl SessionTransport {
-    fn handle_close(&self, link: &Link, pid: Option<PeerId>, reason: u8, link_only: bool) {
+    fn handle_close(
+        &self,
+        link: &Link,
+        pid: Option<PeerId>,
+        reason: u8,
+        link_only: bool,
+    ) -> ZResult<()> {
         // Check if the PID is correct when provided
         if let Some(pid) = pid {
             if pid != self.pid {
-                log::warn!(
+                log::debug!(
                     "Received an invalid Close on link {} from peer {} with reason: {}. Ignoring.",
                     link,
                     pid,
                     reason
                 );
-                return;
+                return Ok(());
             }
         }
 
@@ -180,29 +79,67 @@ impl SessionTransport {
                 let _ = c_transport.delete().await;
             }
         });
+
+        Ok(())
     }
 
-    /*************************************/
-    /*   MESSAGE RECEIVED FROM THE LINK  */
-    /*************************************/
-    fn handle_reliable_frame(&self, link: &Link, sn: ZInt, payload: FramePayload) {
-        // @TODO: Implement the reordering and reliability. Wait for missing messages.
-        let mut guard = zlock!(self.rx_reliable);
-        zreceiveframe!(self, link, guard, sn, payload);
+    fn handle_frame(
+        &self,
+        sn: ZInt,
+        payload: FramePayload,
+        mut guard: MutexGuard<'_, SessionTransportChannel>,
+    ) -> ZResult<()> {
+        let precedes = guard.sn.precedes(sn)?;
+        if !precedes {
+            log::debug!(
+                "Session: {}. Frame with invalid SN dropped: {}. Expected: {}.",
+                self.pid,
+                sn,
+                guard.sn.get()
+            );
+            // Drop the fragments if needed
+            if !guard.defrag.is_empty() {
+                guard.defrag.clear();
+            }
+            // Keep reading
+            return Ok(());
+        }
+
+        // Set will always return OK because we have already checked
+        // with precedes() that the sn has the right resolution
+        let _ = guard.sn.set(sn);
+        match payload {
+            FramePayload::Fragment { buffer, is_final } => {
+                if guard.defrag.is_empty() {
+                    let _ = guard.defrag.sync(sn);
+                }
+                guard.defrag.push(sn, buffer)?;
+                if is_final {
+                    // When zero-copy feature is disabled, msg does not need to be mutable
+                    let msg = guard.defrag.defragment().ok_or_else(|| {
+                        let e = format!("Session: {}. Defragmentation error.", self.pid);
+                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
+                    })?;
+                    self.trigger_callback(msg)
+                } else {
+                    Ok(())
+                }
+            }
+            FramePayload::Messages { mut messages } => {
+                for msg in messages.drain(..) {
+                    self.trigger_callback(msg)?;
+                }
+                Ok(())
+            }
+        }
     }
 
-    fn handle_best_effort_frame(&self, link: &Link, sn: ZInt, payload: FramePayload) {
-        let mut guard = zlock!(self.rx_best_effort);
-        zreceiveframe!(self, link, guard, sn, payload);
-    }
-
-    #[inline(always)]
-    pub(super) fn receive_message(&self, message: SessionMessage, link: &Link) {
+    pub(super) fn receive_message(&self, msg: SessionMessage, link: &Link) -> ZResult<()> {
         // Process the received message
-        match message.body {
+        match msg.body {
             SessionBody::Frame(Frame { ch, sn, payload }) => match ch {
-                Channel::Reliable => self.handle_reliable_frame(link, sn, payload),
-                Channel::BestEffort => self.handle_best_effort_frame(link, sn, payload),
+                Channel::Reliable => self.handle_frame(sn, payload, zlock!(self.rx_reliable)),
+                Channel::BestEffort => self.handle_frame(sn, payload, zlock!(self.rx_best_effort)),
             },
             SessionBody::Close(Close {
                 pid,
@@ -210,11 +147,12 @@ impl SessionTransport {
                 link_only,
             }) => self.handle_close(link, pid, reason, link_only),
             _ => {
-                log::trace!(
+                log::debug!(
                     "Session: {}. Message handling not implemented: {:?}",
                     self.pid,
-                    message
+                    msg
                 );
+                Ok(())
             }
         }
     }

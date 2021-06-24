@@ -267,7 +267,7 @@ async fn rx_task_stream(
 
                 while rbuf.can_read() {
                     match rbuf.read_session_message() {
-                        Some(msg) => transport.receive_message(msg, &link),
+                        Some(msg) => transport.receive_message(msg, &link)?,
                         None => {
                             let e = format!("{}: decoding error", link);
                             return zerror!(ZErrorKind::IoError { descr: e });
@@ -338,7 +338,7 @@ async fn rx_task_dgram(
                 // Deserialize all the messages from the current RBuf
                 while rbuf.can_read() {
                     match rbuf.read_session_message() {
-                        Some(msg) => transport.receive_message(msg, &link),
+                        Some(msg) => transport.receive_message(msg, &link)?,
                         None => {
                             let e = format!("{}: decoding error", link);
                             return zerror!(ZErrorKind::IoError { descr: e });

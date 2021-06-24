@@ -18,7 +18,7 @@ use super::SeqNum;
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
-pub(super) struct DefragBuffer {
+pub(crate) struct DefragBuffer {
     // Keep track of the next expected fragment
     sn: SeqNum,
     buffer: RBuf,
@@ -26,7 +26,7 @@ pub(super) struct DefragBuffer {
 }
 
 impl DefragBuffer {
-    pub(super) fn new(
+    pub(crate) fn new(
         initial_sn: ZInt,
         sn_resolution: ZInt,
         reliability: Reliability,
@@ -39,21 +39,21 @@ impl DefragBuffer {
     }
 
     #[inline(always)]
-    pub(super) fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     #[inline(always)]
-    pub(super) fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.buffer.clear()
     }
 
     #[inline(always)]
-    pub(super) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
+    pub(crate) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
         self.sn.set(sn)
     }
 
-    pub(super) fn push(&mut self, sn: ZInt, zslice: ZSlice) -> ZResult<()> {
+    pub(crate) fn push(&mut self, sn: ZInt, zslice: ZSlice) -> ZResult<()> {
         if sn != self.sn.get() {
             self.clear();
             return zerror!(ZErrorKind::InvalidMessage {
@@ -68,7 +68,7 @@ impl DefragBuffer {
     }
 
     #[inline(always)]
-    pub(super) fn defragment(&mut self) -> Option<ZenohMessage> {
+    pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
         let res = self.buffer.read_zenoh_message(self.reliability);
         self.clear();
         res
