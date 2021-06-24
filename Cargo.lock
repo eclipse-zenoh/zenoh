@@ -2910,6 +2910,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-ext"
+version = "0.5.0-dev"
+dependencies = [
+ "async-std",
+ "clap",
+ "env_logger",
+ "futures",
+ "futures-lite",
+ "log",
+ "zenoh",
+ "zenoh-util",
+]
+
+[[package]]
 name = "zenoh-plugin-rest"
 version = "0.5.0-dev"
 dependencies = [

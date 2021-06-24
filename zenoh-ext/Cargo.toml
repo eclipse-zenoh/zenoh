@@ -1,0 +1,45 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh-ext"
+version = "0.5.0-dev"
+repository = "https://github.com/eclipse-zenoh/zenoh"
+homepage = "http://zenoh.io"
+authors = ["kydos <angelo@icorsaro.net>",
+           "Julien Enoch <julien@enoch.fr>"]
+edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming"]
+description = "Zenoh: extensions to the client API."
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+zenoh = { path = "../zenoh" }
+zenoh-util = { path = "../zenoh-util" }
+async-std = { version = "=1.9.0", default-features = false, features = ["attributes", "unstable"] }
+futures-lite = "1.11.3"
+log = "0.4"
+
+[dev-dependencies]
+futures = "0.3.12"
+clap = "2.33"
+env_logger = "0.8.2"
+
+
+[[example]]
+name = "zn_query_sub"
+path = "examples/zenoh-net/zn_query_sub.rs"
+
