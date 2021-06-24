@@ -443,6 +443,21 @@ impl DataInfo {
     }
 }
 
+impl Default for DataInfo {
+    fn default() -> Self {
+        DataInfo {
+            source_id: None,
+            source_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
+            timestamp: None,
+            kind: None,
+            encoding: None,
+            is_shm: false,
+        }
+    }
+}
+
 impl PartialOrd for DataInfo {
     fn partial_cmp(&self, other: &DataInfo) -> Option<std::cmp::Ordering> {
         self.timestamp.partial_cmp(&other.timestamp)

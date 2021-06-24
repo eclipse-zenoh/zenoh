@@ -16,6 +16,7 @@
 members = [
   "zenoh",
   "zenoh-util",
+  "zenoh-ext",
   "plugins/example-plugin",
   "plugins/zenoh-plugin-rest",
   "plugins/zenoh-plugin-storages",
