@@ -199,15 +199,24 @@ impl From<SharedMemoryBuf> for ZSliceBuffer {
 /*************************************/
 /*               ZSLICE              */
 /*************************************/
-pub enum ZSliceType {
+#[derive(Debug)]
+pub enum ZSliceKind {
     Net,
-    ShmInfo,
-    ShmBuf,
+    Shm,
+}
+
+impl fmt::Display for ZSliceKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ZSliceKind::Net => write!(f, "NET"),
+            ZSliceKind::Shm => write!(f, "SHM"),
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct ZSlice {
-    buf: ZSliceBuffer,
+    pub(super) buf: ZSliceBuffer,
     start: usize,
     end: usize,
 }
@@ -250,13 +259,11 @@ impl ZSlice {
     }
 
     #[inline]
-    pub fn get_type(&self) -> ZSliceType {
+    pub fn get_kind(&self) -> ZSliceKind {
         match &self.buf {
-            ZSliceBuffer::NetSharedBuffer(_) | ZSliceBuffer::NetOwnedBuffer(_) => ZSliceType::Net,
+            ZSliceBuffer::NetSharedBuffer(_) | ZSliceBuffer::NetOwnedBuffer(_) => ZSliceKind::Net,
             #[cfg(feature = "zero-copy")]
-            ZSliceBuffer::ShmBuffer(_) => ZSliceType::ShmBuf,
-            #[cfg(feature = "zero-copy")]
-            ZSliceBuffer::ShmInfo(_) => ZSliceType::ShmInfo,
+            ZSliceBuffer::ShmBuffer(_) | ZSliceBuffer::ShmInfo(_) => ZSliceKind::Shm,
         }
     }
 

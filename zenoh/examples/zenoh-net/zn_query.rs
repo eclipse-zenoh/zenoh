@@ -43,7 +43,7 @@ async fn main() {
         println!(
             ">> [Reply handler] received ('{}': '{}')",
             reply.data.res_name,
-            String::from_utf8_lossy(&reply.data.payload.contigous())
+            String::from_utf8_lossy(&reply.data.payload.contiguous())
         )
     }
 }

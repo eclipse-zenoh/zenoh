@@ -518,7 +518,7 @@ impl Runtime {
                             .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                     );
                     if let Err(err) = socket
-                        .send_to(&RBuf::from(&wbuf).contigous(), mcast_addr.to_string())
+                        .send_to(&RBuf::from(&wbuf).contiguous(), mcast_addr.to_string())
                         .await
                     {
                         log::warn!(
@@ -714,7 +714,8 @@ impl Runtime {
                                 .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                         );
                         wbuf.write_session_message(&hello);
-                        if let Err(err) = socket.send_to(&RBuf::from(&wbuf).contigous(), peer).await
+                        if let Err(err) =
+                            socket.send_to(&RBuf::from(&wbuf).contiguous(), peer).await
                         {
                             log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);
                         }

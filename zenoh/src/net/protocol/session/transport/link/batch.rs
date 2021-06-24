@@ -30,7 +30,7 @@ enum CurrentFrame {
 
 /// Serialization Batch
 ///
-/// A [`SerializationBatch`][SerializationBatch] is a non-expandable and contigous region of memory
+/// A [`SerializationBatch`][SerializationBatch] is a non-expandable and contiguous region of memory
 /// that is used to serialize [`SessionMessage`][SessionMessage] and [`ZenohMessage`][ZenohMessage].
 ///
 /// [`SessionMessage`][SessionMessage] are always serialized on the batch as theyr are, while
@@ -64,7 +64,7 @@ impl SerializationBatch {
     /// Create a new [`SerializationBatch`][SerializationBatch] with a given size in bytes.
     ///
     /// # Arguments
-    /// * `size` - The size in bytes of the contigous memory buffer to allocate on.
+    /// * `size` - The size in bytes of the contiguous memory buffer to allocate on.
     ///
     /// * `is_streamed` - The serialization batch is meant to be used for a stream-based transport
     ///                   protocol (e.g., TCP) in constrast to datagram-based transport protocol (e.g., UDP).

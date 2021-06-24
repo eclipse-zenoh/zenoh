@@ -59,7 +59,7 @@ async fn main() {
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.payload.contigous()));
+                    sample.res_name, String::from_utf8_lossy(&sample.payload.contiguous()));
                 stored.insert(sample.res_name, (sample.payload, sample.data_info));
             },
 

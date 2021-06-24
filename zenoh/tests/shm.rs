@@ -87,7 +87,7 @@ mod tests {
                 print!("n");
             }
             let payload = match message.body {
-                ZenohBody::Data(Data { payload, .. }) => payload.contigous(),
+                ZenohBody::Data(Data { payload, .. }) => payload.contiguous(),
                 _ => panic!("Unsolicited message"),
             };
             assert_eq!(payload.len(), MSG_SIZE);

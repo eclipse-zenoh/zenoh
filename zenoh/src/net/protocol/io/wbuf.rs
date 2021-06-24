@@ -21,12 +21,12 @@ use std::ops::RangeBounds;
 
 // Notes:
 //  - Wbuf has 2 flavors:
-//    - contigous:
-//      - it is a Vec<u8> which is contigous in memory
+//    - contiguous:
+//      - it is a Vec<u8> which is contiguous in memory
 //      - it is initialized with a fixed capacity and won't be extended
 //      - if a write exceeds capacity, 'false' is returned
 //      - the writing of ZSlices makes a copy of the buffer into WBuf
-//    - non-contigous:
+//    - non-contiguous:
 //      - it manages a list of slices which could be:
 //          - either ZSlices, passed by the user => 0-copy
 //          - either slices of an internal Vec<u8> used for serialization

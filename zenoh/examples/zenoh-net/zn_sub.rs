@@ -47,7 +47,24 @@ async fn main() {
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.payload.contigous()));
+                    sample.res_name, String::from_utf8_lossy(&sample.payload.contiguous()));
+
+                // Calling contiguous() allows to acces to the whole payload as a contigous &[u8] via the
+                // ZSlice type. However, this operation has a drawback when the original message was large
+                // enough to cause network fragmentation. Because of that, the actual message payload may have
+                // been received in multiple fragments (i.e. ZSlice) which are non-contigous in memory. In order
+                // to retrieve the content of the payload without allocating, it is possible to loop over the
+                // different payload ZSlice. Finally, iterating over the payload is also recommended when
+                // working with shared memory.
+                //
+                // payload.zslices_num() returns the number of ZSlices the payload is composed of. If
+                // the returned value is greater than 1, then contigous() will allocate.
+                //
+                // let mut sample = sample.unwrap();
+                // println!(">> [Subscription listener] Received '{}', {} ZSlice:", sample.res_name, sample.payload.zslices_num());
+                // for z in sample.payload.next() {
+                //     println!("   {}: '{}'", z.get_kind(), String::from_utf8_lossy(z.as_slice()));
+                // }
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

@@ -17,8 +17,6 @@ use super::link::Locator;
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
 use super::ZSliceBuffer;
-#[cfg(feature = "zero-copy")]
-use super::ZSliceType;
 use super::{RBuf, WBuf, ZSlice};
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -334,8 +332,8 @@ impl WBuf {
         zcheck!(self.write_usize_as_zint(rbuf.zslices_num()));
         let mut idx = 0;
         while let Some(slice) = rbuf.get_zslice(idx) {
-            match slice.get_type() {
-                ZSliceType::ShmInfo => zcheck!(self.write(zslice::kind::SHM_INFO)),
+            match &slice.buf {
+                ZSliceBuffer::ShmInfo(_) => zcheck!(self.write(zslice::kind::SHM_INFO)),
                 _ => zcheck!(self.write(zslice::kind::RAW)),
             }
 

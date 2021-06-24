@@ -15,7 +15,7 @@
 use super::shm::{SharedMemoryBuf, SharedMemoryReader};
 use super::ZSlice;
 #[cfg(feature = "zero-copy")]
-use super::ZSliceType;
+use super::ZSliceBuffer;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
@@ -126,9 +126,9 @@ impl RBuf {
     #[inline]
     pub fn add_slice(&mut self, slice: ZSlice) {
         #[cfg(feature = "zero-copy")]
-        match slice.get_type() {
-            ZSliceType::ShmInfo => self.has_shminfo = true,
-            ZSliceType::ShmBuf => self.has_shmbuf = true,
+        match &slice.buf {
+            ZSliceBuffer::ShmInfo(_) => self.has_shminfo = true,
+            ZSliceBuffer::ShmBuffer(_) => self.has_shmbuf = true,
             _ => {}
         }
 
@@ -330,9 +330,11 @@ impl RBuf {
         vec
     }
 
-    // returns a ZSlice that may allocate in case of RBuf being composed of multiple ZSlices
+    /// Returns a [`ZSlice`][ZSlice].
+    /// This operation will allocate in case the [`RBuf`][RBuf] is composed of multiple ZSlices, i.e.
+    /// if rbuf.zslices_num() > 1.
     #[inline]
-    pub fn contigous(&self) -> ZSlice {
+    pub fn contiguous(&self) -> ZSlice {
         match &self.slices {
             RBufInner::Single(s) => s.clone(),
             RBufInner::Multiple(_) => self.to_vec().into(),
@@ -382,7 +384,7 @@ impl RBuf {
     #[cfg(feature = "zero-copy")]
     #[inline(never)]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
-        if !self.has_shminfo {
+        if !self.has_shminfo() {
             return Ok(false);
         }
 
@@ -411,7 +413,7 @@ impl RBuf {
     #[cfg(feature = "zero-copy")]
     #[inline(never)]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
-        if !self.has_shmbuf {
+        if !self.has_shmbuf() {
             return Ok(false);
         }
 
@@ -472,10 +474,11 @@ impl fmt::Debug for RBuf {
             ($slice:expr) => {
                 #[cfg(feature = "zero-copy")]
                 {
-                    match $slice.get_type() {
-                        ZSliceType::Net => write!(f, " BUF:")?,
-                        ZSliceType::ShmBuf => write!(f, " SHM_BUF:")?,
-                        ZSliceType::ShmInfo => write!(f, " SHM_INFO:")?,
+                    match $slice.buf {
+                        ZSliceBuffer::NetSharedBuffer(_) => write!(f, " BUF:")?,
+                        ZSliceBuffer::NetOwnedBuffer(_) => write!(f, " BUF:")?,
+                        ZSliceBuffer::ShmBuffer(_) => write!(f, " SHM_BUF:")?,
+                        ZSliceBuffer::ShmInfo(_) => write!(f, " SHM_INFO:")?,
                     }
                 }
                 #[cfg(not(feature = "zero-copy"))]

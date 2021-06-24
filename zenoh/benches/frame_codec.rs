@@ -95,7 +95,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             c.bench_function(
                 format!(
-                    "frame_encoding_yes_contigous {} {} {} {}",
+                    "frame_encoding_yes_contiguous {} {} {} {}",
                     batch_size, p, num, r
                 )
                 .as_str(),
@@ -112,7 +112,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             c.bench_function(
                 format!(
-                    "frame_encoding_no_contigous {} {} {} {}",
+                    "frame_encoding_no_contiguous {} {} {} {}",
                     batch_size, p, num, r
                 )
                 .as_str(),
@@ -129,7 +129,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             c.bench_function(
                 format!(
-                    "frame_decoding_yes_contigous {} {} {} {}",
+                    "frame_decoding_yes_contiguous {} {} {} {}",
                     batch_size, p, num, r
                 )
                 .as_str(),
@@ -151,7 +151,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             c.bench_function(
                 format!(
-                    "frame_decoding_no_contigous {} {} {} {}",
+                    "frame_decoding_no_contiguous {} {} {} {}",
                     batch_size, p, num, r
                 )
                 .as_str(),
