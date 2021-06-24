@@ -109,19 +109,23 @@ impl SharedMemoryBufInfo {
 // +---------------+
 
 impl RBuf {
+    #[inline(always)]
     pub fn read_zint(&mut self) -> Option<ZInt> {
         read_zint!(self, ZInt);
     }
 
+    #[inline(always)]
     pub fn read_zint_as_u64(&mut self) -> Option<u64> {
         read_zint!(self, u64);
     }
 
+    #[inline(always)]
     pub fn read_zint_as_usize(&mut self) -> Option<usize> {
         read_zint!(self, usize);
     }
 
     // Same as read_bytes but with array length before the bytes.
+    #[inline(always)]
     pub fn read_bytes_array(&mut self) -> Option<Vec<u8>> {
         let len = self.read_zint_as_usize()?;
         let mut buf = vec![0; len];
@@ -132,11 +136,13 @@ impl RBuf {
         }
     }
 
+    #[inline(always)]
     pub fn read_string(&mut self) -> Option<String> {
         let bytes = self.read_bytes_array()?;
         Some(String::from(String::from_utf8_lossy(&bytes)))
     }
 
+    #[inline(always)]
     pub fn read_peerid(&mut self) -> Option<PeerId> {
         let size = self.read_zint_as_usize()?;
         if size > PeerId::MAX_SIZE {
@@ -151,10 +157,12 @@ impl RBuf {
         }
     }
 
+    #[inline(always)]
     pub fn read_locator(&mut self) -> Option<Locator> {
         self.read_string()?.parse().ok()
     }
 
+    #[inline(always)]
     pub fn read_locators(&mut self) -> Option<Vec<Locator>> {
         let len = self.read_zint()?;
         let mut vec: Vec<Locator> = Vec::new();
@@ -164,13 +172,14 @@ impl RBuf {
         Some(vec)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn read_zslice_array(&mut self) -> Option<ZSlice> {
         let len = self.read_zint_as_usize()?;
         self.read_zslice(len)
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(always)]
     pub fn read_shminfo(&mut self) -> Option<ZSlice> {
         let len = self.read_zint_as_usize()?;
         let mut info = vec![0; len];
@@ -180,6 +189,7 @@ impl RBuf {
         Some(ZSliceBuffer::ShmInfo(info.into()).into())
     }
 
+    #[inline(always)]
     fn read_rbuf_flat(&mut self) -> Option<RBuf> {
         let len = self.read_zint_as_usize()?;
         let mut rbuf = RBuf::new();
@@ -191,6 +201,7 @@ impl RBuf {
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(always)]
     fn read_rbuf_sliced(&mut self) -> Option<RBuf> {
         let num = self.read_zint_as_usize()?;
         let mut rbuf = RBuf::new();
@@ -215,6 +226,7 @@ impl RBuf {
 
     // Same as read_bytes_array but 0 copy on RBuf.
     #[cfg(feature = "zero-copy")]
+    #[inline(always)]
     pub fn read_rbuf(&mut self, sliced: bool) -> Option<RBuf> {
         if !sliced {
             self.read_rbuf_flat()
@@ -224,6 +236,7 @@ impl RBuf {
     }
 
     #[cfg(not(feature = "zero-copy"))]
+    #[inline(always)]
     pub fn read_rbuf(&mut self) -> Option<RBuf> {
         self.read_rbuf_flat()
     }
@@ -259,39 +272,43 @@ macro_rules! write_zint {
 impl WBuf {
     /// This the traditional VByte encoding, in which an arbirary integer
     /// is encoded as a sequence of 7 bits integers
+    #[inline(always)]
     pub fn write_zint(&mut self, v: ZInt) -> bool {
         write_zint!(self, v);
     }
 
+    #[inline(always)]
     pub fn write_u64_as_zint(&mut self, v: u64) -> bool {
         write_zint!(self, v);
     }
 
+    #[inline(always)]
     pub fn write_usize_as_zint(&mut self, v: usize) -> bool {
         write_zint!(self, v);
     }
 
     // Same as write_bytes but with array length before the bytes.
-    #[inline]
+    #[inline(always)]
     pub fn write_bytes_array(&mut self, s: &[u8]) -> bool {
         self.write_usize_as_zint(s.len()) && self.write_bytes(s)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_string(&mut self, s: &str) -> bool {
         self.write_usize_as_zint(s.len()) && self.write_bytes(s.as_bytes())
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_peerid(&mut self, pid: &PeerId) -> bool {
         self.write_bytes_array(pid.as_slice())
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_locator(&mut self, locator: &Locator) -> bool {
         self.write_string(&locator.to_string())
     }
 
+    #[inline(always)]
     pub fn write_locators(&mut self, locators: &[Locator]) -> bool {
         zcheck!(self.write_usize_as_zint(locators.len()));
         for l in locators {
@@ -300,17 +317,19 @@ impl WBuf {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn write_zslice_array(&mut self, slice: ZSlice) -> bool {
         self.write_usize_as_zint(slice.len()) && self.write_zslice(slice)
     }
 
+    #[inline(always)]
     fn write_rbuf_flat(&mut self, rbuf: &RBuf) -> bool {
         zcheck!(self.write_usize_as_zint(rbuf.len()));
         self.write_rbuf_slices(rbuf)
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(always)]
     fn write_rbuf_sliced(&mut self, rbuf: &RBuf) -> bool {
         zcheck!(self.write_usize_as_zint(rbuf.zslices_num()));
         let mut idx = 0;
@@ -327,6 +346,7 @@ impl WBuf {
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(always)]
     pub fn write_rbuf(&mut self, rbuf: &RBuf, sliced: bool) -> bool {
         if !sliced {
             self.write_rbuf_flat(rbuf)
@@ -336,10 +356,12 @@ impl WBuf {
     }
 
     #[cfg(not(feature = "zero-copy"))]
+    #[inline(always)]
     pub fn write_rbuf(&mut self, rbuf: &RBuf) -> bool {
         self.write_rbuf_flat(rbuf)
     }
 
+    #[inline(always)]
     pub fn write_rbuf_slices(&mut self, rbuf: &RBuf) -> bool {
         let mut idx = 0;
         while let Some(slice) = rbuf.get_zslice(idx) {

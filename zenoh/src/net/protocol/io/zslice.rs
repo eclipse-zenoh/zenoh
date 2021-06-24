@@ -270,6 +270,7 @@ impl ZSlice {
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(never)]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         match &self.buf {
             ZSliceBuffer::ShmInfo(info) => {
@@ -297,6 +298,7 @@ impl ZSlice {
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(never)]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         match &self.buf {
             ZSliceBuffer::ShmBuffer(shmb) => {

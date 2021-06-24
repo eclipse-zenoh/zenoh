@@ -17,6 +17,7 @@ use super::msg::*;
 use zenoh_util::zcheck;
 
 impl WBuf {
+    #[inline(always)]
     fn write_deco_attachment(&mut self, attachment: &Attachment) -> bool {
         zcheck!(self.write(attachment.header()));
         #[cfg(feature = "zero-copy")]
@@ -30,11 +31,13 @@ impl WBuf {
         }
     }
 
+    #[inline(always)]
     fn write_deco_routing_context(&mut self, routing_context: &RoutingContext) -> bool {
         zcheck!(self.write(routing_context.header()));
         self.write_zint(routing_context.tree_id)
     }
 
+    #[inline(always)]
     fn write_deco_reply_context(&mut self, reply_context: &ReplyContext) -> bool {
         zcheck!(self.write(reply_context.header()));
         zcheck!(self.write_zint(reply_context.qid));
@@ -48,6 +51,7 @@ impl WBuf {
     /*************************************/
     /*             SESSION               */
     /*************************************/
+    #[inline(always)]
     pub fn write_frame_header(
         &mut self,
         ch: Channel,
@@ -213,16 +217,6 @@ impl WBuf {
     /*************************************/
     /*              ZENOH                */
     /*************************************/
-    fn write_reskey(&mut self, key: &ResKey) -> bool {
-        match key {
-            ResKey::RId(rid) => self.write_zint(*rid),
-            ResKey::RName(name) => self.write_zint(NO_RESOURCE_ID) && self.write_string(name),
-            ResKey::RIdWithSuffix(rid, suffix) => {
-                self.write_zint(*rid) && self.write_string(suffix)
-            }
-        }
-    }
-
     pub fn write_zenoh_message(&mut self, msg: &ZenohMessage) -> bool {
         if let Some(routing_context) = msg.routing_context.as_ref() {
             zcheck!(self.write_deco_routing_context(routing_context));
@@ -246,6 +240,7 @@ impl WBuf {
         }
     }
 
+    #[inline(always)]
     fn write_data(&mut self, data: &Data) -> bool {
         zcheck!(self.write(data.header()));
         zcheck!(self.write_reskey(&data.key));
@@ -271,7 +266,19 @@ impl WBuf {
         }
     }
 
-    pub fn write_data_info(&mut self, info: &DataInfo) -> bool {
+    #[inline(always)]
+    fn write_reskey(&mut self, key: &ResKey) -> bool {
+        match key {
+            ResKey::RId(rid) => self.write_zint(*rid),
+            ResKey::RName(name) => self.write_zint(NO_RESOURCE_ID) && self.write_string(name),
+            ResKey::RIdWithSuffix(rid, suffix) => {
+                self.write_zint(*rid) && self.write_string(suffix)
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn write_data_info(&mut self, info: &DataInfo) -> bool {
         zcheck!(self.write_zint(info.options()));
 
         if let Some(kind) = &info.kind {

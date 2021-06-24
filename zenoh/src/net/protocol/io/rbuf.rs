@@ -36,12 +36,14 @@ pub struct RBufPos {
 }
 
 impl RBufPos {
+    #[inline(always)]
     fn reset(&mut self) {
         self.slice = 0;
         self.byte = 0;
         self.read = 0;
     }
 
+    #[inline(always)]
     fn clear(&mut self) {
         self.reset();
         self.len = 0;
@@ -145,7 +147,7 @@ impl RBuf {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_zslice(&self, index: usize) -> Option<&ZSlice> {
         match &self.slices {
             RBufInner::Single(s) => match index {
@@ -157,7 +159,7 @@ impl RBuf {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn zslices_num(&self) -> usize {
         match &self.slices {
             RBufInner::Single(_) => 1,
@@ -166,7 +168,7 @@ impl RBuf {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_zslice_mut(&mut self, index: usize) -> Option<&mut ZSlice> {
         match &mut self.slices {
             RBufInner::Single(s) => match index {
@@ -295,6 +297,7 @@ impl RBuf {
         self.curr_slice().map(|current| current[self.pos.byte])
     }
 
+    #[inline(always)]
     pub fn read(&mut self) -> Option<u8> {
         let res = self.get();
         if res.is_some() {
@@ -303,7 +306,7 @@ impl RBuf {
         res
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn read_bytes(&mut self, bs: &mut [u8]) -> bool {
         if !self.copy_bytes(bs, (self.pos.slice, self.pos.byte)) {
             return false;
@@ -312,7 +315,7 @@ impl RBuf {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn read_vec(&mut self) -> Vec<u8> {
         let mut vec = vec![0u8; self.readable()];
         self.read_bytes(&mut vec);
@@ -320,7 +323,7 @@ impl RBuf {
     }
 
     // returns a Vec<u8> containing a copy of RBuf content (not considering read position)
-    #[inline]
+    #[inline(always)]
     pub fn to_vec(&self) -> Vec<u8> {
         let mut vec = vec![0u8; self.len()];
         self.copy_bytes(&mut vec[..], (0, 0));
@@ -377,6 +380,7 @@ impl RBuf {
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(never)]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         if !self.has_shminfo {
             return Ok(false);
@@ -405,6 +409,7 @@ impl RBuf {
     }
 
     #[cfg(feature = "zero-copy")]
+    #[inline(never)]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         if !self.has_shmbuf {
             return Ok(false);

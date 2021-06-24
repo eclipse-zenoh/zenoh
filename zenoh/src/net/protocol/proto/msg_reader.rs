@@ -17,6 +17,7 @@ use super::msg::*;
 
 impl RBuf {
     #[allow(unused_variables)]
+    #[inline(always)]
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
         #[cfg(feature = "zero-copy")]
         {
@@ -90,6 +91,7 @@ impl RBuf {
         Some(SessionMessage { body, attachment })
     }
 
+    #[inline(always)]
     fn read_frame(&mut self, header: u8) -> Option<SessionBody> {
         let (ch, reliability) = match imsg::has_flag(header, smsg::flag::R) {
             true => (Channel::Reliable, Reliability::Reliable),
@@ -286,12 +288,14 @@ impl RBuf {
     /*************************************/
     /*              ZENOH                */
     /*************************************/
+    #[inline(always)]
     fn read_deco_routing_context(&mut self, _header: u8) -> Option<RoutingContext> {
         let tree_id = self.read_zint()?;
         Some(RoutingContext { tree_id })
     }
 
     // @TODO: Update the ReplyContext format
+    #[inline(always)]
     fn read_deco_reply_context(&mut self, header: u8) -> Option<ReplyContext> {
         let qid = self.read_zint()?;
         let source_kind = self.read_zint()?;
@@ -364,6 +368,7 @@ impl RBuf {
         })
     }
 
+    #[inline(always)]
     fn read_data(&mut self, header: u8, reliability: Reliability) -> Option<ZenohBody> {
         let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
             CongestionControl::Drop
@@ -401,7 +406,23 @@ impl RBuf {
         Some(body)
     }
 
-    pub fn read_data_info(&mut self) -> Option<DataInfo> {
+    #[inline(always)]
+    fn read_reskey(&mut self, is_numeric: bool) -> Option<ResKey> {
+        let id = self.read_zint()?;
+        if is_numeric {
+            Some(ResKey::RId(id))
+        } else {
+            let s = self.read_string()?;
+            if id == NO_RESOURCE_ID {
+                Some(ResKey::RName(s))
+            } else {
+                Some(ResKey::RIdWithSuffix(id, s))
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn read_data_info(&mut self) -> Option<DataInfo> {
         let mut info = DataInfo::new();
 
         let options = self.read_zint()?;
@@ -578,7 +599,7 @@ impl RBuf {
         Some(ZenohBody::LinkStateList(LinkStateList { link_states }))
     }
 
-    pub fn read_link_state(&mut self) -> Option<LinkState> {
+    fn read_link_state(&mut self) -> Option<LinkState> {
         let options = self.read_zint()?;
         let psid = self.read_zint()?;
         let sn = self.read_zint()?;
@@ -638,20 +659,6 @@ impl RBuf {
         Some((mode, period))
     }
 
-    fn read_reskey(&mut self, is_numeric: bool) -> Option<ResKey> {
-        let id = self.read_zint()?;
-        if is_numeric {
-            Some(ResKey::RId(id))
-        } else {
-            let s = self.read_string()?;
-            if id == NO_RESOURCE_ID {
-                Some(ResKey::RName(s))
-            } else {
-                Some(ResKey::RIdWithSuffix(id, s))
-            }
-        }
-    }
-
     fn read_query_target(&mut self) -> Option<QueryTarget> {
         let kind = self.read_zint()?;
         let target = self.read_target()?;
@@ -696,7 +703,7 @@ impl RBuf {
         })
     }
 
-    pub fn read_timestamp(&mut self) -> Option<Timestamp> {
+    fn read_timestamp(&mut self) -> Option<Timestamp> {
         let time = self.read_zint_as_u64()?;
         let size = self.read_zint_as_usize()?;
         if size > (uhlc::ID::MAX_SIZE) {
