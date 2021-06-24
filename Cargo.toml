@@ -29,7 +29,7 @@ opt-level = 0
 
 
 [profile.release]
-debug=true
+debug=false   # If you want debug symbol in release mode, set the env variable: RUSTFLAGS=-g
 lto="fat"
 codegen-units=1
 opt-level=3
