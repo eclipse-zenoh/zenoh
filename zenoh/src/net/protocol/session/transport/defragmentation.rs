@@ -61,7 +61,7 @@ impl DefragBuffer {
             });
         }
 
-        self.buffer.add_slice(zslice);
+        self.buffer.add_zslice(zslice);
         self.sn.increment();
 
         Ok(())

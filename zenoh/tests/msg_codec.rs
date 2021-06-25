@@ -588,13 +588,9 @@ fn codec_frame_batching() {
 
         let mut read: Vec<SessionMessage> = Vec::new();
         loop {
-            let pos = zbuf.get_pos();
             match zbuf.read_session_message() {
                 Some(msg) => read.push(msg),
-                None => {
-                    assert!(zbuf.set_pos(pos));
-                    break;
-                }
+                None => break,
             }
         }
 

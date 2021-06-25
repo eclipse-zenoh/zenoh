@@ -214,7 +214,7 @@ impl ZBuf {
                 }
                 zslice::kind::SHM_INFO => {
                     let slice = self.read_shminfo()?;
-                    zbuf.add_slice(slice);
+                    zbuf.add_zslice(slice);
                 }
                 _ => return None,
             }

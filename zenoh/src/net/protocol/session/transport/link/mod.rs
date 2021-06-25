@@ -263,7 +263,7 @@ async fn rx_task_stream(
             })??;
         match action {
             Action::Read(n) => {
-                zbuf.add_slice(ZSlice::new(buffer.into(), 0, n));
+                zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
 
                 while zbuf.can_read() {
                     match zbuf.read_session_message() {
@@ -333,7 +333,7 @@ async fn rx_task_dgram(
                 }
 
                 // Add the received bytes to the ZBuf for deserialization
-                zbuf.add_slice(ZSlice::new(buffer.into(), 0, n));
+                zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
 
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {
