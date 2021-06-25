@@ -32,7 +32,8 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let res_key_set = [
         ResKey::RId(1),
-        ResKey::RIdWithSuffix(1, String::from("/frame/bench")),
+        ResKey::RName("/frame/bench".to_string()),
+        ResKey::RIdWithSuffix(1, "/frame/bench".to_string()),
     ];
 
     for p in &pld {

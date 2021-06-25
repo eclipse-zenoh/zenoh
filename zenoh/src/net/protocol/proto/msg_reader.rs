@@ -104,7 +104,6 @@ impl ZBuf {
             // any other frame in the same batch. Read all the bytes.
             let buffer = self.read_zslice(self.readable())?;
             let is_final = imsg::has_flag(header, smsg::flag::E);
-
             FramePayload::Fragment { buffer, is_final }
         } else {
             let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);

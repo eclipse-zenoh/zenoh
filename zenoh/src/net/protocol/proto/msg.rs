@@ -284,6 +284,7 @@ pub struct Attachment {
 }
 
 impl Header for Attachment {
+    #[inline(always)]
     fn header(&self) -> u8 {
         #[allow(unused_mut)]
         let mut header = smsg::id::ATTACHMENT;
@@ -296,6 +297,7 @@ impl Header for Attachment {
 }
 
 impl Attachment {
+    #[inline(always)]
     pub fn make(buffer: ZBuf) -> Attachment {
         Attachment { buffer }
     }
@@ -331,6 +333,7 @@ pub struct ReplyContext {
 }
 
 impl Header for ReplyContext {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::id::REPLY_CONTEXT;
         if self.is_final() {
@@ -342,6 +345,7 @@ impl Header for ReplyContext {
 
 impl ReplyContext {
     // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
+    #[inline(always)]
     pub fn make(qid: ZInt, source_kind: ZInt, replier_id: Option<PeerId>) -> ReplyContext {
         ReplyContext {
             qid,
@@ -350,6 +354,7 @@ impl ReplyContext {
         }
     }
 
+    #[inline(always)]
     pub fn is_final(&self) -> bool {
         self.replier_id.is_none()
     }
@@ -374,12 +379,14 @@ pub struct RoutingContext {
 }
 
 impl Header for RoutingContext {
+    #[inline(always)]
     fn header(&self) -> u8 {
         zmsg::id::ROUTING_CONTEXT
     }
 }
 
 impl RoutingContext {
+    #[inline(always)]
     pub fn make(tree_id: ZInt) -> RoutingContext {
         RoutingContext { tree_id }
     }
@@ -552,6 +559,7 @@ pub struct Data {
 }
 
 impl Header for Data {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::id::DATA;
         if let CongestionControl::Drop = self.congestion_control {
@@ -596,6 +604,7 @@ pub struct Unit {
 }
 
 impl Header for Unit {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::id::UNIT;
         if let CongestionControl::Drop = self.congestion_control {
@@ -646,6 +655,7 @@ pub struct Resource {
 }
 
 impl Header for Resource {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::RESOURCE;
         if self.key.is_numerical() {
@@ -669,6 +679,7 @@ pub struct ForgetResource {
 }
 
 impl Header for ForgetResource {
+    #[inline(always)]
     fn header(&self) -> u8 {
         zmsg::declaration::id::FORGET_RESOURCE
     }
@@ -688,6 +699,7 @@ pub struct Publisher {
 }
 
 impl Header for Publisher {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::PUBLISHER;
         if self.key.is_numerical() {
@@ -711,6 +723,7 @@ pub struct ForgetPublisher {
 }
 
 impl Header for ForgetPublisher {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_PUBLISHER;
         if self.key.is_numerical() {
@@ -739,6 +752,7 @@ pub struct Subscriber {
 }
 
 impl Header for Subscriber {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::SUBSCRIBER;
         if self.info.reliability == Reliability::Reliable {
@@ -768,6 +782,7 @@ pub struct ForgetSubscriber {
 }
 
 impl Header for ForgetSubscriber {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_SUBSCRIBER;
         if self.key.is_numerical() {
@@ -794,6 +809,7 @@ pub struct Queryable {
 }
 
 impl Header for Queryable {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::QUERYABLE;
         if self.kind != queryable::STORAGE {
@@ -820,6 +836,7 @@ pub struct ForgetQueryable {
 }
 
 impl Header for ForgetQueryable {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_QUERYABLE;
         if self.key.is_numerical() {
@@ -845,6 +862,7 @@ pub struct Declare {
 }
 
 impl Header for Declare {
+    #[inline(always)]
     fn header(&self) -> u8 {
         zmsg::id::DECLARE
     }
@@ -885,6 +903,7 @@ pub struct Pull {
 }
 
 impl Header for Pull {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::id::PULL;
         if self.is_final {
@@ -940,6 +959,7 @@ pub struct Query {
 }
 
 impl Header for Query {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::id::QUERY;
         if self.target.is_some() {
@@ -1022,6 +1042,7 @@ pub struct LinkStateList {
 }
 
 impl Header for LinkStateList {
+    #[inline(always)]
     fn header(&self) -> u8 {
         zmsg::id::LINK_STATE_LIST
     }
@@ -1290,6 +1311,7 @@ pub struct Scout {
 }
 
 impl Header for Scout {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::SCOUT;
         if self.pid_request {
@@ -1342,6 +1364,7 @@ pub struct Hello {
 }
 
 impl Header for Hello {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::HELLO;
         if self.pid.is_some() {
@@ -1419,6 +1442,7 @@ pub struct InitSyn {
 }
 
 impl Header for InitSyn {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::INIT;
         if self.sn_resolution.is_some() {
@@ -1437,6 +1461,7 @@ pub struct InitAck {
 }
 
 impl Header for InitAck {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::INIT;
         header |= smsg::flag::A;
@@ -1480,6 +1505,7 @@ pub struct OpenSyn {
 }
 
 impl Header for OpenSyn {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::OPEN;
         if self.lease % 1_000 == 0 {
@@ -1496,6 +1522,7 @@ pub struct OpenAck {
 }
 
 impl Header for OpenAck {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::OPEN;
         header |= smsg::flag::A;
@@ -1541,6 +1568,7 @@ pub struct Close {
 }
 
 impl Header for Close {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::CLOSE;
         if self.pid.is_some() {
@@ -1586,6 +1614,7 @@ pub struct Sync {
 }
 
 impl Header for Sync {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::SYNC;
         if let Channel::Reliable = self.ch {
@@ -1626,6 +1655,7 @@ pub struct AckNack {
 }
 
 impl Header for AckNack {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::ACK_NACK;
         if self.mask.is_some() {
@@ -1660,6 +1690,7 @@ pub struct KeepAlive {
 }
 
 impl Header for KeepAlive {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::KEEP_ALIVE;
         if self.pid.is_some() {
@@ -1693,6 +1724,7 @@ pub struct Ping {
 }
 
 impl Header for Ping {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::PING_PONG;
         header |= smsg::flag::P;
@@ -1706,6 +1738,7 @@ pub struct Pong {
 }
 
 impl Header for Pong {
+    #[inline(always)]
     fn header(&self) -> u8 {
         smsg::id::PING_PONG
     }
@@ -1752,6 +1785,7 @@ pub struct Frame {
 }
 
 impl Header for Frame {
+    #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::FRAME;
         if let Channel::Reliable = self.ch {
