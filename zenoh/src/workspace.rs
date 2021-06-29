@@ -14,9 +14,9 @@
 use crate::net::queryable::EVAL;
 use crate::net::{
     data_kind, encoding, CallbackSubscriber, CongestionControl, DataInfo, Query,
-    QueryConsolidation, QueryTarget, Queryable, RBuf, Receiver, RecvError, RecvTimeoutError,
-    Reliability, RepliesSender, Reply, ReplyReceiver, ResKey, Sample, SampleReceiver, Session,
-    SubInfo, SubMode, Subscriber, TryRecvError, ZFuture, ZInt, ZResolvedFuture,
+    QueryConsolidation, QueryTarget, Queryable, Receiver, RecvError, RecvTimeoutError, Reliability,
+    RepliesSender, Reply, ReplyReceiver, ResKey, Sample, SampleReceiver, Session, SubInfo, SubMode,
+    Subscriber, TryRecvError, ZBuf, ZFuture, ZInt, ZResolvedFuture,
 };
 use crate::utils::new_reception_timestamp;
 use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
@@ -174,7 +174,7 @@ impl Workspace<'_> {
         match self.path_to_reskey(path) {
             Ok(reskey) => self.session().write_ext(
                 &reskey,
-                RBuf::empty(),
+                ZBuf::new(),
                 encoding::NONE,
                 data_kind::DELETE,
                 CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
@@ -542,23 +542,19 @@ impl Change {
 
     /// Convert this [`Change`] into a [`Sample`] to be sent via zenoh-net.
     pub fn into_sample(self) -> Sample {
-        let (encoding, payload) = match self.value {
+        let mut info = DataInfo::new();
+        info.kind = Some(self.kind as ZInt);
+        info.timestamp = Some(self.timestamp);
+
+        let payload = match self.value {
             Some(v) => {
                 let (e, p) = v.encode();
-                (Some(e), p)
+                info.encoding = Some(e);
+                p
             }
-            None => (None, RBuf::empty()),
+            None => ZBuf::new(),
         };
-        let info = DataInfo {
-            source_id: None,
-            source_sn: None,
-            first_router_id: None,
-            first_router_sn: None,
-            timestamp: Some(self.timestamp),
-            kind: Some(self.kind as u64),
-            encoding,
-            is_shm: false,
-        };
+
         Sample {
             res_name: self.path.to_string(),
             payload,
@@ -594,16 +590,9 @@ impl ChangeReceiver<'_> {
 
 fn path_value_to_sample(path: Path, value: Value) -> Sample {
     let (encoding, payload) = value.encode();
-    let info = DataInfo {
-        source_id: None,
-        source_sn: None,
-        first_router_id: None,
-        first_router_sn: None,
-        timestamp: None,
-        kind: None,
-        encoding: Some(encoding),
-        is_shm: false,
-    };
+    let mut info = DataInfo::new();
+    info.encoding = Some(encoding);
+
     Sample {
         res_name: path.to_string(),
         payload,

@@ -12,48 +12,48 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{Reliability, ZInt};
-use super::io::RBuf;
+use super::io::{ZBuf, ZSlice};
 use super::proto::ZenohMessage;
 use super::SeqNum;
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
-pub(super) struct DefragBuffer {
+pub(crate) struct DefragBuffer {
     // Keep track of the next expected fragment
     sn: SeqNum,
-    buffer: RBuf,
+    buffer: ZBuf,
     reliability: Reliability,
 }
 
 impl DefragBuffer {
-    pub(super) fn new(
+    pub(crate) fn new(
         initial_sn: ZInt,
         sn_resolution: ZInt,
         reliability: Reliability,
     ) -> DefragBuffer {
         DefragBuffer {
             sn: SeqNum::new(initial_sn, sn_resolution),
-            buffer: RBuf::new(),
+            buffer: ZBuf::new(),
             reliability,
         }
     }
 
     #[inline(always)]
-    pub(super) fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     #[inline(always)]
-    pub(super) fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.buffer.clear()
     }
 
     #[inline(always)]
-    pub(super) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
+    pub(crate) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
         self.sn.set(sn)
     }
 
-    pub(super) fn push(&mut self, sn: ZInt, mut buffer: RBuf) -> ZResult<()> {
+    pub(crate) fn push(&mut self, sn: ZInt, zslice: ZSlice) -> ZResult<()> {
         if sn != self.sn.get() {
             self.clear();
             return zerror!(ZErrorKind::InvalidMessage {
@@ -61,14 +61,14 @@ impl DefragBuffer {
             });
         }
 
-        buffer.drain_into_rbuf(&mut self.buffer);
+        self.buffer.add_zslice(zslice);
         self.sn.increment();
 
         Ok(())
     }
 
     #[inline(always)]
-    pub(super) fn defragment(&mut self) -> Option<ZenohMessage> {
+    pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
         let res = self.buffer.read_zenoh_message(self.reliability);
         self.clear();
         res

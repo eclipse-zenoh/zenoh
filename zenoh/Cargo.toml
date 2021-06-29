@@ -65,7 +65,7 @@ http-types = "2.10.0"
 git-version = "0.3.4"
 base64 = "0.13.0"
 log = "0.4"
-nix = { version = "0.20.0", optional = true }
+nix = { version = "0.21.0", optional = true }
 quinn = { version = "0.7.2", optional = true }
 rcgen = { version = "0.8.9", optional = true }
 serde = "1.0.123"
@@ -81,7 +81,7 @@ clap = "2.33"
 criterion = "0.3.4"
 
 [build-dependencies]
-rustc_version = "0.3"
+rustc_version = "0.4.0"
 
 [[bin]]
 name = "zenohd"
@@ -160,10 +160,6 @@ name = "zn_sub"
 path = "examples/zenoh-net/zn_sub.rs"
 
 [[example]]
-name = "zn_sub_shm"
-path = "examples/zenoh-net/zn_sub_shm.rs"
-
-[[example]]
 name = "zn_pull"
 path = "examples/zenoh-net/zn_pull.rs"
 
@@ -190,10 +186,6 @@ path = "examples/zenoh-net/zn_sub_thr.rs"
 [[example]]
 name = "zn_pub_shm_thr"
 path = "examples/zenoh-net/zn_pub_shm_thr.rs"
-
-[[example]]
-name = "zn_sub_shm_thr"
-path = "examples/zenoh-net/zn_sub_shm_thr.rs"
 
 [[example]]
 name = "zn_ping"

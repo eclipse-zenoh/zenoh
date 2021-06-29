@@ -17,7 +17,7 @@ extern crate criterion;
 use criterion::Criterion;
 
 use zenoh::net::protocol::core::{Channel, CongestionControl, Reliability, ResKey};
-use zenoh::net::protocol::io::{RBuf, WBuf};
+use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::defaults::ZN_DEFAULT_BATCH_SIZE;
 
@@ -32,7 +32,8 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let res_key_set = [
         ResKey::RId(1),
-        ResKey::RIdWithSuffix(1, String::from("/frame/bench")),
+        ResKey::RName("/frame/bench".to_string()),
+        ResKey::RIdWithSuffix(1, "/frame/bench".to_string()),
     ];
 
     for p in &pld {
@@ -43,7 +44,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             let res_key = r.clone();
             let info = None;
-            let payload = RBuf::from(vec![0; *p]);
+            let payload = ZBuf::from(vec![0; *p]);
 
             let msg = ZenohMessage::make_data(
                 res_key,
@@ -74,7 +75,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                             let congestion_control = CongestionControl::Block;
                             let res_key = r.clone();
                             let info = None;
-                            let payload = RBuf::from(vec![0; *p]);
+                            let payload = ZBuf::from(vec![0; *p]);
 
                             let msg = ZenohMessage::make_data(
                                 res_key,
@@ -95,7 +96,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             c.bench_function(
                 format!(
-                    "frame_encoding_yes_contigous {} {} {} {}",
+                    "frame_encoding_yes_contiguous {} {} {} {}",
                     batch_size, p, num, r
                 )
                 .as_str(),
@@ -112,7 +113,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             c.bench_function(
                 format!(
-                    "frame_encoding_no_contigous {} {} {} {}",
+                    "frame_encoding_no_contiguous {} {} {} {}",
                     batch_size, p, num, r
                 )
                 .as_str(),
@@ -129,7 +130,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             c.bench_function(
                 format!(
-                    "frame_decoding_yes_contigous {} {} {} {}",
+                    "frame_decoding_yes_contiguous {} {} {} {}",
                     batch_size, p, num, r
                 )
                 .as_str(),
@@ -141,17 +142,17 @@ fn criterion_benchmark(c: &mut Criterion) {
                         wbuf.write_zenoh_message(&msg);
                     }
 
-                    let mut rbuf = RBuf::from(&wbuf);
+                    let mut zbuf = ZBuf::from(&wbuf);
                     b.iter(|| {
-                        rbuf.reset_pos();
-                        let _ = rbuf.read_session_message().unwrap();
+                        zbuf.reset();
+                        let _ = zbuf.read_session_message().unwrap();
                     })
                 },
             );
 
             c.bench_function(
                 format!(
-                    "frame_decoding_no_contigous {} {} {} {}",
+                    "frame_decoding_no_contiguous {} {} {} {}",
                     batch_size, p, num, r
                 )
                 .as_str(),
@@ -163,10 +164,10 @@ fn criterion_benchmark(c: &mut Criterion) {
                         wbuf.write_zenoh_message(&msg);
                     }
 
-                    let mut rbuf = RBuf::from(&wbuf);
+                    let mut zbuf = ZBuf::from(&wbuf);
                     b.iter(|| {
-                        rbuf.reset_pos();
-                        let _ = rbuf.read_session_message().unwrap();
+                        zbuf.reset();
+                        let _ = zbuf.read_session_message().unwrap();
                     })
                 },
             );

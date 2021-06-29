@@ -13,8 +13,12 @@
 //
 use super::core::{CongestionControl, PeerId, Reliability, ResKey, ZInt};
 use super::core::{QueryConsolidation, QueryTarget, SubInfo};
-use super::io::RBuf;
-use super::proto::{zmsg, DataInfo, Declaration, ReplyContext, RoutingContext, ZenohMessage};
+use super::io::ZBuf;
+use super::proto::{
+    zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
+    ForgetSubscriber, Publisher, Queryable, ReplyContext, Resource, RoutingContext, Subscriber,
+    ZenohMessage,
+};
 use super::session::{Primitives, Session};
 
 pub struct Mux {
@@ -31,10 +35,10 @@ impl Mux {
 
 impl Primitives for Mux {
     fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
-        let d = Declaration::Resource {
+        let d = Declaration::Resource(Resource {
             rid,
             key: reskey.clone(),
-        };
+        });
         let decls = vec![d];
         let _ = self
             .handler
@@ -42,7 +46,7 @@ impl Primitives for Mux {
     }
 
     fn forget_resource(&self, rid: ZInt) {
-        let d = Declaration::ForgetResource { rid };
+        let d = Declaration::ForgetResource(ForgetResource { rid });
         let decls = vec![d];
         let _ = self
             .handler
@@ -55,10 +59,10 @@ impl Primitives for Mux {
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let d = Declaration::Subscriber {
+        let d = Declaration::Subscriber(Subscriber {
             key: reskey.clone(),
             info: sub_info.clone(),
-        };
+        });
         let decls = vec![d];
         let _ =
             self.handler
@@ -66,9 +70,9 @@ impl Primitives for Mux {
     }
 
     fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
-        let d = Declaration::ForgetSubscriber {
+        let d = Declaration::ForgetSubscriber(ForgetSubscriber {
             key: reskey.clone(),
-        };
+        });
         let decls = vec![d];
         let _ =
             self.handler
@@ -76,9 +80,9 @@ impl Primitives for Mux {
     }
 
     fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
-        let d = Declaration::Publisher {
+        let d = Declaration::Publisher(Publisher {
             key: reskey.clone(),
-        };
+        });
         let decls = vec![d];
         let _ =
             self.handler
@@ -86,9 +90,9 @@ impl Primitives for Mux {
     }
 
     fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
-        let d = Declaration::ForgetPublisher {
+        let d = Declaration::ForgetPublisher(ForgetPublisher {
             key: reskey.clone(),
-        };
+        });
         let decls = vec![d];
         let _ =
             self.handler
@@ -96,10 +100,10 @@ impl Primitives for Mux {
     }
 
     fn decl_queryable(&self, reskey: &ResKey, kind: ZInt, routing_context: Option<RoutingContext>) {
-        let d = Declaration::Queryable {
+        let d = Declaration::Queryable(Queryable {
             key: reskey.clone(),
             kind,
-        };
+        });
         let decls = vec![d];
         let _ =
             self.handler
@@ -107,9 +111,9 @@ impl Primitives for Mux {
     }
 
     fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
-        let d = Declaration::ForgetQueryable {
+        let d = Declaration::ForgetQueryable(ForgetQueryable {
             key: reskey.clone(),
-        };
+        });
         let decls = vec![d];
         let _ =
             self.handler
@@ -119,7 +123,7 @@ impl Primitives for Mux {
     fn send_data(
         &self,
         reskey: &ResKey,
-        payload: RBuf,
+        payload: ZBuf,
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
@@ -169,7 +173,7 @@ impl Primitives for Mux {
         replier_id: PeerId,
         reskey: ResKey,
         data_info: Option<DataInfo>,
-        payload: RBuf,
+        payload: ZBuf,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             reskey,

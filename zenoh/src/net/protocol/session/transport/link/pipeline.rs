@@ -610,7 +610,7 @@ impl fmt::Debug for TransmissionPipeline {
 #[cfg(test)]
 mod tests {
     use super::super::core::{CongestionControl, Reliability, ResKey, ZInt};
-    use super::super::io::RBuf;
+    use super::super::io::ZBuf;
     use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
     use super::super::session::defaults::{
         ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_QUEUE_PRIO_DATA,
@@ -632,7 +632,7 @@ mod tests {
         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
-            let payload = RBuf::from(vec![0u8; payload_size]);
+            let payload = ZBuf::from(vec![0u8; payload_size]);
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -670,10 +670,10 @@ mod tests {
                 let (batch, priority) = queue.pull().await.unwrap();
                 batches += 1;
                 bytes += batch.len();
-                // Create a RBuf for deserialization starting from the batch
-                let mut rbuf: RBuf = batch.get_serialized_messages().into();
+                // Create a ZBuf for deserialization starting from the batch
+                let mut zbuf: ZBuf = batch.get_serialized_messages().into();
                 // Deserialize the messages
-                while let Some(msg) = rbuf.read_session_message() {
+                while let Some(msg) = zbuf.read_session_message() {
                     match msg.body {
                         SessionBody::Frame(Frame { payload, .. }) => match payload {
                             FramePayload::Messages { messages } => {
@@ -761,7 +761,7 @@ mod tests {
 
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
-            let payload = RBuf::from(vec![0u8; payload_size]);
+            let payload = ZBuf::from(vec![0u8; payload_size]);
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -872,7 +872,7 @@ mod tests {
 
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
-            let payload = RBuf::from(vec![0u8; payload_size]);
+            let payload = ZBuf::from(vec![0u8; payload_size]);
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -1007,7 +1007,7 @@ mod tests {
 
                     // Send reliable messages
                     let key = ResKey::RName("/pipeline/thr".to_string());
-                    let payload = RBuf::from(vec![0u8; *size]);
+                    let payload = ZBuf::from(vec![0u8; *size]);
                     let reliability = Reliability::Reliable;
                     let congestion_control = CongestionControl::Block;
                     let data_info = None;

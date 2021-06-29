@@ -37,7 +37,7 @@ async fn main() {
     }
 
     let reskey = RId(z
-        .declare_resource(&RName("/test/shm/thr".to_string()))
+        .declare_resource(&RName("/test/thr".to_string()))
         .await
         .unwrap());
     let _publ = z.declare_publisher(&reskey).await.unwrap();
@@ -70,7 +70,15 @@ fn parse_args() -> (Properties, usize, usize) {
             Arg::from_usage("-s, --shared-memory=[MB]  'shared memory size in MBytes'")
                 .default_value("32"),
         )
-        .arg(Arg::from_usage("-p, --payload=[KB] 'payload in KBytes'").default_value("1"))
+        .arg(Arg::from_usage(
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+        ))
+        .arg(Arg::from_usage(
+            "-c, --config=[FILE]      'A configuration file.'",
+        ))
+        .arg(Arg::from_usage(
+            "<PAYLOAD_SIZE>           'Sets the size of the payload to publish'",
+        ))
         .get_matches();
 
     let config = Properties::default();
@@ -83,10 +91,9 @@ fn parse_args() -> (Properties, usize, usize) {
         * 1024;
 
     let size = args
-        .value_of("shared-memory")
+        .value_of("PAYLOAD_SIZE")
         .unwrap()
         .parse::<usize>()
-        .unwrap()
-        * 1024;
+        .unwrap();
     (config, sm_size, size)
 }

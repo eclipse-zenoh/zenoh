@@ -23,7 +23,7 @@ use super::session;
 use super::core::{
     CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, ZInt,
 };
-use super::io::RBuf;
+use super::io::ZBuf;
 use super::proto::{DataInfo, RoutingContext};
 pub use demux::*;
 pub use mux::*;
@@ -49,7 +49,7 @@ pub trait Primitives {
     fn send_data(
         &self,
         reskey: &ResKey,
-        payload: RBuf,
+        payload: ZBuf,
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
@@ -73,7 +73,7 @@ pub trait Primitives {
         replier_id: PeerId,
         reskey: ResKey,
         info: Option<DataInfo>,
-        payload: RBuf,
+        payload: ZBuf,
     );
 
     fn send_reply_final(&self, qid: ZInt);
@@ -120,7 +120,7 @@ impl Primitives for DummyPrimitives {
     fn send_data(
         &self,
         _reskey: &ResKey,
-        _payload: RBuf,
+        _payload: ZBuf,
         _reliability: Reliability,
         _congestion_control: CongestionControl,
         _info: Option<DataInfo>,
@@ -144,7 +144,7 @@ impl Primitives for DummyPrimitives {
         _replier_id: PeerId,
         _reskey: ResKey,
         _info: Option<DataInfo>,
-        _payload: RBuf,
+        _payload: ZBuf,
     ) {
     }
     fn send_reply_final(&self, _qid: ZInt) {}

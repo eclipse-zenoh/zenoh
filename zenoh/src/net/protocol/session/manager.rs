@@ -20,6 +20,8 @@ use super::defaults::{
     ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_LINK_KEEP_ALIVE, ZN_LINK_LEASE,
     ZN_OPEN_INCOMING_PENDING, ZN_OPEN_TIMEOUT,
 };
+#[cfg(feature = "zero-copy")]
+use super::io::SharedMemoryReader;
 use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
 };
@@ -30,6 +32,8 @@ use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
+#[cfg(feature = "zero-copy")]
+use std::sync::RwLock;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -222,6 +226,8 @@ pub struct SessionManager {
     protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManager>>>,
     // Established sessions
     sessions: Arc<Mutex<HashMap<PeerId, Arc<SessionTransport>>>>,
+    #[cfg(feature = "zero-copy")]
+    pub(super) shmr: Arc<RwLock<SharedMemoryReader>>,
 }
 
 impl SessionManager {
@@ -309,6 +315,8 @@ impl SessionManager {
             incoming: AsyncArc::new(AsyncMutex::new(HashMap::new())),
             prng: AsyncArc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
+            #[cfg(feature = "zero-copy")]
+            shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
         }
     }
 
@@ -455,10 +463,12 @@ impl SessionManager {
                 return zerror!(ZErrorKind::Other { descr: e });
             }
 
-            if session.is_shm != is_shm {
+            if session.is_shm() != is_shm {
                 let e = format!(
                     "Session with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
-                    peer, is_shm, session.is_shm
+                    peer,
+                    is_shm,
+                    session.is_shm()
                 );
                 log::trace!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });

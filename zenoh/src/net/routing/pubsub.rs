@@ -22,7 +22,7 @@ use zenoh_util::zread;
 use super::protocol::core::{
     whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode, ZInt,
 };
-use super::protocol::io::RBuf;
+use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
@@ -101,7 +101,7 @@ fn propagate_sourced_subscription(
                     res,
                     src_face,
                     sub_info,
-                    Some(tree_sid.index() as ZInt),
+                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -407,7 +407,7 @@ fn propagate_forget_sourced_subscription(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(tree_sid.index() as ZInt),
+                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -703,7 +703,7 @@ pub(crate) fn pubsub_tree_change(
                                 res,
                                 None,
                                 &sub_info,
-                                Some(tree_sid as ZInt),
+                                Some(RoutingContext::make(tree_sid as ZInt)),
                             );
                         }
                     }
@@ -739,7 +739,7 @@ fn insert_faces_for_subs(
                                         face.clone(),
                                         reskey,
                                         if source != 0 {
-                                            Some(source as u64)
+                                            Some(RoutingContext::make(source as ZInt))
                                         } else {
                                             None
                                         },
@@ -975,18 +975,9 @@ macro_rules! treat_timestamp {
                     }
                 } else {
                     // No DataInfo; add one with a Timestamp
-                    Some(
-                        DataInfo {
-                            source_id: None,
-                            source_sn: None,
-                            first_router_id: None,
-                            first_router_sn: None,
-                            timestamp: Some(hlc.new_timestamp()),
-                            kind: None,
-                            encoding: None,
-                            is_shm: false,
-                        }
-                    )
+                    let mut data_info = DataInfo::new();
+                    data_info.timestamp = Some(hlc.new_timestamp());
+                    Some(data_info)
                 }
             },
             None => $info,
@@ -1007,7 +998,8 @@ fn get_data_route(
         whatami::ROUTER => match face.whatami {
             whatami::ROUTER => {
                 let routers_net = tables.routers_net.as_ref().unwrap();
-                let local_context = routers_net.get_local_context(routing_context, face.link_id);
+                let local_context = routers_net
+                    .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
                     .map(|res| res.routers_data_route(local_context))
                     .flatten()
@@ -1023,7 +1015,8 @@ fn get_data_route(
             }
             whatami::PEER => {
                 let peers_net = tables.peers_net.as_ref().unwrap();
-                let local_context = peers_net.get_local_context(routing_context, face.link_id);
+                let local_context =
+                    peers_net.get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
                     .map(|res| res.peers_data_route(local_context))
                     .flatten()
@@ -1048,7 +1041,8 @@ fn get_data_route(
         whatami::PEER => match face.whatami {
             whatami::ROUTER | whatami::PEER => {
                 let peers_net = tables.peers_net.as_ref().unwrap();
-                let local_context = peers_net.get_local_context(routing_context, face.link_id);
+                let local_context =
+                    peers_net.get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
                     .map(|res| res.peers_data_route(local_context))
                     .flatten()
@@ -1155,7 +1149,7 @@ pub fn route_data(
     suffix: &str,
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
-    payload: RBuf,
+    payload: ZBuf,
     routing_context: Option<RoutingContext>,
 ) {
     match tables.get_mapping(&face, &rid).cloned() {
@@ -1196,7 +1190,7 @@ pub fn full_reentrant_route_data(
     suffix: &str,
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
-    payload: RBuf,
+    payload: ZBuf,
     routing_context: Option<RoutingContext>,
 ) {
     let tables = zread!(tables_ref);

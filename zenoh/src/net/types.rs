@@ -24,7 +24,7 @@ use std::task::{Context, Poll};
 use uhlc::Timestamp;
 
 /// A read-only bytes buffer.
-pub use super::protocol::io::RBuf;
+pub use super::protocol::io::{ZBuf, ZSlice};
 
 /// A writable bytes buffer.
 pub use super::protocol::io::WBuf;
@@ -96,9 +96,9 @@ pub use zenoh_util::sync::ZResolvedFuture;
 ///
 /// # Examples
 /// ```
-/// # use zenoh::net::protocol::io::RBuf;
+/// # use zenoh::net::protocol::io::ZBuf;
 /// # use zenoh::net::protocol::proto::DataInfo;
-/// # let sample = zenoh::net::Sample { res_name: "".to_string(), payload: RBuf::new(), data_info: None };
+/// # let sample = zenoh::net::Sample { res_name: "".to_string(), payload: ZBuf::new(), data_info: None };
 /// if let Some(info) = sample.data_info {
 ///     match info.timestamp {
 ///         Some(ts) => println!("Sample's timestamp: {}", ts),
@@ -128,7 +128,7 @@ zreceiver! {
 #[derive(Debug, Clone)]
 pub struct Sample {
     pub res_name: String,
-    pub payload: RBuf,
+    pub payload: ZBuf,
     pub data_info: Option<DataInfo>,
 }
 

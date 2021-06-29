@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::{whatami, PeerId, WhatAmI};
-use super::protocol::io::{RBuf, WBuf};
+use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::link::Locator;
 use super::protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
 use super::protocol::session::Session;
@@ -511,19 +511,19 @@ impl Runtime {
                 for socket in sockets {
                     log::trace!(
                         "Send {:?} to {} on interface {}",
-                        scout.get_body(),
+                        scout.body,
                         mcast_addr,
                         socket
                             .local_addr()
                             .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                     );
                     if let Err(err) = socket
-                        .send_to(&RBuf::from(&wbuf).to_vec(), mcast_addr.to_string())
+                        .send_to(&ZBuf::from(&wbuf).contiguous(), mcast_addr.to_string())
                         .await
                     {
                         log::warn!(
                             "Unable to send {:?} to {} on interface {} : {}",
-                            scout.get_body(),
+                            scout.body,
                             mcast_addr,
                             socket
                                 .local_addr()
@@ -543,21 +543,21 @@ impl Runtime {
                 let mut buf = vec![0; RCV_BUF_SIZE];
                 loop {
                     let (n, peer) = socket.recv_from(&mut buf).await.unwrap();
-                    let mut rbuf = RBuf::from(&buf[..n]);
-                    if let Some(msg) = rbuf.read_session_message() {
-                        log::trace!("Received {:?} from {}", msg.get_body(), peer);
-                        if let SessionBody::Hello(hello) = msg.get_body() {
+                    let mut zbuf = ZBuf::from(&buf[..n]);
+                    if let Some(msg) = zbuf.read_session_message() {
+                        log::trace!("Received {:?} from {}", msg.body, peer);
+                        if let SessionBody::Hello(hello) = &msg.body {
                             let whatami = hello.whatami.or(Some(whatami::ROUTER)).unwrap();
                             if whatami & what != 0 {
                                 if let Loop::Break = f(hello.clone()).await {
                                     break;
                                 }
                             } else {
-                                log::warn!("Received unexpected Hello : {:?}", msg.get_body());
+                                log::warn!("Received unexpected Hello : {:?}", msg.body);
                             }
                         }
                     } else {
-                        log::trace!("Received unexpected UDP datagram from {} : {}", peer, rbuf);
+                        log::trace!("Received unexpected UDP datagram from {} : {}", peer, zbuf);
                     }
                 }
             }
@@ -683,12 +683,12 @@ impl Runtime {
                 continue;
             }
 
-            let mut rbuf = RBuf::from(&buf[..n]);
-            if let Some(msg) = rbuf.read_session_message() {
-                log::trace!("Received {:?} from {}", msg.get_body(), peer);
+            let mut zbuf = ZBuf::from(&buf[..n]);
+            if let Some(msg) = zbuf.read_session_message() {
+                log::trace!("Received {:?} from {}", msg.body, peer);
                 if let SessionBody::Scout(Scout {
                     what, pid_request, ..
-                }) = msg.get_body()
+                }) = &msg.body
                 {
                     let what = what.or(Some(whatami::ROUTER)).unwrap();
                     if what & self.whatami != 0 {
@@ -707,25 +707,22 @@ impl Runtime {
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
                         log::trace!(
                             "Send {:?} to {} on interface {}",
-                            hello.get_body(),
+                            hello.body,
                             peer,
                             socket
                                 .local_addr()
                                 .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                         );
                         wbuf.write_session_message(&hello);
-                        if let Err(err) = socket.send_to(&RBuf::from(&wbuf).to_vec(), peer).await {
-                            log::error!(
-                                "Unable to send {:?} to {} : {}",
-                                hello.get_body(),
-                                peer,
-                                err
-                            );
+                        if let Err(err) =
+                            socket.send_to(&ZBuf::from(&wbuf).contiguous(), peer).await
+                        {
+                            log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);
                         }
                     }
                 }
             } else {
-                log::trace!("Received unexpected UDP datagram from {} : {}", peer, rbuf);
+                log::trace!("Received unexpected UDP datagram from {} : {}", peer, zbuf);
             }
         }
     }

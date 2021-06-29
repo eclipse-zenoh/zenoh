@@ -16,7 +16,7 @@ use super::protocol::{
         queryable::EVAL, rname, CongestionControl, PeerId, QueryConsolidation, QueryTarget,
         Reliability, ResKey, SubInfo, ZInt,
     },
-    io::RBuf,
+    io::ZBuf,
     proto::{encoding, DataInfo, RoutingContext},
     session::Primitives,
 };
@@ -38,7 +38,7 @@ pub struct AdminContext {
     version: String,
 }
 
-type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (RBuf, ZInt)> + Send + Sync>;
+type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (ZBuf, ZInt)> + Send + Sync>;
 
 pub struct AdminSpace {
     pid: PeerId,
@@ -149,7 +149,7 @@ impl Primitives for AdminSpace {
     fn send_data(
         &self,
         reskey: &ResKey,
-        payload: RBuf,
+        payload: ZBuf,
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
@@ -201,16 +201,9 @@ impl Primitives for AdminSpace {
         task::spawn(async move {
             for (path, handler) in matching_handlers {
                 let (payload, encoding) = handler(&context).await;
-                let data_info = DataInfo {
-                    source_id: None,
-                    source_sn: None,
-                    first_router_id: None,
-                    first_router_sn: None,
-                    timestamp: None,
-                    kind: None,
-                    encoding: Some(encoding),
-                    is_shm: false,
-                };
+                let mut data_info = DataInfo::new();
+                data_info.encoding = Some(encoding);
+
                 primitives.send_reply_data(
                     qid,
                     EVAL,
@@ -232,7 +225,7 @@ impl Primitives for AdminSpace {
         replier_id: PeerId,
         reskey: ResKey,
         info: Option<DataInfo>,
-        payload: RBuf,
+        payload: ZBuf,
     ) {
         trace!(
             "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
@@ -270,7 +263,7 @@ impl Primitives for AdminSpace {
     }
 }
 
-pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
+pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
     let session_mgr = context.runtime.manager().clone();
 
     // plugins info
@@ -313,22 +306,22 @@ pub async fn router_data(context: &AdminContext) -> (RBuf, ZInt) {
         "plugins": plugins,
     });
     log::trace!("AdminSpace router_data: {:?}", json);
-    (RBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
+    (ZBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
 }
 
-pub async fn linkstate_routers_data(context: &AdminContext) -> (RBuf, ZInt) {
+pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, ZInt) {
     let tables = zread!(context.runtime.router.tables);
 
     let res = (
-        RBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
+        ZBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
         encoding::TEXT_PLAIN,
     );
     res
 }
 
-pub async fn linkstate_peers_data(context: &AdminContext) -> (RBuf, ZInt) {
+pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, ZInt) {
     (
-        RBuf::from(
+        ZBuf::from(
             context
                 .runtime
                 .router

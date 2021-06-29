@@ -19,7 +19,7 @@ use zenoh::net::protocol::core::{
     whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
     SubInfo, SubMode, ZInt,
 };
-use zenoh::net::protocol::io::RBuf;
+use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
 use zenoh::net::protocol::session::{DummyPrimitives, Primitives};
 use zenoh::net::routing::router::*;
@@ -417,7 +417,7 @@ impl Primitives for ClientPrimitives {
     fn send_data(
         &self,
         reskey: &ResKey,
-        _payload: RBuf,
+        _payload: ZBuf,
         _reliability: Reliability,
         _congestion_control: CongestionControl,
         _info: Option<DataInfo>,
@@ -444,7 +444,7 @@ impl Primitives for ClientPrimitives {
         _replier_id: PeerId,
         _reskey: ResKey,
         _info: Option<DataInfo>,
-        _payload: RBuf,
+        _payload: ZBuf,
     ) {
     }
     fn send_reply_final(&self, _qid: ZInt) {}
@@ -566,7 +566,7 @@ fn client_test() {
         "/test/client/z1_wr1",
         CongestionControl::Block,
         None,
-        RBuf::new(),
+        ZBuf::new(),
         None,
     );
 
@@ -592,7 +592,7 @@ fn client_test() {
         "/z1_wr2",
         CongestionControl::Block,
         None,
-        RBuf::new(),
+        ZBuf::new(),
         None,
     );
 
@@ -618,7 +618,7 @@ fn client_test() {
         "/test/client/**",
         CongestionControl::Block,
         None,
-        RBuf::new(),
+        ZBuf::new(),
         None,
     );
 
@@ -644,7 +644,7 @@ fn client_test() {
         "",
         CongestionControl::Block,
         None,
-        RBuf::new(),
+        ZBuf::new(),
         None,
     );
 
@@ -670,7 +670,7 @@ fn client_test() {
         "",
         CongestionControl::Block,
         None,
-        RBuf::new(),
+        ZBuf::new(),
         None,
     );
 

@@ -11,129 +11,111 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "zero-copy")]
+use super::io::SharedMemoryReader;
+#[cfg(feature = "zero-copy")]
 use super::msg::*;
+#[cfg(feature = "zero-copy")]
+use std::sync::{Arc, RwLock};
+#[cfg(feature = "zero-copy")]
+use zenoh_util::core::ZResult;
 
+#[cfg(feature = "zero-copy")]
+macro_rules! unset_sliced {
+    ($msg:expr, $data_info:expr) => {
+        // Set the right data info SHM parameters
+        if let Some(di) = $data_info {
+            di.sliced = false;
+            if !di.has_options() {
+                *$data_info = None;
+            }
+        }
+    };
+}
+
+#[cfg(feature = "zero-copy")]
+macro_rules! set_sliced {
+    ($msg:expr, $data_info:expr) => {
+        match $data_info {
+            Some(di) => {
+                // Just update the is_shm field. This field can be
+                // then used at receiver side to identify that the
+                // actual content is stored in shared memory
+                di.sliced = true;
+            }
+            None => {
+                // Create the DataInfo content
+                let mut di = DataInfo::new();
+                di.sliced = true;
+                *$data_info = Some(di);
+            }
+        }
+    };
+}
+
+#[cfg(feature = "zero-copy")]
 impl ZenohMessage {
-    #[cfg(feature = "zero-copy")]
-    pub(crate) fn flatten_shm(&mut self) {
-        if let Some(at) = self.attachment.as_mut() {
-            at.buffer.flatten_shm();
+    pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
+        let mut res = false;
+
+        if let Some(attachment) = self.attachment.as_mut() {
+            res = attachment.buffer.map_to_shmbuf(shmr.clone())?;
         }
 
         if let ZenohBody::Data(Data {
             payload, data_info, ..
         }) = &mut self.body
         {
-            payload.flatten_shm();
-
-            // Set the right data info SHM parameters
-            if let Some(di) = data_info {
-                di.is_shm = false;
-                if !di.has_opts() {
-                    *data_info = None;
-                    // Unset the DataInfo flag in the header
-                    self.header &= !zmsg::flag::I;
-                }
+            if payload.has_shminfo() {
+                res = res || payload.map_to_shmbuf(shmr)?;
+                unset_sliced!(self, data_info);
             }
         }
+
+        Ok(res)
     }
 
-    #[cfg(feature = "zero-copy")]
-    pub(crate) fn prepare_shm(&mut self) {
-        if let Some(at) = self.attachment.as_mut() {
-            at.buffer.inc_ref_shm();
+    pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        let mut res = false;
+
+        if let Some(attachment) = self.attachment.as_mut() {
+            res = attachment.buffer.map_to_shminfo()?;
         }
 
         if let ZenohBody::Data(Data {
             payload, data_info, ..
         }) = &mut self.body
         {
-            if payload.is_shm() {
-                payload.inc_ref_shm();
-
-                // Set the right data info SHM parameters
-                match data_info {
-                    Some(di) => {
-                        // Just update the is_shm field. This field can be
-                        // then used at receiver side to identify that the
-                        // actual content is stored in shared memory
-                        di.is_shm = true;
-                    }
-                    None => {
-                        // Create the DataInfo content
-                        *data_info = Some(DataInfo {
-                            source_id: None,
-                            source_sn: None,
-                            first_router_id: None,
-                            first_router_sn: None,
-                            timestamp: None,
-                            kind: None,
-                            encoding: None,
-                            is_shm: true,
-                        });
-                        // Set the DataInfo flag in the header
-                        self.header |= zmsg::flag::I;
-                    }
-                }
+            if payload.has_shmbuf() {
+                res = res || payload.map_to_shminfo()?;
+                set_sliced!(self, data_info);
             }
         }
+
+        Ok(res)
     }
 }
 
-// These functions are not used at the moment but it might be used in the future.
-// It's a good practice to keep the message definitions aligned.
-// impl SessionMessage {
-//     #[cfg(feature = "zero-copy")]
-//     pub(crate) fn flatten_shm(&mut self) {
-//         if let Some(at) = self.attachment.as_mut() {
-//             at.buffer.flatten_shm();
-//         }
+#[allow(dead_code)]
+#[cfg(feature = "zero-copy")]
+impl SessionMessage {
+    pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
+        let mut res = false;
 
-//         match &mut self.body {
-//             SessionBody::Frame(Frame { payload, .. }) => match payload {
-//                 FramePayload::Fragment { buffer, .. } => {
-//                     buffer.flatten_shm();
-//                 }
-//                 FramePayload::Messages { messages } => {
-//                     for m in messages {
-//                         m.flatten_shm();
-//                     }
-//                 }
-//             },
-//             SessionBody::InitAck(InitAck { cookie, .. }) => {
-//                 cookie.flatten_shm();
-//             }
-//             SessionBody::OpenSyn(OpenSyn { cookie, .. }) => {
-//                 cookie.flatten_shm();
-//             }
-//             _ => {}
-//         }
-//     }
+        if let Some(attachment) = self.attachment.as_mut() {
+            res = attachment.buffer.map_to_shmbuf(shmr)?;
+        }
 
-//     #[cfg(feature = "zero-copy")]
-//     pub(crate) fn prepare_shm(&mut self) {
-//         if let Some(at) = self.attachment.as_mut() {
-//             at.buffer.inc_ref_shm();
-//         }
+        Ok(res)
+    }
 
-//         match &mut self.body {
-//             SessionBody::Frame(Frame { payload, .. }) => match payload {
-//                 FramePayload::Fragment { buffer, .. } => {
-//                     buffer.inc_ref_shm();
-//                 }
-//                 FramePayload::Messages { messages } => {
-//                     for m in messages {
-//                         m.prepare_shm();
-//                     }
-//                 }
-//             },
-//             SessionBody::InitAck(InitAck { cookie, .. }) => {
-//                 cookie.inc_ref_shm();
-//             }
-//             SessionBody::OpenSyn(OpenSyn { cookie, .. }) => {
-//                 cookie.inc_ref_shm();
-//             }
-//             _ => {}
-//         }
-//     }
-// }
+    pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        let mut res = false;
+
+        if let Some(attachment) = self.attachment.as_mut() {
+            res = attachment.buffer.map_to_shminfo()?;
+        }
+
+        Ok(res)
+    }
+}

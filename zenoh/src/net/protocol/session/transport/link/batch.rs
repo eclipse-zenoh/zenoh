@@ -30,7 +30,7 @@ enum CurrentFrame {
 
 /// Serialization Batch
 ///
-/// A [`SerializationBatch`][SerializationBatch] is a non-expandable and contigous region of memory
+/// A [`SerializationBatch`][SerializationBatch] is a non-expandable and contiguous region of memory
 /// that is used to serialize [`SessionMessage`][SessionMessage] and [`ZenohMessage`][ZenohMessage].
 ///
 /// [`SessionMessage`][SessionMessage] are always serialized on the batch as theyr are, while
@@ -64,7 +64,7 @@ impl SerializationBatch {
     /// Create a new [`SerializationBatch`][SerializationBatch] with a given size in bytes.
     ///
     /// # Arguments
-    /// * `size` - The size in bytes of the contigous memory buffer to allocate on.
+    /// * `size` - The size in bytes of the contiguous memory buffer to allocate on.
     ///
     /// * `is_streamed` - The serialization batch is meant to be used for a stream-based transport
     ///                   protocol (e.g., TCP) in constrast to datagram-based transport protocol (e.g., UDP).
@@ -311,7 +311,7 @@ impl SerializationBatch {
 #[cfg(test)]
 mod tests {
     use super::super::core::{CongestionControl, Reliability, ResKey};
-    use super::super::io::{RBuf, WBuf};
+    use super::super::io::{WBuf, ZBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
     use super::super::session::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
     use super::*;
@@ -373,7 +373,7 @@ mod tests {
                     dropping = !dropping;
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
-                let payload = RBuf::from(vec![0u8; payload_size]);
+                let payload = ZBuf::from(vec![0u8; payload_size]);
                 let reliability = if reliable {
                     Reliability::Reliable
                 } else {
@@ -410,10 +410,10 @@ mod tests {
 
             // Verify that we deserialize the same messages we have serialized
             let mut deserialized: Vec<SessionMessage> = Vec::new();
-            // Convert the buffer into an RBuf
-            let mut rbuf: RBuf = batch.get_serialized_messages().into();
+            // Convert the buffer into an ZBuf
+            let mut zbuf: ZBuf = batch.get_serialized_messages().into();
             // Deserialize the messages
-            while let Some(msg) = rbuf.read_session_message() {
+            while let Some(msg) = zbuf.read_session_message() {
                 deserialized.push(msg);
             }
             assert!(!deserialized.is_empty());
@@ -454,7 +454,7 @@ mod tests {
                 {
                     // Create the ZenohMessage
                     let key = ResKey::RName("test".to_string());
-                    let payload = RBuf::from(vec![0u8; payload_size]);
+                    let payload = ZBuf::from(vec![0u8; payload_size]);
                     let data_info = None;
                     let routing_context = None;
                     let reply_context = None;
@@ -516,16 +516,16 @@ mod tests {
 
                     let mut fragments = WBuf::new(0, false);
                     for batch in batches.iter() {
-                        // Convert the buffer into an RBuf
-                        let mut rbuf: RBuf = batch.get_serialized_messages().into();
+                        // Convert the buffer into an ZBuf
+                        let mut zbuf: ZBuf = batch.get_serialized_messages().into();
                         // Deserialize the messages
-                        let msg = rbuf.read_session_message().unwrap();
+                        let msg = zbuf.read_session_message().unwrap();
 
                         match msg.body {
                             SessionBody::Frame(Frame { payload, .. }) => match payload {
                                 FramePayload::Fragment { buffer, is_final } => {
                                     assert!(!buffer.is_empty());
-                                    fragments.write_rbuf_slices(&buffer);
+                                    fragments.write_zslice(buffer.clone());
                                     if is_final {
                                         break;
                                     }
@@ -535,7 +535,7 @@ mod tests {
                             _ => assert!(false),
                         }
                     }
-                    let mut fragments: RBuf = fragments.into();
+                    let mut fragments: ZBuf = fragments.into();
 
                     assert!(!fragments.is_empty());
 

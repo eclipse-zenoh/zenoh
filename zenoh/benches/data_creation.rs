@@ -18,7 +18,7 @@ use async_std::sync::Arc;
 use criterion::Criterion;
 
 use zenoh::net::protocol::core::{CongestionControl, PeerId, Reliability, ResKey};
-use zenoh::net::protocol::io::RBuf;
+use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
 fn consume_message(msg: ZenohMessage) {
@@ -49,9 +49,10 @@ fn criterion_benchmark(c: &mut Criterion) {
                     )),
                     kind: Some(0),
                     encoding: Some(0),
-                    is_shm: false,
+                    #[cfg(feature = "zero-copy")]
+                    sliced: false,
                 });
-                let payload = RBuf::from(vec![0; *s]);
+                let payload = ZBuf::from(vec![0; *s]);
 
                 let msg = ZenohMessage::make_data(
                     res_key,
@@ -74,7 +75,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
                 let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
                 let info = None;
-                let payload = RBuf::from(vec![0; *s]);
+                let payload = ZBuf::from(vec![0; *s]);
 
                 let msg = ZenohMessage::make_data(
                     res_key,
@@ -105,9 +106,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         )),
         kind: Some(0),
         encoding: Some(0),
-        is_shm: false,
+        #[cfg(feature = "zero-copy")]
+        sliced: false,
     });
-    let payload = RBuf::from(vec![0; 1024]);
+    let payload = ZBuf::from(vec![0; 1024]);
     let msg = Arc::new(ZenohMessage::make_data(
         res_key.clone(),
         payload.clone(),

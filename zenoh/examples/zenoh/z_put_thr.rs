@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use std::convert::TryFrom;
-use zenoh::net::RBuf;
+use zenoh::net::ZBuf;
 use zenoh::*;
 
 #[async_std::main]
@@ -22,7 +22,7 @@ async fn main() {
     env_logger::init();
     let (config, size) = parse_args();
 
-    let data: RBuf = (0usize..size)
+    let data: ZBuf = (0usize..size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();

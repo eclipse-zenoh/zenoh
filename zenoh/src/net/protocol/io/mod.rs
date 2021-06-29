@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod arc_slice;
-pub use arc_slice::*;
+mod zslice;
+pub use zslice::*;
 
-mod rbuf;
-pub use rbuf::*;
+mod zbuf;
+pub use zbuf::*;
 
 mod wbuf;
 pub use wbuf::*;

@@ -15,7 +15,7 @@ use super::{
     attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
 };
-use super::{Locator, PeerId, Property, RBuf, WBuf, ZInt};
+use super::{Locator, PeerId, Property, WBuf, ZBuf, ZInt};
 use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
@@ -68,7 +68,7 @@ impl WBuf {
     }
 }
 
-impl RBuf {
+impl ZBuf {
     fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
         Some(InitSynProperty { version })
@@ -94,7 +94,7 @@ impl WBuf {
     }
 }
 
-impl RBuf {
+impl ZBuf {
     fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty> {
         let nonce = self.read_zint()?;
         Some(InitAckProperty { nonce })
@@ -124,7 +124,7 @@ impl WBuf {
     }
 }
 
-impl RBuf {
+impl ZBuf {
     fn read_open_syn_property_usrpwd(&mut self) -> Option<OpenSynProperty> {
         let user = self.read_bytes_array()?;
         let hmac = self.read_bytes_array()?;
@@ -236,11 +236,11 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_syn_property_usrpwd(&init_syn_property);
-        let rbuf: RBuf = wbuf.into();
+        let zbuf: ZBuf = wbuf.into();
 
         let prop = Property {
             key: attachment::authorization::USRPWD,
-            value: rbuf.to_vec(),
+            value: zbuf.to_vec(),
         };
         res.properties.push(prop);
         Ok(res)
@@ -256,7 +256,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::USRPWD);
-        let mut rbuf: RBuf = match res {
+        let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -264,7 +264,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let init_syn_property = match rbuf.read_init_syn_property_usrpwd() {
+        let init_syn_property = match zbuf.read_init_syn_property_usrpwd() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -285,10 +285,10 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_ack_property_usrpwd(&init_ack_property);
-        let rbuf: RBuf = wbuf.into();
+        let zbuf: ZBuf = wbuf.into();
         let prop = Property {
             key: attachment::authorization::USRPWD,
-            value: rbuf.to_vec(),
+            value: zbuf.to_vec(),
         };
 
         // Insert the nonce in the set of sent nonces
@@ -319,7 +319,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let tmp = properties
             .iter()
             .find(|p| p.key == attachment::authorization::USRPWD);
-        let mut rbuf: RBuf = match tmp {
+        let mut zbuf: ZBuf = match tmp {
             Some(p) => p.value.clone().into(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -327,7 +327,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let init_ack_property = match rbuf.read_init_ack_property_usrpwd() {
+        let init_ack_property = match zbuf.read_init_ack_property_usrpwd() {
             Some(isa) => isa,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -347,10 +347,10 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         // Encode the InitAck attachment
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_open_syn_property_usrpwd(&open_syn_property);
-        let rbuf: RBuf = wbuf.into();
+        let zbuf: ZBuf = wbuf.into();
         let prop = Property {
             key: attachment::authorization::USRPWD,
-            value: rbuf.to_vec(),
+            value: zbuf.to_vec(),
         };
         res.properties.push(prop);
         Ok(res)
@@ -377,7 +377,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let res = properties
             .iter()
             .find(|p| p.key == attachment::authorization::USRPWD);
-        let mut rbuf: RBuf = match res {
+        let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
@@ -385,7 +385,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-        let open_syn_property = match rbuf.read_open_syn_property_usrpwd() {
+        let open_syn_property = match zbuf.read_open_syn_property_usrpwd() {
             Some(osp) => osp,
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {

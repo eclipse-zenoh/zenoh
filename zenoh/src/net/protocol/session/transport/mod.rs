@@ -52,13 +52,17 @@ macro_rules! zlinkindex {
     };
 }
 
-pub(crate) struct SessionTransportRxReliable {
-    sn: SeqNum,
-    defrag_buffer: DefragBuffer,
+pub(crate) struct SessionTransportChannel {
+    pub(crate) sn: SeqNum,
+    pub(crate) defrag: DefragBuffer,
 }
 
-impl SessionTransportRxReliable {
-    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SessionTransportRxReliable {
+impl SessionTransportChannel {
+    pub(crate) fn new(
+        reliability: Reliability,
+        initial_sn: ZInt,
+        sn_resolution: ZInt,
+    ) -> SessionTransportChannel {
         // Set the sequence number in the state as it had
         // received a message with initial_sn - 1
         let last_initial_sn = if initial_sn == 0 {
@@ -67,31 +71,9 @@ impl SessionTransportRxReliable {
             initial_sn - 1
         };
 
-        SessionTransportRxReliable {
+        SessionTransportChannel {
             sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::Reliable),
-        }
-    }
-}
-
-pub(crate) struct SessionTransportRxBestEffort {
-    sn: SeqNum,
-    defrag_buffer: DefragBuffer,
-}
-
-impl SessionTransportRxBestEffort {
-    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SessionTransportRxBestEffort {
-        // Set the sequence number in the state as it had
-        // received a message with initial_sn - 1
-        let last_initial_sn = if initial_sn == 0 {
-            sn_resolution - 1
-        } else {
-            initial_sn - 1
-        };
-
-        SessionTransportRxBestEffort {
-            sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag_buffer: DefragBuffer::new(initial_sn, sn_resolution, Reliability::BestEffort),
+            defrag: DefragBuffer::new(initial_sn, sn_resolution, reliability),
         }
     }
 }
@@ -114,9 +96,9 @@ pub(crate) struct SessionTransport {
     // The sn generator for the TX best_effort channel
     pub(super) tx_sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
     // The RX reliable channel
-    pub(super) rx_reliable: Arc<Mutex<SessionTransportRxReliable>>,
+    pub(super) rx_reliable: Arc<Mutex<SessionTransportChannel>>,
     // The RX best effort channel
-    pub(super) rx_best_effort: Arc<Mutex<SessionTransportRxBestEffort>>,
+    pub(super) rx_best_effort: Arc<Mutex<SessionTransportChannel>>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[SessionTransportLink]>>>,
     // The callback
@@ -124,7 +106,7 @@ pub(crate) struct SessionTransport {
     // Mutex for notification
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The session transport can do shm
-    pub(super) is_shm: bool,
+    is_shm: bool,
 }
 
 impl SessionTransport {
@@ -150,11 +132,13 @@ impl SessionTransport {
                 initial_sn_tx,
                 sn_resolution,
             ))),
-            rx_reliable: Arc::new(Mutex::new(SessionTransportRxReliable::new(
+            rx_reliable: Arc::new(Mutex::new(SessionTransportChannel::new(
+                Reliability::Reliable,
                 initial_sn_rx,
                 sn_resolution,
             ))),
-            rx_best_effort: Arc::new(Mutex::new(SessionTransportRxBestEffort::new(
+            rx_best_effort: Arc::new(Mutex::new(SessionTransportChannel::new(
+                Reliability::BestEffort,
                 initial_sn_rx,
                 sn_resolution,
             ))),
@@ -168,6 +152,10 @@ impl SessionTransport {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
+    pub(crate) fn is_shm(&self) -> bool {
+        self.is_shm
+    }
+
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler + Send + Sync>> {
         zread!(self.callback).clone()
     }
@@ -278,10 +266,14 @@ impl SessionTransport {
     /// Schedule a Zenoh message on the transmission queue    
     #[cfg(feature = "zero-copy")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
-        if self.is_shm {
-            message.prepare_shm();
+        let res = if self.is_shm {
+            message.map_to_shminfo()
         } else {
-            message.flatten_shm();
+            message.map_to_shmbuf(self.manager.shmr.clone())
+        };
+        if let Err(e) = res {
+            log::trace!("Failed SHM conversion: {}", e);
+            return;
         }
         self.schedule_first_fit(message);
     }

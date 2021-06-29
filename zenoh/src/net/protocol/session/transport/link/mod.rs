@@ -18,7 +18,7 @@ use super::super::super::link::Link;
 use super::core;
 use super::core::ZInt;
 use super::io;
-use super::io::{ArcSlice, RBuf};
+use super::io::{ZBuf, ZSlice};
 use super::proto;
 use super::proto::SessionMessage;
 use super::session;
@@ -240,14 +240,14 @@ async fn rx_task_stream(
     }
 
     let lease = Duration::from_millis(lease);
-    // The RBuf to read a message batch onto
-    let mut rbuf = RBuf::new();
+    // The ZBuf to read a message batch onto
+    let mut zbuf = ZBuf::new();
     // The pool of buffers
     let n = 1 + (*ZN_RX_BUFF_SIZE / link.get_mtu());
     let pool = RecyclingObjectPool::new(n, || vec![0u8; link.get_mtu()].into_boxed_slice());
     while active.load(Ordering::Acquire) {
-        // Clear the RBuf
-        rbuf.clear();
+        // Clear the ZBuf
+        zbuf.clear();
 
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
@@ -263,11 +263,11 @@ async fn rx_task_stream(
             })??;
         match action {
             Action::Read(n) => {
-                rbuf.add_slice(ArcSlice::new(buffer.into(), 0, n));
+                zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
 
-                while rbuf.can_read() {
-                    match rbuf.read_session_message() {
-                        Some(msg) => transport.receive_message(msg, &link),
+                while zbuf.can_read() {
+                    match zbuf.read_session_message() {
+                        Some(msg) => transport.receive_message(msg, &link)?,
                         None => {
                             let e = format!("{}: decoding error", link);
                             return zerror!(ZErrorKind::IoError { descr: e });
@@ -304,14 +304,14 @@ async fn rx_task_dgram(
     }
 
     let lease = Duration::from_millis(lease);
-    // The RBuf to read a message batch onto
-    let mut rbuf = RBuf::new();
+    // The ZBuf to read a message batch onto
+    let mut zbuf = ZBuf::new();
     // The pool of buffers
     let n = 1 + (*ZN_RX_BUFF_SIZE / link.get_mtu());
     let pool = RecyclingObjectPool::new(n, || vec![0u8; link.get_mtu()].into_boxed_slice());
     while active.load(Ordering::Acquire) {
-        // Clear the rbuf
-        rbuf.clear();
+        // Clear the zbuf
+        zbuf.clear();
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
@@ -332,13 +332,13 @@ async fn rx_task_dgram(
                     return zerror!(ZErrorKind::IoError { descr: e });
                 }
 
-                // Add the received bytes to the RBuf for deserialization
-                rbuf.add_slice(ArcSlice::new(buffer.into(), 0, n));
+                // Add the received bytes to the ZBuf for deserialization
+                zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
 
-                // Deserialize all the messages from the current RBuf
-                while rbuf.can_read() {
-                    match rbuf.read_session_message() {
-                        Some(msg) => transport.receive_message(msg, &link),
+                // Deserialize all the messages from the current ZBuf
+                while zbuf.can_read() {
+                    match zbuf.read_session_message() {
+                        Some(msg) => transport.receive_message(msg, &link)?,
                         None => {
                             let e = format!("{}: decoding error", link);
                             return zerror!(ZErrorKind::IoError { descr: e });

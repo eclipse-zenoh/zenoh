@@ -16,7 +16,7 @@ use super::authenticator::{
 };
 use super::core::{PeerId, Property, WhatAmI, ZInt};
 use super::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
-use super::io::{RBuf, WBuf};
+use super::io::{WBuf, ZBuf, ZSlice};
 use super::link::Link;
 use super::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
@@ -25,7 +25,7 @@ use super::{Opened, Session, SessionManager};
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::hmac;
-use zenoh_util::{zasynclock, zerror};
+use zenoh_util::{zasynclock, zerror, zerror2};
 
 type IError = (ZError, Option<u8>);
 type IResult<T> = Result<T, IError>;
@@ -42,29 +42,17 @@ fn attachment_from_properties(ps: &[Property]) -> ZResult<Attachment> {
     } else {
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_properties(ps);
-        let rbuf: RBuf = wbuf.into();
-        let attachment = Attachment::make(smsg::attachment::PROPERTIES, rbuf);
+        let zbuf: ZBuf = wbuf.into();
+        let attachment = Attachment::make(zbuf);
         Ok(attachment)
     }
 }
 
 fn properties_from_attachment(mut att: Attachment) -> ZResult<Vec<Property>> {
-    if att.encoding != smsg::attachment::PROPERTIES {
-        let e = format!(
-            "Invalid attachment encoding for properties: {}",
-            att.encoding
-        );
-        return zerror!(ZErrorKind::Other { descr: e });
-    }
-
-    let res = att.buffer.read_properties();
-    match res {
-        Some(ps) => Ok(ps),
-        None => {
-            let e = "Error while decoding properties".to_string();
-            zerror!(ZErrorKind::Other { descr: e })
-        }
-    }
+    att.buffer.read_properties().ok_or_else(|| {
+        let e = "Error while decoding attachment properties".to_string();
+        zerror2!(ZErrorKind::Other { descr: e })
+    })
 }
 
 /*************************************/
@@ -87,7 +75,7 @@ impl WBuf {
     }
 }
 
-impl RBuf {
+impl ZBuf {
     fn read_cookie(&mut self) -> Option<Cookie> {
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
@@ -183,7 +171,7 @@ struct OpenInitAckOutput {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     initial_sn_tx: ZInt,
-    cookie: RBuf,
+    cookie: ZSlice,
     open_syn_attachment: Option<Attachment>,
     auth_session: AuthenticatedPeerSession,
 }
@@ -672,7 +660,7 @@ async fn accept_send_init_ack(
     };
 
     // Use the BlockCipher to encrypt the cookie
-    let serialized = RBuf::from(wbuf).to_vec();
+    let serialized = ZBuf::from(wbuf).to_vec();
     let mut guard = zasynclock!(manager.prng);
     let encrypted = manager.cipher.encrypt(serialized, &mut *guard);
     drop(guard);
@@ -682,7 +670,7 @@ async fn accept_send_init_ack(
     zasynclock!(manager.incoming).insert(link.clone(), Some(hash));
 
     // Send the cookie
-    let cookie = RBuf::from(encrypted);
+    let cookie: ZSlice = encrypted.into();
     let message = SessionMessage::make_init_ack(
         whatami,
         apid,
@@ -790,7 +778,7 @@ async fn accept_recv_open_syn(
         .cipher
         .decrypt(encrypted)
         .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
-    let mut open_syn_cookie = RBuf::from(decrypted);
+    let mut open_syn_cookie = ZBuf::from(decrypted);
 
     // Verify the cookie
     let cookie = match open_syn_cookie.read_cookie() {

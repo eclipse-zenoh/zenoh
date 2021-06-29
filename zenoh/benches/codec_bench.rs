@@ -18,8 +18,8 @@ extern crate rand;
 use criterion::{black_box, Criterion};
 
 use zenoh::net::protocol::core::{Channel, CongestionControl, Reliability, ResKey, ZInt};
-use zenoh::net::protocol::io::{RBuf, WBuf};
-use zenoh::net::protocol::proto::{Attachment, FramePayload, SessionMessage, ZenohMessage};
+use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
+use zenoh::net::protocol::proto::{Attachment, Frame, FramePayload, SessionMessage, ZenohMessage};
 
 fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
     buf.write_zint(v);
@@ -38,28 +38,28 @@ fn _bench_zint_write_three((v, buf): (&[ZInt; 3], &mut WBuf)) {
 
 fn bench_one_zint_codec((v, buf): (ZInt, &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v);
-    RBuf::from(&*buf).read_zint()
+    ZBuf::from(&*buf).read_zint()
 }
 
 fn bench_two_zint_codec((v, buf): (&[ZInt; 2], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
-    let mut rbuf = RBuf::from(&*buf);
-    let _ = rbuf.read_zint()?;
-    rbuf.read_zint()
+    let mut zbuf = ZBuf::from(&*buf);
+    let _ = zbuf.read_zint()?;
+    zbuf.read_zint()
 }
 
 fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     buf.write_zint(v[2]);
-    let mut rbuf = RBuf::from(&*buf);
-    let _ = rbuf.read_zint()?;
-    let _ = rbuf.read_zint()?;
-    rbuf.read_zint()
+    let mut zbuf = ZBuf::from(&*buf);
+    let _ = zbuf.read_zint()?;
+    let _ = zbuf.read_zint()?;
+    zbuf.read_zint()
 }
 
-fn bench_make_data(payload: RBuf) {
+fn bench_make_data(payload: ZBuf) {
     let _ = ZenohMessage::make_data(
         ResKey::RId(10),
         payload,
@@ -77,7 +77,7 @@ fn bench_write_data(buf: &mut WBuf, data: &ZenohMessage) {
 }
 
 fn bench_make_frame_header(ch: Channel, is_fragment: Option<bool>) {
-    let _ = SessionMessage::make_frame_header(ch, is_fragment);
+    let _ = Frame::make_header(ch, is_fragment);
 }
 
 fn bench_write_frame_header(
@@ -132,7 +132,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     ];
     let _ns: [ZInt; 4] = [0; 4];
     let len = String::from("u8");
-    let payload = RBuf::from(vec![0u8, 32]);
+    let bytes = vec![0u8; 32];
+    let payload: ZBuf = bytes.clone().into();
+    let fragment: ZSlice = bytes.into();
     let data = ZenohMessage::make_data(
         ResKey::RId(10),
         payload.clone(),
@@ -228,7 +230,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("bench_make_frame_frag", |b| {
         b.iter(|| {
             let frame_frag_payload = FramePayload::Fragment {
-                buffer: payload.clone(),
+                buffer: fragment.clone(),
                 is_final: false,
             };
             let _ = bench_make_frame_frag(frame_frag_payload);
@@ -236,7 +238,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     let frame_frag_payload = FramePayload::Fragment {
-        buffer: payload.clone(),
+        buffer: fragment.clone(),
         is_final: false,
     };
     let frame_frag = SessionMessage::make_frame(Channel::BestEffort, 42, frame_frag_payload, None);
