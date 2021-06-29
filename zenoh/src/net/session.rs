@@ -53,6 +53,7 @@ pub(crate) struct SessionState {
     remote_resources: HashMap<ResourceId, Resource>,
     publishers: HashMap<Id, Arc<PublisherState>>,
     subscribers: HashMap<Id, Arc<SubscriberState>>,
+    local_subscribers: HashMap<Id, Arc<SubscriberState>>,
     queryables: HashMap<Id, Arc<QueryableState>>,
     queries: HashMap<ZInt, QueryState>,
     local_routing: bool,
@@ -75,6 +76,7 @@ impl SessionState {
             remote_resources: HashMap::new(),
             publishers: HashMap::new(),
             subscribers: HashMap::new(),
+            local_subscribers: HashMap::new(),
             queryables: HashMap::new(),
             queries: HashMap::new(),
             local_routing,
@@ -165,6 +167,7 @@ impl fmt::Debug for SessionState {
 struct Resource {
     pub(crate) name: String,
     pub(crate) subscribers: Vec<Arc<SubscriberState>>,
+    pub(crate) local_subscribers: Vec<Arc<SubscriberState>>,
 }
 
 impl Resource {
@@ -172,6 +175,7 @@ impl Resource {
         Resource {
             name,
             subscribers: vec![],
+            local_subscribers: vec![],
         }
     }
 }
@@ -692,6 +696,47 @@ impl Session {
             }))
     }
 
+    /// This is an experimental API.
+    pub fn declare_local_subscriber(
+        &self,
+        reskey: &ResKey,
+    ) -> ZResolvedFuture<ZResult<Subscriber<'_>>> {
+        trace!("declare_subscriber({:?})", reskey);
+        let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
+        let mut state = zwrite!(self.state);
+        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        zresolved!(state
+            .localkey_to_resname(reskey)
+            .map(|resname| {
+                let sub_state = Arc::new(SubscriberState {
+                    id,
+                    reskey: reskey.clone(),
+                    resname,
+                    invoker: SubscriberInvoker::Sender(sender),
+                });
+                state
+                    .local_subscribers
+                    .insert(sub_state.id, sub_state.clone());
+                for res in state.local_resources.values_mut() {
+                    if rname::matches(&sub_state.resname, &res.name) {
+                        res.local_subscribers.push(sub_state.clone());
+                    }
+                }
+                for res in state.remote_resources.values_mut() {
+                    if rname::matches(&sub_state.resname, &res.name) {
+                        res.local_subscribers.push(sub_state.clone());
+                    }
+                }
+                sub_state
+            })
+            .map(|sub_state| Subscriber {
+                session: self,
+                state: sub_state,
+                alive: true,
+                receiver: SampleReceiver::new(receiver),
+            }))
+    }
+
     pub(crate) fn undeclare_subscriber(&self, sid: usize) -> ZResolvedFuture<ZResult<()>> {
         let mut state = zwrite!(self.state);
         zresolved!(if let Some(sub_state) = state.subscribers.remove(&sid) {
@@ -735,9 +780,18 @@ impl Session {
                     }
                 };
             })
+        } else if let Some(sub_state) = state.local_subscribers.remove(&sid) {
+            trace!("undeclare_subscriber({:?})", sub_state);
+            for res in state.local_resources.values_mut() {
+                res.local_subscribers.retain(|sub| sub.id != sub_state.id);
+            }
+            for res in state.remote_resources.values_mut() {
+                res.local_subscribers.retain(|sub| sub.id != sub_state.id);
+            }
+            Ok(())
         } else {
             zerror!(ZErrorKind::Other {
-                descr: "Unable to find publisher".into()
+                descr: "Unable to find subscriber".into()
             })
         })
     }
@@ -976,13 +1030,11 @@ impl Session {
         let state = zread!(self.state);
         if let ResKey::RId(rid) = reskey {
             match state.get_res(rid, local) {
-                Some(res) => match res.subscribers.len() {
-                    0 => (),
-                    1 => {
+                Some(res) => {
+                    if !local && res.subscribers.len() == 1 {
                         let sub = res.subscribers.get(0).unwrap();
                         Session::invoke_subscriber(&sub.invoker, res.name.clone(), payload, info);
-                    }
-                    _ => {
+                    } else {
                         for sub in &res.subscribers {
                             Session::invoke_subscriber(
                                 &sub.invoker,
@@ -991,8 +1043,18 @@ impl Session {
                                 info.clone(),
                             );
                         }
+                        if local {
+                            for sub in &res.local_subscribers {
+                                Session::invoke_subscriber(
+                                    &sub.invoker,
+                                    res.name.clone(),
+                                    payload.clone(),
+                                    info.clone(),
+                                );
+                            }
+                        }
                     }
-                },
+                }
                 None => {
                     error!("Received Data for unkown rid: {}", rid);
                 }
@@ -1008,6 +1070,18 @@ impl Session {
                                 payload.clone(),
                                 info.clone(),
                             );
+                        }
+                    }
+                    if local {
+                        for sub in state.local_subscribers.values() {
+                            if rname::matches(&sub.resname, &resname) {
+                                Session::invoke_subscriber(
+                                    &sub.invoker,
+                                    resname.clone(),
+                                    payload.clone(),
+                                    info.clone(),
+                                );
+                            }
                         }
                     }
                 }
