@@ -869,16 +869,24 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
         drop(state);
+
+        // if we can create a local timestamp, send it into a DataInfo
+        let data_info = self.runtime.new_timestamp().map(|ts| {
+            let mut data_info = DataInfo::new();
+            data_info.timestamp = Some(ts);
+            data_info
+        });
+
         primitives.send_data(
             resource,
             payload.clone(),
             Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             CongestionControl::default(), // Default congestion control when writing data
-            None,
+            data_info.clone(),
             None,
         );
         if local_routing {
-            self.handle_data(true, resource, None, payload);
+            self.handle_data(true, resource, data_info, payload);
         }
         zresolved!(Ok(()))
     }
@@ -919,6 +927,7 @@ impl Session {
         let mut info = protocol::proto::DataInfo::new();
         info.kind = Some(kind);
         info.encoding = Some(encoding);
+        info.timestamp = self.runtime.new_timestamp();
         let data_info = Some(info);
 
         primitives.send_data(

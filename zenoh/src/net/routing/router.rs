@@ -43,7 +43,7 @@ pub struct Tables {
     pub(crate) whatami: whatami::Type,
     face_counter: usize,
     #[allow(dead_code)]
-    pub(crate) hlc: Option<HLC>,
+    pub(crate) hlc: Option<Arc<HLC>>,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
     pub(crate) pull_caches_lock: Mutex<()>,
@@ -59,7 +59,7 @@ pub struct Tables {
 }
 
 impl Tables {
-    pub fn new(pid: PeerId, whatami: whatami::Type, hlc: Option<HLC>) -> Self {
+    pub fn new(pid: PeerId, whatami: whatami::Type, hlc: Option<Arc<HLC>>) -> Self {
         Tables {
             pid,
             whatami,
@@ -245,7 +245,7 @@ pub struct Router {
 }
 
 impl Router {
-    pub fn new(pid: PeerId, whatami: whatami::Type, hlc: Option<HLC>) -> Self {
+    pub fn new(pid: PeerId, whatami: whatami::Type, hlc: Option<Arc<HLC>>) -> Self {
         Router {
             whatami,
             tables: Arc::new(RwLock::new(Tables::new(pid, whatami, hlc))),

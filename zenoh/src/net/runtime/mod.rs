@@ -41,6 +41,7 @@ pub struct RuntimeState {
     pub router: Arc<Router>,
     pub config: ConfigProperties,
     pub manager: SessionManager,
+    pub hlc: Option<Arc<HLC>>,
 }
 
 pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
@@ -99,12 +100,12 @@ impl Runtime {
             .to_lowercase()
             == ZN_TRUE
         {
-            Some(HLC::with_system_time(uhlc::ID::from(&pid)))
+            Some(Arc::new(HLC::with_system_time(uhlc::ID::from(&pid))))
         } else {
             None
         };
 
-        let router = Arc::new(Router::new(pid.clone(), whatami, hlc));
+        let router = Arc::new(Router::new(pid.clone(), whatami, hlc.clone()));
 
         let handler = Arc::new(RuntimeSessionHandler {
             runtime: std::sync::RwLock::new(None),
@@ -125,6 +126,7 @@ impl Runtime {
                 router,
                 config: config.clone(),
                 manager: session_manager,
+                hlc,
             }),
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
@@ -173,6 +175,10 @@ impl Runtime {
 
     pub fn get_pid_str(&self) -> String {
         self.pid.to_string()
+    }
+
+    pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
+        self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
     }
 }
 
