@@ -30,7 +30,7 @@ fn base_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
         whatami::CLIENT,
-        Some(HLC::default()),
+        Some(Arc::new(HLC::default())),
     );
     let primitives = Arc::new(DummyPrimitives::new());
     let face = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
@@ -125,7 +125,7 @@ fn match_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
         whatami::CLIENT,
-        Some(HLC::default()),
+        Some(Arc::new(HLC::default())),
     );
     let primitives = Arc::new(DummyPrimitives::new());
     let face = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
@@ -160,7 +160,7 @@ fn clean_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
         whatami::CLIENT,
-        Some(HLC::default()),
+        Some(Arc::new(HLC::default())),
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
@@ -466,7 +466,7 @@ fn client_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
         whatami::CLIENT,
-        Some(HLC::default()),
+        Some(Arc::new(HLC::default())),
     );
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
