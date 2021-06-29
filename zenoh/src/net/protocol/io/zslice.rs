@@ -214,6 +214,7 @@ impl fmt::Display for ZSliceKind {
     }
 }
 
+/// A clonable wrapper to a contiguous slice of bytes.
 #[derive(Clone)]
 pub struct ZSlice {
     pub(super) buf: ZSliceBuffer,

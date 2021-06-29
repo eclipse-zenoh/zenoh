@@ -96,47 +96,76 @@ impl Default for ZBufInner {
 /*************************************/
 /*              ZBUF                 */
 /*************************************/
-/// ZBuf
+/// [`ZBuf`][ZBuf] is a buffer that contains one or more [`ZSlice`][ZSlice]s. It is used
+/// to efficiently send and receive data in zenoh. It provides transparent usage for
+/// both network and shared memory operations through a simple API.
 ///
-/// The [`ZBuf`][ZBuf] is a buffer that contains one or more [`ZSlice`][ZSlice]. It is used
-/// to efficiently send and receive the payload in zenoh. It provides transparent usage for
-/// both network and shared memory operations through a simple API. By storing a set of
-/// [`ZSlice`][ZSlice], it is possible to compose the target payload starting from a set
-/// of non-contigous memory regions. This provides a twofold benefit: (1) the user can
-/// compose the payload in an incremental manner without requiring reallocations and (2)
-/// the payload is received and recomposed as it arrives from the network without reallocating
+/// By storing a set of [`ZSlice`][ZSlice], it is possible to compose the target payload
+/// starting from a set of non-contigous memory regions. This provides a twofold benefit:
+/// (1) the user can compose the payload in an incremental manner without requiring reallocations
+/// and (2) the payload is received and recomposed as it arrives from the network without reallocating
 /// any receiving buffer.
 ///
-/// Example when creating the buffer for transmission:
+/// Example for creating a data buffer:
 /// ```
-/// use Z
+/// use zenoh::net::{ZBuf, ZSlice};
+///
 /// // Create a ZBuf containing a newly allocated vector of bytes.
 /// let zbuf: ZBuf = vec![0u8; 16].into();
+/// assert_eq!(&vec![0u8; 16], zbuf.contiguous().as_slice());
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
-/// let zslice: ZSlice = vec![0u8; 16].into(); // Allocate here
+/// // Allocate first a vectore of bytes and convert it into a ZSlice.
+/// let zslice: ZSlice = vec![0u8; 16].into();
 /// let mut zbuf = ZBuf::new();
-/// zbuf.add_zslice(zslice.clone()); // Clone of a ZSlice does not allocate
+/// zbuf.add_zslice(zslice.clone()); // Cloning a ZSlice does not allocate
 /// zbuf.add_zslice(zslice);
+///
+/// assert_eq!(&vec![0u8; 32], zbuf.contiguous().as_slice());
 /// ```
 ///
-/// Calling contiguous() allows to acces to the whole payload as a contigous &[u8] via the
-/// ZSlice type. However, this operation has a drawback when the original message was large
+/// Calling [`contiguous()`][ZBuf::contiguous] allows to acces to the whole payload as a contigous `&[u8]` via the
+/// [`ZSlice`][ZSlice] type. However, this operation has a drawback when the original message was large
 /// enough to cause network fragmentation. Because of that, the actual message payload may have
-/// been received in multiple fragments (i.e. ZSlice) which are non-contigous in memory. In order
-/// to retrieve the content of the payload without allocating, it is possible to loop over the
-/// different payload ZSlice. Finally, iterating over the payload is also recommended when
-/// working with shared memory.
-///
-/// payload.zslices_num() returns the number of ZSlices the payload is composed of. If
-/// the returned value is greater than 1, then contigous() will allocate.
+/// been received in multiple fragments (i.e. [`ZSlice`][ZSlice]) which are non-contigous in memory.
 ///
 /// ```
-/// let mut zbuf: ZBuf = vec![0u8; 16].into();
+/// use zenoh::net::{ZBuf, ZSlice};
 ///
-/// println!(">> [Subscription listener] Received '{}', {} ZSlice:", sample.res_name, sample.payload.zslices_num());
-/// for z in sample.payload.next() {
-///     println!("   {}: '{}'", z.get_kind(), String::from_utf8_lossy(unsafe { z.as_mut_slice() }));
+/// // Create a ZBuf containing twice a newly allocated vector of bytes.
+/// let zslice: ZSlice = vec![0u8; 16].into();
+/// let mut zbuf = ZBuf::new();
+/// zbuf.add_zslice(zslice.clone());
+///
+/// // contiguous() does not allocate since zbuf contains only one slice
+/// assert_eq!(&vec![0u8; 16], zbuf.contiguous().as_slice());
+///
+/// // Add a second slice to zbuf
+/// zbuf.add_zslice(zslice.clone());
+///
+/// // contiguous() allocates since zbuf contains two slices
+/// assert_eq!(&vec![0u8; 32], zbuf.contiguous().as_slice());
+/// ```
+///
+/// [`zslices_num()`][ZBuf::zslices_num] returns the number of [`ZSlice`][ZSlice]s the [`ZBuf`][ZBuf] is composed of. If
+/// the returned value is greater than 1, then [`contiguous()`][ZBuf::contiguous] will allocate. In order to retrieve the
+/// content of the [`ZBuf`][ZBuf] without allocating, it is possible to loop over its [`ZSlice`][ZSlice]s.
+/// Iterating over the payload ensures that no dynamic allocations are performed. This is really useful when
+/// dealing with shared memory access or with large data that has been likely fragmented on the network.
+///
+/// ```
+/// use zenoh::net::protocol::io::{ZBuf, ZSlice};
+///
+/// let zslice: ZSlice = vec![0u8; 16].into();
+///
+/// let mut zbuf = ZBuf::new();
+/// zbuf.add_zslice(zslice.clone());
+/// zbuf.add_zslice(zslice.clone());
+/// zbuf.add_zslice(zslice);
+///
+/// assert_eq!(zbuf.zslices_num(), 3);
+/// for z in zbuf.next() {
+///     assert_eq!(z.len(), 16);
 /// }
 /// ```
 #[derive(Clone, Default)]
@@ -374,8 +403,8 @@ impl ZBuf {
     }
 
     /// Returns a [`ZSlice`][ZSlice].
-    /// This operation will allocate in case the [`ZBuf`][ZBuf] is composed of multiple ZSlices, i.e.
-    /// if zbuf.zslices_num() > 1.
+    /// This operation will allocate in case the [`ZBuf`][ZBuf] is composed of multiple [`ZSlice`][ZSlice]s.
+    /// [`zslices_num()`][ZBuf::zslices_num] returns the number of [`ZSlice`][ZSlice] in the [`ZBuf`][ZBuf].
     #[inline]
     pub fn contiguous(&self) -> ZSlice {
         match &self.slices {
@@ -387,7 +416,7 @@ impl ZBuf {
 
     // Read 'len' bytes from 'self' and add those to 'dest'
     // This is 0-copy, only ZSlices from 'self' are added to 'dest', without cloning the original buffer.
-    pub fn read_into_zbuf(&mut self, dest: &mut ZBuf, len: usize) -> bool {
+    pub(crate) fn read_into_zbuf(&mut self, dest: &mut ZBuf, len: usize) -> bool {
         if self.readable() < len {
             return false;
         }
@@ -408,7 +437,7 @@ impl ZBuf {
 
     // Read all the bytes from 'self' and add those to 'dest'
     #[inline(always)]
-    pub fn drain_into_zbuf(&mut self, dest: &mut ZBuf) -> bool {
+    pub(crate) fn drain_into_zbuf(&mut self, dest: &mut ZBuf) -> bool {
         self.read_into_zbuf(dest, self.readable())
     }
 

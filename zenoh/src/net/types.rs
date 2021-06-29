@@ -24,7 +24,7 @@ use std::task::{Context, Poll};
 use uhlc::Timestamp;
 
 /// A read-only bytes buffer.
-pub use super::protocol::io::ZBuf;
+pub use super::protocol::io::{ZBuf, ZSlice};
 
 /// A writable bytes buffer.
 pub use super::protocol::io::WBuf;

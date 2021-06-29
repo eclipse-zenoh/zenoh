@@ -170,10 +170,10 @@ pub mod zmsg {
             pub const TS: ZInt = 1 << 2; // 0x04
             #[cfg(feature = "zero-copy")]
             pub const SLICED: ZInt = 1 << 5; // 0x20
-            pub const SRCID: ZInt = 1 << 7; // 0x08
-            pub const SRCSN: ZInt = 1 << 8; // 0x10
-            pub const RTRID: ZInt = 1 << 9; // 0x100
-            pub const RTRSN: ZInt = 1 << 10; // 0x200
+            pub const SRCID: ZInt = 1 << 7; // 0x80
+            pub const SRCSN: ZInt = 1 << 8; // 0x100
+            pub const RTRID: ZInt = 1 << 9; // 0x200
+            pub const RTRSN: ZInt = 1 << 10; // 0x400
         }
     }
 
