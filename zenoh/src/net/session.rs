@@ -1464,10 +1464,7 @@ impl Primitives for Session {
 impl Drop for Session {
     fn drop(&mut self) {
         if self.alive {
-            let this = self.clone();
-            let _ = task::block_on(async move {
-                task::spawn_blocking(move || task::block_on(this.close_alive())).await
-            });
+            let _ = self.clone().close_alive().wait();
         }
     }
 }

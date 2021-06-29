@@ -14,7 +14,6 @@
 use crate::net::Session;
 use crate::utils::new_reception_timestamp;
 use async_std::sync::Arc;
-use async_std::task;
 use flume::*;
 use std::collections::HashMap;
 use std::fmt;
@@ -246,21 +245,14 @@ impl Publisher<'_> {
     #[inline]
     pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
         self.alive = false;
-        Session::undeclare_publisher(self.session, self.state.id)
+        self.session.undeclare_publisher(self.state.id)
     }
 }
 
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let session = self.session.clone();
-            let id = self.state.id;
-            let _ = task::block_on(async move {
-                task::spawn_blocking(move || {
-                    task::block_on(Session::undeclare_publisher(&session, id))
-                })
-                .await
-            });
+            self.session.undeclare_publisher(self.state.id);
         }
     }
 }
@@ -368,14 +360,7 @@ impl Subscriber<'_> {
 impl Drop for Subscriber<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let session = self.session.clone();
-            let id = self.state.id;
-            let _ = task::block_on(async move {
-                task::spawn_blocking(move || {
-                    task::block_on(Session::undeclare_subscriber(&session, id))
-                })
-                .await
-            });
+            self.session.undeclare_subscriber(self.state.id);
         }
     }
 }
@@ -450,14 +435,7 @@ impl CallbackSubscriber<'_> {
 impl Drop for CallbackSubscriber<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let session = self.session.clone();
-            let id = self.state.id;
-            let _ = task::block_on(async move {
-                task::spawn_blocking(move || {
-                    task::block_on(Session::undeclare_subscriber(&session, id))
-                })
-                .await
-            });
+            self.session.undeclare_subscriber(self.state.id);
         }
     }
 }
@@ -532,14 +510,7 @@ impl Queryable<'_> {
 impl Drop for Queryable<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let session = self.session.clone();
-            let id = self.state.id;
-            let _ = task::block_on(async move {
-                task::spawn_blocking(move || {
-                    task::block_on(Session::undeclare_queryable(&session, id))
-                })
-                .await
-            });
+            self.session.undeclare_queryable(self.state.id);
         }
     }
 }
