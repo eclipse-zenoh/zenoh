@@ -944,6 +944,34 @@ impl Session {
         zresolved!(Ok(()))
     }
 
+    #[inline]
+    fn invoke_subscriber(
+        invoker: &SubscriberInvoker,
+        res_name: String,
+        payload: ZBuf,
+        data_info: Option<DataInfo>,
+    ) {
+        match invoker {
+            SubscriberInvoker::Handler(handler) => {
+                let handler = &mut *zwrite!(handler);
+                handler(Sample {
+                    res_name,
+                    payload,
+                    data_info,
+                });
+            }
+            SubscriberInvoker::Sender(sender) => {
+                if let Err(e) = sender.send(Sample {
+                    res_name,
+                    payload,
+                    data_info,
+                }) {
+                    error!("SubscriberInvoker error: {}", e);
+                }
+            }
+        }
+    }
+
     fn handle_data(&self, local: bool, reskey: &ResKey, info: Option<DataInfo>, payload: ZBuf) {
         let state = zread!(self.state);
         if let ResKey::RId(rid) = reskey {
@@ -952,49 +980,16 @@ impl Session {
                     0 => (),
                     1 => {
                         let sub = res.subscribers.get(0).unwrap();
-                        match &sub.invoker {
-                            SubscriberInvoker::Handler(handler) => {
-                                let handler = &mut *zwrite!(handler);
-                                handler(Sample {
-                                    res_name: res.name.clone(),
-                                    payload,
-                                    data_info: info,
-                                });
-                            }
-                            SubscriberInvoker::Sender(sender) => {
-                                if let Err(e) = sender.send(Sample {
-                                    res_name: res.name.clone(),
-                                    payload,
-                                    data_info: info,
-                                }) {
-                                    error!("SubscriberInvoker error: {}", e);
-                                    return;
-                                }
-                            }
-                        }
+                        Session::invoke_subscriber(&sub.invoker, res.name.clone(), payload, info);
                     }
                     _ => {
                         for sub in &res.subscribers {
-                            match &sub.invoker {
-                                SubscriberInvoker::Handler(handler) => {
-                                    let handler = &mut *zwrite!(handler);
-                                    handler(Sample {
-                                        res_name: res.name.clone(),
-                                        payload: payload.clone(),
-                                        data_info: info.clone(),
-                                    });
-                                }
-                                SubscriberInvoker::Sender(sender) => {
-                                    if let Err(e) = sender.send(Sample {
-                                        res_name: res.name.clone(),
-                                        payload: payload.clone(),
-                                        data_info: info.clone(),
-                                    }) {
-                                        error!("SubscriberInvoker error: {}", e);
-                                        return;
-                                    }
-                                }
-                            }
+                            Session::invoke_subscriber(
+                                &sub.invoker,
+                                res.name.clone(),
+                                payload.clone(),
+                                info.clone(),
+                            );
                         }
                     }
                 },
@@ -1007,26 +1002,12 @@ impl Session {
                 Ok(resname) => {
                     for sub in state.subscribers.values() {
                         if rname::matches(&sub.resname, &resname) {
-                            match &sub.invoker {
-                                SubscriberInvoker::Handler(handler) => {
-                                    let handler = &mut *zwrite!(handler);
-                                    handler(Sample {
-                                        res_name: resname.clone(),
-                                        payload: payload.clone(),
-                                        data_info: info.clone(),
-                                    });
-                                }
-                                SubscriberInvoker::Sender(sender) => {
-                                    if let Err(e) = sender.send(Sample {
-                                        res_name: resname.clone(),
-                                        payload: payload.clone(),
-                                        data_info: info.clone(),
-                                    }) {
-                                        error!("SubscriberInvoker error: {}", e);
-                                        return;
-                                    }
-                                }
-                            }
+                            Session::invoke_subscriber(
+                                &sub.invoker,
+                                resname.clone(),
+                                payload.clone(),
+                                info.clone(),
+                            );
                         }
                     }
                 }
