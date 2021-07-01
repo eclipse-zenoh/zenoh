@@ -16,8 +16,8 @@ use super::core::{QueryConsolidation, QueryTarget, SubInfo};
 use super::io::ZBuf;
 use super::proto::{
     zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
-    ForgetSubscriber, Publisher, Queryable, ReplyContext, Resource, RoutingContext, Subscriber,
-    ZenohMessage,
+    ForgetSubscriber, Publisher, Queryable, ReplierInfo, ReplyContext, Resource, RoutingContext,
+    Subscriber, ZenohMessage,
 };
 use super::session::{Primitives, Session};
 
@@ -25,8 +25,6 @@ pub struct Mux {
     handler: Session,
 }
 
-#[allow(unused_must_use)] // TODO
-#[allow(dead_code)]
 impl Mux {
     pub(crate) fn new(handler: Session) -> Mux {
         Mux { handler }
@@ -169,7 +167,7 @@ impl Primitives for Mux {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        source_kind: ZInt,
+        replier_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
         data_info: Option<DataInfo>,
@@ -182,7 +180,13 @@ impl Primitives for Mux {
             zmsg::default_congestion_control::REPLY,
             data_info,
             None,
-            Some(ReplyContext::make(qid, source_kind, Some(replier_id))),
+            Some(ReplyContext::make(
+                qid,
+                Some(ReplierInfo {
+                    kind: replier_kind,
+                    id: replier_id,
+                }),
+            )),
             None,
         ));
     }
@@ -191,7 +195,7 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
             zmsg::default_reliability::REPLY,
             zmsg::default_congestion_control::REPLY,
-            Some(ReplyContext::make(qid, 0, None)),
+            Some(ReplyContext::make(qid, None)),
             None,
         ));
     }

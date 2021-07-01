@@ -87,12 +87,12 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                         msg.routing_context,
                     );
                 }
-                Some(rep) => match rep.replier_id {
-                    Some(replier_id) => {
+                Some(rep) => match rep.replier {
+                    Some(replier) => {
                         self.primitives.send_reply_data(
                             rep.qid,
-                            rep.source_kind,
-                            replier_id,
+                            replier.kind,
+                            replier.id,
                             key,
                             data_info,
                             payload,

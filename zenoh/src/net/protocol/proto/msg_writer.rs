@@ -41,9 +41,9 @@ impl WBuf {
     fn write_deco_reply_context(&mut self, reply_context: &ReplyContext) -> bool {
         zcheck!(self.write(reply_context.header()));
         zcheck!(self.write_zint(reply_context.qid));
-        zcheck!(self.write_zint(reply_context.source_kind));
-        if let Some(pid) = &reply_context.replier_id {
-            zcheck!(self.write_peerid(pid));
+        if let Some(replier) = reply_context.replier.as_ref() {
+            zcheck!(self.write_zint(replier.kind));
+            zcheck!(self.write_peerid(&replier.id));
         }
         true
     }

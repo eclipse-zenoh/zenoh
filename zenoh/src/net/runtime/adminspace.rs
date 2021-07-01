@@ -221,7 +221,7 @@ impl Primitives for AdminSpace {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        source_kind: ZInt,
+        replier_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
         info: Option<DataInfo>,
@@ -230,7 +230,7 @@ impl Primitives for AdminSpace {
         trace!(
             "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
             qid,
-            source_kind,
+            replier_kind,
             replier_id,
             reskey,
             info,

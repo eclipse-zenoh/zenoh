@@ -69,7 +69,7 @@ pub trait Primitives {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        source_kind: ZInt,
+        replier_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
         info: Option<DataInfo>,
@@ -140,7 +140,7 @@ impl Primitives for DummyPrimitives {
     fn send_reply_data(
         &self,
         _qid: ZInt,
-        _source_kind: ZInt,
+        _replier_kind: ZInt,
         _replier_id: PeerId,
         _reskey: ResKey,
         _info: Option<DataInfo>,

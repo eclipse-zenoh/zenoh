@@ -477,7 +477,7 @@ impl Primitives for Face {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        source_kind: ZInt,
+        replier_kind: ZInt,
         replier_id: PeerId,
         reskey: ResKey,
         info: Option<DataInfo>,
@@ -488,7 +488,7 @@ impl Primitives for Face {
             &mut tables,
             &mut self.state.clone(),
             qid,
-            source_kind,
+            replier_kind,
             replier_id,
             reskey,
             info,

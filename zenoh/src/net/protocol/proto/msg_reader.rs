@@ -297,18 +297,16 @@ impl ZBuf {
     #[inline(always)]
     fn read_deco_reply_context(&mut self, header: u8) -> Option<ReplyContext> {
         let qid = self.read_zint()?;
-        let source_kind = self.read_zint()?;
-        let replier_id = if imsg::has_flag(header, zmsg::flag::F) {
+        let replier = if imsg::has_flag(header, zmsg::flag::F) {
             None
         } else {
-            Some(self.read_peerid()?)
+            Some(ReplierInfo {
+                kind: self.read_zint()?,
+                id: self.read_peerid()?,
+            })
         };
 
-        Some(ReplyContext {
-            qid,
-            source_kind,
-            replier_id,
-        })
+        Some(ReplyContext { qid, replier })
     }
 
     pub fn read_zenoh_message(&mut self, reliability: Reliability) -> Option<ZenohMessage> {

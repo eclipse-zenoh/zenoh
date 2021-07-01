@@ -440,7 +440,7 @@ impl Primitives for ClientPrimitives {
     fn send_reply_data(
         &self,
         _qid: ZInt,
-        _source_kind: ZInt,
+        _replier_kind: ZInt,
         _replier_id: PeerId,
         _reskey: ResKey,
         _info: Option<DataInfo>,
