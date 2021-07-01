@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod querying_subscriber;
-mod session_ext;
-
+pub mod group;
+pub mod querying_subscriber;
+pub mod session_ext;
 pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};
 pub use session_ext::SessionExt;

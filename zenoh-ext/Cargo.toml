@@ -31,7 +31,12 @@ zenoh = { path = "../zenoh" }
 zenoh-util = { path = "../zenoh-util" }
 async-std = { version = "=1.9.0", default-features = false, features = ["attributes", "unstable"] }
 futures-lite = "1.11.3"
+futures = "0.3.12"
 log = "0.4"
+flume = "0.10.7"
+serde = "1.0.126"
+env_logger = "0.8.4"
+bincode = "1.3.3"
 
 [dev-dependencies]
 futures = "0.3.12"
@@ -43,3 +48,10 @@ env_logger = "0.8.2"
 name = "zn_query_sub"
 path = "examples/zenoh-net/zn_query_sub.rs"
 
+[[example]]
+name = "zn_member"
+path = "examples/zenoh-net/zn_member.rs"
+
+[[example]]
+name = "zn_view_size"
+path = "examples/zenoh-net/zn_view_size.rs"
