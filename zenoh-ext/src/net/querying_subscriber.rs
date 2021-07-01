@@ -18,11 +18,14 @@ use futures_lite::StreamExt;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use zenoh::net::queryable::STORAGE;
 use zenoh::net::*;
 use zenoh_util::core::ZResult;
 use zenoh_util::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh_util::sync::ZFuture;
 use zenoh_util::{zresolved, zwrite};
+
+use super::publication_cache::PUBLISHER_CACHE_QUERYABLE_KIND;
 
 const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
@@ -49,14 +52,25 @@ impl QueryingSubscriberBuilder<'_> {
             mode: SubMode::Push,
             period: None,
         };
+
+        // By default query all matching publication caches and storages
+        let query_target = QueryTarget {
+            kind: PUBLISHER_CACHE_QUERYABLE_KIND | STORAGE,
+            target: Target::All,
+        };
+
+        // By default no query consolidation, to receive more than 1 sample per-resource
+        // (in history of publications is available)
+        let query_consolidation = QueryConsolidation::none();
+
         QueryingSubscriberBuilder {
             session,
             sub_reskey: sub_reskey.clone(),
             info,
             query_reskey: sub_reskey.clone(),
             query_predicate: "".to_string(),
-            query_target: QueryTarget::default(),
-            query_consolidation: QueryConsolidation::default(),
+            query_target,
+            query_consolidation,
         }
     }
 

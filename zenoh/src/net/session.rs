@@ -197,6 +197,10 @@ impl Session {
         }
     }
 
+    pub fn to_arc(&self) -> Arc<Self> {
+        Arc::new((*self).clone())
+    }
+
     pub(super) fn new(config: ConfigProperties) -> ZPendingFuture<ZResult<Session>> {
         zpending!(async {
             let local_routing = config
@@ -1274,6 +1278,11 @@ impl Session {
                 primitives.send_reply_final(qid);
             });
         }
+    }
+
+    pub fn reskey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
+        let state = zread!(self.state);
+        state.remotekey_to_resname(reskey)
     }
 }
 
