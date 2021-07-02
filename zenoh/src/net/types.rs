@@ -197,7 +197,7 @@ impl fmt::Debug for Query {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub data: Sample,
-    pub source_kind: ZInt,
+    pub replier_kind: ZInt,
     pub replier_id: PeerId,
 }
 

@@ -72,9 +72,15 @@ fn gen_routing_context() -> RoutingContext {
 
 fn gen_reply_context(is_final: bool) -> ReplyContext {
     let qid = gen!(ZInt);
-    let source_kind: ZInt = thread_rng().gen_range(0..4);
-    let replier_id = if is_final { None } else { Some(gen_pid()) };
-    ReplyContext::make(qid, source_kind, replier_id)
+    let replier = if !is_final {
+        Some(ReplierInfo {
+            kind: thread_rng().gen_range(0..4),
+            id: gen_pid(),
+        })
+    } else {
+        None
+    };
+    ReplyContext::make(qid, replier)
 }
 
 fn gen_attachment() -> Attachment {

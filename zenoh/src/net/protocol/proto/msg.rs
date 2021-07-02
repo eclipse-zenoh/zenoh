@@ -318,7 +318,7 @@ impl Attachment {
 /// +-+-+-+---------+
 /// ~      qid      ~
 /// +---------------+
-/// ~  source_kind  ~
+/// ~  replier_kind ~ if F==0
 /// +---------------+
 /// ~   replier_id  ~ if F==0
 /// +---------------+
@@ -326,10 +326,14 @@ impl Attachment {
 /// - if F==1 then the message is a REPLY_FINAL
 /// ```
 #[derive(Debug, Clone, PartialEq)]
+pub struct ReplierInfo {
+    pub kind: ZInt,
+    pub id: PeerId,
+}
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReplyContext {
     pub qid: ZInt,
-    pub source_kind: ZInt,
-    pub replier_id: Option<PeerId>,
+    pub replier: Option<ReplierInfo>,
 }
 
 impl Header for ReplyContext {
@@ -346,17 +350,13 @@ impl Header for ReplyContext {
 impl ReplyContext {
     // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
     #[inline(always)]
-    pub fn make(qid: ZInt, source_kind: ZInt, replier_id: Option<PeerId>) -> ReplyContext {
-        ReplyContext {
-            qid,
-            source_kind,
-            replier_id,
-        }
+    pub fn make(qid: ZInt, replier: Option<ReplierInfo>) -> ReplyContext {
+        ReplyContext { qid, replier }
     }
 
     #[inline(always)]
     pub fn is_final(&self) -> bool {
-        self.replier_id.is_none()
+        self.replier.is_none()
     }
 }
 

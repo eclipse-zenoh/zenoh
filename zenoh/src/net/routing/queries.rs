@@ -1219,7 +1219,7 @@ pub(crate) fn route_send_reply_data(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     qid: ZInt,
-    source_kind: ZInt,
+    replier_kind: ZInt,
     replier_id: PeerId,
     reskey: ResKey,
     info: Option<DataInfo>,
@@ -1229,7 +1229,7 @@ pub(crate) fn route_send_reply_data(
         Some(query) => {
             query.src_face.primitives.clone().send_reply_data(
                 query.src_qid,
-                source_kind,
+                replier_kind,
                 replier_id,
                 reskey,
                 info,
