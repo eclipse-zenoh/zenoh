@@ -33,6 +33,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use std::time::Duration;
+use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zconfigurable, zerror, zpending, zresolved};
 
@@ -232,6 +233,10 @@ impl Session {
     /// Returns the identifier for this session.
     pub fn id(&self) -> ZResolvedFuture<String> {
         zresolved!(self.runtime.get_pid_str())
+    }
+
+    pub fn hlc(&self) -> Option<&HLC> {
+        self.runtime.hlc.as_ref().map(Arc::as_ref)
     }
 
     /// Initialize a Session with an existing Runtime.
@@ -1274,6 +1279,11 @@ impl Session {
                 primitives.send_reply_final(qid);
             });
         }
+    }
+
+    pub fn reskey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
+        let state = zread!(self.state);
+        state.remotekey_to_resname(reskey)
     }
 }
 

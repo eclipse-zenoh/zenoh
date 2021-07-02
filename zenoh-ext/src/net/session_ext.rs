@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::QueryingSubscriberBuilder;
+use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
 use zenoh::net::{ResKey, Session};
 
 /// Some extensions to the [zenoh::net::Session](zenoh::net::Session)
@@ -45,10 +45,16 @@ pub trait SessionExt {
     /// # })
     /// ```
     fn declare_querying_subscriber(&self, sub_reskey: &ResKey) -> QueryingSubscriberBuilder<'_>;
+
+    fn declare_publication_cache(&self, pub_reskey: &ResKey) -> PublicationCacheBuilder;
 }
 
 impl SessionExt for Session {
     fn declare_querying_subscriber(&self, sub_reskey: &ResKey) -> QueryingSubscriberBuilder<'_> {
         QueryingSubscriberBuilder::new(self, sub_reskey)
+    }
+
+    fn declare_publication_cache(&self, pub_reskey: &ResKey) -> PublicationCacheBuilder {
+        PublicationCacheBuilder::new(self, pub_reskey)
     }
 }

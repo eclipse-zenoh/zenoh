@@ -30,8 +30,8 @@ maintenance = { status = "actively-developed" }
 zenoh = { path = "../zenoh" }
 zenoh-util = { path = "../zenoh-util" }
 async-std = { version = "=1.9.0", default-features = false, features = ["attributes", "unstable"] }
-futures-lite = "1.11.3"
 futures = "0.3.12"
+futures-lite = "1.11.3"
 log = "0.4"
 flume = "0.10.7"
 serde = "1.0.126"
@@ -39,7 +39,6 @@ env_logger = "0.8.4"
 bincode = "1.3.3"
 
 [dev-dependencies]
-futures = "0.3.12"
 clap = "2.33"
 env_logger = "0.8.2"
 
@@ -47,6 +46,10 @@ env_logger = "0.8.2"
 [[example]]
 name = "zn_query_sub"
 path = "examples/zenoh-net/zn_query_sub.rs"
+
+[[example]]
+name = "zn_pub_cache"
+path = "examples/zenoh-net/zn_pub_cache.rs"
 
 [[example]]
 name = "zn_member"
