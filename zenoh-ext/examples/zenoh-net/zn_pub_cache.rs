@@ -23,7 +23,7 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, path, value) = parse_args();
+    let (config, path, value, history, prefix) = parse_args();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
@@ -33,11 +33,13 @@ async fn main() {
     println!(" => RId {}", rid);
 
     println!("Declaring Publisher on {}", rid);
-    let _publisher = session
+    let mut publisher_builder = session
         .declare_publication_cache(&rid.into())
-        .history(10)
-        .await
-        .unwrap();
+        .history(history);
+    if let Some(prefix) = prefix {
+        publisher_builder = publisher_builder.queryable_prefix(prefix);
+    }
+    let _publisher = publisher_builder.await.unwrap();
 
     for idx in 0..std::u32::MAX {
         sleep(Duration::from_secs(1)).await;
@@ -50,7 +52,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Properties, String, String) {
+fn parse_args() -> (Properties, String, String, usize, Option<String>) {
     let args = App::new("zenoh-net pub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
@@ -73,6 +75,13 @@ fn parse_args() -> (Properties, String, String) {
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
         ))
+        .arg(
+            Arg::from_usage("-h, --history=[SIZE] 'The number of publications to keep in cache'")
+                .default_value("1"),
+        )
+        .arg(Arg::from_usage(
+            "-x, --prefix=[STRING] 'An optional queryable prefix'",
+        ))
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.value_of("config") {
@@ -94,6 +103,8 @@ fn parse_args() -> (Properties, String, String) {
 
     let path = args.value_of("path").unwrap();
     let value = args.value_of("value").unwrap();
+    let history: usize = args.value_of("history").unwrap().parse().unwrap();
+    let prefix = args.value_of("prefix").map(String::from);
 
-    (config, path.to_string(), value.to_string())
+    (config, path.to_string(), value.to_string(), history, prefix)
 }

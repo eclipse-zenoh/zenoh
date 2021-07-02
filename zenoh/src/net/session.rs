@@ -197,10 +197,6 @@ impl Session {
         }
     }
 
-    pub fn to_arc(&self) -> Arc<Self> {
-        Arc::new((*self).clone())
-    }
-
     pub(super) fn new(config: ConfigProperties) -> ZPendingFuture<ZResult<Session>> {
         zpending!(async {
             let local_routing = config
