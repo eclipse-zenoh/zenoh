@@ -24,7 +24,7 @@ use zenoh::net::utils::resource_name;
 use zenoh::net::*;
 use zenoh_util::core::ZResult;
 use zenoh_util::sync::ZFuture;
-use zenoh_util::zresolved;
+use zenoh_util::{zerror, zresolved};
 
 pub(crate) const PUBLISHER_CACHE_QUERYABLE_KIND: ZInt = 0x08;
 
@@ -95,6 +95,16 @@ pub struct PublicationCache<'a> {
 impl PublicationCache<'_> {
     fn new(conf: PublicationCacheBuilder<'_>) -> ZResult<PublicationCache<'_>> {
         log::debug!("Declare PublicationCache on {}", conf.pub_reskey);
+
+        if conf.session.hlc().is_none() {
+            return zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "Failed requirement for PublicationCache on {}: \
+                     the Session is not configured with 'add_timestamp=true'",
+                    conf.pub_reskey
+                )
+            });
+        }
 
         // declare the publisher
         let publisher = conf.session.declare_publisher(&conf.pub_reskey).wait()?;
