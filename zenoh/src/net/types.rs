@@ -244,7 +244,7 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(mut self) -> ZReady<ZResult<()>> {
+    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.undeclare_publisher(self.state.id)
     }
@@ -327,7 +327,7 @@ impl Subscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    pub fn pull(&self) -> ZReady<ZResult<()>> {
+    pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
         self.session.pull(&self.state.reskey)
     }
 
@@ -352,7 +352,7 @@ impl Subscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(mut self) -> ZReady<ZResult<()>> {
+    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.undeclare_subscriber(self.state.id)
     }
@@ -401,7 +401,7 @@ impl CallbackSubscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    pub fn pull(&self) -> ZReady<ZResult<()>> {
+    pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
         self.session.pull(&self.state.reskey)
     }
 
@@ -427,7 +427,7 @@ impl CallbackSubscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(mut self) -> ZReady<ZResult<()>> {
+    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.undeclare_subscriber(self.state.id)
     }
@@ -502,7 +502,7 @@ impl Queryable<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(mut self) -> ZReady<ZResult<()>> {
+    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.undeclare_queryable(self.state.id)
     }

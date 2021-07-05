@@ -140,7 +140,10 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 /// }
 /// # })
 /// ```
-pub fn scout(what: WhatAmI, config: ConfigProperties) -> ZReady<ZResult<HelloReceiver>> {
+pub fn scout(
+    what: WhatAmI,
+    config: ConfigProperties,
+) -> impl ZFuture<Output = ZResult<HelloReceiver>> {
     trace!("scout({}, {})", what, &config);
     let addr = config
         .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
@@ -227,7 +230,7 @@ pub fn scout(what: WhatAmI, config: ConfigProperties) -> ZReady<ZResult<HelloRec
 /// let session = open(config.into()).await.unwrap();
 /// # })
 /// ```
-pub fn open(config: ConfigProperties) -> ZPinBoxFuture<ZResult<Session>> {
+pub fn open(config: ConfigProperties) -> impl ZFuture<Output = ZResult<Session>> {
     debug!("Zenoh Rust API {}", GIT_VERSION);
     debug!("Config: {:?}", &config);
     Session::new(config)

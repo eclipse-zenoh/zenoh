@@ -208,7 +208,7 @@ impl PublicationCache<'_> {
 
     /// Undeclare this PublicationCache
     #[inline]
-    pub fn undeclare(self) -> ZReady<ZResult<()>> {
+    pub fn undeclare(self) -> impl ZFuture<Output = ZResult<()>> {
         // just drop self and all its content
         zready(Ok(()))
     }

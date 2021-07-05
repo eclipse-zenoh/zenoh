@@ -16,7 +16,7 @@ use crate::net::{
     data_kind, encoding, CallbackSubscriber, CongestionControl, DataInfo, Query,
     QueryConsolidation, QueryTarget, Queryable, Receiver, RecvError, RecvTimeoutError, Reliability,
     RepliesSender, Reply, ReplyReceiver, ResKey, Sample, SampleReceiver, Session, SubInfo, SubMode,
-    Subscriber, TryRecvError, ZBuf, ZFuture, ZInt, ZReady,
+    Subscriber, TryRecvError, ZBuf, ZFuture, ZInt,
 };
 use crate::utils::new_reception_timestamp;
 use crate::{
@@ -69,7 +69,10 @@ pub struct Workspace<'a> {
 const LOCAL_ROUTER_PREFIX: &str = "/@/router/local";
 
 impl Workspace<'_> {
-    pub(crate) fn new(zenoh: &Zenoh, prefix: Option<Path>) -> ZReady<ZResult<Workspace<'_>>> {
+    pub(crate) fn new(
+        zenoh: &Zenoh,
+        prefix: Option<Path>,
+    ) -> impl ZFuture<Output = ZResult<Workspace<'_>>> {
         zready(Ok(Workspace { zenoh, prefix }))
     }
 
@@ -136,19 +139,22 @@ impl Workspace<'_> {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub fn put(&self, path: &Path, value: Value) -> ZReady<ZResult<()>> {
+    pub fn put(&self, path: &Path, value: Value) -> impl ZFuture<Output = ZResult<()>> {
         debug!("put on {:?}", path);
         let (encoding, payload) = value.encode();
-        match self.path_to_reskey(path) {
-            Ok(reskey) => self.session().write_ext(
-                &reskey,
-                payload,
-                encoding,
-                data_kind::PUT,
-                CongestionControl::Drop, // TODO: Define the right congestion control value for the put
-            ),
-            Err(e) => zready(Err(e)),
-        }
+        zready(match self.path_to_reskey(path) {
+            Ok(reskey) => self
+                .session()
+                .write_ext(
+                    &reskey,
+                    payload,
+                    encoding,
+                    data_kind::PUT,
+                    CongestionControl::Drop, // TODO: Define the right congestion control value for the put
+                )
+                .wait(),
+            Err(e) => Err(e),
+        })
     }
 
     /// Delete a [`Path`] and its [`Value`] from zenoh.  
@@ -168,18 +174,21 @@ impl Workspace<'_> {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub fn delete(&self, path: &Path) -> ZReady<ZResult<()>> {
+    pub fn delete(&self, path: &Path) -> impl ZFuture<Output = ZResult<()>> {
         debug!("delete on {:?}", path);
-        match self.path_to_reskey(path) {
-            Ok(reskey) => self.session().write_ext(
-                &reskey,
-                ZBuf::new(),
-                encoding::NONE,
-                data_kind::DELETE,
-                CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
-            ),
-            Err(e) => zready(Err(e)),
-        }
+        zready(match self.path_to_reskey(path) {
+            Ok(reskey) => self
+                .session()
+                .write_ext(
+                    &reskey,
+                    ZBuf::new(),
+                    encoding::NONE,
+                    data_kind::DELETE,
+                    CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
+                )
+                .wait(),
+            Err(e) => Err(e),
+        })
     }
 
     /// Get a selection of [`Path`]/[`Value`] from zenoh.  
@@ -203,7 +212,7 @@ impl Workspace<'_> {
     /// }
     /// # })
     /// ```
-    pub fn get(&self, selector: &Selector) -> ZReady<ZResult<DataReceiver>> {
+    pub fn get(&self, selector: &Selector) -> impl ZFuture<Output = ZResult<DataReceiver>> {
         debug!("get on {}", selector);
         zready_try!({
             let reskey = self.pathexpr_to_reskey(&selector.path_expr)?;
@@ -252,7 +261,10 @@ impl Workspace<'_> {
     /// }
     /// # })
     /// ```
-    pub fn subscribe(&self, selector: &Selector) -> ZReady<ZResult<ChangeReceiver<'_>>> {
+    pub fn subscribe(
+        &self,
+        selector: &Selector,
+    ) -> impl ZFuture<Output = ZResult<ChangeReceiver<'_>>> {
         debug!("subscribe on {}", selector);
         zready_try!({
             if selector.filter.is_some() {
@@ -311,7 +323,7 @@ impl Workspace<'_> {
         &self,
         selector: &Selector,
         mut callback: SubscribeCallback,
-    ) -> ZReady<ZResult<SubscriberHandle<'_>>>
+    ) -> impl ZFuture<Output = ZResult<SubscriberHandle<'_>>>
     where
         SubscribeCallback: FnMut(Change) + Send + Sync + 'static,
     {
@@ -378,7 +390,10 @@ impl Workspace<'_> {
     /// }
     /// # })
     /// ```
-    pub fn register_eval(&self, path_expr: &PathExpr) -> ZReady<ZResult<GetRequestStream<'_>>> {
+    pub fn register_eval(
+        &self,
+        path_expr: &PathExpr,
+    ) -> impl ZFuture<Output = ZResult<GetRequestStream<'_>>> {
         debug!("eval on {}", path_expr);
         zready_try!({
             let reskey = self.pathexpr_to_reskey(&path_expr)?;
@@ -579,7 +594,7 @@ impl ChangeReceiver<'_> {
     }
 
     // Closes the stream and the subscription.
-    pub fn close(self) -> ZReady<ZResult<()>> {
+    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
         self.subscriber.undeclare()
     }
 }
@@ -603,7 +618,7 @@ pub struct SubscriberHandle<'a> {
 
 impl SubscriberHandle<'_> {
     /// Closes the subscription.
-    pub fn close(self) -> ZReady<ZResult<()>> {
+    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
         self.subscriber.undeclare()
     }
 }
@@ -647,7 +662,7 @@ pub struct GetRequestStream<'a> {
 
 impl GetRequestStream<'_> {
     /// Closes the stream and unregister the evaluation function.
-    pub fn close(self) -> ZReady<ZResult<()>> {
+    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
         self.queryable.undeclare()
     }
 }

@@ -199,7 +199,7 @@ impl Session {
         }
     }
 
-    pub(super) fn new(config: ConfigProperties) -> ZPinBoxFuture<ZResult<Session>> {
+    pub(super) fn new(config: ConfigProperties) -> impl ZFuture<Output = ZResult<Session>> {
         zpinbox(async {
             let local_routing = config
                 .get_or(&ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
@@ -232,7 +232,7 @@ impl Session {
     }
 
     /// Returns the identifier for this session.
-    pub fn id(&self) -> ZReady<String> {
+    pub fn id(&self) -> impl ZFuture<Output = String> {
         zready(self.runtime.get_pid_str())
     }
 
@@ -248,7 +248,7 @@ impl Session {
         local_routing: bool,
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
-    ) -> ZReady<Session> {
+    ) -> impl ZFuture<Output = Session> {
         let router = runtime.router.clone();
         let state = Arc::new(RwLock::new(SessionState::new(
             local_routing,
@@ -265,7 +265,7 @@ impl Session {
         zready(session)
     }
 
-    fn close_alive(self) -> ZPinBoxFuture<ZResult<()>> {
+    fn close_alive(self) -> impl ZFuture<Output = ZResult<()>> {
         zpinbox(async move {
             trace!("close()");
             self.runtime.close().await?;
@@ -291,7 +291,7 @@ impl Session {
     /// session.close().await.unwrap();
     /// # })
     /// ```
-    pub fn close(mut self) -> ZPinBoxFuture<ZResult<()>> {
+    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.close_alive()
     }
@@ -307,7 +307,7 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub fn info(&self) -> ZReady<InfoProperties> {
+    pub fn info(&self) -> impl ZFuture<Output = InfoProperties> {
         trace!("info()");
         let sessions = self.runtime.manager().get_sessions();
         let peer_pids = sessions
@@ -375,7 +375,10 @@ impl Session {
     /// let rid = session.declare_resource(&"/resource/name".into()).await.unwrap();
     /// # })
     /// ```
-    pub fn declare_resource(&self, resource: &ResKey) -> ZReady<ZResult<ResourceId>> {
+    pub fn declare_resource(
+        &self,
+        resource: &ResKey,
+    ) -> impl ZFuture<Output = ZResult<ResourceId>> {
         trace!("declare_resource({:?})", resource);
         let mut state = zwrite!(self.state);
 
@@ -424,7 +427,7 @@ impl Session {
     /// session.undeclare_resource(rid).await;
     /// # })
     /// ```
-    pub fn undeclare_resource(&self, rid: ResourceId) -> ZReady<ZResult<()>> {
+    pub fn undeclare_resource(&self, rid: ResourceId) -> impl ZFuture<Output = ZResult<()>> {
         trace!("undeclare_resource({:?})", rid);
         let mut state = zwrite!(self.state);
         state.local_resources.remove(&rid);
@@ -455,7 +458,10 @@ impl Session {
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
-    pub fn declare_publisher(&self, resource: &ResKey) -> ZReady<ZResult<Publisher<'_>>> {
+    pub fn declare_publisher(
+        &self,
+        resource: &ResKey,
+    ) -> impl ZFuture<Output = ZResult<Publisher<'_>>> {
         trace!("declare_publisher({:?})", resource);
         let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
@@ -500,7 +506,7 @@ impl Session {
         }))
     }
 
-    pub(crate) fn undeclare_publisher(&self, pid: usize) -> ZReady<ZResult<()>> {
+    pub(crate) fn undeclare_publisher(&self, pid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(pub_state) = state.publishers.remove(&pid) {
             trace!("undeclare_publisher({:?})", pub_state);
@@ -644,7 +650,7 @@ impl Session {
         &self,
         reskey: &ResKey,
         info: &SubInfo,
-    ) -> ZReady<ZResult<Subscriber<'_>>> {
+    ) -> impl ZFuture<Output = ZResult<Subscriber<'_>>> {
         trace!("declare_subscriber({:?})", reskey);
         let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
 
@@ -688,7 +694,7 @@ impl Session {
         reskey: &ResKey,
         info: &SubInfo,
         data_handler: DataHandler,
-    ) -> ZReady<ZResult<CallbackSubscriber<'_>>>
+    ) -> impl ZFuture<Output = ZResult<CallbackSubscriber<'_>>>
     where
         DataHandler: FnMut(Sample) + Send + Sync + 'static,
     {
@@ -705,7 +711,10 @@ impl Session {
     }
 
     /// This is an experimental API.
-    pub fn declare_local_subscriber(&self, reskey: &ResKey) -> ZReady<ZResult<Subscriber<'_>>> {
+    pub fn declare_local_subscriber(
+        &self,
+        reskey: &ResKey,
+    ) -> impl ZFuture<Output = ZResult<Subscriber<'_>>> {
         trace!("declare_subscriber({:?})", reskey);
         let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
         let mut state = zwrite!(self.state);
@@ -744,7 +753,7 @@ impl Session {
         )
     }
 
-    pub(crate) fn undeclare_subscriber(&self, sid: usize) -> ZReady<ZResult<()>> {
+    pub(crate) fn undeclare_subscriber(&self, sid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("undeclare_subscriber({:?})", sub_state);
@@ -843,7 +852,7 @@ impl Session {
         &self,
         resource: &ResKey,
         kind: ZInt,
-    ) -> ZReady<ZResult<Queryable<'_>>> {
+    ) -> impl ZFuture<Output = ZResult<Queryable<'_>>> {
         trace!("declare_queryable({:?}, {:?})", resource, kind);
         let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
@@ -883,7 +892,7 @@ impl Session {
         }))
     }
 
-    pub(crate) fn undeclare_queryable(&self, qid: usize) -> ZReady<ZResult<()>> {
+    pub(crate) fn undeclare_queryable(&self, qid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
@@ -924,7 +933,7 @@ impl Session {
     /// session.write(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
-    pub fn write(&self, resource: &ResKey, payload: ZBuf) -> ZReady<ZResult<()>> {
+    pub fn write(&self, resource: &ResKey, payload: ZBuf) -> impl ZFuture<Output = ZResult<()>> {
         trace!("write({:?}, [...])", resource);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -978,7 +987,7 @@ impl Session {
         encoding: ZInt,
         kind: ZInt,
         congestion_control: CongestionControl,
-    ) -> ZReady<ZResult<()>> {
+    ) -> impl ZFuture<Output = ZResult<()>> {
         trace!("write_ext({:?}, [...])", resource);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -1099,7 +1108,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn pull(&self, reskey: &ResKey) -> ZReady<ZResult<()>> {
+    pub(crate) fn pull(&self, reskey: &ResKey) -> impl ZFuture<Output = ZResult<()>> {
         trace!("pull({:?})", reskey);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -1141,7 +1150,7 @@ impl Session {
         predicate: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> ZReady<ZResult<ReplyReceiver>> {
+    ) -> impl ZFuture<Output = ZResult<ReplyReceiver>> {
         trace!(
             "query({:?}, {:?}, {:?}, {:?})",
             resource,

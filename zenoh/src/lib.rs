@@ -176,7 +176,7 @@ impl Zenoh {
     /// let zenoh = Zenoh::new(config.into()).await.unwrap();
     /// # })
     /// ```
-    pub fn new(config: ConfigProperties) -> ZPinBoxFuture<ZResult<Zenoh>> {
+    pub fn new(config: ConfigProperties) -> impl ZFuture<Output = ZResult<Zenoh>> {
         zpinbox(async {
             Ok(Zenoh {
                 session: net::open(config).await?,
@@ -187,7 +187,7 @@ impl Zenoh {
     /// Creates a Zenoh API with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    pub fn init(runtime: Runtime) -> ZPinBoxFuture<Zenoh> {
+    pub fn init(runtime: Runtime) -> impl ZFuture<Output = Zenoh> {
         zpinbox(async {
             Zenoh {
                 session: Session::init(runtime, true, vec![], vec![]).await,
@@ -205,7 +205,7 @@ impl Zenoh {
     /// Returns the PeerId of the zenoh router this zenoh API is connected to (if any).
     /// This calls [Session::info()](net::Session::info) and returns the first router pid from
     /// the ZN_INFO_ROUTER_PID_KEY property.
-    pub fn router_pid(&self) -> ZReady<Option<String>> {
+    pub fn router_pid(&self) -> impl ZFuture<Output = Option<String>> {
         zready(
             match self.session().info().wait().remove(&ZN_INFO_ROUTER_PID_KEY) {
                 None => None,
@@ -236,7 +236,7 @@ impl Zenoh {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub fn workspace(&self, prefix: Option<Path>) -> ZReady<ZResult<Workspace<'_>>> {
+    pub fn workspace(&self, prefix: Option<Path>) -> impl ZFuture<Output = ZResult<Workspace<'_>>> {
         debug!("New workspace with prefix: {:?}", prefix);
         Workspace::new(&self, prefix)
     }
@@ -256,7 +256,7 @@ impl Zenoh {
     /// zenoh.close();
     /// # })
     /// ```
-    pub fn close(self) -> ZPinBoxFuture<ZResult<()>> {
+    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
         self.session.close()
     }
 }

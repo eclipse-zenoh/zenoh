@@ -165,7 +165,7 @@ impl QueryingSubscriber<'_> {
 
     /// Undeclare this QueryingSubscriber
     #[inline]
-    pub fn undeclare(self) -> ZReady<ZResult<()>> {
+    pub fn undeclare(self) -> impl ZFuture<Output = ZResult<()>> {
         self.subscriber.undeclare()
     }
 
@@ -176,7 +176,7 @@ impl QueryingSubscriber<'_> {
     }
 
     /// Issue a new query using the configured resource key and predicate.
-    pub fn query(&mut self) -> ZReady<ZResult<()>> {
+    pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.query_on(
             &self.conf.query_reskey.clone(),
             &self.conf.query_predicate.clone(),
@@ -192,7 +192,7 @@ impl QueryingSubscriber<'_> {
         predicate: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> ZReady<ZResult<()>> {
+    ) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.receiver.state);
         log::debug!("Start query on {}?{}", reskey, predicate);
         match self
