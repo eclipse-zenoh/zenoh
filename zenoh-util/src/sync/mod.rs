@@ -30,107 +30,90 @@ pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
     unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }
 }
 
-pub trait ZFuture<T>: Future + Send
-where
-    T: Unpin + Send,
-{
-    fn wait(self) -> T;
+pub trait ZFuture: Future + Send {
+    fn wait(self) -> Self::Output;
 }
 
-pub struct ZResolvedFuture<T>
-where
-    T: Unpin + Send,
-{
-    result: Option<T>,
-}
+/// Creates a ZFuture that is immediately ready with a value.
+///
+/// This `struct` is created by [`ready()`]. See its
+/// documentation for more.
+#[derive(Debug, Clone)]
+#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+pub struct ZReady<T>(Option<T>);
 
-impl<T> ZResolvedFuture<T>
-where
-    T: Unpin + Send,
-{
-    #[inline(always)]
-    pub fn new(val: T) -> Self {
-        ZResolvedFuture { result: Some(val) }
+impl<T> Unpin for ZReady<T> {}
+
+impl<T> Future for ZReady<T> {
+    type Output = T;
+
+    #[inline]
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<T> {
+        Poll::Ready(self.0.take().expect("Ready polled after completion"))
     }
 }
 
-#[macro_export]
-macro_rules! zresolved {
-    ($val:expr) => {
-        ZResolvedFuture::new($val)
-    };
+impl<T> ZFuture for ZReady<T>
+where
+    T: Unpin + Send,
+{
+    #[inline]
+    fn wait(self) -> T {
+        self.0.unwrap()
+    }
+}
+
+/// Creates a ZFuture that is immediately ready with a value.
+///
+/// ZFutures created through this function are functionally similar to those
+/// created through `async {}`. The main difference is that futures created
+/// through this function are named and implement `Unpin` and `ZFuture`.
+///
+/// # Examples
+///
+/// ```
+/// use zenoh_util::sync::zready;
+///
+/// # async fn run() {
+/// let a = zready(1);
+/// assert_eq!(a.await, 1);
+/// # }
+/// ```
+#[inline]
+pub fn zready<T>(t: T) -> ZReady<T> {
+    ZReady(Some(t))
 }
 
 #[macro_export]
-macro_rules! zresolved_try {
+macro_rules! zready_try {
     ($val:expr) => {
-        ZResolvedFuture::new({
+        zenoh_util::sync::zready({
             let f = || $val;
             f()
         })
     };
 }
 
-impl<T> Future for ZResolvedFuture<T>
-where
-    T: Unpin + Send,
-{
+#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+pub struct ZPinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
+
+impl<T> Future for ZPinBoxFuture<T> {
     type Output = T;
 
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(self.result.take().unwrap())
-    }
-}
-
-impl<T> ZFuture<T> for ZResolvedFuture<T>
-where
-    T: Unpin + Send,
-{
-    fn wait(self) -> T {
-        self.result.unwrap()
-    }
-}
-
-pub struct ZPendingFuture<T>
-where
-    T: Unpin + Send,
-{
-    result: Pin<Box<dyn Future<Output = T> + Send>>,
-}
-
-impl<T> ZPendingFuture<T>
-where
-    T: Unpin + Send,
-{
-    #[inline(always)]
-    pub fn new(fut: Pin<Box<dyn Future<Output = T> + Send>>) -> Self {
-        ZPendingFuture { result: fut }
-    }
-}
-
-#[macro_export]
-macro_rules! zpending {
-    ($fut:expr) => {
-        ZPendingFuture::new(Box::pin($fut))
-    };
-}
-
-impl<T> Future for ZPendingFuture<T>
-where
-    T: Unpin + Send,
-{
-    type Output = T;
-
+    #[inline]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.result.poll(cx)
+        self.0.poll(cx)
     }
 }
 
-impl<T> ZFuture<T> for ZPendingFuture<T>
-where
-    T: Unpin + Send,
-{
+impl<T> ZFuture for ZPinBoxFuture<T> {
+    #[inline]
     fn wait(self) -> T {
-        async_std::task::block_on(self.result)
+        async_std::task::block_on(self.0)
     }
+}
+
+#[inline]
+pub fn zpinbox<T>(fut: impl Future<Output = T> + Send + 'static) -> ZPinBoxFuture<T> {
+    ZPinBoxFuture(Box::pin(fut))
 }

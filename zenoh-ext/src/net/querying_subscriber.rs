@@ -20,10 +20,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use zenoh::net::queryable::STORAGE;
 use zenoh::net::*;
-use zenoh_util::core::ZResult;
-use zenoh_util::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
-use zenoh_util::sync::ZFuture;
-use zenoh_util::{zresolved, zwrite};
+use zenoh_util::zwrite;
 
 use super::publication_cache::PUBLISHER_CACHE_QUERYABLE_KIND;
 
@@ -132,7 +129,7 @@ impl<'a> Future for QueryingSubscriberBuilder<'a> {
     }
 }
 
-impl<'a> ZFuture<ZResult<QueryingSubscriber<'a>>> for QueryingSubscriberBuilder<'a> {
+impl<'a> ZFuture for QueryingSubscriberBuilder<'a> {
     fn wait(self) -> ZResult<QueryingSubscriber<'a>> {
         QueryingSubscriber::new(self)
     }
@@ -168,7 +165,7 @@ impl QueryingSubscriber<'_> {
 
     /// Undeclare this QueryingSubscriber
     #[inline]
-    pub fn undeclare(self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn undeclare(self) -> ZReady<ZResult<()>> {
         self.subscriber.undeclare()
     }
 
@@ -179,7 +176,7 @@ impl QueryingSubscriber<'_> {
     }
 
     /// Issue a new query using the configured resource key and predicate.
-    pub fn query(&mut self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn query(&mut self) -> ZReady<ZResult<()>> {
         self.query_on(
             &self.conf.query_reskey.clone(),
             &self.conf.query_predicate.clone(),
@@ -195,7 +192,7 @@ impl QueryingSubscriber<'_> {
         predicate: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> ZResolvedFuture<ZResult<()>> {
+    ) -> ZReady<ZResult<()>> {
         let mut state = zwrite!(self.receiver.state);
         log::debug!("Start query on {}?{}", reskey, predicate);
         match self
@@ -206,9 +203,9 @@ impl QueryingSubscriber<'_> {
         {
             Ok(recv) => {
                 state.replies_recv_queue.push(recv);
-                zresolved!(Ok(()))
+                zready(Ok(()))
             }
-            Err(err) => zresolved!(Err(err)),
+            Err(err) => zready(Err(err)),
         }
     }
 }

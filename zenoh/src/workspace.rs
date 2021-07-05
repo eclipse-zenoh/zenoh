@@ -16,10 +16,12 @@ use crate::net::{
     data_kind, encoding, CallbackSubscriber, CongestionControl, DataInfo, Query,
     QueryConsolidation, QueryTarget, Queryable, Receiver, RecvError, RecvTimeoutError, Reliability,
     RepliesSender, Reply, ReplyReceiver, ResKey, Sample, SampleReceiver, Session, SubInfo, SubMode,
-    Subscriber, TryRecvError, ZBuf, ZFuture, ZInt, ZResolvedFuture,
+    Subscriber, TryRecvError, ZBuf, ZFuture, ZInt, ZReady,
 };
 use crate::utils::new_reception_timestamp;
-use crate::{Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh};
+use crate::{
+    zready, Path, PathExpr, Selector, Timestamp, Value, ZError, ZErrorKind, ZResult, Zenoh,
+};
 use async_std::pin::Pin;
 use async_std::task::{Context, Poll};
 use futures_lite::stream::{Stream, StreamExt};
@@ -27,7 +29,7 @@ use log::{debug, warn};
 use std::convert::TryInto;
 use std::fmt;
 use std::time::{Duration, Instant};
-use zenoh_util::{zerror, zresolved};
+use zenoh_util::zerror;
 
 /// A Workspace to operate on zenoh.
 ///
@@ -67,11 +69,8 @@ pub struct Workspace<'a> {
 const LOCAL_ROUTER_PREFIX: &str = "/@/router/local";
 
 impl Workspace<'_> {
-    pub(crate) fn new(
-        zenoh: &Zenoh,
-        prefix: Option<Path>,
-    ) -> ZResolvedFuture<ZResult<Workspace<'_>>> {
-        zresolved!(Ok(Workspace { zenoh, prefix }))
+    pub(crate) fn new(zenoh: &Zenoh, prefix: Option<Path>) -> ZReady<ZResult<Workspace<'_>>> {
+        zready(Ok(Workspace { zenoh, prefix }))
     }
 
     /// Returns the prefix that was used to create this Workspace (calling [`Zenoh::workspace()`]).
@@ -137,7 +136,7 @@ impl Workspace<'_> {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub fn put(&self, path: &Path, value: Value) -> ZResolvedFuture<ZResult<()>> {
+    pub fn put(&self, path: &Path, value: Value) -> ZReady<ZResult<()>> {
         debug!("put on {:?}", path);
         let (encoding, payload) = value.encode();
         match self.path_to_reskey(path) {
@@ -148,7 +147,7 @@ impl Workspace<'_> {
                 data_kind::PUT,
                 CongestionControl::Drop, // TODO: Define the right congestion control value for the put
             ),
-            Err(e) => zresolved!(Err(e)),
+            Err(e) => zready(Err(e)),
         }
     }
 
@@ -169,7 +168,7 @@ impl Workspace<'_> {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub fn delete(&self, path: &Path) -> ZResolvedFuture<ZResult<()>> {
+    pub fn delete(&self, path: &Path) -> ZReady<ZResult<()>> {
         debug!("delete on {:?}", path);
         match self.path_to_reskey(path) {
             Ok(reskey) => self.session().write_ext(
@@ -179,7 +178,7 @@ impl Workspace<'_> {
                 data_kind::DELETE,
                 CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
             ),
-            Err(e) => zresolved!(Err(e)),
+            Err(e) => zready(Err(e)),
         }
     }
 
@@ -204,9 +203,9 @@ impl Workspace<'_> {
     /// }
     /// # })
     /// ```
-    pub fn get(&self, selector: &Selector) -> ZResolvedFuture<ZResult<DataReceiver>> {
+    pub fn get(&self, selector: &Selector) -> ZReady<ZResult<DataReceiver>> {
         debug!("get on {}", selector);
-        zresolved_try!({
+        zready_try!({
             let reskey = self.pathexpr_to_reskey(&selector.path_expr)?;
             let decode_value = !selector.properties.contains_key("raw");
             let consolidation = if selector.has_time_range() {
@@ -253,9 +252,9 @@ impl Workspace<'_> {
     /// }
     /// # })
     /// ```
-    pub fn subscribe(&self, selector: &Selector) -> ZResolvedFuture<ZResult<ChangeReceiver<'_>>> {
+    pub fn subscribe(&self, selector: &Selector) -> ZReady<ZResult<ChangeReceiver<'_>>> {
         debug!("subscribe on {}", selector);
-        zresolved_try!({
+        zready_try!({
             if selector.filter.is_some() {
                 return zerror!(ZErrorKind::Other {
                     descr: "Filter not supported in selector for subscribe()".into()
@@ -312,12 +311,12 @@ impl Workspace<'_> {
         &self,
         selector: &Selector,
         mut callback: SubscribeCallback,
-    ) -> ZResolvedFuture<ZResult<SubscriberHandle<'_>>>
+    ) -> ZReady<ZResult<SubscriberHandle<'_>>>
     where
         SubscribeCallback: FnMut(Change) + Send + Sync + 'static,
     {
         debug!("subscribe_with_callback on {}", selector);
-        zresolved_try!({
+        zready_try!({
             if selector.filter.is_some() {
                 return zerror!(ZErrorKind::Other {
                     descr: "Filter not supported in selector for subscribe()".into()
@@ -379,12 +378,9 @@ impl Workspace<'_> {
     /// }
     /// # })
     /// ```
-    pub fn register_eval(
-        &self,
-        path_expr: &PathExpr,
-    ) -> ZResolvedFuture<ZResult<GetRequestStream<'_>>> {
+    pub fn register_eval(&self, path_expr: &PathExpr) -> ZReady<ZResult<GetRequestStream<'_>>> {
         debug!("eval on {}", path_expr);
-        zresolved_try!({
+        zready_try!({
             let reskey = self.pathexpr_to_reskey(&path_expr)?;
 
             self.session()
@@ -583,7 +579,7 @@ impl ChangeReceiver<'_> {
     }
 
     // Closes the stream and the subscription.
-    pub fn close(self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn close(self) -> ZReady<ZResult<()>> {
         self.subscriber.undeclare()
     }
 }
@@ -607,7 +603,7 @@ pub struct SubscriberHandle<'a> {
 
 impl SubscriberHandle<'_> {
     /// Closes the subscription.
-    pub fn close(self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn close(self) -> ZReady<ZResult<()>> {
         self.subscriber.undeclare()
     }
 }
@@ -651,7 +647,7 @@ pub struct GetRequestStream<'a> {
 
 impl GetRequestStream<'_> {
     /// Closes the stream and unregister the evaluation function.
-    pub fn close(self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn close(self) -> ZReady<ZResult<()>> {
         self.queryable.undeclare()
     }
 }

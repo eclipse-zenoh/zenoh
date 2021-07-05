@@ -87,9 +87,10 @@ pub use zenoh_util::sync::channel::RecvError;
 pub use zenoh_util::sync::channel::RecvTimeoutError;
 pub use zenoh_util::sync::channel::TryIter;
 pub use zenoh_util::sync::channel::TryRecvError;
+pub use zenoh_util::sync::zready;
 pub use zenoh_util::sync::ZFuture;
-pub use zenoh_util::sync::ZPendingFuture;
-pub use zenoh_util::sync::ZResolvedFuture;
+pub use zenoh_util::sync::ZPinBoxFuture;
+pub use zenoh_util::sync::ZReady;
 
 /// Some informations about the associated data.
 ///
@@ -243,7 +244,7 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn undeclare(mut self) -> ZReady<ZResult<()>> {
         self.alive = false;
         self.session.undeclare_publisher(self.state.id)
     }
@@ -252,7 +253,7 @@ impl Publisher<'_> {
 impl Drop for Publisher<'_> {
     fn drop(&mut self) {
         if self.alive {
-            self.session.undeclare_publisher(self.state.id);
+            let _ = self.session.undeclare_publisher(self.state.id).wait();
         }
     }
 }
@@ -326,7 +327,7 @@ impl Subscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    pub fn pull(&self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn pull(&self) -> ZReady<ZResult<()>> {
         self.session.pull(&self.state.reskey)
     }
 
@@ -351,7 +352,7 @@ impl Subscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn undeclare(mut self) -> ZReady<ZResult<()>> {
         self.alive = false;
         self.session.undeclare_subscriber(self.state.id)
     }
@@ -360,7 +361,7 @@ impl Subscriber<'_> {
 impl Drop for Subscriber<'_> {
     fn drop(&mut self) {
         if self.alive {
-            self.session.undeclare_subscriber(self.state.id);
+            let _ = self.session.undeclare_subscriber(self.state.id).wait();
         }
     }
 }
@@ -400,7 +401,7 @@ impl CallbackSubscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    pub fn pull(&self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn pull(&self) -> ZReady<ZResult<()>> {
         self.session.pull(&self.state.reskey)
     }
 
@@ -426,7 +427,7 @@ impl CallbackSubscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn undeclare(mut self) -> ZReady<ZResult<()>> {
         self.alive = false;
         self.session.undeclare_subscriber(self.state.id)
     }
@@ -435,7 +436,7 @@ impl CallbackSubscriber<'_> {
 impl Drop for CallbackSubscriber<'_> {
     fn drop(&mut self) {
         if self.alive {
-            self.session.undeclare_subscriber(self.state.id);
+            let _ = self.session.undeclare_subscriber(self.state.id).wait();
         }
     }
 }
@@ -501,7 +502,7 @@ impl Queryable<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(mut self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn undeclare(mut self) -> ZReady<ZResult<()>> {
         self.alive = false;
         self.session.undeclare_queryable(self.state.id)
     }
@@ -510,7 +511,7 @@ impl Queryable<'_> {
 impl Drop for Queryable<'_> {
     fn drop(&mut self) {
         if self.alive {
-            self.session.undeclare_queryable(self.state.id);
+            let _ = self.session.undeclare_queryable(self.state.id).wait();
         }
     }
 }

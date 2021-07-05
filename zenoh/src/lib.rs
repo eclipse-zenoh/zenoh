@@ -99,7 +99,7 @@ pub mod net;
 use net::info::ZN_INFO_ROUTER_PID_KEY;
 use net::runtime::Runtime;
 use net::Session;
-pub use net::{ZError, ZErrorKind, ZFuture, ZPendingFuture, ZResolvedFuture, ZResult};
+pub use net::{zready, ZError, ZErrorKind, ZFuture, ZPinBoxFuture, ZReady, ZResult};
 
 mod workspace;
 pub use workspace::*;
@@ -119,6 +119,7 @@ pub mod utils;
 pub use net::protocol::core::{Timestamp, TimestampId};
 pub use zenoh_util::properties::config::ConfigProperties;
 pub use zenoh_util::properties::Properties;
+pub use zenoh_util::sync::zpinbox;
 
 /// The zenoh client API.
 pub struct Zenoh {
@@ -175,8 +176,8 @@ impl Zenoh {
     /// let zenoh = Zenoh::new(config.into()).await.unwrap();
     /// # })
     /// ```
-    pub fn new(config: ConfigProperties) -> ZPendingFuture<ZResult<Zenoh>> {
-        zpending!(async {
+    pub fn new(config: ConfigProperties) -> ZPinBoxFuture<ZResult<Zenoh>> {
+        zpinbox(async {
             Ok(Zenoh {
                 session: net::open(config).await?,
             })
@@ -186,8 +187,8 @@ impl Zenoh {
     /// Creates a Zenoh API with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    pub fn init(runtime: Runtime) -> ZPendingFuture<Zenoh> {
-        zpending!(async {
+    pub fn init(runtime: Runtime) -> ZPinBoxFuture<Zenoh> {
+        zpinbox(async {
             Zenoh {
                 session: Session::init(runtime, true, vec![], vec![]).await,
             }
@@ -204,14 +205,14 @@ impl Zenoh {
     /// Returns the PeerId of the zenoh router this zenoh API is connected to (if any).
     /// This calls [Session::info()](net::Session::info) and returns the first router pid from
     /// the ZN_INFO_ROUTER_PID_KEY property.
-    pub fn router_pid(&self) -> ZResolvedFuture<Option<String>> {
-        zresolved!(
+    pub fn router_pid(&self) -> ZReady<Option<String>> {
+        zready(
             match self.session().info().wait().remove(&ZN_INFO_ROUTER_PID_KEY) {
                 None => None,
                 Some(s) if s.is_empty() => None,
                 Some(s) if !s.contains(',') => Some(s),
                 Some(s) => Some(s.split(',').next().unwrap().to_string()),
-            }
+            },
         )
     }
 
@@ -235,7 +236,7 @@ impl Zenoh {
     /// ).await.unwrap();
     /// # })
     /// ```
-    pub fn workspace(&self, prefix: Option<Path>) -> ZResolvedFuture<ZResult<Workspace<'_>>> {
+    pub fn workspace(&self, prefix: Option<Path>) -> ZReady<ZResult<Workspace<'_>>> {
         debug!("New workspace with prefix: {:?}", prefix);
         Workspace::new(&self, prefix)
     }
@@ -255,7 +256,7 @@ impl Zenoh {
     /// zenoh.close();
     /// # })
     /// ```
-    pub fn close(self) -> ZPendingFuture<ZResult<()>> {
+    pub fn close(self) -> ZPinBoxFuture<ZResult<()>> {
         self.session.close()
     }
 }

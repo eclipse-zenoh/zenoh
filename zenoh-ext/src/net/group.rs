@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use zenoh::net::queryable::EVAL;
 use zenoh::net::{
     CongestionControl, ConsolidationMode, QueryConsolidation, QueryTarget, Reliability, ResKey,
-    Sample, Session, SubInfo, SubMode,
+    Sample, Session, SubInfo, SubMode, ZFuture,
 };
 use zenoh_util::sync::Condition;
 
@@ -129,13 +129,15 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
     loop {
         async_std::task::sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
-        z.write_ext(
-            &state.event_resource,
-            (buf.clone()).into(),
-            0,
-            0,
-            CongestionControl::Drop,
-        );
+        let _ = z
+            .write_ext(
+                &state.event_resource,
+                (buf.clone()).into(),
+                0,
+                0,
+                CongestionControl::Drop,
+            )
+            .wait();
     }
 }
 
@@ -214,7 +216,7 @@ async fn advertise_view(z: &Arc<Session>, state: &Arc<GroupState>) {
         log::debug!("Advertising NewGroupView: {:?}", &evt);
         let buf = bincode::serialize(&evt).unwrap();
         let res = format!("{}/{}/{}", GROUP_PREFIX, &state.gid, EVENT_POSTFIX);
-        z.write(&res.into(), buf.into());
+        let _ = z.write(&res.into(), buf.into()).wait();
     }
 }
 

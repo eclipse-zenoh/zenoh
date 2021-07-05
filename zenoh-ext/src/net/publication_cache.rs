@@ -22,9 +22,7 @@ use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use zenoh::net::utils::resource_name;
 use zenoh::net::*;
-use zenoh_util::core::ZResult;
-use zenoh_util::sync::ZFuture;
-use zenoh_util::{zerror, zresolved};
+use zenoh_util::zerror;
 
 pub(crate) const PUBLISHER_CACHE_QUERYABLE_KIND: ZInt = 0x08;
 
@@ -79,7 +77,7 @@ impl<'a> Future for PublicationCacheBuilder<'a> {
     }
 }
 
-impl<'a> ZFuture<ZResult<PublicationCache<'a>>> for PublicationCacheBuilder<'a> {
+impl<'a> ZFuture for PublicationCacheBuilder<'a> {
     fn wait(self) -> ZResult<PublicationCache<'a>> {
         PublicationCache::new(self)
     }
@@ -210,8 +208,8 @@ impl PublicationCache<'_> {
 
     /// Undeclare this PublicationCache
     #[inline]
-    pub fn undeclare(self) -> ZResolvedFuture<ZResult<()>> {
+    pub fn undeclare(self) -> ZReady<ZResult<()>> {
         // just drop self and all its content
-        zresolved!(Ok(()))
+        zready(Ok(()))
     }
 }
