@@ -2976,6 +2976,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-plugin-trait"
+version = "0.5.0-dev"
+dependencies = [
+ "async-std",
+ "clap",
+ "futures",
+ "zenoh",
+]
+
+[[package]]
 name = "zenoh-util"
 version = "0.5.0-dev"
 dependencies = [
