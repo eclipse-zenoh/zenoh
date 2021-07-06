@@ -24,6 +24,9 @@ edition = "2018"
 [lib]
 name = "plugin_example"
 
+[features]
+no_mangle = []
+default = ["no_mangle"]
 
 [dependencies]
 zenoh = { path = "../../zenoh" }
