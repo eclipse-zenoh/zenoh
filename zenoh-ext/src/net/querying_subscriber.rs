@@ -210,6 +210,7 @@ impl QueryingSubscriber<'_> {
     }
 }
 
+#[derive(Clone)]
 pub struct QueryingSubscriberReceiver {
     state: Arc<RwLock<InnerState>>,
 }
