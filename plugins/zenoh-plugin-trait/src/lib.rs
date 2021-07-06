@@ -16,8 +16,12 @@ use std::any::Any;
 use clap::{Arg, ArgMatches};
 use zenoh::net::runtime::Runtime;
 
+pub mod prelude {
+    pub use crate::{Compatible, ArgConstructible, Plugin, PluginStopper, no_mangle::__load_plugin};
+}
+
 pub struct Compatibility {
-    pub uid: u64
+    pub uid: &'static str
 }
 
 pub trait Compatible: Any {
@@ -58,14 +62,30 @@ impl PluginVTable {
     }
 }
 
-
 #[cfg(feature = "no_mangle")]
 pub mod no_mangle {
     use super::*;
 
-    pub fn load_plugin<ConcretePlugin: Plugin + ArgConstructible + Compatible>(vtable: &mut PluginVTable) {
+    pub fn __load_plugin<ConcretePlugin: Plugin + ArgConstructible + Compatible>(vtable: &mut PluginVTable) {
         vtable.is_compatible_with = &ConcretePlugin::is_compatible_with;
         vtable.get_expected_args = &ConcretePlugin::get_expected_args;
         vtable.init = &|args|{Box::new(ConcretePlugin::init(args))};
+    }
+
+    #[macro_export]
+    macro_rules! declare_plugin {
+        ($ty: path) => {
+            #[no_mangle]
+            fn load_plugin(vtable: &mut PluginVTable) {
+                __load_plugin::<$ty>(vtable)
+            }
+        };
+    }
+}
+#[cfg(not(feature = "no_mangle"))]
+pub mod no_mangle {
+    #[macro_export]
+    macro_rules! declare_plugin {
+        ($ty: path) => {};
     }
 }
