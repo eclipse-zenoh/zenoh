@@ -36,13 +36,9 @@ fn main() {
 
     loop {
         session
-            .write_ext(
-                &reskey,
-                data.clone(),
-                encoding::DEFAULT,
-                data_kind::DEFAULT,
-                CongestionControl::Block, // Make sure to not drop messages because of congestion control
-            )
+            .write(&reskey, data.clone())
+            // Make sure to not drop messages because of congestion control
+            .congestion_control(CongestionControl::Block)
             .wait()
             .unwrap();
     }

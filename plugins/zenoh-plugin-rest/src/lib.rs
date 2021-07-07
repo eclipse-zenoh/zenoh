@@ -29,12 +29,6 @@ const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
 const DEFAULT_HTTP_PORT: &str = "8000";
 
-const SSE_SUB_INFO: SubInfo = SubInfo {
-    reliability: Reliability::Reliable,
-    mode: SubMode::Push,
-    period: None,
-};
-
 fn parse_http_port(arg: &str) -> String {
     match arg.split(':').count() {
         1 => {
@@ -227,12 +221,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let mut sub = req
-                        .state()
-                        .0
-                        .declare_subscriber(&resource, &SSE_SUB_INFO)
-                        .await
-                        .unwrap();
+                    let mut sub = req.state().0.declare_subscriber(&resource).await.unwrap();
                     loop {
                         let sample = sub.receiver().next().await.unwrap();
                         let send = async {
@@ -273,12 +262,9 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         match req
             .state()
             .0
-            .query(
-                &resource,
-                &selector.predicate,
-                QueryTarget::default(),
-                consolidation,
-            )
+            .query(&resource)
+            .predicate(&selector.predicate)
+            .consolidation(consolidation)
             .await
         {
             Ok(receiver) => {
@@ -310,16 +296,13 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     match req.body_bytes().await {
         Ok(bytes) => {
             let resource = path_to_resource(req.url().path(), &req.state().1);
+            // TODO: Define the right congestion control value
             match req
                 .state()
                 .0
-                .write_ext(
-                    &resource,
-                    bytes.into(),
-                    enc_from_mime(req.content_type()),
-                    method_to_kind(req.method()),
-                    CongestionControl::Drop, // TODO: Define the right congestion control value
-                )
+                .write(&resource, bytes.into())
+                .encoding(enc_from_mime(req.content_type()))
+                .kind(method_to_kind(req.method()))
                 .await
             {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),

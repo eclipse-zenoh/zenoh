@@ -28,14 +28,10 @@ async fn main() {
     let session = open(config.into()).await.unwrap();
 
     println!("Declaring Subscriber on {}", selector);
-    let sub_info = SubInfo {
-        reliability: Reliability::Reliable,
-        mode: SubMode::Pull,
-        period: None,
-    };
 
     let mut subscriber = session
-        .declare_subscriber(&selector.into(), &sub_info)
+        .declare_subscriber(&selector.into())
+        .mode(SubMode::Pull)
         .await
         .unwrap();
 

@@ -315,12 +315,8 @@ impl Subscriber<'_> {
     /// use futures::prelude::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Pull,
-    /// #     period: None
-    /// # };
-    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// let mut subscriber = session.declare_subscriber(&"/resource/name".into())
+    ///                             .mode(SubMode::Pull).await.unwrap();
     /// async_std::task::spawn(subscriber.receiver().clone().for_each(
     ///     move |sample| async move { println!("Received : {:?}", sample); }
     /// ));
@@ -342,12 +338,7 @@ impl Subscriber<'_> {
     /// use zenoh::net::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Push,
-    /// #     period: None
-    /// # };
-    /// let subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+    /// let subscriber = session.declare_subscriber(&"/resource/name".into()).await.unwrap();
     /// subscriber.undeclare().await.unwrap();
     /// # })
     /// ```
@@ -390,14 +381,9 @@ impl CallbackSubscriber<'_> {
     /// use zenoh::net::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Pull,
-    /// #     period: None
-    /// # };
-    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info,
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(),
     ///     |sample| { println!("Received : {} {}", sample.res_name, sample.payload); }
-    /// ).await.unwrap();
+    /// ).mode(SubMode::Pull).await.unwrap();
     /// subscriber.pull();
     /// # })
     /// ```
@@ -416,13 +402,8 @@ impl CallbackSubscriber<'_> {
     /// use zenoh::net::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// # let sub_info = SubInfo {
-    /// #     reliability: Reliability::Reliable,
-    /// #     mode: SubMode::Push,
-    /// #     period: None
-    /// # };
     /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), &sub_info, data_handler).await.unwrap();
+    /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(), data_handler).await.unwrap();
     /// subscriber.undeclare().await.unwrap();
     /// # })
     /// ```
@@ -494,10 +475,9 @@ impl Queryable<'_> {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::net::*;
-    /// use zenoh::net::queryable::EVAL;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let queryable = session.declare_queryable(&"/resource/name".into(), EVAL).await.unwrap();
+    /// let queryable = session.declare_queryable(&"/resource/name".into()).await.unwrap();
     /// queryable.undeclare().await.unwrap();
     /// # })
     /// ```

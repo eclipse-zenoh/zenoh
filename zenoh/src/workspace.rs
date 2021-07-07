@@ -13,10 +13,9 @@
 //
 use crate::net::queryable::EVAL;
 use crate::net::{
-    data_kind, encoding, CallbackSubscriber, CongestionControl, DataInfo, Query,
-    QueryConsolidation, QueryTarget, Queryable, Receiver, RecvError, RecvTimeoutError, Reliability,
-    RepliesSender, Reply, ReplyReceiver, ResKey, Sample, SampleReceiver, Session, SubInfo, SubMode,
-    Subscriber, TryRecvError, ZBuf, ZFuture, ZInt,
+    data_kind, encoding, CallbackSubscriber, DataInfo, Query, QueryConsolidation, Queryable,
+    Receiver, RecvError, RecvTimeoutError, RepliesSender, Reply, ReplyReceiver, ResKey, Sample,
+    SampleReceiver, Session, Subscriber, TryRecvError, ZBuf, ZFuture, ZInt,
 };
 use crate::utils::new_reception_timestamp;
 use crate::{
@@ -145,13 +144,9 @@ impl Workspace<'_> {
         zready(match self.path_to_reskey(path) {
             Ok(reskey) => self
                 .session()
-                .write_ext(
-                    &reskey,
-                    payload,
-                    encoding,
-                    data_kind::PUT,
-                    CongestionControl::Drop, // TODO: Define the right congestion control value for the put
-                )
+                .write(&reskey, payload)
+                .encoding(encoding)
+                // TODO: Define the right congestion control value for the put
                 .wait(),
             Err(e) => Err(e),
         })
@@ -179,13 +174,9 @@ impl Workspace<'_> {
         zready(match self.path_to_reskey(path) {
             Ok(reskey) => self
                 .session()
-                .write_ext(
-                    &reskey,
-                    ZBuf::new(),
-                    encoding::NONE,
-                    data_kind::DELETE,
-                    CongestionControl::Drop, // TODO: Define the right congestion control value for the delete
-                )
+                .write(&reskey, ZBuf::new())
+                .kind(data_kind::DELETE)
+                // TODO: Define the right congestion control value for the delete
                 .wait(),
             Err(e) => Err(e),
         })
@@ -224,12 +215,9 @@ impl Workspace<'_> {
             };
 
             self.session()
-                .query(
-                    &reskey,
-                    &selector.predicate,
-                    QueryTarget::default(),
-                    consolidation,
-                )
+                .query(&reskey)
+                .predicate(&selector.predicate)
+                .consolidation(consolidation)
                 .wait()
                 .map(|receiver| DataReceiver {
                     receiver,
@@ -280,14 +268,9 @@ impl Workspace<'_> {
             let decode_value = !selector.properties.contains_key("raw");
 
             let reskey = self.pathexpr_to_reskey(&selector.path_expr)?;
-            let sub_info = SubInfo {
-                reliability: Reliability::Reliable,
-                mode: SubMode::Push,
-                period: None,
-            };
 
             self.session()
-                .declare_subscriber(&reskey, &sub_info)
+                .declare_subscriber(&reskey)
                 .wait()
                 .map(|mut subscriber| ChangeReceiver {
                     receiver: subscriber.receiver().clone(),
@@ -342,15 +325,10 @@ impl Workspace<'_> {
             let decode_value = !selector.properties.contains_key("raw");
 
             let reskey = self.pathexpr_to_reskey(&selector.path_expr)?;
-            let sub_info = SubInfo {
-                reliability: Reliability::Reliable,
-                mode: SubMode::Push,
-                period: None,
-            };
 
             let subscriber = self
                 .session()
-                .declare_callback_subscriber(&reskey, &sub_info, move |sample| {
+                .declare_callback_subscriber(&reskey, move |sample| {
                     match Change::from_sample(sample, decode_value) {
                         Ok(change) => callback(change),
                         Err(err) => warn!("Received an invalid Sample (drop it): {}", err),
@@ -399,7 +377,8 @@ impl Workspace<'_> {
             let reskey = self.pathexpr_to_reskey(&path_expr)?;
 
             self.session()
-                .declare_queryable(&reskey, EVAL)
+                .declare_queryable(&reskey)
+                .kind(EVAL)
                 .wait()
                 .map(|queryable| GetRequestStream { queryable })
         })

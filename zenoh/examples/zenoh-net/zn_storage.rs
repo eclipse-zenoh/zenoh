@@ -34,21 +34,16 @@ async fn main() {
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
 
-    let sub_info = SubInfo {
-        reliability: Reliability::Reliable,
-        mode: SubMode::Push,
-        period: None,
-    };
-
     println!("Declaring Subscriber on {}", selector);
     let mut subscriber = session
-        .declare_subscriber(&selector.clone().into(), &sub_info)
+        .declare_subscriber(&selector.clone().into())
         .await
         .unwrap();
 
     println!("Declaring Queryable on {}", selector);
     let mut queryable = session
-        .declare_queryable(&selector.into(), STORAGE)
+        .declare_queryable(&selector.into())
+        .kind(STORAGE)
         .await
         .unwrap();
 

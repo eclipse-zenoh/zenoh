@@ -28,15 +28,11 @@ async fn main() {
 
     println!("Sending Query '{}'...", selector);
     let mut replies = session
-        .query(
-            &selector.into(),
-            "",
-            QueryTarget {
-                kind,
-                target: Target::default(),
-            },
-            QueryConsolidation::default(),
-        )
+        .query(&selector.into())
+        .target(QueryTarget {
+            kind,
+            target: Target::default(),
+        })
         .await
         .unwrap();
     while let Some(reply) = replies.next().await {

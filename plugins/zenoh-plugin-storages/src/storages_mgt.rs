@@ -18,9 +18,7 @@ use futures::select;
 use futures::stream::StreamExt;
 use futures::FutureExt;
 use log::{debug, error, trace, warn};
-use zenoh::net::{
-    queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode, Target,
-};
+use zenoh::net::{queryable, QueryConsolidation, QueryTarget, Target};
 use zenoh::{Path, PathExpr, ZResult, Zenoh};
 use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
 
@@ -39,14 +37,9 @@ pub(crate) async fn start_storage(
         let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
 
         // subscribe on path_expr
-        let sub_info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        };
         let mut storage_sub = match workspace
             .session()
-            .declare_subscriber(&path_expr.to_string().into(), &sub_info)
+            .declare_subscriber(&path_expr.to_string().into())
             .await
         {
             Ok(storage_sub) => storage_sub,
@@ -64,12 +57,10 @@ pub(crate) async fn start_storage(
         };
         let mut replies = match workspace
             .session()
-            .query(
-                &path_expr.to_string().into(),
-                "?(starttime=0)",
-                query_target,
-                QueryConsolidation::none(),
-            )
+            .query(&path_expr.to_string().into())
+            .predicate("?(starttime=0)")
+            .target(query_target)
+            .consolidation(QueryConsolidation::none())
             .await
         {
             Ok(replies) => replies,
@@ -108,7 +99,8 @@ pub(crate) async fn start_storage(
         // answer to queries on path_expr
         let mut storage_queryable = match workspace
             .session()
-            .declare_queryable(&path_expr.to_string().into(), queryable::STORAGE)
+            .declare_queryable(&path_expr.to_string().into())
+            .kind(queryable::STORAGE)
             .await
         {
             Ok(storage_queryable) => storage_queryable,

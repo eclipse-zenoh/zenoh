@@ -38,15 +38,7 @@ async fn main() {
         .await
         .unwrap());
 
-    let sub_info = SubInfo {
-        reliability: Reliability::Reliable,
-        mode: SubMode::Push,
-        period: None,
-    };
-    let mut sub = session
-        .declare_subscriber(&reskey_pong, &sub_info)
-        .await
-        .unwrap();
+    let mut sub = session.declare_subscriber(&reskey_pong).await.unwrap();
 
     let data: ZBuf = (0usize..size)
         .map(|i| (i % 10) as u8)
@@ -58,13 +50,9 @@ async fn main() {
         let data = data.clone();
         let write_time = Instant::now();
         session
-            .write_ext(
-                &reskey_ping,
-                data,
-                encoding::DEFAULT,
-                data_kind::DEFAULT,
-                CongestionControl::Block, // Make sure to not drop messages because of congestion control
-            )
+            .write(&reskey_ping, data)
+            // Make sure to not drop messages because of congestion control
+            .congestion_control(CongestionControl::Block)
             .await
             .unwrap();
 

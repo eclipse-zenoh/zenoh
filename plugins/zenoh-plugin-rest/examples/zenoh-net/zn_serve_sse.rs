@@ -44,7 +44,11 @@ async fn main() {
     let session = open(config.into()).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
-    let mut queryable = session.declare_queryable(&path.into(), EVAL).await.unwrap();
+    let mut queryable = session
+        .declare_queryable(&path.into())
+        .kind(EVAL)
+        .await
+        .unwrap();
 
     async_std::task::spawn(
         queryable
@@ -78,13 +82,9 @@ async fn main() {
     );
     loop {
         session
-            .write_ext(
-                &rid.into(),
-                value.as_bytes().into(),
-                encoding::TEXT_PLAIN,
-                data_kind::PUT,
-                CongestionControl::Block,
-            )
+            .write(&rid.into(), value.as_bytes().into())
+            .encoding(encoding::TEXT_PLAIN)
+            .congestion_control(CongestionControl::Block)
             .await
             .unwrap();
         async_std::task::sleep(std::time::Duration::new(1, 0)).await;

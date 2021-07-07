@@ -30,7 +30,8 @@ async fn main() {
 
     println!("Declaring Queryable on {}", path);
     let mut queryable = session
-        .declare_queryable(&path.clone().into(), EVAL)
+        .declare_queryable(&path.clone().into())
+        .kind(EVAL)
         .await
         .unwrap();
 

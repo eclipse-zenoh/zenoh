@@ -43,23 +43,18 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     let mut stored: HashMap<String, (ZBuf, Option<DataInfo>)> = HashMap::new();
 
-    let sub_info = SubInfo {
-        reliability: Reliability::Reliable,
-        mode: SubMode::Push,
-        period: None,
-    };
-
     let selector: ResKey = args.value_of("storage-selector").unwrap().into();
     debug!("Run example-plugin with storage-selector={}", selector);
 
     debug!("Declaring Subscriber on {}", selector);
-    let mut sub = session
-        .declare_subscriber(&selector, &sub_info)
-        .await
-        .unwrap();
+    let mut sub = session.declare_subscriber(&selector).await.unwrap();
 
     debug!("Declaring Queryable on {}", selector);
-    let mut queryable = session.declare_queryable(&selector, STORAGE).await.unwrap();
+    let mut queryable = session
+        .declare_queryable(&selector)
+        .kind(STORAGE)
+        .await
+        .unwrap();
 
     loop {
         select!(

@@ -110,7 +110,8 @@ impl PublicationCache<'_> {
         // declare the local subscriber that will store the local publications
         let mut local_sub = conf
             .session
-            .declare_local_subscriber(&conf.pub_reskey)
+            .declare_subscriber(&conf.pub_reskey)
+            .local()
             .wait()?;
 
         // declare the queryable that will answer to queries on cache
@@ -125,7 +126,8 @@ impl PublicationCache<'_> {
         };
         let mut queryable = conf
             .session
-            .declare_queryable(&queryable_reskey, PUBLISHER_CACHE_QUERYABLE_KIND)
+            .declare_queryable(&queryable_reskey)
+            .kind(PUBLISHER_CACHE_QUERYABLE_KIND)
             .wait()?;
 
         // take local ownership of stuff to be moved into task

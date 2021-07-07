@@ -8,10 +8,7 @@ use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Duration, Instant};
 use zenoh::net::queryable::EVAL;
-use zenoh::net::{
-    CongestionControl, ConsolidationMode, QueryConsolidation, QueryTarget, Reliability, ResKey,
-    Sample, Session, SubInfo, SubMode, ZFuture,
-};
+use zenoh::net::{ConsolidationMode, QueryConsolidation, ResKey, Sample, Session, ZFuture};
 use zenoh_util::sync::Condition;
 
 const GROUP_PREFIX: &str = "/zenoh/ext/net/group";
@@ -134,15 +131,7 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
     loop {
         async_std::task::sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
-        let _ = z
-            .write_ext(
-                &state.event_resource,
-                (buf.clone()).into(),
-                0,
-                0,
-                CongestionControl::Drop,
-            )
-            .wait();
+        let _ = z.write(&state.event_resource, (buf.clone()).into()).await;
     }
 }
 
@@ -182,7 +171,8 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
     let mut queryable = z
-        .declare_queryable(&qres.clone().into(), EVAL)
+        .declare_queryable(&qres.clone().into())
+        .kind(EVAL)
         .await
         .unwrap();
 
@@ -226,15 +216,7 @@ async fn advertise_view(z: &Arc<Session>, state: &Arc<GroupState>) {
 }
 
 async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
-    let sub_info = SubInfo {
-        period: None,
-        mode: SubMode::Push,
-        reliability: Reliability::Reliable,
-    };
-    let mut sub = z
-        .declare_subscriber(&state.event_resource, &sub_info)
-        .await
-        .unwrap();
+    let mut sub = z.declare_subscriber(&state.event_resource).await.unwrap();
     let stream = sub.receiver();
     while let Some(s) = stream.next().await {
         log::debug!("Handling Network Event...");
@@ -291,10 +273,8 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                     reception: ConsolidationMode::None,
                                 };
                                 log::debug!("Issuing Query for {}", &qres);
-                                let mut receiver = z
-                                    .query(&qres.into(), "", QueryTarget::default(), qc)
-                                    .await
-                                    .unwrap();
+                                let mut receiver =
+                                    z.query(&qres.into()).consolidation(qc).await.unwrap();
 
                                 while let Some(sample) = receiver.next().await {
                                     match bincode::deserialize::<Member>(

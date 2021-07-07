@@ -248,6 +248,7 @@ pub enum CongestionControl {
 }
 
 impl Default for CongestionControl {
+    #[inline]
     fn default() -> CongestionControl {
         *CONGESTION_CONTROL_DEFAULT
     }

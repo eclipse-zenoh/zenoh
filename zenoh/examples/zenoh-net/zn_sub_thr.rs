@@ -33,14 +33,9 @@ fn main() {
     let mut count = 0u128;
     let mut start = Instant::now();
 
-    let sub_info = SubInfo {
-        reliability: Reliability::Reliable,
-        mode: SubMode::Push,
-        period: None,
-    };
     let mut nm = 0;
     let _sub = session
-        .declare_callback_subscriber(&reskey, &sub_info, move |_sample| {
+        .declare_callback_subscriber(&reskey, move |_sample| {
             if count == 0 {
                 start = Instant::now();
                 count += 1;

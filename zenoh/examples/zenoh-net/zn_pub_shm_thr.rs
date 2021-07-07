@@ -43,15 +43,11 @@ async fn main() {
     let _publ = z.declare_publisher(&reskey).await.unwrap();
 
     loop {
-        z.write_ext(
-            &reskey,
-            buf.clone().into(),
-            encoding::DEFAULT,
-            data_kind::DEFAULT,
-            CongestionControl::Block, // Make sure to not drop messages because of congestion control
-        )
-        .await
-        .unwrap();
+        z.write(&reskey, buf.clone().into())
+            // Make sure to not drop messages because of congestion control
+            .congestion_control(CongestionControl::Block)
+            .await
+            .unwrap();
     }
 }
 

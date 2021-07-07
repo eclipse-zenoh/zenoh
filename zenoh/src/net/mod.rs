@@ -36,12 +36,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = open(config::default()).await.unwrap();
-//!     let sub_info = SubInfo {
-//!         reliability: Reliability::Reliable,
-//!         mode: SubMode::Push,
-//!         period: None
-//!     };
-//!     let mut subscriber = session.declare_subscriber(&"/resource/name".into(), &sub_info).await.unwrap();
+//!     let mut subscriber = session.declare_subscriber(&"/resource/name".into()).await.unwrap();
 //!     while let Some(sample) = subscriber.receiver().next().await { println!("Received : {:?}", sample); };
 //! }
 //! ```
@@ -54,12 +49,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = open(config::default()).await.unwrap();
-//!     let mut replies = session.query(
-//!         &"/resource/name".into(),
-//!         "predicate",
-//!         QueryTarget::default(),
-//!         QueryConsolidation::default()
-//!     ).await.unwrap();
+//!     let mut replies = session.query(&"/resource/name".into()).await.unwrap();
 //!     while let Some(reply) = replies.next().await {
 //!         println!(">> Received {:?}", reply.data);
 //!     }

@@ -44,11 +44,7 @@ impl QueryingSubscriberBuilder<'_> {
         session: &'a Session,
         sub_reskey: &ResKey,
     ) -> QueryingSubscriberBuilder<'a> {
-        let info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        };
+        let info = SubInfo::default();
 
         // By default query all matching publication caches and storages
         let query_target = QueryTarget {
@@ -71,50 +67,79 @@ impl QueryingSubscriberBuilder<'_> {
         }
     }
 
+    /// Change the subscription reliability.
+    #[inline]
+    pub fn reliability(mut self, reliability: Reliability) -> Self {
+        self.info.reliability = reliability;
+        self
+    }
+
     /// Change the subscription reliability to Reliable.
+    #[inline]
     pub fn reliable(mut self) -> Self {
         self.info.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
+    #[inline]
     pub fn best_effort(mut self) -> Self {
         self.info.reliability = Reliability::BestEffort;
         self
     }
 
+    /// Change the subscription mode.
+    #[inline]
+    pub fn mode(mut self, mode: SubMode) -> Self {
+        self.info.mode = mode;
+        self
+    }
+
     /// Change the subscription mode to Push.
+    #[inline]
     pub fn push_mode(mut self) -> Self {
         self.info.mode = SubMode::Push;
         self.info.period = None;
         self
     }
 
-    /// Change the subscription mode to Pull with an optional Period.
-    pub fn pull_mode(mut self, period: Option<Period>) -> Self {
+    /// Change the subscription mode to Pull.
+    #[inline]
+    pub fn pull_mode(mut self) -> Self {
         self.info.mode = SubMode::Pull;
+        self
+    }
+
+    /// Change the subscription period.
+    #[inline]
+    pub fn period(mut self, period: Option<Period>) -> Self {
         self.info.period = period;
         self
     }
+
     /// Change the resource key to be used for queries.
+    #[inline]
     pub fn query_reskey(mut self, query_reskey: ResKey) -> Self {
         self.query_reskey = query_reskey;
         self
     }
 
     /// Change the predicate to be used for queries.
+    #[inline]
     pub fn query_predicate(mut self, query_predicate: String) -> Self {
         self.query_predicate = query_predicate;
         self
     }
 
     /// Change the target to be used for queries.
+    #[inline]
     pub fn query_target(mut self, query_target: QueryTarget) -> Self {
         self.query_target = query_target;
         self
     }
 
     /// Change the consolidation mode to be used for queries.
+    #[inline]
     pub fn query_consolidation(mut self, query_consolidation: QueryConsolidation) -> Self {
         self.query_consolidation = query_consolidation;
         self
@@ -124,12 +149,14 @@ impl QueryingSubscriberBuilder<'_> {
 impl<'a> Future for QueryingSubscriberBuilder<'a> {
     type Output = ZResult<QueryingSubscriber<'a>>;
 
+    #[inline]
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(QueryingSubscriber::new(Pin::into_inner(self).clone()))
     }
 }
 
 impl<'a> ZFuture for QueryingSubscriberBuilder<'a> {
+    #[inline]
     fn wait(self) -> ZResult<QueryingSubscriber<'a>> {
         QueryingSubscriber::new(self)
     }
@@ -146,7 +173,10 @@ impl QueryingSubscriber<'_> {
         // declare subscriber at first
         let mut subscriber = conf
             .session
-            .declare_subscriber(&conf.sub_reskey, &conf.info)
+            .declare_subscriber(&conf.sub_reskey)
+            .reliability(conf.info.reliability)
+            .mode(conf.info.mode)
+            .period(conf.info.period)
             .wait()?;
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());
@@ -176,6 +206,7 @@ impl QueryingSubscriber<'_> {
     }
 
     /// Issue a new query using the configured resource key and predicate.
+    #[inline]
     pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.query_on(
             &self.conf.query_reskey.clone(),
@@ -198,7 +229,10 @@ impl QueryingSubscriber<'_> {
         match self
             .conf
             .session
-            .query(reskey, predicate, target, consolidation)
+            .query(reskey)
+            .predicate(predicate)
+            .target(target)
+            .consolidation(consolidation)
             .wait()
         {
             Ok(recv) => {

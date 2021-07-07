@@ -117,3 +117,47 @@ impl<T> ZFuture for ZPinBoxFuture<T> {
 pub fn zpinbox<T>(fut: impl Future<Output = T> + Send + 'static) -> ZPinBoxFuture<T> {
     ZPinBoxFuture(Box::pin(fut))
 }
+
+pub trait Runnable {
+    type Output;
+
+    fn run(&mut self) -> Self::Output;
+}
+
+#[macro_export]
+macro_rules! derive_zfuture{
+    (
+     $(#[$meta:meta])*
+     $vis:vis struct $struct_name:ident$(<$( $lt:lifetime ),+>)? {
+        $(
+        $(#[$field_meta:meta])*
+        $field_vis:vis $field_name:ident : $field_type:ty,
+        )*
+    }
+    ) => {
+        $(#[$meta])*
+        #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+        $vis struct $struct_name$(<$( $lt ),+>)? {
+            $(
+            $(#[$field_meta:meta])*
+            $field_vis $field_name : $field_type,
+            )*
+        }
+
+        impl$(<$( $lt ),+>)? Future for $struct_name$(<$( $lt ),+>)? {
+            type Output = <Self as Runnable>::Output;
+
+            #[inline]
+            fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<<Self as Future>::Output> {
+                Poll::Ready(self.run())
+            }
+        }
+
+        impl$(<$( $lt ),+>)? ZFuture for $struct_name$(<$( $lt ),+>)? {
+            #[inline]
+            fn wait(mut self) -> Self::Output {
+                self.run()
+            }
+        }
+    }
+}
