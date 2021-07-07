@@ -17,10 +17,9 @@ async fn main() {
     };
 
     let z = Arc::new(open(ConfigProperties::default()).await.unwrap());
-    let mut member = Member::new(&z.id().await);
-    member.lease(Duration::from_secs(3));
+    let member = Member::new(&z.id().await).lease(Duration::from_secs(3));
 
-    let group = Group::join(z.clone(), "zgroup", &member).await;
+    let group = Group::join(z.clone(), "zgroup", member).await;
     if group.wait_for_view_size(n, Duration::from_secs(15)).await {
         println!("Established view size of {}", n);
     } else {

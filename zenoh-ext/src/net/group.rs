@@ -91,16 +91,16 @@ impl Member {
             lease: DEFAULT_LEASE,
         }
     }
-    pub fn info(&mut self, i: &str) -> &mut Self {
+    pub fn info(mut self, i: &str) -> Self {
         self.info = Some(String::from(i));
         self
     }
-    pub fn lease(&mut self, d: Duration) -> &mut Self {
+    pub fn lease(mut self, d: Duration) -> Self {
         self.lease = d;
         self
     }
 
-    pub fn liveliness(&mut self, l: MemberLiveliness) -> &mut Self {
+    pub fn liveliness(mut self, l: MemberLiveliness) -> Self {
         self.liveliness = l;
         self
     }
@@ -332,7 +332,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
 }
 
 impl Group {
-    pub async fn join(z: Arc<Session>, group: &str, with: &Member) -> Group {
+    pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_resource = format!("{}/{}", GROUP_PREFIX, group);
         let rid = z
             .declare_resource(&(_group_resource.clone()).into())
@@ -353,9 +353,7 @@ impl Group {
 
         // announce the member:
         log::debug!("Sending Join Message for local member:\n{:?}", &with);
-        let join_evt = GroupNetEvent::Join(JoinEvent {
-            member: with.clone(),
-        });
+        let join_evt = GroupNetEvent::Join(JoinEvent { member: with });
         let buf = bincode::serialize(&join_evt).unwrap();
         let _ = z.write(&event_resource, buf.into()).await;
 
