@@ -25,7 +25,7 @@ edition = "2018"
 name = "plugin_example"
 
 [features]
-no_mangle = []
+no_mangle = [] # When enabled, `declare_plugin(PluginType)` will declare a `load_plugin` no-mangle function for dynamic plugin loading.
 default = ["no_mangle"]
 
 [dependencies]
