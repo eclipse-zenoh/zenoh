@@ -91,6 +91,11 @@ impl Member {
             lease: DEFAULT_LEASE,
         }
     }
+
+    pub fn id(&self) -> &str {
+        &self.mid
+    }
+
     pub fn info(mut self, i: &str) -> Self {
         self.info = Some(String::from(i));
         self
