@@ -24,7 +24,7 @@ use zenoh::net::utils::resource_name;
 use zenoh::net::*;
 
 #[no_mangle]
-pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
+pub fn get_expected_args() -> Vec<Arg<'static, 'static>> {
     vec![
         Arg::from_usage("--storage-selector 'The selection of resources to be stored'")
             .default_value("/demo/example/**"),

@@ -16,7 +16,7 @@
 //!
 //! To build a plugin, up to 2 types may be constructed :
 //! * A [Plugin] type.
-//! * [Plugin::start] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [PluginStopper].
+//! * [PluginLaunch::start] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [PluginStopper].
 
 use clap::{Arg, ArgMatches};
 use zenoh::net::runtime::Runtime;
@@ -40,6 +40,7 @@ pub struct Incompatibility {
     pub details: Option<String>,
 }
 
+/// Zenoh plugins must implement [Plugin] and [PluginLaunch]
 pub trait Plugin: PluginLaunch + Sized + 'static {
     /// Returns this plugin's [Compatibility].
     fn compatibility() -> Compatibility;
