@@ -19,6 +19,7 @@
 //! * [PluginLaunch::start] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [PluginStopper].
 
 use clap::{Arg, ArgMatches};
+use std::error::Error;
 use zenoh::net::runtime::Runtime;
 
 pub mod prelude {
@@ -70,10 +71,13 @@ pub trait Plugin: PluginLaunch + Sized + 'static {
     fn get_expected_args() -> Vec<Arg<'static, 'static>>;
 
     /// Constructs an instance of the plugin, which will be launched with [PluginLaunch::start]
-    fn init(args: &ArgMatches) -> Self;
+    fn init(args: &ArgMatches) -> Result<Self, Box<dyn Error>>;
 
-    fn box_init(args: &ArgMatches) -> Box<dyn PluginLaunch> {
-        Box::new(Self::init(args))
+    fn box_init(args: &ArgMatches) -> Result<Box<dyn PluginLaunch>, Box<dyn Error>> {
+        match Self::init(args) {
+            Ok(v) => Ok(Box::new(v)),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -97,28 +101,50 @@ pub mod dynamic_loading {
     use super::*;
     pub use no_mangle::*;
 
+    type InitFn = fn(&ArgMatches) -> Result<Box<dyn PluginLaunch>, Box<dyn Error>>;
     pub type PluginVTableVersion = u16;
     /// This number should change any time the internal structure of [PluginVTable] changes
     pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 0;
+
+    #[repr(C)]
+    struct PluginVTableInner {
+        init: InitFn,
+        is_compatible_with: fn(&[Compatibility]) -> Result<Compatibility, Incompatibility>,
+        get_expected_args: fn() -> Vec<Arg<'static, 'static>>,
+    }
+
+    const PADDING_LENGTH: usize =
+        64 - std::mem::size_of::<Result<PluginVTableInner, PluginVTableVersion>>();
+    #[repr(C)]
+    struct PluginVTablePadding {
+        __padding: [u8; PADDING_LENGTH],
+    }
+    impl PluginVTablePadding {
+        fn new() -> Self {
+            PluginVTablePadding {
+                __padding: [0; PADDING_LENGTH],
+            }
+        }
+    }
 
     /// For use with dynamically loaded plugins. Its size will not change accross versions, but its internal structure might.
     ///
     /// To ensure compatibility, its size and alignment must allow `size_of::<Result<PluginVTable, PluginVTableVersion>>() == 64` (one cache line).
     #[repr(C)]
     pub struct PluginVTable {
-        init: fn(&ArgMatches) -> Box<dyn PluginLaunch>,
-        is_compatible_with: fn(&[Compatibility]) -> Result<Compatibility, Incompatibility>,
-        get_expected_args: fn() -> Vec<Arg<'static, 'static>>,
-        __padding: [u8; 32],
+        inner: PluginVTableInner,
+        padding: PluginVTablePadding,
     }
 
     impl PluginVTable {
         pub fn new<ConcretePlugin: Plugin + 'static>() -> Self {
             PluginVTable {
-                is_compatible_with: ConcretePlugin::is_compatible_with,
-                get_expected_args: ConcretePlugin::get_expected_args,
-                init: ConcretePlugin::box_init,
-                __padding: [0; 32],
+                inner: PluginVTableInner {
+                    is_compatible_with: ConcretePlugin::is_compatible_with,
+                    get_expected_args: ConcretePlugin::get_expected_args,
+                    init: ConcretePlugin::box_init,
+                },
+                padding: PluginVTablePadding::new(),
             }
         }
 
@@ -135,15 +161,15 @@ pub mod dynamic_loading {
             &self,
             others: &[Compatibility],
         ) -> Result<Compatibility, Incompatibility> {
-            (self.is_compatible_with)(others)
+            (self.inner.is_compatible_with)(others)
         }
 
         pub fn get_expected_args(&self) -> Vec<Arg<'static, 'static>> {
-            (self.get_expected_args)()
+            (self.inner.get_expected_args)()
         }
 
-        pub fn init(&self, args: &ArgMatches) -> Box<dyn PluginLaunch> {
-            (self.init)(args)
+        pub fn init(&self, args: &ArgMatches) -> Result<Box<dyn PluginLaunch>, Box<dyn Error>> {
+            (self.inner.init)(args)
         }
     }
 

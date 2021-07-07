@@ -3030,4 +3030,6 @@ dependencies = [
  "futures",
  "log",
  "zenoh",
+ "zenoh-plugin-trait",
+ "zenoh-util",
 ]
