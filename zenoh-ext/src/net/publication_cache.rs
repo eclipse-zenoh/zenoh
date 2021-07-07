@@ -24,7 +24,7 @@ use zenoh::net::utils::resource_name;
 use zenoh::net::*;
 use zenoh_util::zerror;
 
-pub(crate) const PUBLISHER_CACHE_QUERYABLE_KIND: ZInt = 0x08;
+pub const PUBLICATION_CACHE_QUERYABLE_KIND: ZInt = 0x08;
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
@@ -125,7 +125,7 @@ impl PublicationCache<'_> {
         };
         let mut queryable = conf
             .session
-            .declare_queryable(&queryable_reskey, PUBLISHER_CACHE_QUERYABLE_KIND)
+            .declare_queryable(&queryable_reskey, PUBLICATION_CACHE_QUERYABLE_KIND)
             .wait()?;
 
         // take local ownership of stuff to be moved into task

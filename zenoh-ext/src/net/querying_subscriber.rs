@@ -22,7 +22,7 @@ use zenoh::net::queryable::STORAGE;
 use zenoh::net::*;
 use zenoh_util::zwrite;
 
-use super::publication_cache::PUBLISHER_CACHE_QUERYABLE_KIND;
+use super::publication_cache::PUBLICATION_CACHE_QUERYABLE_KIND;
 
 const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
@@ -52,7 +52,7 @@ impl QueryingSubscriberBuilder<'_> {
 
         // By default query all matching publication caches and storages
         let query_target = QueryTarget {
-            kind: PUBLISHER_CACHE_QUERYABLE_KIND | STORAGE,
+            kind: PUBLICATION_CACHE_QUERYABLE_KIND | STORAGE,
             target: Target::All,
         };
 
