@@ -257,11 +257,13 @@ impl Runtime {
                 if !sockets.is_empty() {
                     let this = self.clone();
                     if routers_autoconnect_multicast {
-                        async_std::prelude::FutureExt::race(
-                            this.responder(&mcast_socket, &sockets),
-                            this.connect_all(&sockets, whatami::ROUTER, &addr),
-                        )
-                        .await;
+                        async_std::task::spawn(async move {
+                            async_std::prelude::FutureExt::race(
+                                this.responder(&mcast_socket, &sockets),
+                                this.connect_all(&sockets, whatami::ROUTER, &addr),
+                            )
+                            .await;
+                        });
                     } else {
                         async_std::task::spawn(async move {
                             this.responder(&mcast_socket, &sockets).await;
