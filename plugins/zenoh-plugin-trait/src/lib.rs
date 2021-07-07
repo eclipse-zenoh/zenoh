@@ -103,6 +103,7 @@ pub mod dynamic_loading {
 
     type InitFn = fn(&ArgMatches) -> Result<Box<dyn PluginLaunch>, Box<dyn Error>>;
     pub type PluginVTableVersion = u16;
+
     /// This number should change any time the internal structure of [PluginVTable] changes
     pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 0;
 
@@ -113,12 +114,13 @@ pub mod dynamic_loading {
         get_expected_args: fn() -> Vec<Arg<'static, 'static>>,
     }
 
-    const PADDING_LENGTH: usize =
-        64 - std::mem::size_of::<Result<PluginVTableInner, PluginVTableVersion>>();
+    /// Automagical padding such that [PluginVTable::init]'s result is the size of a cache line
     #[repr(C)]
     struct PluginVTablePadding {
         __padding: [u8; PADDING_LENGTH],
     }
+    const PADDING_LENGTH: usize =
+        64 - std::mem::size_of::<Result<PluginVTableInner, PluginVTableVersion>>();
     impl PluginVTablePadding {
         fn new() -> Self {
             PluginVTablePadding {
@@ -185,7 +187,7 @@ pub mod dynamic_loading {
                     version: PluginVTableVersion,
                 ) -> Result<PluginVTable, PluginVTableVersion> {
                     if version == PLUGIN_VTABLE_VERSION {
-                        Ok(PluginVTable::new::<ConcretePlugin>())
+                        Ok(PluginVTable::new::<$ty>())
                     } else {
                         Err(PLUGIN_VTABLE_VERSION)
                     }

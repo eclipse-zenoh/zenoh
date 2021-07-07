@@ -33,6 +33,8 @@ pub struct ExamplePlugin {
     selector: ResKey,
 }
 
+zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
+
 pub struct ExamplePluginStopper {
     flag: Arc<AtomicBool>,
 }
