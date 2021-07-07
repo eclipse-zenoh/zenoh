@@ -13,23 +13,23 @@
 #
 [package]
 name = "zenoh-plugin-trait"
-version = "0.5.0-dev"
-authors = ["kydos <angelo@icorsaro.net>",
-           "Julien Enoch <julien@enoch.fr>",
-           "Olivier Hécart <olivier.hecart@adlinktech.com>",
-		   "Luca Cominardi <luca.cominardi@adlinktech.com>",
-           "Pierre Avital <pierre.avital@adlinktech.com>"]
+version = "0.1.0-dev"
+authors = [
+    "kydos <angelo@icorsaro.net>",
+    "Julien Enoch <julien@enoch.fr>",
+    "Olivier Hécart <olivier.hecart@adlinktech.com>",
+    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+    "Pierre Avital <pierre.avital@adlinktech.com>",
+]
 edition = "2018"
 
 [lib]
-name = "plugin_example"
+name = "zenoh_plugin_trait"
 
 [features]
-no_mangle = [] # When enabled, `declare_plugin(PluginType)` will declare a `load_plugin` no-mangle function for dynamic plugin loading.
+no_mangle = []
 default = ["no_mangle"]
 
 [dependencies]
-zenoh = { path = "../../zenoh" }
-async-std = "=1.9.0"
+zenoh = { path="../../zenoh" }
 clap = "2"
-futures = "0.3.12"
