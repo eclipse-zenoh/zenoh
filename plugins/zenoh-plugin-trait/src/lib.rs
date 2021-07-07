@@ -22,9 +22,7 @@ use clap::{Arg, ArgMatches};
 use zenoh::net::runtime::Runtime;
 
 pub mod prelude {
-    pub use crate::{
-        dynamic_loading::*, Plugin, PluginLaunch, PluginStopper,
-    };
+    pub use crate::{dynamic_loading::*, Plugin, PluginLaunch, PluginStopper};
 }
 
 /// Your plugin's compatibility.
@@ -126,9 +124,9 @@ pub mod dynamic_loading {
         /// Ensures [PluginVTable]'s size stays the same between versions
         fn __size_check() {
             unsafe {
-                std::mem::transmute::<_, [u8;64]>(
-                    std::mem::MaybeUninit::<Result<Self, PluginVTableVersion>>::uninit(),
-                )
+                std::mem::transmute::<_, [u8; 64]>(std::mem::MaybeUninit::<
+                    Result<Self, PluginVTableVersion>,
+                >::uninit())
             };
         }
 
@@ -147,7 +145,7 @@ pub mod dynamic_loading {
             (self.init)(args)
         }
     }
-    
+
     pub use no_mangle::*;
     #[cfg(feature = "no_mangle")]
     pub mod no_mangle {
