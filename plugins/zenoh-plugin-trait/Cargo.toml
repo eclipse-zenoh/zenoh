@@ -31,5 +31,4 @@ no_mangle = []
 default = ["no_mangle"]
 
 [dependencies]
-zenoh = { path="../../zenoh" }
 clap = "2"

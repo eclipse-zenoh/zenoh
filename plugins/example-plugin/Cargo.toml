@@ -19,6 +19,7 @@ authors = [
     "Julien Enoch <julien@enoch.fr>",
     "Olivier Hécart <olivier.hecart@adlinktech.com>",
     "Luca Cominardi <luca.cominardi@adlinktech.com>",
+    "Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
 

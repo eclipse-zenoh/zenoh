@@ -15,7 +15,7 @@ use async_std::future;
 use async_std::task;
 use clap::{App, Arg, Values};
 use git_version::git_version;
-use zenoh::net::plugins::PluginsMgr;
+use zenoh::net::plugins::*;
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh_util::properties::config::*;
 use zenoh_util::properties::Properties;
@@ -128,17 +128,23 @@ fn main() {
             LibLoader::default()
         };
 
-        let mut plugins_mgr = PluginsMgr::new(lib_loader);
-
-        // Get specified plugins from command line
-        plugins_mgr.load_plugins(get_plugins_from_args()).unwrap();
+        let mut plugins = StaticPlugins::builder()
+            // Static plugins are to be added here, with `.add_static::<PluginType>()`
+            .into_dynamic(lib_loader)
+            .load_plugins(&get_plugins_from_args());
         // Also search for plugins if no "--plugin-nolookup" arg
         if !std::env::args().any(|arg| arg == "--plugin-nolookup") {
-            plugins_mgr.search_and_load_plugins().await;
+            plugins = plugins.search_and_load_plugins();
         }
+        let (expected_args, plugins) = plugins.get_expected_args();
 
         // Add plugins' expected args and parse command line
-        let args = app.args(&plugins_mgr.get_plugins_args()).get_matches();
+        let args = app.args(&expected_args).get_matches();
+
+        let (plugins, incompatibilities) = plugins.init(&args);
+        for i in incompatibilities {
+            log::debug!("{}", i);
+        }
 
         let mut config = if let Some(conf_file) = args.value_of("config") {
             Properties::from(std::fs::read_to_string(conf_file).unwrap()).into()
@@ -203,9 +209,12 @@ fn main() {
             }
         };
 
-        plugins_mgr.start_plugins(&runtime, &args).await;
+        let (stopper, failures) = plugins.start(&runtime);
+        for f in failures {
+            log::debug!("plugin_failure: {}", f);
+        }
 
-        AdminSpace::start(&runtime, plugins_mgr, LONG_VERSION.clone()).await;
+        AdminSpace::start(&runtime, stopper, LONG_VERSION.clone()).await;
 
         future::pending::<()>().await;
     });

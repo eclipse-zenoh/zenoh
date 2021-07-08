@@ -15,15 +15,14 @@
 //! # The plugin infrastructure for Zenoh.
 //!
 //! To build a plugin, up to 2 types may be constructed :
-//! * A [Plugin] type.
-//! * [PluginLaunch::start] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [PluginStopper].
+//! * A [`Plugin`] type.
+//! * [`PluginLaunch::start`] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [`PluginStopper`].
 
 use clap::{Arg, ArgMatches};
 use std::error::Error;
-use zenoh::net::runtime::Runtime;
 
 pub mod prelude {
-    pub use crate::{dynamic_loading::*, Plugin, PluginLaunch, PluginStopper};
+    pub use crate::{dynamic_loading::*, Plugin, PluginStopper};
 }
 
 /// Your plugin's compatibility.
@@ -41,18 +40,33 @@ pub struct Incompatibility {
     pub details: Option<String>,
 }
 
-/// Zenoh plugins must implement [Plugin] and [PluginLaunch]
-pub trait Plugin: PluginLaunch + Sized + 'static {
-    /// Returns this plugin's [Compatibility].
-    fn compatibility() -> Compatibility;
+impl std::fmt::Display for Incompatibility {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} prevented {} from initing",
+            self.conflicting_with.uid, self.own_compatibility.uid
+        )?;
+        if let Some(details) = &self.details {
+            write!(f, ": {}", details)?;
+        }
+        write!(f, ".")
+    }
+}
 
-    /// As Zenoh instanciates plugins, it will append their [Compatibility] to an array.
+/// Zenoh plugins must implement [`Plugin<Runtime=zenoh::net::runtime::Runtime>`](Plugin)
+pub trait Plugin: Sized + 'static {
+    /// Returns this plugin's [`Compatibility`].
+    fn compatibility() -> Compatibility;
+    type Runtime;
+
+    /// As Zenoh instanciates plugins, it will append their [`Compatibility`] to an array.
     /// This array's current state will be shown to the next plugin.
     ///
     /// To signal that your plugin is incompatible with a previously instanciated plugin, return `Err`,
     /// Otherwise, return `Ok(Self::compatibility())`.
     ///
-    /// By default, a plugin is non-reentrant to avoir reinstanciation if its dlib is accessible despite it already being statically linked.
+    /// By default, a plugin is non-reentrant to avoid reinstanciation if its dlib is accessible despite it already being statically linked.
     fn is_compatible_with(others: &[Compatibility]) -> Result<Compatibility, Incompatibility> {
         let own_compatibility = Self::compatibility();
         if others.iter().any(|c| c == &own_compatibility) {
@@ -70,61 +84,68 @@ pub trait Plugin: PluginLaunch + Sized + 'static {
     /// Returns the arguments that are required for the plugin's construction
     fn get_expected_args() -> Vec<Arg<'static, 'static>>;
 
-    /// Constructs an instance of the plugin, which will be launched with [PluginLaunch::start]
+    /// Constructs an instance of the plugin, which will be launched with [`PluginLaunch::start`]
     fn init(args: &ArgMatches) -> Result<Self, Box<dyn Error>>;
 
-    fn box_init(args: &ArgMatches) -> Result<Box<dyn PluginLaunch>, Box<dyn Error>> {
+    fn box_init(args: &ArgMatches) -> Result<Box<dyn std::any::Any>, Box<dyn Error>> {
         match Self::init(args) {
             Ok(v) => Ok(Box::new(v)),
             Err(e) => Err(e),
         }
     }
+
+    fn start(&mut self, runtime: Self::Runtime) -> Box<dyn PluginStopper>;
+
+    /// # Safety
+    /// ensuring `s` is the right type before calling is primordial
+    unsafe fn do_start(s: *mut (), runtime: Self::Runtime) -> Box<dyn PluginStopper> {
+        unsafe { (&mut *(s.cast::<Self>())).start(runtime) }
+    }
 }
 
-/// Allows a [Plugin] instance to be started.
-pub trait PluginLaunch {
-    fn start(self, runtime: Runtime) -> Box<dyn PluginStopper>;
-}
-
-/// Allows a [Plugin] instance to be stopped.
-/// Typically, you can achieve this using a one-shot channel or an [AtomicBool](std::sync::atomic::AtomicBool).
-/// If you don't want a stopping mechanism, you can use `()` as your [PluginStopper].
-pub trait PluginStopper {
-    fn stop(self);
+/// Allows a [`Plugin`] instance to be stopped.
+/// Typically, you can achieve this using a one-shot channel or an [`AtomicBool`](std::sync::atomic::AtomicBool).
+/// If you don't want a stopping mechanism, you can use `()` as your [`PluginStopper`].
+pub trait PluginStopper: Send + Sync {
+    fn stop(&self);
 }
 
 impl PluginStopper for () {
-    fn stop(self) {}
+    fn stop(&self) {}
 }
 
 pub mod dynamic_loading {
     use super::*;
     pub use no_mangle::*;
 
-    type InitFn = fn(&ArgMatches) -> Result<Box<dyn PluginLaunch>, Box<dyn Error>>;
+    type InitFn = fn(&ArgMatches) -> Result<Box<dyn std::any::Any>, Box<dyn Error>>;
     pub type PluginVTableVersion = u16;
+    type LoadPluginResultInner = Result<PluginVTableInner<()>, PluginVTableVersion>;
+    pub type LoadPluginResult<T> = Result<PluginVTable<T>, PluginVTableVersion>;
 
-    /// This number should change any time the internal structure of [PluginVTable] changes
+    /// This number should change any time the internal structure of [`PluginVTable`] changes
     pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 0;
 
     #[repr(C)]
-    struct PluginVTableInner {
+    struct PluginVTableInner<Runtime> {
         init: InitFn,
         is_compatible_with: fn(&[Compatibility]) -> Result<Compatibility, Incompatibility>,
         get_expected_args: fn() -> Vec<Arg<'static, 'static>>,
+        start: unsafe fn(*mut (), Runtime) -> Box<dyn PluginStopper + 'static>,
     }
 
     /// Automagical padding such that [PluginVTable::init]'s result is the size of a cache line
     #[repr(C)]
     struct PluginVTablePadding {
-        __padding: [u8; PADDING_LENGTH],
+        __padding: [u8; PluginVTablePadding::padding_length()],
     }
-    const PADDING_LENGTH: usize =
-        64 - std::mem::size_of::<Result<PluginVTableInner, PluginVTableVersion>>();
     impl PluginVTablePadding {
+        const fn padding_length() -> usize {
+            64 - std::mem::size_of::<LoadPluginResultInner>()
+        }
         fn new() -> Self {
             PluginVTablePadding {
-                __padding: [0; PADDING_LENGTH],
+                __padding: [0; Self::padding_length()],
             }
         }
     }
@@ -133,18 +154,19 @@ pub mod dynamic_loading {
     ///
     /// To ensure compatibility, its size and alignment must allow `size_of::<Result<PluginVTable, PluginVTableVersion>>() == 64` (one cache line).
     #[repr(C)]
-    pub struct PluginVTable {
-        inner: PluginVTableInner,
+    pub struct PluginVTable<Runtime> {
+        inner: PluginVTableInner<Runtime>,
         padding: PluginVTablePadding,
     }
 
-    impl PluginVTable {
-        pub fn new<ConcretePlugin: Plugin + 'static>() -> Self {
+    impl<Runtime> PluginVTable<Runtime> {
+        pub fn new<ConcretePlugin: Plugin<Runtime = Runtime>>() -> Self {
             PluginVTable {
                 inner: PluginVTableInner {
                     is_compatible_with: ConcretePlugin::is_compatible_with,
                     get_expected_args: ConcretePlugin::get_expected_args,
                     init: ConcretePlugin::box_init,
+                    start: ConcretePlugin::do_start,
                 },
                 padding: PluginVTablePadding::new(),
             }
@@ -170,8 +192,12 @@ pub mod dynamic_loading {
             (self.inner.get_expected_args)()
         }
 
-        pub fn init(&self, args: &ArgMatches) -> Result<Box<dyn PluginLaunch>, Box<dyn Error>> {
+        pub fn init(&self, args: &ArgMatches) -> Result<Box<dyn std::any::Any>, Box<dyn Error>> {
             (self.inner.init)(args)
+        }
+
+        pub unsafe fn start(&self, s: *mut (), runtime: Runtime) -> Box<dyn PluginStopper> {
+            unsafe { (self.inner.start)(s, runtime) }
         }
     }
 
@@ -185,7 +211,7 @@ pub mod dynamic_loading {
                 #[no_mangle]
                 fn load_plugin(
                     version: PluginVTableVersion,
-                ) -> Result<PluginVTable, PluginVTableVersion> {
+                ) -> LoadPluginResult<<$ty as Plugin>::Runtime> {
                     if version == PLUGIN_VTABLE_VERSION {
                         Ok(PluginVTable::new::<$ty>())
                     } else {

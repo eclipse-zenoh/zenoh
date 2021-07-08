@@ -30,7 +30,7 @@ use zenoh_plugin_trait::prelude::*;
 use zenoh_util::zerror2;
 
 pub struct ExamplePlugin {
-    selector: ResKey,
+    selector: Option<ResKey>,
 }
 
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
@@ -40,12 +40,13 @@ pub struct ExamplePluginStopper {
 }
 
 impl PluginStopper for ExamplePluginStopper {
-    fn stop(self) {
+    fn stop(&self) {
         self.flag.store(false, Relaxed);
     }
 }
 
 impl Plugin for ExamplePlugin {
+    type Runtime = Runtime;
     fn compatibility() -> zenoh_plugin_trait::Compatibility {
         zenoh_plugin_trait::Compatibility {
             uid: "zenoh-example-plugin",
@@ -62,7 +63,7 @@ impl Plugin for ExamplePlugin {
     fn init(args: &ArgMatches) -> Result<Self, Box<dyn std::error::Error>> {
         if let Some(selector) = args.value_of("storage-selector") {
             Ok(ExamplePlugin {
-                selector: selector.into(),
+                selector: Some(selector.into()),
             })
         } else {
             Err(Box::new(zerror2!(ZErrorKind::Other {
@@ -70,13 +71,11 @@ impl Plugin for ExamplePlugin {
             })))
         }
     }
-}
 
-impl PluginLaunch for ExamplePlugin {
-    fn start(self, runtime: Runtime) -> Box<dyn PluginStopper> {
+    fn start(&mut self, runtime: Runtime) -> Box<dyn PluginStopper> {
         let flag = Arc::new(AtomicBool::new(true));
         let stopper = ExamplePluginStopper { flag: flag.clone() };
-        async_std::task::spawn(run(runtime, self.selector, flag));
+        async_std::task::spawn(run(runtime, self.selector.take().unwrap(), flag));
         Box::new(stopper)
     }
 }
