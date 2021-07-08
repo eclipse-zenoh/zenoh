@@ -16,14 +16,20 @@ name = "zenoh-plugin-rest"
 version = "0.5.0-dev"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
-authors = ["kydos <angelo@icorsaro.net>",
-           "Julien Enoch <julien@enoch.fr>",
-           "Olivier Hécart <olivier.hecart@adlinktech.com>",
-		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
+authors = [
+    "kydos <angelo@icorsaro.net>",
+    "Julien Enoch <julien@enoch.fr>",
+    "Olivier Hécart <olivier.hecart@adlinktech.com>",
+    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "The zenoh REST plugin"
+
+[features]
+no_mangle = ["zenoh-plugin-trait/no_mangle"]
+default = ["no_mangle"]
 
 
 [lib]
@@ -32,7 +38,8 @@ crate-type = ["cdylib", "rlib"]
 
 
 [dependencies]
-zenoh = { path = "../../zenoh" }
+zenoh = { path="../../zenoh" }
+zenoh-plugin-trait = { path="../zenoh-plugin-trait", default=false }
 async-std = "=1.9.0"
 flume = "0.10.5"
 futures = "0.3.12"

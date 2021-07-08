@@ -46,7 +46,7 @@ impl PluginStopper for ExamplePluginStopper {
 }
 
 impl Plugin for ExamplePlugin {
-    type Runtime = Runtime;
+    type StartArgs = Runtime;
     fn compatibility() -> zenoh_plugin_trait::Compatibility {
         zenoh_plugin_trait::Compatibility {
             uid: "zenoh-example-plugin",

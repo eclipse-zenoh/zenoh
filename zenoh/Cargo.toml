@@ -99,6 +99,9 @@ name = "zenohd"
 test = false
 bench = false
 
+[zenohd.dependencies]
+zenoh-plugin-rest = { path="../plugins/zenoh-plugin-rest" }
+
 [package.metadata.deb]
 name = "zenohd"
 maintainer = "zenoh-dev@eclipse.org"

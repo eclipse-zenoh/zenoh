@@ -24,6 +24,7 @@ use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::*;
 use zenoh::{Change, Selector, Value};
+use zenoh_plugin_trait::prelude::*;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -162,19 +163,51 @@ fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
         .build()
 }
 
-#[no_mangle]
-pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    get_expected_args2()
+zenoh_plugin_trait::declare_plugin!(RestPlugin);
+pub struct RestPlugin {
+    http_port: String,
+}
+#[derive(Clone, Copy, Debug)]
+struct StrError {
+    err: &'static str,
+}
+impl std::error::Error for StrError {}
+impl std::fmt::Display for StrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.err)
+    }
 }
 
-// NOTE: temporary hack for static link of REST plugin in zenoh-bridge-dds, thus it can call this function
-// instead of relying on #[no_mangle] functions that will conflicts with those defined in DDS plugin.
-// TODO: remove once eclipse-zenoh/zenoh#89 is implemented
-pub fn get_expected_args2<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    vec![
-        Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
-            .default_value(DEFAULT_HTTP_PORT),
-    ]
+impl Plugin for RestPlugin {
+    fn compatibility() -> zenoh_plugin_trait::Compatibility {
+        zenoh_plugin_trait::Compatibility {
+            uid: "zenoh-plugin-rest",
+        }
+    }
+
+    type Runtime = Runtime;
+
+    fn get_expected_args() -> Vec<Arg<'static, 'static>> {
+        vec![
+            Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
+                .default_value(DEFAULT_HTTP_PORT),
+        ]
+    }
+
+    fn init(args: &ArgMatches) -> Result<Self, Box<dyn std::error::Error>> {
+        match args.value_of("rest-http-port") {
+            None => Err(Box::new(StrError {
+                err: "No --rest-http-port argument found",
+            })),
+            Some(port) => Ok(RestPlugin {
+                http_port: port.to_owned(),
+            }),
+        }
+    }
+
+    fn start(&mut self, runtime: Self::Runtime) -> Box<dyn PluginStopper> {
+        todo!()
+    }
 }
 
 #[no_mangle]

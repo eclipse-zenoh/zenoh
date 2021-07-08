@@ -2957,6 +2957,7 @@ dependencies = [
  "serde_json",
  "tide",
  "zenoh",
+ "zenoh-plugin-trait",
 ]
 
 [[package]]
@@ -2981,6 +2982,8 @@ name = "zenoh-plugin-trait"
 version = "0.1.0-dev"
 dependencies = [
  "clap",
+ "libloading",
+ "zenoh-util",
 ]
 
 [[package]]
