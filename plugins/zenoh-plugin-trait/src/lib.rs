@@ -99,7 +99,7 @@ pub trait Plugin: Sized + 'static {
     /// # Safety
     /// ensuring `s` is the right type before calling is primordial
     unsafe fn do_start(s: *mut (), runtime: Self::Runtime) -> Box<dyn PluginStopper> {
-        unsafe { (&mut *(s.cast::<Self>())).start(runtime) }
+        (&mut *(s.cast::<Self>())).start(runtime)
     }
 }
 
@@ -196,8 +196,10 @@ pub mod dynamic_loading {
             (self.inner.init)(args)
         }
 
+        /// # Safety
+        /// Make sure s has the right type
         pub unsafe fn start(&self, s: *mut (), runtime: Runtime) -> Box<dyn PluginStopper> {
-            unsafe { (self.inner.start)(s, runtime) }
+            (self.inner.start)(s, runtime)
         }
     }
 
