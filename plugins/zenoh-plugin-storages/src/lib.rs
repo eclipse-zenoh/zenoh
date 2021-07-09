@@ -63,7 +63,9 @@ zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 pub struct StoragesPlugin {}
 impl Plugin for StoragesPlugin {
     fn compatibility() -> zenoh_plugin_trait::PluginId {
-        todo!()
+        zenoh_plugin_trait::PluginId {
+            uid: "zenoh-plugin-storages",
+        }
     }
 
     type Requirements = Vec<Arg<'static, 'static>>;

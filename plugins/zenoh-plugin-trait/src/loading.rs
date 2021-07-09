@@ -158,6 +158,9 @@ pub struct StaticLauncher<StaticPlugins> {
     should_run: Vec<Option<Incompatibility>>,
 }
 
+type HandlesAndErrors<Requirements, StartArgs> =
+    (PluginsHandles<Requirements, StartArgs>, Vec<Box<dyn Error>>);
+
 impl<StaticPlugins> StaticLauncher<StaticPlugins> {
     fn new(static_plugins: StaticPlugins, should_run: Vec<Option<Incompatibility>>) -> Self {
         StaticLauncher {
@@ -173,10 +176,7 @@ impl<StaticPlugins> StaticLauncher<StaticPlugins> {
     pub fn start<StartArgs>(
         self,
         args: &StartArgs,
-    ) -> (
-        PluginsHandles<StaticPlugins::Requirements, StaticPlugins::StartArgs>,
-        Vec<Box<dyn Error>>,
-    )
+    ) -> HandlesAndErrors<StaticPlugins::Requirements, StaticPlugins::StartArgs>
     where
         StaticPlugins: MultipleStaticPlugins<StartArgs = StartArgs>,
     {
@@ -240,12 +240,18 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
         );
         self
     }
-    pub fn search_and_load_plugins(mut self) -> Self {
-        let libs = unsafe { self.loader.load_all_with_prefix(Some(&"*PLUGIN_PREFIX")) };
+    pub fn search_and_load_plugins(mut self, prefix: Option<&str>) -> Self {
+        let libs = unsafe { self.loader.load_all_with_prefix(prefix) };
         self.dynamic_plugins.extend(
             libs.into_iter()
-                .map(|(lib, path, name)| DynamicPlugin::new(name, lib, path).map_err(|_| todo!()))
-                .filter_map(ZResult::ok),
+                .map(|(lib, path, name)| (DynamicPlugin::new(name, lib, path.clone()), path))
+                .filter_map(|(p, path)| match p {
+                    Ok(p) => Some(p),
+                    Err(e) => {
+                        eprintln!("{:?} failed to load: {:?}", path, e);
+                        None
+                    }
+                }),
         );
         self
     }
@@ -289,10 +295,7 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicStarter<StaticPlugins> {
     pub fn start(
         self,
         args: &StaticPlugins::StartArgs,
-    ) -> (
-        PluginsHandles<StaticPlugins::Requirements, StaticPlugins::StartArgs>,
-        Vec<Box<dyn Error>>,
-    ) {
+    ) -> HandlesAndErrors<StaticPlugins::Requirements, StaticPlugins::StartArgs> {
         use std::cell::UnsafeCell;
         let (mut stopper, errors) = self.static_launcher.start(args);
         let errors = UnsafeCell::new(errors);

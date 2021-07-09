@@ -134,7 +134,7 @@ fn main() {
             .load_plugins(&get_plugins_from_args(), &PLUGIN_PREFIX);
         // Also search for plugins if no "--plugin-nolookup" arg
         if !std::env::args().any(|arg| arg == "--plugin-nolookup") {
-            plugins = plugins.search_and_load_plugins();
+            plugins = plugins.search_and_load_plugins(Some(&PLUGIN_PREFIX));
         }
         let (plugins, expected_args) = plugins.get_requirements();
 
@@ -205,8 +205,11 @@ fn main() {
         };
 
         let (handles, failures) = plugins.start(&(runtime.clone(), args));
+        for p in handles.plugins() {
+            eprintln!("loaded plugin: {}", p.name);
+        }
         for f in failures {
-            log::debug!("plugin_failure: {}", f);
+            eprintln!("plugin_failure: {}", f);
         }
 
         AdminSpace::start(&runtime, handles, LONG_VERSION.clone()).await;
