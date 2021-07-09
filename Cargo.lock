@@ -2973,6 +2973,7 @@ dependencies = [
  "libloading",
  "log",
  "zenoh",
+ "zenoh-plugin-trait",
  "zenoh-util",
  "zenoh_backend_traits",
 ]

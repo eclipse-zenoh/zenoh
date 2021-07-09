@@ -164,9 +164,7 @@ fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
 }
 
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
-pub struct RestPlugin {
-    http_port: String,
-}
+pub struct RestPlugin {}
 #[derive(Clone, Copy, Debug)]
 struct StrError {
     err: &'static str,
@@ -179,8 +177,8 @@ impl std::fmt::Display for StrError {
 }
 
 impl Plugin for RestPlugin {
-    fn compatibility() -> zenoh_plugin_trait::Compatibility {
-        zenoh_plugin_trait::Compatibility {
+    fn compatibility() -> zenoh_plugin_trait::PluginId {
+        zenoh_plugin_trait::PluginId {
             uid: "zenoh-plugin-rest",
         }
     }

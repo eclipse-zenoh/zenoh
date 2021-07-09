@@ -10,9 +10,9 @@ pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 0;
 
 #[repr(C)]
 struct PluginVTableInner<Requirements, StartArgs> {
-    is_compatible_with: fn(&[Compatibility]) -> Result<Compatibility, Incompatibility>,
+    is_compatible_with: fn(&[PluginId]) -> Result<PluginId, Incompatibility>,
     get_requirements: fn() -> Requirements,
-    start: fn(&StartArgs) -> Result<Box<dyn Any + Send + Sync>, Box<dyn Error>>,
+    start: fn(&StartArgs) -> Result<BoxedAny, Box<dyn Error>>,
 }
 
 /// Automagical padding such that [PluginVTable::init]'s result is the size of a cache line
@@ -62,10 +62,7 @@ impl<Requirements, StartArgs> PluginVTable<Requirements, StartArgs> {
         };
     }
 
-    pub fn is_compatible_with(
-        &self,
-        others: &[Compatibility],
-    ) -> Result<Compatibility, Incompatibility> {
+    pub fn is_compatible_with(&self, others: &[PluginId]) -> Result<PluginId, Incompatibility> {
         (self.inner.is_compatible_with)(others)
     }
 
@@ -73,10 +70,7 @@ impl<Requirements, StartArgs> PluginVTable<Requirements, StartArgs> {
         (self.inner.get_requirements)()
     }
 
-    pub fn start(
-        &self,
-        start_args: &StartArgs,
-    ) -> Result<Box<dyn Any + Send + Sync>, Box<dyn Error>> {
+    pub fn start(&self, start_args: &StartArgs) -> Result<BoxedAny, Box<dyn Error>> {
         (self.inner.start)(start_args)
     }
 }

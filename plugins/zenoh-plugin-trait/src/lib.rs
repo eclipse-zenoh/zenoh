@@ -27,18 +27,18 @@ pub mod prelude {
     pub use crate::{loading::*, vtable::*, Plugin, PluginStopper};
 }
 
-/// Your plugin's compatibility.
+/// Your plugin's identifier.
 /// Currently, this should simply be the plugin crate's name.
 /// This structure may evolve to include more detailed information.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Compatibility {
+pub struct PluginId {
     pub uid: &'static str,
 }
 
 #[derive(Clone, Debug)]
 pub struct Incompatibility {
-    pub own_compatibility: Compatibility,
-    pub conflicting_with: Compatibility,
+    pub own_compatibility: PluginId,
+    pub conflicting_with: PluginId,
     pub details: Option<String>,
 }
 
@@ -60,10 +60,11 @@ impl Error for Incompatibility {}
 
 /// Zenoh plugins must implement [`Plugin<Requirements=Vec<clap::Arg<'static, 'static>>, StartArgs=(zenoh::net::runtime::Runtime, &clap::ArgMatches)>`](Plugin)
 pub trait Plugin: Sized + 'static {
-    /// Returns this plugin's [`Compatibility`].
-    fn compatibility() -> Compatibility;
     type Requirements;
     type StartArgs;
+
+    /// Returns this plugin's [`Compatibility`].
+    fn compatibility() -> PluginId;
 
     /// As Zenoh instanciates plugins, it will append their [`Compatibility`] to an array.
     /// This array's current state will be shown to the next plugin.
@@ -72,7 +73,7 @@ pub trait Plugin: Sized + 'static {
     /// Otherwise, return `Ok(Self::compatibility())`.
     ///
     /// By default, a plugin is non-reentrant to avoid reinstanciation if its dlib is accessible despite it already being statically linked.
-    fn is_compatible_with(others: &[Compatibility]) -> Result<Compatibility, Incompatibility> {
+    fn is_compatible_with(others: &[PluginId]) -> Result<PluginId, Incompatibility> {
         let own_compatibility = Self::compatibility();
         if others.iter().any(|c| c == &own_compatibility) {
             let conflicting_with = own_compatibility.clone();
@@ -90,8 +91,10 @@ pub trait Plugin: Sized + 'static {
     fn get_requirements() -> Self::Requirements;
 
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(args: &Self::StartArgs) -> Result<Box<dyn Any + Send + Sync>, Box<dyn Error>>;
+    fn start(args: &Self::StartArgs) -> Result<BoxedAny, Box<dyn Error>>;
 }
+
+type BoxedAny = Box<dyn Any + Send + Sync>;
 
 /// Allows a [`Plugin`] instance to be stopped.
 /// Typically, you can achieve this using a one-shot channel or an [`AtomicBool`](std::sync::atomic::AtomicBool).

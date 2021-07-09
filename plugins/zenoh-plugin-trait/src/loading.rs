@@ -5,11 +5,7 @@ use std::path::PathBuf;
 use zenoh_util::core::ZResult;
 use zenoh_util::LibLoader;
 
-type ReqsAndCompats<Requirements> = (
-    Requirements,
-    Vec<Compatibility>,
-    Vec<Option<Incompatibility>>,
-);
+type ReqsAndCompats<Requirements> = (Requirements, Vec<PluginId>, Vec<Option<Incompatibility>>);
 
 pub struct StaticPlugins<A, B, C, D> {
     a: std::marker::PhantomData<A>,
@@ -79,13 +75,13 @@ pub trait MultipleStaticPlugins: Sized {
     fn start(
         it: &mut std::vec::IntoIter<Option<Incompatibility>>,
         args: &Self::StartArgs,
-    ) -> (Vec<Box<dyn Any + Send + Sync>>, Vec<Box<dyn Error>>);
+    ) -> (Vec<BoxedAny>, Vec<Box<dyn Error>>);
 
     fn __len(cur: usize) -> usize;
     fn len() -> usize {
         Self::__len(0)
     }
-    fn get_requirements(self) -> (StaticLauncher<Self>, Self::Requirements, Vec<Compatibility>) {
+    fn get_requirements(self) -> (StaticLauncher<Self>, Self::Requirements, Vec<PluginId>) {
         let (reqs, ids, should_run) = Self::merge_requirements_and_conflicts();
         (StaticLauncher::new(self, should_run), reqs, ids)
     }
@@ -105,9 +101,9 @@ impl<Requirements: MergeRequirements, StartArgs> MultipleStaticPlugins
     }
 
     fn start(
-        it: &mut std::vec::IntoIter<Option<Incompatibility>>,
-        runtime: &StartArgs,
-    ) -> (Vec<Box<dyn Any + Send + Sync>>, Vec<Box<dyn Error>>) {
+        _it: &mut std::vec::IntoIter<Option<Incompatibility>>,
+        _args: &StartArgs,
+    ) -> (Vec<BoxedAny>, Vec<Box<dyn Error>>) {
         (vec![], vec![])
     }
 }
@@ -144,7 +140,7 @@ impl<
     fn start(
         it: &mut std::vec::IntoIter<Option<Incompatibility>>,
         args: &StartArgs,
-    ) -> (Vec<Box<dyn Any + Send + Sync>>, Vec<Box<dyn Error>>) {
+    ) -> (Vec<BoxedAny>, Vec<Box<dyn Error>>) {
         let (mut ok, mut err) = B::start(it, args);
         match it.next().unwrap() {
             None => match A::start(args) {
@@ -196,17 +192,17 @@ impl<StaticPlugins> StaticLauncher<StaticPlugins> {
 }
 
 pub struct StaticPluginsHandles {
-    stoppers: Vec<Box<dyn Any + Send + Sync>>,
+    stoppers: Vec<BoxedAny>,
 }
 
-impl AsRef<Vec<Box<dyn Any + Send + Sync>>> for StaticPluginsHandles {
-    fn as_ref(&self) -> &Vec<Box<dyn Any + Send + Sync>> {
+impl AsRef<Vec<BoxedAny>> for StaticPluginsHandles {
+    fn as_ref(&self) -> &Vec<BoxedAny> {
         &self.stoppers
     }
 }
 
-impl AsMut<Vec<Box<dyn Any + Send + Sync>>> for StaticPluginsHandles {
-    fn as_mut(&mut self) -> &mut Vec<Box<dyn Any + Send + Sync>> {
+impl AsMut<Vec<BoxedAny>> for StaticPluginsHandles {
+    fn as_mut(&mut self) -> &mut Vec<BoxedAny> {
         &mut self.stoppers
     }
 }
@@ -344,14 +340,14 @@ impl<A, B> PluginsHandles<A, B> {
     }
 }
 
-impl<A, B> AsRef<Vec<Box<dyn Any + Send + Sync>>> for PluginsHandles<A, B> {
-    fn as_ref(&self) -> &Vec<Box<dyn Any + Send + Sync>> {
+impl<A, B> AsRef<Vec<BoxedAny>> for PluginsHandles<A, B> {
+    fn as_ref(&self) -> &Vec<BoxedAny> {
         self.stopper.as_ref()
     }
 }
 
-impl<A, B> AsMut<Vec<Box<dyn Any + Send + Sync>>> for PluginsHandles<A, B> {
-    fn as_mut(&mut self) -> &mut Vec<Box<dyn Any + Send + Sync>> {
+impl<A, B> AsMut<Vec<BoxedAny>> for PluginsHandles<A, B> {
+    fn as_mut(&mut self) -> &mut Vec<BoxedAny> {
         self.stopper.as_mut()
     }
 }
@@ -382,10 +378,7 @@ impl<Requirements, StartArgs> DynamicPlugin<Requirements, StartArgs> {
         }
     }
 
-    fn is_compatible_with(
-        &self,
-        others: &[Compatibility],
-    ) -> Result<Compatibility, Incompatibility> {
+    fn is_compatible_with(&self, others: &[PluginId]) -> Result<PluginId, Incompatibility> {
         self.vtable.is_compatible_with(others)
     }
 
@@ -393,7 +386,7 @@ impl<Requirements, StartArgs> DynamicPlugin<Requirements, StartArgs> {
         self.vtable.get_requirements()
     }
 
-    fn start(&self, args: &StartArgs) -> Result<Box<dyn Any + Send + Sync>, Box<dyn Error>> {
+    fn start(&self, args: &StartArgs) -> Result<BoxedAny, Box<dyn Error>> {
         self.vtable.start(args)
     }
 }

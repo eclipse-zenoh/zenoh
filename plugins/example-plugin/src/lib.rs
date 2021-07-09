@@ -29,9 +29,7 @@ use zenoh::net::*;
 use zenoh_plugin_trait::prelude::*;
 use zenoh_util::zerror2;
 
-pub struct ExamplePlugin {
-    selector: Option<ResKey>,
-}
+pub struct ExamplePlugin {}
 
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
@@ -48,8 +46,8 @@ impl PluginStopper for ExamplePluginStopper {
 impl Plugin for ExamplePlugin {
     type Requirements = Vec<Arg<'static, 'static>>;
     type StartArgs = (Runtime, ArgMatches<'static>);
-    fn compatibility() -> zenoh_plugin_trait::Compatibility {
-        zenoh_plugin_trait::Compatibility {
+    fn compatibility() -> zenoh_plugin_trait::PluginId {
+        zenoh_plugin_trait::PluginId {
             uid: "zenoh-example-plugin",
         }
     }

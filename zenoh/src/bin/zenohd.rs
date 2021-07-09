@@ -128,13 +128,10 @@ fn main() {
             LibLoader::default()
         };
 
-        let mut plugins = zenoh::net::plugins::PluginsManager::builder()
+        let mut plugins = PluginsManager::builder()
             // Static plugins are to be added here, with `.add_static::<PluginType>()`
             .into_dynamic(lib_loader)
-            .load_plugins(
-                &get_plugins_from_args(),
-                &zenoh::net::plugins::PLUGIN_PREFIX,
-            );
+            .load_plugins(&get_plugins_from_args(), &PLUGIN_PREFIX);
         // Also search for plugins if no "--plugin-nolookup" arg
         if !std::env::args().any(|arg| arg == "--plugin-nolookup") {
             plugins = plugins.search_and_load_plugins();
