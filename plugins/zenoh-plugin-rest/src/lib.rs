@@ -185,34 +185,29 @@ impl Plugin for RestPlugin {
         }
     }
 
-    type Runtime = Runtime;
+    type Requirements = Vec<Arg<'static, 'static>>;
+    type StartArgs = (Runtime, ArgMatches<'static>);
 
-    fn get_expected_args() -> Vec<Arg<'static, 'static>> {
+    fn get_requirements() -> Self::Requirements {
         vec![
             Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
                 .default_value(DEFAULT_HTTP_PORT),
         ]
     }
 
-    fn init(args: &ArgMatches) -> Result<Self, Box<dyn std::error::Error>> {
+    fn start(
+        (runtime, args): &Self::StartArgs,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
         match args.value_of("rest-http-port") {
             None => Err(Box::new(StrError {
                 err: "No --rest-http-port argument found",
             })),
-            Some(port) => Ok(RestPlugin {
-                http_port: port.to_owned(),
-            }),
+            Some(port) => {
+                async_std::task::spawn(run(runtime.clone(), port.to_owned()));
+                Ok(Box::new(()))
+            }
         }
     }
-
-    fn start(&mut self, runtime: Self::Runtime) -> Box<dyn PluginStopper> {
-        todo!()
-    }
-}
-
-#[no_mangle]
-pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    async_std::task::spawn(run(runtime, args.clone()));
 }
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
@@ -371,13 +366,13 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     }
 }
 
-pub async fn run(runtime: Runtime, args: ArgMatches<'_>) {
+pub async fn run(runtime: Runtime, port: String) {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
 
-    let http_port = parse_http_port(args.value_of("rest-http-port").unwrap());
+    let http_port = parse_http_port(&port);
 
     let pid = runtime.get_pid_str();
     let session = Session::init(runtime, true, vec![], vec![]).await;

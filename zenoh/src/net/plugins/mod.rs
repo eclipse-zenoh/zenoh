@@ -13,10 +13,15 @@
 //
 use super::runtime::Runtime;
 use clap::{Arg, ArgMatches};
-use libloading::{Library, Symbol};
-use log::{debug, trace, warn};
+// use libloading::{Library, Symbol};
+// use log::{debug, trace, warn};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::{zconfigurable, zerror, LibLoader};
 zconfigurable! {
-    static ref PLUGIN_PREFIX: String = "zplugin_".to_string();
+    pub static ref PLUGIN_PREFIX: String = "zplugin_".to_string();
 }
+
+pub type Requirements = Vec<Arg<'static, 'static>>;
+pub type StartArgs = (Runtime, ArgMatches<'static>);
+pub type PluginsManager =
+    zenoh_plugin_trait::loading::StaticPlugins<(), (), Requirements, StartArgs>;

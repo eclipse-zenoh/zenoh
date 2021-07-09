@@ -18,7 +18,7 @@
 //! * A [`Plugin`] type.
 //! * [`PluginLaunch::start`] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [`PluginStopper`].
 
-use clap::{Arg, ArgMatches};
+use std::any::Any;
 use std::error::Error;
 pub mod loading;
 pub mod vtable;
@@ -58,7 +58,7 @@ impl std::fmt::Display for Incompatibility {
 
 impl Error for Incompatibility {}
 
-/// Zenoh plugins must implement [`Plugin<Requirements=Vec<clap::Arg<'static, 'static>>, StartArgs=(zenoh::net::runtime::Runtime, &clap::ArgParse)>`](Plugin)
+/// Zenoh plugins must implement [`Plugin<Requirements=Vec<clap::Arg<'static, 'static>>, StartArgs=(zenoh::net::runtime::Runtime, &clap::ArgMatches)>`](Plugin)
 pub trait Plugin: Sized + 'static {
     /// Returns this plugin's [`Compatibility`].
     fn compatibility() -> Compatibility;
@@ -86,10 +86,11 @@ pub trait Plugin: Sized + 'static {
         }
     }
 
-    /// Returns the arguments that are required for the plugin's construction
-    fn get_expected_args() -> Vec<Arg<'static, 'static>>;
+    /// Allows your plugin type to specify operations for the host before start
     fn get_requirements() -> Self::Requirements;
-    fn start(args: &Self::StartArgs) -> Result<Box<dyn PluginStopper>, Box<dyn Error>>;
+
+    /// Starts your plugin. Use `Ok` to return your plugin's control structure
+    fn start(args: &Self::StartArgs) -> Result<Box<dyn Any + Send + Sync>, Box<dyn Error>>;
 }
 
 /// Allows a [`Plugin`] instance to be stopped.

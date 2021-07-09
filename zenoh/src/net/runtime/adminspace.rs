@@ -10,7 +10,6 @@
 //
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
-use super::plugins::*;
 use super::protocol::{
     core::{
         queryable::EVAL, rname, CongestionControl, PeerId, QueryConsolidation, QueryTarget,
@@ -30,10 +29,14 @@ use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
+type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<
+    super::plugins::Requirements,
+    super::plugins::StartArgs,
+>;
 
 pub struct AdminContext {
     runtime: Runtime,
-    plugins_mgr: PluginsStopper,
+    plugins_mgr: PluginsHandles,
     pid_str: String,
     version: String,
 }
@@ -49,7 +52,7 @@ pub struct AdminSpace {
 }
 
 impl AdminSpace {
-    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsStopper, version: String) {
+    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsHandles, version: String) {
         let pid_str = runtime.get_pid_str();
         let root_path = format!("/@/router/{}", pid_str);
 

@@ -1,7 +1,6 @@
 use super::*;
 pub use no_mangle::*;
 
-type InitFn = fn(&ArgMatches) -> Result<Box<dyn std::any::Any>, Box<dyn Error>>;
 pub type PluginVTableVersion = u16;
 type LoadPluginResultInner = Result<PluginVTableInner<(), ()>, PluginVTableVersion>;
 pub type LoadPluginResult<A, B> = Result<PluginVTable<A, B>, PluginVTableVersion>;
@@ -13,7 +12,7 @@ pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 0;
 struct PluginVTableInner<Requirements, StartArgs> {
     is_compatible_with: fn(&[Compatibility]) -> Result<Compatibility, Incompatibility>,
     get_requirements: fn() -> Requirements,
-    start: fn(&StartArgs) -> Result<Box<dyn PluginStopper + 'static>, Box<dyn Error>>,
+    start: fn(&StartArgs) -> Result<Box<dyn Any + Send + Sync>, Box<dyn Error>>,
 }
 
 /// Automagical padding such that [PluginVTable::init]'s result is the size of a cache line
@@ -74,7 +73,10 @@ impl<Requirements, StartArgs> PluginVTable<Requirements, StartArgs> {
         (self.inner.get_requirements)()
     }
 
-    pub fn start(&self, start_args: &StartArgs) -> Result<Box<dyn PluginStopper>, Box<dyn Error>> {
+    pub fn start(
+        &self,
+        start_args: &StartArgs,
+    ) -> Result<Box<dyn Any + Send + Sync>, Box<dyn Error>> {
         (self.inner.start)(start_args)
     }
 }
@@ -89,7 +91,7 @@ pub mod no_mangle {
             #[no_mangle]
             fn load_plugin(
                 version: PluginVTableVersion,
-            ) -> LoadPluginResult<<$ty as Plugin>::Runtime> {
+            ) -> LoadPluginResult<<$ty as Plugin>::Requirements, <$ty as Plugin>::StartArgs> {
                 if version == PLUGIN_VTABLE_VERSION {
                     Ok(PluginVTable::new::<$ty>())
                 } else {

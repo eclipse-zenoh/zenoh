@@ -46,37 +46,34 @@ impl PluginStopper for ExamplePluginStopper {
 }
 
 impl Plugin for ExamplePlugin {
-    type StartArgs = Runtime;
+    type Requirements = Vec<Arg<'static, 'static>>;
+    type StartArgs = (Runtime, ArgMatches<'static>);
     fn compatibility() -> zenoh_plugin_trait::Compatibility {
         zenoh_plugin_trait::Compatibility {
             uid: "zenoh-example-plugin",
         }
     }
 
-    fn get_expected_args() -> Vec<Arg<'static, 'static>> {
+    fn get_requirements() -> Self::Requirements {
         vec![
             Arg::from_usage("--storage-selector 'The selection of resources to be stored'")
                 .default_value("/demo/example/**"),
         ]
     }
 
-    fn init(args: &ArgMatches) -> Result<Self, Box<dyn std::error::Error>> {
+    fn start(
+        (runtime, args): &Self::StartArgs,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
         if let Some(selector) = args.value_of("storage-selector") {
-            Ok(ExamplePlugin {
-                selector: Some(selector.into()),
-            })
+            let flag = Arc::new(AtomicBool::new(true));
+            let stopper = ExamplePluginStopper { flag: flag.clone() };
+            async_std::task::spawn(run(runtime.clone(), selector.into(), flag));
+            Ok(Box::new(stopper))
         } else {
             Err(Box::new(zerror2!(ZErrorKind::Other {
                 descr: "storage-selector is a mandatory option for ExamplePlugin".into()
             })))
         }
-    }
-
-    fn start(&mut self, runtime: Runtime) -> Box<dyn PluginStopper> {
-        let flag = Arc::new(AtomicBool::new(true));
-        let stopper = ExamplePluginStopper { flag: flag.clone() };
-        async_std::task::spawn(run(runtime, self.selector.take().unwrap(), flag));
-        Box::new(stopper)
     }
 }
 

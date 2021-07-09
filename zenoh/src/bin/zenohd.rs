@@ -128,23 +128,21 @@ fn main() {
             LibLoader::default()
         };
 
-        let mut plugins = StaticPlugins::builder()
+        let mut plugins = zenoh::net::plugins::PluginsManager::builder()
             // Static plugins are to be added here, with `.add_static::<PluginType>()`
             .into_dynamic(lib_loader)
-            .load_plugins(&get_plugins_from_args());
+            .load_plugins(
+                &get_plugins_from_args(),
+                &zenoh::net::plugins::PLUGIN_PREFIX,
+            );
         // Also search for plugins if no "--plugin-nolookup" arg
         if !std::env::args().any(|arg| arg == "--plugin-nolookup") {
             plugins = plugins.search_and_load_plugins();
         }
-        let (expected_args, plugins) = plugins.get_expected_args();
+        let (plugins, expected_args) = plugins.get_requirements();
 
         // Add plugins' expected args and parse command line
         let args = app.args(&expected_args).get_matches();
-
-        let (plugins, incompatibilities) = plugins.init(&args);
-        for i in incompatibilities {
-            log::debug!("{}", i);
-        }
 
         let mut config = if let Some(conf_file) = args.value_of("config") {
             Properties::from(std::fs::read_to_string(conf_file).unwrap()).into()
@@ -209,12 +207,12 @@ fn main() {
             }
         };
 
-        let (stopper, failures) = plugins.start(&runtime);
+        let (handles, failures) = plugins.start(&(runtime.clone(), args));
         for f in failures {
             log::debug!("plugin_failure: {}", f);
         }
 
-        AdminSpace::start(&runtime, stopper, LONG_VERSION.clone()).await;
+        AdminSpace::start(&runtime, handles, LONG_VERSION.clone()).await;
 
         future::pending::<()>().await;
     });

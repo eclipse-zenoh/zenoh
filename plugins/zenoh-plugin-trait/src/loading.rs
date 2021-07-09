@@ -79,7 +79,7 @@ pub trait MultipleStaticPlugins: Sized {
     fn start(
         it: &mut std::vec::IntoIter<Option<Incompatibility>>,
         args: &Self::StartArgs,
-    ) -> (Vec<Box<dyn PluginStopper>>, Vec<Box<dyn Error>>);
+    ) -> (Vec<Box<dyn Any + Send + Sync>>, Vec<Box<dyn Error>>);
 
     fn __len(cur: usize) -> usize;
     fn len() -> usize {
@@ -107,7 +107,7 @@ impl<Requirements: MergeRequirements, StartArgs> MultipleStaticPlugins
     fn start(
         it: &mut std::vec::IntoIter<Option<Incompatibility>>,
         runtime: &StartArgs,
-    ) -> (Vec<Box<dyn PluginStopper>>, Vec<Box<dyn Error>>) {
+    ) -> (Vec<Box<dyn Any + Send + Sync>>, Vec<Box<dyn Error>>) {
         (vec![], vec![])
     }
 }
@@ -144,7 +144,7 @@ impl<
     fn start(
         it: &mut std::vec::IntoIter<Option<Incompatibility>>,
         args: &StartArgs,
-    ) -> (Vec<Box<dyn PluginStopper>>, Vec<Box<dyn Error>>) {
+    ) -> (Vec<Box<dyn Any + Send + Sync>>, Vec<Box<dyn Error>>) {
         let (mut ok, mut err) = B::start(it, args);
         match it.next().unwrap() {
             None => match A::start(args) {
@@ -174,24 +174,40 @@ impl<StaticPlugins> StaticLauncher<StaticPlugins> {
         self.should_run.iter().filter_map(Option::as_ref)
     }
 
-    pub fn start<StartArgs>(self, args: &StartArgs) -> (StaticPluginsStopper, Vec<Box<dyn Error>>)
+    pub fn start<StartArgs>(
+        self,
+        args: &StartArgs,
+    ) -> (
+        PluginsHandles<StaticPlugins::Requirements, StaticPlugins::StartArgs>,
+        Vec<Box<dyn Error>>,
+    )
     where
         StaticPlugins: MultipleStaticPlugins<StartArgs = StartArgs>,
     {
         let (stoppers, errors) = StaticPlugins::start(&mut self.should_run.into_iter(), args);
-        (StaticPluginsStopper { stoppers }, errors)
+        (
+            PluginsHandles {
+                stopper: StaticPluginsHandles { stoppers },
+                dynamic_plugins: Vec::new(),
+            },
+            errors,
+        )
     }
 }
 
-pub struct StaticPluginsStopper {
-    stoppers: Vec<Box<dyn PluginStopper>>,
+pub struct StaticPluginsHandles {
+    stoppers: Vec<Box<dyn Any + Send + Sync>>,
 }
 
-impl StaticPluginsStopper {
-    pub fn stop(self) {
-        for stopper in self.stoppers {
-            stopper.stop()
-        }
+impl AsRef<Vec<Box<dyn Any + Send + Sync>>> for StaticPluginsHandles {
+    fn as_ref(&self) -> &Vec<Box<dyn Any + Send + Sync>> {
+        &self.stoppers
+    }
+}
+
+impl AsMut<Vec<Box<dyn Any + Send + Sync>>> for StaticPluginsHandles {
+    fn as_mut(&mut self) -> &mut Vec<Box<dyn Any + Send + Sync>> {
+        &mut self.stoppers
     }
 }
 
@@ -277,7 +293,10 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicStarter<StaticPlugins> {
     pub fn start(
         self,
         args: &StaticPlugins::StartArgs,
-    ) -> (DynamicPluginsStopper<StaticPlugins>, Vec<Box<dyn Error>>) {
+    ) -> (
+        PluginsHandles<StaticPlugins::Requirements, StaticPlugins::StartArgs>,
+        Vec<Box<dyn Error>>,
+    ) {
         use std::cell::UnsafeCell;
         let (mut stopper, errors) = self.static_launcher.start(args);
         let errors = UnsafeCell::new(errors);
@@ -294,183 +313,72 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicStarter<StaticPlugins> {
             })
         {
             match plugin.start(args) {
-                Ok(p) => stopper.stoppers.push(p),
+                Ok(p) => stopper.stopper.stoppers.push(p),
                 Err(e) => unsafe { &mut *errors.get() }.push(e),
             }
         }
-        (
-            DynamicPluginsStopper {
-                stopper,
-                _dynamic_plugins: dynamic_plugins,
-            },
-            errors.into_inner(),
-        )
+        stopper.dynamic_plugins.extend(dynamic_plugins);
+        (stopper, errors.into_inner())
     }
 }
 
-pub struct DynamicPluginsStopper<StaticPlugins: MultipleStaticPlugins> {
-    stopper: StaticPluginsStopper,
-    _dynamic_plugins: Vec<DynamicPlugin<StaticPlugins::Requirements, StaticPlugins::StartArgs>>,
+pub struct PluginsHandles<Requirements, StartArgs> {
+    stopper: StaticPluginsHandles,
+    dynamic_plugins: Vec<DynamicPlugin<Requirements, StartArgs>>,
 }
 
-impl<StaticPlugins: MultipleStaticPlugins> DynamicPluginsStopper<StaticPlugins> {
-    pub fn stop(self) {
-        self.stopper.stop()
+pub struct PluginDescription<'l> {
+    pub name: &'l str,
+    pub path: &'l std::path::PathBuf,
+}
+
+impl<A, B> PluginsHandles<A, B> {
+    pub fn plugins(&self) -> Vec<PluginDescription> {
+        self.dynamic_plugins
+            .iter()
+            .map(|p| PluginDescription {
+                name: &p.name,
+                path: &p.path,
+            })
+            .collect()
     }
 }
 
-// impl<StaticPlugins, Runtime> PluginsLoader<StaticPlugins, Runtime> {
-//     pub fn load_plugins(mut self, paths: &[String]) -> Self {
-//     }
+impl<A, B> AsRef<Vec<Box<dyn Any + Send + Sync>>> for PluginsHandles<A, B> {
+    fn as_ref(&self) -> &Vec<Box<dyn Any + Send + Sync>> {
+        self.stopper.as_ref()
+    }
+}
 
-//     pub fn get_expected_args(
-//         self,
-//     ) -> (
-//         Vec<Arg<'static, 'static>>,
-//         PluginsIniter<StaticPlugins, Runtime>,
-//     )
-//     where
-//         StaticPlugins: MultipleStaticPlugins<Runtime>,
-//     {
-//         let (mut args, mut compats, mut should_init) =
-//             StaticPlugins::get_expected_args_and_compatibility();
-//         for plugin in &self.dynamic_plugins {
-//             match plugin.is_compatible_with(&compats) {
-//                 Ok(c) => {
-//                     compats.push(c);
-//                     should_init.push(Ok(()));
-//                     args.extend(plugin.get_expected_args());
-//                 }
-//                 Err(i) => should_init.push(Err(i)),
-//             }
-//         }
-//         (
-//             args,
-//             PluginsIniter {
-//                 loader: self,
-//                 should_init,
-//             },
-//         )
-//     }
-// }
-
-// pub struct PluginsIniter<StaticPlugins, Runtime> {
-//     loader: PluginsLoader<StaticPlugins, Runtime>,
-//     should_init: Vec<Result<(), Incompatibility>>,
-// }
-
-// impl<StaticPlugins, Runtime> PluginsIniter<StaticPlugins, Runtime> {
-//     pub fn init(
-//         self,
-//         args: &ArgMatches,
-//     ) -> (PluginsStarter<StaticPlugins, Runtime>, Vec<Incompatibility>)
-//     where
-//         StaticPlugins: MultipleStaticPlugins<Runtime>,
-//     {
-//         let static_starters = StaticPlugins::init(args, &self.should_init);
-//         let mut dynamic_starters = Vec::with_capacity(self.loader.dynamic_plugins.len());
-//         for plugin in self
-//             .loader
-//             .dynamic_plugins
-//             .iter()
-//             .zip(&self.should_init[StaticPlugins::len()..])
-//             .filter_map(|(p, s)| match s {
-//                 Ok(_) => Some(p),
-//                 Err(_) => None,
-//             })
-//         {
-//             dynamic_starters.push(plugin.init(args))
-//         }
-//         (
-//             PluginsStarter {
-//                 static_starters,
-//                 _static_plugins: self.loader._static_plugins,
-//                 dynamic_plugins: self.loader.dynamic_plugins,
-//                 dynamic_starters,
-//             },
-//             self.should_init
-//                 .into_iter()
-//                 .filter_map(Result::err)
-//                 .collect(),
-//         )
-//     }
-// }
-
-// pub struct PluginsStarter<StaticPlugins, Runtime> {
-//     static_starters: InitResultVec,
-//     _static_plugins: StaticPlugins,
-//     dynamic_starters: InitResultVec,
-//     dynamic_plugins: Vec<DynamicPlugin<Runtime>>,
-// }
-
-// impl<StaticPlugins: MultipleStaticPlugins<Runtime>, Runtime>
-//     PluginsStarter<StaticPlugins, Runtime>
-// {
-//     pub fn start(self, runtime: &Runtime) -> (PluginsStopper<Runtime>, Vec<Box<dyn Error>>) {
-//         let (mut stoppers, mut errors) =
-//             StaticPlugins::start(&mut self.static_starters.into_iter(), runtime);
-//         stoppers.extend(
-//             self.dynamic_starters
-//                 .into_iter()
-//                 .zip(self.dynamic_plugins.iter())
-//                 .filter_map(|(s, p)| match s {
-//                     Ok(mut s) => Some(unsafe { p.vtable.start(thin_ptr(&mut s), runtime.clone()) }),
-//                     Err(e) => {
-//                         errors.push(e);
-//                         None
-//                     }
-//                 }),
-//         );
-//         (
-//             PluginsStopper {
-//                 stoppers,
-//                 dynamic_plugins: self.dynamic_plugins,
-//             },
-//             errors,
-//         )
-//     }
-// }
-
-// pub struct PluginsStopper<Runtime> {
-//     stoppers: Vec<Box<dyn PluginStopper>>,
-//     dynamic_plugins: Vec<DynamicPlugin<Runtime>>,
-// }
-
-// impl<Runtime> PluginsStopper<Runtime> {
-//     pub fn plugins(&self) -> &[DynamicPlugin<Runtime>] {
-//         &self.dynamic_plugins
-//     }
-
-//     pub fn stop(self) {
-//         for stopper in self.stoppers {
-//             stopper.stop();
-//         }
-//     }
-// }
+impl<A, B> AsMut<Vec<Box<dyn Any + Send + Sync>>> for PluginsHandles<A, B> {
+    fn as_mut(&mut self) -> &mut Vec<Box<dyn Any + Send + Sync>> {
+        self.stopper.as_mut()
+    }
+}
 
 pub struct DynamicPlugin<Requirements, StartArgs> {
-    lib: Library,
+    _lib: Library,
     vtable: PluginVTable<Requirements, StartArgs>,
     pub name: String,
     pub path: PathBuf,
 }
 
 impl<Requirements, StartArgs> DynamicPlugin<Requirements, StartArgs> {
-    fn new(name: String, lib: Library, path: PathBuf) -> Result<Self, ()> {
+    fn new(name: String, lib: Library, path: PathBuf) -> Result<Self, Option<PluginVTableVersion>> {
         let load_plugin = unsafe {
             lib.get::<fn(PluginVTableVersion) -> LoadPluginResult<Requirements, StartArgs>>(
                 b"load_plugin",
             )
-            .map_err(|_| ())?
+            .map_err(|_| None)?
         };
         match load_plugin(PLUGIN_VTABLE_VERSION) {
             Ok(vtable) => Ok(DynamicPlugin {
-                name,
-                lib,
+                _lib: lib,
                 vtable,
+                name,
                 path,
             }),
-            Err(plugin_version) => todo!(),
+            Err(plugin_version) => Err(Some(plugin_version)),
         }
     }
 
@@ -485,7 +393,7 @@ impl<Requirements, StartArgs> DynamicPlugin<Requirements, StartArgs> {
         self.vtable.get_requirements()
     }
 
-    fn start(&self, args: &StartArgs) -> Result<Box<dyn PluginStopper>, Box<dyn Error>> {
+    fn start(&self, args: &StartArgs) -> Result<Box<dyn Any + Send + Sync>, Box<dyn Error>> {
         self.vtable.start(args)
     }
 }
