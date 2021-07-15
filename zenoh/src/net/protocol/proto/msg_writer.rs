@@ -442,9 +442,11 @@ impl WBuf {
         #![allow(clippy::unnecessary_cast)]
         match target {
             Target::BestMatching => self.write_zint(0 as ZInt),
-            Target::Complete { n } => self.write_zint(1 as ZInt) && self.write_zint(*n),
-            Target::All => self.write_zint(2 as ZInt),
+            Target::All => self.write_zint(1 as ZInt),
+            Target::AllComplete => self.write_zint(2 as ZInt),
             Target::None => self.write_zint(3 as ZInt),
+            #[cfg(feature = "complete_n")]
+            Target::Complete(n) => self.write_zint(4 as ZInt) && self.write_zint(*n),
         }
     }
 

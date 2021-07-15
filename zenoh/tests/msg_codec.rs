@@ -206,8 +206,10 @@ fn gen_target() -> Target {
     let num: u8 = thread_rng().gen_range(0..4);
     match num {
         0 => Target::BestMatching,
-        1 => Target::Complete { n: 3 },
-        2 => Target::All,
+        1 => Target::All,
+        2 => Target::AllComplete,
+        #[cfg(feature = "complete_n")]
+        4 => Target::Complete(3),
         _ => Target::None,
     }
 }

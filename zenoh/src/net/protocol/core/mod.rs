@@ -367,9 +367,11 @@ impl Default for QueryConsolidation {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,
-    Complete { n: ZInt },
     All,
+    AllComplete,
     None,
+    #[cfg(feature = "complete_n")]
+    Complete(ZInt),
 }
 
 impl Default for Target {

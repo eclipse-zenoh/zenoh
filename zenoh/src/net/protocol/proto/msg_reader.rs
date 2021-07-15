@@ -675,12 +675,14 @@ impl ZBuf {
         let t = self.read_zint()?;
         match t {
             0 => Some(Target::BestMatching),
-            1 => {
-                let n = self.read_zint()?;
-                Some(Target::Complete { n })
-            }
-            2 => Some(Target::All),
+            1 => Some(Target::All),
+            2 => Some(Target::AllComplete),
             3 => Some(Target::None),
+            #[cfg(feature = "complete_n")]
+            4 => {
+                let n = self.read_zint()?;
+                Some(Target::Complete(n))
+            }
             id => {
                 log::trace!("UNEXPECTED ID FOR Target: {}", id);
                 None
