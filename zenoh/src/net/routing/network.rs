@@ -91,6 +91,7 @@ pub(crate) struct Network {
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
     pub(crate) trees: Vec<Tree>,
+    pub(crate) distances: Vec<f64>,
     pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
     pub(crate) runtime: Runtime,
 }
@@ -123,6 +124,7 @@ impl Network {
                 childs: vec![],
                 directions: vec![None],
             }],
+            distances: vec![0.0],
             graph,
             runtime,
         }
@@ -644,9 +646,12 @@ impl Network {
         });
 
         for tree_root_idx in &indexes {
-            let path = petgraph::algo::bellman_ford(&self.graph, *tree_root_idx)
-                .unwrap()
-                .1;
+            let (distances, path) =
+                petgraph::algo::bellman_ford(&self.graph, *tree_root_idx).unwrap();
+
+            if tree_root_idx.index() == 0 {
+                self.distances = distances;
+            }
 
             if log::log_enabled!(log::Level::Debug) {
                 let ps: Vec<Option<String>> = path

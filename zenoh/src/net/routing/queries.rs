@@ -12,20 +12,24 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::Arc;
+use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{
-    queryable, whatami, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, ResKey, ZInt,
+    queryable, rname, whatami, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, ResKey,
+    Target, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;
-use super::resource::{elect_router, Resource, Route, SessionContext};
+use super::resource::{
+    elect_router, QueryRoute, Resource, SessionContext, TargetQabl, TargetQablSet,
+};
 use super::router::Tables;
 
 pub(crate) struct Query {
@@ -1025,28 +1029,27 @@ fn matching_kind(query_kind: ZInt, qabl_kind: ZInt) -> bool {
 
 #[inline]
 #[allow(clippy::too_many_arguments)]
-fn insert_faces_for_qabls(
-    route: &mut Route,
+fn insert_target_for_qabls(
+    route: &mut TargetQablSet,
     prefix: &Arc<Resource>,
     suffix: &str,
-    kind: ZInt,
     tables: &Tables,
     net: &Network,
     source: usize,
     qabls: &HashMap<(PeerId, ZInt), QueryableInfo>,
+    complete: bool,
 ) {
     if net.trees.len() > source {
-        for (qabl, qabl_kind) in qabls.keys() {
-            if matching_kind(kind, *qabl_kind) {
-                if let Some(qabl_idx) = net.get_idx(qabl) {
-                    if net.trees[source].directions.len() > qabl_idx.index() {
-                        if let Some(direction) = net.trees[source].directions[qabl_idx.index()] {
-                            if net.graph.contains_node(direction) {
-                                if let Some(face) = tables.get_face(&net.graph[direction].pid) {
-                                    route.entry(face.id).or_insert_with(|| {
-                                        let reskey =
-                                            Resource::get_best_key(prefix, suffix, face.id);
-                                        (
+        for ((qabl, qabl_kind), qabl_info) in qabls {
+            if let Some(qabl_idx) = net.get_idx(qabl) {
+                if net.trees[source].directions.len() > qabl_idx.index() {
+                    if let Some(direction) = net.trees[source].directions[qabl_idx.index()] {
+                        if net.graph.contains_node(direction) {
+                            if let Some(face) = tables.get_face(&net.graph[direction].pid) {
+                                if net.distances.len() > qabl_idx.index() {
+                                    let reskey = Resource::get_best_key(prefix, suffix, face.id);
+                                    route.push(TargetQabl {
+                                        direction: (
                                             face.clone(),
                                             reskey,
                                             if source != 0 {
@@ -1054,7 +1057,10 @@ fn insert_faces_for_qabls(
                                             } else {
                                                 None
                                             },
-                                        )
+                                        ),
+                                        complete: if complete { qabl_info.complete } else { 0 },
+                                        kind: *qabl_kind,
+                                        distance: net.distances[qabl_idx.index()],
                                     });
                                 }
                             }
@@ -1072,11 +1078,10 @@ fn compute_query_route(
     tables: &Tables,
     prefix: &Arc<Resource>,
     suffix: &str,
-    kind: ZInt,
     source: Option<usize>,
     source_type: whatami::Type,
-) -> Arc<Route> {
-    let mut route = HashMap::new();
+) -> Arc<TargetQablSet> {
+    let mut route = TargetQablSet::new();
     let res_name = [&prefix.name(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
@@ -1091,6 +1096,7 @@ fn compute_query_route(
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
+        let complete = rname::include(&mres.name(), &res_name);
         if tables.whatami == whatami::ROUTER {
             if master || source_type == whatami::ROUTER {
                 let net = tables.routers_net.as_ref().unwrap();
@@ -1098,15 +1104,15 @@ fn compute_query_route(
                     whatami::ROUTER => source.unwrap(),
                     _ => net.idx.index(),
                 };
-                insert_faces_for_qabls(
+                insert_target_for_qabls(
                     &mut route,
                     prefix,
                     suffix,
-                    kind,
                     tables,
                     net,
                     router_source,
                     &mres.context().router_qabls,
+                    complete,
                 );
             }
 
@@ -1116,15 +1122,15 @@ fn compute_query_route(
                     whatami::PEER => source.unwrap(),
                     _ => net.idx.index(),
                 };
-                insert_faces_for_qabls(
+                insert_target_for_qabls(
                     &mut route,
                     prefix,
                     suffix,
-                    kind,
                     tables,
                     net,
                     peer_source,
                     &mres.context().peer_qabls,
+                    complete,
                 );
             }
         }
@@ -1135,33 +1141,33 @@ fn compute_query_route(
                 whatami::ROUTER | whatami::PEER => source.unwrap(),
                 _ => net.idx.index(),
             };
-            insert_faces_for_qabls(
+            insert_target_for_qabls(
                 &mut route,
                 prefix,
                 suffix,
-                kind,
                 tables,
                 net,
                 peer_source,
                 &mres.context().peer_qabls,
+                complete,
             );
         }
 
         if tables.whatami != whatami::ROUTER || master || source_type == whatami::ROUTER {
             for (sid, context) in &mres.session_ctxs {
-                if context
-                    .qabl
-                    .keys()
-                    .any(|qabl_kind| matching_kind(kind, *qabl_kind))
-                {
-                    route.entry(*sid).or_insert_with(|| {
-                        let reskey = Resource::get_best_key(prefix, suffix, *sid);
-                        (context.face.clone(), reskey, None)
+                let reskey = Resource::get_best_key(prefix, suffix, *sid);
+                for (qabl_kind, qabl_info) in &context.qabl {
+                    route.push(TargetQabl {
+                        direction: (context.face.clone(), reskey.clone(), None),
+                        complete: if complete { qabl_info.complete } else { 0 },
+                        kind: *qabl_kind,
+                        distance: 0.5,
                     });
                 }
             }
         }
     }
+    route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
     Arc::new(route)
 }
 
@@ -1180,17 +1186,12 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
             let max_idx = indexes.iter().max().unwrap();
             let routers_query_routes = &mut res_mut.context_mut().routers_query_routes;
             routers_query_routes.clear();
-            routers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+            routers_query_routes
+                .resize_with(max_idx.index() + 1, || Arc::new(TargetQablSet::new()));
 
             for idx in &indexes {
-                routers_query_routes[idx.index()] = compute_query_route(
-                    tables,
-                    res,
-                    "",
-                    queryable::ALL_KINDS,
-                    Some(idx.index()),
-                    whatami::ROUTER,
-                );
+                routers_query_routes[idx.index()] =
+                    compute_query_route(tables, res, "", Some(idx.index()), whatami::ROUTER);
             }
         }
         if tables.whatami == whatami::ROUTER || tables.whatami == whatami::PEER {
@@ -1204,28 +1205,16 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
             let max_idx = indexes.iter().max().unwrap();
             let peers_query_routes = &mut res_mut.context_mut().peers_query_routes;
             peers_query_routes.clear();
-            peers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+            peers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(TargetQablSet::new()));
 
             for idx in &indexes {
-                peers_query_routes[idx.index()] = compute_query_route(
-                    tables,
-                    res,
-                    "",
-                    queryable::ALL_KINDS,
-                    Some(idx.index()),
-                    whatami::PEER,
-                );
+                peers_query_routes[idx.index()] =
+                    compute_query_route(tables, res, "", Some(idx.index()), whatami::PEER);
             }
         }
         if tables.whatami == whatami::CLIENT {
-            res_mut.context_mut().client_query_route = Some(compute_query_route(
-                tables,
-                res,
-                "",
-                queryable::ALL_KINDS,
-                None,
-                whatami::CLIENT,
-            ));
+            res_mut.context_mut().client_query_route =
+                Some(compute_query_route(tables, res, "", None, whatami::CLIENT));
         }
     }
 }
@@ -1246,6 +1235,111 @@ pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Re
         for match_ in &mut get_mut_unchecked(res).context_mut().matches {
             if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
                 compute_query_routes(tables, &mut match_.upgrade().unwrap());
+            }
+        }
+    }
+}
+
+#[inline]
+fn compute_final_route(
+    qabls: &Arc<TargetQablSet>,
+    src_face: &Arc<FaceState>,
+    target: &QueryTarget,
+) -> QueryRoute {
+    match &target.target {
+        Target::None => HashMap::new(),
+        Target::All => {
+            let mut route = HashMap::new();
+            for qabl in qabls.iter() {
+                if qabl.direction.0.id != src_face.id && matching_kind(target.kind, qabl.kind) {
+                    #[cfg(feature = "complete_n")]
+                    {
+                        route
+                            .entry(qabl.direction.0.id)
+                            .or_insert_with(|| (qabl.direction.clone(), target.target.clone()));
+                    }
+                    #[cfg(not(feature = "complete_n"))]
+                    {
+                        route
+                            .entry(qabl.direction.0.id)
+                            .or_insert_with(|| qabl.direction.clone());
+                    }
+                }
+            }
+            route
+        }
+        Target::AllComplete => {
+            let mut route = HashMap::new();
+            for qabl in qabls.iter() {
+                if qabl.direction.0.id != src_face.id
+                    && matching_kind(target.kind, qabl.kind)
+                    && qabl.complete > 0
+                {
+                    #[cfg(feature = "complete_n")]
+                    {
+                        route
+                            .entry(qabl.direction.0.id)
+                            .or_insert_with(|| (qabl.direction.clone(), target.target.clone()));
+                    }
+                    #[cfg(not(feature = "complete_n"))]
+                    {
+                        route
+                            .entry(qabl.direction.0.id)
+                            .or_insert_with(|| qabl.direction.clone());
+                    }
+                }
+            }
+            route
+        }
+        #[cfg(feature = "complete_n")]
+        Target::Complete(n) => {
+            let mut route = HashMap::new();
+            let mut remaining = *n;
+            for qabl in qabls.iter() {
+                if qabl.direction.0.id != src_face.id
+                    && matching_kind(target.kind, qabl.kind)
+                    && qabl.complete > 0
+                {
+                    let nb = std::cmp::min(qabl.complete, remaining);
+                    route
+                        .entry(qabl.direction.0.id)
+                        .or_insert_with(|| (qabl.direction.clone(), Target::Complete(nb)));
+                    remaining -= nb;
+                    if remaining == 0 {
+                        break;
+                    }
+                }
+            }
+            route
+        }
+        Target::BestMatching => {
+            if let Some(qabl) = qabls.iter().find(|qabl| {
+                qabl.direction.0.id != src_face.id
+                    && qabl.complete > 0
+                    && matching_kind(target.kind, qabl.kind)
+            }) {
+                let mut route = HashMap::new();
+                #[cfg(feature = "complete_n")]
+                {
+                    route.insert(
+                        qabl.direction.0.id,
+                        (qabl.direction.clone(), target.target.clone()),
+                    );
+                }
+                #[cfg(not(feature = "complete_n"))]
+                {
+                    route.insert(qabl.direction.0.id, qabl.direction.clone());
+                }
+                route
+            } else {
+                compute_final_route(
+                    qabls,
+                    src_face,
+                    &QueryTarget {
+                        kind: target.kind,
+                        target: Target::All,
+                    },
+                )
             }
         }
     }
@@ -1279,9 +1373,7 @@ pub fn route_query(
                         let routers_net = tables.routers_net.as_ref().unwrap();
                         let local_context = routers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
-                        (target.kind == queryable::ALL_KINDS)
-                            .then(|| Resource::get_resource(prefix, suffix))
-                            .flatten()
+                        Resource::get_resource(prefix, suffix)
                             .map(|res| res.routers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
@@ -1289,7 +1381,6 @@ pub fn route_query(
                                     tables,
                                     prefix,
                                     suffix,
-                                    target.kind,
                                     Some(local_context),
                                     whatami::ROUTER,
                                 )
@@ -1299,9 +1390,7 @@ pub fn route_query(
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context = peers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
-                        (target.kind == queryable::ALL_KINDS)
-                            .then(|| Resource::get_resource(prefix, suffix))
-                            .flatten()
+                        Resource::get_resource(prefix, suffix)
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
@@ -1309,26 +1398,16 @@ pub fn route_query(
                                     tables,
                                     prefix,
                                     suffix,
-                                    target.kind,
                                     Some(local_context),
                                     whatami::PEER,
                                 )
                             })
                     }
-                    _ => (target.kind == queryable::ALL_KINDS)
-                        .then(|| Resource::get_resource(prefix, suffix))
-                        .flatten()
+                    _ => Resource::get_resource(prefix, suffix)
                         .map(|res| res.routers_query_route(0))
                         .flatten()
                         .unwrap_or_else(|| {
-                            compute_query_route(
-                                tables,
-                                prefix,
-                                suffix,
-                                target.kind,
-                                None,
-                                whatami::CLIENT,
-                            )
+                            compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
                         }),
                 },
                 whatami::PEER => match face.whatami {
@@ -1336,9 +1415,7 @@ pub fn route_query(
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context = peers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
-                        (target.kind == queryable::ALL_KINDS)
-                            .then(|| Resource::get_resource(prefix, suffix))
-                            .flatten()
+                        Resource::get_resource(prefix, suffix)
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
@@ -1346,48 +1423,29 @@ pub fn route_query(
                                     tables,
                                     prefix,
                                     suffix,
-                                    target.kind,
                                     Some(local_context),
                                     whatami::PEER,
                                 )
                             })
                     }
-                    _ => (target.kind == queryable::ALL_KINDS)
-                        .then(|| Resource::get_resource(prefix, suffix))
-                        .flatten()
+                    _ => Resource::get_resource(prefix, suffix)
                         .map(|res| res.peers_query_route(0))
                         .flatten()
                         .unwrap_or_else(|| {
-                            compute_query_route(
-                                tables,
-                                prefix,
-                                suffix,
-                                target.kind,
-                                None,
-                                whatami::CLIENT,
-                            )
+                            compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
                         }),
                 },
-                _ => (target.kind == queryable::ALL_KINDS)
-                    .then(|| Resource::get_resource(prefix, suffix))
-                    .flatten()
+                _ => Resource::get_resource(prefix, suffix)
                     .map(|res| res.client_query_route())
                     .flatten()
                     .unwrap_or_else(|| {
-                        compute_query_route(
-                            tables,
-                            prefix,
-                            suffix,
-                            target.kind,
-                            None,
-                            whatami::CLIENT,
-                        )
+                        compute_query_route(tables, prefix, suffix, None, whatami::CLIENT)
                     }),
             };
 
-            if route.is_empty()
-                || (route.len() == 1 && route.iter().next().unwrap().1 .0.id == face.id)
-            {
+            let route = compute_final_route(&route, face, &target);
+
+            if route.is_empty() {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
                 face.primitives.clone().send_reply_final(qid)
             } else {
@@ -1396,25 +1454,47 @@ pub fn route_query(
                     src_qid: qid,
                 });
 
+                #[cfg(feature = "complete_n")]
+                for ((outface, reskey, context), t) in route.values() {
+                    let mut outface = outface.clone();
+                    let outface_mut = get_mut_unchecked(&mut outface);
+                    outface_mut.next_qid += 1;
+                    let qid = outface_mut.next_qid;
+                    outface_mut.pending_queries.insert(qid, query.clone());
+
+                    log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
+
+                    outface.primitives.send_query(
+                        &reskey,
+                        predicate,
+                        qid,
+                        QueryTarget {
+                            kind: target.kind,
+                            target: t.clone(),
+                        },
+                        consolidation.clone(),
+                        *context,
+                    );
+                }
+
+                #[cfg(not(feature = "complete_n"))]
                 for (outface, reskey, context) in route.values() {
-                    if face.id != outface.id {
-                        let mut outface = outface.clone();
-                        let outface_mut = get_mut_unchecked(&mut outface);
-                        outface_mut.next_qid += 1;
-                        let qid = outface_mut.next_qid;
-                        outface_mut.pending_queries.insert(qid, query.clone());
+                    let mut outface = outface.clone();
+                    let outface_mut = get_mut_unchecked(&mut outface);
+                    outface_mut.next_qid += 1;
+                    let qid = outface_mut.next_qid;
+                    outface_mut.pending_queries.insert(qid, query.clone());
 
-                        log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
+                    log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
-                        outface.primitives.send_query(
-                            &reskey,
-                            predicate,
-                            qid,
-                            target.clone(),
-                            consolidation.clone(),
-                            *context,
-                        )
-                    }
+                    outface.primitives.send_query(
+                        &reskey,
+                        predicate,
+                        qid,
+                        target.clone(),
+                        consolidation.clone(),
+                        *context,
+                    );
                 }
             }
         }

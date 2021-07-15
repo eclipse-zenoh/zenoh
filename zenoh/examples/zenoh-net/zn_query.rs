@@ -21,7 +21,7 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, selector, kind) = parse_args();
+    let (config, selector, target) = parse_args();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
@@ -29,10 +29,7 @@ async fn main() {
     println!("Sending Query '{}'...", selector);
     let mut replies = session
         .query(&selector.into())
-        .target(QueryTarget {
-            kind,
-            target: Target::default(),
-        })
+        .target(target)
         .await
         .unwrap();
     while let Some(reply) = replies.next().await {
@@ -44,7 +41,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Properties, String, ZInt) {
+fn parse_args() -> (Properties, String, QueryTarget) {
     let args = App::new("zenoh-net query example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -61,9 +58,14 @@ fn parse_args() -> (Properties, String, ZInt) {
                 .default_value("/demo/example/**"),
         )
         .arg(
-            Arg::from_usage("-k, --kind=[KIND] 'The target KIND to query'")
+            Arg::from_usage("-k, --kind=[KIND] 'The KIND of queryables to query'")
                 .possible_values(&["ALL_KINDS", "STORAGE", "EVAL"])
                 .default_value("ALL_KINDS"),
+        )
+        .arg(
+            Arg::from_usage("-t, --target=[TARGET] 'The target queryables of the query'")
+                .possible_values(&["ALL", "BEST_MATCHING", "ALL_COMPLETE", "NONE"])
+                .default_value("ALL"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -87,11 +89,17 @@ fn parse_args() -> (Properties, String, ZInt) {
     let selector = args.value_of("selector").unwrap().to_string();
 
     let kind = match args.value_of("kind") {
-        Some(kind) if kind == "STORAGE" => queryable::STORAGE,
-        Some(kind) if kind == "EVAL" => queryable::EVAL,
-        Some(_) => queryable::ALL_KINDS,
-        None => queryable::ALL_KINDS,
+        Some("STORAGE") => queryable::STORAGE,
+        Some("EVAL") => queryable::EVAL,
+        _ => queryable::ALL_KINDS,
     };
 
-    (config, selector, kind)
+    let target = match args.value_of("target") {
+        Some("BEST_MATCHING") => Target::BestMatching,
+        Some("ALL_COMPLETE") => Target::AllComplete,
+        Some("NONE") => Target::None,
+        _ => Target::All,
+    };
+
+    (config, selector, QueryTarget { kind, target })
 }
