@@ -259,7 +259,7 @@ fn register_client_subscription(
                         local_rid: None,
                         remote_rid: None,
                         subs: Some(sub_info.clone()),
-                        qabl: None,
+                        qabl: HashMap::new(),
                         last_values: HashMap::new(),
                     }),
                 );

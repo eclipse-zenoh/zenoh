@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{CongestionControl, PeerId, Reliability, ResKey, ZInt};
-use super::core::{QueryConsolidation, QueryTarget, SubInfo};
+use super::core::{QueryConsolidation, QueryTarget, QueryableInfo, SubInfo};
 use super::io::ZBuf;
 use super::proto::{
     zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
@@ -97,10 +97,17 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn decl_queryable(&self, reskey: &ResKey, kind: ZInt, routing_context: Option<RoutingContext>) {
+    fn decl_queryable(
+        &self,
+        reskey: &ResKey,
+        kind: ZInt,
+        qabl_info: &QueryableInfo,
+        routing_context: Option<RoutingContext>,
+    ) {
         let d = Declaration::Queryable(Queryable {
             key: reskey.clone(),
             kind,
+            info: qabl_info.clone(),
         });
         let decls = vec![d];
         let _ =
@@ -108,9 +115,15 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn forget_queryable(
+        &self,
+        reskey: &ResKey,
+        kind: ZInt,
+        routing_context: Option<RoutingContext>,
+    ) {
         let d = Declaration::ForgetQueryable(ForgetQueryable {
             key: reskey.clone(),
+            kind,
         });
         let decls = vec![d];
         let _ =

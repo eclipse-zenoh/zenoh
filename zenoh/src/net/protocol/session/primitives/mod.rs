@@ -21,7 +21,8 @@ use super::proto;
 use super::session;
 
 use super::core::{
-    CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, ZInt,
+    CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, Reliability, ResKey,
+    SubInfo, ZInt,
 };
 use super::io::ZBuf;
 use super::proto::{DataInfo, RoutingContext};
@@ -43,8 +44,19 @@ pub trait Primitives {
     );
     fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    fn decl_queryable(&self, reskey: &ResKey, kind: ZInt, routing_context: Option<RoutingContext>);
-    fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn decl_queryable(
+        &self,
+        reskey: &ResKey,
+        kind: ZInt,
+        qabl_info: &QueryableInfo,
+        routing_context: Option<RoutingContext>,
+    );
+    fn forget_queryable(
+        &self,
+        reskey: &ResKey,
+        kind: ZInt,
+        routing_context: Option<RoutingContext>,
+    );
 
     fn send_data(
         &self,
@@ -112,10 +124,17 @@ impl Primitives for DummyPrimitives {
         &self,
         _reskey: &ResKey,
         _kind: ZInt,
+        _qable_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
+    }
 
     fn send_data(
         &self,

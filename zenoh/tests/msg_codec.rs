@@ -151,17 +151,38 @@ fn gen_declarations() -> Vec<Declaration> {
     decls.push(Declaration::Queryable(Queryable {
         key: gen_key(),
         kind: queryable::ALL_KINDS,
+        info: QueryableInfo {
+            complete: 1,
+            distance: 0,
+        },
     }));
     decls.push(Declaration::Queryable(Queryable {
         key: gen_key(),
         kind: queryable::STORAGE,
+        info: QueryableInfo {
+            complete: 0,
+            distance: 10,
+        },
     }));
     decls.push(Declaration::Queryable(Queryable {
         key: gen_key(),
         kind: queryable::EVAL,
+        info: QueryableInfo {
+            complete: 10,
+            distance: 0,
+        },
     }));
     decls.push(Declaration::ForgetQueryable(ForgetQueryable {
         key: gen_key(),
+        kind: queryable::ALL_KINDS,
+    }));
+    decls.push(Declaration::ForgetQueryable(ForgetQueryable {
+        key: gen_key(),
+        kind: queryable::STORAGE,
+    }));
+    decls.push(Declaration::ForgetQueryable(ForgetQueryable {
+        key: gen_key(),
+        kind: queryable::EVAL,
     }));
     decls
 }

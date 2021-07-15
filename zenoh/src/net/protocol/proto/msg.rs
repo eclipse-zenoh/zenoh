@@ -150,7 +150,7 @@ pub mod zmsg {
         pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then only numerical ID
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
         pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
-        pub const Q: u8 = 1 << 6; // 0x40 QueryableKind if Z==1 then the queryable kind is present
+        pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SubMode       if S==1 then the declaration SubMode is indicated
         pub const T: u8 = 1 << 5; // 0x20 QueryTarget   if T==1 then the query target is present
@@ -799,20 +799,23 @@ impl Header for ForgetSubscriber {
 /// +---------------+
 /// ~    ResKey     ~ if K==1 then only numerical id
 /// +---------------+
-/// ~     Kind      ~ if Q==1. Otherwise: STORAGE (0x02)
+/// ~     Kind      ~
+/// +---------------+
+/// ~   QablInfo    ~ if Q==1
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Queryable {
     pub key: ResKey,
     pub kind: ZInt,
+    pub info: QueryableInfo,
 }
 
 impl Header for Queryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::QUERYABLE;
-        if self.kind != queryable::STORAGE {
+        if self.info != QueryableInfo::default() {
             header |= zmsg::flag::Q;
         }
         if self.key.is_numerical() {
@@ -829,16 +832,22 @@ impl Header for Queryable {
 /// +---------------+
 /// ~    ResKey     ~ if K==1 then only numerical id
 /// +---------------+
+/// ~     Kind      ~
+/// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetQueryable {
     pub key: ResKey,
+    pub kind: ZInt,
 }
 
 impl Header for ForgetQueryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_QUERYABLE;
+        if self.kind != queryable::EVAL {
+            header |= zmsg::flag::Q
+        }
         if self.key.is_numerical() {
             header |= zmsg::flag::K
         }

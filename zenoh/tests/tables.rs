@@ -16,8 +16,8 @@ use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh::net::protocol::core::rname::intersect;
 use zenoh::net::protocol::core::{
-    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
-    SubInfo, SubMode, ZInt,
+    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Reliability, ResKey, SubInfo, SubMode, ZInt,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
@@ -409,10 +409,17 @@ impl Primitives for ClientPrimitives {
         &self,
         _reskey: &ResKey,
         _kind: ZInt,
+        _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
+    }
 
     fn send_data(
         &self,

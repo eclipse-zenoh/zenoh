@@ -302,7 +302,13 @@ impl WBuf {
         if let Some(sn) = &info.first_router_sn {
             zcheck!(self.write_zint(*sn));
         }
+        true
+    }
 
+    #[inline(always)]
+    fn write_queryable_info(&mut self, info: &QueryableInfo) -> bool {
+        zcheck!(self.write_zint(info.complete));
+        zcheck!(self.write_zint(info.distance));
         true
     }
 
@@ -341,13 +347,16 @@ impl WBuf {
                 let header = q.header();
                 zcheck!(self.write(header));
                 zcheck!(self.write_reskey(&q.key));
+                zcheck!(self.write_zint(q.kind));
                 if imsg::has_flag(header, zmsg::flag::Q) {
-                    zcheck!(self.write_zint(q.kind))
+                    zcheck!(self.write_queryable_info(&q.info));
                 }
                 true
             }
             Declaration::ForgetQueryable(fq) => {
-                self.write(fq.header()) && self.write_reskey(&fq.key)
+                zcheck!(self.write(fq.header()) && self.write_reskey(&fq.key));
+                zcheck!(self.write_zint(fq.kind));
+                true
             }
         }
     }

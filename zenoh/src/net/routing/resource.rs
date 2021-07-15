@@ -13,7 +13,7 @@
 //
 use super::face::FaceState;
 use super::protocol::core::rname;
-use super::protocol::core::{PeerId, ResKey, SubInfo, ZInt};
+use super::protocol::core::{PeerId, QueryableInfo, ResKey, SubInfo, ZInt};
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 use super::router::Tables;
@@ -31,15 +31,15 @@ pub(super) struct SessionContext {
     pub(super) local_rid: Option<ZInt>,
     pub(super) remote_rid: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
-    pub(super) qabl: Option<ZInt>,
+    pub(super) qabl: HashMap<ZInt, QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
 }
 
 pub(super) struct ResourceContext {
     pub(super) router_subs: HashSet<PeerId>,
     pub(super) peer_subs: HashSet<PeerId>,
-    pub(super) router_qabls: HashMap<PeerId, ZInt>,
-    pub(super) peer_qabls: HashMap<PeerId, ZInt>,
+    pub(super) router_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
+    pub(super) peer_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
@@ -360,7 +360,7 @@ impl Resource {
                             local_rid: None,
                             remote_rid: None,
                             subs: None,
-                            qabl: None,
+                            qabl: HashMap::new(),
                             last_values: HashMap::new(),
                         })
                     });
@@ -529,7 +529,7 @@ pub fn declare_resource(
                             local_rid: None,
                             remote_rid: Some(rid),
                             subs: None,
-                            qabl: None,
+                            qabl: HashMap::new(),
                             last_values: HashMap::new(),
                         })
                     })

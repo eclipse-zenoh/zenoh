@@ -437,6 +437,7 @@ pub(crate) struct QueryableState {
     pub(crate) id: Id,
     pub(crate) reskey: ResKey,
     pub(crate) kind: ZInt,
+    pub(crate) complete: bool,
     pub(crate) sender: Sender<Query>,
 }
 

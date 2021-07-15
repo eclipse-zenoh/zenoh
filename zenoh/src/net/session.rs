@@ -21,8 +21,8 @@ use flume::{bounded, Sender};
 use log::{error, trace, warn};
 use protocol::{
     core::{
-        queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget, ResKey,
-        ResourceId, ZInt,
+        queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget,
+        QueryableInfo, ResKey, ResourceId, ZInt,
     },
     io::ZBuf,
     proto::{Options, RoutingContext},
@@ -509,14 +509,22 @@ derive_zfuture! {
         session: &'a Session,
         reskey: &'b ResKey,
         kind: ZInt,
+        complete: bool,
     }
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
-    /// Change the kind of queryable.
+    /// Change the queryable kind.
     #[inline]
     pub fn kind(mut self, kind: ZInt) -> Self {
         self.kind = kind;
+        self
+    }
+
+    /// Change queryable completeness.
+    #[inline]
+    pub fn complete(mut self, complete: bool) -> Self {
+        self.complete = complete;
         self
     }
 }
@@ -533,27 +541,46 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
             id,
             reskey: self.reskey.clone(),
             kind: self.kind,
+            complete: self.complete,
             sender,
         });
-        let computed_kind = Session::compute_local_queryable_kind(&mut state, &qable_state.reskey);
+        #[cfg(feature = "complete_n")]
+        {
+            state.queryables.insert(id, qable_state.clone());
 
-        state.queryables.insert(id, qable_state.clone());
-
-        let send_kind = match computed_kind {
-            Some(computed_kind) => {
-                if computed_kind != computed_kind | self.kind {
-                    Some(computed_kind | self.kind)
-                } else {
-                    None
-                }
+            if self.complete {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                let complete = Session::complete_twin_qabls(&state, self.reskey, self.kind);
+                drop(state);
+                let qabl_info = QueryableInfo {
+                    complete,
+                    distance: 0,
+                };
+                primitives.decl_queryable(self.reskey, self.kind, &qabl_info, None);
             }
-            None => Some(self.kind),
-        };
+        }
+        #[cfg(not(feature = "complete_n"))]
+        {
+            let twin_qabl = Session::twin_qabl(&state, self.reskey, self.kind);
+            let complete_twin_qabl =
+                twin_qabl && Session::complete_twin_qabl(&state, self.reskey, self.kind);
 
-        if let Some(send_kind) = send_kind {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.decl_queryable(self.reskey, send_kind, None);
+            state.queryables.insert(id, qable_state.clone());
+
+            if !twin_qabl || (!complete_twin_qabl && self.complete) {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                let complete = if !complete_twin_qabl && self.complete {
+                    1
+                } else {
+                    0
+                };
+                drop(state);
+                let qabl_info = QueryableInfo {
+                    complete,
+                    distance: 0,
+                };
+                primitives.decl_queryable(self.reskey, self.kind, &qabl_info, None);
+            }
         }
 
         Ok(Queryable {
@@ -1308,15 +1335,36 @@ impl Session {
         })
     }
 
-    fn compute_local_queryable_kind(state: &mut SessionState, key: &ResKey) -> Option<ZInt> {
-        let res_name = state.localkey_to_resname(key).unwrap();
-        state.queryables.values().fold(None, |accu, q| {
-            if state.localkey_to_resname(&q.reskey).unwrap() == res_name {
-                Some(accu.unwrap_or(0) | q.kind)
-            } else {
-                accu
-            }
+    fn twin_qabl(state: &SessionState, key: &ResKey, kind: ZInt) -> bool {
+        state.queryables.values().any(|q| {
+            q.kind == kind
+                && state.localkey_to_resname(&q.reskey).unwrap()
+                    == state.localkey_to_resname(key).unwrap()
         })
+    }
+
+    #[cfg(not(feature = "complete_n"))]
+    fn complete_twin_qabl(state: &SessionState, key: &ResKey, kind: ZInt) -> bool {
+        state.queryables.values().any(|q| {
+            q.complete
+                && q.kind == kind
+                && state.localkey_to_resname(&q.reskey).unwrap()
+                    == state.localkey_to_resname(key).unwrap()
+        })
+    }
+
+    #[cfg(feature = "complete_n")]
+    fn complete_twin_qabls(state: &SessionState, key: &ResKey, kind: ZInt) -> ZInt {
+        state
+            .queryables
+            .values()
+            .filter(|q| {
+                q.complete
+                    && q.kind == kind
+                    && state.localkey_to_resname(&q.reskey).unwrap()
+                        == state.localkey_to_resname(key).unwrap()
+            })
+            .count() as ZInt
     }
 
     /// Declare a [Queryable](Queryable) for the given resource key.
@@ -1347,6 +1395,7 @@ impl Session {
             session: self,
             reskey,
             kind: EVAL,
+            complete: true,
         }
     }
 
@@ -1354,18 +1403,53 @@ impl Session {
         let mut state = zwrite!(self.state);
         zready(if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("undeclare_queryable({:?})", qable_state);
-            let computed_kind =
-                Session::compute_local_queryable_kind(&mut state, &qable_state.reskey);
-            if let Some(computed_kind) = computed_kind {
-                if computed_kind != computed_kind | qable_state.kind {
-                    // There still exist Queryables on the same ResKey and the merge kind changed
-                    let primitives = state.primitives.as_ref().unwrap();
-                    primitives.decl_queryable(&qable_state.reskey, computed_kind, None);
+            if Session::twin_qabl(&state, &qable_state.reskey, qable_state.kind) {
+                // There still exist Queryables on the same ResKey.
+                if qable_state.complete {
+                    #[cfg(feature = "complete_n")]
+                    {
+                        let complete = Session::complete_twin_qabls(
+                            &state,
+                            &qable_state.reskey,
+                            qable_state.kind,
+                        );
+                        let primitives = state.primitives.as_ref().unwrap();
+                        let qabl_info = QueryableInfo {
+                            complete,
+                            distance: 0,
+                        };
+                        primitives.decl_queryable(
+                            &qable_state.reskey,
+                            qable_state.kind,
+                            &qabl_info,
+                            None,
+                        );
+                    }
+                    #[cfg(not(feature = "complete_n"))]
+                    {
+                        if !Session::complete_twin_qabl(
+                            &state,
+                            &qable_state.reskey,
+                            qable_state.kind,
+                        ) {
+                            let primitives = state.primitives.as_ref().unwrap();
+                            let qabl_info = QueryableInfo {
+                                complete: 0,
+                                distance: 0,
+                            };
+                            primitives.decl_queryable(
+                                &qable_state.reskey,
+                                qable_state.kind,
+                                &qabl_info,
+                                None,
+                            );
+                        }
+                    }
                 }
             } else {
                 // There are no more Queryables on the same ResKey.
                 let primitives = state.primitives.as_ref().unwrap();
-                primitives.forget_queryable(&qable_state.reskey, None);
+                primitives.forget_queryable(&qable_state.reskey, qable_state.kind, None);
             }
             Ok(())
         } else {
@@ -1689,12 +1773,18 @@ impl Primitives for Session {
         &self,
         _reskey: &ResKey,
         _kind: ZInt,
+        _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Decl Queryable {:?}", _reskey);
     }
 
-    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 

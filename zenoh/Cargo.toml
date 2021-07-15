@@ -32,6 +32,7 @@ readme = "README.md"
 maintenance = { status = "actively-developed" }
 
 [features]
+complete_n = []
 stats = []
 transport_tcp = []
 transport_tls = ["async-rustls"]

@@ -309,6 +309,21 @@ impl Default for SubInfo {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryableInfo {
+    pub complete: ZInt,
+    pub distance: ZInt,
+}
+
+impl Default for QueryableInfo {
+    fn default() -> QueryableInfo {
+        QueryableInfo {
+            complete: 1,
+            distance: 0,
+        }
+    }
+}
+
 pub mod queryable {
     pub const ALL_KINDS: super::ZInt = 0x01;
     pub const STORAGE: super::ZInt = 0x02;

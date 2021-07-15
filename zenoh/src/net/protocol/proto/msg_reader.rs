@@ -452,6 +452,13 @@ impl ZBuf {
         Some(info)
     }
 
+    #[inline(always)]
+    fn read_queryable_info(&mut self) -> Option<QueryableInfo> {
+        let complete = self.read_zint()?;
+        let distance = self.read_zint()?;
+        Some(QueryableInfo { complete, distance })
+    }
+
     fn read_unit(&mut self, header: u8, reliability: Reliability) -> Option<ZenohBody> {
         let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
             CongestionControl::Drop
@@ -545,16 +552,18 @@ impl ZBuf {
             }
             QUERYABLE => {
                 let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-                let kind = if imsg::has_flag(header, zmsg::flag::Q) {
-                    self.read_zint()?
+                let kind = self.read_zint()?;
+                let info = if imsg::has_flag(header, zmsg::flag::Q) {
+                    self.read_queryable_info()?
                 } else {
-                    queryable::STORAGE
+                    QueryableInfo::default()
                 };
-                Some(Declaration::Queryable(Queryable { key, kind }))
+                Some(Declaration::Queryable(Queryable { key, kind, info }))
             }
             FORGET_QUERYABLE => {
                 let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-                Some(Declaration::ForgetQueryable(ForgetQueryable { key }))
+                let kind = self.read_zint()?;
+                Some(Declaration::ForgetQueryable(ForgetQueryable { key, kind }))
             }
             unknown => {
                 log::trace!("Invalid ID for Declaration: {}", unknown);

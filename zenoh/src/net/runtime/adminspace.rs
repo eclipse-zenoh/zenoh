@@ -14,7 +14,7 @@ use super::plugins::PluginsMgr;
 use super::protocol::{
     core::{
         queryable::EVAL, rname, CongestionControl, PeerId, QueryConsolidation, QueryTarget,
-        Reliability, ResKey, SubInfo, ZInt,
+        QueryableInfo, Reliability, ResKey, SubInfo, ZInt,
     },
     io::ZBuf,
     proto::{encoding, DataInfo, RoutingContext},
@@ -83,7 +83,15 @@ impl AdminSpace {
         let primitives = runtime.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives.decl_queryable(&[&root_path, "/**"].concat().into(), EVAL, None);
+        primitives.decl_queryable(
+            &[&root_path, "/**"].concat().into(),
+            EVAL,
+            &QueryableInfo {
+                complete: 0,
+                distance: 0,
+            },
+            None,
+        );
     }
 
     pub fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
@@ -137,12 +145,18 @@ impl Primitives for AdminSpace {
         &self,
         _reskey: &ResKey,
         _kind: ZInt,
+        _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
