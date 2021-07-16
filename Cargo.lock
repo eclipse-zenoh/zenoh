@@ -2921,6 +2921,7 @@ dependencies = [
  "uuid",
  "vec_map",
  "webpki 0.22.0",
+ "zenoh-plugin-trait",
  "zenoh-util",
 ]
 
@@ -2956,6 +2957,7 @@ dependencies = [
  "serde_json",
  "tide",
  "zenoh",
+ "zenoh-plugin-trait",
 ]
 
 [[package]]
@@ -2971,8 +2973,18 @@ dependencies = [
  "libloading",
  "log",
  "zenoh",
+ "zenoh-plugin-trait",
  "zenoh-util",
  "zenoh_backend_traits",
+]
+
+[[package]]
+name = "zenoh-plugin-trait"
+version = "0.1.0-dev"
+dependencies = [
+ "clap",
+ "libloading",
+ "zenoh-util",
 ]
 
 [[package]]
@@ -3022,4 +3034,6 @@ dependencies = [
  "futures",
  "log",
  "zenoh",
+ "zenoh-plugin-trait",
+ "zenoh-util",
 ]
