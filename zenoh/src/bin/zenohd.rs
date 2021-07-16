@@ -206,10 +206,10 @@ fn main() {
 
         let (handles, failures) = plugins.start(&(runtime.clone(), args));
         for p in handles.plugins() {
-            eprintln!("loaded plugin: {}", p.name);
+            log::debug!("loaded plugin: {} from {:?}", p.name, p.path);
         }
         for f in failures {
-            eprintln!("plugin_failure: {}", f);
+            log::debug!("plugin_failure: {}", f);
         }
 
         AdminSpace::start(&runtime, handles, LONG_VERSION.clone()).await;

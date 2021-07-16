@@ -33,4 +33,5 @@ default = ["no_mangle"]
 [dependencies]
 clap = "2"
 libloading = "0.7.0"
-zenoh-util = { path="../../zenoh-util" }
+zenoh-util = { path = "../../zenoh-util" }
+log = "0.4"

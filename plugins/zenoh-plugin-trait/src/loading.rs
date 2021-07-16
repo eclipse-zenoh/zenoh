@@ -83,7 +83,7 @@ pub trait MultipleStaticPlugins: Sized {
     }
     fn get_requirements(self) -> (StaticLauncher<Self>, Self::Requirements, Vec<PluginId>) {
         let (reqs, ids, should_run) = Self::merge_requirements_and_conflicts();
-        (StaticLauncher::new(self, should_run), reqs, ids)
+        (StaticLauncher::new(self, should_run, &ids), reqs, ids)
     }
 }
 impl<Requirements: MergeRequirements, StartArgs> MultipleStaticPlugins
@@ -156,15 +156,31 @@ impl<
 pub struct StaticLauncher<StaticPlugins> {
     _static_plugins: StaticPlugins,
     should_run: Vec<Option<Incompatibility>>,
+    ids: Vec<String>,
 }
 
 type HandlesAndErrors<Requirements, StartArgs> =
     (PluginsHandles<Requirements, StartArgs>, Vec<Box<dyn Error>>);
 
 impl<StaticPlugins> StaticLauncher<StaticPlugins> {
-    fn new(static_plugins: StaticPlugins, should_run: Vec<Option<Incompatibility>>) -> Self {
+    fn new(
+        static_plugins: StaticPlugins,
+        should_run: Vec<Option<Incompatibility>>,
+        ids: &[PluginId],
+    ) -> Self {
         StaticLauncher {
             _static_plugins: static_plugins,
+            ids: ids
+                .iter()
+                .zip(&should_run)
+                .filter_map(|(id, incompat)| {
+                    if incompat.is_none() {
+                        Some(id.uid.to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
             should_run,
         }
     }
@@ -180,10 +196,11 @@ impl<StaticPlugins> StaticLauncher<StaticPlugins> {
     where
         StaticPlugins: MultipleStaticPlugins<StartArgs = StartArgs>,
     {
+        let names = self.ids;
         let (stoppers, errors) = StaticPlugins::start(&mut self.should_run.into_iter(), args);
         (
             PluginsHandles {
-                stopper: StaticPluginsHandles { stoppers },
+                stopper: StaticPluginsHandles { stoppers, names },
                 dynamic_plugins: Vec::new(),
             },
             errors,
@@ -193,6 +210,7 @@ impl<StaticPlugins> StaticLauncher<StaticPlugins> {
 
 pub struct StaticPluginsHandles {
     stoppers: Vec<BoxedAny>,
+    names: Vec<String>,
 }
 
 impl AsRef<Vec<BoxedAny>> for StaticPluginsHandles {
@@ -248,7 +266,7 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
                 .filter_map(|(p, path)| match p {
                     Ok(p) => Some(p),
                     Err(e) => {
-                        eprintln!("{:?} failed to load: {:?}", path, e);
+                        log::debug!("{:?} failed to load: {:?}", path, e);
                         None
                     }
                 }),
@@ -328,17 +346,22 @@ pub struct PluginsHandles<Requirements, StartArgs> {
 
 pub struct PluginDescription<'l> {
     pub name: &'l str,
-    pub path: &'l std::path::PathBuf,
+    pub path: &'l str,
 }
 
 impl<A, B> PluginsHandles<A, B> {
     pub fn plugins(&self) -> Vec<PluginDescription> {
-        self.dynamic_plugins
+        self.stopper
+            .names
             .iter()
-            .map(|p| PluginDescription {
-                name: &p.name,
-                path: &p.path,
+            .map(|name| PluginDescription {
+                name,
+                path: "<static-linking>",
             })
+            .chain(self.dynamic_plugins.iter().map(|p| PluginDescription {
+                name: &p.name,
+                path: &p.path.to_str().unwrap(),
+            }))
             .collect()
     }
 }
