@@ -2984,6 +2984,7 @@ version = "0.1.0-dev"
 dependencies = [
  "clap",
  "libloading",
+ "log",
  "zenoh-util",
 ]
 
