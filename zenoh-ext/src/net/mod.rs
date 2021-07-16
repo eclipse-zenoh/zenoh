@@ -15,6 +15,8 @@ pub mod group;
 pub mod publication_cache;
 pub mod querying_subscriber;
 pub mod session_ext;
-pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
+pub use publication_cache::{
+    PublicationCache, PublicationCacheBuilder, PUBLICATION_CACHE_QUERYABLE_KIND,
+};
 pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};
 pub use session_ext::SessionExt;
