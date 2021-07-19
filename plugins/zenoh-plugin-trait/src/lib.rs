@@ -58,7 +58,7 @@ impl std::fmt::Display for Incompatibility {
 
 impl Error for Incompatibility {}
 
-/// Zenoh plugins must implement [`Plugin<Requirements=Vec<clap::Arg<'static, 'static>>, StartArgs=(zenoh::net::runtime::Runtime, &clap::ArgMatches)>`](Plugin)
+/// Zenoh plugins must implement [`Plugin<Requirements=Vec<clap::Arg<'static, 'static>>, StartArgs=(zenoh::net::runtime::Runtime, clap::ArgMatches)>`](Plugin)
 pub trait Plugin: Sized + 'static {
     type Requirements;
     type StartArgs;
@@ -94,7 +94,7 @@ pub trait Plugin: Sized + 'static {
     fn start(args: &Self::StartArgs) -> Result<BoxedAny, Box<dyn Error>>;
 }
 
-type BoxedAny = Box<dyn Any + Send + Sync>;
+pub type BoxedAny = Box<dyn Any + Send + Sync>;
 
 /// Allows a [`Plugin`] instance to be stopped.
 /// Typically, you can achieve this using a one-shot channel or an [`AtomicBool`](std::sync::atomic::AtomicBool).
