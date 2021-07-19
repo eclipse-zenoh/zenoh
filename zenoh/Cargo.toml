@@ -53,7 +53,7 @@ default = [
 
 [dependencies]
 zenoh-util = { path = "../zenoh-util" }
-zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait" }
+zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }
 async-global-executor = "2.0.2"
 async-rustls = { version = "=0.2.0", optional = true }
 async-std = { version = "=1.9.0", default-features = false, features = [
