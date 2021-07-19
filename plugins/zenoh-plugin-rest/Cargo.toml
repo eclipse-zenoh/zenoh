@@ -21,6 +21,7 @@ authors = [
     "Julien Enoch <julien@enoch.fr>",
     "Olivier Hécart <olivier.hecart@adlinktech.com>",
     "Luca Cominardi <luca.cominardi@adlinktech.com>",
+    "Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
@@ -38,8 +39,8 @@ crate-type = ["cdylib", "rlib"]
 
 
 [dependencies]
-zenoh = { path="../../zenoh" }
-zenoh-plugin-trait = { path="../zenoh-plugin-trait", default=false }
+zenoh = { path = "../../zenoh" }
+zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 async-std = "=1.9.0"
 flume = "0.10.5"
 futures = "0.3.12"
