@@ -22,7 +22,8 @@ use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use zenoh::net::runtime::Runtime;
-use zenoh::{ChangeKind, Path, Properties, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
+use zenoh::transcoding::{Change, ChangeKind, Path, Value};
+use zenoh::{encoding, Properties, Session, ZError, ZErrorKind, ZResult};
 use zenoh_backend_traits::{Backend, PROP_STORAGE_PATH_EXPR};
 use zenoh_util::{zerror, LibLoader};
 
@@ -85,11 +86,11 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         runtime.get_pid_str()
     );
 
-    let zenoh = Arc::new(Zenoh::init(runtime).await);
-    let workspace = zenoh
-        .workspace(Some(Path::try_from(backends_prefix.clone()).unwrap()))
-        .await
-        .unwrap();
+    let zenoh = Arc::new(zenoh::init(runtime).await.unwrap());
+    // let workspace = zenoh
+    //     .workspace(Some(Path::try_from(backends_prefix.clone()).unwrap()))
+    //     .await
+    //     .unwrap();
 
     // Map owning handles on alive backends. Once dropped, a handle will release/stop the backend.
     let mut backend_handles: HashMap<Path, Sender<bool>> = HashMap::new();
@@ -112,14 +113,16 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                     "Add memory storage {}-{} on {}",
                     MEMORY_STORAGE_NAME, i, path_expr
                 );
-                let storage_admin_path = Path::try_from(format!(
-                    "{}/storage/{}-{}",
-                    mem_backend_path, MEMORY_STORAGE_NAME, i
-                ))
-                .unwrap();
+                let storage_admin_path =
+                    format!("{}/storage/{}-{}", mem_backend_path, MEMORY_STORAGE_NAME, i)
+                        .to_string();
                 let props = Properties::from([(PROP_STORAGE_PATH_EXPR, path_expr)].as_ref());
-                workspace
-                    .put(&storage_admin_path, Value::Properties(props))
+                zenoh
+                    .put(
+                        &storage_admin_path.into(),
+                        Value::Properties(props).encode().1,
+                    )
+                    .encoding(encoding::APP_PROPERTIES)
                     .await
                     .unwrap();
                 i += 1
@@ -128,9 +131,13 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     }
 
     // subscribe to PUT/DELETE on 'backends_prefix'/*
-    let backends_admin_selector = Selector::try_from(format!("{}/*", backends_prefix)).unwrap();
-    if let Ok(mut backends_admin) = workspace.subscribe(&backends_admin_selector).await {
-        while let Some(change) = backends_admin.next().await {
+    let backends_admin_selector = format!("{}/*", backends_prefix).to_string();
+    if let Ok(mut backends_admin) = zenoh
+        .subscribe(&backends_admin_selector.clone().into())
+        .await
+    {
+        while let Some(sample) = backends_admin.receiver().next().await {
+            let change = Change::from_sample(sample, true).unwrap();
             debug!("Received change: {:?}", change);
             match change.kind {
                 ChangeKind::Put => {
@@ -178,7 +185,7 @@ type CreateBackend<'lib> =
 async fn load_and_start_backend(
     path: &Path,
     value: Value,
-    zenoh: Arc<Zenoh>,
+    zenoh: Arc<Session>,
     lib_loader: &LibLoader,
 ) -> ZResult<Sender<bool>> {
     if let Value::Properties(props) = value {

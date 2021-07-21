@@ -15,30 +15,21 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
 use zenoh::*;
-use zenoh_ext::*;
 
 #[async_std::main]
 async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, selector, query) = parse_args();
+    let (config, selector) = parse_args();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
 
-    println!(
-        "Declaring a QueryingSubscriber on {} with an initial query on {}",
-        selector,
-        query.as_ref().unwrap_or(&selector)
-    );
-    let mut sub_builder = session.subscribe_with_query(&selector.into());
-    if let Some(reskey) = query {
-        sub_builder = sub_builder.query_reskey(reskey.into());
-    }
-    let mut subscriber = sub_builder.await.unwrap();
+    println!("Declaring Subscriber on {}", selector);
 
-    println!("Enter 'd' to issue the query again, or 'q' to quit.");
+    let mut subscriber = session.subscribe(&selector.into()).await.unwrap();
+
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
     loop {
@@ -46,21 +37,17 @@ async fn main() {
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
+                    sample.res_name, String::from_utf8_lossy(&sample.payload.contiguous()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' { break }
-                else if input[0] == b'd' {
-                    println!("Do query again...");
-                    subscriber.query().await.unwrap()
-                }
+                if input[0] == b'q' {break}
             }
         );
     }
 }
 
-fn parse_args() -> (Properties, String, Option<String>) {
+fn parse_args() -> (Properties, String) {
     let args = App::new("zenoh-net sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -75,9 +62,6 @@ fn parse_args() -> (Properties, String, Option<String>) {
         .arg(
             Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to subscribe'")
                 .default_value("/demo/example/**"),
-        )
-        .arg(
-            Arg::from_usage("-q, --query=[SELECTOR] 'The selection of resources to query on (by default it's same than 'selector' option)'"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -99,7 +83,6 @@ fn parse_args() -> (Properties, String, Option<String>) {
     }
 
     let selector = args.value_of("selector").unwrap().to_string();
-    let query = args.value_of("query").map(ToString::to_string);
 
-    (config, selector, query)
+    (config, selector)
 }

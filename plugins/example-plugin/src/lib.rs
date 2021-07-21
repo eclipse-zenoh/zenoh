@@ -17,11 +17,11 @@ use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
-use runtime::Runtime;
 use std::collections::HashMap;
-use zenoh::net::queryable::STORAGE;
-use zenoh::net::utils::resource_name;
-use zenoh::net::*;
+use zenoh::net::runtime::Runtime;
+use zenoh::queryable::STORAGE;
+use zenoh::utils::resource_name;
+use zenoh::*;
 
 #[no_mangle]
 pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
@@ -47,11 +47,11 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     debug!("Run example-plugin with storage-selector={}", selector);
 
     debug!("Declaring Subscriber on {}", selector);
-    let mut sub = session.declare_subscriber(&selector).await.unwrap();
+    let mut sub = session.subscribe(&selector).await.unwrap();
 
     debug!("Declaring Queryable on {}", selector);
     let mut queryable = session
-        .declare_queryable(&selector)
+        .register_queryable(&selector)
         .kind(STORAGE)
         .await
         .unwrap();

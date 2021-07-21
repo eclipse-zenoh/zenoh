@@ -14,70 +14,66 @@
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
+use zenoh::queryable::EVAL;
 use zenoh::*;
-use zenoh_ext::*;
 
 #[async_std::main]
 async fn main() {
-    // Initiate logging
+    // initiate logging
     env_logger::init();
 
-    let (config, selector, query) = parse_args();
+    let (config, path, value) = parse_args();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
 
-    println!(
-        "Declaring a QueryingSubscriber on {} with an initial query on {}",
-        selector,
-        query.as_ref().unwrap_or(&selector)
-    );
-    let mut sub_builder = session.subscribe_with_query(&selector.into());
-    if let Some(reskey) = query {
-        sub_builder = sub_builder.query_reskey(reskey.into());
-    }
-    let mut subscriber = sub_builder.await.unwrap();
+    println!("Declaring Queryable on {}", path);
+    let mut queryable = session
+        .register_queryable(&path.clone().into())
+        .kind(EVAL)
+        .await
+        .unwrap();
 
-    println!("Enter 'd' to issue the query again, or 'q' to quit.");
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
     loop {
         select!(
-            sample = subscriber.receiver().next().fuse() => {
-                let sample = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
+            query = queryable.receiver().next().fuse() => {
+                let query = query.unwrap();
+                println!(">> [Query handler] Handling '{}{}'", query.res_name, query.predicate);
+                query.reply(Sample{
+                    res_name: path.clone(),
+                    payload: value.as_bytes().into(),
+                    data_info: None,
+                });
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' { break }
-                else if input[0] == b'd' {
-                    println!("Do query again...");
-                    subscriber.query().await.unwrap()
-                }
+                if input[0] == b'q' {break}
             }
         );
     }
 }
 
-fn parse_args() -> (Properties, String, Option<String>) {
-    let args = App::new("zenoh-net sub example")
+fn parse_args() -> (Properties, String, String) {
+    let args = App::new("zenoh-net eval example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
+            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
                 .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
+            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
         ))
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to subscribe'")
-                .default_value("/demo/example/**"),
+            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to evaluate.'")
+                .default_value("/demo/example/zenoh-rs-eval"),
         )
         .arg(
-            Arg::from_usage("-q, --query=[SELECTOR] 'The selection of resources to query on (by default it's same than 'selector' option)'"),
+            Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")
+                .default_value("Eval from Rust!"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -98,8 +94,8 @@ fn parse_args() -> (Properties, String, Option<String>) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let selector = args.value_of("selector").unwrap().to_string();
-    let query = args.value_of("query").map(ToString::to_string);
+    let path = args.value_of("path").unwrap().to_string();
+    let value = args.value_of("value").unwrap().to_string();
 
-    (config, selector, query)
+    (config, path, value)
 }

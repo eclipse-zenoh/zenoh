@@ -22,8 +22,8 @@
 //! # Example
 //! ```
 //! use async_trait::async_trait;
-//! use zenoh::net::Sample;
-//! use zenoh::{utils, ChangeKind, Properties, Value, ZResult};
+//! use zenoh::{utils, Properties, Sample, ZResult};
+//! use zenoh::transcoding::{ChangeKind, Value};
 //! use zenoh_backend_traits::*;
 //!
 //! #[no_mangle]
@@ -143,9 +143,8 @@
 
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use std::convert::TryFrom;
-use zenoh::net::Sample;
-use zenoh::{Properties, Selector, Value, ZError, ZResult};
+use zenoh::transcoding::Value;
+use zenoh::{Properties, Sample, ZResult};
 
 pub mod utils;
 
@@ -213,13 +212,13 @@ pub trait OutgoingDataInterceptor: Send + Sync {
 /// A wrapper around the [`zenoh::net::Query`] allowing to call the
 /// OutgoingDataInterceptor (if any) before to send the reply
 pub struct Query {
-    q: zenoh::net::Query,
+    q: zenoh::Query,
     interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
 }
 
 impl Query {
     pub fn new(
-        q: zenoh::net::Query,
+        q: zenoh::Query,
         interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
     ) -> Query {
         Query { q, interceptor }
@@ -247,12 +246,5 @@ impl Query {
         };
         // Send reply
         self.q.reply_async(sample).await
-    }
-}
-
-impl TryFrom<&Query> for Selector {
-    type Error = ZError;
-    fn try_from(q: &Query) -> Result<Self, Self::Error> {
-        Selector::try_from(&q.q)
     }
 }

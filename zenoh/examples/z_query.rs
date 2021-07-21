@@ -13,55 +13,31 @@
 //
 use clap::{App, Arg};
 use futures::prelude::*;
-use futures::select;
 use zenoh::*;
-use zenoh_ext::*;
 
 #[async_std::main]
 async fn main() {
-    // Initiate logging
+    // initiate logging
     env_logger::init();
 
-    let (config, selector, query) = parse_args();
+    let (config, selector, target) = parse_args();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
 
-    println!(
-        "Declaring a QueryingSubscriber on {} with an initial query on {}",
-        selector,
-        query.as_ref().unwrap_or(&selector)
-    );
-    let mut sub_builder = session.subscribe_with_query(&selector.into());
-    if let Some(reskey) = query {
-        sub_builder = sub_builder.query_reskey(reskey.into());
-    }
-    let mut subscriber = sub_builder.await.unwrap();
-
-    println!("Enter 'd' to issue the query again, or 'q' to quit.");
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0u8];
-    loop {
-        select!(
-            sample = subscriber.receiver().next().fuse() => {
-                let sample = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.payload.to_vec()));
-            },
-
-            _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' { break }
-                else if input[0] == b'd' {
-                    println!("Do query again...");
-                    subscriber.query().await.unwrap()
-                }
-            }
-        );
+    println!("Sending Query '{}'...", selector);
+    let mut replies = session.get(&selector.into()).target(target).await.unwrap();
+    while let Some(reply) = replies.next().await {
+        println!(
+            ">> [Reply handler] received ('{}': '{}')",
+            reply.data.res_name,
+            String::from_utf8_lossy(&reply.data.payload.contiguous())
+        )
     }
 }
 
-fn parse_args() -> (Properties, String, Option<String>) {
-    let args = App::new("zenoh-net sub example")
+fn parse_args() -> (Properties, String, QueryTarget) {
+    let args = App::new("zenoh-net query example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
                 .possible_values(&["peer", "client"]),
@@ -73,11 +49,18 @@ fn parse_args() -> (Properties, String, Option<String>) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to subscribe'")
+            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to query'")
                 .default_value("/demo/example/**"),
         )
         .arg(
-            Arg::from_usage("-q, --query=[SELECTOR] 'The selection of resources to query on (by default it's same than 'selector' option)'"),
+            Arg::from_usage("-k, --kind=[KIND] 'The KIND of queryables to query'")
+                .possible_values(&["ALL_KINDS", "STORAGE", "EVAL"])
+                .default_value("ALL_KINDS"),
+        )
+        .arg(
+            Arg::from_usage("-t, --target=[TARGET] 'The target queryables of the query'")
+                .possible_values(&["ALL", "BEST_MATCHING", "ALL_COMPLETE", "NONE"])
+                .default_value("ALL"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -99,7 +82,19 @@ fn parse_args() -> (Properties, String, Option<String>) {
     }
 
     let selector = args.value_of("selector").unwrap().to_string();
-    let query = args.value_of("query").map(ToString::to_string);
 
-    (config, selector, query)
+    let kind = match args.value_of("kind") {
+        Some("STORAGE") => queryable::STORAGE,
+        Some("EVAL") => queryable::EVAL,
+        _ => queryable::ALL_KINDS,
+    };
+
+    let target = match args.value_of("target") {
+        Some("BEST_MATCHING") => Target::BestMatching,
+        Some("ALL_COMPLETE") => Target::AllComplete,
+        Some("NONE") => Target::None,
+        _ => Target::All,
+    };
+
+    (config, selector, QueryTarget { kind, target })
 }

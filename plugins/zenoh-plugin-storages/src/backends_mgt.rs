@@ -20,7 +20,8 @@ use futures::select;
 use log::{debug, error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use zenoh::{ChangeKind, Path, PathExpr, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
+use zenoh::transcoding::{ChangeKind, ChangeReceiver, GetRequestStream, Path, PathExpr, Value};
+use zenoh::{Session, ZError, ZErrorKind, ZResult};
 use zenoh_backend_traits::{
     IncomingDataInterceptor, OutgoingDataInterceptor, PROP_STORAGE_PATH_EXPR,
 };
@@ -29,7 +30,7 @@ use zenoh_util::{zerror, zerror2};
 pub(crate) async fn start_backend(
     backend: Box<dyn zenoh_backend_traits::Backend>,
     admin_path: Path,
-    zenoh: Arc<Zenoh>,
+    zenoh: Arc<Session>,
 ) -> ZResult<Sender<bool>> {
     let backend_name = admin_path.clone();
     trace!("Starting backend {}", backend_name);
@@ -40,25 +41,27 @@ pub(crate) async fn start_backend(
     let (stop_tx, stop_rx) = bounded::<bool>(1);
 
     task::spawn(async move {
-        let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
+        // let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
         // admin_path is "/@/.../backend/<beid>"
         // answer to GET on 'admin_path'
-        let mut backend_admin = match workspace.register_eval(&PathExpr::from(&admin_path)).await {
-            Ok(backend_admin) => backend_admin,
-            Err(e) => {
-                error!("Error starting backend {} : {}", admin_path, e);
-                return;
-            }
-        };
+        let mut backend_admin: GetRequestStream =
+            match zenoh.register_queryable(&(&admin_path).into()).await {
+                Ok(backend_admin) => backend_admin.into(),
+                Err(e) => {
+                    error!("Error starting backend {} : {}", admin_path, e);
+                    return;
+                }
+            };
         // subscribe to PUT/DELETE on 'admin_path'/storage/*
-        let storages_admin_selector = Selector::try_from("storage/*").unwrap();
-        let mut storages_admin = match workspace.subscribe(&storages_admin_selector).await {
-            Ok(storages_admin) => storages_admin,
-            Err(e) => {
-                error!("Error starting backend {} : {}", admin_path, e);
-                return;
-            }
-        };
+        let storages_admin_selector = "storage/*".to_string();
+        let mut storages_admin: ChangeReceiver =
+            match zenoh.subscribe(&storages_admin_selector.into()).await {
+                Ok(storages_admin) => storages_admin.into(),
+                Err(e) => {
+                    error!("Error starting backend {} : {}", admin_path, e);
+                    return;
+                }
+            };
 
         // now that the backend is ready to receive GET/PUT/DELETE,
         // unblock the start_backend() operation below
@@ -140,7 +143,7 @@ async fn create_and_start_storage(
     backend: &mut Box<dyn zenoh_backend_traits::Backend>,
     in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
     out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
-    zenoh: Arc<Zenoh>,
+    zenoh: Arc<Session>,
 ) -> ZResult<Sender<bool>> {
     trace!("Create storage {}", admin_path);
     if let Value::Properties(props) = value {

@@ -14,7 +14,7 @@
 
 //! Some useful operations for the zenoh API.
 
-use crate::{Properties, Timestamp, TimestampId, Value};
+use crate::{transcoding::Value, Properties, Timestamp, TimestampId};
 
 /// Generates a reception [`Timestamp`] with id=0x00.  
 /// This operation should be called if a timestamp is required for an incoming [`zenoh::net::Sample`](crate::net::Sample)
@@ -39,4 +39,9 @@ pub fn properties_to_json_value(props: &Properties) -> Value {
         .collect::<serde_json::map::Map<String, serde_json::Value>>();
     let json_val = serde_json::Value::Object(json_map);
     Value::Json(json_val.to_string())
+}
+
+pub mod resource_name {
+    pub use super::super::net::protocol::core::rname::include;
+    pub use super::super::net::protocol::core::rname::intersect;
 }

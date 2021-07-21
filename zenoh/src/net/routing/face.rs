@@ -99,12 +99,12 @@ impl Primitives for Face {
     fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
-        declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix);
+        register_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix);
     }
 
     fn forget_resource(&self, rid: ZInt) {
         let mut tables = zwrite!(self.tables);
-        undeclare_resource(&mut tables, &mut self.state.clone(), rid);
+        unregister_resource(&mut tables, &mut self.state.clone(), rid);
     }
 
     fn decl_subscriber(

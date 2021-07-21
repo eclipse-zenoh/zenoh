@@ -515,7 +515,7 @@ impl Resource {
     }
 }
 
-pub fn declare_resource(
+pub fn register_resource(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     rid: ZInt,
@@ -568,7 +568,7 @@ pub fn declare_resource(
     }
 }
 
-pub fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
+pub fn unregister_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
     match get_mut_unchecked(face).remote_mappings.remove(&rid) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),

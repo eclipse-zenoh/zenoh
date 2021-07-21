@@ -1,8 +1,8 @@
 use async_std::sync::Arc;
 use clap::{App, Arg};
 use std::time::Duration;
-use zenoh::{net::*, Properties};
-use zenoh_ext::net::group::*;
+use zenoh::*;
+use zenoh_ext::group::*;
 
 #[async_std::main]
 async fn main() {

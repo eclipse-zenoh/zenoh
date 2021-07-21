@@ -17,9 +17,10 @@ use log::{debug, trace, warn};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use zenoh::net::utils::resource_name;
-use zenoh::net::Sample;
-use zenoh::{utils, ChangeKind, Properties, Timestamp, Value, ZResult};
+use zenoh::transcoding::{ChangeKind, Value};
+use zenoh::utils::resource_name;
+use zenoh::Sample;
+use zenoh::{utils, Properties, Timestamp, ZResult};
 use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 

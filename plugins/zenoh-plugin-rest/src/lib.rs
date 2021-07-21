@@ -16,14 +16,14 @@ use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use http_types::Method;
-use runtime::Runtime;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::net::*;
-use zenoh::{Change, Selector, Value};
+use zenoh::net::runtime::Runtime;
+use zenoh::transcoding::*;
+use zenoh::*;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -125,7 +125,7 @@ async fn to_html(results: ReplyReceiver) -> String {
 }
 
 fn enc_from_mime(mime: Option<Mime>) -> ZInt {
-    use zenoh::net::encoding::*;
+    use zenoh::encoding::*;
     match mime {
         Some(mime) => match from_str(mime.essence()) {
             Ok(encoding) => encoding,
@@ -221,7 +221,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let mut sub = req.state().0.declare_subscriber(&resource).await.unwrap();
+                    let mut sub = req.state().0.subscribe(&resource).await.unwrap();
                     loop {
                         let sample = sub.receiver().next().await.unwrap();
                         let send = async {
@@ -242,7 +242,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            if let Err(e) = sub.undeclare().await {
+                            if let Err(e) = sub.unregister().await {
                                 log::error!("Error undeclaring subscriber: {}", e);
                             }
                             break;
@@ -262,7 +262,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         match req
             .state()
             .0
-            .query(&resource)
+            .get(&resource)
             .predicate(&selector.predicate)
             .consolidation(consolidation)
             .await
@@ -300,7 +300,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             match req
                 .state()
                 .0
-                .write(&resource, bytes.into())
+                .put(&resource, bytes.into())
                 .encoding(enc_from_mime(req.content_type()))
                 .kind(method_to_kind(req.method()))
                 .await

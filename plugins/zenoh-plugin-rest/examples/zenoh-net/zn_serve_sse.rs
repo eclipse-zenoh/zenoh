@@ -14,9 +14,8 @@
 
 use clap::{App, Arg};
 use futures::prelude::*;
-use zenoh::net::queryable::EVAL;
-use zenoh::net::*;
-use zenoh::Properties;
+use zenoh::queryable::EVAL;
+use zenoh::*;
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -45,7 +44,7 @@ async fn main() {
 
     println!("Declaring Queryable on {}", path);
     let mut queryable = session
-        .declare_queryable(&path.into())
+        .register_queryable(&path.into())
         .kind(EVAL)
         .await
         .unwrap();
@@ -68,11 +67,11 @@ async fn main() {
     let event_path = [path, "/event"].concat();
 
     print!("Declaring Resource {}", event_path);
-    let rid = session.declare_resource(&event_path.into()).await.unwrap();
+    let rid = session.register_resource(&event_path.into()).await.unwrap();
     println!(" => RId {}", rid);
 
     println!("Declaring Publisher on {}", rid);
-    let _publ = session.declare_publisher(&rid.into()).await.unwrap();
+    let _publ = session.publishing(&rid.into()).await.unwrap();
 
     println!("Writing Data periodically ('{}': '{}')...", rid, value);
 
@@ -82,7 +81,7 @@ async fn main() {
     );
     loop {
         session
-            .write(&rid.into(), value.as_bytes().into())
+            .put(&rid.into(), value.as_bytes().into())
             .encoding(encoding::TEXT_PLAIN)
             .congestion_control(CongestionControl::Block)
             .await

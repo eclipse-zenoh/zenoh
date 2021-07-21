@@ -18,8 +18,8 @@ use futures::select;
 use futures::stream::StreamExt;
 use futures::FutureExt;
 use log::{debug, error, trace, warn};
-use zenoh::net::{queryable, QueryConsolidation, QueryTarget, Target};
-use zenoh::{Path, PathExpr, ZResult, Zenoh};
+use zenoh::transcoding::{GetRequestStream, Path, PathExpr};
+use zenoh::{queryable, QueryConsolidation, QueryTarget, Session, Target, ZResult};
 use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
 
 pub(crate) async fn start_storage(
@@ -28,20 +28,14 @@ pub(crate) async fn start_storage(
     path_expr: PathExpr,
     in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
     out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
-    zenoh: Arc<Zenoh>,
+    zenoh: Arc<Session>,
 ) -> ZResult<Sender<bool>> {
     debug!("Start storage {} on {}", admin_path, path_expr);
 
     let (tx, rx) = bounded::<bool>(1);
     task::spawn(async move {
-        let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
-
         // subscribe on path_expr
-        let mut storage_sub = match workspace
-            .session()
-            .declare_subscriber(&path_expr.to_string().into())
-            .await
-        {
+        let mut storage_sub = match zenoh.subscribe(&path_expr.to_string().into()).await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_path, e);
@@ -55,9 +49,8 @@ pub(crate) async fn start_storage(
             kind: queryable::STORAGE,
             target: Target::All,
         };
-        let mut replies = match workspace
-            .session()
-            .query(&path_expr.to_string().into())
+        let mut replies = match zenoh
+            .get(&path_expr.to_string().into())
             .predicate("?(starttime=0)")
             .target(query_target)
             .consolidation(QueryConsolidation::none())
@@ -88,18 +81,18 @@ pub(crate) async fn start_storage(
 
         // admin_path is "/@/.../storage/<stid>"
         // answer to GET on 'admin_path'
-        let mut storage_admin = match workspace.register_eval(&PathExpr::from(&admin_path)).await {
-            Ok(storages_admin) => storages_admin,
-            Err(e) => {
-                error!("Error starting storage {} : {}", admin_path, e);
-                return;
-            }
-        };
+        let mut storage_admin: GetRequestStream =
+            match zenoh.register_queryable(&(&admin_path).into()).await {
+                Ok(storages_admin) => storages_admin.into(),
+                Err(e) => {
+                    error!("Error starting storage {} : {}", admin_path, e);
+                    return;
+                }
+            };
 
         // answer to queries on path_expr
-        let mut storage_queryable = match workspace
-            .session()
-            .declare_queryable(&path_expr.to_string().into())
+        let mut storage_queryable = match zenoh
+            .register_queryable(&path_expr.into())
             .kind(queryable::STORAGE)
             .await
         {

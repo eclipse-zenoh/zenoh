@@ -14,7 +14,7 @@
 
 //! Some useful functions for Backend/Storage implementations.
 
-use zenoh::net::utils::resource_name::*;
+use zenoh::utils::resource_name::*;
 
 /// Returns the longest prefix in a Path expressions that doesn't contain any '*' character.  
 /// This would be the common prefix of all keys stored in a storage using this Path expression.
