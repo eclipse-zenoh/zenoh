@@ -102,11 +102,11 @@ enum StoredValue {
 impl StoredValue {
     fn ts(&self) -> &Timestamp {
         match self {
-            Present { ts, sample: _ } => &ts,
+            Present { ts, sample: _ } => ts,
             Removed {
                 ts,
                 cleanup_handle: _,
-            } => &ts,
+            } => ts,
         }
     }
 }

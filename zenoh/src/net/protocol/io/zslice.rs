@@ -87,7 +87,7 @@ impl Index<usize> for ZSliceBuffer {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
-        &(&self.deref())[index]
+        &(self.deref())[index]
     }
 }
 
@@ -95,7 +95,7 @@ impl Index<Range<usize>> for ZSliceBuffer {
     type Output = [u8];
 
     fn index(&self, range: Range<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
@@ -103,15 +103,15 @@ impl Index<RangeFrom<usize>> for ZSliceBuffer {
     type Output = [u8];
 
     fn index(&self, range: RangeFrom<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
 impl Index<RangeFull> for ZSliceBuffer {
     type Output = [u8];
 
-    fn index(&self, range: RangeFull) -> &Self::Output {
-        &(&self.deref())[range]
+    fn index(&self, _range: RangeFull) -> &Self::Output {
+        self.deref()
     }
 }
 
@@ -119,7 +119,7 @@ impl Index<RangeInclusive<usize>> for ZSliceBuffer {
     type Output = [u8];
 
     fn index(&self, range: RangeInclusive<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
@@ -127,7 +127,7 @@ impl Index<RangeTo<usize>> for ZSliceBuffer {
     type Output = [u8];
 
     fn index(&self, range: RangeTo<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
@@ -135,7 +135,7 @@ impl Index<RangeToInclusive<usize>> for ZSliceBuffer {
     type Output = [u8];
 
     fn index(&self, range: RangeToInclusive<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
@@ -283,7 +283,7 @@ impl ZSlice {
         match &self.buf {
             ZSliceBuffer::ShmInfo(info) => {
                 // Deserialize the shmb info into shm buff
-                let shmbinfo = SharedMemoryBufInfo::deserialize(&info)?;
+                let shmbinfo = SharedMemoryBufInfo::deserialize(info)?;
 
                 // First, try in read mode allowing concurrenct lookups
                 let r_guard = zread!(shmr);
@@ -352,7 +352,7 @@ impl Index<Range<usize>> for ZSlice {
     type Output = [u8];
 
     fn index(&self, range: Range<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
@@ -360,15 +360,15 @@ impl Index<RangeFrom<usize>> for ZSlice {
     type Output = [u8];
 
     fn index(&self, range: RangeFrom<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
 impl Index<RangeFull> for ZSlice {
     type Output = [u8];
 
-    fn index(&self, range: RangeFull) -> &Self::Output {
-        &(&self.deref())[range]
+    fn index(&self, _range: RangeFull) -> &Self::Output {
+        self.deref()
     }
 }
 
@@ -376,7 +376,7 @@ impl Index<RangeInclusive<usize>> for ZSlice {
     type Output = [u8];
 
     fn index(&self, range: RangeInclusive<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
@@ -384,7 +384,7 @@ impl Index<RangeTo<usize>> for ZSlice {
     type Output = [u8];
 
     fn index(&self, range: RangeTo<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 
@@ -392,7 +392,7 @@ impl Index<RangeToInclusive<usize>> for ZSlice {
     type Output = [u8];
 
     fn index(&self, range: RangeToInclusive<usize>) -> &Self::Output {
-        &(&self.deref())[range]
+        &(self.deref())[range]
     }
 }
 

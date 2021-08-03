@@ -238,7 +238,7 @@ impl Zenoh {
     /// ```
     pub fn workspace(&self, prefix: Option<Path>) -> impl ZFuture<Output = ZResult<Workspace<'_>>> {
         debug!("New workspace with prefix: {:?}", prefix);
-        Workspace::new(&self, prefix)
+        Workspace::new(self, prefix)
     }
 
     /// Closes the zenoh API and the associated zenoh-net session.

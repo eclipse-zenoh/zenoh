@@ -43,7 +43,7 @@ impl Path {
         let p = RE.replace_all(path, "/");
         if p.len() > 1 {
             // remove last '/' if any and return as String
-            p.strip_suffix("/").unwrap_or(&p).to_string()
+            p.strip_suffix('/').unwrap_or(&p).to_string()
         } else {
             p.to_string()
         }
@@ -52,13 +52,13 @@ impl Path {
     /// Creates a new Path from a String, checking its validity.  
     /// Returns `Err(`[`ZError`]`)` if not valid.
     pub fn new(p: &str) -> ZResult<Path> {
-        if !Self::is_valid(&p) {
+        if !Self::is_valid(p) {
             zerror!(ZErrorKind::InvalidPath {
                 path: p.to_string()
             })
         } else {
             Ok(Path {
-                p: Self::remove_useless_slashes(&p),
+                p: Self::remove_useless_slashes(p),
             })
         }
     }

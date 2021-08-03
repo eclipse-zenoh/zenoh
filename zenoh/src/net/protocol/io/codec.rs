@@ -64,7 +64,7 @@ impl SharedMemoryBufInfo {
     }
 
     pub fn deserialize(bs: &[u8]) -> ZResult<SharedMemoryBufInfo> {
-        match bincode::deserialize::<SharedMemoryBufInfo>(&bs) {
+        match bincode::deserialize::<SharedMemoryBufInfo>(bs) {
             Ok(info) => Ok(info),
             Err(e) => zerror!(ZErrorKind::ValueDecodingFailed {
                 descr: format!("Unable to deserialize SharedMemoryBufInfo: {}", e)
@@ -310,7 +310,7 @@ impl WBuf {
     pub fn write_locators(&mut self, locators: &[Locator]) -> bool {
         zcheck!(self.write_usize_as_zint(locators.len()));
         for l in locators {
-            zcheck!(self.write_locator(&l));
+            zcheck!(self.write_locator(l));
         }
         true
     }

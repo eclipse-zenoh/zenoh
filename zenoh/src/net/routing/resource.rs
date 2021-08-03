@@ -237,7 +237,7 @@ impl Resource {
         let mut result = from.name();
         result.push('\n');
         for child in from.childs.values() {
-            result.push_str(&Resource::print_tree(&child));
+            result.push_str(&Resource::print_tree(child));
         }
         result
     }
@@ -316,7 +316,7 @@ impl Resource {
             }
         } else {
             match &from.parent {
-                Some(parent) => Resource::get_resource(&parent, &[&from.suffix, suffix].concat()),
+                Some(parent) => Resource::get_resource(parent, &[&from.suffix, suffix].concat()),
                 None => {
                     let (chunk, rest) = match suffix[1..].find('/') {
                         Some(idx) => (&suffix[0..(idx + 1)], &suffix[(idx + 1)..]),
@@ -407,7 +407,7 @@ impl Resource {
             }
             match &prefix.parent {
                 Some(parent) => {
-                    get_best_key_(&parent, &[&prefix.suffix, suffix].concat(), sid, false)
+                    get_best_key_(parent, &[&prefix.suffix, suffix].concat(), sid, false)
                 }
                 None => (0, suffix).into(),
             }
@@ -483,11 +483,11 @@ impl Resource {
 
             for match_ in &mut matches {
                 let mut match_ = match_.upgrade().unwrap();
-                if !matches_contain(&match_.context().matches, &res) {
+                if !matches_contain(&match_.context().matches, res) {
                     get_mut_unchecked(&mut match_)
                         .context_mut()
                         .matches
-                        .push(Arc::downgrade(&res));
+                        .push(Arc::downgrade(res));
                 }
             }
             get_mut_unchecked(res).context_mut().matches = matches;
@@ -510,7 +510,7 @@ pub fn declare_resource(
     prefixid: ZInt,
     suffix: &str,
 ) {
-    match tables.get_mapping(&face, &prefixid).cloned() {
+    match tables.get_mapping(face, &prefixid).cloned() {
         Some(mut prefix) => match face.remote_mappings.get(&rid) {
             Some(res) => {
                 if res.name() != format!("{}{}", prefix.name(), suffix) {
@@ -519,7 +519,7 @@ pub fn declare_resource(
             }
             None => {
                 let mut res = Resource::make_resource(tables, &mut prefix, suffix);
-                Resource::match_resource(&tables, &mut res);
+                Resource::match_resource(tables, &mut res);
                 let mut ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)

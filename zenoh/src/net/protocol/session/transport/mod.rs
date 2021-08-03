@@ -230,7 +230,7 @@ impl SessionTransport {
             }
 
             // Remove the link from the channel
-            self.del_link(&link).await?;
+            self.del_link(link).await?;
         }
 
         Ok(())

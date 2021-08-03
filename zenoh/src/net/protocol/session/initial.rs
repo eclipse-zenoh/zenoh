@@ -129,7 +129,7 @@ async fn open_send_init_syn(
     let mut auth = PeerAuthenticatorOutput::default();
     for pa in manager.config.peer_authenticator.iter() {
         let ps = pa
-            .get_init_syn_properties(&auth_link, &manager.config.pid)
+            .get_init_syn_properties(auth_link, &manager.config.pid)
             .await
             .map_err(|e| (e, None))?;
         auth = auth.merge(ps);
@@ -272,7 +272,7 @@ async fn open_recv_init_ack(
     for pa in manager.config.peer_authenticator.iter() {
         let ps = pa
             .handle_init_ack(
-                &auth_link,
+                auth_link,
                 &init_ack_pid,
                 sn_resolution,
                 &init_ack_properties,
@@ -401,7 +401,7 @@ async fn open_recv_open_ack(
     };
     for pa in manager.config.peer_authenticator.iter() {
         let _ = pa
-            .handle_open_ack(&auth_link, &opean_ack_properties)
+            .handle_open_ack(auth_link, &opean_ack_properties)
             .await
             .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
     }
@@ -479,7 +479,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         let _ = transport.add_link(link.clone())?;
 
         // Start the TX loop
-        let _ = transport.start_tx(&link, keep_alive, manager.config.batch_size)?;
+        let _ = transport.start_tx(link, keep_alive, manager.config.batch_size)?;
 
         // Assign a callback if the session is new
         loop {
@@ -502,7 +502,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         }
 
         // Start the RX loop
-        let _ = transport.start_rx(&link, info.lease)?;
+        let _ = transport.start_rx(link, info.lease)?;
     }
     drop(a_guard);
 
@@ -608,7 +608,7 @@ async fn accept_recv_init_syn(
     for pa in manager.config.peer_authenticator.iter() {
         let ps = pa
             .handle_init_syn(
-                &auth_link,
+                auth_link,
                 &init_syn_pid,
                 init_syn_sn_resolution,
                 &init_syn_properties,
@@ -805,7 +805,7 @@ async fn accept_recv_open_syn(
     };
     for pa in manager.config.peer_authenticator.iter() {
         let ps = pa
-            .handle_open_syn(&auth_link, &open_syn_properties)
+            .handle_open_syn(auth_link, &open_syn_properties)
             .await
             .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
         auth = auth.merge(ps);
@@ -959,7 +959,7 @@ async fn accept_finalize_session(
         //       session lease.
         let keep_alive = manager.config.keep_alive.min(input.lease / 4);
         // Start the TX loop
-        let _ = transport.start_tx(&link, keep_alive, manager.config.batch_size)?;
+        let _ = transport.start_tx(link, keep_alive, manager.config.batch_size)?;
 
         // Assign a callback if the session is new
         loop {
@@ -992,7 +992,7 @@ async fn accept_finalize_session(
         }
 
         // Start the RX loop
-        let _ = transport.start_rx(&link, input.lease)?;
+        let _ = transport.start_rx(link, input.lease)?;
     }
     drop(a_guard);
 

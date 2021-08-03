@@ -180,7 +180,7 @@ impl PublicationCache<'_> {
                                 }
                             } else {
                                 for (resname, queue) in cache.iter() {
-                                    if resource_name::intersect(&query.res_name, &resname) {
+                                    if resource_name::intersect(&query.res_name, resname) {
                                         for sample in queue {
                                             query.reply(sample.clone());
                                         }

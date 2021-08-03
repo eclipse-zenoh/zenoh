@@ -288,7 +288,7 @@ impl WBuf {
             zcheck!(self.write_zint(*enc));
         }
         if let Some(ts) = &info.timestamp {
-            zcheck!(self.write_timestamp(&ts));
+            zcheck!(self.write_timestamp(ts));
         }
         if let Some(pid) = &info.source_id {
             zcheck!(self.write_peerid(pid));

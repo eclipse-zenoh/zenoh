@@ -422,13 +422,13 @@ impl SessionManager {
     pub fn get_session(&self, peer: &PeerId) -> Option<Session> {
         zlock!(self.sessions)
             .get(peer)
-            .map(|t| Session::new(Arc::downgrade(&t)))
+            .map(|t| Session::new(Arc::downgrade(t)))
     }
 
     pub fn get_sessions(&self) -> Vec<Session> {
         zlock!(self.sessions)
             .values()
-            .map(|t| Session::new(Arc::downgrade(&t)))
+            .map(|t| Session::new(Arc::downgrade(t)))
             .collect()
     }
 
@@ -474,7 +474,7 @@ impl SessionManager {
                 return zerror!(ZErrorKind::Other { descr: e });
             }
 
-            return Ok(Session::new(Arc::downgrade(&session)));
+            return Ok(Session::new(Arc::downgrade(session)));
         }
 
         // Then verify that we haven't reached the session number limit
@@ -536,7 +536,7 @@ impl SessionManager {
         let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
         let ps = self.config.locator_property.get(&locator.get_proto());
         // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(&locator, ps).await?;
+        let link = manager.new_link(locator, ps).await?;
         // Open the link
         super::initial::open_link(self, &link).await
     }
