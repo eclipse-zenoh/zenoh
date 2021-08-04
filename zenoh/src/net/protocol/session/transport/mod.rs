@@ -18,18 +18,18 @@ mod seq_num;
 mod tx;
 
 use super::core;
-use super::core::{PeerId, Reliability, WhatAmI, ZInt};
+use super::core::{PeerId, Priority, Reliability, WhatAmI, ZInt};
 use super::io;
 use super::link::Link;
 use super::proto;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session;
-use super::session::defaults::ZN_QUEUE_PRIO_DATA;
 use super::session::{SessionEventHandler, SessionManager};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use defragmentation::*;
 use link::*;
 pub(super) use seq_num::*;
+use std::convert::TryInto;
 use std::sync::{Arc, Mutex, RwLock};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
@@ -52,17 +52,31 @@ macro_rules! zlinkindex {
     };
 }
 
-pub(crate) struct SessionTransportChannel {
+#[derive(Debug)]
+pub(crate) struct SessionTransportChannelTx {
+    pub(crate) sn: SeqNumGenerator,
+}
+
+impl SessionTransportChannelTx {
+    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SessionTransportChannelTx {
+        SessionTransportChannelTx {
+            sn: SeqNumGenerator::new(initial_sn, sn_resolution),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SessionTransportChannelRx {
     pub(crate) sn: SeqNum,
     pub(crate) defrag: DefragBuffer,
 }
 
-impl SessionTransportChannel {
+impl SessionTransportChannelRx {
     pub(crate) fn new(
-        reliability: Reliability,
         initial_sn: ZInt,
         sn_resolution: ZInt,
-    ) -> SessionTransportChannel {
+        reliability: Reliability,
+    ) -> SessionTransportChannelRx {
         // Set the sequence number in the state as it had
         // received a message with initial_sn - 1
         let last_initial_sn = if initial_sn == 0 {
@@ -71,9 +85,65 @@ impl SessionTransportChannel {
             initial_sn - 1
         };
 
-        SessionTransportChannel {
+        SessionTransportChannelRx {
             sn: SeqNum::new(last_initial_sn, sn_resolution),
             defrag: DefragBuffer::new(initial_sn, sn_resolution, reliability),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SessionTransportConduitTx {
+    pub(crate) priority: Priority,
+    pub(crate) reliable: Arc<Mutex<SessionTransportChannelTx>>,
+    pub(crate) best_effort: Arc<Mutex<SessionTransportChannelTx>>,
+}
+
+impl SessionTransportConduitTx {
+    pub(crate) fn new(
+        priority: Priority,
+        initial_sn: ZInt,
+        sn_resolution: ZInt,
+    ) -> SessionTransportConduitTx {
+        SessionTransportConduitTx {
+            priority,
+            reliable: Arc::new(Mutex::new(SessionTransportChannelTx::new(
+                initial_sn,
+                sn_resolution,
+            ))),
+            best_effort: Arc::new(Mutex::new(SessionTransportChannelTx::new(
+                initial_sn,
+                sn_resolution,
+            ))),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SessionTransportConduitRx {
+    pub(crate) priority: Priority,
+    pub(crate) reliable: Arc<Mutex<SessionTransportChannelRx>>,
+    pub(crate) best_effort: Arc<Mutex<SessionTransportChannelRx>>,
+}
+
+impl SessionTransportConduitRx {
+    pub(crate) fn new(
+        priority: Priority,
+        initial_sn: ZInt,
+        sn_resolution: ZInt,
+    ) -> SessionTransportConduitRx {
+        SessionTransportConduitRx {
+            priority,
+            reliable: Arc::new(Mutex::new(SessionTransportChannelRx::new(
+                initial_sn,
+                sn_resolution,
+                Reliability::Reliable,
+            ))),
+            best_effort: Arc::new(Mutex::new(SessionTransportChannelRx::new(
+                initial_sn,
+                sn_resolution,
+                Reliability::BestEffort,
+            ))),
         }
     }
 }
@@ -91,14 +161,10 @@ pub(crate) struct SessionTransport {
     pub(super) whatami: WhatAmI,
     // The SN resolution
     pub(super) sn_resolution: ZInt,
-    // The sn generator for the TX reliable channel
-    pub(super) tx_sn_reliable: Arc<Mutex<SeqNumGenerator>>,
-    // The sn generator for the TX best_effort channel
-    pub(super) tx_sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
-    // The RX reliable channel
-    pub(super) rx_reliable: Arc<Mutex<SessionTransportChannel>>,
-    // The RX best effort channel
-    pub(super) rx_best_effort: Arc<Mutex<SessionTransportChannel>>,
+    // Tx conduits
+    pub(super) conduit_tx: Box<[SessionTransportConduitTx]>,
+    // Rx conduits
+    pub(super) conduit_rx: Box<[SessionTransportConduitRx]>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[SessionTransportLink]>>>,
     // The callback
@@ -107,6 +173,8 @@ pub(crate) struct SessionTransport {
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The session transport can do shm
     is_shm: bool,
+    // The session has priorities
+    has_priorities: bool,
 }
 
 impl SessionTransport {
@@ -118,34 +186,40 @@ impl SessionTransport {
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
         is_shm: bool,
+        has_priorities: bool,
     ) -> SessionTransport {
+        let num = if has_priorities { Priority::num() } else { 1 };
+
+        let mut conduit_tx = Vec::with_capacity(num);
+        for p in 0..num {
+            conduit_tx.push(SessionTransportConduitTx::new(
+                (p as u8).try_into().unwrap(),
+                initial_sn_tx,
+                sn_resolution,
+            ));
+        }
+
+        let mut conduit_rx = Vec::with_capacity(num);
+        for p in 0..num {
+            conduit_rx.push(SessionTransportConduitRx::new(
+                (p as u8).try_into().unwrap(),
+                initial_sn_rx,
+                sn_resolution,
+            ));
+        }
+
         SessionTransport {
             manager,
             pid,
             whatami,
             sn_resolution,
-            tx_sn_reliable: Arc::new(Mutex::new(SeqNumGenerator::new(
-                initial_sn_tx,
-                sn_resolution,
-            ))),
-            tx_sn_best_effort: Arc::new(Mutex::new(SeqNumGenerator::new(
-                initial_sn_tx,
-                sn_resolution,
-            ))),
-            rx_reliable: Arc::new(Mutex::new(SessionTransportChannel::new(
-                Reliability::Reliable,
-                initial_sn_rx,
-                sn_resolution,
-            ))),
-            rx_best_effort: Arc::new(Mutex::new(SessionTransportChannel::new(
-                Reliability::BestEffort,
-                initial_sn_rx,
-                sn_resolution,
-            ))),
+            conduit_tx: conduit_tx.into_boxed_slice(),
+            conduit_rx: conduit_rx.into_boxed_slice(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
             alive: AsyncArc::new(AsyncMutex::new(true)),
             is_shm,
+            has_priorities,
         }
     }
 
@@ -226,7 +300,7 @@ impl SessionTransport {
                 let attachment = None; // No attachment here
                 let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-                pipeline.push_session_message(msg, ZN_QUEUE_PRIO_DATA);
+                pipeline.push_session_message(msg, Priority::Background);
             }
 
             // Remove the link from the channel
@@ -254,7 +328,7 @@ impl SessionTransport {
             let attachment = None; // No attachment here
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            p.push_session_message(msg, ZN_QUEUE_PRIO_DATA);
+            p.push_session_message(msg, Priority::Background);
         }
         // Terminate and clean up the session
         self.delete().await
@@ -275,7 +349,8 @@ impl SessionTransport {
             log::trace!("Failed SHM conversion: {}", e);
             return;
         }
-        self.schedule_first_fit(message);
+        // @TODO fix priority match
+        self.schedule_first_fit(message, Priority::default());
     }
 
     #[cfg(not(feature = "zero-copy"))]
@@ -318,12 +393,8 @@ impl SessionTransport {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {
-                l.start_tx(
-                    keep_alive,
-                    batch_size,
-                    self.tx_sn_reliable.clone(),
-                    self.tx_sn_best_effort.clone(),
-                );
+                assert!(!self.conduit_tx.is_empty());
+                l.start_tx(keep_alive, batch_size, self.conduit_tx.clone());
                 Ok(())
             }
             None => {

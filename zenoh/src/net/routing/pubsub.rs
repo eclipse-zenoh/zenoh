@@ -101,7 +101,7 @@ fn propagate_sourced_subscription(
                     res,
                     src_face,
                     sub_info,
-                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -407,7 +407,7 @@ fn propagate_forget_sourced_subscription(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -703,7 +703,7 @@ pub(crate) fn pubsub_tree_change(
                                 res,
                                 None,
                                 &sub_info,
-                                Some(RoutingContext::make(tree_sid as ZInt)),
+                                Some(RoutingContext::new(tree_sid as ZInt)),
                             );
                         }
                     }
@@ -739,7 +739,7 @@ fn insert_faces_for_subs(
                                         face.clone(),
                                         reskey,
                                         if source != 0 {
-                                            Some(RoutingContext::make(source as ZInt))
+                                            Some(RoutingContext::new(source as ZInt))
                                         } else {
                                             None
                                         },

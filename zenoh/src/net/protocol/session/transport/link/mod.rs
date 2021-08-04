@@ -15,22 +15,22 @@ mod batch;
 mod pipeline;
 
 use super::super::super::link::Link;
-use super::core;
-use super::core::ZInt;
+use super::core::{Priority, ZInt};
 use super::io;
 use super::io::{ZBuf, ZSlice};
 use super::proto;
 use super::proto::SessionMessage;
 use super::session;
-use super::session::defaults::{ZN_QUEUE_PRIO_CTRL, ZN_RX_BUFF_SIZE};
-use super::{SeqNumGenerator, SessionTransport};
+use super::session::defaults::ZN_RX_BUFF_SIZE;
+use super::SessionTransport;
+use super::{core, SessionTransportConduitTx};
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
 use batch::*;
 pub(crate) use pipeline::*;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -81,16 +81,14 @@ impl SessionTransportLink {
         &mut self,
         keep_alive: ZInt,
         batch_size: usize,
-        sn_reliable: Arc<Mutex<SeqNumGenerator>>,
-        sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
+        conduit_tx: Box<[SessionTransportConduitTx]>,
     ) {
         if self.handle_tx.is_none() {
             // The pipeline
             let pipeline = Arc::new(TransmissionPipeline::new(
                 batch_size.min(self.inner.get_mtu()),
                 self.inner.is_streamed(),
-                sn_reliable,
-                sn_best_effort,
+                conduit_tx,
             ));
             self.pipeline = Some(pipeline.clone());
 
@@ -192,7 +190,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
                 let pid = None;
                 let attachment = None;
                 let message = SessionMessage::make_keep_alive(pid, attachment);
-                pipeline.push_session_message(message, ZN_QUEUE_PRIO_CTRL);
+                pipeline.push_session_message(message, Priority::Control);
             }
         }
     }

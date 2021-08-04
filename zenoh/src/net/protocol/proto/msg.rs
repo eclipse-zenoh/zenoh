@@ -45,16 +45,22 @@ pub(crate) mod imsg {
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
         // Message decorators
+        pub(crate) const PRIORITY: u8 = 0x1e;
         pub(crate) const ROUTING_CONTEXT: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
     }
 
     // Header mask
-    pub const HEADER_MASK: u8 = 0x1f;
+    pub const HEADER_BITS: u8 = 5;
+    pub const HEADER_MASK: u8 = !(0xff << HEADER_BITS);
 
     pub fn mid(header: u8) -> u8 {
         header & HEADER_MASK
+    }
+
+    pub fn flags(header: u8) -> u8 {
+        header & !HEADER_MASK
     }
 
     pub fn has_flag(byte: u8, flag: u8) -> bool {
@@ -67,7 +73,7 @@ pub(crate) mod imsg {
 }
 
 pub mod smsg {
-    use super::imsg;
+    use super::{imsg, Priority};
 
     // Session message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -86,6 +92,7 @@ pub mod smsg {
         pub const FRAME: u8 = imsg::id::FRAME;
 
         // Message decorators
+        pub const PRIORITY: u8 = imsg::id::PRIORITY;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
     }
 
@@ -118,11 +125,22 @@ pub mod smsg {
         pub const MAX_LINKS: u8 = 0x04;
         pub const EXPIRED: u8 = 0x05;
     }
+
+    pub mod priority {
+        use super::{imsg, Priority};
+
+        pub const REAL_TIME_HIGH: u8 = (Priority::RealTimeHigh as u8) << imsg::HEADER_BITS;
+        pub const REAL_TIME_LOW: u8 = (Priority::RealTimeLow as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
+        pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
+        pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
+        pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
+    }
 }
 
 pub mod zmsg {
-    use super::imsg;
-    use super::{CongestionControl, Reliability, ZInt};
+    use super::{imsg, CongestionControl, Priority, Reliability, ZInt};
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -160,7 +178,7 @@ pub mod zmsg {
 
     // Options used for DataInfo
     pub mod data {
-        use super::ZInt;
+        use super::{imsg, Priority, ZInt};
 
         pub mod info {
             use super::ZInt;
@@ -168,12 +186,25 @@ pub mod zmsg {
             pub const KIND: ZInt = 1 << 0; // 0x01
             pub const ENC: ZInt = 1 << 1; // 0x02
             pub const TS: ZInt = 1 << 2; // 0x04
+            pub const QOS: ZInt = 1 << 3; // 0x08
             #[cfg(feature = "zero-copy")]
             pub const SLICED: ZInt = 1 << 5; // 0x20
             pub const SRCID: ZInt = 1 << 7; // 0x80
             pub const SRCSN: ZInt = 1 << 8; // 0x100
             pub const RTRID: ZInt = 1 << 9; // 0x200
             pub const RTRSN: ZInt = 1 << 10; // 0x400
+        }
+
+        pub mod qos {
+            use super::{imsg, Priority};
+
+            pub const REAL_TIME_HIGH: u8 = (Priority::RealTimeHigh as u8) << imsg::HEADER_BITS;
+            pub const REAL_TIME_LOW: u8 = (Priority::RealTimeLow as u8) << imsg::HEADER_BITS;
+            pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
+            pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
+            pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
+            pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
+            pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
         }
     }
 
@@ -298,7 +329,7 @@ impl Header for Attachment {
 
 impl Attachment {
     #[inline(always)]
-    pub fn make(buffer: ZBuf) -> Attachment {
+    pub fn new(buffer: ZBuf) -> Attachment {
         Attachment { buffer }
     }
 }
@@ -350,7 +381,7 @@ impl Header for ReplyContext {
 impl ReplyContext {
     // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
     #[inline(always)]
-    pub fn make(qid: ZInt, replier: Option<ReplierInfo>) -> ReplyContext {
+    pub fn new(qid: ZInt, replier: Option<ReplierInfo>) -> ReplyContext {
         ReplyContext { qid, replier }
     }
 
@@ -387,8 +418,41 @@ impl Header for RoutingContext {
 
 impl RoutingContext {
     #[inline(always)]
-    pub fn make(tree_id: ZInt) -> RoutingContext {
+    pub fn new(tree_id: ZInt) -> RoutingContext {
         RoutingContext { tree_id }
+    }
+}
+
+/// -- PriorityId decorator
+///
+/// ```text
+/// The **PriorityId** is a message decorator containing
+/// informations for quality of service.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// | ID  | PrioID  |
+/// +-+-+-+---------+
+///
+/// - ID == 0 is reserved
+///
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PriorityId {
+    pub id: Priority,
+}
+
+impl Header for PriorityId {
+    #[inline(always)]
+    fn header(&self) -> u8 {
+        smsg::id::PRIORITY | ((self.id as u8) << imsg::HEADER_BITS)
+    }
+}
+
+impl PriorityId {
+    #[inline(always)]
+    pub fn new(id: Priority) -> PriorityId {
+        PriorityId { id }
     }
 }
 
@@ -405,14 +469,15 @@ impl RoutingContext {
 /// -  0: Payload kind
 /// -  1: Payload encoding
 /// -  2: Payload timestamp
-/// -  3: Payload source_id
-/// -  4: Payload source_sn
+/// -  3: QoS
+/// -  4: Reserved
 /// -  5: Payload is sliced
 /// -  6: Reserved
-/// -  7: Reserved
-/// -  8: First router_id
-/// -  9: First router_sn
-/// - 10-63: Reserved
+/// -  7: Payload source_id
+/// -  8: Payload source_sn
+/// -  9: First router_id
+/// - 10: First router_sn
+/// - 11-63: Reserved
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+---------+
@@ -423,6 +488,8 @@ impl RoutingContext {
 /// ~   encoding    ~ if options & (1 << 1)
 /// +---------------+
 /// ~   timestamp   ~ if options & (1 << 2)
+/// +---------------+
+/// | qos | reserved| if options & (1 << 3)
 /// +---------------+
 /// ~   source_id   ~ if options & (1 << 7)
 /// +---------------+
@@ -1608,7 +1675,7 @@ impl Header for Close {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sync {
-    pub ch: Channel,
+    pub reliability: Reliability,
     pub sn: ZInt,
     pub count: Option<ZInt>,
 }
@@ -1617,7 +1684,7 @@ impl Header for Sync {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::SYNC;
-        if let Channel::Reliable = self.ch {
+        if let Reliability::Reliable = self.reliability {
             header |= smsg::flag::R;
         }
         if self.count.is_some() {
@@ -1779,7 +1846,7 @@ impl Header for Pong {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
-    pub ch: Channel,
+    pub conduit: Conduit,
     pub sn: ZInt,
     pub payload: FramePayload,
 }
@@ -1788,7 +1855,7 @@ impl Header for Frame {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::FRAME;
-        if let Channel::Reliable = self.ch {
+        if let Reliability::Reliable = self.conduit.reliability {
             header |= smsg::flag::R;
         }
         if let FramePayload::Fragment { is_final, .. } = self.payload {
@@ -1802,9 +1869,9 @@ impl Header for Frame {
 }
 
 impl Frame {
-    pub fn make_header(ch: Channel, is_fragment: Option<bool>) -> u8 {
+    pub fn make_header(reliability: Reliability, is_fragment: Option<bool>) -> u8 {
         let mut header = smsg::id::FRAME;
-        if let Channel::Reliable = ch {
+        if let Reliability::Reliable = reliability {
             header |= smsg::flag::R;
         }
         if let Some(is_final) = is_fragment {
@@ -1977,13 +2044,17 @@ impl SessionMessage {
     }
 
     pub fn make_sync(
-        ch: Channel,
+        reliability: Reliability,
         sn: ZInt,
         count: Option<ZInt>,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         SessionMessage {
-            body: SessionBody::Sync(Sync { ch, sn, count }),
+            body: SessionBody::Sync(Sync {
+                reliability,
+                sn,
+                count,
+            }),
             attachment,
         }
     }
@@ -2021,13 +2092,17 @@ impl SessionMessage {
     }
 
     pub fn make_frame(
-        ch: Channel,
+        conduit: Conduit,
         sn: ZInt,
         payload: FramePayload,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         SessionMessage {
-            body: SessionBody::Frame(Frame { ch, sn, payload }),
+            body: SessionBody::Frame(Frame {
+                conduit,
+                sn,
+                payload,
+            }),
             attachment,
         }
     }

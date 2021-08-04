@@ -48,13 +48,16 @@ impl WBuf {
         true
     }
 
-    /*************************************/
-    /*             SESSION               */
-    /*************************************/
+    #[inline(always)]
+    fn write_deco_priority(&mut self, priority: PriorityId) -> bool {
+        self.write(priority.header())
+    }
+
     #[inline(always)]
     pub fn write_frame_header(
         &mut self,
-        ch: Channel,
+        priority: Priority,
+        reliability: Reliability,
         sn: ZInt,
         is_fragment: Option<bool>,
         attachment: Option<Attachment>,
@@ -62,10 +65,18 @@ impl WBuf {
         if let Some(attachment) = attachment {
             zcheck!(self.write_deco_attachment(&attachment));
         }
-        let header = Frame::make_header(ch, is_fragment);
+
+        if priority != Priority::default() {
+            zcheck!(self.write_deco_priority(PriorityId::new(priority)))
+        }
+
+        let header = Frame::make_header(reliability, is_fragment);
         self.write(header) && self.write_zint(sn)
     }
 
+    /*************************************/
+    /*             SESSION               */
+    /*************************************/
     pub fn write_session_message(&mut self, msg: &SessionMessage) -> bool {
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
@@ -89,6 +100,10 @@ impl WBuf {
     }
 
     fn write_frame(&mut self, frame: &Frame) -> bool {
+        if frame.conduit.priority != Priority::default() {
+            zcheck!(self.write_deco_priority(PriorityId::new(frame.conduit.priority)))
+        }
+
         zcheck!(self.write(frame.header()));
         zcheck!(self.write_zint(frame.sn));
         match &frame.payload {

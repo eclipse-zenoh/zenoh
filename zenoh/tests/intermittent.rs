@@ -31,7 +31,7 @@ use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
 
 const MSG_SIZE: usize = 8;
-const MSG_COUNT: usize = 1_000_000;
+const MSG_COUNT: usize = 100_000;
 const TIMEOUT: Duration = Duration::from_secs(300);
 const SLEEP: Duration = Duration::from_millis(100);
 const USLEEP: Duration = Duration::from_millis(1);
@@ -405,6 +405,8 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_intermittent() {
+    env_logger::init();
+
     task::block_on(async {
         zasync_executor_init!();
     });

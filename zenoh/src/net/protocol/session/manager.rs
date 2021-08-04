@@ -440,6 +440,7 @@ impl SessionManager {
         initial_sn_tx: ZInt,
         initial_sn_rx: ZInt,
         is_shm: bool,
+        has_priorities: bool,
     ) -> ZResult<Session> {
         let mut guard = zlock!(self.sessions);
 
@@ -498,6 +499,7 @@ impl SessionManager {
             initial_sn_tx,
             initial_sn_rx,
             is_shm,
+            has_priorities,
         ));
 
         // Create a weak reference to the session

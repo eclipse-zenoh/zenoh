@@ -43,7 +43,7 @@ fn attachment_from_properties(ps: &[Property]) -> ZResult<Attachment> {
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_properties(ps);
         let zbuf: ZBuf = wbuf.into();
-        let attachment = Attachment::make(zbuf);
+        let attachment = Attachment::new(zbuf);
         Ok(attachment)
     }
 }
@@ -453,6 +453,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         info.initial_sn_tx,
         info.initial_sn_rx,
         info.auth_session.is_local,
+        true, //@TODO
     );
     let session = match res {
         Ok(s) => s,
@@ -886,6 +887,7 @@ async fn accept_init_session(
             open_ack_initial_sn,
             input.initial_sn,
             input.auth_session.is_local,
+            true, // @TODO
         )
         .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
 

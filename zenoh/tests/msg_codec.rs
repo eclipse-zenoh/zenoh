@@ -67,7 +67,7 @@ fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
 }
 
 fn gen_routing_context() -> RoutingContext {
-    RoutingContext::make(gen!(ZInt))
+    RoutingContext::new(gen!(ZInt))
 }
 
 fn gen_reply_context(is_final: bool) -> ReplyContext {
@@ -80,7 +80,7 @@ fn gen_reply_context(is_final: bool) -> ReplyContext {
     } else {
         None
     };
-    ReplyContext::make(qid, replier)
+    ReplyContext::new(qid, replier)
 }
 
 fn gen_attachment() -> Attachment {
@@ -89,7 +89,7 @@ fn gen_attachment() -> Attachment {
     wbuf.write_properties(&props);
 
     let zbuf = ZBuf::from(&wbuf);
-    Attachment::make(zbuf)
+    Attachment::new(zbuf)
 }
 
 fn gen_declarations() -> Vec<Declaration> {
@@ -382,7 +382,7 @@ fn codec_close() {
 #[test]
 fn codec_sync() {
     for _ in 0..NUM_ITER {
-        let ch = [Channel::Reliable, Channel::BestEffort];
+        let ch = [Reliability::Reliable, Reliability::BestEffort];
         let count = [None, Some(gen!(ZInt))];
         let attachment = [None, Some(gen_attachment())];
 
@@ -456,6 +456,7 @@ fn codec_frame() {
     let msg_payload_count = 4;
 
     for _ in 0..NUM_ITER {
+        let priority = [Priority::default(), Priority::RealTimeHigh];
         let reliability = [Reliability::BestEffort, Reliability::Reliable];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
@@ -506,12 +507,15 @@ fn codec_frame() {
 
             for p in payload.drain(..) {
                 for a in attachment.iter() {
-                    let ch = match *rl {
-                        Reliability::Reliable => Channel::Reliable,
-                        Reliability::BestEffort => Channel::BestEffort,
-                    };
-                    let msg = SessionMessage::make_frame(ch, gen!(ZInt), p.clone(), a.clone());
-                    test_write_read_session_message(msg);
+                    for pr in priority.iter() {
+                        let conduit = Conduit {
+                            priority: *pr,
+                            reliability: *rl,
+                        };
+                        let msg =
+                            SessionMessage::make_frame(conduit, gen!(ZInt), p.clone(), a.clone());
+                        test_write_read_session_message(msg);
+                    }
                 }
             }
         }
@@ -527,11 +531,11 @@ fn codec_frame_batching() {
         let mut written: Vec<SessionMessage> = Vec::new();
 
         // Create empty frame message
-        let ch = Channel::Reliable;
+        let ct = Conduit::default();
         let payload = FramePayload::Messages { messages: vec![] };
         let sn = gen!(ZInt);
         let sattachment = None;
-        let frame = SessionMessage::make_frame(ch, sn, payload, sattachment.clone());
+        let frame = SessionMessage::make_frame(ct, sn, payload, sattachment.clone());
 
         // Write the first frame header
         assert!(wbuf.write_session_message(&frame));
@@ -539,7 +543,7 @@ fn codec_frame_batching() {
         // Create data message
         let key = ResKey::RName("test".to_string());
         let payload = ZBuf::from(vec![0u8; 1]);
-        let reliability = Reliability::Reliable;
+        let reliability = ct.reliability;
         let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
@@ -564,7 +568,7 @@ fn codec_frame_batching() {
             messages: vec![data.clone(); 1],
         };
         written.push(SessionMessage::make_frame(
-            ch,
+            ct,
             sn,
             payload,
             sattachment.clone(),
@@ -587,7 +591,7 @@ fn codec_frame_batching() {
 
         // Store the second session message written
         let payload = FramePayload::Messages { messages };
-        written.push(SessionMessage::make_frame(ch, sn, payload, sattachment));
+        written.push(SessionMessage::make_frame(ct, sn, payload, sattachment));
 
         // Deserialize from the buffer
         let mut zbuf = ZBuf::from(&wbuf);

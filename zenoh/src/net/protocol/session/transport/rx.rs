@@ -11,9 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{Channel, PeerId, ZInt};
-use super::proto::{Close, Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
-use super::{Link, SessionTransport, SessionTransportChannel};
+use super::core::{PeerId, Reliability, ZInt};
+use super::proto::{
+    Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage, ZenohMessage,
+};
+use super::{Link, SessionTransport, SessionTransportChannelRx};
 use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -87,7 +89,7 @@ impl SessionTransport {
         &self,
         sn: ZInt,
         payload: FramePayload,
-        mut guard: MutexGuard<'_, SessionTransportChannel>,
+        mut guard: MutexGuard<'_, SessionTransportChannelRx>,
     ) -> ZResult<()> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
@@ -137,15 +139,35 @@ impl SessionTransport {
     pub(super) fn receive_message(&self, msg: SessionMessage, link: &Link) -> ZResult<()> {
         // Process the received message
         match msg.body {
-            SessionBody::Frame(Frame { ch, sn, payload }) => match ch {
-                Channel::Reliable => self.handle_frame(sn, payload, zlock!(self.rx_reliable)),
-                Channel::BestEffort => self.handle_frame(sn, payload, zlock!(self.rx_best_effort)),
-            },
+            SessionBody::Frame(Frame {
+                conduit,
+                sn,
+                payload,
+            }) => {
+                let c = self
+                    .conduit_rx
+                    .get(conduit.priority as usize)
+                    .ok_or_else(|| {
+                        let e = format!(
+                            "Session: {}. Unknown conduit: {:?}.",
+                            self.pid, conduit.priority
+                        );
+                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
+                    })?;
+
+                match conduit.reliability {
+                    Reliability::Reliable => self.handle_frame(sn, payload, zlock!(c.reliable)),
+                    Reliability::BestEffort => {
+                        self.handle_frame(sn, payload, zlock!(c.best_effort))
+                    }
+                }
+            }
             SessionBody::Close(Close {
                 pid,
                 reason,
                 link_only,
             }) => self.handle_close(link, pid, reason, link_only),
+            SessionBody::KeepAlive(KeepAlive { .. }) => Ok(()),
             _ => {
                 log::debug!(
                     "Session: {}. Message handling not implemented: {:?}",

@@ -180,7 +180,7 @@ impl Primitives for Mux {
             zmsg::default_congestion_control::REPLY,
             data_info,
             None,
-            Some(ReplyContext::make(
+            Some(ReplyContext::new(
                 qid,
                 Some(ReplierInfo {
                     kind: replier_kind,
@@ -195,7 +195,7 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
             zmsg::default_reliability::REPLY,
             zmsg::default_congestion_control::REPLY,
-            Some(ReplyContext::make(qid, None)),
+            Some(ReplyContext::new(qid, None)),
             None,
         ));
     }

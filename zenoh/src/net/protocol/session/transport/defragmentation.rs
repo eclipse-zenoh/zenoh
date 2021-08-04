@@ -18,6 +18,7 @@ use super::SeqNum;
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
+#[derive(Debug)]
 pub(crate) struct DefragBuffer {
     // Keep track of the next expected fragment
     sn: SeqNum,

@@ -11,22 +11,23 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::Channel;
+use super::core::{Priority, Reliability};
 use super::io::WBuf;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session::defaults::{
     // Constants
-    ZN_QUEUE_NUM,
-    ZN_QUEUE_PRIO_CTRL,
-    ZN_QUEUE_PRIO_DATA,
-    ZN_QUEUE_PRIO_RETX,
     ZN_QUEUE_PULL_BACKOFF,
     // Configurable constants
+    ZN_QUEUE_SIZE_BACKGROUND,
     ZN_QUEUE_SIZE_CTRL,
-    ZN_QUEUE_SIZE_DATA,
-    ZN_QUEUE_SIZE_RETX,
+    ZN_QUEUE_SIZE_DATA_HIGH,
+    ZN_QUEUE_SIZE_DATA_LOW,
+    ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
+    ZN_QUEUE_SIZE_INTERACTIVE_LOW,
+    ZN_QUEUE_SIZE_REAL_TIME_HIGH,
+    ZN_QUEUE_SIZE_REAL_TIME_LOW,
 };
-use super::{SeqNumGenerator, SerializationBatch};
+use super::{SerializationBatch, SessionTransportConduitTx};
 use async_std::task;
 use std::collections::VecDeque;
 use std::fmt;
@@ -95,8 +96,7 @@ impl StageIn {
         capacity: usize,
         batch_size: usize,
         is_streamed: bool,
-        sn_reliable: Arc<Mutex<SeqNumGenerator>>,
-        sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
+        conduit: SessionTransportConduitTx,
         bytes_topull: Arc<AtomicUsize>,
     ) -> StageIn {
         let mut inner = VecDeque::<SerializationBatch>::with_capacity(capacity);
@@ -104,8 +104,7 @@ impl StageIn {
             inner.push_back(SerializationBatch::new(
                 batch_size,
                 is_streamed,
-                sn_reliable.clone(),
-                sn_best_effort.clone(),
+                conduit.clone(),
             ));
         }
 
@@ -190,12 +189,10 @@ impl StageRefill {
 
 /// Link queue
 pub(crate) struct TransmissionPipeline {
-    // Active or not
+    // Status variable of transmission pipeline
     active: Arc<AtomicBool>,
-    // The sn generator for the reliable channel
-    sn_reliable: Arc<Mutex<SeqNumGenerator>>,
-    // The sn generator for the best effor channel
-    sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
+    // The conduit TX containing the SN generators
+    conduit: Box<[SessionTransportConduitTx]>,
     // Each priority queue has its own Mutex
     stage_in: Box<[Arc<Mutex<StageIn>>]>,
     // Amount of bytes available in each stage IN priority queue
@@ -219,73 +216,63 @@ impl TransmissionPipeline {
     pub(crate) fn new(
         batch_size: usize,
         is_streamed: bool,
-        sn_reliable: Arc<Mutex<SeqNumGenerator>>,
-        sn_best_effort: Arc<Mutex<SeqNumGenerator>>,
+        conduit: Box<[SessionTransportConduitTx]>,
     ) -> TransmissionPipeline {
         // Conditional variables
         let mut cond_canrefill = vec![];
-        cond_canrefill.resize_with(ZN_QUEUE_NUM, || Arc::new(Condvar::new()));
+        cond_canrefill.resize_with(conduit.len(), || Arc::new(Condvar::new()));
         let cond_canpull = AsyncCondvar::new();
 
-        // Build the stage EMPTY
-        let mut stage_refill = Vec::with_capacity(ZN_QUEUE_NUM);
-        stage_refill.push(Arc::new(Mutex::new(StageRefill::new(*ZN_QUEUE_SIZE_CTRL))));
-        stage_refill.push(Arc::new(Mutex::new(StageRefill::new(*ZN_QUEUE_SIZE_RETX))));
-        stage_refill.push(Arc::new(Mutex::new(StageRefill::new(*ZN_QUEUE_SIZE_DATA))));
+        // Build the stage REFILL
+        let mut stage_refill = Vec::with_capacity(conduit.len());
+        for c in conduit.iter() {
+            stage_refill.push(Arc::new(Mutex::new(StageRefill::new(c.priority as usize))));
+        }
 
         // Batches to be pulled from stage OUT
         let mut batches_out = vec![];
-        batches_out.resize_with(ZN_QUEUE_NUM, || Arc::new(AtomicUsize::new(0)));
+        batches_out.resize_with(conduit.len(), || Arc::new(AtomicUsize::new(0)));
+
         // Build the stage OUT
-        let mut stage_out = Vec::with_capacity(ZN_QUEUE_NUM);
-        stage_out.push(StageOut::new(
-            *ZN_QUEUE_SIZE_CTRL,
-            batches_out[ZN_QUEUE_PRIO_CTRL].clone(),
-        ));
-        stage_out.push(StageOut::new(
-            *ZN_QUEUE_SIZE_RETX,
-            batches_out[ZN_QUEUE_PRIO_RETX].clone(),
-        ));
-        stage_out.push(StageOut::new(
-            *ZN_QUEUE_SIZE_DATA,
-            batches_out[ZN_QUEUE_PRIO_DATA].clone(),
-        ));
+        let mut stage_out = Vec::with_capacity(conduit.len());
+        for c in conduit.iter() {
+            stage_out.push(StageOut::new(
+                c.priority as usize,
+                batches_out[c.priority as usize].clone(),
+            ));
+        }
         let stage_out = Arc::new(Mutex::new(stage_out.into_boxed_slice()));
 
         // Bytes to be pulled from stage IN
         let mut bytes_in = vec![];
-        bytes_in.resize_with(ZN_QUEUE_NUM, || Arc::new(AtomicUsize::new(0)));
+        bytes_in.resize_with(conduit.len(), || Arc::new(AtomicUsize::new(0)));
+
         // Build the stage IN
-        let mut stage_in = Vec::with_capacity(ZN_QUEUE_NUM);
-        stage_in.push(Arc::new(Mutex::new(StageIn::new(
-            *ZN_QUEUE_SIZE_CTRL,
-            batch_size,
-            is_streamed,
-            sn_reliable.clone(),
-            sn_best_effort.clone(),
-            bytes_in[ZN_QUEUE_PRIO_CTRL].clone(),
-        ))));
-        stage_in.push(Arc::new(Mutex::new(StageIn::new(
-            *ZN_QUEUE_SIZE_RETX,
-            batch_size,
-            is_streamed,
-            sn_reliable.clone(),
-            sn_best_effort.clone(),
-            bytes_in[ZN_QUEUE_PRIO_RETX].clone(),
-        ))));
-        stage_in.push(Arc::new(Mutex::new(StageIn::new(
-            *ZN_QUEUE_SIZE_DATA,
-            batch_size,
-            is_streamed,
-            sn_reliable.clone(),
-            sn_best_effort.clone(),
-            bytes_in[ZN_QUEUE_PRIO_DATA].clone(),
-        ))));
+        let mut stage_in = Vec::with_capacity(conduit.len());
+        for c in conduit.iter() {
+            let capacity = match c.priority {
+                Priority::Control => *ZN_QUEUE_SIZE_CTRL,
+                Priority::RealTimeHigh => *ZN_QUEUE_SIZE_REAL_TIME_HIGH,
+                Priority::RealTimeLow => *ZN_QUEUE_SIZE_REAL_TIME_LOW,
+                Priority::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
+                Priority::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
+                Priority::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
+                Priority::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
+                Priority::Background => *ZN_QUEUE_SIZE_BACKGROUND,
+            };
+
+            stage_in.push(Arc::new(Mutex::new(StageIn::new(
+                capacity,
+                batch_size,
+                is_streamed,
+                c.clone(),
+                bytes_in[c.priority as usize].clone(),
+            ))));
+        }
 
         TransmissionPipeline {
             active: Arc::new(AtomicBool::new(true)),
-            sn_reliable,
-            sn_best_effort,
+            conduit,
             stage_in: stage_in.into_boxed_slice(),
             bytes_in: bytes_in.into_boxed_slice(),
             stage_out,
@@ -297,15 +284,20 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_session_message(&self, message: SessionMessage, priority: usize) {
-        let mut in_guard = zlock!(self.stage_in[priority]);
+    pub(crate) fn push_session_message(&self, message: SessionMessage, priority: Priority) {
+        // Check it is a valid priority
+        let p = priority as usize;
+        if p >= self.conduit.len() {
+            panic!("ARGH");
+        }
+        let mut in_guard = zlock!(self.stage_in[p]);
 
         macro_rules! zserialize {
             () => {
                 // Get the current serialization batch
-                let batch = zgetbatch!(self, priority, in_guard, false);
+                let batch = zgetbatch!(self, p, in_guard, false);
                 if batch.serialize_session_message(&message) {
-                    self.bytes_in[priority].store(batch.len(), Ordering::Release);
+                    self.bytes_in[p].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return;
                 }
@@ -322,7 +314,7 @@ impl TransmissionPipeline {
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty
             let mut out_guard = zlock!(self.stage_out);
-            out_guard[priority].push(batch);
+            out_guard[p].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
 
@@ -337,16 +329,21 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, message: ZenohMessage, priority: usize) {
-        let mut in_guard = zlock!(self.stage_in[priority]);
+    pub(crate) fn push_zenoh_message(&self, message: ZenohMessage, priority: Priority) {
+        // Check it is a valid priority
+        let p = priority as usize;
+        if p >= self.conduit.len() {
+            panic!("ARGH");
+        }
+        let mut in_guard = zlock!(self.stage_in[p]);
 
         macro_rules! zserialize {
             () => {
                 // Get the current serialization batch. Drop the message
                 // if no batches are available
-                let batch = zgetbatch!(self, priority, in_guard, message.is_droppable());
+                let batch = zgetbatch!(self, p, in_guard, message.is_droppable());
                 if batch.serialize_zenoh_message(&message) {
-                    self.bytes_in[priority].store(batch.len(), Ordering::Release);
+                    self.bytes_in[p].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return;
                 }
@@ -364,7 +361,7 @@ impl TransmissionPipeline {
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty, move it to the stage OUT pipeline
             let mut out_guard = zlock!(self.stage_out);
-            out_guard[priority].push(batch);
+            out_guard[p].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
 
@@ -374,7 +371,7 @@ impl TransmissionPipeline {
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
-        self.fragment_zenoh_message(message, priority, in_guard);
+        self.fragment_zenoh_message(message, p, in_guard);
     }
 
     fn fragment_zenoh_message(
@@ -394,9 +391,15 @@ impl TransmissionPipeline {
         // Acquire the lock on the SN generator to ensure that we have all
         // sequential sequence numbers for the fragments
         let (ch, sn) = if message.is_reliable() {
-            (Channel::Reliable, self.sn_reliable.clone())
+            (
+                Reliability::Reliable,
+                self.conduit[priority].reliable.clone(),
+            )
         } else {
-            (Channel::BestEffort, self.sn_best_effort.clone())
+            (
+                Reliability::BestEffort,
+                self.conduit[priority].best_effort.clone(),
+            )
         };
         let mut guard = zlock!(sn);
 
@@ -407,7 +410,7 @@ impl TransmissionPipeline {
             let batch = zgetbatch!(self, priority, in_guard, false);
 
             // Get the frame SN
-            let sn = guard.get();
+            let sn = guard.sn.get();
 
             // Serialize the message
             let written = batch.serialize_zenoh_fragment(ch, sn, &mut fragbuf, to_write);
@@ -425,7 +428,7 @@ impl TransmissionPipeline {
                 self.cond_canpull.notify_one();
             } else {
                 // Reinsert the SN back to the pool
-                guard.set(sn);
+                guard.sn.set(sn);
                 log::warn!(
                     "Zenoh message dropped because it can not be fragmented: {:?}",
                     message
@@ -489,7 +492,7 @@ impl TransmissionPipeline {
 
         let mut backoff = Duration::from_nanos(*ZN_QUEUE_PULL_BACKOFF);
         loop {
-            for priority in 0..ZN_QUEUE_NUM {
+            for priority in 0..self.conduit.len() {
                 if let Some(batch) = self.try_pull_queue(priority).await {
                     return Some((batch, priority));
                 }
@@ -613,15 +616,14 @@ mod tests {
     use super::super::io::ZBuf;
     use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
     use super::super::session::defaults::{
-        ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_QUEUE_PRIO_DATA,
-        ZN_QUEUE_SIZE_DATA,
+        ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_QUEUE_SIZE_CTRL,
     };
     use super::*;
     use async_std::prelude::*;
     use async_std::task;
     use std::convert::TryFrom;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
 
     const SLEEP: Duration = Duration::from_millis(100);
@@ -656,7 +658,7 @@ mod tests {
                 num_msg, payload_size
             );
             for _ in 0..num_msg {
-                queue.push_zenoh_message(message.clone(), ZN_QUEUE_PRIO_DATA);
+                queue.push_zenoh_message(message.clone(), Priority::Control);
             }
         }
 
@@ -701,23 +703,16 @@ mod tests {
             );
         }
 
-        // Queue
+        // Pipeline
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
-        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+        let conduit = vec![SessionTransportConduitTx::new(
+            Priority::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        )));
-        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-            0,
-            ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        )));
-        let queue = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
-            sn_reliable,
-            sn_best_effort,
-        ));
+        )]
+        .into_boxed_slice();
+        let queue = Arc::new(TransmissionPipeline::new(batch_size, is_streamed, conduit));
 
         // Total amount of bytes to send in each test
         let bytes: usize = 100_000_000;
@@ -781,14 +776,14 @@ mod tests {
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
-            let num_msg = 1 + *ZN_QUEUE_SIZE_DATA;
+            let num_msg = 1 + *ZN_QUEUE_SIZE_CTRL;
             for i in 0..num_msg {
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduling message #{} with payload size of {} bytes",
                     id, i,
                     payload_size
                 );
-                queue.push_zenoh_message(message.clone(), ZN_QUEUE_PRIO_DATA);
+                queue.push_zenoh_message(message.clone(), Priority::Control);
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
@@ -798,23 +793,16 @@ mod tests {
             }
         }
 
-        // Queue
+        // Pipeline
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
-        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+        let conduit = vec![SessionTransportConduitTx::new(
+            Priority::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        )));
-        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-            0,
-            ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        )));
-        let queue = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
-            sn_reliable,
-            sn_best_effort,
-        ));
+        )]
+        .into_boxed_slice();
+        let queue = Arc::new(TransmissionPipeline::new(batch_size, is_streamed, conduit));
 
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -834,10 +822,10 @@ mod tests {
             // Wait to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-                *ZN_QUEUE_SIZE_DATA
+                *ZN_QUEUE_SIZE_CTRL
             );
             let check = async {
-                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_DATA {
+                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_CTRL {
                     task::sleep(SLEEP).await;
                 }
             };
@@ -892,13 +880,13 @@ mod tests {
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
-            let num_msg = *ZN_QUEUE_SIZE_DATA;
+            let num_msg = *ZN_QUEUE_SIZE_CTRL;
             for i in 0..num_msg {
                 println!(
                     "Pipeline Blocking [>>>]: Scheduling message #{} with payload size of {} bytes",
                     i, payload_size
                 );
-                queue.push_zenoh_message(message.clone(), ZN_QUEUE_PRIO_DATA);
+                queue.push_zenoh_message(message.clone(), Priority::Control);
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: Scheduled message #{} with payload size of {} bytes",
@@ -910,20 +898,13 @@ mod tests {
         // Queue
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
-        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+        let conduit = vec![SessionTransportConduitTx::new(
+            Priority::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        )));
-        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-            0,
-            ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        )));
-        let queue = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
-            sn_reliable,
-            sn_best_effort,
-        ));
+        )]
+        .into_boxed_slice();
+        let queue = Arc::new(TransmissionPipeline::new(batch_size, is_streamed, conduit));
 
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -945,10 +926,10 @@ mod tests {
             // Wait to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-                *ZN_QUEUE_SIZE_DATA
+                *ZN_QUEUE_SIZE_CTRL
             );
             let check = async {
-                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_DATA {
+                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_CTRL {
                     task::sleep(SLEEP).await;
                 }
             };
@@ -977,20 +958,13 @@ mod tests {
         // Queue
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
-        let sn_reliable = Arc::new(Mutex::new(SeqNumGenerator::new(
+        let conduit = vec![SessionTransportConduitTx::new(
+            Priority::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        )));
-        let sn_best_effort = Arc::new(Mutex::new(SeqNumGenerator::new(
-            0,
-            ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        )));
-        let pipeline = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
-            sn_reliable,
-            sn_best_effort,
-        ));
+        )]
+        .into_boxed_slice();
+        let pipeline = Arc::new(TransmissionPipeline::new(batch_size, is_streamed, conduit));
         let count = Arc::new(AtomicUsize::new(0));
         let size = Arc::new(AtomicUsize::new(0));
 
@@ -1029,7 +1003,7 @@ mod tests {
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
                     while start.elapsed() < duration {
-                        c_pipeline.push_zenoh_message(message.clone(), ZN_QUEUE_PRIO_DATA);
+                        c_pipeline.push_zenoh_message(message.clone(), Priority::Control);
                     }
                 }
             }

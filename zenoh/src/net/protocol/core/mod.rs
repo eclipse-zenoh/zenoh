@@ -13,7 +13,7 @@
 //
 pub mod rname;
 
-use std::convert::From;
+use std::convert::{From, TryFrom};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -236,12 +236,6 @@ impl From<&PeerId> for uhlc::ID {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Channel {
-    BestEffort,
-    Reliable,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CongestionControl {
     Block,
     Drop,
@@ -273,9 +267,78 @@ impl FromStr for CongestionControl {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
+pub enum Priority {
+    Control = 0,
+    RealTimeHigh = 1,
+    RealTimeLow = 2,
+    InteractiveHigh = 3,
+    InteractiveLow = 4,
+    DataHigh = 5,
+    DataLow = 6,
+    Background = 7,
+}
+
+impl Priority {
+    pub fn num() -> usize {
+        8
+    }
+}
+
+impl Default for Priority {
+    fn default() -> Priority {
+        Priority::Background
+    }
+}
+
+impl TryFrom<u8> for Priority {
+    type Error = ZError;
+
+    fn try_from(priority: u8) -> Result<Self, Self::Error> {
+        match priority {
+            0 => Ok(Priority::Control),
+            1 => Ok(Priority::RealTimeHigh),
+            2 => Ok(Priority::RealTimeLow),
+            3 => Ok(Priority::InteractiveHigh),
+            4 => Ok(Priority::InteractiveLow),
+            5 => Ok(Priority::DataHigh),
+            6 => Ok(Priority::DataLow),
+            7 => Ok(Priority::Background),
+            unknown => zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "{} is not a valid priority value. Admitted values are [0-7].",
+                    unknown
+                )
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Reliability {
     BestEffort,
     Reliable,
+}
+
+impl Default for Reliability {
+    fn default() -> Reliability {
+        Reliability::BestEffort
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Conduit {
+    pub priority: Priority,
+    pub reliability: Reliability,
+}
+
+impl Default for Conduit {
+    fn default() -> Conduit {
+        Conduit {
+            priority: Priority::default(),
+            reliability: Reliability::default(),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

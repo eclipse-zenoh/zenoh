@@ -13,14 +13,6 @@
 //
 use super::core::ZInt;
 
-// Total number of queues
-pub const ZN_QUEUE_NUM: usize = 3;
-
-// Queue priorities
-pub const ZN_QUEUE_PRIO_CTRL: usize = 0;
-pub const ZN_QUEUE_PRIO_RETX: usize = 1;
-pub const ZN_QUEUE_PRIO_DATA: usize = 2;
-
 // The default sequence number resolution takes 4 bytes on the wire.
 // Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.
 // 2^28 = 268_435_456 => Max Seq Num = 268_435_455
@@ -63,8 +55,13 @@ zconfigurable! {
     //   In case the transport link MTU is smaller than the ZN_BATCH_SIZE, then amount of memory being
     //   allocated for each queue is QUEUE_SIZE_XXX * LINK_MTU.
     pub static ref ZN_QUEUE_SIZE_CTRL: usize = 1;
-    pub static ref ZN_QUEUE_SIZE_RETX: usize = 1;
-    pub static ref ZN_QUEUE_SIZE_DATA: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_REAL_TIME_HIGH: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_REAL_TIME_LOW: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_INTERACTIVE_HIGH: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_INTERACTIVE_LOW: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_DATA_HIGH: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_DATA_LOW: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_BACKGROUND: usize = 4;
 
     // The default backoff time in nanoseconds to allow the batching to potentially progress
     pub static ref ZN_QUEUE_PULL_BACKOFF: u64 = 100;

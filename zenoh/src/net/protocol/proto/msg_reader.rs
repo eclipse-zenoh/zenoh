@@ -14,6 +14,7 @@
 use super::core::*;
 use super::io::ZBuf;
 use super::msg::*;
+use std::convert::TryInto;
 
 impl ZBuf {
     #[allow(unused_variables)]
@@ -32,6 +33,11 @@ impl ZBuf {
         }
     }
 
+    #[inline(always)]
+    fn read_deco_priority(&mut self, header: u8) -> Option<Priority> {
+        (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()
+    }
+
     /*************************************/
     /*             SESSION               */
     /*************************************/
@@ -39,6 +45,7 @@ impl ZBuf {
         use super::smsg::id::*;
 
         let mut attachment = None;
+        let mut priority = Priority::default();
 
         // Read the message
         let body = loop {
@@ -47,7 +54,11 @@ impl ZBuf {
 
             // Read the body
             match imsg::mid(header) {
-                FRAME => break self.read_frame(header)?,
+                FRAME => break self.read_frame(header, priority)?,
+                PRIORITY => {
+                    priority = self.read_deco_priority(header)?;
+                    continue;
+                }
                 ATTACHMENT => {
                     attachment = Some(self.read_deco_attachment(header)?);
                     continue;
@@ -72,7 +83,6 @@ impl ZBuf {
                 SYNC => break self.read_sync(header)?,
                 ACK_NACK => break self.read_ack_nack(header)?,
                 KEEP_ALIVE => break self.read_keep_alive(header)?,
-
                 PING_PONG => {
                     if imsg::has_flag(header, smsg::flag::P) {
                         break self.read_ping(header)?;
@@ -80,7 +90,6 @@ impl ZBuf {
                         break self.read_pong(header)?;
                     }
                 }
-
                 unknown => {
                     log::trace!("Session message with unknown ID: {}", unknown);
                     return None;
@@ -92,10 +101,10 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_frame(&mut self, header: u8) -> Option<SessionBody> {
-        let (ch, reliability) = match imsg::has_flag(header, smsg::flag::R) {
-            true => (Channel::Reliable, Reliability::Reliable),
-            false => (Channel::BestEffort, Reliability::BestEffort),
+    fn read_frame(&mut self, header: u8, priority: Priority) -> Option<SessionBody> {
+        let reliability = match imsg::has_flag(header, smsg::flag::R) {
+            true => Reliability::Reliable,
+            false => Reliability::BestEffort,
         };
         let sn = self.read_zint()?;
 
@@ -121,7 +130,14 @@ impl ZBuf {
             FramePayload::Messages { messages }
         };
 
-        Some(SessionBody::Frame(Frame { ch, sn, payload }))
+        Some(SessionBody::Frame(Frame {
+            conduit: Conduit {
+                priority,
+                reliability,
+            },
+            sn,
+            payload,
+        }))
     }
 
     fn read_scout(&mut self, header: u8) -> Option<SessionBody> {
@@ -239,9 +255,9 @@ impl ZBuf {
     }
 
     fn read_sync(&mut self, header: u8) -> Option<SessionBody> {
-        let ch = match imsg::has_flag(header, smsg::flag::R) {
-            true => Channel::Reliable,
-            false => Channel::BestEffort,
+        let reliability = match imsg::has_flag(header, smsg::flag::R) {
+            true => Reliability::Reliable,
+            false => Reliability::BestEffort,
         };
         let sn = self.read_zint()?;
         let count = if imsg::has_flag(header, smsg::flag::C) {
@@ -250,7 +266,11 @@ impl ZBuf {
             None
         };
 
-        Some(SessionBody::Sync(Sync { ch, sn, count }))
+        Some(SessionBody::Sync(Sync {
+            reliability,
+            sn,
+            count,
+        }))
     }
 
     fn read_ack_nack(&mut self, header: u8) -> Option<SessionBody> {
