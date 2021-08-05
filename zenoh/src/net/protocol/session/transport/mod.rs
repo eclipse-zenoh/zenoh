@@ -193,21 +193,34 @@ pub(crate) struct SessionTransportConfig {
 
 impl SessionTransport {
     pub(crate) fn new(config: SessionTransportConfig) -> SessionTransport {
-        let num = if config.is_qos { Service::num() } else { 1 };
+        let mut conduit_tx = vec![];
+        let mut conduit_rx = vec![];
 
-        let mut conduit_tx = Vec::with_capacity(num);
-        for p in 0..num {
+        if config.is_qos {
+            for p in 0..Service::num() {
+                conduit_tx.push(SessionTransportConduitTx::new(
+                    (p as u8).try_into().unwrap(),
+                    config.initial_sn_tx,
+                    config.sn_resolution,
+                ));
+            }
+
+            for p in 0..Service::num() {
+                conduit_rx.push(SessionTransportConduitRx::new(
+                    (p as u8).try_into().unwrap(),
+                    config.initial_sn_rx,
+                    config.sn_resolution,
+                ));
+            }
+        } else {
             conduit_tx.push(SessionTransportConduitTx::new(
-                (p as u8).try_into().unwrap(),
+                Service::default(),
                 config.initial_sn_tx,
                 config.sn_resolution,
             ));
-        }
 
-        let mut conduit_rx = Vec::with_capacity(num);
-        for p in 0..num {
             conduit_rx.push(SessionTransportConduitRx::new(
-                (p as u8).try_into().unwrap(),
+                Service::default(),
                 config.initial_sn_rx,
                 config.sn_resolution,
             ));
