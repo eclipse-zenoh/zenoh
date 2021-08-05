@@ -18,7 +18,9 @@ use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey, ZInt};
+use zenoh::net::protocol::core::{
+    whatami, CongestionControl, PeerId, Reliability, ResKey, Service, ZInt,
+};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -207,6 +209,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         // Create the message to send
         let key = ResKey::RName("/test02".to_string());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
+        let service = Service::default();
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;
         let data_info = None;
@@ -216,6 +219,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         let message = ZenohMessage::make_data(
             key,
             payload,
+            service,
             reliability,
             congestion_control,
             data_info,
@@ -313,6 +317,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         // Create the message to send
         let key = ResKey::RName("/test02".to_string());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
+        let service = Service::default();
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;
         let data_info = None;
@@ -322,6 +327,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         let message = ZenohMessage::make_data(
             key,
             payload,
+            service,
             reliability,
             congestion_control,
             data_info,

@@ -62,6 +62,7 @@ struct Cookie {
     whatami: WhatAmI,
     pid: PeerId,
     sn_resolution: ZInt,
+    is_qos: bool,
     nonce: ZInt,
 }
 
@@ -70,6 +71,7 @@ impl WBuf {
         zcheck!(self.write_zint(cookie.whatami));
         zcheck!(self.write_peerid(&cookie.pid));
         zcheck!(self.write_zint(cookie.sn_resolution));
+        zcheck!(self.write(if cookie.is_qos { 1 } else { 0 }));
         zcheck!(self.write_zint(cookie.nonce));
         true
     }
@@ -80,12 +82,14 @@ impl ZBuf {
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
         let sn_resolution = self.read_zint()?;
+        let is_qos = if self.read()? == 1 { true } else { false };
         let nonce = self.read_zint()?;
 
         Some(Cookie {
             whatami,
             pid,
             sn_resolution,
+            is_qos,
             nonce,
         })
     }
@@ -144,6 +148,7 @@ async fn open_send_init_syn(
     } else {
         Some(manager.config.sn_resolution)
     };
+    let init_syn_qos = true;
     let init_syn_attachment = attachment_from_properties(&auth.properties).ok();
 
     // Build and send the InitSyn message
@@ -152,6 +157,7 @@ async fn open_send_init_syn(
         init_syn_whatami,
         init_syn_pid,
         init_syn_sn_resolution,
+        init_syn_qos,
         init_syn_attachment,
     );
     let _ = link
@@ -170,6 +176,7 @@ struct OpenInitAckOutput {
     pid: PeerId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
+    is_qos: bool,
     initial_sn_tx: ZInt,
     cookie: ZSlice,
     open_syn_attachment: Option<Attachment>,
@@ -195,31 +202,33 @@ async fn open_recv_init_ack(
     }
 
     let mut msg = messages.remove(0);
-    let (init_ack_whatami, init_ack_pid, init_ack_sn_resolution, init_ack_cookie) = match msg.body {
-        SessionBody::InitAck(InitAck {
-            whatami,
-            pid,
-            sn_resolution,
-            cookie,
-        }) => (whatami, pid, sn_resolution, cookie),
-        SessionBody::Close(Close { reason, .. }) => {
-            let e = format!(
-                "Received a close message (reason {}) in response to an InitSyn on link: {}",
-                reason, link,
-            );
-            return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
-        }
-        _ => {
-            let e = format!(
-                "Received an invalid message in response to an InitSyn on link {}: {:?}",
-                link, msg.body
-            );
-            return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
-            ));
-        }
-    };
+    let (init_ack_whatami, init_ack_pid, init_ack_sn_resolution, init_ack_is_qos, init_ack_cookie) =
+        match msg.body {
+            SessionBody::InitAck(InitAck {
+                whatami,
+                pid,
+                sn_resolution,
+                is_qos,
+                cookie,
+            }) => (whatami, pid, sn_resolution, is_qos, cookie),
+            SessionBody::Close(Close { reason, .. }) => {
+                let e = format!(
+                    "Received a close message (reason {}) in response to an InitSyn on link: {}",
+                    reason, link,
+                );
+                return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
+            }
+            _ => {
+                let e = format!(
+                    "Received an invalid message in response to an InitSyn on link {}: {:?}",
+                    link, msg.body
+                );
+                return Err((
+                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    Some(smsg::close_reason::INVALID),
+                ));
+            }
+        };
 
     // Check if a session is already open with the target peer
     let mut guard = zasynclock!(manager.opened);
@@ -299,6 +308,7 @@ async fn open_recv_init_ack(
         pid: init_ack_pid,
         whatami: init_ack_whatami,
         sn_resolution,
+        is_qos: init_ack_is_qos,
         initial_sn_tx,
         cookie: init_ack_cookie,
         open_syn_attachment: attachment_from_properties(&auth.properties).ok(),
@@ -312,6 +322,7 @@ struct OpenOpenSynOutput {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     initial_sn_tx: ZInt,
+    is_qos: bool,
     auth_session: AuthenticatedPeerSession,
 }
 async fn open_send_open_syn(
@@ -338,6 +349,7 @@ async fn open_send_open_syn(
         whatami: input.whatami,
         sn_resolution: input.sn_resolution,
         initial_sn_tx: input.initial_sn_tx,
+        is_qos: input.is_qos,
         auth_session: input.auth_session,
     };
     Ok(output)
@@ -347,6 +359,7 @@ struct OpenAckOutput {
     pid: PeerId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
+    is_qos: bool,
     initial_sn_tx: ZInt,
     initial_sn_rx: ZInt,
     lease: ZInt,
@@ -410,6 +423,7 @@ async fn open_recv_open_ack(
         pid: input.pid,
         whatami: input.whatami,
         sn_resolution: input.sn_resolution,
+        is_qos: input.is_qos,
         initial_sn_tx: input.initial_sn_tx,
         initial_sn_rx,
         lease,
@@ -453,7 +467,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         initial_sn_tx: info.initial_sn_tx,
         initial_sn_rx: info.initial_sn_rx,
         is_shm: info.auth_session.is_shm,
-        is_qos: true, //@TODO
+        is_qos: info.is_qos,
     };
     let res = manager.init_session(config);
     let session = match res {
@@ -516,10 +530,13 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
 /*************************************/
 /*             ACCEPT                */
 /*************************************/
+
+// Read and eventually accept an InitSyn
 struct AcceptInitSynOutput {
     whatami: WhatAmI,
     pid: PeerId,
     sn_resolution: ZInt,
+    is_qos: bool,
     init_ack_attachment: Option<Attachment>,
     auth_session: AuthenticatedPeerSession,
 }
@@ -542,25 +559,26 @@ async fn accept_recv_init_syn(
     }
 
     let mut msg = messages.remove(0);
-    let (init_syn_version, init_syn_whatami, init_syn_pid, init_syn_sn_resolution) = match msg.body
-    {
-        SessionBody::InitSyn(InitSyn {
-            version,
-            whatami,
-            pid,
-            sn_resolution,
-        }) => (version, whatami, pid, sn_resolution),
-        _ => {
-            let e = format!(
-                "Received invalid message instead of an InitSyn on link {}: {:?}",
-                link, msg.body
-            );
-            return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
-            ));
-        }
-    };
+    let (init_syn_version, init_syn_whatami, init_syn_pid, init_syn_sn_resolution, init_syn_is_qos) =
+        match msg.body {
+            SessionBody::InitSyn(InitSyn {
+                version,
+                whatami,
+                pid,
+                sn_resolution,
+                is_qos,
+            }) => (version, whatami, pid, sn_resolution, is_qos),
+            _ => {
+                let e = format!(
+                    "Received invalid message instead of an InitSyn on link {}: {:?}",
+                    link, msg.body
+                );
+                return Err((
+                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    Some(smsg::close_reason::INVALID),
+                ));
+            }
+        };
 
     // Check if we are allowed to open more links if the session is established
     if let Some(s) = manager.get_session(&init_syn_pid) {
@@ -624,12 +642,14 @@ async fn accept_recv_init_syn(
         whatami: init_syn_whatami,
         pid: init_syn_pid,
         sn_resolution: init_syn_sn_resolution,
+        is_qos: init_syn_is_qos,
         init_ack_attachment: attachment_from_properties(&auth.properties).ok(),
         auth_session: auth.session,
     };
     Ok(output)
 }
 
+// Send an InitAck
 struct AcceptInitAckOutput {
     auth_session: AuthenticatedPeerSession,
 }
@@ -648,6 +668,7 @@ async fn accept_send_init_ack(
         whatami: input.whatami,
         pid: input.pid.clone(),
         sn_resolution: agreed_sn_resolution,
+        is_qos: input.is_qos,
         nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
     };
     wbuf.write_cookie(&cookie);
@@ -677,6 +698,7 @@ async fn accept_send_init_ack(
         whatami,
         apid,
         sn_resolution,
+        input.is_qos,
         cookie,
         input.init_ack_attachment,
     );
@@ -693,6 +715,7 @@ async fn accept_send_init_ack(
     Ok(output)
 }
 
+// Read and eventually accept an OpenSyn
 struct AcceptOpenSynOutput {
     cookie: Cookie,
     initial_sn: ZInt,
@@ -823,6 +846,7 @@ async fn accept_recv_open_syn(
     Ok(output)
 }
 
+// Validate the OpenSyn cookie and eventually initialize a new session
 struct AcceptInitSessionOutput {
     session: Session,
     initial_sn: ZInt,
@@ -887,7 +911,7 @@ async fn accept_init_session(
         initial_sn_tx: open_ack_initial_sn,
         initial_sn_rx: input.initial_sn,
         is_shm: input.auth_session.is_shm,
-        is_qos: true, //@TODO
+        is_qos: input.cookie.is_qos,
     };
     let session = manager
         .init_session(config)
@@ -914,6 +938,7 @@ async fn accept_init_session(
     Ok(output)
 }
 
+// Send an OpenAck
 struct AcceptOpenAckOutput {
     session: Session,
     lease: ZInt,
@@ -941,6 +966,7 @@ async fn accept_send_open_ack(
     Ok(output)
 }
 
+// Notify the callback and start the link tasks
 async fn accept_finalize_session(
     manager: &SessionManager,
     link: &Link,

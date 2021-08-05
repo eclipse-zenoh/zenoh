@@ -19,7 +19,9 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
+    use zenoh::net::protocol::core::{
+        whatami, CongestionControl, PeerId, Reliability, ResKey, Service,
+    };
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::link::{Link, Locator};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
@@ -234,6 +236,7 @@ mod tests {
 
             let key = ResKey::RName("/test".to_string());
             let payload: ZBuf = sbuf.into();
+            let service = Service::default();
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -243,6 +246,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
+                service,
                 reliability,
                 congestion_control,
                 data_info,
@@ -290,6 +294,7 @@ mod tests {
 
             let key = ResKey::RName("/test".to_string());
             let payload: ZBuf = sbuf.into();
+            let service = Service::default();
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -299,6 +304,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
+                service,
                 reliability,
                 congestion_control,
                 data_info,

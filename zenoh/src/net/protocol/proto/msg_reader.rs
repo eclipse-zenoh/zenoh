@@ -177,6 +177,11 @@ impl ZBuf {
     }
 
     fn read_init_syn(&mut self, header: u8) -> Option<SessionBody> {
+        let options = if imsg::has_flag(header, smsg::flag::O) {
+            self.read_zint()?
+        } else {
+            0
+        };
         let version = self.read()?;
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
@@ -185,16 +190,23 @@ impl ZBuf {
         } else {
             None
         };
+        let is_qos = imsg::has_option(options, smsg::init_options::Q);
 
         Some(SessionBody::InitSyn(InitSyn {
             version,
             whatami,
             pid,
             sn_resolution,
+            is_qos,
         }))
     }
 
     fn read_init_ack(&mut self, header: u8) -> Option<SessionBody> {
+        let options = if imsg::has_flag(header, smsg::flag::O) {
+            self.read_zint()?
+        } else {
+            0
+        };
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
         let sn_resolution = if imsg::has_flag(header, smsg::flag::S) {
@@ -202,12 +214,14 @@ impl ZBuf {
         } else {
             None
         };
+        let is_qos = imsg::has_option(options, smsg::init_options::Q);
         let cookie = self.read_zslice_array()?;
 
         Some(SessionBody::InitAck(InitAck {
             whatami,
             pid,
             sn_resolution,
+            is_qos,
             cookie,
         }))
     }

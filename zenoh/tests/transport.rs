@@ -17,7 +17,9 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
+use zenoh::net::protocol::core::{
+    whatami, CongestionControl, PeerId, Reliability, ResKey, Service,
+};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -252,6 +254,7 @@ async fn close_session(
 async fn single_run(
     router_handler: Arc<SHRouter>,
     client_session: Session,
+    service: Service,
     reliability: Reliability,
     congestion_control: CongestionControl,
     msg_size: usize,
@@ -266,6 +269,7 @@ async fn single_run(
     let message = ZenohMessage::make_data(
         key,
         payload,
+        service,
         reliability,
         congestion_control,
         data_info,
@@ -327,24 +331,28 @@ async fn single_run(
 async fn run(
     locators: &[Locator],
     properties: Option<Vec<LocatorProperty>>,
+    service: &[Service],
     reliability: &[Reliability],
     congestion_control: &[CongestionControl],
     msg_size: &[usize],
 ) {
-    for rl in reliability.iter() {
-        for cc in congestion_control.iter() {
-            for ms in msg_size.iter() {
-                let (router_manager, router_handler, client_session) =
-                    open_session(locators, properties.clone()).await;
-                single_run(
-                    router_handler.clone(),
-                    client_session.clone(),
-                    *rl,
-                    *cc,
-                    *ms,
-                )
-                .await;
-                close_session(router_manager, client_session, locators).await;
+    for sv in service.iter() {
+        for rl in reliability.iter() {
+            for cc in congestion_control.iter() {
+                for ms in msg_size.iter() {
+                    let (router_manager, router_handler, client_session) =
+                        open_session(locators, properties.clone()).await;
+                    single_run(
+                        router_handler.clone(),
+                        client_session.clone(),
+                        *sv,
+                        *rl,
+                        *cc,
+                        *ms,
+                    )
+                    .await;
+                    close_session(router_manager, client_session, locators).await;
+                }
             }
         }
     }
@@ -361,12 +369,14 @@ fn transport_tcp_only() {
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::Reliable, Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         properties,
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_ALL,
@@ -384,12 +394,14 @@ fn transport_udp_only() {
     let locators: Vec<Locator> = vec!["udp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         properties,
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_NOFRAG,
@@ -410,12 +422,14 @@ fn transport_unix_only() {
         .unwrap()];
     let properties = None;
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         properties,
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_ALL,
@@ -438,12 +452,14 @@ fn transport_tcp_udp() {
     ];
     let properties = None;
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         properties,
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_NOFRAG,
@@ -471,12 +487,14 @@ fn transport_tcp_unix() {
     ];
     let properties = None;
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         properties,
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_ALL,
@@ -506,12 +524,14 @@ fn transport_udp_unix() {
     ];
     let properties = None;
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         properties,
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_NOFRAG,
@@ -543,12 +563,14 @@ fn transport_tcp_udp_unix() {
     ];
     let properties = None;
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         properties,
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_NOFRAG,
@@ -662,12 +684,14 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     let properties = vec![(client_config, server_config).into()];
 
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         Some(properties),
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_ALL,
@@ -784,12 +808,14 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     let properties = vec![(client_config, server_config).into()];
 
     // Define the reliability and congestion control
+    let service = [Service::default(), Service::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
     task::block_on(run(
         &locators,
         Some(properties),
+        &service,
         &reliability,
         &congestion_control,
         &MSG_SIZE_ALL,

@@ -73,7 +73,7 @@ pub(crate) mod imsg {
 }
 
 pub mod smsg {
-    use super::{imsg, Service};
+    use super::{imsg, Service, ZInt};
 
     // Session message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -106,6 +106,7 @@ pub mod smsg {
         pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
         pub const L: u8 = 1 << 7; // 0x80 Locators      if L==1 then Locators are present
         pub const M: u8 = 1 << 5; // 0x20 Mask          if M==1 then a Mask is present
+        pub const O: u8 = 1 << 7; // 0x80 Options       if O==1 then Options are present
         pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
@@ -114,6 +115,12 @@ pub mod smsg {
         pub const Z: u8 = 1 << 5; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
         pub const X: u8 = 0; // Unused flags are set to zero
+    }
+
+    pub mod init_options {
+        use super::ZInt;
+
+        pub const Q: ZInt = 1 << 0; // 0x01 Service     if Q==1 then the session is multi-service
     }
 
     // Reason for the Close message
@@ -1395,8 +1402,10 @@ impl fmt::Display for Hello {
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |X|S|A|   INIT  |
+/// |O|S|A|   INIT  |
 /// +-+-+-+-+-------+
+/// ~             |Q~ if O==1
+/// +---------------+
 /// | v_maj | v_min | if A==0 -- Protocol Version VMaj.VMin
 /// +-------+-------+
 /// ~    whatami    ~ -- Client, Router, Peer or a combination of them
@@ -1410,6 +1419,8 @@ impl fmt::Display for Hello {
 ///
 /// (*) if A==0 and S==0 then 2^28 is assumed.
 ///     if A==1 and S==0 then the agreed resolution is the one communicated by the initiator.
+///
+/// - if Q==1 then
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct InitSyn {
@@ -1417,6 +1428,7 @@ pub struct InitSyn {
     pub whatami: WhatAmI,
     pub pid: PeerId,
     pub sn_resolution: Option<ZInt>,
+    pub is_qos: bool,
 }
 
 impl Header for InitSyn {
@@ -1426,7 +1438,24 @@ impl Header for InitSyn {
         if self.sn_resolution.is_some() {
             header |= smsg::flag::S;
         }
+        if self.has_options() {
+            header |= smsg::flag::O;
+        }
         header
+    }
+}
+
+impl Options for InitSyn {
+    fn options(&self) -> ZInt {
+        let mut options = 0;
+        if self.is_qos {
+            options |= smsg::init_options::Q;
+        }
+        options
+    }
+
+    fn has_options(&self) -> bool {
+        self.is_qos
     }
 }
 
@@ -1435,6 +1464,7 @@ pub struct InitAck {
     pub whatami: WhatAmI,
     pub pid: PeerId,
     pub sn_resolution: Option<ZInt>,
+    pub is_qos: bool,
     pub cookie: ZSlice,
 }
 
@@ -1446,7 +1476,24 @@ impl Header for InitAck {
         if self.sn_resolution.is_some() {
             header |= smsg::flag::S;
         }
+        if self.has_options() {
+            header |= smsg::flag::O;
+        }
         header
+    }
+}
+
+impl Options for InitAck {
+    fn options(&self) -> ZInt {
+        let mut options = 0;
+        if self.is_qos {
+            options |= smsg::init_options::Q;
+        }
+        options
+    }
+
+    fn has_options(&self) -> bool {
+        self.is_qos
     }
 }
 
@@ -1880,6 +1927,7 @@ impl SessionMessage {
         whatami: WhatAmI,
         pid: PeerId,
         sn_resolution: Option<ZInt>,
+        is_qos: bool,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         SessionMessage {
@@ -1888,6 +1936,7 @@ impl SessionMessage {
                 whatami,
                 pid,
                 sn_resolution,
+                is_qos,
             }),
             attachment,
         }
@@ -1897,6 +1946,7 @@ impl SessionMessage {
         whatami: WhatAmI,
         pid: PeerId,
         sn_resolution: Option<ZInt>,
+        is_qos: bool,
         cookie: ZSlice,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
@@ -1905,6 +1955,7 @@ impl SessionMessage {
                 whatami,
                 pid,
                 sn_resolution,
+                is_qos,
                 cookie,
             }),
             attachment,

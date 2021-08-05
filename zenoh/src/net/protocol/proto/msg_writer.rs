@@ -65,7 +65,6 @@ impl WBuf {
         if let Some(attachment) = attachment {
             zcheck!(self.write_deco_attachment(&attachment));
         }
-
         if service != Service::default() {
             zcheck!(self.write_deco_service(service))
         }
@@ -143,6 +142,9 @@ impl WBuf {
 
     fn write_init_syn(&mut self, init_syn: &InitSyn) -> bool {
         zcheck!(self.write(init_syn.header()));
+        if init_syn.has_options() {
+            zcheck!(self.write_zint(init_syn.options()));
+        }
         zcheck!(self.write(init_syn.version));
         zcheck!(self.write_zint(init_syn.whatami));
         zcheck!(self.write_peerid(&init_syn.pid));
@@ -154,6 +156,9 @@ impl WBuf {
 
     fn write_init_ack(&mut self, init_ack: &InitAck) -> bool {
         zcheck!(self.write(init_ack.header()));
+        if init_ack.has_options() {
+            zcheck!(self.write_zint(init_ack.options()));
+        }
         zcheck!(self.write_zint(init_ack.whatami));
         zcheck!(self.write_peerid(&init_ack.pid));
         if let Some(snr) = init_ack.sn_resolution {
@@ -238,9 +243,6 @@ impl WBuf {
         }
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
-        }
-        if msg.service != Service::default() {
-            zcheck!(self.write_deco_service(msg.service))
         }
 
         match &msg.body {
