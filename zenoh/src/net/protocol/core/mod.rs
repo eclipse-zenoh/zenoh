@@ -268,45 +268,45 @@ impl FromStr for CongestionControl {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
-pub enum Priority {
+pub enum Service {
     Control = 0,
-    RealTimeHigh = 1,
-    RealTimeLow = 2,
-    InteractiveHigh = 3,
-    InteractiveLow = 4,
-    DataHigh = 5,
+    RealTime = 1,
+    InteractiveHigh = 2,
+    InteractiveLow = 3,
+    DataHigh = 4,
+    Data = 5,
     DataLow = 6,
     Background = 7,
 }
 
-impl Priority {
+impl Service {
     pub fn num() -> usize {
         8
     }
 }
 
-impl Default for Priority {
-    fn default() -> Priority {
-        Priority::Background
+impl Default for Service {
+    fn default() -> Service {
+        Service::Background
     }
 }
 
-impl TryFrom<u8> for Priority {
+impl TryFrom<u8> for Service {
     type Error = ZError;
 
-    fn try_from(priority: u8) -> Result<Self, Self::Error> {
-        match priority {
-            0 => Ok(Priority::Control),
-            1 => Ok(Priority::RealTimeHigh),
-            2 => Ok(Priority::RealTimeLow),
-            3 => Ok(Priority::InteractiveHigh),
-            4 => Ok(Priority::InteractiveLow),
-            5 => Ok(Priority::DataHigh),
-            6 => Ok(Priority::DataLow),
-            7 => Ok(Priority::Background),
+    fn try_from(service: u8) -> Result<Self, Self::Error> {
+        match service {
+            0 => Ok(Service::Control),
+            1 => Ok(Service::RealTime),
+            2 => Ok(Service::InteractiveHigh),
+            3 => Ok(Service::InteractiveLow),
+            4 => Ok(Service::DataHigh),
+            5 => Ok(Service::Data),
+            6 => Ok(Service::DataLow),
+            7 => Ok(Service::Background),
             unknown => zerror!(ZErrorKind::Other {
                 descr: format!(
-                    "{} is not a valid priority value. Admitted values are [0-7].",
+                    "{} is not a valid service value. Admitted values are [0-7].",
                     unknown
                 )
             }),
@@ -328,14 +328,14 @@ impl Default for Reliability {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Conduit {
-    pub priority: Priority,
+    pub service: Service,
     pub reliability: Reliability,
 }
 
 impl Default for Conduit {
     fn default() -> Conduit {
         Conduit {
-            priority: Priority::default(),
+            service: Service::default(),
             reliability: Reliability::default(),
         }
     }

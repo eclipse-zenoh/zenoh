@@ -456,7 +456,7 @@ fn codec_frame() {
     let msg_payload_count = 4;
 
     for _ in 0..NUM_ITER {
-        let priority = [Priority::default(), Priority::RealTimeHigh];
+        let service = [Service::default(), Service::RealTime];
         let reliability = [Reliability::BestEffort, Reliability::Reliable];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
@@ -507,9 +507,9 @@ fn codec_frame() {
 
             for p in payload.drain(..) {
                 for a in attachment.iter() {
-                    for pr in priority.iter() {
+                    for pr in service.iter() {
                         let conduit = Conduit {
-                            priority: *pr,
+                            service: *pr,
                             reliability: *rl,
                         };
                         let msg =

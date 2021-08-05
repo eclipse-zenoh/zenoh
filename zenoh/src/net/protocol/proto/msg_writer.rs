@@ -49,14 +49,14 @@ impl WBuf {
     }
 
     #[inline(always)]
-    fn write_deco_priority(&mut self, priority: PriorityId) -> bool {
-        self.write(priority.header())
+    fn write_deco_service(&mut self, service: ServiceId) -> bool {
+        self.write(service.header())
     }
 
     #[inline(always)]
     pub fn write_frame_header(
         &mut self,
-        priority: Priority,
+        service: Service,
         reliability: Reliability,
         sn: ZInt,
         is_fragment: Option<bool>,
@@ -66,8 +66,8 @@ impl WBuf {
             zcheck!(self.write_deco_attachment(&attachment));
         }
 
-        if priority != Priority::default() {
-            zcheck!(self.write_deco_priority(PriorityId::new(priority)))
+        if service != Service::default() {
+            zcheck!(self.write_deco_service(ServiceId::new(service)))
         }
 
         let header = Frame::make_header(reliability, is_fragment);
@@ -100,8 +100,8 @@ impl WBuf {
     }
 
     fn write_frame(&mut self, frame: &Frame) -> bool {
-        if frame.conduit.priority != Priority::default() {
-            zcheck!(self.write_deco_priority(PriorityId::new(frame.conduit.priority)))
+        if frame.conduit.service != Service::default() {
+            zcheck!(self.write_deco_service(ServiceId::new(frame.conduit.service)))
         }
 
         zcheck!(self.write(frame.header()));

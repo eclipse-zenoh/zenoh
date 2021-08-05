@@ -18,7 +18,7 @@ mod seq_num;
 mod tx;
 
 use super::core;
-use super::core::{PeerId, Priority, Reliability, WhatAmI, ZInt};
+use super::core::{PeerId, Reliability, Service, WhatAmI, ZInt};
 use super::io;
 use super::link::Link;
 use super::proto;
@@ -94,19 +94,19 @@ impl SessionTransportChannelRx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SessionTransportConduitTx {
-    pub(crate) priority: Priority,
+    pub(crate) service: Service,
     pub(crate) reliable: Arc<Mutex<SessionTransportChannelTx>>,
     pub(crate) best_effort: Arc<Mutex<SessionTransportChannelTx>>,
 }
 
 impl SessionTransportConduitTx {
     pub(crate) fn new(
-        priority: Priority,
+        service: Service,
         initial_sn: ZInt,
         sn_resolution: ZInt,
     ) -> SessionTransportConduitTx {
         SessionTransportConduitTx {
-            priority,
+            service,
             reliable: Arc::new(Mutex::new(SessionTransportChannelTx::new(
                 initial_sn,
                 sn_resolution,
@@ -121,19 +121,19 @@ impl SessionTransportConduitTx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SessionTransportConduitRx {
-    pub(crate) priority: Priority,
+    pub(crate) service: Service,
     pub(crate) reliable: Arc<Mutex<SessionTransportChannelRx>>,
     pub(crate) best_effort: Arc<Mutex<SessionTransportChannelRx>>,
 }
 
 impl SessionTransportConduitRx {
     pub(crate) fn new(
-        priority: Priority,
+        service: Service,
         initial_sn: ZInt,
         sn_resolution: ZInt,
     ) -> SessionTransportConduitRx {
         SessionTransportConduitRx {
-            priority,
+            service,
             reliable: Arc::new(Mutex::new(SessionTransportChannelRx::new(
                 initial_sn,
                 sn_resolution,
@@ -190,7 +190,7 @@ pub(crate) struct SessionTransportConfig {
 
 impl SessionTransport {
     pub(crate) fn new(config: SessionTransportConfig) -> SessionTransport {
-        let num = if config.is_qos { Priority::num() } else { 1 };
+        let num = if config.is_qos { Service::num() } else { 1 };
 
         let mut conduit_tx = Vec::with_capacity(num);
         for p in 0..num {
@@ -302,7 +302,7 @@ impl SessionTransport {
                 let attachment = None; // No attachment here
                 let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-                pipeline.push_session_message(msg, Priority::Background);
+                pipeline.push_session_message(msg, Service::Background);
             }
 
             // Remove the link from the channel
@@ -330,7 +330,7 @@ impl SessionTransport {
             let attachment = None; // No attachment here
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            p.push_session_message(msg, Priority::Background);
+            p.push_session_message(msg, Service::Background);
         }
         // Terminate and clean up the session
         self.delete().await
@@ -351,8 +351,8 @@ impl SessionTransport {
             log::trace!("Failed SHM conversion: {}", e);
             return;
         }
-        // @TODO fix priority match
-        self.schedule_first_fit(message, Priority::default());
+        // @TODO fix service match
+        self.schedule_first_fit(message, Service::default());
     }
 
     #[cfg(not(feature = "zero-copy"))]

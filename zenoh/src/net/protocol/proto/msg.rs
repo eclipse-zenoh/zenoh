@@ -45,7 +45,7 @@ pub(crate) mod imsg {
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
         // Message decorators
-        pub(crate) const PRIORITY: u8 = 0x1e;
+        pub(crate) const SERVICE: u8 = 0x1e;
         pub(crate) const ROUTING_CONTEXT: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
@@ -73,7 +73,7 @@ pub(crate) mod imsg {
 }
 
 pub mod smsg {
-    use super::{imsg, Priority};
+    use super::{imsg, Service};
 
     // Session message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -92,7 +92,7 @@ pub mod smsg {
         pub const FRAME: u8 = imsg::id::FRAME;
 
         // Message decorators
-        pub const PRIORITY: u8 = imsg::id::PRIORITY;
+        pub const SERVICE: u8 = imsg::id::SERVICE;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
     }
 
@@ -126,21 +126,22 @@ pub mod smsg {
         pub const EXPIRED: u8 = 0x05;
     }
 
-    pub mod priority {
-        use super::{imsg, Priority};
+    pub mod service {
+        use super::{imsg, Service};
 
-        pub const REAL_TIME_HIGH: u8 = (Priority::RealTimeHigh as u8) << imsg::HEADER_BITS;
-        pub const REAL_TIME_LOW: u8 = (Priority::RealTimeLow as u8) << imsg::HEADER_BITS;
-        pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
-        pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
-        pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
-        pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
-        pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
+        pub const CONTROL: u8 = (Service::Control as u8) << imsg::HEADER_BITS;
+        pub const REAL_TIME: u8 = (Service::RealTime as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_HIGH: u8 = (Service::InteractiveHigh as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_LOW: u8 = (Service::InteractiveLow as u8) << imsg::HEADER_BITS;
+        pub const DATA_HIGH: u8 = (Service::DataHigh as u8) << imsg::HEADER_BITS;
+        pub const DATA: u8 = (Service::Data as u8) << imsg::HEADER_BITS;
+        pub const DATA_LOW: u8 = (Service::DataLow as u8) << imsg::HEADER_BITS;
+        pub const BACKGROUND: u8 = (Service::Background as u8) << imsg::HEADER_BITS;
     }
 }
 
 pub mod zmsg {
-    use super::{imsg, CongestionControl, Priority, Reliability, ZInt};
+    use super::{imsg, CongestionControl, Reliability, Service, ZInt};
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -178,7 +179,7 @@ pub mod zmsg {
 
     // Options used for DataInfo
     pub mod data {
-        use super::{imsg, Priority, ZInt};
+        use super::{imsg, Service, ZInt};
 
         pub mod info {
             use super::ZInt;
@@ -195,16 +196,16 @@ pub mod zmsg {
             pub const RTRSN: ZInt = 1 << 10; // 0x400
         }
 
-        pub mod qos {
-            use super::{imsg, Priority};
+        pub mod service {
+            use super::{imsg, Service};
 
-            pub const REAL_TIME_HIGH: u8 = (Priority::RealTimeHigh as u8) << imsg::HEADER_BITS;
-            pub const REAL_TIME_LOW: u8 = (Priority::RealTimeLow as u8) << imsg::HEADER_BITS;
-            pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
-            pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
-            pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
-            pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
-            pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
+            pub const REAL_TIME: u8 = (Service::RealTime as u8) << imsg::HEADER_BITS;
+            pub const INTERACTIVE_HIGH: u8 = (Service::InteractiveHigh as u8) << imsg::HEADER_BITS;
+            pub const INTERACTIVE_LOW: u8 = (Service::InteractiveLow as u8) << imsg::HEADER_BITS;
+            pub const DATA_HIGH: u8 = (Service::DataHigh as u8) << imsg::HEADER_BITS;
+            pub const DATA: u8 = (Service::Data as u8) << imsg::HEADER_BITS;
+            pub const DATA_LOW: u8 = (Service::DataLow as u8) << imsg::HEADER_BITS;
+            pub const BACKGROUND: u8 = (Service::Background as u8) << imsg::HEADER_BITS;
         }
     }
 
@@ -423,36 +424,36 @@ impl RoutingContext {
     }
 }
 
-/// -- PriorityId decorator
+/// -- ServiceId decorator
 ///
 /// ```text
-/// The **PriorityId** is a message decorator containing
-/// informations for quality of service.
+/// The **ServiceId** is a message decorator containing
+/// informations related to the class of service.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// | ID  | PrioID  |
+/// | ID  | Service |
 /// +-+-+-+---------+
 ///
 /// - ID == 0 is reserved
 ///
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PriorityId {
-    pub id: Priority,
+pub struct ServiceId {
+    pub id: Service,
 }
 
-impl Header for PriorityId {
+impl Header for ServiceId {
     #[inline(always)]
     fn header(&self) -> u8 {
-        smsg::id::PRIORITY | ((self.id as u8) << imsg::HEADER_BITS)
+        smsg::id::SERVICE | ((self.id as u8) << imsg::HEADER_BITS)
     }
 }
 
-impl PriorityId {
+impl ServiceId {
     #[inline(always)]
-    pub fn new(id: Priority) -> PriorityId {
-        PriorityId { id }
+    pub fn new(id: Service) -> ServiceId {
+        ServiceId { id }
     }
 }
 

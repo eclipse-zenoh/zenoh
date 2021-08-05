@@ -146,11 +146,11 @@ impl SessionTransport {
             }) => {
                 let c = self
                     .conduit_rx
-                    .get(conduit.priority as usize)
+                    .get(conduit.service as usize)
                     .ok_or_else(|| {
                         let e = format!(
                             "Session: {}. Unknown conduit: {:?}.",
-                            self.pid, conduit.priority
+                            self.pid, conduit.service
                         );
                         zerror2!(ZErrorKind::InvalidMessage { descr: e })
                     })?;

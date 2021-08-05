@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{Priority, Reliability};
+use super::core::{Reliability, Service};
 use super::io::WBuf;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session::defaults::{
@@ -19,13 +19,13 @@ use super::session::defaults::{
     ZN_QUEUE_PULL_BACKOFF,
     // Configurable constants
     ZN_QUEUE_SIZE_BACKGROUND,
-    ZN_QUEUE_SIZE_CTRL,
+    ZN_QUEUE_SIZE_CONTROL,
+    ZN_QUEUE_SIZE_DATA,
     ZN_QUEUE_SIZE_DATA_HIGH,
     ZN_QUEUE_SIZE_DATA_LOW,
     ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
     ZN_QUEUE_SIZE_INTERACTIVE_LOW,
-    ZN_QUEUE_SIZE_REAL_TIME_HIGH,
-    ZN_QUEUE_SIZE_REAL_TIME_LOW,
+    ZN_QUEUE_SIZE_REAL_TIME,
 };
 use super::{SerializationBatch, SessionTransportConduitTx};
 use async_std::task;
@@ -39,7 +39,7 @@ use zenoh_util::sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondva
 use zenoh_util::zlock;
 
 macro_rules! zgetbatch {
-    ($self:expr, $priority:expr, $stage_in:expr, $is_droppable:expr) => {
+    ($self:expr, $service:expr, $stage_in:expr, $is_droppable:expr) => {
         // Try to get a pointer to the first batch
         loop {
             if let Some(batch) = $stage_in.inner.front_mut() {
@@ -47,7 +47,7 @@ macro_rules! zgetbatch {
             }
 
             // Refill the batches
-            let mut refill_guard = zlock!($self.stage_refill[$priority]);
+            let mut refill_guard = zlock!($self.stage_refill[$service]);
             if refill_guard.is_empty() {
                 // Execute the dropping strategy if provided
                 if $is_droppable {
@@ -67,14 +67,14 @@ macro_rules! zgetbatch {
                     return;
                 }
 
-                refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
+                refill_guard = $self.cond_canrefill[$service].wait(refill_guard).unwrap();
 
                 // Verify that the pipeline is still active
                 if !$self.active.load(Ordering::Acquire) {
                     return;
                 }
 
-                $stage_in = zlock!($self.stage_in[$priority]);
+                $stage_in = zlock!($self.stage_in[$service]);
             }
 
             // Drain all the empty batches
@@ -193,20 +193,20 @@ pub(crate) struct TransmissionPipeline {
     active: Arc<AtomicBool>,
     // The conduit TX containing the SN generators
     conduit: Box<[SessionTransportConduitTx]>,
-    // Each priority queue has its own Mutex
+    // Each service queue has its own Mutex
     stage_in: Box<[Arc<Mutex<StageIn>>]>,
-    // Amount of bytes available in each stage IN priority queue
+    // Amount of bytes available in each stage IN service queue
     bytes_in: Box<[Arc<AtomicUsize>]>,
-    // A single Mutex for all the priority queues
+    // A single Mutex for all the service queues
     stage_out: Arc<Mutex<Box<[StageOut]>>>,
-    // Number of batches in each stage OUT priority queue
+    // Number of batches in each stage OUT service queue
     batches_out: Box<[Arc<AtomicUsize>]>,
-    // Each priority queue has its own Mutex
+    // Each service queue has its own Mutex
     stage_refill: Box<[Arc<Mutex<StageRefill>>]>,
-    // Each priority queue has its own Conditional variable
+    // Each service queue has its own Conditional variable
     // The conditional variable requires a MutexGuard from stage_refill
     cond_canrefill: Box<[Arc<Condvar>]>,
-    // A single conditional variable for all the priority queues
+    // A single conditional variable for all the service queues
     // The conditional variable requires a MutexGuard from stage_out
     cond_canpull: AsyncCondvar,
 }
@@ -226,7 +226,7 @@ impl TransmissionPipeline {
         // Build the stage REFILL
         let mut stage_refill = Vec::with_capacity(conduit.len());
         for c in conduit.iter() {
-            stage_refill.push(Arc::new(Mutex::new(StageRefill::new(c.priority as usize))));
+            stage_refill.push(Arc::new(Mutex::new(StageRefill::new(c.service as usize))));
         }
 
         // Batches to be pulled from stage OUT
@@ -237,8 +237,8 @@ impl TransmissionPipeline {
         let mut stage_out = Vec::with_capacity(conduit.len());
         for c in conduit.iter() {
             stage_out.push(StageOut::new(
-                c.priority as usize,
-                batches_out[c.priority as usize].clone(),
+                c.service as usize,
+                batches_out[c.service as usize].clone(),
             ));
         }
         let stage_out = Arc::new(Mutex::new(stage_out.into_boxed_slice()));
@@ -250,15 +250,15 @@ impl TransmissionPipeline {
         // Build the stage IN
         let mut stage_in = Vec::with_capacity(conduit.len());
         for c in conduit.iter() {
-            let capacity = match c.priority {
-                Priority::Control => *ZN_QUEUE_SIZE_CTRL,
-                Priority::RealTimeHigh => *ZN_QUEUE_SIZE_REAL_TIME_HIGH,
-                Priority::RealTimeLow => *ZN_QUEUE_SIZE_REAL_TIME_LOW,
-                Priority::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
-                Priority::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
-                Priority::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
-                Priority::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
-                Priority::Background => *ZN_QUEUE_SIZE_BACKGROUND,
+            let capacity = match c.service {
+                Service::Control => *ZN_QUEUE_SIZE_CONTROL,
+                Service::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
+                Service::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
+                Service::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
+                Service::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
+                Service::Data => *ZN_QUEUE_SIZE_DATA,
+                Service::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
+                Service::Background => *ZN_QUEUE_SIZE_BACKGROUND,
             };
 
             stage_in.push(Arc::new(Mutex::new(StageIn::new(
@@ -266,7 +266,7 @@ impl TransmissionPipeline {
                 batch_size,
                 is_streamed,
                 c.clone(),
-                bytes_in[c.priority as usize].clone(),
+                bytes_in[c.service as usize].clone(),
             ))));
         }
 
@@ -284,9 +284,9 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_session_message(&self, message: SessionMessage, priority: Priority) {
-        // Check it is a valid priority
-        let p = priority as usize;
+    pub(crate) fn push_session_message(&self, message: SessionMessage, service: Service) {
+        // Check it is a valid service
+        let p = service as usize;
         if p >= self.conduit.len() {
             panic!("ARGH");
         }
@@ -329,9 +329,9 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, message: ZenohMessage, priority: Priority) {
-        // Check it is a valid priority
-        let p = priority as usize;
+    pub(crate) fn push_zenoh_message(&self, message: ZenohMessage, service: Service) {
+        // Check it is a valid service
+        let p = service as usize;
         if p >= self.conduit.len() {
             panic!("ARGH");
         }
@@ -377,7 +377,7 @@ impl TransmissionPipeline {
     fn fragment_zenoh_message(
         &self,
         message: ZenohMessage,
-        priority: usize,
+        service: usize,
         stage_in: MutexGuard<'_, StageIn>,
     ) {
         // Assign the stage_in to in_guard to avoid lifetime warnings
@@ -393,12 +393,12 @@ impl TransmissionPipeline {
         let (ch, sn) = if message.is_reliable() {
             (
                 Reliability::Reliable,
-                self.conduit[priority].reliable.clone(),
+                self.conduit[service].reliable.clone(),
             )
         } else {
             (
                 Reliability::BestEffort,
-                self.conduit[priority].best_effort.clone(),
+                self.conduit[service].best_effort.clone(),
             )
         };
         let mut guard = zlock!(sn);
@@ -407,7 +407,7 @@ impl TransmissionPipeline {
         let mut to_write = fragbuf.len();
         while to_write > 0 {
             // Get the current serialization batch
-            let batch = zgetbatch!(self, priority, in_guard, false);
+            let batch = zgetbatch!(self, service, in_guard, false);
 
             // Get the frame SN
             let sn = guard.sn.get();
@@ -423,7 +423,7 @@ impl TransmissionPipeline {
                 // Move the serialization batch into the OUT pipeline
                 let batch = in_guard.try_pull().unwrap();
                 let mut out_guard = zlock!(self.stage_out);
-                out_guard[priority].push(batch);
+                out_guard[service].push(batch);
                 drop(out_guard);
                 self.cond_canpull.notify_one();
             } else {
@@ -440,18 +440,18 @@ impl TransmissionPipeline {
         in_guard.fragbuf = Some(fragbuf);
     }
 
-    pub(super) async fn try_pull_queue(&self, priority: usize) -> Option<SerializationBatch> {
+    pub(super) async fn try_pull_queue(&self, service: usize) -> Option<SerializationBatch> {
         let mut backoff = Duration::from_nanos(*ZN_QUEUE_PULL_BACKOFF);
         let mut bytes_in_pre: usize = 0;
         loop {
             // Check first if we have complete batches available for transmission
-            if self.batches_out[priority].load(Ordering::Acquire) > 0 {
+            if self.batches_out[service].load(Ordering::Acquire) > 0 {
                 let mut out_guard = zlock!(self.stage_out);
-                return out_guard[priority].try_pull();
+                return out_guard[service].try_pull();
             }
 
             // Check then if there are incomplete batches available for transmission
-            let bytes_in_now = self.bytes_in[priority].load(Ordering::Acquire);
+            let bytes_in_now = self.bytes_in[service].load(Ordering::Acquire);
             if bytes_in_now == 0 {
                 // Nothing in the batch, return immediately
                 return None;
@@ -467,12 +467,12 @@ impl TransmissionPipeline {
                 // No new bytes have been written on the batch, try to pull
                 // First try to pull from stage OUT
                 let mut out_guard = zlock!(self.stage_out);
-                if let Some(batch) = out_guard[priority].try_pull() {
+                if let Some(batch) = out_guard[service].try_pull() {
                     return Some(batch);
                 }
 
                 // An incomplete (non-empty) batch is available in the state IN pipeline.
-                if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
+                if let Ok(mut in_guard) = self.stage_in[service].try_lock() {
                     return in_guard.try_pull();
                 }
             }
@@ -492,24 +492,24 @@ impl TransmissionPipeline {
 
         let mut backoff = Duration::from_nanos(*ZN_QUEUE_PULL_BACKOFF);
         loop {
-            for priority in 0..self.conduit.len() {
-                if let Some(batch) = self.try_pull_queue(priority).await {
-                    return Some((batch, priority));
+            for service in 0..self.conduit.len() {
+                if let Some(batch) = self.try_pull_queue(service).await {
+                    return Some((batch, service));
                 }
             }
 
             let action = {
                 let mut out_guard = zlock!(self.stage_out);
                 let mut is_pipeline_really_empty = true;
-                for priority in 0..out_guard.len() {
-                    if let Some(batch) = out_guard[priority].try_pull() {
-                        return Some((batch, priority));
+                for service in 0..out_guard.len() {
+                    if let Some(batch) = out_guard[service].try_pull() {
+                        return Some((batch, service));
                     }
 
                     // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
-                    if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
+                    if let Ok(mut in_guard) = self.stage_in[service].try_lock() {
                         if let Some(batch) = in_guard.try_pull() {
-                            return Some((batch, priority));
+                            return Some((batch, service));
                         }
                     } else {
                         is_pipeline_really_empty = false
@@ -547,11 +547,11 @@ impl TransmissionPipeline {
         }
     }
 
-    pub(super) fn refill(&self, batch: SerializationBatch, priority: usize) {
-        let mut refill_guard = zlock!(self.stage_refill[priority]);
+    pub(super) fn refill(&self, batch: SerializationBatch, service: usize) {
+        let mut refill_guard = zlock!(self.stage_refill[service]);
         refill_guard.push(batch);
         drop(refill_guard);
-        self.cond_canrefill[priority].notify_one();
+        self.cond_canrefill[service].notify_one();
     }
 
     pub(super) fn disable(&self) {
@@ -585,8 +585,8 @@ impl TransmissionPipeline {
         let mut out_guard = zlock!(self.stage_out);
 
         // Drain first the batches in stage OUT
-        for priority in 0..out_guard.len() {
-            if let Some(b) = out_guard[priority].try_pull() {
+        for service in 0..out_guard.len() {
+            if let Some(b) = out_guard[service].try_pull() {
                 batches.push(b);
             }
         }
@@ -616,7 +616,7 @@ mod tests {
     use super::super::io::ZBuf;
     use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
     use super::super::session::defaults::{
-        ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_QUEUE_SIZE_CTRL,
+        ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_QUEUE_SIZE_CONTROL,
     };
     use super::*;
     use async_std::prelude::*;
@@ -658,7 +658,7 @@ mod tests {
                 num_msg, payload_size
             );
             for _ in 0..num_msg {
-                queue.push_zenoh_message(message.clone(), Priority::Control);
+                queue.push_zenoh_message(message.clone(), Service::Control);
             }
         }
 
@@ -669,7 +669,7 @@ mod tests {
             let mut fragments: usize = 0;
 
             while msgs != num_msg {
-                let (batch, priority) = queue.pull().await.unwrap();
+                let (batch, service) = queue.pull().await.unwrap();
                 batches += 1;
                 bytes += batch.len();
                 // Create a ZBuf for deserialization starting from the batch
@@ -694,7 +694,7 @@ mod tests {
                     }
                 }
                 // Reinsert the batch
-                queue.refill(batch, priority);
+                queue.refill(batch, service);
             }
 
             println!(
@@ -707,7 +707,7 @@ mod tests {
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![SessionTransportConduitTx::new(
-            Priority::Control,
+            Service::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
         )]
@@ -776,14 +776,14 @@ mod tests {
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
-            let num_msg = 1 + *ZN_QUEUE_SIZE_CTRL;
+            let num_msg = 1 + *ZN_QUEUE_SIZE_CONTROL;
             for i in 0..num_msg {
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduling message #{} with payload size of {} bytes",
                     id, i,
                     payload_size
                 );
-                queue.push_zenoh_message(message.clone(), Priority::Control);
+                queue.push_zenoh_message(message.clone(), Service::Control);
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
@@ -797,7 +797,7 @@ mod tests {
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![SessionTransportConduitTx::new(
-            Priority::Control,
+            Service::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
         )]
@@ -822,10 +822,10 @@ mod tests {
             // Wait to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-                *ZN_QUEUE_SIZE_CTRL
+                *ZN_QUEUE_SIZE_CONTROL
             );
             let check = async {
-                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_CTRL {
+                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_CONTROL {
                     task::sleep(SLEEP).await;
                 }
             };
@@ -880,13 +880,13 @@ mod tests {
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
-            let num_msg = *ZN_QUEUE_SIZE_CTRL;
+            let num_msg = *ZN_QUEUE_SIZE_CONTROL;
             for i in 0..num_msg {
                 println!(
                     "Pipeline Blocking [>>>]: Scheduling message #{} with payload size of {} bytes",
                     i, payload_size
                 );
-                queue.push_zenoh_message(message.clone(), Priority::Control);
+                queue.push_zenoh_message(message.clone(), Service::Control);
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: Scheduled message #{} with payload size of {} bytes",
@@ -899,7 +899,7 @@ mod tests {
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![SessionTransportConduitTx::new(
-            Priority::Control,
+            Service::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
         )]
@@ -926,10 +926,10 @@ mod tests {
             // Wait to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-                *ZN_QUEUE_SIZE_CTRL
+                *ZN_QUEUE_SIZE_CONTROL
             );
             let check = async {
-                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_CTRL {
+                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_CONTROL {
                     task::sleep(SLEEP).await;
                 }
             };
@@ -959,7 +959,7 @@ mod tests {
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![SessionTransportConduitTx::new(
-            Priority::Control,
+            Service::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
         )]
@@ -1003,7 +1003,7 @@ mod tests {
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
                     while start.elapsed() < duration {
-                        c_pipeline.push_zenoh_message(message.clone(), Priority::Control);
+                        c_pipeline.push_zenoh_message(message.clone(), Service::Control);
                     }
                 }
             }
@@ -1013,10 +1013,10 @@ mod tests {
         let c_count = count.clone();
         task::spawn(async move {
             loop {
-                let (batch, priority) = c_pipeline.pull().await.unwrap();
+                let (batch, service) = c_pipeline.pull().await.unwrap();
                 c_count.fetch_add(batch.len(), Ordering::AcqRel);
                 task::sleep(Duration::from_nanos(100)).await;
-                c_pipeline.refill(batch, priority);
+                c_pipeline.refill(batch, service);
             }
         });
 

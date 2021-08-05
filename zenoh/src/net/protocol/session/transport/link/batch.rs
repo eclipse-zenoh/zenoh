@@ -171,7 +171,7 @@ impl SerializationBatch {
             let fragment = Some(is_final);
             let attachment = None;
             let res = self.buffer.write_frame_header(
-                self.conduit.priority,
+                self.conduit.service,
                 reliability,
                 sn,
                 fragment,
@@ -259,7 +259,7 @@ impl SerializationBatch {
             };
             let res =
                 self.buffer
-                    .write_frame_header(self.conduit.priority, reliability, sn, None, None)
+                    .write_frame_header(self.conduit.service, reliability, sn, None, None)
                     && self.buffer.write_zenoh_message(message);
             if res {
                 self.current_frame = frame;
@@ -314,7 +314,7 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::super::core::{CongestionControl, Priority, Reliability, ResKey};
+    use super::super::core::{CongestionControl, Reliability, ResKey, Service};
     use super::super::io::{WBuf, ZBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
     use super::super::session::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
@@ -332,7 +332,7 @@ mod tests {
 
             // Create the serialization batch
             let conduit = SessionTransportConduitTx::new(
-                Priority::default(),
+                Service::default(),
                 0,
                 ZN_DEFAULT_SEQ_NUM_RESOLUTION,
             );
@@ -438,7 +438,7 @@ mod tests {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
             let conduit = SessionTransportConduitTx::new(
-                Priority::default(),
+                Service::default(),
                 0,
                 ZN_DEFAULT_SEQ_NUM_RESOLUTION,
             );

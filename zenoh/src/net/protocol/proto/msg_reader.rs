@@ -34,7 +34,7 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_deco_priority(&mut self, header: u8) -> Option<Priority> {
+    fn read_deco_service(&mut self, header: u8) -> Option<Service> {
         (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()
     }
 
@@ -45,7 +45,7 @@ impl ZBuf {
         use super::smsg::id::*;
 
         let mut attachment = None;
-        let mut priority = Priority::default();
+        let mut service = Service::default();
 
         // Read the message
         let body = loop {
@@ -54,9 +54,9 @@ impl ZBuf {
 
             // Read the body
             match imsg::mid(header) {
-                FRAME => break self.read_frame(header, priority)?,
-                PRIORITY => {
-                    priority = self.read_deco_priority(header)?;
+                FRAME => break self.read_frame(header, service)?,
+                SERVICE => {
+                    service = self.read_deco_service(header)?;
                     continue;
                 }
                 ATTACHMENT => {
@@ -101,7 +101,7 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_frame(&mut self, header: u8, priority: Priority) -> Option<SessionBody> {
+    fn read_frame(&mut self, header: u8, service: Service) -> Option<SessionBody> {
         let reliability = match imsg::has_flag(header, smsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
@@ -132,7 +132,7 @@ impl ZBuf {
 
         Some(SessionBody::Frame(Frame {
             conduit: Conduit {
-                priority,
+                service,
                 reliability,
             },
             sn,

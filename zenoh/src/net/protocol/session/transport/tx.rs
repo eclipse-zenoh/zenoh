@@ -11,21 +11,21 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::Priority;
+use super::core::Service;
 use super::proto::ZenohMessage;
 use super::SessionTransport;
 use zenoh_util::zread;
 
 impl SessionTransport {
     #[inline(always)]
-    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage, priority: Priority) {
+    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage, service: Service) {
         macro_rules! zpush {
             ($guard:expr, $pipeline:expr, $msg:expr) => {
                 // Drop the guard before the push_zenoh_message since
                 // the link could be congested and this operation could
                 // block for fairly long time
                 drop($guard);
-                $pipeline.push_zenoh_message($msg, priority);
+                $pipeline.push_zenoh_message($msg, service);
                 return;
             };
         }

@@ -54,12 +54,12 @@ zconfigurable! {
     // - The amount of memory being allocated for each queue is then QUEUE_SIZE_XXX * ZN_BATCH_SIZE.
     //   In case the transport link MTU is smaller than the ZN_BATCH_SIZE, then amount of memory being
     //   allocated for each queue is QUEUE_SIZE_XXX * LINK_MTU.
-    pub static ref ZN_QUEUE_SIZE_CTRL: usize = 1;
-    pub static ref ZN_QUEUE_SIZE_REAL_TIME_HIGH: usize = 4;
-    pub static ref ZN_QUEUE_SIZE_REAL_TIME_LOW: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_CONTROL: usize = 1;
+    pub static ref ZN_QUEUE_SIZE_REAL_TIME: usize = 4;
     pub static ref ZN_QUEUE_SIZE_INTERACTIVE_HIGH: usize = 4;
     pub static ref ZN_QUEUE_SIZE_INTERACTIVE_LOW: usize = 4;
     pub static ref ZN_QUEUE_SIZE_DATA_HIGH: usize = 4;
+    pub static ref ZN_QUEUE_SIZE_DATA: usize = 4;
     pub static ref ZN_QUEUE_SIZE_DATA_LOW: usize = 4;
     pub static ref ZN_QUEUE_SIZE_BACKGROUND: usize = 4;
 
