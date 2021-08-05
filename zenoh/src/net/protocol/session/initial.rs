@@ -82,7 +82,7 @@ impl ZBuf {
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
         let sn_resolution = self.read_zint()?;
-        let is_qos = if self.read()? == 1 { true } else { false };
+        let is_qos = self.read()? == 1;
         let nonce = self.read_zint()?;
 
         Some(Cookie {
