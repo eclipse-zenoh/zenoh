@@ -239,9 +239,6 @@ impl WBuf {
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
         }
-        if let Some(reply_context) = msg.reply_context.as_ref() {
-            zcheck!(self.write_deco_reply_context(reply_context));
-        }
         if msg.service != Service::default() {
             zcheck!(self.write_deco_service(msg.service))
         }
@@ -260,6 +257,10 @@ impl WBuf {
 
     #[inline(always)]
     fn write_data(&mut self, data: &Data) -> bool {
+        if let Some(reply_context) = data.reply_context.as_ref() {
+            zcheck!(self.write_deco_reply_context(reply_context));
+        }
+
         zcheck!(self.write(data.header()));
         zcheck!(self.write_reskey(&data.key));
 
@@ -388,6 +389,10 @@ impl WBuf {
     }
 
     fn write_unit(&mut self, unit: &Unit) -> bool {
+        if let Some(reply_context) = unit.reply_context.as_ref() {
+            zcheck!(self.write_deco_reply_context(reply_context));
+        }
+
         self.write(unit.header())
     }
 

@@ -352,7 +352,7 @@ impl ZBuf {
 
             // Read the body
             match imsg::mid(header) {
-                DATA => break self.read_data(header)?,
+                DATA => break self.read_data(header, reply_context)?,
                 REPLY_CONTEXT => {
                     reply_context = Some(self.read_deco_reply_context(header)?);
                     continue;
@@ -366,7 +366,7 @@ impl ZBuf {
                     continue;
                 }
                 DECLARE => break self.read_declare(header)?,
-                UNIT => break self.read_unit(header)?,
+                UNIT => break self.read_unit(header, reply_context)?,
                 PULL => break self.read_pull(header)?,
                 QUERY => break self.read_query(header)?,
                 LINK_STATE_LIST => break self.read_link_state_list(header)?,
@@ -385,7 +385,6 @@ impl ZBuf {
             service,
             reliability,
             routing_context,
-            reply_context,
             attachment,
             #[cfg(feature = "stats")]
             size: std::num::NonZeroUsize::new(start_readable - stop_readable),
@@ -393,7 +392,7 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_data(&mut self, header: u8) -> Option<ZenohBody> {
+    fn read_data(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
         let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
             CongestionControl::Drop
         } else {
@@ -425,6 +424,7 @@ impl ZBuf {
             data_info,
             payload,
             congestion_control,
+            reply_context,
         });
         Some(body)
     }
@@ -478,13 +478,16 @@ impl ZBuf {
         Some(info)
     }
 
-    fn read_unit(&mut self, header: u8) -> Option<ZenohBody> {
+    fn read_unit(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
         let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
             CongestionControl::Drop
         } else {
             CongestionControl::Block
         };
-        Some(ZenohBody::Unit(Unit { congestion_control }))
+        Some(ZenohBody::Unit(Unit {
+            congestion_control,
+            reply_context,
+        }))
     }
 
     fn read_pull(&mut self, header: u8) -> Option<ZenohBody> {

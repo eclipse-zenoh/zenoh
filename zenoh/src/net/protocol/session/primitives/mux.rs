@@ -130,6 +130,7 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             reskey.clone(),
             payload,
+            zmsg::default_service::DATA,
             reliability,
             congestion_control,
             data_info,
@@ -176,6 +177,7 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             reskey,
             payload,
+            zmsg::default_service::REPLY,
             zmsg::default_reliability::REPLY,
             zmsg::default_congestion_control::REPLY,
             data_info,
@@ -193,6 +195,7 @@ impl Primitives for Mux {
 
     fn send_reply_final(&self, qid: ZInt) {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
+            zmsg::default_service::REPLY,
             zmsg::default_reliability::REPLY,
             zmsg::default_congestion_control::REPLY,
             Some(ReplyContext::new(qid, None)),

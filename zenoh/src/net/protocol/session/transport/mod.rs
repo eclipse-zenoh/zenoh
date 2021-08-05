@@ -354,8 +354,7 @@ impl SessionTransport {
             log::trace!("Failed SHM conversion: {}", e);
             return;
         }
-        // @TODO fix service match
-        self.schedule_first_fit(message, Service::default());
+        self.schedule_first_fit(message);
     }
 
     #[cfg(not(feature = "zero-copy"))]

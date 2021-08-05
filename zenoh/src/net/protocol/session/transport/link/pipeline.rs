@@ -329,9 +329,9 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, message: ZenohMessage, service: Service) {
+    pub(crate) fn push_zenoh_message(&self, message: ZenohMessage) {
         // Check it is a valid service
-        let p = service as usize;
+        let p = message.service as usize;
         if p >= self.conduit.len() {
             panic!("ARGH");
         }
@@ -635,6 +635,7 @@ mod tests {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
             let payload = ZBuf::from(vec![0u8; payload_size]);
+            let service = Service::Control;
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -645,6 +646,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
+                service,
                 reliability,
                 congestion_control,
                 data_info,
@@ -658,7 +660,7 @@ mod tests {
                 num_msg, payload_size
             );
             for _ in 0..num_msg {
-                queue.push_zenoh_message(message.clone(), Service::Control);
+                queue.push_zenoh_message(message.clone());
             }
         }
 
@@ -757,6 +759,7 @@ mod tests {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
             let payload = ZBuf::from(vec![0u8; payload_size]);
+            let service = Service::Control;
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -766,6 +769,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
+                service,
                 reliability,
                 congestion_control,
                 data_info,
@@ -783,7 +787,7 @@ mod tests {
                     id, i,
                     payload_size
                 );
-                queue.push_zenoh_message(message.clone(), Service::Control);
+                queue.push_zenoh_message(message.clone());
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
@@ -861,6 +865,7 @@ mod tests {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
             let payload = ZBuf::from(vec![0u8; payload_size]);
+            let service = Service::Control;
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
             let data_info = None;
@@ -870,6 +875,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
+                service,
                 reliability,
                 congestion_control,
                 data_info,
@@ -886,7 +892,7 @@ mod tests {
                     "Pipeline Blocking [>>>]: Scheduling message #{} with payload size of {} bytes",
                     i, payload_size
                 );
-                queue.push_zenoh_message(message.clone(), Service::Control);
+                queue.push_zenoh_message(message.clone());
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: Scheduled message #{} with payload size of {} bytes",
@@ -982,6 +988,7 @@ mod tests {
                     // Send reliable messages
                     let key = ResKey::RName("/pipeline/thr".to_string());
                     let payload = ZBuf::from(vec![0u8; *size]);
+                    let service = Service::Control;
                     let reliability = Reliability::Reliable;
                     let congestion_control = CongestionControl::Block;
                     let data_info = None;
@@ -992,6 +999,7 @@ mod tests {
                     let message = ZenohMessage::make_data(
                         key,
                         payload,
+                        service,
                         reliability,
                         congestion_control,
                         data_info,
@@ -1003,7 +1011,7 @@ mod tests {
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
                     while start.elapsed() < duration {
-                        c_pipeline.push_zenoh_message(message.clone(), Service::Control);
+                        c_pipeline.push_zenoh_message(message.clone());
                     }
                 }
             }

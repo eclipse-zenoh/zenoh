@@ -331,11 +331,8 @@ mod tests {
             );
 
             // Create the serialization batch
-            let conduit = SessionTransportConduitTx::new(
-                Service::default(),
-                0,
-                ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-            );
+            let service = Service::default();
+            let conduit = SessionTransportConduitTx::new(service, 0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
             let mut batch = SerializationBatch::new(batch_size, *is_streamed, conduit);
 
             // Serialize the messages until the batch is full
@@ -388,6 +385,7 @@ mod tests {
                 let msg = ZenohMessage::make_data(
                     key,
                     payload,
+                    service,
                     reliability,
                     congestion_control,
                     data_info,
@@ -456,6 +454,7 @@ mod tests {
                     let msg_in = ZenohMessage::make_data(
                         key,
                         payload,
+                        conduit.service,
                         *reliability,
                         *congestion_control,
                         data_info,

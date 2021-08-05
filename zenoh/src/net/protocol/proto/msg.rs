@@ -616,6 +616,7 @@ pub struct Data {
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
     pub congestion_control: CongestionControl,
+    pub reply_context: Option<ReplyContext>,
 }
 
 impl Header for Data {
@@ -648,6 +649,7 @@ impl Header for Data {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
     pub congestion_control: CongestionControl,
+    pub reply_context: Option<ReplyContext>,
 }
 
 impl Header for Unit {
@@ -1065,7 +1067,6 @@ pub struct ZenohMessage {
     pub service: Service,
     pub reliability: Reliability,
     pub routing_context: Option<RoutingContext>,
-    pub reply_context: Option<ReplyContext>,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
     pub size: Option<std::num::NonZeroUsize>,
@@ -1079,8 +1080,8 @@ impl fmt::Debug for ZenohMessage {
             "{:?} {:?} {:?} {:?} {:?} {:?}",
             self.body,
             self.service,
+            self.reliability,
             self.routing_context,
-            self.reply_context,
             self.attachment,
             self.size
         )
@@ -1091,7 +1092,7 @@ impl fmt::Debug for ZenohMessage {
         write!(
             f,
             "{:?} {:?} {:?} {:?} {:?}",
-            self.body, self.service, self.routing_context, self.reply_context, self.attachment
+            self.body, self.service, self.reliability, self.routing_context, self.attachment
         )
     }
 }
@@ -1113,7 +1114,6 @@ impl ZenohMessage {
             service: zmsg::default_service::DECLARE,
             reliability: zmsg::default_reliability::DECLARE,
             routing_context,
-            reply_context: None,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1125,6 +1125,7 @@ impl ZenohMessage {
     pub fn make_data(
         key: ResKey,
         payload: ZBuf,
+        service: Service,
         reliability: Reliability,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
@@ -1138,11 +1139,11 @@ impl ZenohMessage {
                 data_info,
                 payload,
                 congestion_control,
+                reply_context,
             }),
             reliability,
-            service: zmsg::default_service::DATA,
+            service,
             routing_context,
-            reply_context,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1150,17 +1151,20 @@ impl ZenohMessage {
     }
 
     pub fn make_unit(
+        service: Service,
         reliability: Reliability,
         congestion_control: CongestionControl,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
-            body: ZenohBody::Unit(Unit { congestion_control }),
-            service: zmsg::default_service::UNIT,
+            body: ZenohBody::Unit(Unit {
+                congestion_control,
+                reply_context,
+            }),
+            service,
             reliability,
             routing_context: None,
-            reply_context,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1184,7 +1188,6 @@ impl ZenohMessage {
             service: zmsg::default_service::PULL,
             reliability: zmsg::default_reliability::PULL,
             routing_context: None,
-            reply_context: None,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1212,7 +1215,6 @@ impl ZenohMessage {
             service: zmsg::default_service::QUERY,
             reliability: zmsg::default_reliability::QUERY,
             routing_context,
-            reply_context: None,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1228,7 +1230,6 @@ impl ZenohMessage {
             service: zmsg::default_service::LINK_STATE_LIST,
             reliability: zmsg::default_reliability::LINK_STATE_LIST,
             routing_context: None,
-            reply_context: None,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1248,11 +1249,6 @@ impl ZenohMessage {
             ZenohBody::Unit(unit) => unit.congestion_control == CongestionControl::Drop,
             _ => false,
         }
-    }
-
-    #[inline]
-    pub fn is_reply(&self) -> bool {
-        self.reply_context.is_some()
     }
 }
 

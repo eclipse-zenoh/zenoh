@@ -14,7 +14,7 @@
 use super::super::SessionEventHandler;
 use super::link::Link;
 use super::proto::{
-    Data, Declaration, Declare, LinkStateList, Pull, Query, ZenohBody, ZenohMessage,
+    Data, Declaration, Declare, LinkStateList, Pull, Query, Unit, ZenohBody, ZenohMessage,
 };
 use super::Primitives;
 use std::any::Any;
@@ -75,7 +75,8 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 data_info,
                 payload,
                 congestion_control,
-            }) => match msg.reply_context {
+                reply_context,
+            }) => match reply_context {
                 None => {
                     self.primitives.send_data(
                         &key,
@@ -105,8 +106,8 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 },
             },
 
-            ZenohBody::Unit { .. } => {
-                if let Some(rep) = msg.reply_context {
+            ZenohBody::Unit(Unit { reply_context, .. }) => {
+                if let Some(rep) = reply_context {
                     if rep.is_final() {
                         self.primitives.send_reply_final(rep.qid);
                     }
