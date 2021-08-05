@@ -174,28 +174,30 @@ pub(crate) struct SessionTransport {
     // The session transport can do shm
     is_shm: bool,
     // The session has priorities
-    has_priorities: bool,
+    is_qos: bool,
+}
+
+pub(crate) struct SessionTransportConfig {
+    pub(crate) manager: SessionManager,
+    pub(crate) pid: PeerId,
+    pub(crate) whatami: WhatAmI,
+    pub(crate) sn_resolution: ZInt,
+    pub(crate) initial_sn_tx: ZInt,
+    pub(crate) initial_sn_rx: ZInt,
+    pub(crate) is_shm: bool,
+    pub(crate) is_qos: bool,
 }
 
 impl SessionTransport {
-    pub(crate) fn new(
-        manager: SessionManager,
-        pid: PeerId,
-        whatami: WhatAmI,
-        sn_resolution: ZInt,
-        initial_sn_tx: ZInt,
-        initial_sn_rx: ZInt,
-        is_shm: bool,
-        has_priorities: bool,
-    ) -> SessionTransport {
-        let num = if has_priorities { Priority::num() } else { 1 };
+    pub(crate) fn new(config: SessionTransportConfig) -> SessionTransport {
+        let num = if config.is_qos { Priority::num() } else { 1 };
 
         let mut conduit_tx = Vec::with_capacity(num);
         for p in 0..num {
             conduit_tx.push(SessionTransportConduitTx::new(
                 (p as u8).try_into().unwrap(),
-                initial_sn_tx,
-                sn_resolution,
+                config.initial_sn_tx,
+                config.sn_resolution,
             ));
         }
 
@@ -203,23 +205,23 @@ impl SessionTransport {
         for p in 0..num {
             conduit_rx.push(SessionTransportConduitRx::new(
                 (p as u8).try_into().unwrap(),
-                initial_sn_rx,
-                sn_resolution,
+                config.initial_sn_rx,
+                config.sn_resolution,
             ));
         }
 
         SessionTransport {
-            manager,
-            pid,
-            whatami,
-            sn_resolution,
+            manager: config.manager,
+            pid: config.pid,
+            whatami: config.whatami,
+            sn_resolution: config.sn_resolution,
             conduit_tx: conduit_tx.into_boxed_slice(),
             conduit_rx: conduit_rx.into_boxed_slice(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
             alive: AsyncArc::new(AsyncMutex::new(true)),
-            is_shm,
-            has_priorities,
+            is_shm: config.is_shm,
+            is_qos: config.is_qos,
         }
     }
 

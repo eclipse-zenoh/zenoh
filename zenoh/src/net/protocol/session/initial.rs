@@ -21,7 +21,7 @@ use super::link::Link;
 use super::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
 };
-use super::{Opened, Session, SessionManager};
+use super::{Opened, Session, SessionConfig, SessionManager};
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::hmac;
@@ -446,15 +446,16 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         }
     };
 
-    let res = manager.init_session(
-        &info.pid,
-        info.whatami,
-        info.sn_resolution,
-        info.initial_sn_tx,
-        info.initial_sn_rx,
-        info.auth_session.is_local,
-        true, //@TODO
-    );
+    let config = SessionConfig {
+        peer: info.pid.clone(),
+        whatami: info.whatami,
+        sn_resolution: info.sn_resolution,
+        initial_sn_tx: info.initial_sn_tx,
+        initial_sn_rx: info.initial_sn_rx,
+        is_shm: info.auth_session.is_shm,
+        is_qos: true, //@TODO
+    };
+    let res = manager.init_session(config);
     let session = match res {
         Ok(s) => s,
         Err(e) => {
@@ -879,16 +880,17 @@ async fn accept_init_session(
         }
     };
 
+    let config = SessionConfig {
+        peer: input.cookie.pid.clone(),
+        whatami: input.cookie.whatami,
+        sn_resolution: input.cookie.sn_resolution,
+        initial_sn_tx: open_ack_initial_sn,
+        initial_sn_rx: input.initial_sn,
+        is_shm: input.auth_session.is_shm,
+        is_qos: true, //@TODO
+    };
     let session = manager
-        .init_session(
-            &input.cookie.pid,
-            input.cookie.whatami,
-            input.cookie.sn_resolution,
-            open_ack_initial_sn,
-            input.initial_sn,
-            input.auth_session.is_local,
-            true, // @TODO
-        )
+        .init_session(config)
         .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
 
     // Retrieve the session's transport

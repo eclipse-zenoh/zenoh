@@ -80,6 +80,16 @@ impl SessionEventHandler for DummySessionEventHandler {
 /*************************************/
 const STR_ERR: &str = "Session closed";
 
+pub(crate) struct SessionConfig {
+    pub(crate) peer: PeerId,
+    pub(crate) whatami: WhatAmI,
+    pub(crate) sn_resolution: ZInt,
+    pub(crate) initial_sn_tx: ZInt,
+    pub(crate) initial_sn_rx: ZInt,
+    pub(crate) is_shm: bool,
+    pub(crate) is_qos: bool,
+}
+
 /// [`Session`] is the session handler returned when opening a new session
 #[derive(Clone)]
 pub struct Session(Weak<SessionTransport>);

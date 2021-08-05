@@ -149,20 +149,20 @@ impl fmt::Display for AuthenticatedPeerLink {
 
 // Authenticated peer session
 pub struct AuthenticatedPeerSession {
-    pub is_local: bool,
+    pub is_shm: bool,
 }
 
 impl AuthenticatedPeerSession {
     pub fn merge(self, other: Self) -> Self {
         Self {
-            is_local: self.is_local || other.is_local,
+            is_shm: self.is_shm || other.is_shm,
         }
     }
 }
 
 impl Default for AuthenticatedPeerSession {
     fn default() -> Self {
-        Self { is_local: false }
+        Self { is_shm: false }
     }
 }
 
