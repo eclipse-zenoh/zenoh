@@ -287,7 +287,7 @@ impl Service {
 
 impl Default for Service {
     fn default() -> Service {
-        Service::Background
+        Service::Data
     }
 }
 

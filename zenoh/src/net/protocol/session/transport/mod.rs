@@ -75,6 +75,7 @@ impl SessionTransportChannelRx {
     pub(crate) fn new(
         initial_sn: ZInt,
         sn_resolution: ZInt,
+        service: Service,
         reliability: Reliability,
     ) -> SessionTransportChannelRx {
         // Set the sequence number in the state as it had
@@ -87,7 +88,7 @@ impl SessionTransportChannelRx {
 
         SessionTransportChannelRx {
             sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag: DefragBuffer::new(initial_sn, sn_resolution, reliability),
+            defrag: DefragBuffer::new(initial_sn, sn_resolution, service, reliability),
         }
     }
 }
@@ -137,11 +138,13 @@ impl SessionTransportConduitRx {
             reliable: Arc::new(Mutex::new(SessionTransportChannelRx::new(
                 initial_sn,
                 sn_resolution,
+                service,
                 Reliability::Reliable,
             ))),
             best_effort: Arc::new(Mutex::new(SessionTransportChannelRx::new(
                 initial_sn,
                 sn_resolution,
+                service,
                 Reliability::BestEffort,
             ))),
         }

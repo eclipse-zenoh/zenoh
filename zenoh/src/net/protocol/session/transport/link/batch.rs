@@ -530,7 +530,7 @@ mod tests {
                     assert!(!fragments.is_empty());
 
                     // Deserialize the message
-                    let msg_out = fragments.read_zenoh_message(*reliability);
+                    let msg_out = fragments.read_zenoh_message(conduit.service, *reliability);
                     assert!(msg_out.is_some());
                     assert_eq!(msg_in, msg_out.unwrap());
 

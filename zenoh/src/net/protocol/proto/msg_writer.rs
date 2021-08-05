@@ -49,7 +49,7 @@ impl WBuf {
     }
 
     #[inline(always)]
-    fn write_deco_service(&mut self, service: ServiceId) -> bool {
+    fn write_deco_service(&mut self, service: Service) -> bool {
         self.write(service.header())
     }
 
@@ -67,7 +67,7 @@ impl WBuf {
         }
 
         if service != Service::default() {
-            zcheck!(self.write_deco_service(ServiceId::new(service)))
+            zcheck!(self.write_deco_service(service))
         }
 
         let header = Frame::make_header(reliability, is_fragment);
@@ -101,7 +101,7 @@ impl WBuf {
 
     fn write_frame(&mut self, frame: &Frame) -> bool {
         if frame.conduit.service != Service::default() {
-            zcheck!(self.write_deco_service(ServiceId::new(frame.conduit.service)))
+            zcheck!(self.write_deco_service(frame.conduit.service))
         }
 
         zcheck!(self.write(frame.header()));
@@ -241,6 +241,9 @@ impl WBuf {
         }
         if let Some(reply_context) = msg.reply_context.as_ref() {
             zcheck!(self.write_deco_reply_context(reply_context));
+        }
+        if msg.service != Service::default() {
+            zcheck!(self.write_deco_service(msg.service))
         }
 
         match &msg.body {

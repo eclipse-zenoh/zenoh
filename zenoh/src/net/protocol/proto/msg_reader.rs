@@ -35,7 +35,8 @@ impl ZBuf {
 
     #[inline(always)]
     fn read_deco_service(&mut self, header: u8) -> Option<Service> {
-        (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()
+        let service: Service = (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()?;
+        Some(service)
     }
 
     /*************************************/
@@ -118,7 +119,7 @@ impl ZBuf {
             let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
             while self.can_read() {
                 let pos = self.get_pos();
-                if let Some(msg) = self.read_zenoh_message(reliability) {
+                if let Some(msg) = self.read_zenoh_message(service, reliability) {
                     messages.push(msg);
                 } else if self.set_pos(pos) {
                     break;
@@ -329,7 +330,11 @@ impl ZBuf {
         Some(ReplyContext { qid, replier })
     }
 
-    pub fn read_zenoh_message(&mut self, reliability: Reliability) -> Option<ZenohMessage> {
+    pub fn read_zenoh_message(
+        &mut self,
+        service: Service,
+        reliability: Reliability,
+    ) -> Option<ZenohMessage> {
         use super::zmsg::id::*;
 
         #[cfg(feature = "stats")]
@@ -347,11 +352,7 @@ impl ZBuf {
 
             // Read the body
             match imsg::mid(header) {
-                DATA => break self.read_data(header, reliability)?,
-                ROUTING_CONTEXT => {
-                    routing_context = Some(self.read_deco_routing_context(header)?);
-                    continue;
-                }
+                DATA => break self.read_data(header)?,
                 REPLY_CONTEXT => {
                     reply_context = Some(self.read_deco_reply_context(header)?);
                     continue;
@@ -360,11 +361,15 @@ impl ZBuf {
                     attachment = Some(self.read_deco_attachment(header)?);
                     continue;
                 }
-                DECLARE => break self.read_declare(header, reliability)?,
-                UNIT => break self.read_unit(header, reliability)?,
-                PULL => break self.read_pull(header, reliability)?,
-                QUERY => break self.read_query(header, reliability)?,
-                LINK_STATE_LIST => break self.read_link_state_list(header, reliability)?,
+                ROUTING_CONTEXT => {
+                    routing_context = Some(self.read_deco_routing_context(header)?);
+                    continue;
+                }
+                DECLARE => break self.read_declare(header)?,
+                UNIT => break self.read_unit(header)?,
+                PULL => break self.read_pull(header)?,
+                QUERY => break self.read_query(header)?,
+                LINK_STATE_LIST => break self.read_link_state_list(header)?,
                 unknown => {
                     log::trace!("Zenoh message with unknown ID: {}", unknown);
                     return None;
@@ -377,6 +382,8 @@ impl ZBuf {
 
         Some(ZenohMessage {
             body,
+            service,
+            reliability,
             routing_context,
             reply_context,
             attachment,
@@ -386,7 +393,7 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_data(&mut self, header: u8, reliability: Reliability) -> Option<ZenohBody> {
+    fn read_data(&mut self, header: u8) -> Option<ZenohBody> {
         let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
             CongestionControl::Drop
         } else {
@@ -417,7 +424,6 @@ impl ZBuf {
             key,
             data_info,
             payload,
-            reliability,
             congestion_control,
         });
         Some(body)
@@ -472,19 +478,16 @@ impl ZBuf {
         Some(info)
     }
 
-    fn read_unit(&mut self, header: u8, reliability: Reliability) -> Option<ZenohBody> {
+    fn read_unit(&mut self, header: u8) -> Option<ZenohBody> {
         let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
             CongestionControl::Drop
         } else {
             CongestionControl::Block
         };
-        Some(ZenohBody::Unit(Unit {
-            reliability,
-            congestion_control,
-        }))
+        Some(ZenohBody::Unit(Unit { congestion_control }))
     }
 
-    fn read_pull(&mut self, header: u8, _reliability: Reliability) -> Option<ZenohBody> {
+    fn read_pull(&mut self, header: u8) -> Option<ZenohBody> {
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
         let pull_id = self.read_zint()?;
         let max_samples = if imsg::has_flag(header, zmsg::flag::N) {
@@ -502,7 +505,7 @@ impl ZBuf {
         }))
     }
 
-    fn read_declare(&mut self, _header: u8, _reliability: Reliability) -> Option<ZenohBody> {
+    fn read_declare(&mut self, _header: u8) -> Option<ZenohBody> {
         let declarations = self.read_declarations()?;
         Some(ZenohBody::Declare(Declare { declarations }))
     }
@@ -583,7 +586,7 @@ impl ZBuf {
         }
     }
 
-    fn read_query(&mut self, header: u8, _reliability: Reliability) -> Option<ZenohBody> {
+    fn read_query(&mut self, header: u8) -> Option<ZenohBody> {
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
         let predicate = self.read_string()?;
         let qid = self.read_zint()?;
@@ -603,11 +606,7 @@ impl ZBuf {
         }))
     }
 
-    fn read_link_state_list(
-        &mut self,
-        _header: u8,
-        _reliability: Reliability,
-    ) -> Option<ZenohBody> {
+    fn read_link_state_list(&mut self, _header: u8) -> Option<ZenohBody> {
         let len = self.read_zint()?;
         let mut link_states: Vec<LinkState> = Vec::new();
         for _ in 0..len {

@@ -45,7 +45,7 @@ pub(crate) mod imsg {
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
         // Message decorators
-        pub(crate) const SERVICE: u8 = 0x1e;
+        pub(crate) const SERVICE: u8 = 0x1c;
         pub(crate) const ROUTING_CONTEXT: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
@@ -266,6 +266,19 @@ pub mod zmsg {
         pub const UNIT: CongestionControl = CongestionControl::Block;
         pub const LINK_STATE_LIST: CongestionControl = CongestionControl::Block;
     }
+
+    // Default service for each Zenoh Message
+    pub mod default_service {
+        use super::Service;
+
+        pub const DECLARE: Service = Service::Data;
+        pub const DATA: Service = Service::Data;
+        pub const QUERY: Service = Service::Data;
+        pub const PULL: Service = Service::Data;
+        pub const REPLY: Service = Service::Data;
+        pub const UNIT: Service = Service::Data;
+        pub const LINK_STATE_LIST: Service = Service::Control;
+    }
 }
 
 /*************************************/
@@ -278,11 +291,6 @@ pub(crate) trait Header {
 pub(crate) trait Options {
     fn options(&self) -> ZInt;
     fn has_options(&self) -> bool;
-}
-
-pub(crate) trait Control {
-    fn reliability(&self) -> Reliability;
-    fn congestion(&self) -> CongestionControl;
 }
 
 /*************************************/
@@ -424,10 +432,10 @@ impl RoutingContext {
     }
 }
 
-/// -- ServiceId decorator
+/// -- Service decorator
 ///
 /// ```text
-/// The **ServiceId** is a message decorator containing
+/// The **Service** is a message decorator containing
 /// informations related to the class of service.
 ///
 ///  7 6 5 4 3 2 1 0
@@ -435,25 +443,10 @@ impl RoutingContext {
 /// | ID  | Service |
 /// +-+-+-+---------+
 ///
-/// - ID == 0 is reserved
-///
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ServiceId {
-    pub id: Service,
-}
-
-impl Header for ServiceId {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        smsg::id::SERVICE | ((self.id as u8) << imsg::HEADER_BITS)
-    }
-}
-
-impl ServiceId {
-    #[inline(always)]
-    pub fn new(id: Service) -> ServiceId {
-        ServiceId { id }
+impl Service {
+    pub fn header(self) -> u8 {
+        smsg::id::SERVICE | ((self as u8) << imsg::HEADER_BITS)
     }
 }
 
@@ -622,7 +615,6 @@ pub struct Data {
     pub key: ResKey,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
-    pub reliability: Reliability,
     pub congestion_control: CongestionControl,
 }
 
@@ -643,18 +635,6 @@ impl Header for Data {
     }
 }
 
-impl Control for Data {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        self.reliability
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        self.congestion_control
-    }
-}
-
 /// # Unit message
 ///
 /// ```text
@@ -667,7 +647,6 @@ impl Control for Data {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
-    pub reliability: Reliability,
     pub congestion_control: CongestionControl,
 }
 
@@ -679,18 +658,6 @@ impl Header for Unit {
             header |= zmsg::flag::D;
         }
         header
-    }
-}
-
-impl Control for Unit {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        self.reliability
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        self.congestion_control
     }
 }
 
@@ -936,18 +903,6 @@ impl Header for Declare {
     }
 }
 
-impl Control for Declare {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        zmsg::default_reliability::DECLARE
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        zmsg::default_congestion_control::DECLARE
-    }
-}
-
 /// # Pull message
 ///
 /// ```text
@@ -984,18 +939,6 @@ impl Header for Pull {
             header |= zmsg::flag::K;
         }
         header
-    }
-}
-
-impl Control for Pull {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        zmsg::default_reliability::PULL
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        zmsg::default_congestion_control::PULL
     }
 }
 
@@ -1037,18 +980,6 @@ impl Header for Query {
             header |= zmsg::flag::K;
         }
         header
-    }
-}
-
-impl Control for Query {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        zmsg::default_reliability::QUERY
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        zmsg::default_congestion_control::QUERY
     }
 }
 
@@ -1116,18 +1047,6 @@ impl Header for LinkStateList {
     }
 }
 
-impl Control for LinkStateList {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        zmsg::default_reliability::LINK_STATE_LIST
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        zmsg::default_congestion_control::LINK_STATE_LIST
-    }
-}
-
 // Zenoh messages at zenoh level
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
@@ -1143,6 +1062,8 @@ pub enum ZenohBody {
 #[derive(Clone, PartialEq)]
 pub struct ZenohMessage {
     pub body: ZenohBody,
+    pub service: Service,
+    pub reliability: Reliability,
     pub routing_context: Option<RoutingContext>,
     pub reply_context: Option<ReplyContext>,
     pub attachment: Option<Attachment>,
@@ -1155,8 +1076,13 @@ impl fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?} {:?} {:?}",
-            self.body, self.routing_context, self.reply_context, self.attachment, self.size
+            "{:?} {:?} {:?} {:?} {:?} {:?}",
+            self.body,
+            self.service,
+            self.routing_context,
+            self.reply_context,
+            self.attachment,
+            self.size
         )
     }
 
@@ -1164,8 +1090,8 @@ impl fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?} {:?}",
-            self.body, self.routing_context, self.reply_context, self.attachment
+            "{:?} {:?} {:?} {:?} {:?}",
+            self.body, self.service, self.routing_context, self.reply_context, self.attachment
         )
     }
 }
@@ -1184,6 +1110,8 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Declare(Declare { declarations }),
+            service: zmsg::default_service::DECLARE,
+            reliability: zmsg::default_reliability::DECLARE,
             routing_context,
             reply_context: None,
             attachment,
@@ -1209,9 +1137,10 @@ impl ZenohMessage {
                 key,
                 data_info,
                 payload,
-                reliability,
                 congestion_control,
             }),
+            reliability,
+            service: zmsg::default_service::DATA,
             routing_context,
             reply_context,
             attachment,
@@ -1227,10 +1156,9 @@ impl ZenohMessage {
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
-            body: ZenohBody::Unit(Unit {
-                reliability,
-                congestion_control,
-            }),
+            body: ZenohBody::Unit(Unit { congestion_control }),
+            service: zmsg::default_service::UNIT,
+            reliability,
             routing_context: None,
             reply_context,
             attachment,
@@ -1253,6 +1181,8 @@ impl ZenohMessage {
                 max_samples,
                 is_final,
             }),
+            service: zmsg::default_service::PULL,
+            reliability: zmsg::default_reliability::PULL,
             routing_context: None,
             reply_context: None,
             attachment,
@@ -1279,6 +1209,8 @@ impl ZenohMessage {
                 target,
                 consolidation,
             }),
+            service: zmsg::default_service::QUERY,
+            reliability: zmsg::default_reliability::QUERY,
             routing_context,
             reply_context: None,
             attachment,
@@ -1293,6 +1225,8 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::LinkStateList(LinkStateList { link_states }),
+            service: zmsg::default_service::LINK_STATE_LIST,
+            reliability: zmsg::default_reliability::LINK_STATE_LIST,
             routing_context: None,
             reply_context: None,
             attachment,
@@ -1304,35 +1238,15 @@ impl ZenohMessage {
     // -- Message Predicates
     #[inline]
     pub fn is_reliable(&self) -> bool {
-        let reliability = match &self.body {
-            ZenohBody::Data(data) => data.reliability(),
-            ZenohBody::Unit(unit) => unit.reliability(),
-            ZenohBody::Declare(declare) => declare.reliability(),
-            ZenohBody::Pull(pull) => pull.reliability(),
-            ZenohBody::Query(query) => query.reliability(),
-            ZenohBody::LinkStateList(lsl) => lsl.reliability(),
-        };
-
-        match reliability {
-            Reliability::Reliable => true,
-            Reliability::BestEffort => false,
-        }
+        self.reliability == Reliability::Reliable
     }
 
     #[inline]
     pub fn is_droppable(&self) -> bool {
-        let congestion = match &self.body {
-            ZenohBody::Data(data) => data.congestion(),
-            ZenohBody::Unit(unit) => unit.congestion(),
-            ZenohBody::Declare(declare) => declare.congestion(),
-            ZenohBody::Pull(pull) => pull.congestion(),
-            ZenohBody::Query(query) => query.congestion(),
-            ZenohBody::LinkStateList(lsl) => lsl.congestion(),
-        };
-
-        match congestion {
-            CongestionControl::Drop => true,
-            CongestionControl::Block => false,
+        match &self.body {
+            ZenohBody::Data(data) => data.congestion_control == CongestionControl::Drop,
+            ZenohBody::Unit(unit) => unit.congestion_control == CongestionControl::Drop,
+            _ => false,
         }
     }
 
