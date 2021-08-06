@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{PeerId, Reliability, ZInt};
+use super::core::{Conduit, PeerId, Reliability, ZInt};
 use super::proto::{
     Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage, ZenohMessage,
 };
@@ -144,16 +144,17 @@ impl SessionTransport {
                 sn,
                 payload,
             }) => {
-                let c = self
-                    .conduit_rx
-                    .get(channel.conduit as usize)
-                    .ok_or_else(|| {
-                        let e = format!(
-                            "Session: {}. Unknown conduit: {:?}.",
-                            self.pid, channel.conduit
-                        );
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
-                    })?;
+                let c = if self.is_qos() {
+                    &self.conduit_rx[channel.conduit as usize]
+                } else if channel.conduit == Conduit::default() {
+                    &self.conduit_rx[0]
+                } else {
+                    let e = format!(
+                        "Session: {}. Unknown conduit: {:?}.",
+                        self.pid, channel.conduit
+                    );
+                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                };
 
                 match channel.reliability {
                     Reliability::Reliable => self.handle_frame(sn, payload, zlock!(c.reliable)),

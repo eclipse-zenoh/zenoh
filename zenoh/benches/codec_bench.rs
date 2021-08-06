@@ -82,13 +82,13 @@ fn bench_make_frame_header(reliability: Reliability, is_fragment: Option<bool>) 
 
 fn bench_write_frame_header(
     buf: &mut WBuf,
-    service: Conduit,
+    conduit: Conduit,
     reliability: Reliability,
     sn: ZInt,
     is_fragment: Option<bool>,
     attachment: Option<Attachment>,
 ) {
-    buf.write_frame_header(service, reliability, sn, is_fragment, attachment);
+    buf.write_frame_header(conduit, reliability, sn, is_fragment, attachment);
 }
 
 fn bench_make_frame_data(payload: FramePayload) {
@@ -191,7 +191,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // Frame benchmark
-    let service = Conduit::default();
+    let conduit = Conduit::default();
     let reliability = Reliability::Reliable;
     let is_fragment = Some(true);
     c.bench_function("bench_make_frame_header", |b| {
@@ -203,7 +203,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("bench_write_frame_header", |b| {
         b.iter(|| {
-            let _ = bench_write_frame_header(&mut buf, service, reliability, 42, is_fragment, None);
+            let _ = bench_write_frame_header(&mut buf, conduit, reliability, 42, is_fragment, None);
             buf.clear();
         })
     });

@@ -179,8 +179,6 @@ pub(crate) struct SessionTransport {
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The session transport can do shm
     is_shm: bool,
-    // The session has priorities
-    is_qos: bool,
 }
 
 pub(crate) struct SessionTransportConfig {
@@ -200,17 +198,17 @@ impl SessionTransport {
         let mut conduit_rx = vec![];
 
         if config.is_qos {
-            for p in 0..Conduit::num() {
+            for c in 0..Conduit::num() {
                 conduit_tx.push(SessionTransportConduitTx::new(
-                    (p as u8).try_into().unwrap(),
+                    (c as u8).try_into().unwrap(),
                     config.initial_sn_tx,
                     config.sn_resolution,
                 ));
             }
 
-            for p in 0..Conduit::num() {
+            for c in 0..Conduit::num() {
                 conduit_rx.push(SessionTransportConduitRx::new(
-                    (p as u8).try_into().unwrap(),
+                    (c as u8).try_into().unwrap(),
                     config.initial_sn_rx,
                     config.sn_resolution,
                 ));
@@ -240,7 +238,6 @@ impl SessionTransport {
             callback: Arc::new(RwLock::new(None)),
             alive: AsyncArc::new(AsyncMutex::new(true)),
             is_shm: config.is_shm,
-            is_qos: config.is_qos,
         }
     }
 
@@ -249,6 +246,10 @@ impl SessionTransport {
     /*************************************/
     pub(crate) fn is_shm(&self) -> bool {
         self.is_shm
+    }
+
+    pub(crate) fn is_qos(&self) -> bool {
+        self.conduit_tx.len() > 1
     }
 
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler + Send + Sync>> {

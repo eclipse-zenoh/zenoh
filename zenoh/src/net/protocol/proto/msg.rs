@@ -120,7 +120,7 @@ pub mod smsg {
     pub mod init_options {
         use super::ZInt;
 
-        pub const Q: ZInt = 1 << 0; // 0x01 Conduit     if Q==1 then the session is multi-service
+        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if QOS==1 then the session supports QoS
     }
 
     // Reason for the Close message
@@ -133,7 +133,7 @@ pub mod smsg {
         pub const EXPIRED: u8 = 0x05;
     }
 
-    pub mod service {
+    pub mod conduit {
         use super::{imsg, Conduit};
 
         pub const CONTROL: u8 = (Conduit::Control as u8) << imsg::HEADER_BITS;
@@ -451,7 +451,7 @@ impl RoutingContext {
 ///
 /// ```text
 /// The **Conduit** is a message decorator containing
-/// informations related to the class of service.
+/// informations related to the class of conduit.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -1443,7 +1443,7 @@ impl Options for InitSyn {
     fn options(&self) -> ZInt {
         let mut options = 0;
         if self.is_qos {
-            options |= smsg::init_options::Q;
+            options |= smsg::init_options::QOS;
         }
         options
     }
@@ -1481,7 +1481,7 @@ impl Options for InitAck {
     fn options(&self) -> ZInt {
         let mut options = 0;
         if self.is_qos {
-            options |= smsg::init_options::Q;
+            options |= smsg::init_options::QOS;
         }
         options
     }

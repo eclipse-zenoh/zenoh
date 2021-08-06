@@ -56,7 +56,7 @@ impl WBuf {
     #[inline(always)]
     pub fn write_frame_header(
         &mut self,
-        service: Conduit,
+        conduit: Conduit,
         reliability: Reliability,
         sn: ZInt,
         is_fragment: Option<bool>,
@@ -65,8 +65,8 @@ impl WBuf {
         if let Some(attachment) = attachment {
             zcheck!(self.write_deco_attachment(&attachment));
         }
-        if service != Conduit::default() {
-            zcheck!(self.write_deco_conduit(service))
+        if conduit != Conduit::default() {
+            zcheck!(self.write_deco_conduit(conduit))
         }
 
         let header = Frame::make_header(reliability, is_fragment);

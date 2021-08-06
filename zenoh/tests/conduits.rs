@@ -297,7 +297,7 @@ async fn run(locators: &[Locator], channel: &[Channel], msg_size: &[usize]) {
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-fn service_tcp_only() {
+fn conduits_tcp_only() {
     task::block_on(async {
         zasync_executor_init!();
     });

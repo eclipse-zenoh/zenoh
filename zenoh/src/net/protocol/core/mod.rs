@@ -319,8 +319,8 @@ impl From<Priority> for Conduit {
 impl TryFrom<u8> for Conduit {
     type Error = ZError;
 
-    fn try_from(service: u8) -> Result<Self, Self::Error> {
-        match service {
+    fn try_from(conduit: u8) -> Result<Self, Self::Error> {
+        match conduit {
             0 => Ok(Conduit::Control),
             1 => Ok(Conduit::RealTime),
             2 => Ok(Conduit::InteractiveHigh),
@@ -331,7 +331,7 @@ impl TryFrom<u8> for Conduit {
             7 => Ok(Conduit::Background),
             unknown => zerror!(ZErrorKind::Other {
                 descr: format!(
-                    "{} is not a valid service value. Admitted values are [0-7].",
+                    "{} is not a valid conduit value. Admitted values are [0-7].",
                     unknown
                 )
             }),
