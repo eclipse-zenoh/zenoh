@@ -219,6 +219,7 @@ impl SessionEventHandler for RuntimeSession {
                     face,
                     rid,
                     suffix,
+                    msg.channel,
                     data.congestion_control,
                     data.data_info,
                     data.payload,
