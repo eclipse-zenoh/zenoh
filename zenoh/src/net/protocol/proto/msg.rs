@@ -1414,7 +1414,7 @@ impl fmt::Display for Hello {
 /// (*) if A==0 and S==0 then 2^28 is assumed.
 ///     if A==1 and S==0 then the agreed resolution is the one communicated by the initiator.
 ///
-/// - if Q==1 then
+/// - if Q==1 then the initiator/responder support QoS.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct InitSyn {
