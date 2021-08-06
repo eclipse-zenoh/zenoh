@@ -32,6 +32,7 @@ use zenoh_util::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
+const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
@@ -291,7 +292,7 @@ async fn single_run(
             // Wait to receive something
             let count = async {
                 while router_handler.get_count() == 0 {
-                    task::sleep(SLEEP).await;
+                    task::sleep(SLEEP_COUNT).await;
                 }
             };
             let _ = count.timeout(TIMEOUT).await.unwrap();
@@ -303,7 +304,7 @@ async fn single_run(
             // Wait for the messages to arrive to the other side
             let count = async {
                 while router_handler.get_count() != MSG_COUNT {
-                    task::sleep(SLEEP).await;
+                    task::sleep(SLEEP_COUNT).await;
                 }
             };
             let _ = count.timeout(TIMEOUT).await.unwrap();
