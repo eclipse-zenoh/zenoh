@@ -17,7 +17,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::{CongestionControl, PeerId, Reliability, ResKey};
+use zenoh::net::protocol::core::{CongestionControl, PeerId, Reliability, ResKey, Service};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
@@ -34,6 +34,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     for s in size.iter() {
         c.bench_function(format!("{} msg_creation_yes_info", s).as_str(), |b| {
             b.iter(|| {
+                let service = Service::default();
                 let reliability = Reliability::Reliable;
                 let congestion_control = CongestionControl::Block;
 
@@ -57,6 +58,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let msg = ZenohMessage::make_data(
                     res_key,
                     payload,
+                    service,
                     reliability,
                     congestion_control,
                     info,
@@ -70,6 +72,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         c.bench_function(format!("{} msg_creation_no_info", s).as_str(), |b| {
             b.iter(|| {
+                let service = Service::default();
                 let reliability = Reliability::Reliable;
                 let congestion_control = CongestionControl::Block;
 
@@ -80,6 +83,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let msg = ZenohMessage::make_data(
                     res_key,
                     payload,
+                    service,
                     reliability,
                     congestion_control,
                     info,
@@ -92,6 +96,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     }
 
+    let service = Service::default();
     let reliability = Reliability::Reliable;
     let congestion_control = CongestionControl::Block;
     let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
@@ -113,6 +118,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let msg = Arc::new(ZenohMessage::make_data(
         res_key.clone(),
         payload.clone(),
+        service,
         reliability,
         congestion_control,
         info.clone(),
