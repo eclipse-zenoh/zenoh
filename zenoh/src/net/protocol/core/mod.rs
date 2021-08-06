@@ -267,6 +267,17 @@ impl FromStr for CongestionControl {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Priority {
+    RealTime,
+    InteractiveHigh,
+    InteractiveLow,
+    DataHigh,
+    Data,
+    DataLow,
+    Background,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum Conduit {
     Control = 0,
@@ -288,6 +299,20 @@ impl Conduit {
 impl Default for Conduit {
     fn default() -> Conduit {
         Conduit::Data
+    }
+}
+
+impl From<Priority> for Conduit {
+    fn from(priority: Priority) -> Conduit {
+        match priority {
+            Priority::RealTime => Conduit::RealTime,
+            Priority::InteractiveHigh => Conduit::InteractiveHigh,
+            Priority::InteractiveLow => Conduit::InteractiveLow,
+            Priority::DataHigh => Conduit::DataHigh,
+            Priority::Data => Conduit::Data,
+            Priority::DataLow => Conduit::DataLow,
+            Priority::Background => Conduit::Background,
+        }
     }
 }
 
