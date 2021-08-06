@@ -140,22 +140,22 @@ impl SessionTransport {
         // Process the received message
         match msg.body {
             SessionBody::Frame(Frame {
-                conduit,
+                channel,
                 sn,
                 payload,
             }) => {
                 let c = self
                     .conduit_rx
-                    .get(conduit.service as usize)
+                    .get(channel.conduit as usize)
                     .ok_or_else(|| {
                         let e = format!(
                             "Session: {}. Unknown conduit: {:?}.",
-                            self.pid, conduit.service
+                            self.pid, channel.conduit
                         );
                         zerror2!(ZErrorKind::InvalidMessage { descr: e })
                     })?;
 
-                match conduit.reliability {
+                match channel.reliability {
                     Reliability::Reliable => self.handle_frame(sn, payload, zlock!(c.reliable)),
                     Reliability::BestEffort => {
                         self.handle_frame(sn, payload, zlock!(c.best_effort))

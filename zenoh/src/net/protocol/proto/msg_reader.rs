@@ -34,9 +34,9 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_deco_service(&mut self, header: u8) -> Option<Service> {
-        let service: Service = (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()?;
-        Some(service)
+    fn read_deco_conduit(&mut self, header: u8) -> Option<Conduit> {
+        let conduit: Conduit = (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()?;
+        Some(conduit)
     }
 
     /*************************************/
@@ -46,7 +46,7 @@ impl ZBuf {
         use super::smsg::id::*;
 
         let mut attachment = None;
-        let mut service = Service::default();
+        let mut service = Conduit::default();
 
         // Read the message
         let body = loop {
@@ -56,8 +56,8 @@ impl ZBuf {
             // Read the body
             match imsg::mid(header) {
                 FRAME => break self.read_frame(header, service)?,
-                SERVICE => {
-                    service = self.read_deco_service(header)?;
+                CONDUIT => {
+                    service = self.read_deco_conduit(header)?;
                     continue;
                 }
                 ATTACHMENT => {
@@ -102,10 +102,14 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_frame(&mut self, header: u8, service: Service) -> Option<SessionBody> {
+    fn read_frame(&mut self, header: u8, conduit: Conduit) -> Option<SessionBody> {
         let reliability = match imsg::has_flag(header, smsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
+        };
+        let channel = Channel {
+            conduit,
+            reliability,
         };
         let sn = self.read_zint()?;
 
@@ -119,7 +123,7 @@ impl ZBuf {
             let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
             while self.can_read() {
                 let pos = self.get_pos();
-                if let Some(msg) = self.read_zenoh_message(service, reliability) {
+                if let Some(msg) = self.read_zenoh_message(channel) {
                     messages.push(msg);
                 } else if self.set_pos(pos) {
                     break;
@@ -132,10 +136,7 @@ impl ZBuf {
         };
 
         Some(SessionBody::Frame(Frame {
-            conduit: Conduit {
-                service,
-                reliability,
-            },
+            channel,
             sn,
             payload,
         }))
@@ -344,11 +345,7 @@ impl ZBuf {
         Some(ReplyContext { qid, replier })
     }
 
-    pub fn read_zenoh_message(
-        &mut self,
-        service: Service,
-        reliability: Reliability,
-    ) -> Option<ZenohMessage> {
+    pub fn read_zenoh_message(&mut self, channel: Channel) -> Option<ZenohMessage> {
         use super::zmsg::id::*;
 
         #[cfg(feature = "stats")]
@@ -396,8 +393,7 @@ impl ZBuf {
 
         Some(ZenohMessage {
             body,
-            service,
-            reliability,
+            channel,
             routing_context,
             attachment,
             #[cfg(feature = "stats")]

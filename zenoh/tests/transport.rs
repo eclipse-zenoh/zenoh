@@ -18,7 +18,7 @@ use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::protocol::core::{
-    whatami, CongestionControl, PeerId, Reliability, ResKey, Service,
+    whatami, CongestionControl, PeerId, Reliability, ResKey, Conduit,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
@@ -255,7 +255,7 @@ async fn close_session(
 async fn single_run(
     router_handler: Arc<SHRouter>,
     client_session: Session,
-    service: Service,
+    service: Conduit,
     reliability: Reliability,
     congestion_control: CongestionControl,
     msg_size: usize,
@@ -332,7 +332,7 @@ async fn single_run(
 async fn run(
     locators: &[Locator],
     properties: Option<Vec<LocatorProperty>>,
-    service: &[Service],
+    service: &[Conduit],
     reliability: &[Reliability],
     congestion_control: &[CongestionControl],
     msg_size: &[usize],
@@ -370,7 +370,7 @@ fn transport_tcp_only() {
     let locators: Vec<Locator> = vec!["tcp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::Reliable, Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -395,7 +395,7 @@ fn transport_udp_only() {
     let locators: Vec<Locator> = vec!["udp/127.0.0.1:10447".parse().unwrap()];
     let properties = None;
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -423,7 +423,7 @@ fn transport_unix_only() {
         .unwrap()];
     let properties = None;
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -453,7 +453,7 @@ fn transport_tcp_udp() {
     ];
     let properties = None;
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -488,7 +488,7 @@ fn transport_tcp_unix() {
     ];
     let properties = None;
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -525,7 +525,7 @@ fn transport_udp_unix() {
     ];
     let properties = None;
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -564,7 +564,7 @@ fn transport_tcp_udp_unix() {
     ];
     let properties = None;
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -685,7 +685,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     let properties = vec![(client_config, server_config).into()];
 
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
@@ -809,7 +809,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     let properties = vec![(client_config, server_config).into()];
 
     // Define the reliability and congestion control
-    let service = [Service::default(), Service::RealTime];
+    let service = [Conduit::default(), Conduit::RealTime];
     let reliability = [Reliability::BestEffort];
     let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run

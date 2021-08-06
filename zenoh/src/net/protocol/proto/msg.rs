@@ -45,7 +45,7 @@ pub(crate) mod imsg {
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
         // Message decorators
-        pub(crate) const SERVICE: u8 = 0x1c;
+        pub(crate) const CONDUIT: u8 = 0x1c;
         pub(crate) const ROUTING_CONTEXT: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
@@ -73,7 +73,7 @@ pub(crate) mod imsg {
 }
 
 pub mod smsg {
-    use super::{imsg, Service, ZInt};
+    use super::{imsg, Conduit, ZInt};
 
     // Session message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -92,7 +92,7 @@ pub mod smsg {
         pub const FRAME: u8 = imsg::id::FRAME;
 
         // Message decorators
-        pub const SERVICE: u8 = imsg::id::SERVICE;
+        pub const CONDUIT: u8 = imsg::id::CONDUIT;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
     }
 
@@ -120,7 +120,7 @@ pub mod smsg {
     pub mod init_options {
         use super::ZInt;
 
-        pub const Q: ZInt = 1 << 0; // 0x01 Service     if Q==1 then the session is multi-service
+        pub const Q: ZInt = 1 << 0; // 0x01 Conduit     if Q==1 then the session is multi-service
     }
 
     // Reason for the Close message
@@ -134,21 +134,21 @@ pub mod smsg {
     }
 
     pub mod service {
-        use super::{imsg, Service};
+        use super::{imsg, Conduit};
 
-        pub const CONTROL: u8 = (Service::Control as u8) << imsg::HEADER_BITS;
-        pub const REAL_TIME: u8 = (Service::RealTime as u8) << imsg::HEADER_BITS;
-        pub const INTERACTIVE_HIGH: u8 = (Service::InteractiveHigh as u8) << imsg::HEADER_BITS;
-        pub const INTERACTIVE_LOW: u8 = (Service::InteractiveLow as u8) << imsg::HEADER_BITS;
-        pub const DATA_HIGH: u8 = (Service::DataHigh as u8) << imsg::HEADER_BITS;
-        pub const DATA: u8 = (Service::Data as u8) << imsg::HEADER_BITS;
-        pub const DATA_LOW: u8 = (Service::DataLow as u8) << imsg::HEADER_BITS;
-        pub const BACKGROUND: u8 = (Service::Background as u8) << imsg::HEADER_BITS;
+        pub const CONTROL: u8 = (Conduit::Control as u8) << imsg::HEADER_BITS;
+        pub const REAL_TIME: u8 = (Conduit::RealTime as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_HIGH: u8 = (Conduit::InteractiveHigh as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_LOW: u8 = (Conduit::InteractiveLow as u8) << imsg::HEADER_BITS;
+        pub const DATA_HIGH: u8 = (Conduit::DataHigh as u8) << imsg::HEADER_BITS;
+        pub const DATA: u8 = (Conduit::Data as u8) << imsg::HEADER_BITS;
+        pub const DATA_LOW: u8 = (Conduit::DataLow as u8) << imsg::HEADER_BITS;
+        pub const BACKGROUND: u8 = (Conduit::Background as u8) << imsg::HEADER_BITS;
     }
 }
 
 pub mod zmsg {
-    use super::{imsg, CongestionControl, Reliability, Service, ZInt};
+    use super::{imsg, Channel, Conduit, CongestionControl, Reliability, ZInt};
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -186,7 +186,7 @@ pub mod zmsg {
 
     // Options used for DataInfo
     pub mod data {
-        use super::{imsg, Service, ZInt};
+        use super::{imsg, Conduit, ZInt};
 
         pub mod info {
             use super::ZInt;
@@ -203,16 +203,16 @@ pub mod zmsg {
             pub const RTRSN: ZInt = 1 << 10; // 0x400
         }
 
-        pub mod service {
-            use super::{imsg, Service};
+        pub mod conduit {
+            use super::{imsg, Conduit};
 
-            pub const REAL_TIME: u8 = (Service::RealTime as u8) << imsg::HEADER_BITS;
-            pub const INTERACTIVE_HIGH: u8 = (Service::InteractiveHigh as u8) << imsg::HEADER_BITS;
-            pub const INTERACTIVE_LOW: u8 = (Service::InteractiveLow as u8) << imsg::HEADER_BITS;
-            pub const DATA_HIGH: u8 = (Service::DataHigh as u8) << imsg::HEADER_BITS;
-            pub const DATA: u8 = (Service::Data as u8) << imsg::HEADER_BITS;
-            pub const DATA_LOW: u8 = (Service::DataLow as u8) << imsg::HEADER_BITS;
-            pub const BACKGROUND: u8 = (Service::Background as u8) << imsg::HEADER_BITS;
+            pub const REAL_TIME: u8 = (Conduit::RealTime as u8) << imsg::HEADER_BITS;
+            pub const INTERACTIVE_HIGH: u8 = (Conduit::InteractiveHigh as u8) << imsg::HEADER_BITS;
+            pub const INTERACTIVE_LOW: u8 = (Conduit::InteractiveLow as u8) << imsg::HEADER_BITS;
+            pub const DATA_HIGH: u8 = (Conduit::DataHigh as u8) << imsg::HEADER_BITS;
+            pub const DATA: u8 = (Conduit::Data as u8) << imsg::HEADER_BITS;
+            pub const DATA_LOW: u8 = (Conduit::DataLow as u8) << imsg::HEADER_BITS;
+            pub const BACKGROUND: u8 = (Conduit::Background as u8) << imsg::HEADER_BITS;
         }
     }
 
@@ -249,16 +249,37 @@ pub mod zmsg {
     }
 
     // Default reliability for each Zenoh Message
-    pub mod default_reliability {
-        use super::Reliability;
+    pub mod default_channel {
+        use super::{Channel, Conduit, Reliability};
 
-        pub const DECLARE: Reliability = Reliability::Reliable;
-        pub const DATA: Reliability = Reliability::BestEffort;
-        pub const QUERY: Reliability = Reliability::Reliable;
-        pub const PULL: Reliability = Reliability::Reliable;
-        pub const REPLY: Reliability = Reliability::Reliable;
-        pub const UNIT: Reliability = Reliability::BestEffort;
-        pub const LINK_STATE_LIST: Reliability = Reliability::Reliable;
+        pub const DECLARE: Channel = Channel {
+            conduit: Conduit::Data,
+            reliability: Reliability::Reliable,
+        };
+        pub const DATA: Channel = Channel {
+            conduit: Conduit::Data,
+            reliability: Reliability::BestEffort,
+        };
+        pub const QUERY: Channel = Channel {
+            conduit: Conduit::Data,
+            reliability: Reliability::Reliable,
+        };
+        pub const PULL: Channel = Channel {
+            conduit: Conduit::Data,
+            reliability: Reliability::Reliable,
+        };
+        pub const REPLY: Channel = Channel {
+            conduit: Conduit::Data,
+            reliability: Reliability::Reliable,
+        };
+        pub const UNIT: Channel = Channel {
+            conduit: Conduit::Data,
+            reliability: Reliability::BestEffort,
+        };
+        pub const LINK_STATE_LIST: Channel = Channel {
+            conduit: Conduit::Control,
+            reliability: Reliability::Reliable,
+        };
     }
 
     // Default congestion control for each Zenoh Message
@@ -272,19 +293,6 @@ pub mod zmsg {
         pub const REPLY: CongestionControl = CongestionControl::Block;
         pub const UNIT: CongestionControl = CongestionControl::Block;
         pub const LINK_STATE_LIST: CongestionControl = CongestionControl::Block;
-    }
-
-    // Default service for each Zenoh Message
-    pub mod default_service {
-        use super::Service;
-
-        pub const DECLARE: Service = Service::Data;
-        pub const DATA: Service = Service::Data;
-        pub const QUERY: Service = Service::Data;
-        pub const PULL: Service = Service::Data;
-        pub const REPLY: Service = Service::Data;
-        pub const UNIT: Service = Service::Data;
-        pub const LINK_STATE_LIST: Service = Service::Control;
     }
 }
 
@@ -439,21 +447,21 @@ impl RoutingContext {
     }
 }
 
-/// -- Service decorator
+/// -- Conduit decorator
 ///
 /// ```text
-/// The **Service** is a message decorator containing
+/// The **Conduit** is a message decorator containing
 /// informations related to the class of service.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// | ID  | Service |
+/// | ID  | Conduit |
 /// +-+-+-+---------+
 ///
 /// ```
-impl Service {
+impl Conduit {
     pub fn header(self) -> u8 {
-        smsg::id::SERVICE | ((self as u8) << imsg::HEADER_BITS)
+        smsg::id::CONDUIT | ((self as u8) << imsg::HEADER_BITS)
     }
 }
 
@@ -1071,8 +1079,7 @@ pub enum ZenohBody {
 #[derive(Clone, PartialEq)]
 pub struct ZenohMessage {
     pub body: ZenohBody,
-    pub service: Service,
-    pub reliability: Reliability,
+    pub channel: Channel,
     pub routing_context: Option<RoutingContext>,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
@@ -1084,13 +1091,8 @@ impl fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?} {:?} {:?} {:?}",
-            self.body,
-            self.service,
-            self.reliability,
-            self.routing_context,
-            self.attachment,
-            self.size
+            "{:?} {:?} {:?} {:?} {:?}",
+            self.body, self.channel, self.routing_context, self.attachment, self.size
         )
     }
 
@@ -1098,8 +1100,8 @@ impl fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?} {:?} {:?}",
-            self.body, self.service, self.reliability, self.routing_context, self.attachment
+            "{:?} {:?} {:?} {:?}",
+            self.body, self.channel, self.routing_context, self.attachment
         )
     }
 }
@@ -1118,8 +1120,7 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Declare(Declare { declarations }),
-            service: zmsg::default_service::DECLARE,
-            reliability: zmsg::default_reliability::DECLARE,
+            channel: zmsg::default_channel::DECLARE,
             routing_context,
             attachment,
             #[cfg(feature = "stats")]
@@ -1132,8 +1133,7 @@ impl ZenohMessage {
     pub fn make_data(
         key: ResKey,
         payload: ZBuf,
-        service: Service,
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
@@ -1148,8 +1148,7 @@ impl ZenohMessage {
                 congestion_control,
                 reply_context,
             }),
-            reliability,
-            service,
+            channel,
             routing_context,
             attachment,
             #[cfg(feature = "stats")]
@@ -1158,8 +1157,7 @@ impl ZenohMessage {
     }
 
     pub fn make_unit(
-        service: Service,
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
@@ -1169,8 +1167,7 @@ impl ZenohMessage {
                 congestion_control,
                 reply_context,
             }),
-            service,
-            reliability,
+            channel,
             routing_context: None,
             attachment,
             #[cfg(feature = "stats")]
@@ -1192,8 +1189,7 @@ impl ZenohMessage {
                 max_samples,
                 is_final,
             }),
-            service: zmsg::default_service::PULL,
-            reliability: zmsg::default_reliability::PULL,
+            channel: zmsg::default_channel::PULL,
             routing_context: None,
             attachment,
             #[cfg(feature = "stats")]
@@ -1219,8 +1215,7 @@ impl ZenohMessage {
                 target,
                 consolidation,
             }),
-            service: zmsg::default_service::QUERY,
-            reliability: zmsg::default_reliability::QUERY,
+            channel: zmsg::default_channel::QUERY,
             routing_context,
             attachment,
             #[cfg(feature = "stats")]
@@ -1234,8 +1229,7 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::LinkStateList(LinkStateList { link_states }),
-            service: zmsg::default_service::LINK_STATE_LIST,
-            reliability: zmsg::default_reliability::LINK_STATE_LIST,
+            channel: zmsg::default_channel::LINK_STATE_LIST,
             routing_context: None,
             attachment,
             #[cfg(feature = "stats")]
@@ -1246,7 +1240,7 @@ impl ZenohMessage {
     // -- Message Predicates
     #[inline]
     pub fn is_reliable(&self) -> bool {
-        self.reliability == Reliability::Reliable
+        self.channel.reliability == Reliability::Reliable
     }
 
     #[inline]
@@ -1804,7 +1798,7 @@ impl Header for Pong {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
-    pub conduit: Conduit,
+    pub channel: Channel,
     pub sn: ZInt,
     pub payload: FramePayload,
 }
@@ -1813,7 +1807,7 @@ impl Header for Frame {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = smsg::id::FRAME;
-        if let Reliability::Reliable = self.conduit.reliability {
+        if let Reliability::Reliable = self.channel.reliability {
             header |= smsg::flag::R;
         }
         if let FramePayload::Fragment { is_final, .. } = self.payload {
@@ -2054,14 +2048,14 @@ impl SessionMessage {
     }
 
     pub fn make_frame(
-        conduit: Conduit,
+        channel: Channel,
         sn: ZInt,
         payload: FramePayload,
         attachment: Option<Attachment>,
     ) -> SessionMessage {
         SessionMessage {
             body: SessionBody::Frame(Frame {
-                conduit,
+                channel,
                 sn,
                 payload,
             }),

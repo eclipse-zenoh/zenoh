@@ -18,7 +18,7 @@ use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::protocol::core::{
-    whatami, CongestionControl, PeerId, Reliability, ResKey, Service,
+    whatami, Conduit, CongestionControl, PeerId, Reliability, ResKey,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator};
@@ -36,25 +36,25 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 const MSG_COUNT: usize = 100;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
 
-const SERVICE_ALL: [Service; 8] = [
-    Service::Control,
-    Service::RealTime,
-    Service::InteractiveHigh,
-    Service::InteractiveLow,
-    Service::DataHigh,
-    Service::Data,
-    Service::DataLow,
-    Service::Background,
+const SERVICE_ALL: [Conduit; 8] = [
+    Conduit::Control,
+    Conduit::RealTime,
+    Conduit::InteractiveHigh,
+    Conduit::InteractiveLow,
+    Conduit::DataHigh,
+    Conduit::Data,
+    Conduit::DataLow,
+    Conduit::Background,
 ];
 
 // Session Handler for the router
 struct SHRouter {
-    service: Service,
+    service: Conduit,
     count: Arc<AtomicUsize>,
 }
 
 impl SHRouter {
-    fn new(service: Service) -> Self {
+    fn new(service: Conduit) -> Self {
         Self {
             service,
             count: Arc::new(AtomicUsize::new(0)),
@@ -78,12 +78,12 @@ impl SessionHandler for SHRouter {
 
 // Session Callback for the router
 pub struct SCRouter {
-    service: Service,
+    service: Conduit,
     count: Arc<AtomicUsize>,
 }
 
 impl SCRouter {
-    pub fn new(count: Arc<AtomicUsize>, service: Service) -> Self {
+    pub fn new(count: Arc<AtomicUsize>, service: Conduit) -> Self {
         Self { service, count }
     }
 }
@@ -149,7 +149,7 @@ impl SessionEventHandler for SCClient {
 
 async fn open_session(
     locators: &[Locator],
-    service: Service,
+    service: Conduit,
 ) -> (SessionManager, Arc<SHRouter>, Session) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
@@ -242,7 +242,7 @@ async fn close_session(
 async fn single_run(
     router_handler: Arc<SHRouter>,
     client_session: Session,
-    service: Service,
+    service: Conduit,
     msg_size: usize,
 ) {
     // Create the message to send
@@ -286,7 +286,7 @@ async fn single_run(
     task::sleep(SLEEP).await;
 }
 
-async fn run(locators: &[Locator], service: &[Service], msg_size: &[usize]) {
+async fn run(locators: &[Locator], service: &[Conduit], msg_size: &[usize]) {
     for sv in service.iter() {
         for ms in msg_size.iter() {
             let (router_manager, router_handler, client_session) =

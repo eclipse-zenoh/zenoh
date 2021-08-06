@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{CongestionControl, PeerId, Reliability, ResKey, ZInt};
+use super::core::{Channel, CongestionControl, PeerId, ResKey, ZInt};
 use super::core::{QueryConsolidation, QueryTarget, SubInfo};
 use super::io::ZBuf;
 use super::proto::{
@@ -122,7 +122,7 @@ impl Primitives for Mux {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
@@ -130,8 +130,7 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             reskey.clone(),
             payload,
-            zmsg::default_service::DATA,
-            reliability,
+            channel,
             congestion_control,
             data_info,
             routing_context,
@@ -177,8 +176,7 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             reskey,
             payload,
-            zmsg::default_service::REPLY,
-            zmsg::default_reliability::REPLY,
+            zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,
             data_info,
             None,
@@ -195,8 +193,7 @@ impl Primitives for Mux {
 
     fn send_reply_final(&self, qid: ZInt) {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
-            zmsg::default_service::REPLY,
-            zmsg::default_reliability::REPLY,
+            zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,
             Some(ReplyContext::new(qid, None)),
             None,

@@ -246,9 +246,7 @@ fn test_write_read_zenoh_message(msg: ZenohMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_zenoh_message(&msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(&buf)
-        .read_zenoh_message(msg.service, msg.reliability)
-        .unwrap();
+    let mut result = ZBuf::from(&buf).read_zenoh_message(msg.channel).unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = &mut result.attachment {
         let properties = attachment.buffer.read_properties();
@@ -471,7 +469,7 @@ fn codec_frame() {
     let msg_payload_count = 4;
 
     for _ in 0..NUM_ITER {
-        let service = [Service::default(), Service::Control];
+        let service = [Conduit::default(), Conduit::Control];
         let reliability = [Reliability::BestEffort, Reliability::Reliable];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
@@ -653,7 +651,7 @@ fn codec_declare() {
 #[test]
 fn codec_data() {
     for _ in 0..NUM_ITER {
-        let service = [Service::default(), Service::Control];
+        let service = [Conduit::default(), Conduit::Control];
         let reliability = [Reliability::Reliable, Reliability::BestEffort];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
@@ -697,7 +695,7 @@ fn codec_data() {
 #[test]
 fn codec_unit() {
     for _ in 0..NUM_ITER {
-        let service = [Service::default(), Service::Control];
+        let service = [Conduit::default(), Conduit::Control];
         let reliability = [Reliability::Reliable, Reliability::BestEffort];
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let reply_context = [

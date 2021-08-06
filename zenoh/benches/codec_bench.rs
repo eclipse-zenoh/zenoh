@@ -17,7 +17,7 @@ extern crate rand;
 
 use criterion::{black_box, Criterion};
 
-use zenoh::net::protocol::core::{Conduit, CongestionControl, Reliability, ResKey, Service, ZInt};
+use zenoh::net::protocol::core::{Conduit, CongestionControl, Reliability, ResKey, Conduit, ZInt};
 use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
 use zenoh::net::protocol::proto::{Attachment, Frame, FramePayload, SessionMessage, ZenohMessage};
 
@@ -63,7 +63,7 @@ fn bench_make_data(payload: ZBuf) {
     let _ = ZenohMessage::make_data(
         ResKey::RId(10),
         payload,
-        Service::Data,
+        Conduit::Data,
         Reliability::Reliable,
         CongestionControl::Block,
         None,
@@ -83,7 +83,7 @@ fn bench_make_frame_header(reliability: Reliability, is_fragment: Option<bool>) 
 
 fn bench_write_frame_header(
     buf: &mut WBuf,
-    service: Service,
+    service: Conduit,
     reliability: Reliability,
     sn: ZInt,
     is_fragment: Option<bool>,
@@ -140,7 +140,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let data = ZenohMessage::make_data(
         ResKey::RId(10),
         payload.clone(),
-        Service::Data,
+        Conduit::Data,
         Reliability::BestEffort,
         CongestionControl::Drop,
         None,
@@ -193,7 +193,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // Frame benchmark
-    let service = Service::default();
+    let service = Conduit::default();
     let reliability = Reliability::Reliable;
     let is_fragment = Some(true);
     c.bench_function("bench_make_frame_header", |b| {

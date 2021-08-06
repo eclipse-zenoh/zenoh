@@ -20,7 +20,7 @@ use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::zread;
 
 use super::protocol::core::{
-    whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode, ZInt,
+    whatami, Channel, Conduit, CongestionControl, PeerId, Reliability, SubInfo, SubMode, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -1095,7 +1095,10 @@ macro_rules! send_to_first {
                 .send_data(
                     &reskey,
                     $payload,
-                    Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                    Channel {
+                        conduit: Conduit::default(),
+                        reliability: Reliability::Reliable,
+                    }, // TODO: Need to check the active subscriptions to determine the right conduit and reliability value
                     $congestion_control,
                     $data_info,
                     *context,
@@ -1113,7 +1116,10 @@ macro_rules! send_to_all {
                     .send_data(
                         &reskey,
                         $payload.clone(),
-                        Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
+                        Channel {
+                            conduit: Conduit::default(),
+                            reliability: Reliability::Reliable,
+                        }, // TODO: Need to check the active subscriptions to determine the right conduit and reliability value
                         $congestion_control,
                         $data_info.clone(),
                         *context,
@@ -1248,7 +1254,10 @@ pub fn pull_data(
                                 face.primitives.send_data(
                                     &reskey,
                                     data.clone(),
-                                    subinfo.reliability,
+                                    Channel {
+                                        conduit: Conduit::default(), // TODO: Default value for the time being
+                                        reliability: subinfo.reliability,
+                                    },
                                     CongestionControl::Drop, // TODO: Default value for the time being
                                     info.clone(),
                                     None,

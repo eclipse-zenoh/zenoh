@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{Reliability, Service};
+use super::core::{Conduit, Reliability};
 use super::io::WBuf;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session::defaults::{
@@ -226,7 +226,7 @@ impl TransmissionPipeline {
         // Build the stage REFILL
         let mut stage_refill = Vec::with_capacity(conduit.len());
         for c in conduit.iter() {
-            stage_refill.push(Arc::new(Mutex::new(StageRefill::new(c.service as usize))));
+            stage_refill.push(Arc::new(Mutex::new(StageRefill::new(c.id as usize))));
         }
 
         // Batches to be pulled from stage OUT
@@ -237,8 +237,8 @@ impl TransmissionPipeline {
         let mut stage_out = Vec::with_capacity(conduit.len());
         for c in conduit.iter() {
             stage_out.push(StageOut::new(
-                c.service as usize,
-                batches_out[c.service as usize].clone(),
+                c.id as usize,
+                batches_out[c.id as usize].clone(),
             ));
         }
         let stage_out = Arc::new(Mutex::new(stage_out.into_boxed_slice()));
@@ -250,15 +250,15 @@ impl TransmissionPipeline {
         // Build the stage IN
         let mut stage_in = Vec::with_capacity(conduit.len());
         for c in conduit.iter() {
-            let capacity = match c.service {
-                Service::Control => *ZN_QUEUE_SIZE_CONTROL,
-                Service::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
-                Service::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
-                Service::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
-                Service::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
-                Service::Data => *ZN_QUEUE_SIZE_DATA,
-                Service::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
-                Service::Background => *ZN_QUEUE_SIZE_BACKGROUND,
+            let capacity = match c.id {
+                Conduit::Control => *ZN_QUEUE_SIZE_CONTROL,
+                Conduit::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
+                Conduit::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
+                Conduit::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
+                Conduit::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
+                Conduit::Data => *ZN_QUEUE_SIZE_DATA,
+                Conduit::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
+                Conduit::Background => *ZN_QUEUE_SIZE_BACKGROUND,
             };
 
             stage_in.push(Arc::new(Mutex::new(StageIn::new(
@@ -266,7 +266,7 @@ impl TransmissionPipeline {
                 batch_size,
                 is_streamed,
                 c.clone(),
-                bytes_in[c.service as usize].clone(),
+                bytes_in[c.id as usize].clone(),
             ))));
         }
 
@@ -284,7 +284,7 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_session_message(&self, message: SessionMessage, service: Service) {
+    pub(crate) fn push_session_message(&self, message: SessionMessage, service: Conduit) {
         // Check it is a valid service
         let p = service as usize;
         if p >= self.conduit.len() {
@@ -331,9 +331,9 @@ impl TransmissionPipeline {
     #[inline]
     pub(crate) fn push_zenoh_message(&self, message: ZenohMessage) {
         // Check it is a valid service
-        let p = message.service as usize;
+        let mut p = message.channel.conduit as usize;
         if p >= self.conduit.len() {
-            panic!("ARGH");
+            p = self.conduit.len() - 1;
         }
         let mut in_guard = zlock!(self.stage_in[p]);
 
@@ -612,7 +612,7 @@ impl fmt::Debug for TransmissionPipeline {
 
 #[cfg(test)]
 mod tests {
-    use super::super::core::{CongestionControl, Reliability, ResKey, ZInt};
+    use super::super::core::{Channel, Conduit, CongestionControl, Reliability, ResKey, ZInt};
     use super::super::io::ZBuf;
     use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
     use super::super::session::defaults::{
@@ -635,8 +635,10 @@ mod tests {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
             let payload = ZBuf::from(vec![0u8; payload_size]);
-            let service = Service::Control;
-            let reliability = Reliability::Reliable;
+            let channel = Channel {
+                conduit: Conduit::Control,
+                reliability: Reliability::Reliable,
+            };
             let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
@@ -646,8 +648,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                service,
-                reliability,
+                channel,
                 congestion_control,
                 data_info,
                 routing_context,
@@ -709,7 +710,7 @@ mod tests {
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![SessionTransportConduitTx::new(
-            Service::Control,
+            Conduit::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
         )]
@@ -759,8 +760,10 @@ mod tests {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
             let payload = ZBuf::from(vec![0u8; payload_size]);
-            let service = Service::Control;
-            let reliability = Reliability::Reliable;
+            let channel = Channel {
+                conduit: Conduit::Control,
+                reliability: Reliability::Reliable,
+            };
             let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
@@ -769,8 +772,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                service,
-                reliability,
+                channel,
                 congestion_control,
                 data_info,
                 routing_context,
@@ -801,7 +803,7 @@ mod tests {
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![SessionTransportConduitTx::new(
-            Service::Control,
+            Conduit::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
         )]
@@ -865,8 +867,10 @@ mod tests {
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
             let payload = ZBuf::from(vec![0u8; payload_size]);
-            let service = Service::Control;
-            let reliability = Reliability::Reliable;
+            let channel = Channel {
+                conduit: Conduit::Control,
+                reliability: Reliability::Reliable,
+            };
             let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
@@ -875,8 +879,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                service,
-                reliability,
+                channel,
                 congestion_control,
                 data_info,
                 routing_context,
@@ -905,7 +908,7 @@ mod tests {
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![SessionTransportConduitTx::new(
-            Service::Control,
+            Conduit::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
         )]
@@ -965,7 +968,7 @@ mod tests {
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![SessionTransportConduitTx::new(
-            Service::Control,
+            Conduit::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
         )]
@@ -988,8 +991,10 @@ mod tests {
                     // Send reliable messages
                     let key = ResKey::RName("/pipeline/thr".to_string());
                     let payload = ZBuf::from(vec![0u8; *size]);
-                    let service = Service::Control;
-                    let reliability = Reliability::Reliable;
+                    let channel = Channel {
+                        conduit: Conduit::Control,
+                        reliability: Reliability::Reliable,
+                    };
                     let congestion_control = CongestionControl::Block;
                     let data_info = None;
                     let routing_context = None;
@@ -999,8 +1004,7 @@ mod tests {
                     let message = ZenohMessage::make_data(
                         key,
                         payload,
-                        service,
-                        reliability,
+                        channel,
                         congestion_control,
                         data_info,
                         routing_context,

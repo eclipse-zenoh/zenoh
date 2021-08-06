@@ -18,7 +18,7 @@ mod seq_num;
 mod tx;
 
 use super::core;
-use super::core::{PeerId, Reliability, Service, WhatAmI, ZInt};
+use super::core::{Channel, Conduit, PeerId, Reliability, WhatAmI, ZInt};
 use super::io;
 use super::link::Link;
 use super::proto;
@@ -73,10 +73,9 @@ pub(crate) struct SessionTransportChannelRx {
 
 impl SessionTransportChannelRx {
     pub(crate) fn new(
+        channel: Channel,
         initial_sn: ZInt,
         sn_resolution: ZInt,
-        service: Service,
-        reliability: Reliability,
     ) -> SessionTransportChannelRx {
         // Set the sequence number in the state as it had
         // received a message with initial_sn - 1
@@ -88,26 +87,26 @@ impl SessionTransportChannelRx {
 
         SessionTransportChannelRx {
             sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag: DefragBuffer::new(initial_sn, sn_resolution, service, reliability),
+            defrag: DefragBuffer::new(channel, initial_sn, sn_resolution),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct SessionTransportConduitTx {
-    pub(crate) service: Service,
+    pub(crate) id: Conduit,
     pub(crate) reliable: Arc<Mutex<SessionTransportChannelTx>>,
     pub(crate) best_effort: Arc<Mutex<SessionTransportChannelTx>>,
 }
 
 impl SessionTransportConduitTx {
     pub(crate) fn new(
-        service: Service,
+        conduit: Conduit,
         initial_sn: ZInt,
         sn_resolution: ZInt,
     ) -> SessionTransportConduitTx {
         SessionTransportConduitTx {
-            service,
+            id: conduit,
             reliable: Arc::new(Mutex::new(SessionTransportChannelTx::new(
                 initial_sn,
                 sn_resolution,
@@ -122,30 +121,34 @@ impl SessionTransportConduitTx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SessionTransportConduitRx {
-    pub(crate) service: Service,
+    pub(crate) conduit: Conduit,
     pub(crate) reliable: Arc<Mutex<SessionTransportChannelRx>>,
     pub(crate) best_effort: Arc<Mutex<SessionTransportChannelRx>>,
 }
 
 impl SessionTransportConduitRx {
     pub(crate) fn new(
-        service: Service,
+        conduit: Conduit,
         initial_sn: ZInt,
         sn_resolution: ZInt,
     ) -> SessionTransportConduitRx {
         SessionTransportConduitRx {
-            service,
+            conduit,
             reliable: Arc::new(Mutex::new(SessionTransportChannelRx::new(
+                Channel {
+                    conduit,
+                    reliability: Reliability::Reliable,
+                },
                 initial_sn,
                 sn_resolution,
-                service,
-                Reliability::Reliable,
             ))),
             best_effort: Arc::new(Mutex::new(SessionTransportChannelRx::new(
+                Channel {
+                    conduit,
+                    reliability: Reliability::BestEffort,
+                },
                 initial_sn,
                 sn_resolution,
-                service,
-                Reliability::BestEffort,
             ))),
         }
     }
@@ -197,7 +200,7 @@ impl SessionTransport {
         let mut conduit_rx = vec![];
 
         if config.is_qos {
-            for p in 0..Service::num() {
+            for p in 0..Conduit::num() {
                 conduit_tx.push(SessionTransportConduitTx::new(
                     (p as u8).try_into().unwrap(),
                     config.initial_sn_tx,
@@ -205,7 +208,7 @@ impl SessionTransport {
                 ));
             }
 
-            for p in 0..Service::num() {
+            for p in 0..Conduit::num() {
                 conduit_rx.push(SessionTransportConduitRx::new(
                     (p as u8).try_into().unwrap(),
                     config.initial_sn_rx,
@@ -214,13 +217,13 @@ impl SessionTransport {
             }
         } else {
             conduit_tx.push(SessionTransportConduitTx::new(
-                Service::default(),
+                Conduit::default(),
                 config.initial_sn_tx,
                 config.sn_resolution,
             ));
 
             conduit_rx.push(SessionTransportConduitRx::new(
-                Service::default(),
+                Conduit::default(),
                 config.initial_sn_rx,
                 config.sn_resolution,
             ));
@@ -318,7 +321,7 @@ impl SessionTransport {
                 let attachment = None; // No attachment here
                 let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-                pipeline.push_session_message(msg, Service::Background);
+                pipeline.push_session_message(msg, Conduit::Background);
             }
 
             // Remove the link from the channel
@@ -346,7 +349,7 @@ impl SessionTransport {
             let attachment = None; // No attachment here
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            p.push_session_message(msg, Service::Background);
+            p.push_session_message(msg, Conduit::Background);
         }
         // Terminate and clean up the session
         self.delete().await

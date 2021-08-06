@@ -21,7 +21,7 @@ use super::proto;
 use super::session;
 
 use super::core::{
-    CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, ZInt,
+    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt,
 };
 use super::io::ZBuf;
 use super::proto::{DataInfo, RoutingContext};
@@ -50,7 +50,7 @@ pub trait Primitives {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
@@ -121,7 +121,7 @@ impl Primitives for DummyPrimitives {
         &self,
         _reskey: &ResKey,
         _payload: ZBuf,
-        _reliability: Reliability,
+        _channel: Channel,
         _congestion_control: CongestionControl,
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,

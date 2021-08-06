@@ -49,14 +49,14 @@ impl WBuf {
     }
 
     #[inline(always)]
-    fn write_deco_service(&mut self, service: Service) -> bool {
-        self.write(service.header())
+    fn write_deco_conduit(&mut self, conduit: Conduit) -> bool {
+        self.write(conduit.header())
     }
 
     #[inline(always)]
     pub fn write_frame_header(
         &mut self,
-        service: Service,
+        service: Conduit,
         reliability: Reliability,
         sn: ZInt,
         is_fragment: Option<bool>,
@@ -65,8 +65,8 @@ impl WBuf {
         if let Some(attachment) = attachment {
             zcheck!(self.write_deco_attachment(&attachment));
         }
-        if service != Service::default() {
-            zcheck!(self.write_deco_service(service))
+        if service != Conduit::default() {
+            zcheck!(self.write_deco_conduit(service))
         }
 
         let header = Frame::make_header(reliability, is_fragment);
@@ -99,8 +99,8 @@ impl WBuf {
     }
 
     fn write_frame(&mut self, frame: &Frame) -> bool {
-        if frame.conduit.service != Service::default() {
-            zcheck!(self.write_deco_service(frame.conduit.service))
+        if frame.channel.conduit != Conduit::default() {
+            zcheck!(self.write_deco_conduit(frame.channel.conduit))
         }
 
         zcheck!(self.write(frame.header()));

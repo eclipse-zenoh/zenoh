@@ -81,7 +81,7 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                     self.primitives.send_data(
                         &key,
                         payload,
-                        msg.reliability,
+                        msg.channel,
                         congestion_control,
                         data_info,
                         msg.routing_context,

@@ -268,7 +268,7 @@ impl FromStr for CongestionControl {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
-pub enum Service {
+pub enum Conduit {
     Control = 0,
     RealTime = 1,
     InteractiveHigh = 2,
@@ -279,31 +279,31 @@ pub enum Service {
     Background = 7,
 }
 
-impl Service {
+impl Conduit {
     pub fn num() -> usize {
         8
     }
 }
 
-impl Default for Service {
-    fn default() -> Service {
-        Service::Data
+impl Default for Conduit {
+    fn default() -> Conduit {
+        Conduit::Data
     }
 }
 
-impl TryFrom<u8> for Service {
+impl TryFrom<u8> for Conduit {
     type Error = ZError;
 
     fn try_from(service: u8) -> Result<Self, Self::Error> {
         match service {
-            0 => Ok(Service::Control),
-            1 => Ok(Service::RealTime),
-            2 => Ok(Service::InteractiveHigh),
-            3 => Ok(Service::InteractiveLow),
-            4 => Ok(Service::DataHigh),
-            5 => Ok(Service::Data),
-            6 => Ok(Service::DataLow),
-            7 => Ok(Service::Background),
+            0 => Ok(Conduit::Control),
+            1 => Ok(Conduit::RealTime),
+            2 => Ok(Conduit::InteractiveHigh),
+            3 => Ok(Conduit::InteractiveLow),
+            4 => Ok(Conduit::DataHigh),
+            5 => Ok(Conduit::Data),
+            6 => Ok(Conduit::DataLow),
+            7 => Ok(Conduit::Background),
             unknown => zerror!(ZErrorKind::Other {
                 descr: format!(
                     "{} is not a valid service value. Admitted values are [0-7].",
@@ -327,15 +327,15 @@ impl Default for Reliability {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Conduit {
-    pub service: Service,
+pub struct Channel {
+    pub conduit: Conduit,
     pub reliability: Reliability,
 }
 
-impl Default for Conduit {
-    fn default() -> Conduit {
-        Conduit {
-            service: Service::default(),
+impl Default for Channel {
+    fn default() -> Channel {
+        Channel {
+            conduit: Conduit::default(),
             reliability: Reliability::default(),
         }
     }

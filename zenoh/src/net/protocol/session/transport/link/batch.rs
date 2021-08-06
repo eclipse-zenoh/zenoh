@@ -171,7 +171,7 @@ impl SerializationBatch {
             let fragment = Some(is_final);
             let attachment = None;
             let res = self.buffer.write_frame_header(
-                self.conduit.service,
+                self.conduit.id,
                 reliability,
                 sn,
                 fragment,
@@ -257,10 +257,10 @@ impl SerializationBatch {
             } else {
                 Reliability::BestEffort
             };
-            let res =
-                self.buffer
-                    .write_frame_header(self.conduit.service, reliability, sn, None, None)
-                    && self.buffer.write_zenoh_message(message);
+            let res = self
+                .buffer
+                .write_frame_header(self.conduit.id, reliability, sn, None, None)
+                && self.buffer.write_zenoh_message(message);
             if res {
                 self.current_frame = frame;
             } else {
@@ -314,7 +314,7 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::super::core::{CongestionControl, Reliability, ResKey, Service};
+    use super::super::core::{Channel, Conduit, CongestionControl, Reliability, ResKey};
     use super::super::io::{WBuf, ZBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
     use super::super::session::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
@@ -331,8 +331,8 @@ mod tests {
             );
 
             // Create the serialization batch
-            let service = Service::default();
-            let conduit = SessionTransportConduitTx::new(service, 0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
+            let cid = Conduit::default();
+            let conduit = SessionTransportConduitTx::new(cid, 0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
             let mut batch = SerializationBatch::new(batch_size, *is_streamed, conduit);
 
             // Serialize the messages until the batch is full
@@ -368,10 +368,13 @@ mod tests {
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
                 let payload = ZBuf::from(vec![0u8; payload_size]);
-                let reliability = if reliable {
-                    Reliability::Reliable
-                } else {
-                    Reliability::BestEffort
+                let channel = Channel {
+                    conduit: cid,
+                    reliability: if reliable {
+                        Reliability::Reliable
+                    } else {
+                        Reliability::BestEffort
+                    },
                 };
                 let congestion_control = if dropping {
                     CongestionControl::Drop
@@ -385,8 +388,7 @@ mod tests {
                 let msg = ZenohMessage::make_data(
                     key,
                     payload,
-                    service,
-                    reliability,
+                    channel,
                     congestion_control,
                     data_info,
                     routing_context,
@@ -436,7 +438,7 @@ mod tests {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
             let conduit = SessionTransportConduitTx::new(
-                Service::default(),
+                Conduit::default(),
                 0,
                 ZN_DEFAULT_SEQ_NUM_RESOLUTION,
             );
@@ -444,6 +446,10 @@ mod tests {
             for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
                 for congestion_control in [CongestionControl::Drop, CongestionControl::Block].iter()
                 {
+                    let channel = Channel {
+                        conduit: conduit.id,
+                        reliability: *reliability,
+                    };
                     // Create the ZenohMessage
                     let key = ResKey::RName("test".to_string());
                     let payload = ZBuf::from(vec![0u8; payload_size]);
@@ -454,8 +460,7 @@ mod tests {
                     let msg_in = ZenohMessage::make_data(
                         key,
                         payload,
-                        conduit.service,
-                        *reliability,
+                        channel,
                         *congestion_control,
                         data_info,
                         routing_context,
@@ -529,7 +534,7 @@ mod tests {
                     assert!(!fragments.is_empty());
 
                     // Deserialize the message
-                    let msg_out = fragments.read_zenoh_message(conduit.service, *reliability);
+                    let msg_out = fragments.read_zenoh_message(channel);
                     assert!(msg_out.is_some());
                     assert_eq!(msg_in, msg_out.unwrap());
 

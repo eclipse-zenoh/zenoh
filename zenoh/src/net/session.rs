@@ -20,8 +20,8 @@ use flume::{bounded, Sender};
 use log::{error, trace, warn};
 use protocol::{
     core::{
-        queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget, ResKey,
-        ResourceId, ZInt,
+        queryable, rname, AtomicZInt, Channel, Conduit, CongestionControl, QueryConsolidation,
+        QueryTarget, ResKey, ResourceId, ZInt,
     },
     io::ZBuf,
     proto::RoutingContext,
@@ -950,7 +950,10 @@ impl Session {
         primitives.send_data(
             resource,
             payload.clone(),
-            Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            Channel {
+                conduit: Conduit::default(),
+                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            },
             CongestionControl::default(), // Default congestion control when writing data
             data_info.clone(),
             None,
@@ -1003,7 +1006,10 @@ impl Session {
         primitives.send_data(
             resource,
             payload.clone(),
-            Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+            Channel {
+                conduit: Conduit::default(),
+                reliability: Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+            },
             congestion_control,
             data_info.clone(),
             None,
@@ -1359,7 +1365,7 @@ impl Primitives for Session {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
@@ -1368,7 +1374,7 @@ impl Primitives for Session {
             "recv Data {:?} {:?} {:?} {:?} {:?}",
             reskey,
             payload,
-            reliability,
+            channel,
             congestion_control,
             info,
         );

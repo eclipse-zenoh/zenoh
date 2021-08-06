@@ -16,7 +16,7 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::{CongestionControl, Reliability, ResKey, Service};
+use zenoh::net::protocol::core::{CongestionControl, Reliability, ResKey, Conduit};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::defaults::ZN_DEFAULT_BATCH_SIZE;
@@ -38,7 +38,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     for p in &pld {
         for r in &res_key_set {
-            let service = Service::default();
+            let service = Conduit::default();
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
 
