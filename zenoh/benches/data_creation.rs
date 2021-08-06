@@ -17,7 +17,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::{CongestionControl, PeerId, Reliability, ResKey, Conduit};
+use zenoh::net::protocol::core::{Channel, CongestionControl, PeerId, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
@@ -34,8 +34,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     for s in size.iter() {
         c.bench_function(format!("{} msg_creation_yes_info", s).as_str(), |b| {
             b.iter(|| {
-                let service = Conduit::default();
-                let reliability = Reliability::Reliable;
+                let channel = Channel::default();
                 let congestion_control = CongestionControl::Block;
 
                 let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
@@ -58,8 +57,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let msg = ZenohMessage::make_data(
                     res_key,
                     payload,
-                    service,
-                    reliability,
+                    channel,
                     congestion_control,
                     info,
                     None,
@@ -72,8 +70,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         c.bench_function(format!("{} msg_creation_no_info", s).as_str(), |b| {
             b.iter(|| {
-                let service = Conduit::default();
-                let reliability = Reliability::Reliable;
+                let channel = Channel::default();
                 let congestion_control = CongestionControl::Block;
 
                 let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
@@ -83,8 +80,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let msg = ZenohMessage::make_data(
                     res_key,
                     payload,
-                    service,
-                    reliability,
+                    channel,
                     congestion_control,
                     info,
                     None,
@@ -96,8 +92,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     }
 
-    let service = Conduit::default();
-    let reliability = Reliability::Reliable;
+    let channel = Channel::default();
     let congestion_control = CongestionControl::Block;
     let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
     let info = Some(DataInfo {
@@ -116,21 +111,19 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     let payload = ZBuf::from(vec![0; 1024]);
     let msg = Arc::new(ZenohMessage::make_data(
-        res_key.clone(),
-        payload.clone(),
-        service,
-        reliability,
+        res_key,
+        payload,
+        channel,
         congestion_control,
-        info.clone(),
+        info,
         None,
         None,
         None,
     ));
 
-    let amsg = msg.clone();
-    c.bench_function(format!("arc_msg_clone").as_str(), |b| {
+    c.bench_function(&"arc_msg_clone".to_string(), |b| {
         b.iter(|| {
-            consume_message_arc(amsg.clone());
+            consume_message_arc(msg.clone());
         })
     });
 }

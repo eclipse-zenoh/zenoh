@@ -17,7 +17,7 @@ extern crate rand;
 
 use criterion::{black_box, Criterion};
 
-use zenoh::net::protocol::core::{Conduit, CongestionControl, Reliability, ResKey, Conduit, ZInt};
+use zenoh::net::protocol::core::{Channel, Conduit, CongestionControl, Reliability, ResKey, ZInt};
 use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
 use zenoh::net::protocol::proto::{Attachment, Frame, FramePayload, SessionMessage, ZenohMessage};
 
@@ -63,8 +63,7 @@ fn bench_make_data(payload: ZBuf) {
     let _ = ZenohMessage::make_data(
         ResKey::RId(10),
         payload,
-        Conduit::Data,
-        Reliability::Reliable,
+        Channel::default(),
         CongestionControl::Block,
         None,
         None,
@@ -93,7 +92,7 @@ fn bench_write_frame_header(
 }
 
 fn bench_make_frame_data(payload: FramePayload) {
-    let _ = SessionMessage::make_frame(Conduit::default(), 42, payload, None);
+    let _ = SessionMessage::make_frame(Channel::default(), 42, payload, None);
 }
 
 fn bench_write_frame_data(buf: &mut WBuf, data: &SessionMessage) {
@@ -101,7 +100,7 @@ fn bench_write_frame_data(buf: &mut WBuf, data: &SessionMessage) {
 }
 
 fn bench_make_frame_frag(payload: FramePayload) {
-    let _ = SessionMessage::make_frame(Conduit::default(), 42, payload, None);
+    let _ = SessionMessage::make_frame(Channel::default(), 42, payload, None);
 }
 
 fn bench_write_frame_frag(buf: &mut WBuf, data: &SessionMessage) {
@@ -140,8 +139,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let data = ZenohMessage::make_data(
         ResKey::RId(10),
         payload.clone(),
-        Conduit::Data,
-        Reliability::BestEffort,
+        Channel::default(),
         CongestionControl::Drop,
         None,
         None,
@@ -215,15 +213,14 @@ fn criterion_benchmark(c: &mut Criterion) {
             let frame_data_payload = FramePayload::Messages {
                 messages: vec![data.clone(); 1],
             };
-            let _ = bench_make_frame_data(frame_data_payload.clone());
+            let _ = bench_make_frame_data(frame_data_payload);
         })
     });
 
     let frame_data_payload = FramePayload::Messages {
         messages: vec![data; 1],
     };
-    let frame_data =
-        SessionMessage::make_frame(Conduit::default(), 42, frame_data_payload.clone(), None);
+    let frame_data = SessionMessage::make_frame(Channel::default(), 42, frame_data_payload, None);
     c.bench_function("bench_write_frame_data", |b| {
         b.iter(|| {
             let _ = bench_write_frame_data(&mut buf, &frame_data);
@@ -242,10 +239,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     let frame_frag_payload = FramePayload::Fragment {
-        buffer: fragment.clone(),
+        buffer: fragment,
         is_final: false,
     };
-    let frame_frag = SessionMessage::make_frame(Conduit::default(), 42, frame_frag_payload, None);
+    let frame_frag = SessionMessage::make_frame(Channel::default(), 42, frame_frag_payload, None);
     c.bench_function("bench_write_frame_frag", |b| {
         b.iter(|| {
             let _ = bench_write_frame_frag(&mut buf, &frame_frag);
