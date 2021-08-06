@@ -16,8 +16,8 @@ use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh::net::protocol::core::rname::intersect;
 use zenoh::net::protocol::core::{
-    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
-    SubInfo, SubMode, ZInt,
+    whatami, Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability,
+    ResKey, SubInfo, SubMode, ZInt,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
@@ -418,7 +418,7 @@ impl Primitives for ClientPrimitives {
         &self,
         reskey: &ResKey,
         _payload: ZBuf,
-        _reliability: Reliability,
+        _channel: Channel,
         _congestion_control: CongestionControl,
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,

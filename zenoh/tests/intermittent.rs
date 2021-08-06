@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 use zenoh::net::protocol::core::{
-    whatami, Conduit, CongestionControl, PeerId, Reliability, ResKey,
+    whatami, Channel, Conduit, CongestionControl, PeerId, Reliability, ResKey,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
@@ -292,8 +292,10 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         // Create the message to send
         let key = ResKey::RName("/test".to_string());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
-        let service = Conduit::default();
-        let reliability = Reliability::Reliable;
+        let channel = Channel {
+            conduit: Conduit::default(),
+            reliability: Reliability::Reliable,
+        };
         let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
@@ -302,8 +304,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         let message = ZenohMessage::make_data(
             key,
             payload,
-            service,
-            reliability,
+            channel,
             congestion_control,
             data_info,
             routing_context,

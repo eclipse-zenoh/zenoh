@@ -20,7 +20,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::protocol::core::{
-        whatami, CongestionControl, PeerId, Reliability, ResKey, Conduit,
+        whatami, Channel, Conduit, CongestionControl, PeerId, Reliability, ResKey,
     };
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::link::{Link, Locator};
@@ -236,8 +236,10 @@ mod tests {
 
             let key = ResKey::RName("/test".to_string());
             let payload: ZBuf = sbuf.into();
-            let service = Conduit::default();
-            let reliability = Reliability::Reliable;
+            let channel = Channel {
+                conduit: Conduit::default(),
+                reliability: Reliability::Reliable,
+            };
             let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
@@ -246,8 +248,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                service,
-                reliability,
+                channel,
                 congestion_control,
                 data_info,
                 routing_context,
@@ -294,8 +295,10 @@ mod tests {
 
             let key = ResKey::RName("/test".to_string());
             let payload: ZBuf = sbuf.into();
-            let service = Conduit::default();
-            let reliability = Reliability::Reliable;
+            let channel = Channel {
+                conduit: Conduit::default(),
+                reliability: Reliability::Reliable,
+            };
             let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
@@ -304,8 +307,7 @@ mod tests {
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                service,
-                reliability,
+                channel,
                 congestion_control,
                 data_info,
                 routing_context,
