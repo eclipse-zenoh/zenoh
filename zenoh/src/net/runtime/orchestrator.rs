@@ -114,7 +114,7 @@ impl Runtime {
             }
             _ => {
                 for locator in &peers {
-                    match self.manager().open_session(&locator).await {
+                    match self.manager().open_session(locator).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -278,7 +278,7 @@ impl Runtime {
 
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
         for listener in listeners {
-            match self.manager().add_listener(&listener).await {
+            match self.manager().add_listener(listener).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", listener, err);

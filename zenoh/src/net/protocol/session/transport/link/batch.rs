@@ -256,7 +256,7 @@ impl SerializationBatch {
                 Channel::BestEffort
             };
             let res = self.buffer.write_frame_header(ch, sn, None, None)
-                && self.buffer.write_zenoh_message(&message);
+                && self.buffer.write_zenoh_message(message);
             if res {
                 self.current_frame = frame;
             } else {
@@ -268,7 +268,7 @@ impl SerializationBatch {
             // Return
             res
         } else {
-            self.buffer.write_zenoh_message(&message)
+            self.buffer.write_zenoh_message(message)
         };
 
         if !res {
@@ -287,7 +287,7 @@ impl SerializationBatch {
     pub(super) fn serialize_session_message(&mut self, message: &SessionMessage) -> bool {
         // Mark the write operation
         self.buffer.mark();
-        let res = self.buffer.write_session_message(&message);
+        let res = self.buffer.write_session_message(message);
         if res {
             // Reset the current frame value
             self.current_frame = CurrentFrame::None;

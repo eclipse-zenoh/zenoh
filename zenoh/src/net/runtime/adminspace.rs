@@ -91,9 +91,9 @@ impl AdminSpace {
 
     pub fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
         match key {
-            ResKey::RId(id) => zlock!(self.mappings).get(&id).cloned(),
+            ResKey::RId(id) => zlock!(self.mappings).get(id).cloned(),
             ResKey::RIdWithSuffix(id, suffix) => zlock!(self.mappings)
-                .get(&id)
+                .get(id)
                 .map(|prefix| format!("{}{}", prefix, suffix)),
             ResKey::RName(name) => Some(name.clone()),
         }

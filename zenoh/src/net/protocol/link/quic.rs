@@ -514,7 +514,7 @@ impl LinkManagerTrait for LinkManagerQuic {
         })?;
 
         let quic_conn = endpoint
-            .connect(&addr, &host)
+            .connect(&addr, host)
             .map_err(|e| {
                 let e = format!("Can not create a new QUIC link bound to {}: {}", host, e);
                 zerror2!(ZErrorKind::InvalidLink { descr: e })

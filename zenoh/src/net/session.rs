@@ -113,7 +113,7 @@ impl SessionState {
 
     #[inline]
     fn localid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
-        match self.local_resources.get(&rid) {
+        match self.local_resources.get(rid) {
             Some(res) => Ok(res.name.clone()),
             None => zerror!(ZErrorKind::UnkownResourceId {
                 rid: format!("{}", rid)
@@ -123,7 +123,7 @@ impl SessionState {
 
     #[inline]
     fn rid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
-        match self.remote_resources.get(&rid) {
+        match self.remote_resources.get(rid) {
             Some(res) => Ok(res.name.clone()),
             None => self.localid_to_resname(rid),
         }
@@ -133,8 +133,8 @@ impl SessionState {
         use super::ResKey::*;
         match reskey {
             RName(name) => Ok(name.clone()),
-            RId(rid) => self.rid_to_resname(&rid),
-            RIdWithSuffix(rid, suffix) => Ok(self.rid_to_resname(&rid)? + suffix),
+            RId(rid) => self.rid_to_resname(rid),
+            RIdWithSuffix(rid, suffix) => Ok(self.rid_to_resname(rid)? + suffix),
         }
     }
 
@@ -142,8 +142,8 @@ impl SessionState {
         use super::ResKey::*;
         match reskey {
             RName(name) => Ok(name.clone()),
-            RId(rid) => self.localid_to_resname(&rid),
-            RIdWithSuffix(rid, suffix) => Ok(self.localid_to_resname(&rid)? + suffix),
+            RId(rid) => self.localid_to_resname(rid),
+            RIdWithSuffix(rid, suffix) => Ok(self.localid_to_resname(rid)? + suffix),
         }
     }
 

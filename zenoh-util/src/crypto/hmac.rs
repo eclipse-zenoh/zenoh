@@ -17,12 +17,12 @@ use hmac::{Hmac, Mac, NewMac};
 use sha3::{Digest, Sha3_256};
 
 pub fn sign(key: &[u8], data: &[u8]) -> ZResult<Vec<u8>> {
-    let mut hmac = Hmac::<Sha3_256>::new_from_slice(&key).map_err(|e| {
+    let mut hmac = Hmac::<Sha3_256>::new_from_slice(key).map_err(|e| {
         zerror2!(ZErrorKind::Other {
             descr: e.to_string()
         })
     })?;
-    hmac.update(&data);
+    hmac.update(data);
     Ok(hmac.finalize().into_bytes().as_slice().to_vec())
 }
 

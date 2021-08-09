@@ -344,7 +344,7 @@ impl LinkTls {
 
         // Set the TLS linger option
         if let Err(err) = zenoh_util::net::set_linger(
-            &tcp_stream,
+            tcp_stream,
             Some(Duration::from_secs(
                 (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
             )),

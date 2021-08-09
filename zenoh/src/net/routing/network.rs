@@ -324,7 +324,7 @@ impl Network {
                 let links: Vec<PeerId> = links
                     .iter()
                     .filter_map(|l| {
-                        if let Some(pid) = src_link.get_pid(&l) {
+                        if let Some(pid) = src_link.get_pid(l) {
                             Some(pid.clone())
                         } else {
                             log::error!(
@@ -405,7 +405,7 @@ impl Network {
         let mut reintroduced_nodes = vec![];
         for (links, idx1, _) in &link_states {
             for link in links {
-                if let Some(idx2) = self.get_idx(&link) {
+                if let Some(idx2) = self.get_idx(link) {
                     if self.graph[idx2].links.contains(&self.graph[*idx1].pid) {
                         log::trace!(
                             "{} Update edge (state) {} {}",
@@ -568,7 +568,7 @@ impl Network {
         self.graph[self.idx].links.retain(|link| *link != *pid);
 
         if let Some((edge, _)) = self
-            .get_idx(&pid)
+            .get_idx(pid)
             .map(|idx| self.graph.find_edge_undirected(self.idx, idx))
             .flatten()
         {

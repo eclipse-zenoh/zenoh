@@ -396,7 +396,7 @@ impl Workspace<'_> {
     ) -> impl ZFuture<Output = ZResult<GetRequestStream<'_>>> {
         debug!("eval on {}", path_expr);
         zready_try!({
-            let reskey = self.pathexpr_to_reskey(&path_expr)?;
+            let reskey = self.pathexpr_to_reskey(path_expr)?;
 
             self.session()
                 .declare_queryable(&reskey, EVAL)

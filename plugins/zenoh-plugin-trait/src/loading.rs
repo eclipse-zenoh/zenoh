@@ -360,7 +360,7 @@ impl<A, B> PluginsHandles<A, B> {
             })
             .chain(self.dynamic_plugins.iter().map(|p| PluginDescription {
                 name: &p.name,
-                path: &p.path.to_str().unwrap(),
+                path: p.path.to_str().unwrap(),
             }))
             .collect()
     }
