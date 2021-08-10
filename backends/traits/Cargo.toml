@@ -29,6 +29,6 @@ description = "Zenoh: traits to be implemented by backends libraries"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-zenoh = { path = "../../zenoh" }
 async-std = "=1.9.0"
-async-trait = "0.1"
+async-trait = "0.1.51"
+zenoh = { path = "../../zenoh" }
