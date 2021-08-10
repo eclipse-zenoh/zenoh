@@ -15,7 +15,7 @@ mod batch;
 mod pipeline;
 
 use super::super::super::link::Link;
-use super::core::{Conduit, ZInt};
+use super::core::{Priority, ZInt};
 use super::io;
 use super::io::{ZBuf, ZSlice};
 use super::proto;
@@ -190,7 +190,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
                 let pid = None;
                 let attachment = None;
                 let message = SessionMessage::make_keep_alive(pid, attachment);
-                pipeline.push_session_message(message, Conduit::Control);
+                pipeline.push_session_message(message, Priority::Control);
             }
         }
     }

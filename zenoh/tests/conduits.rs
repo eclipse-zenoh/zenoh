@@ -17,9 +17,7 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::protocol::core::{
-    whatami, Channel, Conduit, CongestionControl, PeerId, Reliability, ResKey,
-};
+use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -36,27 +34,27 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 const MSG_COUNT: usize = 100;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
 
-const CONDUIT_ALL: [Conduit; 8] = [
-    Conduit::Control,
-    Conduit::RealTime,
-    Conduit::InteractiveHigh,
-    Conduit::InteractiveLow,
-    Conduit::DataHigh,
-    Conduit::Data,
-    Conduit::DataLow,
-    Conduit::Background,
+const PRIORITY_ALL: [Priority; 8] = [
+    Priority::Control,
+    Priority::RealTime,
+    Priority::InteractiveHigh,
+    Priority::InteractiveLow,
+    Priority::DataHigh,
+    Priority::Data,
+    Priority::DataLow,
+    Priority::Background,
 ];
 
 // Session Handler for the router
 struct SHRouter {
-    conduit: Conduit,
+    priority: Priority,
     count: Arc<AtomicUsize>,
 }
 
 impl SHRouter {
-    fn new(conduit: Conduit) -> Self {
+    fn new(priority: Priority) -> Self {
         Self {
-            conduit,
+            priority,
             count: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -71,26 +69,26 @@ impl SessionHandler for SHRouter {
         &self,
         _session: Session,
     ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        let arc = Arc::new(SCRouter::new(self.count.clone(), self.conduit));
+        let arc = Arc::new(SCRouter::new(self.count.clone(), self.priority));
         Ok(arc)
     }
 }
 
 // Session Callback for the router
 pub struct SCRouter {
-    conduit: Conduit,
+    priority: Priority,
     count: Arc<AtomicUsize>,
 }
 
 impl SCRouter {
-    pub fn new(count: Arc<AtomicUsize>, conduit: Conduit) -> Self {
-        Self { conduit, count }
+    pub fn new(count: Arc<AtomicUsize>, priority: Priority) -> Self {
+        Self { priority, count }
     }
 }
 
 impl SessionEventHandler for SCRouter {
     fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        assert_eq!(self.conduit, message.channel.conduit);
+        assert_eq!(self.priority, message.channel.priority);
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -149,14 +147,14 @@ impl SessionEventHandler for SCClient {
 
 async fn open_session(
     locators: &[Locator],
-    conduit: Conduit,
+    priority: Priority,
 ) -> (SessionManager, Arc<SHRouter>, Session) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
     // Create the router session manager
-    let router_handler = Arc::new(SHRouter::new(conduit));
+    let router_handler = Arc::new(SHRouter::new(priority));
     let config = SessionManagerConfig {
         version: 0,
         whatami: whatami::ROUTER,
@@ -249,19 +247,17 @@ async fn single_run(
     let key = ResKey::RName("/test".to_string());
     let payload = ZBuf::from(vec![0u8; msg_size]);
     let data_info = None;
-    let congestion_control = CongestionControl::Block;
     let routing_context = None;
     let reply_context = None;
     let attachment = None;
     let message = ZenohMessage::make_data(
         key,
         payload,
-        congestion_control,
+        channel,
         data_info,
         routing_context,
         reply_context,
         attachment,
-        channel,
     );
 
     println!(
@@ -288,7 +284,7 @@ async fn run(locators: &[Locator], channel: &[Channel], msg_size: &[usize]) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
             let (router_manager, router_handler, client_session) =
-                open_session(locators, ch.conduit).await;
+                open_session(locators, ch.priority).await;
             single_run(router_handler.clone(), client_session.clone(), *ch, *ms).await;
             close_session(router_manager, client_session, locators).await;
         }
@@ -302,9 +298,9 @@ fn conduits_tcp_only() {
         zasync_executor_init!();
     });
     let mut channel = vec![];
-    for c in CONDUIT_ALL.iter() {
+    for p in PRIORITY_ALL.iter() {
         channel.push(Channel {
-            conduit: *c,
+            priority: *p,
             reliability: Reliability::Reliable,
         });
     }

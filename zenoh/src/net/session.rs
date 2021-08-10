@@ -20,8 +20,8 @@ use flume::{bounded, Sender};
 use log::{error, trace, warn};
 use protocol::{
     core::{
-        queryable, rname, AtomicZInt, Channel, Conduit, CongestionControl, QueryConsolidation,
-        QueryTarget, ResKey, ResourceId, ZInt,
+        queryable, rname, AtomicZInt, Channel, Priority, QueryConsolidation, QueryTarget, ResKey,
+        ResourceId, ZInt,
     },
     io::ZBuf,
     proto::RoutingContext,
@@ -951,10 +951,9 @@ impl Session {
             resource,
             payload.clone(),
             Channel {
-                conduit: Conduit::default(),
+                priority: Priority::default(),
                 reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             },
-            CongestionControl::default(), // Default congestion control when writing data
             data_info.clone(),
             None,
         );
@@ -989,7 +988,7 @@ impl Session {
         payload: ZBuf,
         encoding: ZInt,
         kind: ZInt,
-        congestion_control: CongestionControl,
+        _congestion_control: CongestionControl,
     ) -> impl ZFuture<Output = ZResult<()>> {
         trace!("write_ext({:?}, [...])", resource);
         let state = zread!(self.state);
@@ -1007,10 +1006,9 @@ impl Session {
             resource,
             payload.clone(),
             Channel {
-                conduit: Conduit::default(),
-                reliability: Reliability::Reliable, // TODO: need to check subscriptions to determine the right reliability value
+                priority: Priority::default(),
+                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             },
-            congestion_control,
             data_info.clone(),
             None,
         );
@@ -1366,16 +1364,14 @@ impl Primitives for Session {
         reskey: &ResKey,
         payload: ZBuf,
         channel: Channel,
-        congestion_control: CongestionControl,
         info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
-            "recv Data {:?} {:?} {:?} {:?} {:?}",
+            "recv Data {:?} {:?} {:?} {:?}",
             reskey,
             payload,
             channel,
-            congestion_control,
             info,
         );
         self.handle_data(false, reskey, info, payload)

@@ -16,7 +16,6 @@ pub mod rname;
 use std::convert::{From, TryFrom};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::Timestamp;
 use zenoh_util::core::{ZError, ZErrorKind};
@@ -28,10 +27,6 @@ pub type ZInt = u64;
 pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
 pub const ZINT_MAX_BYTES: usize = 10;
-
-zconfigurable! {
-    static ref CONGESTION_CONTROL_DEFAULT: CongestionControl = CongestionControl::Drop;
-}
 
 // WhatAmI values
 pub type WhatAmI = whatami::Type;
@@ -247,40 +242,9 @@ impl From<&PeerId> for uhlc::ID {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum CongestionControl {
-    Block,
-    Drop,
-}
-
-impl Default for CongestionControl {
-    fn default() -> CongestionControl {
-        *CONGESTION_CONTROL_DEFAULT
-    }
-}
-
-impl FromStr for CongestionControl {
-    type Err = ZError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "block" => Ok(CongestionControl::Block),
-            "drop" => Ok(CongestionControl::Drop),
-            _ => {
-                let e = format!(
-                    "Invalid CongestionControl: {}. Valid values are: 'block' | 'drop'",
-                    s
-                );
-                log::warn!("{}", e);
-                zerror!(ZErrorKind::Other { descr: e })
-            }
-        }
-    }
-}
-
-// Keep the same mapping ID with the conduits
-#[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum Priority {
+    Control = 0,
     RealTime = 1,
     InteractiveHigh = 2,
     InteractiveLow = 3,
@@ -292,7 +256,7 @@ pub enum Priority {
 
 impl Priority {
     pub fn num() -> usize {
-        7
+        8
     }
 }
 
@@ -305,8 +269,9 @@ impl Default for Priority {
 impl TryFrom<u8> for Priority {
     type Error = ZError;
 
-    fn try_from(priority: u8) -> Result<Self, Self::Error> {
-        match priority {
+    fn try_from(conduit: u8) -> Result<Self, Self::Error> {
+        match conduit {
+            0 => Ok(Priority::Control),
             1 => Ok(Priority::RealTime),
             2 => Ok(Priority::InteractiveHigh),
             3 => Ok(Priority::InteractiveLow),
@@ -314,68 +279,6 @@ impl TryFrom<u8> for Priority {
             5 => Ok(Priority::Data),
             6 => Ok(Priority::DataLow),
             7 => Ok(Priority::Background),
-            unknown => zerror!(ZErrorKind::Other {
-                descr: format!(
-                    "{} is not a valid priority value. Admitted values are [1-7].",
-                    unknown
-                )
-            }),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[repr(u8)]
-pub enum Conduit {
-    Control = 0,
-    RealTime = 1,
-    InteractiveHigh = 2,
-    InteractiveLow = 3,
-    DataHigh = 4,
-    Data = 5,
-    DataLow = 6,
-    Background = 7,
-}
-
-impl Conduit {
-    pub fn num() -> usize {
-        8
-    }
-}
-
-impl Default for Conduit {
-    fn default() -> Conduit {
-        Conduit::Data
-    }
-}
-
-impl From<Priority> for Conduit {
-    fn from(priority: Priority) -> Conduit {
-        match priority {
-            Priority::RealTime => Conduit::RealTime,
-            Priority::InteractiveHigh => Conduit::InteractiveHigh,
-            Priority::InteractiveLow => Conduit::InteractiveLow,
-            Priority::DataHigh => Conduit::DataHigh,
-            Priority::Data => Conduit::Data,
-            Priority::DataLow => Conduit::DataLow,
-            Priority::Background => Conduit::Background,
-        }
-    }
-}
-
-impl TryFrom<u8> for Conduit {
-    type Error = ZError;
-
-    fn try_from(conduit: u8) -> Result<Self, Self::Error> {
-        match conduit {
-            0 => Ok(Conduit::Control),
-            1 => Ok(Conduit::RealTime),
-            2 => Ok(Conduit::InteractiveHigh),
-            3 => Ok(Conduit::InteractiveLow),
-            4 => Ok(Conduit::DataHigh),
-            5 => Ok(Conduit::Data),
-            6 => Ok(Conduit::DataLow),
-            7 => Ok(Conduit::Background),
             unknown => zerror!(ZErrorKind::Other {
                 descr: format!(
                     "{} is not a valid conduit value. Admitted values are [0-7].",
@@ -387,6 +290,7 @@ impl TryFrom<u8> for Conduit {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum Reliability {
     BestEffort,
     Reliable,
@@ -400,20 +304,21 @@ impl Default for Reliability {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Channel {
-    pub conduit: Conduit,
+    pub priority: Priority,
     pub reliability: Reliability,
 }
 
 impl Default for Channel {
     fn default() -> Channel {
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::default(),
         }
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum SubMode {
     Push,
     Pull,
@@ -450,6 +355,7 @@ pub mod queryable {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[repr(u8)]
 pub enum ConsolidationMode {
     None,
     Lazy,

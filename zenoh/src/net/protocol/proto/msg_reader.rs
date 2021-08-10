@@ -34,9 +34,9 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_deco_conduit(&mut self, header: u8) -> Option<Conduit> {
-        let conduit: Conduit = (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()?;
-        Some(conduit)
+    fn read_deco_priority(&mut self, header: u8) -> Option<Priority> {
+        let priority: Priority = (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()?;
+        Some(priority)
     }
 
     /*************************************/
@@ -46,7 +46,7 @@ impl ZBuf {
         use super::smsg::id::*;
 
         let mut attachment = None;
-        let mut conduit = Conduit::default();
+        let mut priority = Priority::default();
 
         // Read the message
         let body = loop {
@@ -55,9 +55,9 @@ impl ZBuf {
 
             // Read the body
             match imsg::mid(header) {
-                FRAME => break self.read_frame(header, conduit)?,
-                CONDUIT => {
-                    conduit = self.read_deco_conduit(header)?;
+                FRAME => break self.read_frame(header, priority)?,
+                PRIORITY => {
+                    priority = self.read_deco_priority(header)?;
                     continue;
                 }
                 ATTACHMENT => {
@@ -102,13 +102,13 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_frame(&mut self, header: u8, conduit: Conduit) -> Option<SessionBody> {
+    fn read_frame(&mut self, header: u8, priority: Priority) -> Option<SessionBody> {
         let reliability = match imsg::has_flag(header, smsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
         };
         let channel = Channel {
-            conduit,
+            priority,
             reliability,
         };
         let sn = self.read_zint()?;
@@ -123,7 +123,7 @@ impl ZBuf {
             let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
             while self.can_read() {
                 let pos = self.get_pos();
-                if let Some(msg) = self.read_zenoh_message(channel) {
+                if let Some(msg) = self.read_zenoh_message(reliability) {
                     messages.push(msg);
                 } else if self.set_pos(pos) {
                     break;
@@ -345,13 +345,14 @@ impl ZBuf {
         Some(ReplyContext { qid, replier })
     }
 
-    pub fn read_zenoh_message(&mut self, channel: Channel) -> Option<ZenohMessage> {
+    pub fn read_zenoh_message(&mut self, reliability: Reliability) -> Option<ZenohMessage> {
         use super::zmsg::id::*;
 
         #[cfg(feature = "stats")]
         let start_readable = self.readable();
 
         // Message decorators
+        let mut priority = Priority::default();
         let mut routing_context = None;
         let mut reply_context = None;
         let mut attachment = None;
@@ -364,6 +365,10 @@ impl ZBuf {
             // Read the body
             match imsg::mid(header) {
                 DATA => break self.read_data(header, reply_context)?,
+                PRIORITY => {
+                    priority = self.read_deco_priority(header)?;
+                    continue;
+                }
                 REPLY_CONTEXT => {
                     reply_context = Some(self.read_deco_reply_context(header)?);
                     continue;
@@ -393,7 +398,10 @@ impl ZBuf {
 
         Some(ZenohMessage {
             body,
-            channel,
+            channel: Channel {
+                priority,
+                reliability,
+            },
             routing_context,
             attachment,
             #[cfg(feature = "stats")]
@@ -403,11 +411,6 @@ impl ZBuf {
 
     #[inline(always)]
     fn read_data(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
-        let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
-            CongestionControl::Drop
-        } else {
-            CongestionControl::Block
-        };
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
 
         #[cfg(feature = "zero-copy")]
@@ -433,7 +436,6 @@ impl ZBuf {
             key,
             data_info,
             payload,
-            congestion_control,
             reply_context,
         });
         Some(body)
@@ -472,9 +474,6 @@ impl ZBuf {
         if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
             info.timestamp = Some(self.read_timestamp()?);
         }
-        if imsg::has_option(options, zmsg::data::info::QOS) {
-            info.qos = Some(self.read()?.try_into().ok()?);
-        }
         if imsg::has_option(options, zmsg::data::info::SRCID) {
             info.source_id = Some(self.read_peerid()?);
         }
@@ -491,16 +490,8 @@ impl ZBuf {
         Some(info)
     }
 
-    fn read_unit(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
-        let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
-            CongestionControl::Drop
-        } else {
-            CongestionControl::Block
-        };
-        Some(ZenohBody::Unit(Unit {
-            congestion_control,
-            reply_context,
-        }))
+    fn read_unit(&mut self, _header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
+        Some(ZenohBody::Unit(Unit { reply_context }))
     }
 
     fn read_pull(&mut self, header: u8) -> Option<ZenohBody> {

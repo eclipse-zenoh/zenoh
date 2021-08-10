@@ -18,7 +18,7 @@ mod seq_num;
 mod tx;
 
 use super::core;
-use super::core::{Channel, Conduit, PeerId, Reliability, WhatAmI, ZInt};
+use super::core::{PeerId, Priority, Reliability, WhatAmI, ZInt};
 use super::io;
 use super::link::Link;
 use super::proto;
@@ -73,12 +73,11 @@ pub(crate) struct SessionTransportChannelRx {
 
 impl SessionTransportChannelRx {
     pub(crate) fn new(
-        channel: Channel,
+        reliability: Reliability,
         initial_sn: ZInt,
         sn_resolution: ZInt,
     ) -> SessionTransportChannelRx {
-        // Set the sequence number in the state as it had
-        // received a message with initial_sn - 1
+        // Set the sequence number in the state as it had received a message with initial_sn - 1
         let last_initial_sn = if initial_sn == 0 {
             sn_resolution - 1
         } else {
@@ -87,26 +86,26 @@ impl SessionTransportChannelRx {
 
         SessionTransportChannelRx {
             sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag: DefragBuffer::new(channel, initial_sn, sn_resolution),
+            defrag: DefragBuffer::new(reliability, initial_sn, sn_resolution),
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct SessionTransportConduitTx {
-    pub(crate) id: Conduit,
+    pub(crate) id: Priority,
     pub(crate) reliable: Arc<Mutex<SessionTransportChannelTx>>,
     pub(crate) best_effort: Arc<Mutex<SessionTransportChannelTx>>,
 }
 
 impl SessionTransportConduitTx {
     pub(crate) fn new(
-        conduit: Conduit,
+        priority: Priority,
         initial_sn: ZInt,
         sn_resolution: ZInt,
     ) -> SessionTransportConduitTx {
         SessionTransportConduitTx {
-            id: conduit,
+            id: priority,
             reliable: Arc::new(Mutex::new(SessionTransportChannelTx::new(
                 initial_sn,
                 sn_resolution,
@@ -121,32 +120,26 @@ impl SessionTransportConduitTx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SessionTransportConduitRx {
-    pub(crate) conduit: Conduit,
+    pub(crate) priority: Priority,
     pub(crate) reliable: Arc<Mutex<SessionTransportChannelRx>>,
     pub(crate) best_effort: Arc<Mutex<SessionTransportChannelRx>>,
 }
 
 impl SessionTransportConduitRx {
     pub(crate) fn new(
-        conduit: Conduit,
+        priority: Priority,
         initial_sn: ZInt,
         sn_resolution: ZInt,
     ) -> SessionTransportConduitRx {
         SessionTransportConduitRx {
-            conduit,
+            priority,
             reliable: Arc::new(Mutex::new(SessionTransportChannelRx::new(
-                Channel {
-                    conduit,
-                    reliability: Reliability::Reliable,
-                },
+                Reliability::Reliable,
                 initial_sn,
                 sn_resolution,
             ))),
             best_effort: Arc::new(Mutex::new(SessionTransportChannelRx::new(
-                Channel {
-                    conduit,
-                    reliability: Reliability::BestEffort,
-                },
+                Reliability::BestEffort,
                 initial_sn,
                 sn_resolution,
             ))),
@@ -198,7 +191,7 @@ impl SessionTransport {
         let mut conduit_rx = vec![];
 
         if config.is_qos {
-            for c in 0..Conduit::num() {
+            for c in 0..Priority::num() {
                 conduit_tx.push(SessionTransportConduitTx::new(
                     (c as u8).try_into().unwrap(),
                     config.initial_sn_tx,
@@ -206,7 +199,7 @@ impl SessionTransport {
                 ));
             }
 
-            for c in 0..Conduit::num() {
+            for c in 0..Priority::num() {
                 conduit_rx.push(SessionTransportConduitRx::new(
                     (c as u8).try_into().unwrap(),
                     config.initial_sn_rx,
@@ -215,13 +208,13 @@ impl SessionTransport {
             }
         } else {
             conduit_tx.push(SessionTransportConduitTx::new(
-                Conduit::default(),
+                Priority::default(),
                 config.initial_sn_tx,
                 config.sn_resolution,
             ));
 
             conduit_rx.push(SessionTransportConduitRx::new(
-                Conduit::default(),
+                Priority::default(),
                 config.initial_sn_rx,
                 config.sn_resolution,
             ));
@@ -322,7 +315,7 @@ impl SessionTransport {
                 let attachment = None; // No attachment here
                 let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-                pipeline.push_session_message(msg, Conduit::Background);
+                pipeline.push_session_message(msg, Priority::Background);
             }
 
             // Remove the link from the channel
@@ -350,7 +343,7 @@ impl SessionTransport {
             let attachment = None; // No attachment here
             let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            p.push_session_message(msg, Conduit::Background);
+            p.push_session_message(msg, Priority::Background);
         }
         // Terminate and clean up the session
         self.delete().await

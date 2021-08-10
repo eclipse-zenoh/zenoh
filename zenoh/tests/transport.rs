@@ -17,9 +17,7 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::protocol::core::{
-    whatami, Channel, Conduit, CongestionControl, PeerId, Reliability, ResKey,
-};
+use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -256,7 +254,6 @@ async fn single_run(
     router_handler: Arc<SHRouter>,
     client_session: Session,
     channel: Channel,
-    congestion_control: CongestionControl,
     msg_size: usize,
 ) {
     // Create the message to send
@@ -269,59 +266,39 @@ async fn single_run(
     let message = ZenohMessage::make_data(
         key,
         payload,
-        congestion_control,
+        channel,
         data_info,
         routing_context,
         reply_context,
         attachment,
-        channel,
     );
 
     println!(
-        "Sending {} messages... {:?} {:?} {}",
-        MSG_COUNT, channel, congestion_control, msg_size
+        "Sending {} messages... {:?} {}",
+        MSG_COUNT, channel, msg_size
     );
     for _ in 0..MSG_COUNT {
         client_session.schedule(message.clone()).unwrap();
     }
 
-    macro_rules! some {
-        () => {
-            // Wait to receive something
-            let count = async {
-                while router_handler.get_count() == 0 {
-                    task::sleep(SLEEP_COUNT).await;
-                }
-            };
-            let _ = count.timeout(TIMEOUT).await.unwrap();
-        };
-    }
-
-    macro_rules! all {
-        () => {
-            // Wait for the messages to arrive to the other side
+    match channel.reliability {
+        Reliability::Reliable => {
             let count = async {
                 while router_handler.get_count() != MSG_COUNT {
                     task::sleep(SLEEP_COUNT).await;
                 }
             };
             let _ = count.timeout(TIMEOUT).await.unwrap();
-        };
-    }
-
-    match channel.reliability {
-        Reliability::Reliable => match congestion_control {
-            CongestionControl::Block => {
-                all!();
-            }
-            CongestionControl::Drop => {
-                some!();
-            }
-        },
-        Reliability::BestEffort => {
-            some!();
         }
-    }
+        Reliability::BestEffort => {
+            let count = async {
+                while router_handler.get_count() == 0 {
+                    task::sleep(SLEEP_COUNT).await;
+                }
+            };
+            let _ = count.timeout(TIMEOUT).await.unwrap();
+        }
+    };
 
     // Wait a little bit
     task::sleep(SLEEP).await;
@@ -331,24 +308,14 @@ async fn run(
     locators: &[Locator],
     properties: Option<Vec<LocatorProperty>>,
     channel: &[Channel],
-    congestion_control: &[CongestionControl],
     msg_size: &[usize],
 ) {
     for ch in channel.iter() {
-        for cc in congestion_control.iter() {
-            for ms in msg_size.iter() {
-                let (router_manager, router_handler, client_session) =
-                    open_session(locators, properties.clone()).await;
-                single_run(
-                    router_handler.clone(),
-                    client_session.clone(),
-                    *ch,
-                    *cc,
-                    *ms,
-                )
-                .await;
-                close_session(router_manager, client_session, locators).await;
-            }
+        for ms in msg_size.iter() {
+            let (router_manager, router_handler, client_session) =
+                open_session(locators, properties.clone()).await;
+            single_run(router_handler.clone(), client_session.clone(), *ch, *ms).await;
+            close_session(router_manager, client_session, locators).await;
         }
     }
 }
@@ -366,31 +333,24 @@ fn transport_tcp_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::Reliable,
         },
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::Reliable,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        properties,
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_ALL,
-    ));
+    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -406,23 +366,16 @@ fn transport_udp_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        properties,
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_NOFRAG,
-    ));
+    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -441,23 +394,16 @@ fn transport_unix_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        properties,
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_ALL,
-    ));
+    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
@@ -478,23 +424,16 @@ fn transport_tcp_udp() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        properties,
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_NOFRAG,
-    ));
+    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(
@@ -520,23 +459,16 @@ fn transport_tcp_unix() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        properties,
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_ALL,
-    ));
+    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
 }
@@ -564,23 +496,16 @@ fn transport_udp_unix() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        properties,
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_NOFRAG,
-    ));
+    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
 }
@@ -610,23 +535,16 @@ fn transport_tcp_udp_unix() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        properties,
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_NOFRAG,
-    ));
+    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
 }
@@ -738,31 +656,24 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::Reliable,
         },
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::Reliable,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        Some(properties),
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_ALL,
-    ));
+    task::block_on(run(&locators, Some(properties), &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -877,29 +788,22 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::Reliable,
         },
         Channel {
-            conduit: Conduit::default(),
+            priority: Priority::default(),
             reliability: Reliability::BestEffort,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::Reliable,
         },
         Channel {
-            conduit: Conduit::RealTime,
+            priority: Priority::RealTime,
             reliability: Reliability::BestEffort,
         },
     ];
-    let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
     // Run
-    task::block_on(run(
-        &locators,
-        Some(properties),
-        &channel,
-        &congestion_control,
-        &MSG_SIZE_ALL,
-    ));
+    task::block_on(run(&locators, Some(properties), &channel, &MSG_SIZE_ALL));
 }

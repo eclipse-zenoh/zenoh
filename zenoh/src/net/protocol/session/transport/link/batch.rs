@@ -314,7 +314,7 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::super::core::{Channel, Conduit, CongestionControl, Reliability, ResKey};
+    use super::super::core::{Channel, Priority, Reliability, ResKey};
     use super::super::io::{WBuf, ZBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
     use super::super::session::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
@@ -331,8 +331,9 @@ mod tests {
             );
 
             // Create the serialization batch
-            let cid = Conduit::default();
-            let conduit = SessionTransportConduitTx::new(cid, 0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
+            let priority = Priority::default();
+            let conduit =
+                SessionTransportConduitTx::new(priority, 0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
             let mut batch = SerializationBatch::new(batch_size, *is_streamed, conduit);
 
             // Serialize the messages until the batch is full
@@ -368,33 +369,27 @@ mod tests {
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
                 let payload = ZBuf::from(vec![0u8; payload_size]);
-                let congestion_control = if dropping {
-                    CongestionControl::Drop
-                } else {
-                    CongestionControl::Block
-                };
-                let data_info = None;
-                let routing_context = None;
-                let reply_context = None;
-                let attachment = None;
                 let channel = Channel {
-                    conduit: cid,
+                    priority,
                     reliability: if reliable {
                         Reliability::Reliable
                     } else {
                         Reliability::BestEffort
                     },
                 };
+                let data_info = None;
+                let routing_context = None;
+                let reply_context = None;
+                let attachment = None;
 
                 let msg = ZenohMessage::make_data(
                     key,
                     payload,
-                    congestion_control,
+                    channel,
                     data_info,
                     routing_context,
                     reply_context,
                     attachment,
-                    channel,
                 );
                 // Serialize the ZenohMessage
                 let res = batch.serialize_zenoh_message(&msg);
@@ -439,108 +434,108 @@ mod tests {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
             let conduit = SessionTransportConduitTx::new(
-                Conduit::default(),
+                Priority::default(),
                 0,
                 ZN_DEFAULT_SEQ_NUM_RESOLUTION,
             );
 
             for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
-                for congestion_control in [CongestionControl::Drop, CongestionControl::Block].iter()
-                {
-                    let channel = Channel {
-                        conduit: conduit.id,
-                        reliability: *reliability,
-                    };
-                    // Create the ZenohMessage
-                    let key = ResKey::RName("test".to_string());
-                    let payload = ZBuf::from(vec![0u8; payload_size]);
-                    let data_info = None;
-                    let routing_context = None;
-                    let reply_context = None;
-                    let attachment = None;
-                    let msg_in = ZenohMessage::make_data(
-                        key,
-                        payload,
-                        *congestion_control,
-                        data_info,
-                        routing_context,
-                        reply_context,
-                        attachment,
-                        channel,
-                    );
+                let channel = Channel {
+                    priority: conduit.id,
+                    reliability: *reliability,
+                };
+                // Create the ZenohMessage
+                let key = ResKey::RName("test".to_string());
+                let payload = ZBuf::from(vec![0u8; payload_size]);
+                let data_info = None;
+                let routing_context = None;
+                let reply_context = None;
+                let attachment = None;
+                let msg_in = ZenohMessage::make_data(
+                    key,
+                    payload,
+                    channel,
+                    data_info,
+                    routing_context,
+                    reply_context,
+                    attachment,
+                );
 
-                    // Acquire the lock on the sn generators to ensure that we have
-                    // sequential sequence numbers for all the fragments
-                    let mut guard = if msg_in.is_reliable() {
-                        zlock!(conduit.reliable)
+                // Acquire the lock on the sn generators to ensure that we have
+                // sequential sequence numbers for all the fragments
+                let mut guard = if msg_in.is_reliable() {
+                    zlock!(conduit.reliable)
+                } else {
+                    zlock!(conduit.best_effort)
+                };
+
+                // Serialize the message
+                let mut wbuf = WBuf::new(batch_size, false);
+                wbuf.write_zenoh_message(&msg_in);
+
+                print!(
+                    "Streamed: {}\t\tBatch: {}\t\tPload: {}",
+                    is_streamed, batch_size, payload_size
+                );
+
+                // Store all the batches
+                let mut batches: Vec<SerializationBatch> = Vec::new();
+                // Fragment the message
+                let mut to_write = wbuf.len();
+                while to_write > 0 {
+                    // Create the serialization batch
+                    let mut batch =
+                        SerializationBatch::new(batch_size, *is_streamed, conduit.clone());
+                    let reliability = if msg_in.is_reliable() {
+                        Reliability::Reliable
                     } else {
-                        zlock!(conduit.best_effort)
+                        Reliability::BestEffort
                     };
-
-                    // Serialize the message
-                    let mut wbuf = WBuf::new(batch_size, false);
-                    wbuf.write_zenoh_message(&msg_in);
-
-                    print!(
-                        "Streamed: {}\t\tBatch: {}\t\tPload: {}",
-                        is_streamed, batch_size, payload_size
+                    let written = batch.serialize_zenoh_fragment(
+                        reliability,
+                        guard.sn.get(),
+                        &mut wbuf,
+                        to_write,
                     );
-
-                    // Store all the batches
-                    let mut batches: Vec<SerializationBatch> = Vec::new();
-                    // Fragment the message
-                    let mut to_write = wbuf.len();
-                    while to_write > 0 {
-                        // Create the serialization batch
-                        let mut batch =
-                            SerializationBatch::new(batch_size, *is_streamed, conduit.clone());
-                        let ch = if msg_in.is_reliable() {
-                            Reliability::Reliable
-                        } else {
-                            Reliability::BestEffort
-                        };
-                        let written =
-                            batch.serialize_zenoh_fragment(ch, guard.sn.get(), &mut wbuf, to_write);
-                        assert_ne!(written, 0);
-                        // Keep serializing
-                        to_write -= written;
-                        batches.push(batch);
-                    }
-
-                    assert!(!batches.is_empty());
-
-                    let mut fragments = WBuf::new(0, false);
-                    for batch in batches.iter() {
-                        // Convert the buffer into an ZBuf
-                        let mut zbuf: ZBuf = batch.get_serialized_messages().into();
-                        // Deserialize the messages
-                        let msg = zbuf.read_session_message().unwrap();
-
-                        match msg.body {
-                            SessionBody::Frame(Frame { payload, .. }) => match payload {
-                                FramePayload::Fragment { buffer, is_final } => {
-                                    assert!(!buffer.is_empty());
-                                    fragments.write_zslice(buffer.clone());
-                                    if is_final {
-                                        break;
-                                    }
-                                }
-                                _ => assert!(false),
-                            },
-                            _ => assert!(false),
-                        }
-                    }
-                    let mut fragments: ZBuf = fragments.into();
-
-                    assert!(!fragments.is_empty());
-
-                    // Deserialize the message
-                    let msg_out = fragments.read_zenoh_message(channel);
-                    assert!(msg_out.is_some());
-                    assert_eq!(msg_in, msg_out.unwrap());
-
-                    println!("\t\tFragments: {}", batches.len());
+                    assert_ne!(written, 0);
+                    // Keep serializing
+                    to_write -= written;
+                    batches.push(batch);
                 }
+
+                assert!(!batches.is_empty());
+
+                let mut fragments = WBuf::new(0, false);
+                for batch in batches.iter() {
+                    // Convert the buffer into an ZBuf
+                    let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+                    // Deserialize the messages
+                    let msg = zbuf.read_session_message().unwrap();
+
+                    match msg.body {
+                        SessionBody::Frame(Frame { payload, .. }) => match payload {
+                            FramePayload::Fragment { buffer, is_final } => {
+                                assert!(!buffer.is_empty());
+                                fragments.write_zslice(buffer.clone());
+                                if is_final {
+                                    break;
+                                }
+                            }
+                            _ => assert!(false),
+                        },
+                        _ => assert!(false),
+                    }
+                }
+                let mut fragments: ZBuf = fragments.into();
+
+                assert!(!fragments.is_empty());
+
+                // Deserialize the message
+                let msg_out = fragments.read_zenoh_message(*reliability);
+                assert!(msg_out.is_some());
+                assert_eq!(msg_in, msg_out.unwrap());
+
+                println!("\t\tFragments: {}", batches.len());
             }
         }
     }

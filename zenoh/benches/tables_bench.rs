@@ -15,9 +15,7 @@
 extern crate criterion;
 use async_std::sync::Arc;
 use criterion::{BenchmarkId, Criterion};
-use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Reliability, SubInfo, SubMode,
-};
+use zenoh::net::protocol::core::{whatami, Channel, PeerId, Reliability, SubInfo, SubMode};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::session::DummyPrimitives;
 use zenoh::net::routing::pubsub::*;
@@ -82,7 +80,6 @@ fn tables_bench(c: &mut Criterion) {
                     2 as u64,
                     "",
                     Channel::default(),
-                    CongestionControl::Drop,
                     None,
                     payload.clone(),
                     None,
@@ -98,7 +95,6 @@ fn tables_bench(c: &mut Criterion) {
                     0 as u64,
                     "/bench/tables/*",
                     Channel::default(),
-                    CongestionControl::Drop,
                     None,
                     payload.clone(),
                     None,
@@ -114,7 +110,6 @@ fn tables_bench(c: &mut Criterion) {
                     0 as u64,
                     "/bench/tables/A*",
                     Channel::default(),
-                    CongestionControl::Drop,
                     None,
                     payload.clone(),
                     None,

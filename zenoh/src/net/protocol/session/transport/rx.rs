@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{Conduit, PeerId, Reliability, ZInt};
+use super::core::{PeerId, Priority, Reliability, ZInt};
 use super::proto::{
     Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage, ZenohMessage,
 };
@@ -145,13 +145,13 @@ impl SessionTransport {
                 payload,
             }) => {
                 let c = if self.is_qos() {
-                    &self.conduit_rx[channel.conduit as usize]
-                } else if channel.conduit == Conduit::default() {
+                    &self.conduit_rx[channel.priority as usize]
+                } else if channel.priority == Priority::default() {
                     &self.conduit_rx[0]
                 } else {
                     let e = format!(
                         "Session: {}. Unknown conduit: {:?}.",
-                        self.pid, channel.conduit
+                        self.pid, channel.priority
                     );
                     return zerror!(ZErrorKind::InvalidMessage { descr: e });
                 };

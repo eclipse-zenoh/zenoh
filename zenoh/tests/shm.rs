@@ -19,9 +19,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh::net::protocol::core::{
-        whatami, Channel, Conduit, CongestionControl, PeerId, Reliability, ResKey,
-    };
+    use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::link::{Link, Locator};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
@@ -236,25 +234,23 @@ mod tests {
 
             let key = ResKey::RName("/test".to_string());
             let payload: ZBuf = sbuf.into();
-            let congestion_control = CongestionControl::Block;
+            let channel = Channel {
+                priority: Priority::default(),
+                reliability: Reliability::Reliable,
+            };
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
             let attachment = None;
-            let channel = Channel {
-                conduit: Conduit::default(),
-                reliability: Reliability::Reliable,
-            };
 
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                congestion_control,
+                channel,
                 data_info,
                 routing_context,
                 reply_context,
                 attachment,
-                channel,
             );
 
             peer_shm02_session.schedule(message.clone()).unwrap();
@@ -296,25 +292,23 @@ mod tests {
 
             let key = ResKey::RName("/test".to_string());
             let payload: ZBuf = sbuf.into();
-            let congestion_control = CongestionControl::Block;
+            let channel = Channel {
+                priority: Priority::default(),
+                reliability: Reliability::Reliable,
+            };
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
             let attachment = None;
-            let channel = Channel {
-                conduit: Conduit::default(),
-                reliability: Reliability::Reliable,
-            };
 
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                congestion_control,
+                channel,
                 data_info,
                 routing_context,
                 reply_context,
                 attachment,
-                channel,
             );
 
             peer_net01_session.schedule(message.clone()).unwrap();

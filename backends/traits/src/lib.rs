@@ -108,14 +108,14 @@
 //!         match kind {
 //!             ChangeKind::Put => {
 //!                 let _key = sample.res_name;
-//!                 // TODO:
+//!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: store (key, sample)
 //!                 //  - if not: drop the sample
 //!             }
 //!             ChangeKind::Delete => {
 //!                 let _key = sample.res_name;
-//!                 // TODO:
+//!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
 //!                 //  - if not: drop the sample
@@ -130,7 +130,7 @@
 //!     // When receiving a Query (i.e. on GET operations)
 //!     async fn on_query(&mut self, query: Query) -> ZResult<()> {
 //!         let _path_expr = query.res_name();
-//!         // TODO:
+//!         // @TODO:
 //!         //  - test if path expression contains *
 //!         //  - if not: just get the sample with key==path_expr and call: query.reply(sample.clone()).await;
 //!         //  - if yes: get all the samples with key matching path_expr and call for each: query.reply(sample.clone()).await;

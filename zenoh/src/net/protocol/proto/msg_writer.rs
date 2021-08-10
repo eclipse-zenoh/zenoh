@@ -49,14 +49,14 @@ impl WBuf {
     }
 
     #[inline(always)]
-    fn write_deco_conduit(&mut self, conduit: Conduit) -> bool {
-        self.write(conduit.header())
+    fn write_deco_priority(&mut self, priority: Priority) -> bool {
+        self.write(priority.header())
     }
 
     #[inline(always)]
     pub fn write_frame_header(
         &mut self,
-        conduit: Conduit,
+        priority: Priority,
         reliability: Reliability,
         sn: ZInt,
         is_fragment: Option<bool>,
@@ -65,8 +65,8 @@ impl WBuf {
         if let Some(attachment) = attachment {
             zcheck!(self.write_deco_attachment(&attachment));
         }
-        if conduit != Conduit::default() {
-            zcheck!(self.write_deco_conduit(conduit))
+        if priority != Priority::default() {
+            zcheck!(self.write_deco_priority(priority))
         }
 
         let header = Frame::make_header(reliability, is_fragment);
@@ -99,8 +99,8 @@ impl WBuf {
     }
 
     fn write_frame(&mut self, frame: &Frame) -> bool {
-        if frame.channel.conduit != Conduit::default() {
-            zcheck!(self.write_deco_conduit(frame.channel.conduit))
+        if frame.channel.priority != Priority::default() {
+            zcheck!(self.write_deco_priority(frame.channel.priority))
         }
 
         zcheck!(self.write(frame.header()));
@@ -238,11 +238,14 @@ impl WBuf {
     /*              ZENOH                */
     /*************************************/
     pub fn write_zenoh_message(&mut self, msg: &ZenohMessage) -> bool {
+        if let Some(attachment) = msg.attachment.as_ref() {
+            zcheck!(self.write_deco_attachment(attachment));
+        }
         if let Some(routing_context) = msg.routing_context.as_ref() {
             zcheck!(self.write_deco_routing_context(routing_context));
         }
-        if let Some(attachment) = msg.attachment.as_ref() {
-            zcheck!(self.write_deco_attachment(attachment));
+        if msg.channel.priority != Priority::default() {
+            zcheck!(self.write_deco_priority(msg.channel.priority));
         }
 
         match &msg.body {
@@ -310,9 +313,6 @@ impl WBuf {
         }
         if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
-        }
-        if let Some(qos) = info.qos {
-            zcheck!(self.write(qos as u8));
         }
         if let Some(pid) = info.source_id.as_ref() {
             zcheck!(self.write_peerid(pid));

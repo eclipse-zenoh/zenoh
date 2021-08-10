@@ -139,7 +139,7 @@ fn propagate_simple_queryable(
         let kind = local_qabl_kind(whatami, pid, res, dst_face);
         // let current_qabl = dst_face.local_qabls.get(res);
         if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
-            // && (current_qabl.is_none() || *current_qabl.unwrap() != kind) // TODO
+            // && (current_qabl.is_none() || *current_qabl.unwrap() != kind) // @TODO
             && match tables.whatami {
                 whatami::ROUTER => dst_face.whatami == whatami::CLIENT,
                 whatami::PEER => dst_face.whatami == whatami::CLIENT,

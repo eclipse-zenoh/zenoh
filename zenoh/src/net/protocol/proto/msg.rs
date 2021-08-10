@@ -45,7 +45,7 @@ pub(crate) mod imsg {
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
         // Message decorators
-        pub(crate) const CONDUIT: u8 = 0x1c;
+        pub(crate) const PRIORITY: u8 = 0x1c;
         pub(crate) const ROUTING_CONTEXT: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
@@ -73,7 +73,7 @@ pub(crate) mod imsg {
 }
 
 pub mod smsg {
-    use super::{imsg, Conduit, ZInt};
+    use super::{imsg, Priority, ZInt};
 
     // Session message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -92,7 +92,7 @@ pub mod smsg {
         pub const FRAME: u8 = imsg::id::FRAME;
 
         // Message decorators
-        pub const CONDUIT: u8 = imsg::id::CONDUIT;
+        pub const PRIORITY: u8 = imsg::id::PRIORITY;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
     }
 
@@ -120,7 +120,7 @@ pub mod smsg {
     pub mod init_options {
         use super::ZInt;
 
-        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if QOS==1 then the session supports QoS
+        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the session supports QoS
     }
 
     // Reason for the Close message
@@ -134,21 +134,21 @@ pub mod smsg {
     }
 
     pub mod conduit {
-        use super::{imsg, Conduit};
+        use super::{imsg, Priority};
 
-        pub const CONTROL: u8 = (Conduit::Control as u8) << imsg::HEADER_BITS;
-        pub const REAL_TIME: u8 = (Conduit::RealTime as u8) << imsg::HEADER_BITS;
-        pub const INTERACTIVE_HIGH: u8 = (Conduit::InteractiveHigh as u8) << imsg::HEADER_BITS;
-        pub const INTERACTIVE_LOW: u8 = (Conduit::InteractiveLow as u8) << imsg::HEADER_BITS;
-        pub const DATA_HIGH: u8 = (Conduit::DataHigh as u8) << imsg::HEADER_BITS;
-        pub const DATA: u8 = (Conduit::Data as u8) << imsg::HEADER_BITS;
-        pub const DATA_LOW: u8 = (Conduit::DataLow as u8) << imsg::HEADER_BITS;
-        pub const BACKGROUND: u8 = (Conduit::Background as u8) << imsg::HEADER_BITS;
+        pub const CONTROL: u8 = (Priority::Control as u8) << imsg::HEADER_BITS;
+        pub const REAL_TIME: u8 = (Priority::RealTime as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
+        pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
+        pub const DATA: u8 = (Priority::Data as u8) << imsg::HEADER_BITS;
+        pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
+        pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
     }
 }
 
 pub mod zmsg {
-    use super::{imsg, Channel, Conduit, CongestionControl, Priority, Reliability, ZInt};
+    use super::{imsg, Channel, Priority, Reliability, ZInt};
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -163,6 +163,7 @@ pub mod zmsg {
         pub const LINK_STATE_LIST: u8 = imsg::id::LINK_STATE_LIST;
 
         // Message decorators
+        pub const PRIORITY: u8 = imsg::id::PRIORITY;
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
         pub const ROUTING_CONTEXT: u8 = imsg::id::ROUTING_CONTEXT;
@@ -170,7 +171,6 @@ pub mod zmsg {
 
     // Zenoh message flags
     pub mod flag {
-        pub const D: u8 = 1 << 5; // 0x20 Dropping      if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final         if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
         pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then resource key has name
@@ -186,7 +186,7 @@ pub mod zmsg {
 
     // Options used for DataInfo
     pub mod data {
-        use super::{Priority, ZInt};
+        use super::ZInt;
 
         pub mod info {
             use super::ZInt;
@@ -196,25 +196,13 @@ pub mod zmsg {
             pub const KIND: ZInt = 1 << 1; // 0x02
             pub const ENCODING: ZInt = 1 << 2; // 0x04
             pub const TIMESTAMP: ZInt = 1 << 3; // 0x08
-            pub const QOS: ZInt = 1 << 4; // 0x10
-                                          // 0x20: Reserved
-                                          // 0x40: Reserved
+            pub const PRIORITY: ZInt = 1 << 4; // 0x10
+                                               // 0x20: Reserved
+                                               // 0x40: Reserved
             pub const SRCID: ZInt = 1 << 7; // 0x80
             pub const SRCSN: ZInt = 1 << 8; // 0x100
             pub const RTRID: ZInt = 1 << 9; // 0x200
             pub const RTRSN: ZInt = 1 << 10; // 0x400
-        }
-
-        pub mod priority {
-            use super::Priority;
-
-            pub const REAL_TIME: u8 = Priority::RealTime as u8;
-            pub const INTERACTIVE_HIGH: u8 = Priority::InteractiveHigh as u8;
-            pub const INTERACTIVE_LOW: u8 = Priority::InteractiveLow as u8;
-            pub const DATA_HIGH: u8 = Priority::DataHigh as u8;
-            pub const DATA: u8 = Priority::Data as u8;
-            pub const DATA_LOW: u8 = Priority::DataLow as u8;
-            pub const BACKGROUND: u8 = Priority::Background as u8;
         }
     }
 
@@ -250,51 +238,51 @@ pub mod zmsg {
         pub const LOC: ZInt = 1 << 2; // 0x04
     }
 
+    pub mod conduit {
+        use super::{imsg, Priority};
+
+        pub const CONTROL: u8 = (Priority::Control as u8) << imsg::HEADER_BITS;
+        pub const REAL_TIME: u8 = (Priority::RealTime as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
+        pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
+        pub const DATA: u8 = (Priority::Data as u8) << imsg::HEADER_BITS;
+        pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
+        pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
+    }
+
     // Default reliability for each Zenoh Message
     pub mod default_channel {
-        use super::{Channel, Conduit, Reliability};
+        use super::{Channel, Priority, Reliability};
 
         pub const DECLARE: Channel = Channel {
-            conduit: Conduit::Data,
+            priority: Priority::Data,
             reliability: Reliability::Reliable,
         };
         pub const DATA: Channel = Channel {
-            conduit: Conduit::Data,
+            priority: Priority::Data,
             reliability: Reliability::BestEffort,
         };
         pub const QUERY: Channel = Channel {
-            conduit: Conduit::Data,
+            priority: Priority::Data,
             reliability: Reliability::Reliable,
         };
         pub const PULL: Channel = Channel {
-            conduit: Conduit::Data,
+            priority: Priority::Data,
             reliability: Reliability::Reliable,
         };
         pub const REPLY: Channel = Channel {
-            conduit: Conduit::Data,
+            priority: Priority::Data,
             reliability: Reliability::Reliable,
         };
         pub const UNIT: Channel = Channel {
-            conduit: Conduit::Data,
+            priority: Priority::Data,
             reliability: Reliability::BestEffort,
         };
         pub const LINK_STATE_LIST: Channel = Channel {
-            conduit: Conduit::Control,
+            priority: Priority::Control,
             reliability: Reliability::Reliable,
         };
-    }
-
-    // Default congestion control for each Zenoh Message
-    pub mod default_congestion_control {
-        use super::CongestionControl;
-
-        pub const DECLARE: CongestionControl = CongestionControl::Block;
-        pub const DATA: CongestionControl = CongestionControl::Drop;
-        pub const QUERY: CongestionControl = CongestionControl::Block;
-        pub const PULL: CongestionControl = CongestionControl::Block;
-        pub const REPLY: CongestionControl = CongestionControl::Block;
-        pub const UNIT: CongestionControl = CongestionControl::Block;
-        pub const LINK_STATE_LIST: CongestionControl = CongestionControl::Block;
     }
 }
 
@@ -449,21 +437,21 @@ impl RoutingContext {
     }
 }
 
-/// -- Conduit decorator
+/// -- Priority decorator
 ///
 /// ```text
-/// The **Conduit** is a message decorator containing
-/// informations related to the class of conduit.
+/// The **Priority** is a message decorator containing
+/// informations related to the priority of the frame/zenoh message.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// | ID  | Conduit |
+/// | ID  |  Prio   |
 /// +-+-+-+---------+
 ///
 /// ```
-impl Conduit {
+impl Priority {
     pub fn header(self) -> u8 {
-        smsg::id::CONDUIT | ((self as u8) << imsg::HEADER_BITS)
+        smsg::id::PRIORITY | ((self as u8) << imsg::HEADER_BITS)
     }
 }
 
@@ -500,8 +488,6 @@ impl Conduit {
 /// +---------------+
 /// ~   timestamp   ~ if options & (1 << 2)
 /// +---------------+
-/// | reserved| prio| if options & (1 << 3)
-/// +---------------+
 /// ~   source_id   ~ if options & (1 << 7)
 /// +---------------+
 /// ~   source_sn   ~ if options & (1 << 8)
@@ -521,7 +507,6 @@ pub struct DataInfo {
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
     pub timestamp: Option<Timestamp>,
-    pub qos: Option<Priority>,
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
     pub first_router_id: Option<PeerId>,
@@ -542,7 +527,6 @@ impl Default for DataInfo {
             kind: None,
             encoding: None,
             timestamp: None,
-            qos: None,
             source_id: None,
             source_sn: None,
             first_router_id: None,
@@ -566,9 +550,6 @@ impl Options for DataInfo {
         }
         if self.timestamp.is_some() {
             options |= zmsg::data::info::TIMESTAMP;
-        }
-        if self.qos.is_some() {
-            options |= zmsg::data::info::QOS;
         }
         if self.source_id.is_some() {
             options |= zmsg::data::info::SRCID;
@@ -603,7 +584,6 @@ impl Options for DataInfo {
             || self.kind.is_some()
             || self.encoding.is_some()
             || self.timestamp.is_some()
-            || self.qos.is_some()
             || self.source_id.is_some()
             || self.source_sn.is_some()
             || self.first_router_id.is_some()
@@ -622,7 +602,7 @@ impl PartialOrd for DataInfo {
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |K|I|D|  DATA   |
+/// |K|I|X|  DATA   |
 /// +-+-+-+---------+
 /// ~    ResKey     ~ if K==1 -- Only numerical id
 /// +---------------+
@@ -631,14 +611,12 @@ impl PartialOrd for DataInfo {
 /// ~    Payload    ~
 /// +---------------+
 ///
-/// - if D==1 then the message can be dropped for congestion control reasons.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
     pub key: ResKey,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
-    pub congestion_control: CongestionControl,
     pub reply_context: Option<ReplyContext>,
 }
 
@@ -646,9 +624,6 @@ impl Header for Data {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::id::DATA;
-        if let CongestionControl::Drop = self.congestion_control {
-            header |= zmsg::flag::D;
-        }
         if self.data_info.is_some() {
             header |= zmsg::flag::I;
         }
@@ -664,25 +639,19 @@ impl Header for Data {
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |X|X|D|  UNIT   |
+/// |X|X|X|  UNIT   |
 /// +-+-+-+---------+
 ///
-/// - if D==1 then the message can be dropped for congestion control reasons.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
-    pub congestion_control: CongestionControl,
     pub reply_context: Option<ReplyContext>,
 }
 
 impl Header for Unit {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = zmsg::id::UNIT;
-        if let CongestionControl::Drop = self.congestion_control {
-            header |= zmsg::flag::D;
-        }
-        header
+        zmsg::id::UNIT
     }
 }
 
@@ -1087,9 +1056,9 @@ pub enum ZenohBody {
 #[derive(Clone, PartialEq)]
 pub struct ZenohMessage {
     pub body: ZenohBody,
+    pub channel: Channel,
     pub routing_context: Option<RoutingContext>,
     pub attachment: Option<Attachment>,
-    pub channel: Channel,
     #[cfg(feature = "stats")]
     pub size: Option<std::num::NonZeroUsize>,
 }
@@ -1100,7 +1069,7 @@ impl fmt::Debug for ZenohMessage {
         write!(
             f,
             "{:?} {:?} {:?} {:?} {:?}",
-            self.body, self.routing_context, self.attachment, self.channel, self.size
+            self.body, self.channel, self.routing_context, self.attachment, self.size
         )
     }
 
@@ -1109,7 +1078,7 @@ impl fmt::Debug for ZenohMessage {
         write!(
             f,
             "{:?} {:?} {:?} {:?}",
-            self.body, self.routing_context, self.attachment, self.channel
+            self.body, self.channel, self.routing_context, self.attachment,
         )
     }
 }
@@ -1128,9 +1097,9 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Declare(Declare { declarations }),
+            channel: zmsg::default_channel::DECLARE,
             routing_context,
             attachment,
-            channel: zmsg::default_channel::DECLARE,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1141,43 +1110,37 @@ impl ZenohMessage {
     pub fn make_data(
         key: ResKey,
         payload: ZBuf,
-        congestion_control: CongestionControl,
+        channel: Channel,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
-        channel: Channel,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Data(Data {
                 key,
                 data_info,
                 payload,
-                congestion_control,
                 reply_context,
             }),
+            channel,
             routing_context,
             attachment,
-            channel,
             #[cfg(feature = "stats")]
             size: None,
         }
     }
 
     pub fn make_unit(
-        congestion_control: CongestionControl,
+        channel: Channel,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
-        channel: Channel,
     ) -> ZenohMessage {
         ZenohMessage {
-            body: ZenohBody::Unit(Unit {
-                congestion_control,
-                reply_context,
-            }),
+            body: ZenohBody::Unit(Unit { reply_context }),
+            channel,
             routing_context: None,
             attachment,
-            channel,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1197,9 +1160,9 @@ impl ZenohMessage {
                 max_samples,
                 is_final,
             }),
+            channel: zmsg::default_channel::PULL,
             routing_context: None,
             attachment,
-            channel: zmsg::default_channel::PULL,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1223,9 +1186,9 @@ impl ZenohMessage {
                 target,
                 consolidation,
             }),
+            channel: zmsg::default_channel::QUERY,
             routing_context,
             attachment,
-            channel: zmsg::default_channel::QUERY,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1237,9 +1200,9 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::LinkStateList(LinkStateList { link_states }),
+            channel: zmsg::default_channel::LINK_STATE_LIST,
             routing_context: None,
             attachment,
-            channel: zmsg::default_channel::LINK_STATE_LIST,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1249,15 +1212,6 @@ impl ZenohMessage {
     #[inline]
     pub fn is_reliable(&self) -> bool {
         self.channel.reliability == Reliability::Reliable
-    }
-
-    #[inline]
-    pub fn is_droppable(&self) -> bool {
-        match &self.body {
-            ZenohBody::Data(data) => data.congestion_control == CongestionControl::Drop,
-            ZenohBody::Unit(unit) => unit.congestion_control == CongestionControl::Drop,
-            _ => false,
-        }
     }
 }
 

@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use rand::*;
-use std::convert::TryInto;
 use uhlc::Timestamp;
 use zenoh::net::protocol::core::*;
 use zenoh::net::protocol::io::{WBuf, ZBuf};
@@ -27,13 +26,6 @@ macro_rules! gen {
     ($name:ty) => {
         thread_rng().gen::<$name>()
     };
-}
-
-macro_rules! gen_range {
-    ($name:ty, $range:expr) => {{
-        let v: $name = thread_rng().gen_range($range);
-        v
-    }};
 }
 
 macro_rules! gen_bool {
@@ -220,18 +212,11 @@ fn gen_timestamp() -> Timestamp {
     Timestamp::new(uhlc::NTP64(gen!(u64)), uhlc::ID::from(uuid::Uuid::new_v4()))
 }
 
-fn gen_priority() -> Priority {
-    let range = (Priority::RealTime as u8)..=(Priority::Background as u8);
-    let value = gen_range!(u8, range);
-    value.try_into().unwrap()
-}
-
 fn gen_data_info() -> DataInfo {
     DataInfo {
         kind: option_gen!(gen!(ZInt)),
         encoding: option_gen!(gen!(ZInt)),
         timestamp: option_gen!(gen_timestamp()),
-        qos: option_gen!(gen_priority()),
         #[cfg(feature = "zero-copy")]
         sliced: false,
         source_id: option_gen!(gen_pid()),
@@ -252,7 +237,6 @@ fn test_write_read_session_message(msg: SessionMessage) {
         let properties = attachment.buffer.read_properties();
         println!("Properties read: {:?}", properties);
     }
-
     assert_eq!(msg, result);
 }
 
@@ -261,13 +245,14 @@ fn test_write_read_zenoh_message(msg: ZenohMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_zenoh_message(&msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(&buf).read_zenoh_message(msg.channel).unwrap();
+    let mut result = ZBuf::from(&buf)
+        .read_zenoh_message(msg.channel.reliability)
+        .unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = &mut result.attachment {
         let properties = attachment.buffer.read_properties();
         println!("Properties read: {:?}", properties);
     }
-
     assert_eq!(msg, result);
 }
 
@@ -486,23 +471,22 @@ fn codec_frame() {
     for _ in 0..NUM_ITER {
         let channel = [
             Channel {
-                conduit: Conduit::default(),
+                priority: Priority::default(),
                 reliability: Reliability::Reliable,
             },
             Channel {
-                conduit: Conduit::default(),
+                priority: Priority::default(),
                 reliability: Reliability::BestEffort,
             },
             Channel {
-                conduit: Conduit::RealTime,
+                priority: Priority::RealTime,
                 reliability: Reliability::Reliable,
             },
             Channel {
-                conduit: Conduit::RealTime,
+                priority: Priority::RealTime,
                 reliability: Reliability::BestEffort,
             },
         ];
-        let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
         let routing_context = [None, Some(gen_routing_context())];
         let reply_context = [
@@ -523,27 +507,24 @@ fn codec_frame() {
                 is_final: true,
             });
 
-            for cc in congestion_control.iter() {
-                for di in data_info.iter() {
-                    for rec in reply_context.iter() {
-                        for roc in routing_context.iter() {
-                            for a in attachment.iter() {
-                                payload.push(FramePayload::Messages {
-                                    messages: vec![
-                                        ZenohMessage::make_data(
-                                            gen_key(),
-                                            ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                                            *cc,
-                                            di.clone(),
-                                            roc.clone(),
-                                            rec.clone(),
-                                            a.clone(),
-                                            *ch,
-                                        );
-                                        msg_payload_count
-                                    ],
-                                });
-                            }
+            for di in data_info.iter() {
+                for rec in reply_context.iter() {
+                    for roc in routing_context.iter() {
+                        for a in attachment.iter() {
+                            payload.push(FramePayload::Messages {
+                                messages: vec![
+                                    ZenohMessage::make_data(
+                                        gen_key(),
+                                        ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                        *ch,
+                                        di.clone(),
+                                        roc.clone(),
+                                        rec.clone(),
+                                        a.clone(),
+                                    );
+                                    msg_payload_count
+                                ],
+                            });
                         }
                     }
                 }
@@ -580,7 +561,6 @@ fn codec_frame_batching() {
         // Create data message
         let key = ResKey::RName("test".to_string());
         let payload = ZBuf::from(vec![0u8; 1]);
-        let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
@@ -588,12 +568,11 @@ fn codec_frame_batching() {
         let data = ZenohMessage::make_data(
             key,
             payload,
-            congestion_control,
+            channel,
             data_info,
             routing_context,
             reply_context,
             zattachment,
-            channel,
         );
 
         // Write the first data message
@@ -673,23 +652,22 @@ fn codec_data() {
     for _ in 0..NUM_ITER {
         let channel = [
             Channel {
-                conduit: Conduit::default(),
+                priority: Priority::default(),
                 reliability: Reliability::Reliable,
             },
             Channel {
-                conduit: Conduit::default(),
+                priority: Priority::default(),
                 reliability: Reliability::BestEffort,
             },
             Channel {
-                conduit: Conduit::RealTime,
+                priority: Priority::RealTime,
                 reliability: Reliability::Reliable,
             },
             Channel {
-                conduit: Conduit::RealTime,
+                priority: Priority::RealTime,
                 reliability: Reliability::BestEffort,
             },
         ];
-        let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
         let routing_context = [None, Some(gen_routing_context())];
         let reply_context = [
@@ -700,23 +678,20 @@ fn codec_data() {
         let attachment = [None, Some(gen_attachment())];
 
         for ch in channel.iter() {
-            for cc in congestion_control.iter() {
-                for di in data_info.iter() {
-                    for roc in routing_context.iter() {
-                        for rec in reply_context.iter() {
-                            for a in attachment.iter() {
-                                let msg = ZenohMessage::make_data(
-                                    gen_key(),
-                                    ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                                    *cc,
-                                    di.clone(),
-                                    roc.clone(),
-                                    rec.clone(),
-                                    a.clone(),
-                                    *ch,
-                                );
-                                test_write_read_zenoh_message(msg);
-                            }
+            for di in data_info.iter() {
+                for roc in routing_context.iter() {
+                    for rec in reply_context.iter() {
+                        for a in attachment.iter() {
+                            let msg = ZenohMessage::make_data(
+                                gen_key(),
+                                ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                *ch,
+                                di.clone(),
+                                roc.clone(),
+                                rec.clone(),
+                                a.clone(),
+                            );
+                            test_write_read_zenoh_message(msg);
                         }
                     }
                 }
@@ -730,23 +705,22 @@ fn codec_unit() {
     for _ in 0..NUM_ITER {
         let channel = [
             Channel {
-                conduit: Conduit::default(),
+                priority: Priority::default(),
                 reliability: Reliability::Reliable,
             },
             Channel {
-                conduit: Conduit::default(),
+                priority: Priority::default(),
                 reliability: Reliability::BestEffort,
             },
             Channel {
-                conduit: Conduit::RealTime,
+                priority: Priority::RealTime,
                 reliability: Reliability::Reliable,
             },
             Channel {
-                conduit: Conduit::RealTime,
+                priority: Priority::RealTime,
                 reliability: Reliability::BestEffort,
             },
         ];
-        let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let reply_context = [
             None,
             Some(gen_reply_context(false)),
@@ -755,12 +729,10 @@ fn codec_unit() {
         let attachment = [None, Some(gen_attachment())];
 
         for ch in channel.iter() {
-            for cc in congestion_control.iter() {
-                for rc in reply_context.iter() {
-                    for a in attachment.iter() {
-                        let msg = ZenohMessage::make_unit(*cc, rc.clone(), a.clone(), *ch);
-                        test_write_read_zenoh_message(msg);
-                    }
+            for rc in reply_context.iter() {
+                for a in attachment.iter() {
+                    let msg = ZenohMessage::make_unit(*ch, rc.clone(), a.clone());
+                    test_write_read_zenoh_message(msg);
                 }
             }
         }

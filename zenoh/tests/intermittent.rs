@@ -19,9 +19,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
-use zenoh::net::protocol::core::{
-    whatami, Channel, Conduit, CongestionControl, PeerId, Reliability, ResKey,
-};
+use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -292,26 +290,23 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         // Create the message to send
         let key = ResKey::RName("/test".to_string());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
-
-        let congestion_control = CongestionControl::Block;
+        let channel = Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        };
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
         let attachment = None;
-        let channel = Channel {
-            conduit: Conduit::default(),
-            reliability: Reliability::Reliable,
-        };
 
         let message = ZenohMessage::make_data(
             key,
             payload,
-            congestion_control,
+            channel,
             data_info,
             routing_context,
             reply_context,
             attachment,
-            channel,
         );
 
         let mut ticks: Vec<usize> = (0..=MSG_COUNT).step_by(MSG_COUNT / 10).collect();
