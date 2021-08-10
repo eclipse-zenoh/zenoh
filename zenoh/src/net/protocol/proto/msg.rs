@@ -173,7 +173,7 @@ pub mod zmsg {
         pub const D: u8 = 1 << 5; // 0x20 Dropping      if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final         if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
-        pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then only numerical ID
+        pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then resource key has name
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
         pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
         pub const Q: u8 = 1 << 6; // 0x40 QueryableKind if Z==1 then the queryable kind is present
@@ -552,6 +552,10 @@ impl Default for DataInfo {
 impl Options for DataInfo {
     fn options(&self) -> ZInt {
         let mut options = 0;
+        #[cfg(feature = "zero-copy")]
+        if self.sliced {
+            options |= zmsg::data::info::SLICED;
+        }
         if self.kind.is_some() {
             options |= zmsg::data::info::KIND;
         }
@@ -561,9 +565,8 @@ impl Options for DataInfo {
         if self.timestamp.is_some() {
             options |= zmsg::data::info::TIMESTAMP;
         }
-        #[cfg(feature = "zero-copy")]
-        if self.sliced {
-            options |= zmsg::data::info::SLICED;
+        if self.qos.is_some() {
+            options |= zmsg::data::info::QOS;
         }
         if self.source_id.is_some() {
             options |= zmsg::data::info::SRCID;
@@ -647,7 +650,7 @@ impl Header for Data {
         if self.data_info.is_some() {
             header |= zmsg::flag::I;
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K;
         }
         header
@@ -700,7 +703,7 @@ pub enum Declaration {
 /// +---------------+
 /// ~      RID      ~
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -713,8 +716,8 @@ impl Header for Resource {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::RESOURCE;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -745,7 +748,7 @@ impl Header for ForgetResource {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|   PUB   |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -757,8 +760,8 @@ impl Header for Publisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::PUBLISHER;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -769,7 +772,7 @@ impl Header for Publisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_PUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -781,8 +784,8 @@ impl Header for ForgetPublisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_PUBLISHER;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -793,7 +796,7 @@ impl Header for ForgetPublisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|S|R|   SUB   |  R for Reliable
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// |P|  SubMode    | if S==1. Otherwise: SubMode=Push
 /// +---------------+
@@ -816,7 +819,7 @@ impl Header for Subscriber {
         if !(self.info.mode == SubMode::Push && self.info.period.is_none()) {
             header |= zmsg::flag::S;
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K;
         }
         header
@@ -828,7 +831,7 @@ impl Header for Subscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_SUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -840,8 +843,8 @@ impl Header for ForgetSubscriber {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_SUBSCRIBER;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -852,7 +855,7 @@ impl Header for ForgetSubscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|Q|X|  QABLE  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~     Kind      ~ if Q==1. Otherwise: STORAGE (0x02)
 /// +---------------+
@@ -870,8 +873,8 @@ impl Header for Queryable {
         if self.kind != queryable::STORAGE {
             header |= zmsg::flag::Q;
         }
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -882,7 +885,7 @@ impl Header for Queryable {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X| F_QABLE |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -894,8 +897,8 @@ impl Header for ForgetQueryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_QUERYABLE;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -930,7 +933,7 @@ impl Header for Declare {
 /// +-+-+-+-+-+-+-+-+
 /// |K|N|F|  PULL   |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~    pullid     ~
 /// +---------------+
@@ -955,7 +958,7 @@ impl Header for Pull {
         if self.max_samples.is_some() {
             header |= zmsg::flag::N;
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K;
         }
         header
@@ -969,7 +972,7 @@ impl Header for Pull {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|T|  QUERY  |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~   predicate   ~
 /// +---------------+
@@ -996,7 +999,7 @@ impl Header for Query {
         if self.target.is_some() {
             header |= zmsg::flag::T;
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K;
         }
         header

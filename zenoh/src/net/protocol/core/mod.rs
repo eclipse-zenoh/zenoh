@@ -63,7 +63,7 @@ pub const NO_RESOURCE_ID: ResourceId = 0;
 // +-+-+-+-+-+-+-+-+
 // ~      id       — if ResName{name} : id=0
 // +-+-+-+-+-+-+-+-+
-// ~  name/suffix  ~ if flag C!=1 in Message's header
+// ~  name/suffix  ~ if flag K==1 in Message's header
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
@@ -84,8 +84,16 @@ impl ResKey {
     }
 
     #[inline(always)]
-    pub fn is_numerical(&self) -> bool {
-        matches!(self, RId(_))
+    pub fn is_string(&self) -> bool {
+        match self {
+            RName(_) | RIdWithSuffix(_, _) => true,
+            RId(_) => false,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_numeric(&self) -> bool {
+        !self.is_string()
     }
 }
 
