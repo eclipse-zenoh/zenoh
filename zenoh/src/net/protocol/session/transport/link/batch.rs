@@ -32,7 +32,7 @@ enum CurrentFrame {
 /// A [`SerializationBatch`][SerializationBatch] is a non-expandable and contiguous region of memory
 /// that is used to serialize [`SessionMessage`][SessionMessage] and [`ZenohMessage`][ZenohMessage].
 ///
-/// [`SessionMessage`][SessionMessage] are always serialized on the batch as theyr are, while
+/// [`SessionMessage`][SessionMessage] are always serialized on the batch as they are, while
 /// [`ZenohMessage`][ZenohMessage] are always serializaed on the batch as part of a [`SessionMessage`]
 /// [SessionMessage] Frame. Reliable and Best Effort Frames can be interleaved on the same
 /// [`SerializationBatch`][SerializationBatch] as long as they fit in the remaining buffer capacity.

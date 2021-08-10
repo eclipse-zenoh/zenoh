@@ -302,26 +302,29 @@ impl WBuf {
     fn write_data_info(&mut self, info: &DataInfo) -> bool {
         zcheck!(self.write_zint(info.options()));
 
-        if let Some(kind) = &info.kind {
-            zcheck!(self.write_zint(*kind));
+        if let Some(kind) = info.kind {
+            zcheck!(self.write_zint(kind));
         }
-        if let Some(enc) = &info.encoding {
-            zcheck!(self.write_zint(*enc));
+        if let Some(enc) = info.encoding {
+            zcheck!(self.write_zint(enc));
         }
-        if let Some(ts) = &info.timestamp {
+        if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
         }
-        if let Some(pid) = &info.source_id {
+        if let Some(qos) = info.qos {
+            zcheck!(self.write(qos as u8));
+        }
+        if let Some(pid) = info.source_id.as_ref() {
             zcheck!(self.write_peerid(pid));
         }
-        if let Some(sn) = &info.source_sn {
-            zcheck!(self.write_zint(*sn));
+        if let Some(sn) = info.source_sn {
+            zcheck!(self.write_zint(sn));
         }
-        if let Some(pid) = &info.first_router_id {
+        if let Some(pid) = info.first_router_id.as_ref() {
             zcheck!(self.write_peerid(pid));
         }
-        if let Some(sn) = &info.first_router_sn {
-            zcheck!(self.write_zint(*sn));
+        if let Some(sn) = info.first_router_sn {
+            zcheck!(self.write_zint(sn));
         }
 
         true

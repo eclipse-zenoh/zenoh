@@ -266,15 +266,51 @@ impl FromStr for CongestionControl {
     }
 }
 
+// Keep the same mapping ID with the conduits
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum Priority {
-    RealTime,
-    InteractiveHigh,
-    InteractiveLow,
-    DataHigh,
-    Data,
-    DataLow,
-    Background,
+    RealTime = 1,
+    InteractiveHigh = 2,
+    InteractiveLow = 3,
+    DataHigh = 4,
+    Data = 5,
+    DataLow = 6,
+    Background = 7,
+}
+
+impl Priority {
+    pub fn num() -> usize {
+        7
+    }
+}
+
+impl Default for Priority {
+    fn default() -> Priority {
+        Priority::Data
+    }
+}
+
+impl TryFrom<u8> for Priority {
+    type Error = ZError;
+
+    fn try_from(priority: u8) -> Result<Self, Self::Error> {
+        match priority {
+            1 => Ok(Priority::RealTime),
+            2 => Ok(Priority::InteractiveHigh),
+            3 => Ok(Priority::InteractiveLow),
+            4 => Ok(Priority::DataHigh),
+            5 => Ok(Priority::Data),
+            6 => Ok(Priority::DataLow),
+            7 => Ok(Priority::Background),
+            unknown => zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "{} is not a valid priority value. Admitted values are [1-7].",
+                    unknown
+                )
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use rand::*;
+use std::convert::TryInto;
 use uhlc::Timestamp;
 use zenoh::net::protocol::core::*;
 use zenoh::net::protocol::io::{WBuf, ZBuf};
@@ -26,6 +27,13 @@ macro_rules! gen {
     ($name:ty) => {
         thread_rng().gen::<$name>()
     };
+}
+
+macro_rules! gen_range {
+    ($name:ty, $range:expr) => {{
+        let v: $name = thread_rng().gen_range($range);
+        v
+    }};
 }
 
 macro_rules! gen_bool {
@@ -212,17 +220,24 @@ fn gen_timestamp() -> Timestamp {
     Timestamp::new(uhlc::NTP64(gen!(u64)), uhlc::ID::from(uuid::Uuid::new_v4()))
 }
 
+fn gen_priority() -> Priority {
+    let range = (Priority::RealTime as u8)..=(Priority::Background as u8);
+    let value = gen_range!(u8, range);
+    value.try_into().unwrap()
+}
+
 fn gen_data_info() -> DataInfo {
     DataInfo {
+        kind: option_gen!(gen!(ZInt)),
+        encoding: option_gen!(gen!(ZInt)),
+        timestamp: option_gen!(gen_timestamp()),
+        qos: option_gen!(gen_priority()),
+        #[cfg(feature = "zero-copy")]
+        sliced: false,
         source_id: option_gen!(gen_pid()),
         source_sn: option_gen!(gen!(ZInt)),
         first_router_id: option_gen!(gen_pid()),
         first_router_sn: option_gen!(gen!(ZInt)),
-        timestamp: option_gen!(gen_timestamp()),
-        kind: option_gen!(gen!(ZInt)),
-        encoding: option_gen!(gen!(ZInt)),
-        #[cfg(feature = "zero-copy")]
-        sliced: false,
     }
 }
 

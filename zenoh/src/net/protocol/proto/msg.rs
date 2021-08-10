@@ -148,7 +148,7 @@ pub mod smsg {
 }
 
 pub mod zmsg {
-    use super::{imsg, Channel, Conduit, CongestionControl, Reliability, ZInt};
+    use super::{imsg, Channel, Conduit, CongestionControl, Priority, Reliability, ZInt};
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -186,33 +186,33 @@ pub mod zmsg {
 
     // Options used for DataInfo
     pub mod data {
-        use super::{imsg, Conduit, ZInt};
+        use super::{Priority, ZInt};
 
         pub mod info {
             use super::ZInt;
 
-            pub const KIND: ZInt = 1 << 0; // 0x01
-            pub const ENC: ZInt = 1 << 1; // 0x02
-            pub const TS: ZInt = 1 << 2; // 0x04
-            pub const QOS: ZInt = 1 << 3; // 0x08
             #[cfg(feature = "zero-copy")]
-            pub const SLICED: ZInt = 1 << 5; // 0x20
+            pub const SLICED: ZInt = 1 << 0; // 0x01
+            pub const KIND: ZInt = 1 << 1; // 0x02
+            pub const ENCODING: ZInt = 1 << 2; // 0x04
+            pub const TIMESTAMP: ZInt = 1 << 3; // 0x08
+            pub const QOS: ZInt = 1 << 4; // 0x10
             pub const SRCID: ZInt = 1 << 7; // 0x80
             pub const SRCSN: ZInt = 1 << 8; // 0x100
             pub const RTRID: ZInt = 1 << 9; // 0x200
             pub const RTRSN: ZInt = 1 << 10; // 0x400
         }
 
-        pub mod conduit {
-            use super::{imsg, Conduit};
+        pub mod priority {
+            use super::Priority;
 
-            pub const REAL_TIME: u8 = (Conduit::RealTime as u8) << imsg::HEADER_BITS;
-            pub const INTERACTIVE_HIGH: u8 = (Conduit::InteractiveHigh as u8) << imsg::HEADER_BITS;
-            pub const INTERACTIVE_LOW: u8 = (Conduit::InteractiveLow as u8) << imsg::HEADER_BITS;
-            pub const DATA_HIGH: u8 = (Conduit::DataHigh as u8) << imsg::HEADER_BITS;
-            pub const DATA: u8 = (Conduit::Data as u8) << imsg::HEADER_BITS;
-            pub const DATA_LOW: u8 = (Conduit::DataLow as u8) << imsg::HEADER_BITS;
-            pub const BACKGROUND: u8 = (Conduit::Background as u8) << imsg::HEADER_BITS;
+            pub const REAL_TIME: u8 = Priority::RealTime as u8;
+            pub const INTERACTIVE_HIGH: u8 = Priority::InteractiveHigh as u8;
+            pub const INTERACTIVE_LOW: u8 = Priority::InteractiveLow as u8;
+            pub const DATA_HIGH: u8 = Priority::DataHigh as u8;
+            pub const DATA: u8 = Priority::Data as u8;
+            pub const DATA_LOW: u8 = Priority::DataLow as u8;
+            pub const BACKGROUND: u8 = Priority::Background as u8;
         }
     }
 
@@ -475,12 +475,12 @@ impl Conduit {
 /// ```text
 ///
 /// Options bits
-/// -  0: Payload kind
-/// -  1: Payload encoding
-/// -  2: Payload timestamp
-/// -  3: QoS
-/// -  4: Reserved
-/// -  5: Payload is sliced
+/// -  0: Payload is sliced
+/// -  1: Payload kind
+/// -  2: Payload encoding
+/// -  3: Payload timestamp
+/// -  4: QoS
+/// -  5: Reserved
 /// -  6: Reserved
 /// -  7: Payload source_id
 /// -  8: Payload source_sn
@@ -498,7 +498,7 @@ impl Conduit {
 /// +---------------+
 /// ~   timestamp   ~ if options & (1 << 2)
 /// +---------------+
-/// | qos | reserved| if options & (1 << 3)
+/// | reserved| prio| if options & (1 << 3)
 /// +---------------+
 /// ~   source_id   ~ if options & (1 << 7)
 /// +---------------+
@@ -514,11 +514,12 @@ impl Conduit {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
+    #[cfg(feature = "zero-copy")]
+    pub sliced: bool,
     pub kind: Option<ZInt>,
     pub encoding: Option<ZInt>,
     pub timestamp: Option<Timestamp>,
-    #[cfg(feature = "zero-copy")]
-    pub sliced: bool,
+    pub qos: Option<Priority>,
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
     pub first_router_id: Option<PeerId>,
@@ -534,11 +535,12 @@ impl DataInfo {
 impl Default for DataInfo {
     fn default() -> DataInfo {
         DataInfo {
+            #[cfg(feature = "zero-copy")]
+            sliced: false,
             kind: None,
             encoding: None,
             timestamp: None,
-            #[cfg(feature = "zero-copy")]
-            sliced: false,
+            qos: None,
             source_id: None,
             source_sn: None,
             first_router_id: None,
@@ -554,10 +556,10 @@ impl Options for DataInfo {
             options |= zmsg::data::info::KIND;
         }
         if self.encoding.is_some() {
-            options |= zmsg::data::info::ENC;
+            options |= zmsg::data::info::ENCODING;
         }
         if self.timestamp.is_some() {
-            options |= zmsg::data::info::TS;
+            options |= zmsg::data::info::TIMESTAMP;
         }
         #[cfg(feature = "zero-copy")]
         if self.sliced {
@@ -592,10 +594,11 @@ impl Options for DataInfo {
             }};
         }
 
-        self.kind.is_some()
+        sliced!(self)
+            || self.kind.is_some()
             || self.encoding.is_some()
             || self.timestamp.is_some()
-            || sliced!(self)
+            || self.qos.is_some()
             || self.source_id.is_some()
             || self.source_sn.is_some()
             || self.first_router_id.is_some()
@@ -1332,7 +1335,7 @@ impl Header for Scout {
 /// +---------------+
 /// ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
 /// +---------------+
-/// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
+/// ~   [Locators]  ~ if L==1 -- Otherwise src-address is the locator
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]

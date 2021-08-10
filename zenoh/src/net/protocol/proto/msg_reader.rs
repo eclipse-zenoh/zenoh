@@ -459,18 +459,21 @@ impl ZBuf {
         let mut info = DataInfo::new();
 
         let options = self.read_zint()?;
-        if imsg::has_option(options, zmsg::data::info::KIND) {
-            info.kind = Some(self.read_zint()?);
-        }
-        if imsg::has_option(options, zmsg::data::info::ENC) {
-            info.encoding = Some(self.read_zint()?);
-        }
-        if imsg::has_option(options, zmsg::data::info::TS) {
-            info.timestamp = Some(self.read_timestamp()?);
-        }
         #[cfg(feature = "zero-copy")]
         {
             info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
+        }
+        if imsg::has_option(options, zmsg::data::info::KIND) {
+            info.kind = Some(self.read_zint()?);
+        }
+        if imsg::has_option(options, zmsg::data::info::ENCODING) {
+            info.encoding = Some(self.read_zint()?);
+        }
+        if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
+            info.timestamp = Some(self.read_timestamp()?);
+        }
+        if imsg::has_option(options, zmsg::data::info::QOS) {
+            info.qos = Some(self.read()?.try_into().ok()?);
         }
         if imsg::has_option(options, zmsg::data::info::SRCID) {
             info.source_id = Some(self.read_peerid()?);
