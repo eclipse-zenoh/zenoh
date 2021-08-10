@@ -93,7 +93,10 @@ impl ResKey {
 
     #[inline(always)]
     pub fn is_numeric(&self) -> bool {
-        !self.is_string()
+        match self {
+            RId(_) => true,
+            RName(_) | RIdWithSuffix(_, _) => false,
+        }
     }
 }
 

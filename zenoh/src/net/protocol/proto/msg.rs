@@ -197,6 +197,8 @@ pub mod zmsg {
             pub const ENCODING: ZInt = 1 << 2; // 0x04
             pub const TIMESTAMP: ZInt = 1 << 3; // 0x08
             pub const QOS: ZInt = 1 << 4; // 0x10
+                                          // 0x20: Reserved
+                                          // 0x40: Reserved
             pub const SRCID: ZInt = 1 << 7; // 0x80
             pub const SRCSN: ZInt = 1 << 8; // 0x100
             pub const RTRID: ZInt = 1 << 9; // 0x200
@@ -1085,9 +1087,9 @@ pub enum ZenohBody {
 #[derive(Clone, PartialEq)]
 pub struct ZenohMessage {
     pub body: ZenohBody,
-    pub channel: Channel,
     pub routing_context: Option<RoutingContext>,
     pub attachment: Option<Attachment>,
+    pub channel: Channel,
     #[cfg(feature = "stats")]
     pub size: Option<std::num::NonZeroUsize>,
 }
@@ -1098,7 +1100,7 @@ impl fmt::Debug for ZenohMessage {
         write!(
             f,
             "{:?} {:?} {:?} {:?} {:?}",
-            self.body, self.channel, self.routing_context, self.attachment, self.size
+            self.body, self.routing_context, self.attachment, self.channel, self.size
         )
     }
 
@@ -1107,7 +1109,7 @@ impl fmt::Debug for ZenohMessage {
         write!(
             f,
             "{:?} {:?} {:?} {:?}",
-            self.body, self.channel, self.routing_context, self.attachment
+            self.body, self.routing_context, self.attachment, self.channel
         )
     }
 }
@@ -1126,9 +1128,9 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Declare(Declare { declarations }),
-            channel: zmsg::default_channel::DECLARE,
             routing_context,
             attachment,
+            channel: zmsg::default_channel::DECLARE,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1139,12 +1141,12 @@ impl ZenohMessage {
     pub fn make_data(
         key: ResKey,
         payload: ZBuf,
-        channel: Channel,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
+        channel: Channel,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Data(Data {
@@ -1154,28 +1156,28 @@ impl ZenohMessage {
                 congestion_control,
                 reply_context,
             }),
-            channel,
             routing_context,
             attachment,
+            channel,
             #[cfg(feature = "stats")]
             size: None,
         }
     }
 
     pub fn make_unit(
-        channel: Channel,
         congestion_control: CongestionControl,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
+        channel: Channel,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Unit(Unit {
                 congestion_control,
                 reply_context,
             }),
-            channel,
             routing_context: None,
             attachment,
+            channel,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1195,9 +1197,9 @@ impl ZenohMessage {
                 max_samples,
                 is_final,
             }),
-            channel: zmsg::default_channel::PULL,
             routing_context: None,
             attachment,
+            channel: zmsg::default_channel::PULL,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1221,9 +1223,9 @@ impl ZenohMessage {
                 target,
                 consolidation,
             }),
-            channel: zmsg::default_channel::QUERY,
             routing_context,
             attachment,
+            channel: zmsg::default_channel::QUERY,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -1235,9 +1237,9 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::LinkStateList(LinkStateList { link_states }),
-            channel: zmsg::default_channel::LINK_STATE_LIST,
             routing_context: None,
             attachment,
+            channel: zmsg::default_channel::LINK_STATE_LIST,
             #[cfg(feature = "stats")]
             size: None,
         }

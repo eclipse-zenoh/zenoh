@@ -292,24 +292,26 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         // Create the message to send
         let key = ResKey::RName("/test".to_string());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
-        let channel = Channel {
-            conduit: Conduit::default(),
-            reliability: Reliability::Reliable,
-        };
+
         let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
         let attachment = None;
+        let channel = Channel {
+            conduit: Conduit::default(),
+            reliability: Reliability::Reliable,
+        };
+
         let message = ZenohMessage::make_data(
             key,
             payload,
-            channel,
             congestion_control,
             data_info,
             routing_context,
             reply_context,
             attachment,
+            channel,
         );
 
         let mut ticks: Vec<usize> = (0..=MSG_COUNT).step_by(MSG_COUNT / 10).collect();

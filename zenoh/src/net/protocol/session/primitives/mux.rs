@@ -130,12 +130,12 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             reskey.clone(),
             payload,
-            channel,
             congestion_control,
             data_info,
             routing_context,
             None,
             None,
+            channel,
         ));
     }
 
@@ -176,7 +176,6 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             reskey,
             payload,
-            zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,
             data_info,
             None,
@@ -188,15 +187,16 @@ impl Primitives for Mux {
                 }),
             )),
             None,
+            zmsg::default_channel::REPLY,
         ));
     }
 
     fn send_reply_final(&self, qid: ZInt) {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
-            zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,
             Some(ReplyContext::new(qid, None)),
             None,
+            zmsg::default_channel::REPLY,
         ));
     }
 

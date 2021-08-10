@@ -51,12 +51,12 @@ fn criterion_benchmark(c: &mut Criterion) {
             let msg = ZenohMessage::make_data(
                 res_key,
                 payload,
-                channel,
                 congestion_control,
                 info,
                 None,
                 None,
                 None,
+                channel,
             );
 
             let mut wbuf = WBuf::new(batch_size, true);
@@ -91,12 +91,12 @@ fn criterion_benchmark(c: &mut Criterion) {
                             let msg = ZenohMessage::make_data(
                                 res_key,
                                 payload,
-                                channel,
                                 congestion_control,
                                 info,
                                 None,
                                 None,
                                 None,
+                                channel,
                             );
                             wbuf.write_zenoh_message(&msg);
                             drop(msg);

@@ -533,12 +533,12 @@ fn codec_frame() {
                                         ZenohMessage::make_data(
                                             gen_key(),
                                             ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                                            *ch,
                                             *cc,
                                             di.clone(),
                                             roc.clone(),
                                             rec.clone(),
                                             a.clone(),
+                                            *ch,
                                         );
                                         msg_payload_count
                                     ],
@@ -588,12 +588,12 @@ fn codec_frame_batching() {
         let data = ZenohMessage::make_data(
             key,
             payload,
-            channel,
             congestion_control,
             data_info,
             routing_context,
             reply_context,
             zattachment,
+            channel,
         );
 
         // Write the first data message
@@ -708,12 +708,12 @@ fn codec_data() {
                                 let msg = ZenohMessage::make_data(
                                     gen_key(),
                                     ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                                    *ch,
                                     *cc,
                                     di.clone(),
                                     roc.clone(),
                                     rec.clone(),
                                     a.clone(),
+                                    *ch,
                                 );
                                 test_write_read_zenoh_message(msg);
                             }
@@ -758,7 +758,7 @@ fn codec_unit() {
             for cc in congestion_control.iter() {
                 for rc in reply_context.iter() {
                     for a in attachment.iter() {
-                        let msg = ZenohMessage::make_unit(*ch, *cc, rc.clone(), a.clone());
+                        let msg = ZenohMessage::make_unit(*cc, rc.clone(), a.clone(), *ch);
                         test_write_read_zenoh_message(msg);
                     }
                 }

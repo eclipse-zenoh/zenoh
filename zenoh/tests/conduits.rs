@@ -256,12 +256,12 @@ async fn single_run(
     let message = ZenohMessage::make_data(
         key,
         payload,
-        channel,
         congestion_control,
         data_info,
         routing_context,
         reply_context,
         attachment,
+        channel,
     );
 
     println!(

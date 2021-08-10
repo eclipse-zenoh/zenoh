@@ -368,14 +368,6 @@ mod tests {
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
                 let payload = ZBuf::from(vec![0u8; payload_size]);
-                let channel = Channel {
-                    conduit: cid,
-                    reliability: if reliable {
-                        Reliability::Reliable
-                    } else {
-                        Reliability::BestEffort
-                    },
-                };
                 let congestion_control = if dropping {
                     CongestionControl::Drop
                 } else {
@@ -385,15 +377,24 @@ mod tests {
                 let routing_context = None;
                 let reply_context = None;
                 let attachment = None;
+                let channel = Channel {
+                    conduit: cid,
+                    reliability: if reliable {
+                        Reliability::Reliable
+                    } else {
+                        Reliability::BestEffort
+                    },
+                };
+
                 let msg = ZenohMessage::make_data(
                     key,
                     payload,
-                    channel,
                     congestion_control,
                     data_info,
                     routing_context,
                     reply_context,
                     attachment,
+                    channel,
                 );
                 // Serialize the ZenohMessage
                 let res = batch.serialize_zenoh_message(&msg);
@@ -460,12 +461,12 @@ mod tests {
                     let msg_in = ZenohMessage::make_data(
                         key,
                         payload,
-                        channel,
                         *congestion_control,
                         data_info,
                         routing_context,
                         reply_context,
                         attachment,
+                        channel,
                     );
 
                     // Acquire the lock on the sn generators to ensure that we have

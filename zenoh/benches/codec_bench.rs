@@ -63,12 +63,12 @@ fn bench_make_data(payload: ZBuf) {
     let _ = ZenohMessage::make_data(
         ResKey::RId(10),
         payload,
-        Channel::default(),
         CongestionControl::Block,
         None,
         None,
         None,
         None,
+        Channel::default(),
     );
 }
 
@@ -139,12 +139,12 @@ fn criterion_benchmark(c: &mut Criterion) {
     let data = ZenohMessage::make_data(
         ResKey::RId(10),
         payload.clone(),
-        Channel::default(),
         CongestionControl::Drop,
         None,
         None,
         None,
         None,
+        Channel::default(),
     );
 
     c.bench_function(&format!("bench_one_zint_codec {}", len), |b| {
