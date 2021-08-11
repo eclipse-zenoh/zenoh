@@ -18,23 +18,23 @@ use super::SeqNum;
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
+#[derive(Debug)]
 pub(crate) struct DefragBuffer {
-    // Keep track of the next expected fragment
+    reliability: Reliability,
     sn: SeqNum,
     buffer: ZBuf,
-    reliability: Reliability,
 }
 
 impl DefragBuffer {
     pub(crate) fn new(
+        reliability: Reliability,
         initial_sn: ZInt,
         sn_resolution: ZInt,
-        reliability: Reliability,
     ) -> DefragBuffer {
         DefragBuffer {
+            reliability,
             sn: SeqNum::new(initial_sn, sn_resolution),
             buffer: ZBuf::new(),
-            reliability,
         }
     }
 

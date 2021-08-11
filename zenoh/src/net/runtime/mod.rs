@@ -18,7 +18,7 @@ use super::plugins;
 use super::protocol;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::link::{Link, Locator};
-use super::protocol::proto::{Data, ZenohBody, ZenohMessage};
+use super::protocol::proto::{ZenohBody, ZenohMessage};
 use super::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
     SessionManagerOptionalConfig,
@@ -208,36 +208,29 @@ pub(super) struct RuntimeSession {
 }
 
 impl SessionEventHandler for RuntimeSession {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, mut msg: ZenohMessage) -> ZResult<()> {
         // critical path shortcut
-        if msg.reply_context.is_none() {
-            if let ZenohBody::Data(Data {
-                key,
-                data_info,
-                payload,
-                congestion_control,
-                ..
-            }) = msg.body
-            {
-                let (rid, suffix) = (&key).into();
+        if let ZenohBody::Data(data) = msg.body {
+            if data.reply_context.is_none() {
+                let (rid, suffix) = (&data.key).into();
                 let face = &self.sub_event_handler.face.state;
                 full_reentrant_route_data(
                     &self.sub_event_handler.tables,
                     face,
                     rid,
                     suffix,
-                    congestion_control,
-                    data_info,
-                    payload,
+                    msg.channel,
+                    data.data_info,
+                    data.payload,
                     msg.routing_context,
                 );
-                Ok(())
+                return Ok(());
             } else {
-                self.sub_event_handler.handle_message(msg)
+                msg.body = ZenohBody::Data(data);
             }
-        } else {
-            self.sub_event_handler.handle_message(msg)
         }
+
+        self.sub_event_handler.handle_message(msg)
     }
 
     fn new_link(&self, link: Link) {

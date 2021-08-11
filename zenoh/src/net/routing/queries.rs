@@ -139,7 +139,7 @@ fn propagate_simple_queryable(
         let kind = local_qabl_kind(whatami, pid, res, dst_face);
         // let current_qabl = dst_face.local_qabls.get(res);
         if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
-            // && (current_qabl.is_none() || *current_qabl.unwrap() != kind) // TODO
+            // && (current_qabl.is_none() || *current_qabl.unwrap() != kind) // @TODO
             && match tables.whatami {
                 whatami::ROUTER => dst_face.whatami == whatami::CLIENT,
                 whatami::PEER => dst_face.whatami == whatami::CLIENT,
@@ -174,7 +174,7 @@ fn propagate_sourced_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
                     res,
                     kind,
                     src_face,
-                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -484,7 +484,7 @@ fn propagate_forget_sourced_queryable(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -800,7 +800,7 @@ pub(crate) fn queries_tree_change(
                                 res,
                                 *kind,
                                 None,
-                                Some(RoutingContext::make(tree_sid as ZInt)),
+                                Some(RoutingContext::new(tree_sid as ZInt)),
                             );
                         }
                     }
@@ -840,7 +840,7 @@ fn insert_faces_for_qabls(
                                             face.clone(),
                                             reskey,
                                             if source != 0 {
-                                                Some(RoutingContext::make(source as ZInt))
+                                                Some(RoutingContext::new(source as ZInt))
                                             } else {
                                                 None
                                             },

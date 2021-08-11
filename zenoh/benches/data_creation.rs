@@ -17,7 +17,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::{CongestionControl, PeerId, Reliability, ResKey};
+use zenoh::net::protocol::core::{Channel, PeerId, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
@@ -34,97 +34,69 @@ fn criterion_benchmark(c: &mut Criterion) {
     for s in size.iter() {
         c.bench_function(format!("{} msg_creation_yes_info", s).as_str(), |b| {
             b.iter(|| {
-                let reliability = Reliability::Reliable;
-                let congestion_control = CongestionControl::Block;
-
                 let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+                let payload = ZBuf::from(vec![0; *s]);
+                let channel = Channel::default();
                 let info = Some(DataInfo {
-                    source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
-                    source_sn: Some(12345),
-                    first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
-                    first_router_sn: Some(12345),
+                    #[cfg(feature = "zero-copy")]
+                    sliced: false,
+                    kind: Some(0),
+                    encoding: Some(0),
                     timestamp: Some(uhlc::Timestamp::new(
                         Default::default(),
                         uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
                     )),
-                    kind: Some(0),
-                    encoding: Some(0),
-                    #[cfg(feature = "zero-copy")]
-                    sliced: false,
+                    source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+                    source_sn: Some(12345),
+                    first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+                    first_router_sn: Some(12345),
                 });
-                let payload = ZBuf::from(vec![0; *s]);
 
-                let msg = ZenohMessage::make_data(
-                    res_key,
-                    payload,
-                    reliability,
-                    congestion_control,
-                    info,
-                    None,
-                    None,
-                    None,
-                );
+                let msg =
+                    ZenohMessage::make_data(res_key, payload, channel, info, None, None, None);
                 consume_message(msg);
             })
         });
 
         c.bench_function(format!("{} msg_creation_no_info", s).as_str(), |b| {
             b.iter(|| {
-                let reliability = Reliability::Reliable;
-                let congestion_control = CongestionControl::Block;
-
                 let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
-                let info = None;
                 let payload = ZBuf::from(vec![0; *s]);
+                let channel = Channel::default();
+                let info = None;
 
-                let msg = ZenohMessage::make_data(
-                    res_key,
-                    payload,
-                    reliability,
-                    congestion_control,
-                    info,
-                    None,
-                    None,
-                    None,
-                );
+                let msg =
+                    ZenohMessage::make_data(res_key, payload, channel, info, None, None, None);
                 consume_message(msg);
             })
         });
     }
 
-    let reliability = Reliability::Reliable;
-    let congestion_control = CongestionControl::Block;
     let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
     let info = Some(DataInfo {
-        source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
-        source_sn: Some(12345),
-        first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
-        first_router_sn: Some(12345),
+        #[cfg(feature = "zero-copy")]
+        sliced: false,
+        kind: Some(0),
+        encoding: Some(0),
         timestamp: Some(uhlc::Timestamp::new(
             Default::default(),
             uhlc::ID::new(16, [0u8; uhlc::ID::MAX_SIZE]),
         )),
-        kind: Some(0),
-        encoding: Some(0),
-        #[cfg(feature = "zero-copy")]
-        sliced: false,
+        source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+        source_sn: Some(12345),
+        first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+        first_router_sn: Some(12345),
     });
     let payload = ZBuf::from(vec![0; 1024]);
+    let channel = Channel::default();
+
     let msg = Arc::new(ZenohMessage::make_data(
-        res_key.clone(),
-        payload.clone(),
-        reliability,
-        congestion_control,
-        info.clone(),
-        None,
-        None,
-        None,
+        res_key, payload, channel, info, None, None, None,
     ));
 
-    let amsg = msg.clone();
-    c.bench_function(format!("arc_msg_clone").as_str(), |b| {
+    c.bench_function(&"arc_msg_clone".to_string(), |b| {
         b.iter(|| {
-            consume_message_arc(amsg.clone());
+            consume_message_arc(msg.clone());
         })
     });
 }

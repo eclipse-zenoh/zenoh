@@ -19,7 +19,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
+    use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::link::{Link, Locator};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
@@ -234,17 +234,19 @@ mod tests {
 
             let key = ResKey::RName("/test".to_string());
             let payload: ZBuf = sbuf.into();
-            let reliability = Reliability::Reliable;
-            let congestion_control = CongestionControl::Block;
+            let channel = Channel {
+                priority: Priority::default(),
+                reliability: Reliability::Reliable,
+            };
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
             let attachment = None;
+
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                reliability,
-                congestion_control,
+                channel,
                 data_info,
                 routing_context,
                 reply_context,
@@ -290,17 +292,19 @@ mod tests {
 
             let key = ResKey::RName("/test".to_string());
             let payload: ZBuf = sbuf.into();
-            let reliability = Reliability::Reliable;
-            let congestion_control = CongestionControl::Block;
+            let channel = Channel {
+                priority: Priority::default(),
+                reliability: Reliability::Reliable,
+            };
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
             let attachment = None;
+
             let message = ZenohMessage::make_data(
                 key,
                 payload,
-                reliability,
-                congestion_control,
+                channel,
                 data_info,
                 routing_context,
                 reply_context,

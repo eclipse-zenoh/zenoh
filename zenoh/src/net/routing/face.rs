@@ -12,8 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::{
-    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
-    SubInfo, WhatAmI, ZInt,
+    whatami, Channel, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, WhatAmI, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -432,8 +431,7 @@ impl Primitives for Face {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        _reliability: Reliability,
-        congestion_control: CongestionControl,
+        channel: Channel,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
     ) {
@@ -443,7 +441,7 @@ impl Primitives for Face {
             &self.state,
             prefixid,
             suffix,
-            congestion_control,
+            channel,
             data_info,
             payload,
             routing_context,

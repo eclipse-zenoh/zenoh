@@ -25,8 +25,8 @@ use super::io::SharedMemoryReader;
 use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
 };
-use super::transport::SessionTransport;
-use super::{Session, SessionHandler};
+use super::transport::{SessionTransport, SessionTransportConfig};
+use super::{Session, SessionConfig, SessionHandler};
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
@@ -432,42 +432,34 @@ impl SessionManager {
             .collect()
     }
 
-    pub(super) fn init_session(
-        &self,
-        peer: &PeerId,
-        whatami: WhatAmI,
-        sn_resolution: ZInt,
-        initial_sn_tx: ZInt,
-        initial_sn_rx: ZInt,
-        is_shm: bool,
-    ) -> ZResult<Session> {
+    pub(super) fn init_session(&self, config: SessionConfig) -> ZResult<Session> {
         let mut guard = zlock!(self.sessions);
 
         // First verify if the session already exists
-        if let Some(session) = guard.get(peer) {
-            if session.whatami != whatami {
+        if let Some(session) = guard.get(&config.peer) {
+            if session.whatami != config.whatami {
                 let e = format!(
                     "Session with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
-                    peer, whatami, session.whatami
+                    config.peer, config.whatami, session.whatami
                 );
                 log::trace!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });
             }
 
-            if session.sn_resolution != sn_resolution {
+            if session.sn_resolution != config.sn_resolution {
                 let e = format!(
                     "Session with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
-                    peer, sn_resolution, session.sn_resolution
+                    config.peer, config.sn_resolution, session.sn_resolution
                 );
                 log::trace!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });
             }
 
-            if session.is_shm() != is_shm {
+            if session.is_shm() != config.is_shm {
                 let e = format!(
                     "Session with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
-                    peer,
-                    is_shm,
+                    config.peer,
+                    config.is_shm,
                     session.is_shm()
                 );
                 log::trace!("{}", e);
@@ -482,7 +474,7 @@ impl SessionManager {
             if guard.len() == limit {
                 let e = format!(
                     "Max sessions reached ({}). Denying new session with peer: {}",
-                    limit, peer
+                    limit, config.peer
                 );
                 log::trace!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });
@@ -490,29 +482,32 @@ impl SessionManager {
         }
 
         // Create the channel object
-        let a_st = Arc::new(SessionTransport::new(
-            self.clone(),
-            peer.clone(),
-            whatami,
-            sn_resolution,
-            initial_sn_tx,
-            initial_sn_rx,
-            is_shm,
-        ));
+        let stc = SessionTransportConfig {
+            manager: self.clone(),
+            pid: config.peer.clone(),
+            whatami: config.whatami,
+            sn_resolution: config.sn_resolution,
+            initial_sn_tx: config.initial_sn_tx,
+            initial_sn_rx: config.initial_sn_rx,
+            is_shm: config.is_shm,
+            is_qos: config.is_qos,
+        };
+        let a_st = Arc::new(SessionTransport::new(stc));
 
         // Create a weak reference to the session
         let session = Session::new(Arc::downgrade(&a_st));
         // Add the session to the list of active sessions
-        guard.insert(peer.clone(), a_st);
+        guard.insert(config.peer.clone(), a_st);
 
         log::debug!(
-            "New session opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}, is_local: {}",
-            peer,
-            whatami,
-            sn_resolution,
-            initial_sn_tx,
-            initial_sn_rx,
-            is_shm
+            "New session opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}, shm: {}, qos: {}",
+            config.peer,
+            config.whatami,
+            config.sn_resolution,
+            config.initial_sn_tx,
+            config.initial_sn_rx,
+            config.is_shm,
+            config.is_qos
         );
 
         Ok(session)

@@ -16,8 +16,8 @@ use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh::net::protocol::core::rname::intersect;
 use zenoh::net::protocol::core::{
-    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey,
-    SubInfo, SubMode, ZInt,
+    whatami, Channel, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo,
+    SubMode, ZInt,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
@@ -418,8 +418,7 @@ impl Primitives for ClientPrimitives {
         &self,
         reskey: &ResKey,
         _payload: ZBuf,
-        _reliability: Reliability,
-        _congestion_control: CongestionControl,
+        _channel: Channel,
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -564,7 +563,7 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         0,
         "/test/client/z1_wr1",
-        CongestionControl::Block,
+        Channel::default(),
         None,
         ZBuf::new(),
         None,
@@ -590,7 +589,7 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         11,
         "/z1_wr2",
-        CongestionControl::Block,
+        Channel::default(),
         None,
         ZBuf::new(),
         None,
@@ -616,7 +615,7 @@ fn client_test() {
         &face1.upgrade().unwrap(),
         0,
         "/test/client/**",
-        CongestionControl::Block,
+        Channel::default(),
         None,
         ZBuf::new(),
         None,
@@ -642,7 +641,7 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         12,
         "",
-        CongestionControl::Block,
+        Channel::default(),
         None,
         ZBuf::new(),
         None,
@@ -668,7 +667,7 @@ fn client_test() {
         &face1.upgrade().unwrap(),
         22,
         "",
-        CongestionControl::Block,
+        Channel::default(),
         None,
         ZBuf::new(),
         None,

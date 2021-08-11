@@ -20,7 +20,7 @@ use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::zread;
 
 use super::protocol::core::{
-    whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode, ZInt,
+    whatami, Channel, PeerId, Priority, Reliability, SubInfo, SubMode, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -101,7 +101,7 @@ fn propagate_sourced_subscription(
                     res,
                     src_face,
                     sub_info,
-                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -407,7 +407,7 @@ fn propagate_forget_sourced_subscription(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(RoutingContext::make(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
                 );
             } else {
                 log::trace!(
@@ -599,7 +599,7 @@ pub fn forget_client_subscription(
 
 pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubInfo {
-        reliability: Reliability::Reliable, // TODO
+        reliability: Reliability::Reliable, // @TODO
         mode: SubMode::Push,
         period: None,
     };
@@ -692,7 +692,7 @@ pub(crate) fn pubsub_tree_change(
                     for sub in subs {
                         if *sub == tree_id {
                             let sub_info = SubInfo {
-                                reliability: Reliability::Reliable, // TODO
+                                reliability: Reliability::Reliable, // @TODO
                                 mode: SubMode::Push,
                                 period: None,
                             };
@@ -703,7 +703,7 @@ pub(crate) fn pubsub_tree_change(
                                 res,
                                 None,
                                 &sub_info,
-                                Some(RoutingContext::make(tree_sid as ZInt)),
+                                Some(RoutingContext::new(tree_sid as ZInt)),
                             );
                         }
                     }
@@ -739,7 +739,7 @@ fn insert_faces_for_subs(
                                         face.clone(),
                                         reskey,
                                         if source != 0 {
-                                            Some(RoutingContext::make(source as ZInt))
+                                            Some(RoutingContext::new(source as ZInt))
                                         } else {
                                             None
                                         },
@@ -1087,7 +1087,7 @@ fn get_matching_pulls(
 }
 
 macro_rules! send_to_first {
-    ($route:expr, $srcface:expr, $payload:expr, $congestion_control:expr, $data_info:expr) => {
+    ($route:expr, $srcface:expr, $payload:expr, $channel:expr, $data_info:expr) => {
         let (outface, reskey, context) = $route.values().next().unwrap();
         if $srcface.id != outface.id {
             outface
@@ -1095,8 +1095,7 @@ macro_rules! send_to_first {
                 .send_data(
                     &reskey,
                     $payload,
-                    Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
-                    $congestion_control,
+                    $channel, // @TODO: Need to check the active subscriptions to determine the right reliability value
                     $data_info,
                     *context,
                 )
@@ -1105,7 +1104,7 @@ macro_rules! send_to_first {
 }
 
 macro_rules! send_to_all {
-    ($route:expr, $srcface:expr, $payload:expr, $congestion_control:expr, $data_info:expr) => {
+    ($route:expr, $srcface:expr, $payload:expr, $channel:expr, $data_info:expr) => {
         for (outface, reskey, context) in $route.values() {
             if $srcface.id != outface.id {
                 outface
@@ -1113,8 +1112,7 @@ macro_rules! send_to_all {
                     .send_data(
                         &reskey,
                         $payload.clone(),
-                        Reliability::Reliable, // TODO: Need to check the active subscriptions to determine the right reliability value
-                        $congestion_control,
+                        $channel, // @TODO: Need to check the active subscriptions to determine the right reliability value
                         $data_info.clone(),
                         *context,
                     )
@@ -1147,14 +1145,14 @@ pub fn route_data(
     face: &Arc<FaceState>,
     rid: u64,
     suffix: &str,
-    congestion_control: CongestionControl,
+    channel: Channel,
     info: Option<DataInfo>,
     payload: ZBuf,
     routing_context: Option<RoutingContext>,
 ) {
     match tables.get_mapping(face, &rid).cloned() {
         Some(prefix) => {
-            log::trace!("Route data for res {}{}", prefix.name(), suffix,);
+            log::trace!("Route data for res {}{}", prefix.name(), suffix);
 
             let res = Resource::get_resource(&prefix, suffix);
             let route = get_data_route(tables, face, &res, &prefix, suffix, routing_context);
@@ -1164,14 +1162,14 @@ pub fn route_data(
                 let data_info = treat_timestamp!(&tables.hlc, info);
 
                 if route.len() == 1 && matching_pulls.len() == 0 {
-                    send_to_first!(route, face, payload, congestion_control, data_info);
+                    send_to_first!(route, face, payload, channel, data_info);
                 } else {
                     if !matching_pulls.is_empty() {
                         let lock = zlock!(tables.pull_caches_lock);
                         cache_data!(matching_pulls, prefix, suffix, payload, data_info);
                         drop(lock);
                     }
-                    send_to_all!(route, face, payload, congestion_control, data_info);
+                    send_to_all!(route, face, payload, channel, data_info);
                 }
             }
         }
@@ -1188,7 +1186,7 @@ pub fn full_reentrant_route_data(
     face: &Arc<FaceState>,
     rid: u64,
     suffix: &str,
-    congestion_control: CongestionControl,
+    channel: Channel,
     info: Option<DataInfo>,
     payload: ZBuf,
     routing_context: Option<RoutingContext>,
@@ -1196,7 +1194,7 @@ pub fn full_reentrant_route_data(
     let tables = zread!(tables_ref);
     match tables.get_mapping(face, &rid).cloned() {
         Some(prefix) => {
-            log::trace!("Route data for res {}{}", prefix.name(), suffix,);
+            log::trace!("Route data for res {}{}", prefix.name(), suffix);
 
             let res = Resource::get_resource(&prefix, suffix);
             let route = get_data_route(&tables, face, &res, &prefix, suffix, routing_context);
@@ -1207,7 +1205,7 @@ pub fn full_reentrant_route_data(
 
                 if route.len() == 1 && matching_pulls.len() == 0 {
                     drop(tables);
-                    send_to_first!(route, face, payload, congestion_control, data_info);
+                    send_to_first!(route, face, payload, channel, data_info);
                 } else {
                     if !matching_pulls.is_empty() {
                         let lock = zlock!(tables.pull_caches_lock);
@@ -1215,7 +1213,7 @@ pub fn full_reentrant_route_data(
                         drop(lock);
                     }
                     drop(tables);
-                    send_to_all!(route, face, payload, congestion_control, data_info);
+                    send_to_all!(route, face, payload, channel, data_info);
                 }
             }
         }
@@ -1248,8 +1246,10 @@ pub fn pull_data(
                                 face.primitives.send_data(
                                     &reskey,
                                     data.clone(),
-                                    subinfo.reliability,
-                                    CongestionControl::Drop, // TODO: Default value for the time being
+                                    Channel {
+                                        priority: Priority::default(), // @TODO: Default value for the time being
+                                        reliability: subinfo.reliability,
+                                    },
                                     info.clone(),
                                     None,
                                 );

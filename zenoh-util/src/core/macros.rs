@@ -175,7 +175,7 @@ macro_rules! zconfigurable {
     () => ()
 }
 
-// TODO: re-design ZError and macros
+// @TODO: re-design ZError and macros
 // This macro is a shorthand for the creation of a ZError
 #[macro_export]
 macro_rules! zerror {

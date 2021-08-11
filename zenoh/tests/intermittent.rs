@@ -19,7 +19,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
-use zenoh::net::protocol::core::{whatami, CongestionControl, PeerId, Reliability, ResKey};
+use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -31,7 +31,7 @@ use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
 
 const MSG_SIZE: usize = 8;
-const MSG_COUNT: usize = 1_000_000;
+const MSG_COUNT: usize = 100_000;
 const TIMEOUT: Duration = Duration::from_secs(300);
 const SLEEP: Duration = Duration::from_millis(100);
 const USLEEP: Duration = Duration::from_millis(1);
@@ -290,17 +290,19 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
         // Create the message to send
         let key = ResKey::RName("/test".to_string());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
-        let reliability = Reliability::Reliable;
-        let congestion_control = CongestionControl::Block;
+        let channel = Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        };
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
         let attachment = None;
+
         let message = ZenohMessage::make_data(
             key,
             payload,
-            reliability,
-            congestion_control,
+            channel,
             data_info,
             routing_context,
             reply_context,
@@ -405,6 +407,8 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn session_tcp_intermittent() {
+    env_logger::init();
+
     task::block_on(async {
         zasync_executor_init!();
     });

@@ -11,9 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{Channel, PeerId, ZInt};
-use super::proto::{Close, Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
-use super::{Link, SessionTransport, SessionTransportChannel};
+use super::core::{PeerId, Priority, Reliability, ZInt};
+use super::proto::{
+    Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage, ZenohMessage,
+};
+use super::{Link, SessionTransport, SessionTransportChannelRx};
 use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -87,7 +89,7 @@ impl SessionTransport {
         &self,
         sn: ZInt,
         payload: FramePayload,
-        mut guard: MutexGuard<'_, SessionTransportChannel>,
+        mut guard: MutexGuard<'_, SessionTransportChannelRx>,
     ) -> ZResult<()> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
@@ -135,17 +137,39 @@ impl SessionTransport {
     }
 
     pub(super) fn receive_message(&self, msg: SessionMessage, link: &Link) -> ZResult<()> {
+        log::trace!("Received: {:?}", msg);
         // Process the received message
         match msg.body {
-            SessionBody::Frame(Frame { ch, sn, payload }) => match ch {
-                Channel::Reliable => self.handle_frame(sn, payload, zlock!(self.rx_reliable)),
-                Channel::BestEffort => self.handle_frame(sn, payload, zlock!(self.rx_best_effort)),
-            },
+            SessionBody::Frame(Frame {
+                channel,
+                sn,
+                payload,
+            }) => {
+                let c = if self.is_qos() {
+                    &self.conduit_rx[channel.priority as usize]
+                } else if channel.priority == Priority::default() {
+                    &self.conduit_rx[0]
+                } else {
+                    let e = format!(
+                        "Session: {}. Unknown conduit: {:?}.",
+                        self.pid, channel.priority
+                    );
+                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                };
+
+                match channel.reliability {
+                    Reliability::Reliable => self.handle_frame(sn, payload, zlock!(c.reliable)),
+                    Reliability::BestEffort => {
+                        self.handle_frame(sn, payload, zlock!(c.best_effort))
+                    }
+                }
+            }
             SessionBody::Close(Close {
                 pid,
                 reason,
                 link_only,
             }) => self.handle_close(link, pid, reason, link_only),
+            SessionBody::KeepAlive(KeepAlive { .. }) => Ok(()),
             _ => {
                 log::debug!(
                     "Session: {}. Message handling not implemented: {:?}",

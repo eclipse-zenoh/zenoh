@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 use super::protocol::{
     core::{
-        queryable::EVAL, rname, CongestionControl, PeerId, QueryConsolidation, QueryTarget,
-        Reliability, ResKey, SubInfo, ZInt,
+        queryable::EVAL, rname, Channel, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo,
+        ZInt,
     },
     io::ZBuf,
     proto::{encoding, DataInfo, RoutingContext},
@@ -153,17 +153,15 @@ impl Primitives for AdminSpace {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        reliability: Reliability,
-        congestion_control: CongestionControl,
+        channel: Channel,
         data_info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
-            "recv Data {:?} {:?} {:?} {:?} {:?}",
+            "recv Data {:?} {:?} {:?} {:?}",
             reskey,
             payload,
-            reliability,
-            congestion_control,
+            channel,
             data_info,
         );
     }

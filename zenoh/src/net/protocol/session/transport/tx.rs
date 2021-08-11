@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::proto::ZenohMessage;
-use super::session::defaults::ZN_QUEUE_PRIO_DATA;
 use super::SessionTransport;
 use zenoh_util::zread;
 
@@ -25,7 +24,7 @@ impl SessionTransport {
                 // the link could be congested and this operation could
                 // block for fairly long time
                 drop($guard);
-                $pipeline.push_zenoh_message($msg, ZN_QUEUE_PRIO_DATA);
+                $pipeline.push_zenoh_message($msg);
                 return;
             };
         }

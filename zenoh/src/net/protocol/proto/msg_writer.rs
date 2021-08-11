@@ -48,13 +48,16 @@ impl WBuf {
         true
     }
 
-    /*************************************/
-    /*             SESSION               */
-    /*************************************/
+    #[inline(always)]
+    fn write_deco_priority(&mut self, priority: Priority) -> bool {
+        self.write(priority.header())
+    }
+
     #[inline(always)]
     pub fn write_frame_header(
         &mut self,
-        ch: Channel,
+        priority: Priority,
+        reliability: Reliability,
         sn: ZInt,
         is_fragment: Option<bool>,
         attachment: Option<Attachment>,
@@ -62,10 +65,17 @@ impl WBuf {
         if let Some(attachment) = attachment {
             zcheck!(self.write_deco_attachment(&attachment));
         }
-        let header = Frame::make_header(ch, is_fragment);
+        if priority != Priority::default() {
+            zcheck!(self.write_deco_priority(priority))
+        }
+
+        let header = Frame::make_header(reliability, is_fragment);
         self.write(header) && self.write_zint(sn)
     }
 
+    /*************************************/
+    /*             SESSION               */
+    /*************************************/
     pub fn write_session_message(&mut self, msg: &SessionMessage) -> bool {
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
@@ -89,6 +99,10 @@ impl WBuf {
     }
 
     fn write_frame(&mut self, frame: &Frame) -> bool {
+        if frame.channel.priority != Priority::default() {
+            zcheck!(self.write_deco_priority(frame.channel.priority))
+        }
+
         zcheck!(self.write(frame.header()));
         zcheck!(self.write_zint(frame.sn));
         match &frame.payload {
@@ -128,6 +142,9 @@ impl WBuf {
 
     fn write_init_syn(&mut self, init_syn: &InitSyn) -> bool {
         zcheck!(self.write(init_syn.header()));
+        if init_syn.has_options() {
+            zcheck!(self.write_zint(init_syn.options()));
+        }
         zcheck!(self.write(init_syn.version));
         zcheck!(self.write_zint(init_syn.whatami));
         zcheck!(self.write_peerid(&init_syn.pid));
@@ -139,6 +156,9 @@ impl WBuf {
 
     fn write_init_ack(&mut self, init_ack: &InitAck) -> bool {
         zcheck!(self.write(init_ack.header()));
+        if init_ack.has_options() {
+            zcheck!(self.write_zint(init_ack.options()));
+        }
         zcheck!(self.write_zint(init_ack.whatami));
         zcheck!(self.write_peerid(&init_ack.pid));
         if let Some(snr) = init_ack.sn_resolution {
@@ -218,14 +238,14 @@ impl WBuf {
     /*              ZENOH                */
     /*************************************/
     pub fn write_zenoh_message(&mut self, msg: &ZenohMessage) -> bool {
-        if let Some(routing_context) = msg.routing_context.as_ref() {
-            zcheck!(self.write_deco_routing_context(routing_context));
-        }
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
         }
-        if let Some(reply_context) = msg.reply_context.as_ref() {
-            zcheck!(self.write_deco_reply_context(reply_context));
+        if let Some(routing_context) = msg.routing_context.as_ref() {
+            zcheck!(self.write_deco_routing_context(routing_context));
+        }
+        if msg.channel.priority != Priority::default() {
+            zcheck!(self.write_deco_priority(msg.channel.priority));
         }
 
         match &msg.body {
@@ -242,6 +262,10 @@ impl WBuf {
 
     #[inline(always)]
     fn write_data(&mut self, data: &Data) -> bool {
+        if let Some(reply_context) = data.reply_context.as_ref() {
+            zcheck!(self.write_deco_reply_context(reply_context));
+        }
+
         zcheck!(self.write(data.header()));
         zcheck!(self.write_reskey(&data.key));
 
@@ -281,26 +305,26 @@ impl WBuf {
     fn write_data_info(&mut self, info: &DataInfo) -> bool {
         zcheck!(self.write_zint(info.options()));
 
-        if let Some(kind) = &info.kind {
-            zcheck!(self.write_zint(*kind));
+        if let Some(kind) = info.kind {
+            zcheck!(self.write_zint(kind));
         }
-        if let Some(enc) = &info.encoding {
-            zcheck!(self.write_zint(*enc));
+        if let Some(enc) = info.encoding {
+            zcheck!(self.write_zint(enc));
         }
-        if let Some(ts) = &info.timestamp {
+        if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
         }
-        if let Some(pid) = &info.source_id {
+        if let Some(pid) = info.source_id.as_ref() {
             zcheck!(self.write_peerid(pid));
         }
-        if let Some(sn) = &info.source_sn {
-            zcheck!(self.write_zint(*sn));
+        if let Some(sn) = info.source_sn {
+            zcheck!(self.write_zint(sn));
         }
-        if let Some(pid) = &info.first_router_id {
+        if let Some(pid) = info.first_router_id.as_ref() {
             zcheck!(self.write_peerid(pid));
         }
-        if let Some(sn) = &info.first_router_sn {
-            zcheck!(self.write_zint(*sn));
+        if let Some(sn) = info.first_router_sn {
+            zcheck!(self.write_zint(sn));
         }
 
         true
@@ -370,6 +394,10 @@ impl WBuf {
     }
 
     fn write_unit(&mut self, unit: &Unit) -> bool {
+        if let Some(reply_context) = unit.reply_context.as_ref() {
+            zcheck!(self.write_deco_reply_context(reply_context));
+        }
+
         self.write(unit.header())
     }
 

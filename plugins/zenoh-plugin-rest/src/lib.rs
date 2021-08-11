@@ -57,7 +57,7 @@ fn get_kind_str(sample: &Sample) -> String {
 }
 
 fn value_to_json(value: Value) -> String {
-    // TODO: transcode to JSON when implemented in Value
+    // @TODO: transcode to JSON when implemented in Value
     use Value::*;
 
     match value {
@@ -344,7 +344,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                     bytes.into(),
                     enc_from_mime(req.content_type()),
                     method_to_kind(req.method()),
-                    CongestionControl::Drop, // TODO: Define the right congestion control value
+                    CongestionControl::Drop, // @TODO: Define the right congestion control value
                 )
                 .await
             {

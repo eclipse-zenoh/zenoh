@@ -20,9 +20,7 @@ use super::link;
 use super::proto;
 use super::session;
 
-use super::core::{
-    CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability, ResKey, SubInfo, ZInt,
-};
+use super::core::{Channel, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt};
 use super::io::ZBuf;
 use super::proto::{DataInfo, RoutingContext};
 pub use demux::*;
@@ -50,8 +48,7 @@ pub trait Primitives {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        reliability: Reliability,
-        congestion_control: CongestionControl,
+        channel: Channel,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
     );
@@ -121,8 +118,7 @@ impl Primitives for DummyPrimitives {
         &self,
         _reskey: &ResKey,
         _payload: ZBuf,
-        _reliability: Reliability,
-        _congestion_control: CongestionControl,
+        _channel: Channel,
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
