@@ -196,9 +196,9 @@ pub mod zmsg {
             pub const KIND: ZInt = 1 << 1; // 0x02
             pub const ENCODING: ZInt = 1 << 2; // 0x04
             pub const TIMESTAMP: ZInt = 1 << 3; // 0x08
-            pub const PRIORITY: ZInt = 1 << 4; // 0x10
-                                               // 0x20: Reserved
-                                               // 0x40: Reserved
+                                                // 0x10: Reserved
+                                                // 0x20: Reserved
+                                                // 0x40: Reserved
             pub const SRCID: ZInt = 1 << 7; // 0x80
             pub const SRCSN: ZInt = 1 << 8; // 0x100
             pub const RTRID: ZInt = 1 << 9; // 0x200

@@ -137,6 +137,7 @@ impl SessionTransport {
     }
 
     pub(super) fn receive_message(&self, msg: SessionMessage, link: &Link) -> ZResult<()> {
+        log::trace!("Received: {:?}", msg);
         // Process the received message
         match msg.body {
             SessionBody::Frame(Frame {

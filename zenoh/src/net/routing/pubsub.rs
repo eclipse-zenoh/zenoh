@@ -1152,7 +1152,7 @@ pub fn route_data(
 ) {
     match tables.get_mapping(face, &rid).cloned() {
         Some(prefix) => {
-            log::trace!("Route data for res {}{}", prefix.name(), suffix,);
+            log::trace!("Route data for res {}{}", prefix.name(), suffix);
 
             let res = Resource::get_resource(&prefix, suffix);
             let route = get_data_route(tables, face, &res, &prefix, suffix, routing_context);
@@ -1194,7 +1194,7 @@ pub fn full_reentrant_route_data(
     let tables = zread!(tables_ref);
     match tables.get_mapping(face, &rid).cloned() {
         Some(prefix) => {
-            log::trace!("Route data for res {}{}", prefix.name(), suffix,);
+            log::trace!("Route data for res {}{}", prefix.name(), suffix);
 
             let res = Resource::get_resource(&prefix, suffix);
             let route = get_data_route(&tables, face, &res, &prefix, suffix, routing_context);
