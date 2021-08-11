@@ -294,7 +294,7 @@ impl TransmissionPipeline {
         macro_rules! zserialize {
             () => {
                 // Get the current serialization batch
-                let batch = zgetbatch!(self, queue, in_guard, false);
+                let batch = zgetbatch!(self, queue, in_guard, true);
                 if batch.serialize_session_message(&message) {
                     self.bytes_in[queue].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
