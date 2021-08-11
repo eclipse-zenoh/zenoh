@@ -848,19 +848,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "env_logger"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
-dependencies = [
- "atty",
- "humantime",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
 name = "event-listener"
 version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -918,16 +905,6 @@ checksum = "5fc25a87fa4fd2094bffb06925852034d90a17f0d1e05197d4956d3555752191"
 dependencies = [
  "matches",
  "percent-encoding",
-]
-
-[[package]]
-name = "fs2"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
-dependencies = [
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -2851,7 +2828,7 @@ dependencies = [
  "bincode",
  "clap",
  "criterion",
- "env_logger 0.9.0",
+ "env_logger",
  "event-listener",
  "flume",
  "futures",
@@ -2888,7 +2865,7 @@ dependencies = [
  "async-std",
  "bincode",
  "clap",
- "env_logger 0.8.4",
+ "env_logger",
  "flume",
  "futures",
  "futures-lite",
@@ -2905,7 +2882,7 @@ dependencies = [
  "async-std",
  "base64 0.13.0",
  "clap",
- "env_logger 0.8.4",
+ "env_logger",
  "flume",
  "futures",
  "http-types",
@@ -2923,7 +2900,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "clap",
- "env_logger 0.8.4",
+ "env_logger",
  "futures",
  "lazy_static",
  "libloading",
@@ -2987,7 +2964,7 @@ version = "0.5.0-dev"
 dependencies = [
  "async-std",
  "clap",
- "env_logger 0.8.4",
+ "env_logger",
  "futures",
  "log",
  "zenoh",
