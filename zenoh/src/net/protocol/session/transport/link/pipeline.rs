@@ -404,7 +404,8 @@ impl TransmissionPipeline {
         let mut to_write = fragbuf.len();
         while to_write > 0 {
             // Get the current serialization batch
-            let batch = zgetbatch!(self, queue, in_guard, false);
+            // Treat all messages as non-droppable once we start fragmenting
+            let batch = zgetbatch!(self, queue, in_guard, true);
 
             // Get the frame SN
             let sn = guard.sn.get();
