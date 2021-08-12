@@ -24,16 +24,17 @@ pub(crate) mod imsg {
     use super::ZInt;
 
     pub(crate) mod id {
-        // Session Messages
-        pub(crate) const SCOUT: u8 = 0x01;
-        pub(crate) const HELLO: u8 = 0x02;
+        // Session Messages Unicast
         pub(crate) const INIT: u8 = 0x03;
         pub(crate) const OPEN: u8 = 0x04;
         pub(crate) const CLOSE: u8 = 0x05;
         pub(crate) const SYNC: u8 = 0x06;
         pub(crate) const ACK_NACK: u8 = 0x07;
-        pub(crate) const KEEP_ALIVE: u8 = 0x08;
         pub(crate) const PING_PONG: u8 = 0x09;
+        // Session Messages
+        pub(crate) const SCOUT: u8 = 0x01;
+        pub(crate) const HELLO: u8 = 0x02;
+        pub(crate) const KEEP_ALIVE: u8 = 0x08;
         pub(crate) const FRAME: u8 = 0x0a;
 
         // Zenoh Messages

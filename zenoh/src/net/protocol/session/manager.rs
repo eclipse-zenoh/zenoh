@@ -15,6 +15,7 @@ use super::authenticator::{
     AuthenticatedPeerLink, DummyLinkAuthenticator, DummyPeerAuthenticator, LinkAuthenticator,
     PeerAuthenticator,
 };
+use super::common::transport::SessionTransport;
 use super::core::{PeerId, WhatAmI, ZInt};
 use super::defaults::{
     ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_LINK_KEEP_ALIVE, ZN_LINK_LEASE,
@@ -25,7 +26,7 @@ use super::io::SharedMemoryReader;
 use super::link::{
     Link, LinkManager, LinkManagerBuilder, Locator, LocatorProperty, LocatorProtocol,
 };
-use super::transport::{SessionTransport, SessionTransportConfig};
+use super::unicast::transport::SessionTransportUnicast;
 use super::{Session, SessionConfig, SessionHandler};
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
@@ -213,6 +214,8 @@ pub(super) struct Opened {
 
 #[derive(Clone)]
 pub struct SessionManager {
+    pub(super) unicast: SessionManagerUnicast,
+    pub(crate) multicast: SessionManagerMulticast,
     pub(super) config: Arc<SessionManagerConfigInner>,
     // Outgoing and incoming opened (i.e. established) sessions
     pub(super) opened: AsyncArc<AsyncMutex<HashMap<PeerId, Opened>>>,
@@ -481,7 +484,7 @@ impl SessionManager {
             }
         }
 
-        // Create the channel object
+        // Create the session transport
         let stc = SessionTransportConfig {
             manager: self.clone(),
             pid: config.peer.clone(),
@@ -494,9 +497,9 @@ impl SessionManager {
         };
         let a_st = Arc::new(SessionTransport::new(stc));
 
-        // Create a weak reference to the session
+        // Create a weak reference to the session transport
         let session = Session::new(Arc::downgrade(&a_st));
-        // Add the session to the list of active sessions
+        // Add the session transport to the list of active sessions
         guard.insert(config.peer.clone(), a_st);
 
         log::debug!(
@@ -533,7 +536,12 @@ impl SessionManager {
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(locator, ps).await?;
         // Open the link
-        super::initial::open_link(self, &link).await
+        super::establishment::unicast::open_link(self, &link).await
+    }
+
+    pub async fn join_group(&self, _locator: &Locator) -> ZResult<Session> {
+        // @TODO: implement the multicast join
+        Ok(Session(std::sync::Weak::new()))
     }
 
     pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LocatorProperty>) {
@@ -592,7 +600,7 @@ impl SessionManager {
             };
 
             let timeout = Duration::from_millis(c_manager.config.open_timeout);
-            let res = super::initial::accept_link(&c_manager, &link, &auth_link)
+            let res = super::establishment::unicast::accept_link(&c_manager, &link, &auth_link)
                 .timeout(timeout)
                 .await;
             match res {

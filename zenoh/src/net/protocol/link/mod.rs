@@ -163,21 +163,3 @@ impl From<Arc<dyn LinkTrait + Send + Sync>> for Link {
         Link(link)
     }
 }
-
-/*************************************/
-/*           LINK MANAGER            */
-/*************************************/
-#[async_trait]
-pub trait LinkManagerTrait {
-    async fn new_link(&self, dst: &Locator, property: Option<&LocatorProperty>) -> ZResult<Link>;
-    async fn new_listener(
-        &self,
-        locator: &Locator,
-        property: Option<&LocatorProperty>,
-    ) -> ZResult<Locator>;
-    async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
-    fn get_listeners(&self) -> Vec<Locator>;
-    fn get_locators(&self) -> Vec<Locator>;
-}
-
-pub type LinkManager = Arc<dyn LinkManagerTrait + Send + Sync>;
