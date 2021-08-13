@@ -222,11 +222,11 @@ mod consts {
     pub const ZN_OPEN_TIMEOUT_STR: &str = "open_timeout";
 
     /// Configures the number of open session that can be in pending state.
-    /// String key : `"open_incoming_pending"`.
+    /// String key : `"open_pending"`.
     /// Accepted values : `<unsigned integer>`.
     /// Default value : `1024`.
     pub const ZN_OPEN_INCOMING_PENDING_KEY: u64 = 0x67;
-    pub const ZN_OPEN_INCOMING_PENDING_STR: &str = "open_incoming_pending";
+    pub const ZN_OPEN_INCOMING_PENDING_STR: &str = "open_pending";
 
     /// Configures the peer ID.
     /// String key : `"peer_id"`.

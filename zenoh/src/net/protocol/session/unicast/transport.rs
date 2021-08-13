@@ -186,7 +186,10 @@ impl SessionTransportUnicast {
         let mut guard = zwrite!(self.links);
         if guard.len() >= self.manager.config.unicast.max_links {
             return zerror!(ZErrorKind::InvalidLink {
-                descr: format!("Max num of links ({}) with peer: {}", link, self.pid)
+                descr: format!(
+                    "Can not add Link {} with peer {}: max num of links ({})",
+                    link, self.pid, self.manager.config.unicast.max_links
+                )
             });
         }
 

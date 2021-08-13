@@ -43,15 +43,6 @@ pub struct RuntimeState {
     pub hlc: Option<Arc<HLC>>,
 }
 
-pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
-    match m {
-        "peer" => Ok(whatami::PEER),
-        "client" => Ok(whatami::CLIENT),
-        "router" => Ok(whatami::ROUTER),
-        _ => Err(()),
-    }
-}
-
 #[derive(Clone)]
 pub struct Runtime {
     state: Arc<RuntimeState>,
@@ -93,7 +84,7 @@ impl Runtime {
 
         log::info!("Using PID: {}", pid);
 
-        let whatami = parse_mode(config.get_or(&ZN_MODE_KEY, ZN_MODE_DEFAULT)).unwrap();
+        let whatami = whatami::parse(config.get_or(&ZN_MODE_KEY, ZN_MODE_DEFAULT)).unwrap();
         let hlc = if config
             .get_or(&ZN_ADD_TIMESTAMP_KEY, ZN_ADD_TIMESTAMP_DEFAULT)
             .to_lowercase()

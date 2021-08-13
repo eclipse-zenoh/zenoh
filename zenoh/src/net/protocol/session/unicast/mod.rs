@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub(crate) mod authenticator;
+pub mod authenticator;
 pub(crate) mod establishment;
 pub(crate) mod link;
 pub(crate) mod manager;

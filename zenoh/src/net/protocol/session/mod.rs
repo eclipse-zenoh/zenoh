@@ -16,7 +16,7 @@ pub mod defaults;
 mod manager;
 mod multicast;
 mod primitives;
-mod unicast;
+pub mod unicast;
 
 use super::core;
 use super::core::{PeerId, WhatAmI, ZInt};
@@ -32,6 +32,7 @@ pub use primitives::*;
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
+pub use unicast::manager::*;
 use unicast::SessionUnicast;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 

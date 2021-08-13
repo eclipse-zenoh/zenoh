@@ -149,22 +149,18 @@ async fn open_session(
 
     // Create the router session manager
     let router_handler = Arc::new(SHRouter::new(priority));
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let router_manager = SessionManager::new(config, None);
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(router_id.clone())
+        .build(router_handler.clone());
+    let router_manager = SessionManager::new(config);
 
     // Create the client session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client_id,
-        handler: Arc::new(SHClient::new()),
-    };
-    let client_manager = SessionManager::new(config, None);
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client_id)
+        .build(Arc::new(SHClient::new()));
+    let client_manager = SessionManager::new(config);
 
     // Create the listener on the router
     for l in locators.iter() {

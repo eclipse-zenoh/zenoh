@@ -68,25 +68,12 @@ impl SessionEventHandler for SC {
 
 async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>>) {
     // Create the session manager
-    let mut config = SessionManagerConfig::default();
-    config.whatami = whatami::PEER;
-    config.pid = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-    config.handler = Arc::new(SH::new());
-
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property,
-    };
-    let sm = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::PEER)
+        .pid(PeerId::new(1, [0u8; PeerId::MAX_SIZE]))
+        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .build(Arc::new(SH::new()));
+    let sm = SessionManager::new(config);
 
     for _ in 0..RUNS {
         // Create the listeners
@@ -288,7 +275,7 @@ fn locator_quic() {
         zasync_executor_init!();
     });
 
-    use zenoh::net::protocol::link::quic::ServerConfigBuilder;
+    use quinn::ServerConfigBuilder;
 
     // Define the locators
     let locators = vec!["quic/localhost:9453".parse().unwrap()];

@@ -23,7 +23,6 @@ use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -139,44 +138,17 @@ async fn open_session(
     let config = SessionManagerConfig::builder()
         .pid(router_id.clone())
         .whatami(whatami::ROUTER)
-        .locator_property(LocatorProperty::vec_into_hashmap())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
         .build(router_handler.clone());
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
     let router_manager = SessionManager::new(config);
 
     // Create the client session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client_id,
-        handler: Arc::new(SHClient::new()),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property,
-    };
-    let client_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client_id)
+        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .build(Arc::new(SHClient::new()));
+    let client_manager = SessionManager::new(config);
 
     // Create the listener on the router
     for l in locators.iter() {
@@ -676,10 +648,11 @@ fn transport_quic_only() {
         zasync_executor_init!();
     });
 
-    use zenoh::net::protocol::link::quic::{
+    use quinn::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
-        ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,
+        ServerConfigBuilder, TransportConfig,
     };
+    use zenoh::net::protocol::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real

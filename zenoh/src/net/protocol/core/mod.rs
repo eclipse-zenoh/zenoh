@@ -13,7 +13,6 @@
 //
 pub mod rname;
 
-use rand::{thread_rng, Rng};
 use std::convert::{From, TryFrom};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -21,7 +20,7 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::Timestamp;
 use uuid::Uuid;
-use zenoh_util::core::{ZError, ZErrorKind};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
 pub type TimestampId = uhlc::ID;
@@ -35,7 +34,7 @@ pub const ZINT_MAX_BYTES: usize = 10;
 pub type WhatAmI = whatami::Type;
 
 pub mod whatami {
-    use super::ZInt;
+    use super::{ZError, ZErrorKind, ZInt, ZResult};
 
     pub type Type = ZInt;
 
@@ -50,6 +49,17 @@ pub mod whatami {
             PEER => "Peer".to_string(),
             CLIENT => "Client".to_string(),
             i => i.to_string(),
+        }
+    }
+
+    pub(crate) fn parse(m: &str) -> ZResult<Type> {
+        match m {
+            "peer" => Ok(PEER),
+            "client" => Ok(CLIENT),
+            "router" => Ok(ROUTER),
+            unknown => zerror!(ZErrorKind::ValueDecodingFailed {
+                descr: format!("{} is not a valid WhatAmI value", unknown)
+            }),
         }
     }
 }
@@ -203,12 +213,7 @@ impl PeerId {
     }
 
     pub fn rand() -> PeerId {
-        let mut id = [0; PeerId::MAX_SIZE];
-        thread_rng().fill(&mut id);
-        PeerId {
-            size: PeerId::MAX_SIZE,
-            id,
-        }
+        PeerId::from(Uuid::new_v4())
     }
 }
 

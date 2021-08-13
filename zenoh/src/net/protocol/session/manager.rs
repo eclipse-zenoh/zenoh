@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{PeerId, WhatAmI, ZInt};
+use super::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::defaults::*;
 #[cfg(feature = "zero-copy")]
 use super::io::SharedMemoryReader;
@@ -29,63 +29,55 @@ use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
 
-// / # Examples
-// / ```
-// / use async_std::sync::Arc;
-// / use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
-// / use zenoh::net::protocol::session::{DummySessionEventHandler, SessionEventHandler, Session, SessionHandler, SessionManager, SessionManagerConfig, SessionManagerOptionalConfig};
-// /
-// / use zenoh_util::core::ZResult;
-// /
-// / // Create my session handler to be notified when a new session is initiated with me
-// / struct MySH;
-// /
-// / impl MySH {
-// /     fn new() -> MySH {
-// /         MySH
-// /     }
-// / }
-// /
-// / impl SessionHandler for MySH {
-// /     fn new_session(&self,
-// /         _session: Session
-// /     ) -> ZResult<Arc<dyn SessionEventHandler>> {
-// /         Ok(Arc::new(DummySessionEventHandler::new()))
-// /     }
-// / }
-// /
-// / // Create the SessionManager
-// / let config = SessionManagerConfig {
-// /     version: 0,
-// /     whatami: whatami::PEER,
-// /     id: PeerId::from(uuid::Uuid::new_v4()),
-// /     handler: Arc::new(MySH::new())
-// / };
-// / let manager = SessionManager::new(config, None);
-// /
-// / // Create the SessionManager with optional configuration
-// / let config = SessionManagerConfig {
-// /     version: 0,
-// /     whatami: whatami::PEER,
-// /     id: PeerId::from(uuid::Uuid::new_v4()),
-// /     handler: Arc::new(MySH::new())
-// / };
-// / // Setting a value to None means to use the default value
-// / let opt_config = SessionManagerOptionalConfig {
-// /     lease: Some(1_000),             // Set the default lease to 1s
-// /     keep_alive: Some(100),          // Set the default keep alive interval to 100ms
-// /     sn_resolution: None,            // Use the default sequence number resolution
-// /     open_timeout: None,             // Use the default open timeout
-// /     open_incoming_pending: None,    // Use the default amount of pending incoming sessions
-// /     batch_size: None,               // Use the default batch size
-// /     max_sessions: Some(5),          // Accept any number of sessions
-// /     max_links: None,                // Allow any number of links in a single session
-// /     peer_authenticator: None,       // Accept any incoming session
-// /     link_authenticator: None,       // Accept any incoming link
-// /     locator_property: None,         // No specific link property
-// / };
-// / let manager_opt = SessionManager::new(config, Some(opt_config));
-// / ```
+/// # Examples
+/// ```
+/// use async_std::sync::Arc;
+/// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
+/// use zenoh::net::protocol::session::{DummySessionEventHandler, SessionEventHandler, Session,
+///         SessionHandler, SessionManager, SessionManagerConfig, SessionManagerConfigUnicast};
+/// use zenoh_util::core::ZResult;
+///
+/// // Create my session handler to be notified when a new session is initiated with me
+/// struct MySH;
+///
+/// impl MySH {
+///     fn new() -> MySH {
+///         MySH
+///     }
+/// }
+///
+/// impl SessionHandler for MySH {
+///     fn new_session(&self,
+///         _session: Session
+///     ) -> ZResult<Arc<dyn SessionEventHandler>> {
+///         Ok(Arc::new(DummySessionEventHandler::default()))
+///     }
+/// }
+///
+/// // Create the default SessionManager
+/// let config = SessionManagerConfig::builder()
+///         .build(Arc::new(MySH::new()));
+/// let manager = SessionManager::new(config);
+///
+/// // Create the SessionManager with custom configuration
+/// // Configure the unicast sessions parameters
+/// let unicast = SessionManagerConfigUnicast::builder()
+///         .lease(1_000)                   // Set the link lease to 1s
+///         .keep_alive(100)                // Set the link keep alive interval to 100ms
+///         .open_timeout(1_000)            // Set an open timeout to 1s
+///         .open_pending(10)               // Set to 10 the number of simultanous pending incoming sessions
+///         .max_sessions(5)                // Allow max 5 sessions open
+///         .max_links(2)                   // Allow max 2 links per session
+///         .build();
+/// let config = SessionManagerConfig::builder()
+///         .pid(PeerId::rand())
+///         .whatami(whatami::PEER)
+///         .batch_size(1_024)              // Use a batch size of 1024 bytes
+///         .sn_resolution(128)             // Use a sequence number resolution of 128
+///         .unicast(unicast)               // Configure unicast parameters
+///         .build(Arc::new(MySH::new()));
+/// let manager = SessionManager::new(config);
+/// ```
 
 pub struct SessionManagerConfig {
     pub version: u8,
@@ -105,13 +97,13 @@ impl SessionManagerConfig {
 }
 
 pub struct SessionManagerConfigBuilder {
-    pub version: u8,
-    pub pid: PeerId,
-    pub whatami: WhatAmI,
-    pub sn_resolution: ZInt,
-    pub batch_size: usize,
-    pub unicast: SessionManagerConfigUnicast,
-    pub locator_property: HashMap<LocatorProtocol, LocatorProperty>,
+    version: u8,
+    pid: PeerId,
+    whatami: WhatAmI,
+    sn_resolution: ZInt,
+    batch_size: usize,
+    unicast: SessionManagerConfigUnicast,
+    locator_property: HashMap<LocatorProtocol, LocatorProperty>,
 }
 
 impl SessionManagerConfigBuilder {
@@ -140,11 +132,12 @@ impl SessionManagerConfigBuilder {
         self
     }
 
-    pub fn locator_property(
-        mut self,
-        locator_property: HashMap<LocatorProtocol, LocatorProperty>,
-    ) -> Self {
-        self.locator_property = locator_property;
+    pub fn locator_property(mut self, mut locator_property: Vec<LocatorProperty>) -> Self {
+        let mut hm = HashMap::new();
+        for lp in locator_property.drain(..) {
+            hm.insert(lp.get_proto(), lp);
+        }
+        self.locator_property = hm;
         self
     }
 
@@ -184,25 +177,27 @@ impl SessionManagerConfigBuilder {
         }
 
         if let Some(v) = properties.get(&ZN_VERSION_KEY) {
-            self.version = zparse!(v)?;
+            self = self.version(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_PEER_ID_KEY) {
-            self.pid = zparse!(v)?;
+            self = self.pid(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_MODE_KEY) {
-            self.whatami = zparse!(v)?;
+            self = self.whatami(whatami::parse(v)?);
         }
         if let Some(v) = properties.get(&ZN_SEQ_NUM_RESOLUTION_KEY) {
-            self.sn_resolution = zparse!(v)?;
+            self = self.sn_resolution(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_BATCH_SIZE_KEY) {
-            self.batch_size = zparse!(v)?;
+            self = self.batch_size(zparse!(v)?);
         }
-
-        self.locator_property =
-            LocatorProperty::vec_into_hashmap(LocatorProperty::from_properties(properties).await?);
-
-        self.unicast = SessionManagerConfigUnicast::from_properties(properties).await?;
+        self = self.locator_property(LocatorProperty::from_properties(properties).await?);
+        self = self.unicast(
+            SessionManagerConfigUnicast::builder()
+                .from_properties(properties)
+                .await?
+                .build(),
+        );
 
         Ok(self)
     }

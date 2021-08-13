@@ -33,7 +33,7 @@ pub struct SessionManagerConfigUnicast {
     pub lease: ZInt,
     pub keep_alive: ZInt,
     pub open_timeout: ZInt,
-    pub open_incoming_pending: usize,
+    pub open_pending: usize,
     pub max_sessions: usize,
     pub max_links: usize,
     pub peer_authenticator: Vec<PeerAuthenticator>,
@@ -41,12 +41,35 @@ pub struct SessionManagerConfigUnicast {
 }
 
 impl Default for SessionManagerConfigUnicast {
-    fn default() -> SessionManagerConfigUnicast {
-        SessionManagerConfigUnicast {
+    fn default() -> Self {
+        Self::builder().build()
+    }
+}
+
+impl SessionManagerConfigUnicast {
+    pub fn builder() -> SessionManagerConfigBuilderUnicast {
+        SessionManagerConfigBuilderUnicast::default()
+    }
+}
+
+pub struct SessionManagerConfigBuilderUnicast {
+    lease: ZInt,
+    keep_alive: ZInt,
+    open_timeout: ZInt,
+    open_pending: usize,
+    max_sessions: usize,
+    max_links: usize,
+    peer_authenticator: Vec<PeerAuthenticator>,
+    link_authenticator: Vec<LinkAuthenticator>,
+}
+
+impl Default for SessionManagerConfigBuilderUnicast {
+    fn default() -> SessionManagerConfigBuilderUnicast {
+        SessionManagerConfigBuilderUnicast {
             lease: *ZN_LINK_LEASE,
             keep_alive: *ZN_LINK_KEEP_ALIVE,
             open_timeout: *ZN_OPEN_TIMEOUT,
-            open_incoming_pending: *ZN_OPEN_INCOMING_PENDING,
+            open_pending: *ZN_OPEN_INCOMING_PENDING,
             max_sessions: usize::MAX,
             max_links: usize::MAX,
             peer_authenticator: vec![DummyPeerAuthenticator::make()],
@@ -55,10 +78,51 @@ impl Default for SessionManagerConfigUnicast {
     }
 }
 
-impl SessionManagerConfigUnicast {
+impl SessionManagerConfigBuilderUnicast {
+    pub fn lease(mut self, lease: ZInt) -> Self {
+        self.lease = lease;
+        self
+    }
+
+    pub fn keep_alive(mut self, keep_alive: ZInt) -> Self {
+        self.keep_alive = keep_alive;
+        self
+    }
+
+    pub fn open_timeout(mut self, open_timeout: ZInt) -> Self {
+        self.open_timeout = open_timeout;
+        self
+    }
+
+    pub fn open_pending(mut self, open_pending: usize) -> Self {
+        self.open_pending = open_pending;
+        self
+    }
+
+    pub fn max_sessions(mut self, max_sessions: usize) -> Self {
+        self.max_sessions = max_sessions;
+        self
+    }
+
+    pub fn max_links(mut self, max_links: usize) -> Self {
+        self.max_links = max_links;
+        self
+    }
+
+    pub fn peer_authenticator(mut self, peer_authenticator: Vec<PeerAuthenticator>) -> Self {
+        self.peer_authenticator = peer_authenticator;
+        self
+    }
+
+    pub fn link_authenticator(mut self, link_authenticator: Vec<LinkAuthenticator>) -> Self {
+        self.link_authenticator = link_authenticator;
+        self
+    }
+
     pub async fn from_properties(
+        mut self,
         properties: &ConfigProperties,
-    ) -> ZResult<SessionManagerConfigUnicast> {
+    ) -> ZResult<SessionManagerConfigBuilderUnicast> {
         macro_rules! zparse {
             ($str:expr) => {
                 $str.parse().map_err(|_| {
@@ -72,31 +136,42 @@ impl SessionManagerConfigUnicast {
             };
         }
 
-        let mut config = SessionManagerConfigUnicast::default();
-
         if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
-            config.lease = zparse!(v)?;
+            self = self.lease(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_LINK_KEEP_ALIVE_KEY) {
-            config.keep_alive = zparse!(v)?;
+            self = self.keep_alive(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_OPEN_TIMEOUT_KEY) {
-            config.open_timeout = zparse!(v)?;
+            self = self.open_timeout(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_OPEN_INCOMING_PENDING_KEY) {
-            config.open_incoming_pending = zparse!(v)?;
+            self = self.open_pending(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_MAX_SESSIONS_KEY) {
-            config.max_sessions = zparse!(v)?;
+            self = self.max_sessions(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_MAX_LINKS_KEY) {
-            config.max_links = zparse!(v)?;
+            self = self.max_links(zparse!(v)?);
         }
 
-        config.peer_authenticator = PeerAuthenticator::from_properties(properties).await?;
-        config.link_authenticator = LinkAuthenticator::from_properties(properties).await?;
+        self = self.peer_authenticator(PeerAuthenticator::from_properties(properties).await?);
+        self = self.link_authenticator(LinkAuthenticator::from_properties(properties).await?);
 
-        Ok(config)
+        Ok(self)
+    }
+
+    pub fn build(self) -> SessionManagerConfigUnicast {
+        SessionManagerConfigUnicast {
+            lease: self.lease,
+            keep_alive: self.keep_alive,
+            open_timeout: self.open_timeout,
+            open_pending: self.open_pending,
+            max_sessions: self.max_sessions,
+            max_links: self.max_links,
+            peer_authenticator: self.peer_authenticator,
+            link_authenticator: self.link_authenticator,
+        }
     }
 }
 
@@ -358,7 +433,7 @@ impl SessionManager {
         properties: Option<LocatorProperty>,
     ) {
         let mut guard = zasynclock!(self.state.unicast.incoming);
-        if guard.len() >= self.config.unicast.open_incoming_pending {
+        if guard.len() >= self.config.unicast.open_pending {
             // We reached the limit of concurrent incoming session, this means two things:
             // - the values configured for ZN_OPEN_INCOMING_PENDING and ZN_OPEN_TIMEOUT
             //   are too small for the scenario zenoh is deployed in;
