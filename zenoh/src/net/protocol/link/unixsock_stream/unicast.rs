@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::session::SessionManagerUnicast;
+use super::session::SessionManager;
 use super::*;
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::{Path, PathBuf};
@@ -177,12 +177,12 @@ impl ListenerUnixSocketStream {
 }
 
 pub struct LinkManagerUnicastUnixSocketStream {
-    manager: SessionManagerUnicast,
+    manager: SessionManager,
     listeners: Arc<RwLock<HashMap<String, ListenerUnixSocketStream>>>,
 }
 
 impl LinkManagerUnicastUnixSocketStream {
-    pub(crate) fn new(manager: SessionManagerUnicast) -> Self {
+    pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -448,7 +448,7 @@ async fn accept_task(
     socket: UnixListener,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: SessionManagerUnicast,
+    manager: SessionManager,
 ) -> ZResult<()> {
     enum Action {
         Accept(UnixStream),
@@ -533,7 +533,7 @@ async fn accept_task(
         ));
 
         // Communicate the new link to the initial session manager
-        manager.handle_new_link(Link(link), None).await;
+        manager.handle_new_link_unicast(Link(link), None).await;
     }
 
     Ok(())

@@ -22,6 +22,7 @@ use super::udp::{LocatorPropertyUdp, LocatorUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use super::unixsock_stream::{LocatorPropertyUnixSocketStream, LocatorUnixSocketStream};
 use std::cmp::PartialEq;
+use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
 use std::str::FromStr;
@@ -236,6 +237,16 @@ impl LocatorProperty {
             }
         }
         Ok(ps)
+    }
+
+    pub fn vec_into_hashmap(
+        mut lps: Vec<LocatorProperty>,
+    ) -> HashMap<LocatorProtocol, LocatorProperty> {
+        let mut hm = HashMap::new();
+        for lp in lps.drain(..) {
+            hm.insert(lp.get_proto(), lp);
+        }
+        hm
     }
 }
 

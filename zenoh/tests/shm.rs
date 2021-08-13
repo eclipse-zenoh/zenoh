@@ -58,10 +58,7 @@ mod tests {
     }
 
     impl SessionHandler for SHPeer {
-        fn new_session(
-            &self,
-            _session: Session,
-        ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+        fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
         }

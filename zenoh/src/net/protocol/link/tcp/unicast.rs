@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::session::SessionManagerUnicast;
+use super::session::SessionManager;
 use super::*;
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
@@ -191,12 +191,12 @@ impl ListenerUnicastTcp {
 }
 
 pub struct LinkManagerUnicastTcp {
-    manager: SessionManagerUnicast,
+    manager: SessionManager,
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastTcp>>>,
 }
 
 impl LinkManagerUnicastTcp {
-    pub(crate) fn new(manager: SessionManagerUnicast) -> Self {
+    pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -325,7 +325,7 @@ async fn accept_task(
     socket: TcpListener,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: SessionManagerUnicast,
+    manager: SessionManager,
 ) -> ZResult<()> {
     enum Action {
         Accept((TcpStream, SocketAddr)),
@@ -378,7 +378,7 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial session manager
-        manager.handle_new_link(Link(link), None).await;
+        manager.handle_new_link_unicast(Link(link), None).await;
     }
 
     Ok(())

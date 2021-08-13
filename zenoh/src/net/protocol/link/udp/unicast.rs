@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::session::SessionManagerUnicast;
+use super::session::SessionManager;
 use super::*;
 use async_std::net::{SocketAddr, UdpSocket};
 use async_std::prelude::*;
@@ -254,12 +254,12 @@ impl ListenerUnicastUdp {
 }
 
 pub struct LinkManagerUnicastUdp {
-    manager: SessionManagerUnicast,
+    manager: SessionManager,
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastUdp>>>,
 }
 
 impl LinkManagerUnicastUdp {
-    pub(crate) fn new(manager: SessionManagerUnicast) -> Self {
+    pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -395,7 +395,7 @@ async fn accept_read_task(
     socket: UdpSocket,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: SessionManagerUnicast,
+    manager: SessionManager,
 ) -> ZResult<()> {
     let socket = Arc::new(socket);
     let links: LinkHashMap = Arc::new(Mutex::new(HashMap::new()));
@@ -491,7 +491,7 @@ async fn accept_read_task(
                         LinkUnicastUdpVariant::Unconnected(unconnected),
                     ));
                     // Add the new link to the set of connected peers
-                    manager.handle_new_link(Link(link), None).await;
+                    manager.handle_new_link_unicast(Link(link), None).await;
                 }
             }
         };

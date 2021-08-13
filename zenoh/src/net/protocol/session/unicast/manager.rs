@@ -11,141 +11,115 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::authenticator::{
-    AuthenticatedPeerLink, DummyLinkAuthenticator, DummyPeerAuthenticator, LinkAuthenticator,
-    PeerAuthenticator,
-};
+use super::authenticator::*;
 use super::core::{PeerId, WhatAmI, ZInt};
-use super::defaults::{
-    ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_LINK_KEEP_ALIVE, ZN_LINK_LEASE,
-    ZN_OPEN_INCOMING_PENDING, ZN_OPEN_TIMEOUT,
-};
-#[cfg(feature = "zero-copy")]
-use super::io::SharedMemoryReader;
-use super::session::SessionHandler;
+use super::defaults::*;
+use super::session::SessionManager;
 use super::transport::{SessionTransportUnicast, SessionTransportUnicastConfig};
 use super::*;
-use crate::net::protocol::link::{
-    Link, LinkManagerBuilderUnicast, LinkManagerUnicast, Locator, LocatorProperty, LocatorProtocol,
-};
+use crate::net::protocol::link::*;
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
-use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
-#[cfg(feature = "zero-copy")]
-use std::sync::RwLock;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::properties::config::ConfigProperties;
-use zenoh_util::properties::config::{
-    ZN_LINK_KEEP_ALIVE_KEY, ZN_LINK_KEEP_ALIVE_STR, ZN_LINK_LEASE_KEY, ZN_LINK_LEASE_STR,
-    ZN_OPEN_INCOMING_PENDING_KEY, ZN_OPEN_INCOMING_PENDING_STR, ZN_OPEN_TIMEOUT_KEY,
-    ZN_OPEN_TIMEOUT_STR, ZN_SEQ_NUM_RESOLUTION_KEY, ZN_SEQ_NUM_RESOLUTION_STR,
-};
+use zenoh_util::properties::config::*;
 use zenoh_util::{zasynclock, zerror, zlock};
 
-pub struct SessionManagerUnicastOptionalConfig {
-    pub lease: Option<ZInt>,
-    pub keep_alive: Option<ZInt>,
-    pub sn_resolution: Option<ZInt>,
-    pub open_timeout: Option<ZInt>,
-    pub open_incoming_pending: Option<usize>,
-    pub batch_size: Option<usize>,
-    pub max_sessions: Option<usize>,
-    pub max_links: Option<usize>,
-    pub peer_authenticator: Option<Vec<PeerAuthenticator>>,
-    pub link_authenticator: Option<Vec<LinkAuthenticator>>,
-    pub locator_property: Option<Vec<LocatorProperty>>,
+pub struct SessionManagerConfigUnicast {
+    pub lease: ZInt,
+    pub keep_alive: ZInt,
+    pub open_timeout: ZInt,
+    pub open_incoming_pending: usize,
+    pub max_sessions: usize,
+    pub max_links: usize,
+    pub peer_authenticator: Vec<PeerAuthenticator>,
+    pub link_authenticator: Vec<LinkAuthenticator>,
 }
 
-impl SessionManagerUnicastOptionalConfig {
-    pub async fn from_properties(
-        config: &ConfigProperties,
-    ) -> ZResult<Option<SessionManagerUnicastOptionalConfig>> {
-        macro_rules! zparse {
-            ($key:expr, $str:expr) => {
-                match config.get(&$key) {
-                    Some(snr) => {
-                        let snr = snr.parse().map_err(|_| {
-                            let e = format!(
-                                "Failed to read configuration {}: {} is not a valid entry",
-                                $str, snr
-                            );
-                            log::warn!("{}", e);
-                            zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
-                        })?;
-                        Some(snr)
-                    }
-                    None => None,
-                }
-            };
+impl Default for SessionManagerConfigUnicast {
+    fn default() -> SessionManagerConfigUnicast {
+        SessionManagerConfigUnicast {
+            lease: *ZN_LINK_LEASE,
+            keep_alive: *ZN_LINK_KEEP_ALIVE,
+            open_timeout: *ZN_OPEN_TIMEOUT,
+            open_incoming_pending: *ZN_OPEN_INCOMING_PENDING,
+            max_sessions: usize::MAX,
+            max_links: usize::MAX,
+            peer_authenticator: vec![DummyPeerAuthenticator::make()],
+            link_authenticator: vec![DummyLinkAuthenticator::make()],
         }
-
-        let peer_authenticator = PeerAuthenticator::from_properties(config).await?;
-        let link_authenticator = LinkAuthenticator::from_properties(config).await?;
-        let locator_property = LocatorProperty::from_properties(config).await?;
-
-        let lease = zparse!(ZN_LINK_LEASE_KEY, ZN_LINK_LEASE_STR);
-        let keep_alive = zparse!(ZN_LINK_KEEP_ALIVE_KEY, ZN_LINK_KEEP_ALIVE_STR);
-        let sn_resolution = zparse!(ZN_SEQ_NUM_RESOLUTION_KEY, ZN_SEQ_NUM_RESOLUTION_STR);
-        let open_timeout = zparse!(ZN_OPEN_TIMEOUT_KEY, ZN_OPEN_TIMEOUT_STR);
-        let open_incoming_pending =
-            zparse!(ZN_OPEN_INCOMING_PENDING_KEY, ZN_OPEN_INCOMING_PENDING_STR);
-
-        let opt_config = SessionManagerUnicastOptionalConfig {
-            lease,
-            keep_alive,
-            sn_resolution,
-            open_timeout,
-            open_incoming_pending,
-            batch_size: None,
-            max_sessions: None,
-            max_links: None,
-            peer_authenticator: if peer_authenticator.is_empty() {
-                None
-            } else {
-                Some(peer_authenticator)
-            },
-            link_authenticator: if link_authenticator.is_empty() {
-                None
-            } else {
-                Some(link_authenticator)
-            },
-            locator_property: if locator_property.is_empty() {
-                None
-            } else {
-                Some(locator_property)
-            },
-        };
-        Ok(Some(opt_config))
     }
 }
 
-pub(super) struct SessionManagerUnicastConfig {
-    pub version: u8,
-    pub whatami: WhatAmI,
-    pub id: PeerId,
-    pub handler: Arc<dyn SessionHandler + Send + Sync>,
+impl SessionManagerConfigUnicast {
+    pub async fn from_properties(
+        properties: &ConfigProperties,
+    ) -> ZResult<SessionManagerConfigUnicast> {
+        macro_rules! zparse {
+            ($str:expr) => {
+                $str.parse().map_err(|_| {
+                    let e = format!(
+                        "Failed to read configuration: {} is not a valid value",
+                        $str
+                    );
+                    log::warn!("{}", e);
+                    zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
+                })
+            };
+        }
+
+        let mut config = SessionManagerConfigUnicast::default();
+
+        if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
+            config.lease = zparse!(v)?;
+        }
+        if let Some(v) = properties.get(&ZN_LINK_KEEP_ALIVE_KEY) {
+            config.keep_alive = zparse!(v)?;
+        }
+        if let Some(v) = properties.get(&ZN_OPEN_TIMEOUT_KEY) {
+            config.open_timeout = zparse!(v)?;
+        }
+        if let Some(v) = properties.get(&ZN_OPEN_INCOMING_PENDING_KEY) {
+            config.open_incoming_pending = zparse!(v)?;
+        }
+        if let Some(v) = properties.get(&ZN_MAX_SESSIONS_KEY) {
+            config.max_sessions = zparse!(v)?;
+        }
+        if let Some(v) = properties.get(&ZN_MAX_LINKS_KEY) {
+            config.max_links = zparse!(v)?;
+        }
+
+        config.peer_authenticator = PeerAuthenticator::from_properties(properties).await?;
+        config.link_authenticator = LinkAuthenticator::from_properties(properties).await?;
+
+        Ok(config)
+    }
 }
-pub(super) struct SessionManagerUnicastConfigInner {
-    pub(super) version: u8,
-    pub(super) whatami: WhatAmI,
-    pub(super) pid: PeerId,
-    pub(super) lease: ZInt,
-    pub(super) keep_alive: ZInt,
-    pub(super) sn_resolution: ZInt,
-    pub(super) open_timeout: ZInt,
-    pub(super) open_incoming_pending: usize,
-    pub(super) batch_size: usize,
-    pub(super) max_sessions: Option<usize>,
-    pub(super) max_links: Option<usize>,
-    pub(super) peer_authenticator: Vec<PeerAuthenticator>,
-    pub(super) link_authenticator: Vec<LinkAuthenticator>,
-    pub(super) locator_property: HashMap<LocatorProtocol, LocatorProperty>,
-    pub(super) handler: Arc<dyn SessionHandler + Send + Sync>,
+
+pub struct SessionManagerStateUnicast {
+    // Outgoing and incoming opened (i.e. established) sessions
+    pub(super) opened: AsyncArc<AsyncMutex<HashMap<PeerId, Opened>>>,
+    // Incoming uninitialized sessions
+    pub(super) incoming: AsyncArc<AsyncMutex<HashMap<Link, Option<Vec<u8>>>>>,
+    // Established listeners
+    pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
+    // Established sessions
+    pub(super) sessions: Arc<Mutex<HashMap<PeerId, Arc<SessionTransportUnicast>>>>,
+}
+
+impl Default for SessionManagerStateUnicast {
+    fn default() -> SessionManagerStateUnicast {
+        SessionManagerStateUnicast {
+            opened: AsyncArc::new(AsyncMutex::new(HashMap::new())),
+            incoming: AsyncArc::new(AsyncMutex::new(HashMap::new())),
+            protocols: Arc::new(Mutex::new(HashMap::new())),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
 }
 
 pub(super) struct Opened {
@@ -154,161 +128,18 @@ pub(super) struct Opened {
     pub(super) initial_sn: ZInt,
 }
 
-#[derive(Clone)]
-pub struct SessionManagerUnicast {
-    pub(super) config: Arc<SessionManagerUnicastConfigInner>,
-    // Outgoing and incoming opened (i.e. established) sessions
-    pub(super) opened: AsyncArc<AsyncMutex<HashMap<PeerId, Opened>>>,
-    // Incoming uninitialized sessions
-    pub(super) incoming: AsyncArc<AsyncMutex<HashMap<Link, Option<Vec<u8>>>>>,
-    // Default PRNG
-    pub(super) prng: AsyncArc<AsyncMutex<PseudoRng>>,
-    // Default cipher for cookies
-    pub(super) cipher: Arc<BlockCipher>,
-    // Established listeners
-    protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
-    // Established sessions
-    sessions: Arc<Mutex<HashMap<PeerId, Arc<SessionTransportUnicast>>>>,
-    #[cfg(feature = "zero-copy")]
-    pub(super) shmr: Arc<RwLock<SharedMemoryReader>>,
-}
-
-impl SessionManagerUnicast {
-    pub fn new(
-        config: SessionManagerUnicastConfig,
-        mut opt_config: Option<SessionManagerUnicastOptionalConfig>,
-    ) -> SessionManagerUnicast {
-        // Set default optional values
-        let mut lease = *ZN_LINK_LEASE;
-        let mut keep_alive = *ZN_LINK_KEEP_ALIVE;
-        let mut sn_resolution = ZN_DEFAULT_SEQ_NUM_RESOLUTION;
-        let mut open_timeout = *ZN_OPEN_TIMEOUT;
-        let mut open_incoming_pending = *ZN_OPEN_INCOMING_PENDING;
-        let mut batch_size = ZN_DEFAULT_BATCH_SIZE;
-        let mut max_sessions = None;
-        let mut max_links = None;
-        let mut peer_authenticator = vec![DummyPeerAuthenticator::make()];
-        let mut link_authenticator = vec![DummyLinkAuthenticator::make()];
-        let mut locator_property = HashMap::new();
-
-        // Override default values if provided
-        if let Some(mut opt) = opt_config.take() {
-            if let Some(v) = opt.lease.take() {
-                lease = v;
-            }
-            if let Some(v) = opt.keep_alive.take() {
-                keep_alive = v;
-            }
-            if let Some(v) = opt.sn_resolution.take() {
-                sn_resolution = v;
-            }
-            if let Some(v) = opt.open_timeout.take() {
-                open_timeout = v;
-            }
-            if let Some(v) = opt.open_incoming_pending.take() {
-                open_incoming_pending = v;
-            }
-            if let Some(v) = opt.batch_size.take() {
-                batch_size = v;
-            }
-            max_sessions = opt.max_sessions;
-            max_links = opt.max_links;
-            if let Some(v) = opt.peer_authenticator.take() {
-                peer_authenticator = v;
-            }
-            if let Some(v) = opt.link_authenticator.take() {
-                link_authenticator = v;
-            }
-            if let Some(mut v) = opt.locator_property.take() {
-                for p in v.drain(..) {
-                    locator_property.insert(p.get_proto(), p);
-                }
-            }
-        }
-
-        let config_inner = SessionManagerUnicastConfigInner {
-            version: config.version,
-            whatami: config.whatami,
-            pid: config.id.clone(),
-            lease,
-            keep_alive,
-            sn_resolution,
-            open_timeout,
-            open_incoming_pending,
-            batch_size,
-            max_sessions,
-            max_links,
-            peer_authenticator,
-            link_authenticator,
-            locator_property,
-            handler: config.handler,
-        };
-
-        // Initialize the PRNG and the Cipher
-        let mut prng = PseudoRng::from_entropy();
-        let mut key = [0u8; BlockCipher::BLOCK_SIZE];
-        prng.fill_bytes(&mut key);
-        let cipher = BlockCipher::new(key);
-
-        SessionManagerUnicast {
-            config: Arc::new(config_inner),
-            protocols: Arc::new(Mutex::new(HashMap::new())),
-            sessions: Arc::new(Mutex::new(HashMap::new())),
-            opened: AsyncArc::new(AsyncMutex::new(HashMap::new())),
-            incoming: AsyncArc::new(AsyncMutex::new(HashMap::new())),
-            prng: AsyncArc::new(AsyncMutex::new(prng)),
-            cipher: Arc::new(cipher),
-            #[cfg(feature = "zero-copy")]
-            shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
-        }
-    }
-
-    pub fn pid(&self) -> PeerId {
-        self.config.pid.clone()
-    }
-
-    /*************************************/
-    /*              LISTENER             */
-    /*************************************/
-    pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
-        let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
-        let ps = self.config.locator_property.get(&locator.get_proto());
-        manager.new_listener(locator, ps).await
-    }
-
-    pub async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let manager = self.get_link_manager(&locator.get_proto())?;
-        manager.del_listener(locator).await?;
-        if manager.get_listeners().is_empty() {
-            self.del_link_manager(&locator.get_proto()).await?;
-        }
-        Ok(())
-    }
-
-    pub fn get_listeners(&self) -> Vec<Locator> {
-        let mut vec: Vec<Locator> = vec![];
-        for p in zlock!(self.protocols).values() {
-            vec.extend_from_slice(&p.get_listeners());
-        }
-        vec
-    }
-
-    pub fn get_locators(&self) -> Vec<Locator> {
-        let mut vec: Vec<Locator> = vec![];
-        for p in zlock!(self.protocols).values() {
-            vec.extend_from_slice(&p.get_locators());
-        }
-        vec
-    }
-
+impl SessionManager {
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
-    async fn get_or_new_link_manager(&self, protocol: &LocatorProtocol) -> LinkManagerUnicast {
+    async fn get_or_new_link_manager_unicast(
+        &self,
+        protocol: &LocatorProtocol,
+    ) -> LinkManagerUnicast {
         loop {
-            match self.get_link_manager(protocol) {
+            match self.get_link_manager_unicast(protocol) {
                 Ok(manager) => return manager,
-                Err(_) => match self.new_link_manager(protocol).await {
+                Err(_) => match self.new_link_manager_unicast(protocol).await {
                     Ok(manager) => return manager,
                     Err(_) => continue,
                 },
@@ -316,8 +147,11 @@ impl SessionManagerUnicast {
         }
     }
 
-    async fn new_link_manager(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
-        let mut w_guard = zlock!(self.protocols);
+    async fn new_link_manager_unicast(
+        &self,
+        protocol: &LocatorProtocol,
+    ) -> ZResult<LinkManagerUnicast> {
+        let mut w_guard = zlock!(self.state.unicast.protocols);
         if w_guard.contains_key(protocol) {
             return zerror!(ZErrorKind::Other {
                 descr: format!(
@@ -332,8 +166,8 @@ impl SessionManagerUnicast {
         Ok(lm)
     }
 
-    fn get_link_manager(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
-        match zlock!(self.protocols).get(protocol) {
+    fn get_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
+        match zlock!(self.state.unicast.protocols).get(protocol) {
             Some(manager) => Ok(manager.clone()),
             None => zerror!(ZErrorKind::Other {
                 descr: format!(
@@ -344,8 +178,8 @@ impl SessionManagerUnicast {
         }
     }
 
-    async fn del_link_manager(&self, protocol: &LocatorProtocol) -> ZResult<()> {
-        match zlock!(self.protocols).remove(protocol) {
+    async fn del_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
+        match zlock!(self.state.unicast.protocols).remove(protocol) {
             Some(lm) => {
                 let mut listeners = lm.get_listeners();
                 for l in listeners.drain(..) {
@@ -360,18 +194,49 @@ impl SessionManagerUnicast {
     }
 
     /*************************************/
+    /*              LISTENER             */
+    /*************************************/
+    pub async fn add_listener_unicast(&self, locator: &Locator) -> ZResult<Locator> {
+        let manager = self
+            .get_or_new_link_manager_unicast(&locator.get_proto())
+            .await;
+        let ps = self.config.locator_property.get(&locator.get_proto());
+        manager.new_listener(locator, ps).await
+    }
+
+    pub async fn del_listener_unicast(&self, locator: &Locator) -> ZResult<()> {
+        let lm = self.get_link_manager_unicast(&locator.get_proto())?;
+        lm.del_listener(locator).await?;
+        if lm.get_listeners().is_empty() {
+            self.del_link_manager_unicast(&locator.get_proto()).await?;
+        }
+        Ok(())
+    }
+
+    pub fn get_listeners_unicast(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = vec![];
+        for p in zlock!(self.state.unicast.protocols).values() {
+            vec.extend_from_slice(&p.get_listeners());
+        }
+        vec
+    }
+
+    pub fn get_locators_unicast(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = vec![];
+        for p in zlock!(self.state.unicast.protocols).values() {
+            vec.extend_from_slice(&p.get_locators());
+        }
+        vec
+    }
+
+    /*************************************/
     /*              SESSION              */
     /*************************************/
-    pub fn get_session(&self, peer: &PeerId) -> Option<SessionUnicast> {
-        zlock!(self.sessions).get(peer).map(|t| t.into())
-    }
-
-    pub fn get_sessions(&self) -> Vec<SessionUnicast> {
-        zlock!(self.sessions).values().map(|t| t.into()).collect()
-    }
-
-    pub(super) fn init_session(&self, config: SessionConfigUnicast) -> ZResult<SessionUnicast> {
-        let mut guard = zlock!(self.sessions);
+    pub(super) fn init_session_unicast(
+        &self,
+        config: SessionConfigUnicast,
+    ) -> ZResult<SessionUnicast> {
+        let mut guard = zlock!(self.state.unicast.sessions);
 
         // First verify if the session already exists
         if let Some(session) = guard.get(&config.peer) {
@@ -406,15 +271,13 @@ impl SessionManagerUnicast {
         }
 
         // Then verify that we haven't reached the session number limit
-        if let Some(limit) = self.config.max_sessions {
-            if guard.len() == limit {
-                let e = format!(
-                    "Max sessions reached ({}). Denying new session with peer: {}",
-                    limit, config.peer
-                );
-                log::trace!("{}", e);
-                return zerror!(ZErrorKind::Other { descr: e });
-            }
+        if guard.len() >= self.config.unicast.max_sessions {
+            let e = format!(
+                "Max sessions reached ({}). Denying new session with peer: {}",
+                self.config.unicast.max_sessions, config.peer
+            );
+            log::trace!("{}", e);
+            return zerror!(ZErrorKind::Other { descr: e });
         }
 
         // Create the session transport
@@ -449,22 +312,11 @@ impl SessionManagerUnicast {
         Ok(session)
     }
 
-    pub(super) async fn del_session(&self, peer: &PeerId) -> ZResult<()> {
-        let _ = zlock!(self.sessions).remove(peer).ok_or_else(|| {
-            let e = format!("Can not delete the session of peer: {}", peer);
-            log::trace!("{}", e);
-            zerror2!(ZErrorKind::Other { descr: e })
-        })?;
-
-        for pa in self.config.peer_authenticator.iter() {
-            pa.handle_close(peer).await;
-        }
-        Ok(())
-    }
-
-    pub async fn open_session(&self, locator: &Locator) -> ZResult<SessionUnicast> {
+    pub async fn open_session_unicast(&self, locator: &Locator) -> ZResult<SessionUnicast> {
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.get_or_new_link_manager(&locator.get_proto()).await;
+        let manager = self
+            .get_or_new_link_manager_unicast(&locator.get_proto())
+            .await;
         let ps = self.config.locator_property.get(&locator.get_proto());
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(locator, ps).await?;
@@ -472,9 +324,41 @@ impl SessionManagerUnicast {
         super::establishment::open_link(self, &link).await
     }
 
-    pub(crate) async fn handle_new_link(&self, link: Link, properties: Option<LocatorProperty>) {
-        let mut guard = zasynclock!(self.incoming);
-        if guard.len() >= self.config.open_incoming_pending {
+    pub fn get_session_unicast(&self, peer: &PeerId) -> Option<SessionUnicast> {
+        zlock!(self.state.unicast.sessions)
+            .get(peer)
+            .map(|t| t.into())
+    }
+
+    pub fn get_sessions_unicast(&self) -> Vec<SessionUnicast> {
+        zlock!(self.state.unicast.sessions)
+            .values()
+            .map(|t| t.into())
+            .collect()
+    }
+
+    pub(super) async fn del_session_unicast(&self, peer: &PeerId) -> ZResult<()> {
+        let _ = zlock!(self.state.unicast.sessions)
+            .remove(peer)
+            .ok_or_else(|| {
+                let e = format!("Can not delete the session of peer: {}", peer);
+                log::trace!("{}", e);
+                zerror2!(ZErrorKind::Other { descr: e })
+            })?;
+
+        for pa in self.config.unicast.peer_authenticator.iter() {
+            pa.handle_close(peer).await;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn handle_new_link_unicast(
+        &self,
+        link: Link,
+        properties: Option<LocatorProperty>,
+    ) {
+        let mut guard = zasynclock!(self.state.unicast.incoming);
+        if guard.len() >= self.config.unicast.open_incoming_pending {
             // We reached the limit of concurrent incoming session, this means two things:
             // - the values configured for ZN_OPEN_INCOMING_PENDING and ZN_OPEN_TIMEOUT
             //   are too small for the scenario zenoh is deployed in;
@@ -491,7 +375,7 @@ impl SessionManagerUnicast {
         drop(guard);
 
         let mut peer_id: Option<PeerId> = None;
-        for la in self.config.link_authenticator.iter() {
+        for la in self.config.unicast.link_authenticator.iter() {
             let res = la.handle_new_link(&link, properties.as_ref()).await;
             match res {
                 Ok(pid) => {
@@ -501,7 +385,7 @@ impl SessionManagerUnicast {
                             if pid1 != pid2 {
                                 log::debug!("Ambigous PeerID identification for link: {}", link);
                                 let _ = link.close().await;
-                                zasynclock!(self.incoming).remove(&link);
+                                zasynclock!(self.state.unicast.incoming).remove(&link);
                                 return;
                             }
                         }
@@ -517,7 +401,7 @@ impl SessionManagerUnicast {
         }
 
         // Spawn a task to accept the link
-        let c_incoming = self.incoming.clone();
+        let c_incoming = self.state.unicast.incoming.clone();
         let c_manager = self.clone();
         task::spawn(async move {
             let auth_link = AuthenticatedPeerLink {
@@ -527,7 +411,7 @@ impl SessionManagerUnicast {
                 properties,
             };
 
-            let timeout = Duration::from_millis(c_manager.config.open_timeout);
+            let timeout = Duration::from_millis(c_manager.config.unicast.open_timeout);
             let res = super::establishment::accept_link(&c_manager, &link, &auth_link)
                 .timeout(timeout)
                 .await;

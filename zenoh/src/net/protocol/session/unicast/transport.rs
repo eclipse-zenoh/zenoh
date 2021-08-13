@@ -19,7 +19,7 @@ use super::common::{
 use super::core::{PeerId, Priority, WhatAmI, ZInt};
 use super::link::SessionTransportLink;
 use super::proto::{SessionMessage, ZenohMessage};
-use super::session::{SessionEventHandler, SessionManagerUnicast};
+use super::session::{SessionEventHandler, SessionManager};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
@@ -50,7 +50,7 @@ macro_rules! zlinkindex {
 #[derive(Clone)]
 pub(crate) struct SessionTransportUnicast {
     // The manager this channel is associated to
-    pub(super) manager: SessionManagerUnicast,
+    pub(super) manager: SessionManager,
     // The remote peer id
     pub(super) pid: PeerId,
     // The remote whatami
@@ -64,7 +64,7 @@ pub(crate) struct SessionTransportUnicast {
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[SessionTransportLink]>>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler + Send + Sync>>>>,
+    pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler>>>>,
     // Mutex for notification
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The session transport can do shm
@@ -72,7 +72,7 @@ pub(crate) struct SessionTransportUnicast {
 }
 
 pub(crate) struct SessionTransportUnicastConfig {
-    pub(crate) manager: SessionManagerUnicast,
+    pub(crate) manager: SessionManager,
     pub(crate) pid: PeerId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
@@ -131,7 +131,7 @@ impl SessionTransportUnicast {
         }
     }
 
-    pub(super) fn set_callback(&self, callback: Arc<dyn SessionEventHandler + Send + Sync>) {
+    pub(super) fn set_callback(&self, callback: Arc<dyn SessionEventHandler>) {
         let mut guard = zwrite!(self.callback);
         *guard = Some(callback);
     }
@@ -158,7 +158,7 @@ impl SessionTransportUnicast {
         }
 
         // Delete the session on the manager
-        let _ = self.manager.del_session(&self.pid).await;
+        let _ = self.manager.del_session_unicast(&self.pid).await;
 
         // Close all the links
         let mut links = {
@@ -184,12 +184,10 @@ impl SessionTransportUnicast {
     /*************************************/
     pub(super) fn add_link(&self, link: Link) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        if let Some(limit) = self.manager.config.max_links {
-            if guard.len() == limit {
-                return zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Max num of links ({}) with peer: {}", link, self.pid)
-                });
-            }
+        if guard.len() >= self.manager.config.unicast.max_links {
+            return zerror!(ZErrorKind::InvalidLink {
+                descr: format!("Max num of links ({}) with peer: {}", link, self.pid)
+            });
         }
 
         if zlinkget!(guard, &link).is_some() {
@@ -336,7 +334,7 @@ impl SessionTransportUnicast {
         self.conduit_tx.len() > 1
     }
 
-    pub(crate) fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler + Send + Sync>> {
+    pub(crate) fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler>> {
         zread!(self.callback).clone()
     }
 

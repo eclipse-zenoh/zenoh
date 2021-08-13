@@ -227,6 +227,37 @@ mod consts {
     /// Default value : `1024`.
     pub const ZN_OPEN_INCOMING_PENDING_KEY: u64 = 0x67;
     pub const ZN_OPEN_INCOMING_PENDING_STR: &str = "open_incoming_pending";
+
+    /// Configures the peer ID.
+    /// String key : `"peer_id"`.
+    /// Accepted values : `<UUID>`.
+    /// Default value : `1024`.
+    pub const ZN_PEER_ID_KEY: u64 = 0x68;
+    pub const ZN_PEER_ID_STR: &str = "peer_id";
+
+    /// Configures the batch size.
+    /// String key : `"batch_size"`.
+    /// Accepted values : `<unsigned integer>`.
+    pub const ZN_BATCH_SIZE_KEY: u64 = 0x69;
+    pub const ZN_BATCH_SIZE_STR: &str = "batch_size";
+
+    /// Configures the maximum number of simultaneous open sessions.
+    /// String key : `"max_sessions"`.
+    /// Accepted values : `<unsigned integer>`.
+    pub const ZN_MAX_SESSIONS_KEY: u64 = 0x70;
+    pub const ZN_MAX_SESSIONS_STR: &str = "max_sessions";
+
+    /// Configures the maximum number of links per open session.
+    /// String key : `"max_links"`.
+    /// Accepted values : `<unsigned integer>`.
+    pub const ZN_MAX_LINKS_KEY: u64 = 0x71;
+    pub const ZN_MAX_LINKS_STR: &str = "max_links";
+
+    /// Configures the zenoh version.
+    /// String key : `"version"`.
+    /// Accepted values : `<unsigned integer>`.
+    pub const ZN_VERSION_KEY: u64 = 0x72;
+    pub const ZN_VERSION_STR: &str = "version";
 }
 
 pub use consts::*;
@@ -266,6 +297,11 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_SEQ_NUM_RESOLUTION_STR => Some(ZN_SEQ_NUM_RESOLUTION_KEY),
             ZN_OPEN_TIMEOUT_STR => Some(ZN_OPEN_TIMEOUT_KEY),
             ZN_OPEN_INCOMING_PENDING_STR => Some(ZN_OPEN_INCOMING_PENDING_KEY),
+            ZN_PEER_ID_STR => Some(ZN_PEER_ID_KEY),
+            ZN_BATCH_SIZE_STR => Some(ZN_BATCH_SIZE_KEY),
+            ZN_MAX_SESSIONS_STR => Some(ZN_MAX_SESSIONS_KEY),
+            ZN_MAX_LINKS_STR => Some(ZN_MAX_LINKS_KEY),
+            ZN_VERSION_STR => Some(ZN_VERSION_KEY),
             _ => None,
         }
     }
@@ -304,6 +340,10 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_SEQ_NUM_RESOLUTION_KEY => Some(ZN_SEQ_NUM_RESOLUTION_STR.to_string()),
             ZN_OPEN_TIMEOUT_KEY => Some(ZN_OPEN_TIMEOUT_STR.to_string()),
             ZN_OPEN_INCOMING_PENDING_KEY => Some(ZN_OPEN_INCOMING_PENDING_STR.to_string()),
+            ZN_PEER_ID_KEY => Some(ZN_PEER_ID_STR.to_string()),
+            ZN_BATCH_SIZE_KEY => Some(ZN_BATCH_SIZE_STR.to_string()),
+            ZN_MAX_LINKS_KEY => Some(ZN_MAX_LINKS_STR.to_string()),
+            ZN_VERSION_KEY => Some(ZN_VERSION_STR.to_string()),
             _ => None,
         }
     }

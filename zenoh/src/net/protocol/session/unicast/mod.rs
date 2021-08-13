@@ -28,7 +28,8 @@ use super::proto;
 use super::session;
 use std::sync::{Arc, Weak};
 use transport::SessionTransportUnicast;
-use zenoh_util::core::{ZErrorKind, ZResult};
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror2;
 
 pub(crate) struct SessionConfigUnicast {
     pub(crate) peer: PeerId,
@@ -41,7 +42,7 @@ pub(crate) struct SessionConfigUnicast {
 }
 
 #[derive(Clone)]
-pub(crate) struct SessionUnicast(Weak<SessionTransportUnicast>);
+pub struct SessionUnicast(Weak<SessionTransportUnicast>);
 
 impl SessionUnicast {
     pub(crate) fn upgrade(&self) -> Option<Arc<SessionTransportUnicast>> {

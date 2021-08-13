@@ -65,10 +65,7 @@ impl SHRouter {
 }
 
 impl SessionHandler for SHRouter {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         let arc = Arc::new(SCRouter::new(self.count.clone(), self.priority));
         Ok(arc)
     }
@@ -113,10 +110,7 @@ impl SHClient {
 }
 
 impl SessionHandler for SHClient {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(SCClient::new()))
     }
 }

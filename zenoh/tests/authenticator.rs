@@ -41,10 +41,7 @@ impl SHRouterAuthenticator {
 }
 
 impl SessionHandler for SHRouterAuthenticator {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(MHRouterAuthenticator::new()))
     }
 }
@@ -81,10 +78,7 @@ impl SHClientAuthenticator {
 }
 
 impl SessionHandler for SHClientAuthenticator {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }

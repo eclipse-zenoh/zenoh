@@ -49,7 +49,7 @@ impl SessionHandler for SHRouterIntermittent {
     fn new_session(
         &self,
         _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    ) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }
@@ -67,7 +67,7 @@ impl SessionHandler for SHClientIntermittent {
     fn new_session(
         &self,
         _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    ) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }
@@ -87,7 +87,7 @@ impl SessionHandler for SHClientStable {
     fn new_session(
         &self,
         _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    ) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(SCClient::new(self.counter.clone())))
     }
 }

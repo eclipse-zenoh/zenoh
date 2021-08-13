@@ -10,13 +10,56 @@
 //
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
-pub(super) mod unicast;
+// pub(crate) mod authenticator;
+pub(crate) mod establishment;
+// pub(crate) mod link;
+// pub(crate) mod manager;
+// pub(crate) mod rx;
+// pub(crate) mod transport;
+// pub(crate) mod tx;
 
-use super::authenticator;
-use super::core;
-use super::defaults;
-use super::io;
-use super::link;
-use super::manager;
-use super::proto;
-use super::{Session, SessionConfig};
+// use super::common;
+// use super::core;
+// use super::core::{PeerId, WhatAmI, ZInt};
+// use super::defaults;
+// use super::io;
+// use super::proto;
+// use super::session;
+// use std::sync::{Arc, Weak};
+// use transport::SessionTransportUnicast;
+// use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+// use zenoh_util::zerror2;
+
+// pub(crate) struct SessionConfigMulticast;
+
+// pub type SessionTransportMulticast = ();
+// #[derive(Clone)]
+// pub(crate) struct SessionMulticast(Weak<SessionTransportMulticast>);
+
+// impl SessionMulticast {
+//     pub(crate) fn upgrade(&self) -> Option<Arc<SessionTransportMulticast>> {
+//         self.0.upgrade()
+//     }
+
+//     pub(super) fn get_transport(&self) -> ZResult<Arc<SessionTransportMulticast>> {
+//         self.upgrade().ok_or_else(|| {
+//             zerror2!(ZErrorKind::InvalidReference {
+//                 descr: "Session closed".to_string()
+//             })
+//         })
+//     }
+// }
+
+// impl From<&Arc<SessionTransportMulticast>> for SessionMulticast {
+//     fn from(s: &Arc<SessionTransportMulticast>) -> SessionMulticast {
+//         SessionMulticast(Arc::downgrade(s))
+//     }
+// }
+
+// impl Eq for SessionMulticast {}
+
+// impl PartialEq for SessionMulticast {
+//     fn eq(&self, other: &Self) -> bool {
+//         Weak::ptr_eq(&self.0, &other.0)
+//     }
+// }

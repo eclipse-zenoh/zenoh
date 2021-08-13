@@ -13,11 +13,14 @@
 //
 pub mod rname;
 
+use rand::{thread_rng, Rng};
 use std::convert::{From, TryFrom};
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::Timestamp;
+use uuid::Uuid;
 use zenoh_util::core::{ZError, ZErrorKind};
 use zenoh_util::zerror;
 
@@ -30,6 +33,7 @@ pub const ZINT_MAX_BYTES: usize = 10;
 
 // WhatAmI values
 pub type WhatAmI = whatami::Type;
+
 pub mod whatami {
     use super::ZInt;
 
@@ -197,6 +201,15 @@ impl PeerId {
     pub fn as_slice(&self) -> &[u8] {
         &self.id[..self.size]
     }
+
+    pub fn rand() -> PeerId {
+        let mut id = [0; PeerId::MAX_SIZE];
+        thread_rng().fill(&mut id);
+        PeerId {
+            size: PeerId::MAX_SIZE,
+            id,
+        }
+    }
 }
 
 impl From<uuid::Uuid> for PeerId {
@@ -206,6 +219,23 @@ impl From<uuid::Uuid> for PeerId {
             size: 16,
             id: *uuid.as_bytes(),
         }
+    }
+}
+
+impl FromStr for PeerId {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let id = s.parse::<Uuid>().map_err(|e| {
+            zerror2!(ZErrorKind::ValueDecodingFailed {
+                descr: e.to_string()
+            })
+        })?;
+        let pid = PeerId {
+            size: 16,
+            id: *id.as_bytes(),
+        };
+        Ok(pid)
     }
 }
 

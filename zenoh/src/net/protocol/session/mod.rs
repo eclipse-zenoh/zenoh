@@ -14,6 +14,7 @@
 mod common;
 pub mod defaults;
 mod manager;
+mod multicast;
 mod primitives;
 mod unicast;
 
@@ -26,18 +27,18 @@ use super::proto;
 use super::proto::{smsg, ZenohMessage};
 use super::session;
 pub use manager::*;
+// use multicast::SessionMulticast;
 pub use primitives::*;
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
-pub(crate) use unicast::manager::SessionManagerUnicast;
 use unicast::SessionUnicast;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*********************************************************/
 /* Session Callback to be implemented by the Upper Layer */
 /*********************************************************/
-pub trait SessionEventHandler {
+pub trait SessionEventHandler: Send + Sync {
     fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
     fn new_link(&self, link: Link);
     fn del_link(&self, link: Link);
@@ -46,19 +47,22 @@ pub trait SessionEventHandler {
     fn as_any(&self) -> &dyn Any;
 }
 
-pub trait SessionHandler {
-    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>>;
+pub trait SessionHandler: Send + Sync {
+    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler>>;
+}
+
+#[derive(Default)]
+pub struct DummySessionHandler;
+
+impl SessionHandler for DummySessionHandler {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+        Ok(Arc::new(DummySessionEventHandler::default()))
+    }
 }
 
 // Define an empty SessionCallback for the listener session
 #[derive(Default)]
 pub struct DummySessionEventHandler;
-
-impl DummySessionEventHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
 
 impl SessionEventHandler for DummySessionEventHandler {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
@@ -102,6 +106,7 @@ macro_rules! zweak {
 pub enum Session {
     Unicast(SessionUnicast),
     Multicast(SessionUnicast),
+    // @TODO: Multicast(SessionMulticast),
 }
 
 impl Session {
@@ -136,7 +141,7 @@ impl Session {
     }
 
     #[inline(always)]
-    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn SessionEventHandler + Send + Sync>>> {
+    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn SessionEventHandler>>> {
         let transport = zweak!(self)?;
         Ok(transport.get_callback())
     }
@@ -199,3 +204,10 @@ impl From<SessionUnicast> for Session {
         Session::Unicast(su)
     }
 }
+
+// @TODO
+// impl From<SessionMulticast> for Session {
+//     fn from(sm: SessionMulticast) -> Session {
+//         Session::SessionMulticast(sm)
+//     }
+// }

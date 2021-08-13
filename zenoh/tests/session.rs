@@ -37,10 +37,7 @@ impl SHRouterOpenClose {
 }
 
 impl SessionHandler for SHRouterOpenClose {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }
@@ -55,10 +52,7 @@ impl SHClientOpenClose {
 }
 
 impl SessionHandler for SHClientOpenClose {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(DummySessionEventHandler::new()))
     }
 }

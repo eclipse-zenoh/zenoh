@@ -13,7 +13,7 @@
 //
 #[cfg(feature = "transport_quic")]
 use super::quic::LinkManagerUnicastQuic;
-use super::session::SessionManagerUnicast;
+use super::session::SessionManager;
 #[cfg(feature = "transport_tcp")]
 use super::tcp::LinkManagerUnicastTcp;
 #[cfg(feature = "transport_tls")]
@@ -46,7 +46,7 @@ pub struct LinkManagerBuilderUnicast;
 
 impl LinkManagerBuilderUnicast {
     pub(crate) fn make(
-        manager: SessionManagerUnicast,
+        manager: SessionManager,
         protocol: &LocatorProtocol,
     ) -> ZResult<LinkManagerUnicast> {
         match protocol {

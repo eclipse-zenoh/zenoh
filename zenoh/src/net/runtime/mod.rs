@@ -21,7 +21,6 @@ use super::protocol::link::{Link, Locator};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
 use super::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
 };
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
@@ -110,15 +109,15 @@ impl Runtime {
         let handler = Arc::new(RuntimeSessionHandler {
             runtime: std::sync::RwLock::new(None),
         });
-        let sm_config = SessionManagerConfig {
-            version,
-            whatami,
-            id: pid.clone(),
-            handler: handler.clone(),
-        };
-        let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
+        let sm_config = SessionManagerConfig::builder()
+            .from_properties(&config)
+            .await?
+            .version(version)
+            .whatami(whatami)
+            .pid(pid.clone())
+            .build(handler.clone());
 
-        let session_manager = SessionManager::new(sm_config, sm_opt_config);
+        let session_manager = SessionManager::new(sm_config);
         let mut runtime = Runtime {
             state: Arc::new(RuntimeState {
                 pid,
@@ -187,7 +186,7 @@ struct RuntimeSessionHandler {
 }
 
 impl SessionHandler for RuntimeSessionHandler {
-    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         match &*self.runtime.read().unwrap() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
