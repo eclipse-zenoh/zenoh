@@ -210,6 +210,7 @@ impl SessionEventHandler for RuntimeSession {
                     rid,
                     suffix,
                     msg.channel,
+                    data.congestion_control,
                     data.data_info,
                     data.payload,
                     msg.routing_context,

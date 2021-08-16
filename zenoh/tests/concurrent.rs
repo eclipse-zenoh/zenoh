@@ -18,7 +18,9 @@ use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey, ZInt};
+use zenoh::net::protocol::core::{
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, ZInt,
+};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -180,6 +182,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             priority: Priority::default(),
             reliability: Reliability::Reliable,
         };
+        let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
@@ -189,6 +192,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             key,
             payload,
             channel,
+            congestion_control,
             data_info,
             routing_context,
             reply_context,
@@ -288,6 +292,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             priority: Priority::default(),
             reliability: Reliability::Reliable,
         };
+        let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
@@ -297,6 +302,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             key,
             payload,
             channel,
+            congestion_control,
             data_info,
             routing_context,
             reply_context,

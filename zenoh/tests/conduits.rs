@@ -17,7 +17,9 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
+use zenoh::net::protocol::core::{
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -244,6 +246,7 @@ async fn single_run(
         key,
         payload,
         channel,
+        CongestionControl::Block,
         data_info,
         routing_context,
         reply_context,

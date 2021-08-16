@@ -40,7 +40,7 @@ use zenoh_util::sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondva
 use zenoh_util::zlock;
 
 macro_rules! zgetbatch {
-    ($self:expr, $conduit:expr, $stage_in:expr, $is_reliable:expr) => {
+    ($self:expr, $conduit:expr, $stage_in:expr, $is_droppable:expr) => {
         // Try to get a pointer to the first batch
         loop {
             if let Some(batch) = $stage_in.inner.front_mut() {
@@ -51,7 +51,7 @@ macro_rules! zgetbatch {
             let mut refill_guard = zlock!($self.stage_refill[$conduit]);
             if refill_guard.is_empty() {
                 // Execute the dropping strategy if provided
-                if !$is_reliable {
+                if $is_droppable {
                     // Drop the guard to allow the sending task to
                     // refill the queue of empty batches
                     drop(refill_guard);
@@ -295,7 +295,7 @@ impl TransmissionPipeline {
         macro_rules! zserialize {
             () => {
                 // Get the current serialization batch
-                let batch = zgetbatch!(self, queue, in_guard, true);
+                let batch = zgetbatch!(self, queue, in_guard, false);
                 if batch.serialize_session_message(&message) {
                     self.bytes_in[queue].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
@@ -342,7 +342,7 @@ impl TransmissionPipeline {
             () => {
                 // Get the current serialization batch. Drop the message
                 // if no batches are available
-                let batch = zgetbatch!(self, queue, in_guard, message.is_reliable());
+                let batch = zgetbatch!(self, queue, in_guard, message.is_droppable());
                 if batch.serialize_zenoh_message(&message) {
                     self.bytes_in[queue].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
@@ -406,7 +406,7 @@ impl TransmissionPipeline {
         while to_write > 0 {
             // Get the current serialization batch
             // Treat all messages as non-droppable once we start fragmenting
-            let batch = zgetbatch!(self, queue, in_guard, true);
+            let batch = zgetbatch!(self, queue, in_guard, false);
 
             // Get the frame SN
             let sn = guard.sn.get();
@@ -611,7 +611,7 @@ impl fmt::Debug for TransmissionPipeline {
 
 #[cfg(test)]
 mod tests {
-    use super::super::core::{Channel, Priority, Reliability, ResKey, ZInt};
+    use super::super::core::{Channel, CongestionControl, Priority, Reliability, ResKey, ZInt};
     use super::super::io::ZBuf;
     use super::super::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
     use super::super::session::defaults::{
@@ -642,11 +642,13 @@ mod tests {
                 priority: Priority::Control,
                 reliability: Reliability::Reliable,
             };
+            let congestion_control = CongestionControl::Block;
 
             let message = ZenohMessage::make_data(
                 key,
                 payload,
                 channel,
+                congestion_control,
                 data_info,
                 routing_context,
                 reply_context,
@@ -761,6 +763,7 @@ mod tests {
                 priority: Priority::Control,
                 reliability: Reliability::Reliable,
             };
+            let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
@@ -770,6 +773,7 @@ mod tests {
                 key,
                 payload,
                 channel,
+                congestion_control,
                 data_info,
                 routing_context,
                 reply_context,
@@ -867,6 +871,7 @@ mod tests {
                 priority: Priority::Control,
                 reliability: Reliability::Reliable,
             };
+            let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
@@ -876,6 +881,7 @@ mod tests {
                 key,
                 payload,
                 channel,
+                congestion_control,
                 data_info,
                 routing_context,
                 reply_context,
@@ -990,6 +996,7 @@ mod tests {
                         priority: Priority::Control,
                         reliability: Reliability::Reliable,
                     };
+                    let congestion_control = CongestionControl::Block;
                     let data_info = None;
                     let routing_context = None;
                     let reply_context = None;
@@ -999,6 +1006,7 @@ mod tests {
                         key,
                         payload,
                         channel,
+                        congestion_control,
                         data_info,
                         routing_context,
                         reply_context,

@@ -314,7 +314,7 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::super::core::{Channel, Priority, Reliability, ResKey};
+    use super::super::core::{Channel, CongestionControl, Priority, Reliability, ResKey};
     use super::super::io::{WBuf, ZBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
     use super::super::session::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
@@ -377,6 +377,7 @@ mod tests {
                         Reliability::BestEffort
                     },
                 };
+                let congestion_control = CongestionControl::Block;
                 let data_info = None;
                 let routing_context = None;
                 let reply_context = None;
@@ -386,6 +387,7 @@ mod tests {
                     key,
                     payload,
                     channel,
+                    congestion_control,
                     data_info,
                     routing_context,
                     reply_context,
@@ -444,6 +446,8 @@ mod tests {
                     priority: conduit.id,
                     reliability: *reliability,
                 };
+                let congestion_control = CongestionControl::Block;
+
                 // Create the ZenohMessage
                 let key = ResKey::RName("test".to_string());
                 let payload = ZBuf::from(vec![0u8; payload_size]);
@@ -455,6 +459,7 @@ mod tests {
                     key,
                     payload,
                     channel,
+                    congestion_control,
                     data_info,
                     routing_context,
                     reply_context,

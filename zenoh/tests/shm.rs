@@ -28,6 +28,7 @@ mod tests {
         Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
         SessionManagerConfigUnicast,
     };
+    use zenoh::net::CongestionControl;
     use zenoh_util::core::ZResult;
     use zenoh_util::zasync_executor_init;
 
@@ -213,6 +214,7 @@ mod tests {
                 priority: Priority::default(),
                 reliability: Reliability::Reliable,
             };
+            let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
@@ -222,6 +224,7 @@ mod tests {
                 key,
                 payload,
                 channel,
+                congestion_control,
                 data_info,
                 routing_context,
                 reply_context,
@@ -271,6 +274,7 @@ mod tests {
                 priority: Priority::default(),
                 reliability: Reliability::Reliable,
             };
+            let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
@@ -280,6 +284,7 @@ mod tests {
                 key,
                 payload,
                 channel,
+                congestion_control,
                 data_info,
                 routing_context,
                 reply_context,

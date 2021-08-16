@@ -74,6 +74,7 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                 key,
                 data_info,
                 payload,
+                congestion_control,
                 reply_context,
             }) => match reply_context {
                 None => {
@@ -81,6 +82,7 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
                         &key,
                         payload,
                         msg.channel,
+                        congestion_control,
                         data_info,
                         msg.routing_context,
                     );

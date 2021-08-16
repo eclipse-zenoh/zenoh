@@ -20,7 +20,7 @@ use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::zread;
 
 use super::protocol::core::{
-    whatami, Channel, PeerId, Priority, Reliability, SubInfo, SubMode, ZInt,
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, SubInfo, SubMode, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -1087,7 +1087,7 @@ fn get_matching_pulls(
 }
 
 macro_rules! send_to_first {
-    ($route:expr, $srcface:expr, $payload:expr, $channel:expr, $data_info:expr) => {
+    ($route:expr, $srcface:expr, $payload:expr, $channel:expr, $cong_ctrl:expr, $data_info:expr) => {
         let (outface, reskey, context) = $route.values().next().unwrap();
         if $srcface.id != outface.id {
             outface
@@ -1096,6 +1096,7 @@ macro_rules! send_to_first {
                     &reskey,
                     $payload,
                     $channel, // @TODO: Need to check the active subscriptions to determine the right reliability value
+                    $cong_ctrl,
                     $data_info,
                     *context,
                 )
@@ -1104,7 +1105,7 @@ macro_rules! send_to_first {
 }
 
 macro_rules! send_to_all {
-    ($route:expr, $srcface:expr, $payload:expr, $channel:expr, $data_info:expr) => {
+    ($route:expr, $srcface:expr, $payload:expr, $channel:expr, $cong_ctrl:expr, $data_info:expr) => {
         for (outface, reskey, context) in $route.values() {
             if $srcface.id != outface.id {
                 outface
@@ -1113,6 +1114,7 @@ macro_rules! send_to_all {
                         &reskey,
                         $payload.clone(),
                         $channel, // @TODO: Need to check the active subscriptions to determine the right reliability value
+                        $cong_ctrl,
                         $data_info.clone(),
                         *context,
                     )
@@ -1146,6 +1148,7 @@ pub fn route_data(
     rid: u64,
     suffix: &str,
     channel: Channel,
+    congestion_control: CongestionControl,
     info: Option<DataInfo>,
     payload: ZBuf,
     routing_context: Option<RoutingContext>,
@@ -1162,14 +1165,14 @@ pub fn route_data(
                 let data_info = treat_timestamp!(&tables.hlc, info);
 
                 if route.len() == 1 && matching_pulls.len() == 0 {
-                    send_to_first!(route, face, payload, channel, data_info);
+                    send_to_first!(route, face, payload, channel, congestion_control, data_info);
                 } else {
                     if !matching_pulls.is_empty() {
                         let lock = zlock!(tables.pull_caches_lock);
                         cache_data!(matching_pulls, prefix, suffix, payload, data_info);
                         drop(lock);
                     }
-                    send_to_all!(route, face, payload, channel, data_info);
+                    send_to_all!(route, face, payload, channel, congestion_control, data_info);
                 }
             }
         }
@@ -1187,6 +1190,7 @@ pub fn full_reentrant_route_data(
     rid: u64,
     suffix: &str,
     channel: Channel,
+    congestion_control: CongestionControl,
     info: Option<DataInfo>,
     payload: ZBuf,
     routing_context: Option<RoutingContext>,
@@ -1205,7 +1209,7 @@ pub fn full_reentrant_route_data(
 
                 if route.len() == 1 && matching_pulls.len() == 0 {
                     drop(tables);
-                    send_to_first!(route, face, payload, channel, data_info);
+                    send_to_first!(route, face, payload, channel, congestion_control, data_info);
                 } else {
                     if !matching_pulls.is_empty() {
                         let lock = zlock!(tables.pull_caches_lock);
@@ -1213,7 +1217,7 @@ pub fn full_reentrant_route_data(
                         drop(lock);
                     }
                     drop(tables);
-                    send_to_all!(route, face, payload, channel, data_info);
+                    send_to_all!(route, face, payload, channel, congestion_control, data_info);
                 }
             }
         }
@@ -1250,6 +1254,7 @@ pub fn pull_data(
                                         priority: Priority::default(), // @TODO: Default value for the time being
                                         reliability: subinfo.reliability,
                                     },
+                                    CongestionControl::default(), // @TODO: Default value for the time being
                                     info.clone(),
                                     None,
                                 );

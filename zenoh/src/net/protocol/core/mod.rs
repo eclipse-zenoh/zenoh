@@ -354,6 +354,19 @@ impl Default for Channel {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
+pub enum CongestionControl {
+    Block,
+    Drop,
+}
+
+impl Default for CongestionControl {
+    fn default() -> CongestionControl {
+        CongestionControl::Drop
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum SubMode {
     Push,
     Pull,
