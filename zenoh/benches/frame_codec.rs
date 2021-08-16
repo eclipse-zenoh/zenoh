@@ -16,7 +16,7 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::{Channel, Priority, Reliability, ResKey};
+use zenoh::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ResKey};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::defaults::ZN_DEFAULT_BATCH_SIZE;
@@ -44,9 +44,19 @@ fn criterion_benchmark(c: &mut Criterion) {
                 priority: Priority::default(),
                 reliability: Reliability::Reliable,
             };
+            let congestion_control = CongestionControl::default();
             let info = None;
 
-            let msg = ZenohMessage::make_data(res_key, payload, channel, info, None, None, None);
+            let msg = ZenohMessage::make_data(
+                res_key,
+                payload,
+                channel,
+                congestion_control,
+                info,
+                None,
+                None,
+                None,
+            );
 
             let mut wbuf = WBuf::new(batch_size, true);
             let mut num = 0;
@@ -74,10 +84,18 @@ fn criterion_benchmark(c: &mut Criterion) {
                                 priority: Priority::default(),
                                 reliability: Reliability::Reliable,
                             };
+                            let congestion_control = CongestionControl::default();
                             let info = None;
 
                             let msg = ZenohMessage::make_data(
-                                res_key, payload, channel, info, None, None, None,
+                                res_key,
+                                payload,
+                                channel,
+                                congestion_control,
+                                info,
+                                None,
+                                None,
+                                None,
                             );
                             wbuf.write_zenoh_message(&msg);
                             drop(msg);
