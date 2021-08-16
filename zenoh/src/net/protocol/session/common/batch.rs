@@ -11,11 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::conduit::SessionTransportConduitTx;
-use super::core::{Reliability, ZInt};
+use super::core::{Priority, Reliability};
 use super::io::WBuf;
 use super::proto::{SessionMessage, ZenohMessage};
-use zenoh_util::zlock;
+use super::seq_num::SeqNumGenerator;
 
 type LengthType = u16;
 const LENGTH_BYTES: [u8; 2] = [0u8, 0u8];
@@ -54,8 +53,6 @@ pub(crate) struct SerializationBatch {
     is_streamed: bool,
     // The current frame being serialized: BestEffort/Reliable
     current_frame: CurrentFrame,
-    // The conduit
-    conduit: SessionTransportConduitTx,
 }
 
 impl SerializationBatch {
@@ -75,16 +72,11 @@ impl SerializationBatch {
     ///
     /// * `sn_best_effort` - The sequence number generator for the best effort channel.
     ///
-    pub(crate) fn new(
-        size: usize,
-        is_streamed: bool,
-        conduit: SessionTransportConduitTx,
-    ) -> SerializationBatch {
+    pub(crate) fn new(size: usize, is_streamed: bool) -> SerializationBatch {
         let mut batch = SerializationBatch {
             buffer: WBuf::new(size, true),
             is_streamed,
             current_frame: CurrentFrame::None,
-            conduit,
         };
 
         // Bring the batch in a clear state
@@ -158,11 +150,13 @@ impl SerializationBatch {
     pub(crate) fn serialize_zenoh_fragment(
         &mut self,
         reliability: Reliability,
-        sn: ZInt,
+        priority: Priority,
+        sn_gen: &mut SeqNumGenerator,
         to_fragment: &mut WBuf,
         to_write: usize,
     ) -> usize {
         // Assume first that this is not the final fragment
+        let sn = sn_gen.get();
         let mut is_final = false;
         loop {
             // Mark the buffer for the writing operation
@@ -170,13 +164,9 @@ impl SerializationBatch {
             // Write the frame header
             let fragment = Some(is_final);
             let attachment = None;
-            let res = self.buffer.write_frame_header(
-                self.conduit.id,
-                reliability,
-                sn,
-                fragment,
-                attachment,
-            );
+            let res =
+                self.buffer
+                    .write_frame_header(priority, reliability, sn, fragment, attachment);
             if res {
                 // Compute the amount left
                 let space_left = self.buffer.capacity() - self.buffer.len();
@@ -194,7 +184,8 @@ impl SerializationBatch {
 
                 return written;
             } else {
-                // Revert the buffer
+                // Revert the buffer and the SN
+                sn_gen.set(sn);
                 self.buffer.revert();
                 return 0;
             }
@@ -206,7 +197,12 @@ impl SerializationBatch {
     /// # Arguments
     /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
     ///
-    pub(crate) fn serialize_zenoh_message(&mut self, message: &ZenohMessage) -> bool {
+    pub(crate) fn serialize_zenoh_message(
+        &mut self,
+        message: &ZenohMessage,
+        priority: Priority,
+        sn_gen: &mut SeqNumGenerator,
+    ) -> bool {
         // Keep track of eventual new frame and new sn
         let mut new_frame = None;
 
@@ -243,13 +239,8 @@ impl SerializationBatch {
         let res = if let Some(frame) = new_frame {
             // Acquire the lock on the sn generator
             let is_reliable = message.is_reliable();
-            let mut guard = if is_reliable {
-                zlock!(self.conduit.reliable)
-            } else {
-                zlock!(self.conduit.best_effort)
-            };
             // Get a new sequence number
-            let sn = guard.sn.get();
+            let sn = sn_gen.get();
 
             // Serialize the new frame and the zenoh message
             let reliability = if is_reliable {
@@ -259,17 +250,14 @@ impl SerializationBatch {
             };
             let res = self
                 .buffer
-                .write_frame_header(self.conduit.id, reliability, sn, None, None)
+                .write_frame_header(priority, reliability, sn, None, None)
                 && self.buffer.write_zenoh_message(message);
             if res {
                 self.current_frame = frame;
             } else {
                 // Restore the sequence number
-                guard.sn.set(sn);
+                sn_gen.set(sn);
             }
-            // Drop the guard
-            drop(guard);
-            // Return
             res
         } else {
             self.buffer.write_zenoh_message(message)
@@ -314,14 +302,12 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::super::core::{Channel, CongestionControl, Priority, Reliability, ResKey};
+    use super::super::core::{Channel, CongestionControl, Priority, Reliability, ResKey, ZInt};
     use super::super::io::{WBuf, ZBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
     use super::super::session::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
-    use super::SessionTransportConduitTx;
     use super::*;
     use std::convert::TryFrom;
-    use zenoh_util::zlock;
 
     fn serialize_no_fragmentation(batch_size: usize, payload_size: usize) {
         for is_streamed in [false, true].iter() {
@@ -332,9 +318,8 @@ mod tests {
 
             // Create the serialization batch
             let priority = Priority::default();
-            let conduit =
-                SessionTransportConduitTx::new(priority, 0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
-            let mut batch = SerializationBatch::new(batch_size, *is_streamed, conduit);
+            let mut sn_gen = SeqNumGenerator::new(0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
+            let mut batch = SerializationBatch::new(batch_size, *is_streamed);
 
             // Serialize the messages until the batch is full
             let mut smsgs_in: Vec<SessionMessage> = Vec::new();
@@ -377,7 +362,7 @@ mod tests {
                         Reliability::BestEffort
                     },
                 };
-                let congestion_control = CongestionControl::Block;
+                let congestion_control = CongestionControl::default();
                 let data_info = None;
                 let routing_context = None;
                 let reply_context = None;
@@ -394,7 +379,7 @@ mod tests {
                     attachment,
                 );
                 // Serialize the ZenohMessage
-                let res = batch.serialize_zenoh_message(&msg);
+                let res = batch.serialize_zenoh_message(&msg, channel.priority, &mut sn_gen);
                 if !res {
                     batch.write_len();
                     assert!(!zmsgs_in.is_empty());
@@ -435,19 +420,14 @@ mod tests {
     fn serialize_fragmentation(batch_size: usize, payload_size: usize) {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
-            let conduit = SessionTransportConduitTx::new(
-                Priority::default(),
-                0,
-                ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-            );
+            let mut sn_gen = SeqNumGenerator::new(0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
 
             for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
                 let channel = Channel {
-                    priority: conduit.id,
+                    priority: Priority::default(),
                     reliability: *reliability,
                 };
-                let congestion_control = CongestionControl::Block;
-
+                let congestion_control = CongestionControl::default();
                 // Create the ZenohMessage
                 let key = ResKey::RName("test".to_string());
                 let payload = ZBuf::from(vec![0u8; payload_size]);
@@ -466,14 +446,6 @@ mod tests {
                     attachment,
                 );
 
-                // Acquire the lock on the sn generators to ensure that we have
-                // sequential sequence numbers for all the fragments
-                let mut guard = if msg_in.is_reliable() {
-                    zlock!(conduit.reliable)
-                } else {
-                    zlock!(conduit.best_effort)
-                };
-
                 // Serialize the message
                 let mut wbuf = WBuf::new(batch_size, false);
                 wbuf.write_zenoh_message(&msg_in);
@@ -489,16 +461,11 @@ mod tests {
                 let mut to_write = wbuf.len();
                 while to_write > 0 {
                     // Create the serialization batch
-                    let mut batch =
-                        SerializationBatch::new(batch_size, *is_streamed, conduit.clone());
-                    let reliability = if msg_in.is_reliable() {
-                        Reliability::Reliable
-                    } else {
-                        Reliability::BestEffort
-                    };
+                    let mut batch = SerializationBatch::new(batch_size, *is_streamed);
                     let written = batch.serialize_zenoh_fragment(
-                        reliability,
-                        guard.sn.get(),
+                        msg_in.channel.reliability,
+                        msg_in.channel.priority,
+                        &mut sn_gen,
                         &mut wbuf,
                         to_write,
                     );

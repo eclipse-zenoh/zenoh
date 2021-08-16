@@ -517,7 +517,7 @@ fn transport_tcp_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
 }
 
-#[cfg(feature = "transport_tls")]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
 fn transport_tls_only() {
     task::block_on(async {

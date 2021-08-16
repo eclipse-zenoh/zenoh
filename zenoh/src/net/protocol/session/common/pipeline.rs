@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::batch::SerializationBatch;
-use super::conduit::SessionTransportConduitTx;
-use super::core::{Priority, Reliability};
+use super::conduit::{SessionTransportChannelTx, SessionTransportConduitTx};
+use super::core::Priority;
 use super::io::WBuf;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session::defaults::{
@@ -97,16 +97,11 @@ impl StageIn {
         capacity: usize,
         batch_size: usize,
         is_streamed: bool,
-        conduit: SessionTransportConduitTx,
         bytes_topull: Arc<AtomicUsize>,
     ) -> StageIn {
         let mut inner = VecDeque::<SerializationBatch>::with_capacity(capacity);
         for _ in 0..capacity {
-            inner.push_back(SerializationBatch::new(
-                batch_size,
-                is_streamed,
-                conduit.clone(),
-            ));
+            inner.push_back(SerializationBatch::new(batch_size, is_streamed));
         }
 
         StageIn {
@@ -263,7 +258,6 @@ impl TransmissionPipeline {
                 capacity,
                 batch_size,
                 is_streamed,
-                c.clone(),
                 bytes_in[i].clone(),
             ))));
         }
@@ -330,12 +324,19 @@ impl TransmissionPipeline {
 
     #[inline]
     pub(crate) fn push_zenoh_message(&self, message: ZenohMessage) {
-        // Check it is a valid conduit
+        // If the queue is not QoS, it means that we only have one priority with index 0.
         let queue = if self.is_qos() {
             message.channel.priority as usize
         } else {
             0
         };
+        // Lock the channel. We are the only one that will be writing on it.
+        let mut ch_guard = if message.is_reliable() {
+            zlock!(self.conduit[queue].reliable)
+        } else {
+            zlock!(self.conduit[queue].best_effort)
+        };
+        // Lock the stage in containing the serialization batches.
         let mut in_guard = zlock!(self.stage_in[queue]);
 
         macro_rules! zserialize {
@@ -343,7 +344,11 @@ impl TransmissionPipeline {
                 // Get the current serialization batch. Drop the message
                 // if no batches are available
                 let batch = zgetbatch!(self, queue, in_guard, message.is_droppable());
-                if batch.serialize_zenoh_message(&message) {
+                if batch.serialize_zenoh_message(
+                    &message,
+                    message.channel.priority,
+                    &mut ch_guard.sn,
+                ) {
                     self.bytes_in[queue].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return;
@@ -372,34 +377,24 @@ impl TransmissionPipeline {
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
-        self.fragment_zenoh_message(message, queue, in_guard);
+        self.fragment_zenoh_message(message, queue, ch_guard, in_guard);
     }
 
     fn fragment_zenoh_message(
         &self,
         message: ZenohMessage,
         queue: usize,
+        channel: MutexGuard<'_, SessionTransportChannelTx>,
         stage_in: MutexGuard<'_, StageIn>,
     ) {
         // Assign the stage_in to in_guard to avoid lifetime warnings
+        let mut ch_guard = channel;
         let mut in_guard = stage_in;
 
         // Take the expandable buffer and serialize the totality of the message
         let mut fragbuf = in_guard.fragbuf.take().unwrap();
         fragbuf.clear();
         fragbuf.write_zenoh_message(&message);
-
-        // Acquire the lock on the SN generator to ensure that we have all
-        // sequential sequence numbers for the fragments
-        let (ch, sn) = if message.is_reliable() {
-            (Reliability::Reliable, self.conduit[queue].reliable.clone())
-        } else {
-            (
-                Reliability::BestEffort,
-                self.conduit[queue].best_effort.clone(),
-            )
-        };
-        let mut guard = zlock!(sn);
 
         // Fragment the whole message
         let mut to_write = fragbuf.len();
@@ -408,11 +403,14 @@ impl TransmissionPipeline {
             // Treat all messages as non-droppable once we start fragmenting
             let batch = zgetbatch!(self, queue, in_guard, false);
 
-            // Get the frame SN
-            let sn = guard.sn.get();
-
             // Serialize the message
-            let written = batch.serialize_zenoh_fragment(ch, sn, &mut fragbuf, to_write);
+            let written = batch.serialize_zenoh_fragment(
+                message.channel.reliability,
+                message.channel.priority,
+                &mut ch_guard.sn,
+                &mut fragbuf,
+                to_write,
+            );
 
             // Update the amount of bytes left to write
             to_write -= written;
@@ -426,8 +424,6 @@ impl TransmissionPipeline {
                 drop(out_guard);
                 self.cond_canpull.notify_one();
             } else {
-                // Reinsert the SN back to the pool
-                guard.sn.set(sn);
                 log::warn!(
                     "Zenoh message dropped because it can not be fragmented: {:?}",
                     message
