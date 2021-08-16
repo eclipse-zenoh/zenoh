@@ -23,11 +23,12 @@ mod tests {
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::link::{Link, Locator};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
-    use zenoh::net::protocol::session::authenticator::SharedMemoryAuthenticator;
+    use zenoh::net::protocol::session::unicast::authenticator::SharedMemoryAuthenticator;
     use zenoh::net::protocol::session::{
         Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-        SessionManagerOptionalConfig,
+        SessionManagerConfigUnicast,
     };
+    use zenoh::net::CongestionControl;
     use zenoh_util::core::ZResult;
     use zenoh_util::zasync_executor_init;
 
@@ -58,10 +59,7 @@ mod tests {
     }
 
     impl SessionHandler for SHPeer {
-        fn new_session(
-            &self,
-            _session: Session,
-        ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+        fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
         }
@@ -123,59 +121,37 @@ mod tests {
 
         // Create a peer manager with zero-copy authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
-        let config = SessionManagerConfig {
-            version: 0,
-            whatami: whatami::PEER,
-            id: peer_shm01.clone(),
-            handler: peer_shm01_handler.clone(),
-        };
-        let opt_config = SessionManagerOptionalConfig {
-            lease: None,
-            keep_alive: None,
-            sn_resolution: None,
-            open_timeout: None,
-            open_incoming_pending: None,
-            batch_size: None,
-            max_sessions: None,
-            max_links: None,
-            peer_authenticator: Some(vec![SharedMemoryAuthenticator::new().into()]),
-            link_authenticator: None,
-            locator_property: None,
-        };
-        let peer_shm01_manager = SessionManager::new(config, Some(opt_config));
+        let config = SessionManagerConfig::builder()
+            .whatami(whatami::PEER)
+            .pid(peer_shm01.clone())
+            .unicast(
+                SessionManagerConfigUnicast::builder()
+                    .peer_authenticator(vec![SharedMemoryAuthenticator::new().into()])
+                    .build(),
+            )
+            .build(peer_shm01_handler.clone());
+        let peer_shm01_manager = SessionManager::new(config);
 
         // Create a peer manager with zero-copy authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
-        let config = SessionManagerConfig {
-            version: 0,
-            whatami: whatami::PEER,
-            id: peer_shm02.clone(),
-            handler: peer_shm02_handler.clone(),
-        };
-        let opt_config = SessionManagerOptionalConfig {
-            lease: None,
-            keep_alive: None,
-            sn_resolution: None,
-            open_timeout: None,
-            open_incoming_pending: None,
-            batch_size: None,
-            max_sessions: None,
-            max_links: None,
-            peer_authenticator: Some(vec![SharedMemoryAuthenticator::new().into()]),
-            link_authenticator: None,
-            locator_property: None,
-        };
-        let peer_shm02_manager = SessionManager::new(config, Some(opt_config));
+        let config = SessionManagerConfig::builder()
+            .whatami(whatami::PEER)
+            .pid(peer_shm02.clone())
+            .unicast(
+                SessionManagerConfigUnicast::builder()
+                    .peer_authenticator(vec![SharedMemoryAuthenticator::new().into()])
+                    .build(),
+            )
+            .build(peer_shm02_handler.clone());
+        let peer_shm02_manager = SessionManager::new(config);
 
         // Create a peer manager with zero-copy authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
-        let config = SessionManagerConfig {
-            version: 0,
-            whatami: whatami::PEER,
-            id: peer_net01.clone(),
-            handler: peer_net01_handler.clone(),
-        };
-        let peer_net01_manager = SessionManager::new(config, None);
+        let config = SessionManagerConfig::builder()
+            .whatami(whatami::PEER)
+            .pid(peer_net01.clone())
+            .build(peer_net01_handler.clone());
+        let peer_net01_manager = SessionManager::new(config);
 
         // Create the listener on the peer
         println!("\nSession SHM [1a]");
@@ -238,6 +214,7 @@ mod tests {
                 priority: Priority::default(),
                 reliability: Reliability::Reliable,
             };
+            let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
@@ -247,6 +224,7 @@ mod tests {
                 key,
                 payload,
                 channel,
+                congestion_control,
                 data_info,
                 routing_context,
                 reply_context,
@@ -296,6 +274,7 @@ mod tests {
                 priority: Priority::default(),
                 reliability: Reliability::Reliable,
             };
+            let congestion_control = CongestionControl::Block;
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
@@ -305,6 +284,7 @@ mod tests {
                 key,
                 payload,
                 channel,
+                congestion_control,
                 data_info,
                 routing_context,
                 reply_context,

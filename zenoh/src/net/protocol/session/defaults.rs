@@ -11,7 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::ZInt;
+use super::core::{whatami, WhatAmI, ZInt};
+
+// Zenoh version
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// | v_maj | v_min |
+// +-------+-------+
+pub const ZN_VERSION: u8 = 0x05;
+
+// Zenoh default whatami
+pub const ZN_DEFAULT_WHATAMI: WhatAmI = whatami::PEER;
 
 // The default sequence number resolution takes 4 bytes on the wire.
 // Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.

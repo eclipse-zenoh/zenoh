@@ -122,21 +122,6 @@ macro_rules! zasyncrecv {
     };
 }
 
-// This macro performs an upgrade on a weak pointer returning
-// a ZError with custom description in case of error
-#[macro_export]
-macro_rules! zweak {
-    ($var:expr, $descr:expr) => {
-        if let Some(inner) = $var.upgrade() {
-            inner
-        } else {
-            return zerror!(ZErrorKind::InvalidReference {
-                descr: $descr.to_string()
-            });
-        }
-    };
-}
-
 // This macro checks the boolean results of an operation and returns in case
 // the result is false. Basically, it implements the ? operator for booleans
 #[macro_export]

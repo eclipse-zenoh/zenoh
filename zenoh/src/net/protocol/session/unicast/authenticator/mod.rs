@@ -15,13 +15,14 @@ pub(super) mod attachment;
 #[cfg(feature = "zero-copy")]
 mod shm;
 mod userpassword;
+
 #[cfg(feature = "zero-copy")]
 use super::core;
 use super::core::{PeerId, Property, ZInt};
 #[cfg(feature = "zero-copy")]
 use super::io;
 use super::io::{WBuf, ZBuf};
-use super::link::{Link, Locator, LocatorProperty};
+use crate::net::protocol::link::{Link, Locator, LocatorProperty};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "zero-copy")]

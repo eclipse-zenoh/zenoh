@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::conduit::SessionTransportConduitTx;
 use super::core::{Reliability, ZInt};
 use super::io::WBuf;
 use super::proto::{SessionMessage, ZenohMessage};
-use super::SessionTransportConduitTx;
 use zenoh_util::zlock;
 
 type LengthType = u16;
@@ -47,7 +47,7 @@ enum CurrentFrame {
 /// | Keep Alive | Frame Reliable<Zenoh Message, Zenoh Message> | Frame Best Effort<Zenoh Message Fragment> |
 ///
 #[derive(Clone, Debug)]
-pub(super) struct SerializationBatch {
+pub(crate) struct SerializationBatch {
     // The buffer to perform the batching on
     buffer: WBuf,
     // It is a streamed batch
@@ -75,7 +75,7 @@ impl SerializationBatch {
     ///
     /// * `sn_best_effort` - The sequence number generator for the best effort channel.
     ///
-    pub(super) fn new(
+    pub(crate) fn new(
         size: usize,
         is_streamed: bool,
         conduit: SessionTransportConduitTx,
@@ -95,13 +95,13 @@ impl SerializationBatch {
 
     /// Verify that the [`SerializationBatch`][SerializationBatch] has no serialized bytes.
     #[inline(always)]
-    pub(super) fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Get the total number of bytes that have been serialized on the [`SerializationBatch`][SerializationBatch].
     #[inline(always)]
-    pub(super) fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         let len = self.buffer.len();
         if self.is_streamed() {
             len - LENGTH_BYTES.len()
@@ -113,13 +113,13 @@ impl SerializationBatch {
     /// Verify that the [`SerializationBatch`][SerializationBatch] is for a stream-based protocol, i.e., the first
     /// 2 bytes are reserved to encode the total amount of serialized bytes as 16-bits little endian.
     #[inline(always)]
-    pub(super) fn is_streamed(&self) -> bool {
+    pub(crate) fn is_streamed(&self) -> bool {
         self.is_streamed
     }
 
     /// Clear the [`SerializationBatch`][SerializationBatch] memory buffer and related internal state.
     #[inline(always)]
-    pub(super) fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.current_frame = CurrentFrame::None;
         self.buffer.clear();
         if self.is_streamed() {
@@ -130,7 +130,7 @@ impl SerializationBatch {
     /// In case the [`SerializationBatch`][SerializationBatch] is for a stream-based protocol, use the first 2 bytes
     /// to encode the total amount of serialized bytes as 16-bits little endian.
     #[inline(always)]
-    pub(super) fn write_len(&mut self) {
+    pub(crate) fn write_len(&mut self) {
         if self.is_streamed() {
             let length = self.len() as LengthType;
             let bits = self.buffer.get_first_slice_mut(..LENGTH_BYTES.len());
@@ -140,7 +140,7 @@ impl SerializationBatch {
 
     /// Get a `&[u8]` to access the internal memory buffer, usually for transmitting it on the network.
     #[inline(always)]
-    pub(super) fn as_bytes(&self) -> &[u8] {
+    pub(crate) fn as_bytes(&self) -> &[u8] {
         self.buffer.get_first_slice(..)
     }
 
@@ -155,7 +155,7 @@ impl SerializationBatch {
     ///
     /// * `to_write` - The amount of bytes that still need to be fragmented.
     ///
-    pub(super) fn serialize_zenoh_fragment(
+    pub(crate) fn serialize_zenoh_fragment(
         &mut self,
         reliability: Reliability,
         sn: ZInt,
@@ -206,7 +206,7 @@ impl SerializationBatch {
     /// # Arguments
     /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
     ///
-    pub(super) fn serialize_zenoh_message(&mut self, message: &ZenohMessage) -> bool {
+    pub(crate) fn serialize_zenoh_message(&mut self, message: &ZenohMessage) -> bool {
         // Keep track of eventual new frame and new sn
         let mut new_frame = None;
 
@@ -288,7 +288,7 @@ impl SerializationBatch {
     /// # Arguments
     /// * `message` - The [`SessionMessage`][SessionMessage] to serialize.
     ///
-    pub(super) fn serialize_session_message(&mut self, message: &SessionMessage) -> bool {
+    pub(crate) fn serialize_session_message(&mut self, message: &SessionMessage) -> bool {
         // Mark the write operation
         self.buffer.mark();
         let res = self.buffer.write_session_message(message);
@@ -303,7 +303,7 @@ impl SerializationBatch {
     }
 
     #[cfg(test)]
-    pub(super) fn get_serialized_messages(&self) -> &[u8] {
+    pub(crate) fn get_serialized_messages(&self) -> &[u8] {
         if self.is_streamed() {
             self.buffer.get_first_slice(LENGTH_BYTES.len()..)
         } else {
@@ -314,11 +314,11 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::super::core::{Channel, Priority, Reliability, ResKey};
+    use super::super::core::{Channel, CongestionControl, Priority, Reliability, ResKey};
     use super::super::io::{WBuf, ZBuf};
     use super::super::proto::{Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage};
     use super::super::session::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
-    use super::super::SessionTransportConduitTx;
+    use super::SessionTransportConduitTx;
     use super::*;
     use std::convert::TryFrom;
     use zenoh_util::zlock;
@@ -377,6 +377,7 @@ mod tests {
                         Reliability::BestEffort
                     },
                 };
+                let congestion_control = CongestionControl::Block;
                 let data_info = None;
                 let routing_context = None;
                 let reply_context = None;
@@ -386,6 +387,7 @@ mod tests {
                     key,
                     payload,
                     channel,
+                    congestion_control,
                     data_info,
                     routing_context,
                     reply_context,
@@ -444,6 +446,8 @@ mod tests {
                     priority: conduit.id,
                     reliability: *reliability,
                 };
+                let congestion_control = CongestionControl::Block;
+
                 // Create the ZenohMessage
                 let key = ResKey::RName("test".to_string());
                 let payload = ZBuf::from(vec![0u8; payload_size]);
@@ -455,6 +459,7 @@ mod tests {
                     key,
                     payload,
                     channel,
+                    congestion_control,
                     data_info,
                     routing_context,
                     reply_context,

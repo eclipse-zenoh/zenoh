@@ -147,6 +147,21 @@ impl Locator {
             Locator::UnixSocketStream(..) => LocatorProtocol::UnixSocketStream,
         }
     }
+
+    pub fn is_multicast(&self) -> bool {
+        match self {
+            #[cfg(feature = "transport_tcp")]
+            Locator::Tcp(l) => l.is_multicast(),
+            #[cfg(feature = "transport_udp")]
+            Locator::Udp(l) => l.is_multicast(),
+            #[cfg(feature = "transport_tls")]
+            Locator::Tls(l) => l.is_multicast(),
+            #[cfg(feature = "transport_quic")]
+            Locator::Quic(l) => l.is_multicast(),
+            #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+            Locator::UnixSocketStream(l) => l.is_multicast(),
+        }
+    }
 }
 
 impl fmt::Display for Locator {

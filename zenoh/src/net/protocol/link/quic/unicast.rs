@@ -12,308 +12,39 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
-use async_std::fs;
-use async_std::net::{SocketAddr, ToSocketAddrs};
+use super::*;
+use async_std::net::SocketAddr;
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
-pub use quinn::*;
+use quinn::*;
 use std::collections::HashMap;
 use std::fmt;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use webpki::{DnsName, DnsNameRef};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::*;
 use zenoh_util::sync::Signal;
-use zenoh_util::{zasynclock, zerror, zerror2, zread, zwrite};
+use zenoh_util::{zasynclock, zerror2, zread, zwrite};
 
-// Default ALPN protocol
-pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
-
-// Default MTU (QUIC PDU) in bytes.
-// NOTE: Since QUIC is a byte-stream oriented transport, theoretically it has
-//       no limit regarding the MTU. However, given the batching strategy
-//       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
-//       payload length in byte-streamed, the QUIC MTU is constrained to
-//       2^16 + 1 bytes (i.e., 65537).
-const QUIC_MAX_MTU: usize = 65_537;
-
-zconfigurable! {
-    // Default MTU (QUIC PDU) in bytes.
-    static ref QUIC_DEFAULT_MTU: usize = QUIC_MAX_MTU;
-    // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
-    // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
-    // More info on the LINGER option and its dynamics can be found at:
-    // https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable
-    static ref QUIC_LINGER_TIMEOUT: i32 = 10;
-    // Amount of time in microseconds to throttle the accept loop upon an error.
-    // Default set to 100 ms.
-    static ref QUIC_ACCEPT_THROTTLE_TIME: u64 = 100_000;
-}
-
-#[allow(unreachable_patterns)]
-async fn get_quic_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match locator {
-        Locator::Quic(addr) => match addr {
-            LocatorQuic::SocketAddr(addr) => Ok(*addr),
-            LocatorQuic::DnsName(addr) => match addr.to_socket_addrs().await {
-                Ok(mut addr_iter) => {
-                    if let Some(addr) = addr_iter.next() {
-                        Ok(addr)
-                    } else {
-                        let e = format!("Couldn't resolve QUIC locator: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
-                    }
-                }
-                Err(e) => {
-                    let e = format!("{}: {}", e, addr);
-                    zerror!(ZErrorKind::InvalidLocator { descr: e })
-                }
-            },
-        },
-        _ => {
-            let e = format!("Not a QUIC locator: {}", locator);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-#[allow(unreachable_patterns)]
-async fn get_quic_dns(locator: &Locator) -> ZResult<DnsName> {
-    match locator {
-        Locator::Quic(addr) => match addr {
-            LocatorQuic::SocketAddr(addr) => {
-                let e = format!("Couldn't get domain from SocketAddr: {}", addr);
-                zerror!(ZErrorKind::InvalidLocator { descr: e })
-            }
-            LocatorQuic::DnsName(addr) => {
-                // Separate the domain from the port.
-                // E.g. zenoh.io:7447 returns (zenoh.io, 7447).
-                let split: Vec<&str> = addr.split(':').collect();
-                match split.get(0) {
-                    Some(dom) => {
-                        let domain = DnsNameRef::try_from_ascii_str(dom).map_err(|e| {
-                            let e = e.to_string();
-                            zerror2!(ZErrorKind::InvalidLocator { descr: e })
-                        })?;
-                        Ok(domain.to_owned())
-                    }
-                    None => {
-                        let e = format!("Couldn't get domain for: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
-                    }
-                }
-            }
-        },
-        _ => {
-            let e = format!("Not a QUIC locator: {}", locator);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-#[allow(unreachable_patterns)]
-fn get_quic_prop(property: &LocatorProperty) -> ZResult<&LocatorPropertyQuic> {
-    match property {
-        LocatorProperty::Quic(prop) => Ok(prop),
-        _ => {
-            let e = "Not a QUIC property".to_string();
-            log::debug!("{}", e);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-/*************************************/
-/*             LOCATOR               */
-/*************************************/
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum LocatorQuic {
-    SocketAddr(SocketAddr),
-    DnsName(String),
-}
-
-impl FromStr for LocatorQuic {
-    type Err = ZError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.parse() {
-            Ok(addr) => Ok(LocatorQuic::SocketAddr(addr)),
-            Err(_) => Ok(LocatorQuic::DnsName(s.to_string())),
-        }
-    }
-}
-
-impl fmt::Display for LocatorQuic {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LocatorQuic::SocketAddr(addr) => write!(f, "{}", addr)?,
-            LocatorQuic::DnsName(addr) => write!(f, "{}", addr)?,
-        }
-        Ok(())
-    }
-}
-
-/*************************************/
-/*            PROPERTY               */
-/*************************************/
-#[derive(Clone)]
-pub struct LocatorPropertyQuic {
-    client: Option<ClientConfigBuilder>,
-    server: Option<ServerConfigBuilder>,
-}
-
-impl LocatorPropertyQuic {
-    fn new(
-        client: Option<ClientConfigBuilder>,
-        server: Option<ServerConfigBuilder>,
-    ) -> LocatorPropertyQuic {
-        LocatorPropertyQuic { client, server }
-    }
-
-    pub(super) async fn from_properties(
-        config: &ConfigProperties,
-    ) -> ZResult<Option<LocatorProperty>> {
-        let mut client_config: Option<ClientConfigBuilder> = None;
-        if let Some(tls_ca_certificate) = config.get(&ZN_TLS_ROOT_CA_CERTIFICATE_KEY) {
-            let ca = fs::read(tls_ca_certificate).await.map_err(|e| {
-                let e = format!("Invalid QUIC CA certificate file: {}", e);
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })?;
-            let ca = Certificate::from_pem(&ca).map_err(|e| {
-                let e = format!("Invalid QUIC CA certificate file: {}", e);
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })?;
-
-            let mut cc = ClientConfigBuilder::default();
-            cc.protocols(ALPN_QUIC_HTTP);
-            cc.add_certificate_authority(ca).map_err(|e| {
-                let e = format!("Invalid QUIC CA certificate file: {}", e);
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })?;
-
-            client_config = Some(cc);
-            log::debug!("QUIC client is configured");
-        }
-
-        let mut server_config: Option<ServerConfigBuilder> = None;
-        if let Some(tls_server_private_key) = config.get(&ZN_TLS_SERVER_PRIVATE_KEY_KEY) {
-            if let Some(tls_server_certificate) = config.get(&ZN_TLS_SERVER_CERTIFICATE_KEY) {
-                let pkey = fs::read(tls_server_private_key).await.map_err(|e| {
-                    let e = format!("Invalid TLS private key file: {}", e);
-                    zerror2!(ZErrorKind::IoError { descr: e })
-                })?;
-                let keys = PrivateKey::from_pem(&pkey).unwrap();
-
-                let certs = fs::read(tls_server_certificate).await.map_err(|e| {
-                    let e = format!("Invalid TLS server certificate file: {}", e);
-                    zerror2!(ZErrorKind::IoError { descr: e })
-                })?;
-                let certs = CertificateChain::from_pem(&certs).map_err(|e| {
-                    let e = format!("Invalid TLS server certificate file: {}", e);
-                    zerror2!(ZErrorKind::IoError { descr: e })
-                })?;
-
-                let mut tc = TransportConfig::default();
-                // We do not accept unidireactional streams.
-                tc.max_concurrent_uni_streams(0).map_err(|e| {
-                    let e = format!("Invalid QUIC server configuration: {}", e);
-                    zerror2!(ZErrorKind::IoError { descr: e })
-                })?;
-                // For the time being we only allow one bidirectional stream
-                tc.max_concurrent_bidi_streams(1).map_err(|e| {
-                    let e = format!("Invalid QUIC server configuration: {}", e);
-                    zerror2!(ZErrorKind::IoError { descr: e })
-                })?;
-                let mut sc = ServerConfig::default();
-                sc.transport = Arc::new(tc);
-                let mut sc = ServerConfigBuilder::new(sc);
-                sc.protocols(ALPN_QUIC_HTTP);
-                sc.certificate(certs, keys).map_err(|e| {
-                    let e = format!("Invalid TLS server configuration: {}", e);
-                    zerror2!(ZErrorKind::Other { descr: e })
-                })?;
-
-                server_config = Some(sc);
-                log::debug!("QUIC server is configured");
-            }
-        }
-
-        if client_config.is_none() && server_config.is_none() {
-            Ok(None)
-        } else {
-            Ok(Some((client_config, server_config).into()))
-        }
-    }
-}
-
-impl From<LocatorPropertyQuic> for LocatorProperty {
-    fn from(property: LocatorPropertyQuic) -> LocatorProperty {
-        LocatorProperty::Quic(property)
-    }
-}
-
-impl From<ClientConfigBuilder> for LocatorProperty {
-    fn from(client: ClientConfigBuilder) -> LocatorProperty {
-        Self::from(LocatorPropertyQuic::new(Some(client), None))
-    }
-}
-
-impl From<ServerConfigBuilder> for LocatorProperty {
-    fn from(server: ServerConfigBuilder) -> LocatorProperty {
-        Self::from(LocatorPropertyQuic::new(None, Some(server)))
-    }
-}
-
-impl From<(Option<ClientConfigBuilder>, Option<ServerConfigBuilder>)> for LocatorProperty {
-    fn from(tuple: (Option<ClientConfigBuilder>, Option<ServerConfigBuilder>)) -> LocatorProperty {
-        Self::from(LocatorPropertyQuic::new(tuple.0, tuple.1))
-    }
-}
-
-impl From<(Option<ServerConfigBuilder>, Option<ClientConfigBuilder>)> for LocatorProperty {
-    fn from(tuple: (Option<ServerConfigBuilder>, Option<ClientConfigBuilder>)) -> LocatorProperty {
-        Self::from(LocatorPropertyQuic::new(tuple.1, tuple.0))
-    }
-}
-
-impl From<(ServerConfigBuilder, ClientConfigBuilder)> for LocatorProperty {
-    fn from(tuple: (ServerConfigBuilder, ClientConfigBuilder)) -> LocatorProperty {
-        Self::from((Some(tuple.0), Some(tuple.1)))
-    }
-}
-
-impl From<(ClientConfigBuilder, ServerConfigBuilder)> for LocatorProperty {
-    fn from(tuple: (ClientConfigBuilder, ServerConfigBuilder)) -> LocatorProperty {
-        Self::from((Some(tuple.0), Some(tuple.1)))
-    }
-}
-
-/*************************************/
-/*              LINK                 */
-/*************************************/
-pub struct LinkQuic {
+pub struct LinkUnicastQuic {
     connection: NewConnection,
     src_addr: SocketAddr,
     send: AsyncMutex<SendStream>,
     recv: AsyncMutex<RecvStream>,
 }
 
-impl LinkQuic {
+impl LinkUnicastQuic {
     fn new(
         connection: NewConnection,
         src_addr: SocketAddr,
         send: SendStream,
         recv: RecvStream,
-    ) -> LinkQuic {
+    ) -> LinkUnicastQuic {
         // Build the Quic object
-        LinkQuic {
+        LinkUnicastQuic {
             connection,
             src_addr,
             send: AsyncMutex::new(send),
@@ -323,7 +54,7 @@ impl LinkQuic {
 }
 
 #[async_trait]
-impl LinkTrait for LinkQuic {
+impl LinkTrait for LinkUnicastQuic {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
@@ -411,13 +142,13 @@ impl LinkTrait for LinkQuic {
     }
 }
 
-impl Drop for LinkQuic {
+impl Drop for LinkUnicastQuic {
     fn drop(&mut self) {
         self.connection.connection.close(VarInt::from_u32(0), &[0]);
     }
 }
 
-impl fmt::Display for LinkQuic {
+impl fmt::Display for LinkUnicastQuic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -429,7 +160,7 @@ impl fmt::Display for LinkQuic {
     }
 }
 
-impl fmt::Debug for LinkQuic {
+impl fmt::Debug for LinkUnicastQuic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Quic")
             .field("src", &self.src_addr)
@@ -441,19 +172,19 @@ impl fmt::Debug for LinkQuic {
 /*************************************/
 /*          LISTENER                 */
 /*************************************/
-struct ListenerQuic {
+struct ListenerUnicastQuic {
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
 }
 
-impl ListenerQuic {
+impl ListenerUnicastQuic {
     fn new(
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
-    ) -> ListenerQuic {
-        ListenerQuic {
+    ) -> ListenerUnicastQuic {
+        ListenerUnicastQuic {
             active,
             signal,
             handle,
@@ -461,12 +192,12 @@ impl ListenerQuic {
     }
 }
 
-pub struct LinkManagerQuic {
+pub struct LinkManagerUnicastQuic {
     manager: SessionManager,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerQuic>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastQuic>>>,
 }
 
-impl LinkManagerQuic {
+impl LinkManagerUnicastQuic {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
@@ -476,7 +207,7 @@ impl LinkManagerQuic {
 }
 
 #[async_trait]
-impl LinkManagerTrait for LinkManagerQuic {
+impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, locator: &Locator, ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let domain = get_quic_dns(locator).await?;
         let addr = get_quic_addr(locator).await?;
@@ -530,7 +261,7 @@ impl LinkManagerTrait for LinkManagerQuic {
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
 
-        let link = Arc::new(LinkQuic::new(quic_conn, src_addr, send, recv));
+        let link = Arc::new(LinkUnicastQuic::new(quic_conn, src_addr, send, recv));
 
         Ok(Link(link))
     }
@@ -589,7 +320,7 @@ impl LinkManagerTrait for LinkManagerQuic {
         });
 
         // Initialize the QuicAcceptor
-        let listener = ListenerQuic::new(active, signal, handle);
+        let listener = ListenerUnicastQuic::new(active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
@@ -725,10 +456,10 @@ async fn accept_task(
         let dst_addr = quic_conn.connection.remote_address();
         log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
         // Create the new link object
-        let link = Arc::new(LinkQuic::new(quic_conn, src_addr, send, recv));
+        let link = Arc::new(LinkUnicastQuic::new(quic_conn, src_addr, send, recv));
 
         // Communicate the new link to the initial session manager
-        manager.handle_new_link(Link(link), None).await;
+        manager.handle_new_link_unicast(Link(link), None).await;
     }
 
     Ok(())

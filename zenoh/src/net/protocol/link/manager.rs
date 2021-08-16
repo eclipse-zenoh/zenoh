@@ -12,35 +12,55 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #[cfg(feature = "transport_quic")]
-use super::quic::LinkManagerQuic;
+use super::quic::LinkManagerUnicastQuic;
 use super::session::SessionManager;
 #[cfg(feature = "transport_tcp")]
-use super::tcp::LinkManagerTcp;
+use super::tcp::LinkManagerUnicastTcp;
 #[cfg(feature = "transport_tls")]
-use super::tls::LinkManagerTls;
+use super::tls::LinkManagerUnicastTls;
 #[cfg(feature = "transport_udp")]
-use super::udp::LinkManagerUdp;
+use super::udp::LinkManagerUnicastUdp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-use super::unixsock_stream::LinkManagerUnixSocketStream;
-use super::{LinkManager, LocatorProtocol};
+use super::unixsock_stream::LinkManagerUnicastUnixSocketStream;
+use super::{Link, Locator, LocatorProperty, LocatorProtocol};
 use async_std::sync::Arc;
+use async_trait::async_trait;
+use zenoh_util::core::ZResult;
 
-pub struct LinkManagerBuilder;
+#[async_trait]
+pub trait LinkManagerUnicastTrait: Send + Sync {
+    async fn new_link(&self, dst: &Locator, property: Option<&LocatorProperty>) -> ZResult<Link>;
+    async fn new_listener(
+        &self,
+        locator: &Locator,
+        property: Option<&LocatorProperty>,
+    ) -> ZResult<Locator>;
+    async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
+    fn get_listeners(&self) -> Vec<Locator>;
+    fn get_locators(&self) -> Vec<Locator>;
+}
 
-impl LinkManagerBuilder {
-    pub(crate) fn make(manager: SessionManager, protocol: &LocatorProtocol) -> LinkManager {
+pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
+
+pub struct LinkManagerBuilderUnicast;
+
+impl LinkManagerBuilderUnicast {
+    pub(crate) fn make(
+        manager: SessionManager,
+        protocol: &LocatorProtocol,
+    ) -> ZResult<LinkManagerUnicast> {
         match protocol {
             #[cfg(feature = "transport_tcp")]
-            LocatorProtocol::Tcp => Arc::new(LinkManagerTcp::new(manager)),
+            LocatorProtocol::Tcp => Ok(Arc::new(LinkManagerUnicastTcp::new(manager))),
             #[cfg(feature = "transport_udp")]
-            LocatorProtocol::Udp => Arc::new(LinkManagerUdp::new(manager)),
+            LocatorProtocol::Udp => Ok(Arc::new(LinkManagerUnicastUdp::new(manager))),
             #[cfg(feature = "transport_tls")]
-            LocatorProtocol::Tls => Arc::new(LinkManagerTls::new(manager)),
+            LocatorProtocol::Tls => Ok(Arc::new(LinkManagerUnicastTls::new(manager))),
             #[cfg(feature = "transport_quic")]
-            LocatorProtocol::Quic => Arc::new(LinkManagerQuic::new(manager)),
+            LocatorProtocol::Quic => Ok(Arc::new(LinkManagerUnicastQuic::new(manager))),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LocatorProtocol::UnixSocketStream => {
-                Arc::new(LinkManagerUnixSocketStream::new(manager))
+                Ok(Arc::new(LinkManagerUnicastUnixSocketStream::new(manager)))
             }
         }
     }

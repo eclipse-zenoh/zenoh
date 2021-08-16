@@ -17,11 +17,13 @@ use super::authenticator::{
 use super::core::{PeerId, Property, WhatAmI, ZInt};
 use super::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
 use super::io::{WBuf, ZBuf, ZSlice};
-use super::link::Link;
+use super::manager::Opened;
 use super::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
 };
-use super::{Opened, Session, SessionConfig, SessionManager};
+use super::session::SessionManager;
+use super::{SessionConfigUnicast, SessionUnicast};
+use crate::net::protocol::link::Link;
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::hmac;
@@ -113,7 +115,7 @@ async fn close_link(
     // Close the link
     let _ = link.close().await;
     // Notify the authenticators
-    for pa in manager.config.peer_authenticator.iter() {
+    for pa in manager.config.unicast.peer_authenticator.iter() {
         pa.handle_link_err(auth_link).await;
     }
 }
@@ -131,7 +133,7 @@ async fn open_send_init_syn(
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<OpenInitSynOutput> {
     let mut auth = PeerAuthenticatorOutput::default();
-    for pa in manager.config.peer_authenticator.iter() {
+    for pa in manager.config.unicast.peer_authenticator.iter() {
         let ps = pa
             .get_init_syn_properties(auth_link, &manager.config.pid)
             .await
@@ -231,7 +233,7 @@ async fn open_recv_init_ack(
         };
 
     // Check if a session is already open with the target peer
-    let mut guard = zasynclock!(manager.opened);
+    let mut guard = zasynclock!(manager.state.unicast.opened);
     let (sn_resolution, initial_sn_tx, is_opened) = if let Some(s) = guard.get(&init_ack_pid) {
         if let Some(sn_resolution) = init_ack_sn_resolution {
             if sn_resolution != s.sn_resolution {
@@ -278,7 +280,7 @@ async fn open_recv_init_ack(
         session: input.auth_session,
         ..Default::default()
     };
-    for pa in manager.config.peer_authenticator.iter() {
+    for pa in manager.config.unicast.peer_authenticator.iter() {
         let ps = pa
             .handle_init_ack(
                 auth_link,
@@ -332,7 +334,7 @@ async fn open_send_open_syn(
     input: OpenInitAckOutput,
 ) -> IResult<OpenOpenSynOutput> {
     // Build and send an OpenSyn message
-    let lease = manager.config.lease;
+    let lease = manager.config.unicast.lease;
     let message = SessionMessage::make_open_syn(
         lease,
         input.initial_sn_tx,
@@ -412,7 +414,7 @@ async fn open_recv_open_ack(
         }
         None => vec![],
     };
-    for pa in manager.config.peer_authenticator.iter() {
+    for pa in manager.config.unicast.peer_authenticator.iter() {
         let _ = pa
             .handle_open_ack(auth_link, &opean_ack_properties)
             .await
@@ -443,7 +445,7 @@ async fn open_stages(
     open_recv_open_ack(manager, link, auth_link, output).await
 }
 
-pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<Session> {
+pub(crate) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<SessionUnicast> {
     let auth_link = AuthenticatedPeerLink {
         src: link.get_src(),
         dst: link.get_src(),
@@ -460,7 +462,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         }
     };
 
-    let config = SessionConfig {
+    let config = SessionConfigUnicast {
         peer: info.pid.clone(),
         whatami: info.whatami,
         sn_resolution: info.sn_resolution,
@@ -469,7 +471,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         is_shm: info.auth_session.is_shm,
         is_qos: info.is_qos,
     };
-    let res = manager.init_session(config);
+    let res = manager.init_session_unicast(config);
     let session = match res {
         Ok(s) => s,
         Err(e) => {
@@ -491,7 +493,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         //       check which considers a link as failed when no messages are received in 3.5 times the
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
         //       session lease.
-        let keep_alive = manager.config.keep_alive.min(info.lease / 4);
+        let keep_alive = manager.config.unicast.keep_alive.min(info.lease / 4);
         let _ = transport.add_link(link.clone())?;
 
         // Start the TX loop
@@ -510,7 +512,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
                     // NOTE: the read loop of the link the open message was sent on remains blocked
                     //       until the new_session() returns. The read_loop in the various links
                     //       waits for any eventual transport to associate to.
-                    let callback = manager.config.handler.new_session(session.clone())?;
+                    let callback = manager.config.handler.new_session(session.clone().into())?;
                     // Set the callback on the transport
                     let _ = transport.set_callback(callback);
                 }
@@ -522,7 +524,7 @@ pub(super) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
     }
     drop(a_guard);
 
-    zasynclock!(manager.opened).remove(&info.pid);
+    zasynclock!(manager.state.unicast.opened).remove(&info.pid);
 
     Ok(session)
 }
@@ -581,20 +583,18 @@ async fn accept_recv_init_syn(
         };
 
     // Check if we are allowed to open more links if the session is established
-    if let Some(s) = manager.get_session(&init_syn_pid) {
+    if let Some(s) = manager.get_session_unicast(&init_syn_pid) {
         // Check if we have reached maximum number of links for this session
-        if let Some(limit) = manager.config.max_links {
-            let links = s.get_links().map_err(|e| (e, None))?;
-            if links.len() >= limit {
-                let e = format!(
-                    "Rejecting Open on link {} because of maximum links limit reached for peer: {}",
-                    link, init_syn_pid
-                );
-                return Err((
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(smsg::close_reason::INVALID),
-                ));
-            }
+        let links = s.get_transport().map_err(|e| (e, None))?.get_links();
+        if links.len() >= manager.config.unicast.max_links {
+            let e = format!(
+                "Rejecting Open on link {} because of maximum links ({}) limit reached for peer: {}",
+                manager.config.unicast.max_links, link, init_syn_pid
+            );
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(smsg::close_reason::INVALID),
+            ));
         }
     }
 
@@ -625,7 +625,7 @@ async fn accept_recv_init_syn(
         None => vec![],
     };
     let mut auth = PeerAuthenticatorOutput::default();
-    for pa in manager.config.peer_authenticator.iter() {
+    for pa in manager.config.unicast.peer_authenticator.iter() {
         let ps = pa
             .handle_init_syn(
                 auth_link,
@@ -690,7 +690,7 @@ async fn accept_send_init_ack(
 
     // Compute and store cookie hash
     let hash = hmac::digest(&encrypted);
-    zasynclock!(manager.incoming).insert(link.clone(), Some(hash));
+    zasynclock!(manager.state.unicast.incoming).insert(link.clone(), Some(hash));
 
     // Send the cookie
     let cookie: ZSlice = encrypted.into();
@@ -770,7 +770,7 @@ async fn accept_recv_open_syn(
     let encrypted = open_syn_cookie.to_vec();
 
     // Verify that the cookie is the one we sent
-    match zasynclock!(manager.incoming).get(link) {
+    match zasynclock!(manager.state.unicast.incoming).get(link) {
         Some(cookie_hash) => match cookie_hash {
             Some(cookie_hash) => {
                 if cookie_hash != &hmac::digest(&encrypted) {
@@ -828,7 +828,7 @@ async fn accept_recv_open_syn(
         session: input.auth_session,
         ..Default::default()
     };
-    for pa in manager.config.peer_authenticator.iter() {
+    for pa in manager.config.unicast.peer_authenticator.iter() {
         let ps = pa
             .handle_open_syn(auth_link, &open_syn_properties)
             .await
@@ -848,7 +848,7 @@ async fn accept_recv_open_syn(
 
 // Validate the OpenSyn cookie and eventually initialize a new session
 struct AcceptInitSessionOutput {
-    session: Session,
+    session: SessionUnicast,
     initial_sn: ZInt,
     lease: ZInt,
     open_ack_attachment: Option<Attachment>,
@@ -862,7 +862,7 @@ async fn accept_init_session(
     // Initialize the session if it is new
     // NOTE: Keep the lock on the manager.opened and use it to protect concurrent
     //       addition of new sessions and links
-    let mut guard = zasynclock!(manager.opened);
+    let mut guard = zasynclock!(manager.state.unicast.opened);
 
     let open_ack_initial_sn = match guard.get(&input.cookie.pid) {
         Some(opened) => {
@@ -904,7 +904,7 @@ async fn accept_init_session(
         }
     };
 
-    let config = SessionConfig {
+    let config = SessionConfigUnicast {
         peer: input.cookie.pid.clone(),
         whatami: input.cookie.whatami,
         sn_resolution: input.cookie.sn_resolution,
@@ -914,7 +914,7 @@ async fn accept_init_session(
         is_qos: input.cookie.is_qos,
     };
     let session = manager
-        .init_session(config)
+        .init_session_unicast(config)
         .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
 
     // Retrieve the session's transport
@@ -940,7 +940,7 @@ async fn accept_init_session(
 
 // Send an OpenAck
 struct AcceptOpenAckOutput {
-    session: Session,
+    session: SessionUnicast,
     lease: ZInt,
 }
 async fn accept_send_open_ack(
@@ -951,7 +951,7 @@ async fn accept_send_open_ack(
 ) -> ZResult<AcceptOpenAckOutput> {
     // Build OpenAck message
     let message = SessionMessage::make_open_ack(
-        manager.config.lease,
+        manager.config.unicast.lease,
         input.initial_sn,
         input.open_ack_attachment,
     );
@@ -987,7 +987,7 @@ async fn accept_finalize_session(
         //       check which considers a link as failed when no messages are received in 3.5 times the
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
         //       session lease.
-        let keep_alive = manager.config.keep_alive.min(input.lease / 4);
+        let keep_alive = manager.config.unicast.keep_alive.min(input.lease / 4);
         // Start the TX loop
         let _ = transport.start_tx(link, keep_alive, manager.config.batch_size)?;
 
@@ -1007,7 +1007,7 @@ async fn accept_finalize_session(
                     let callback = manager
                         .config
                         .handler
-                        .new_session(input.session.clone())
+                        .new_session(input.session.clone().into())
                         .map_err(|e| {
                             let e = format!(
                                 "Rejecting OpenSyn on link: {}. New session error: {:?}",
@@ -1050,7 +1050,7 @@ async fn accept_session_stages(
     accept_finalize_session(manager, link, auth_link, output).await
 }
 
-pub(super) async fn accept_link(
+pub(crate) async fn accept_link(
     manager: &SessionManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
@@ -1067,7 +1067,10 @@ pub(super) async fn accept_link(
     let session = output.session.clone();
     let res = accept_session_stages(manager, link, auth_link, output).await;
     if let Err(e) = res {
-        let _ = session.close().await;
+        let _ = session
+            .get_transport()?
+            .close(smsg::close_reason::GENERIC)
+            .await;
         return Err(e);
     }
 

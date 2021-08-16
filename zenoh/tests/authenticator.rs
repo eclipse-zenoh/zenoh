@@ -20,11 +20,11 @@ use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 #[cfg(feature = "zero-copy")]
-use zenoh::net::protocol::session::authenticator::SharedMemoryAuthenticator;
-use zenoh::net::protocol::session::authenticator::UserPasswordAuthenticator;
+use zenoh::net::protocol::session::unicast::authenticator::SharedMemoryAuthenticator;
+use zenoh::net::protocol::session::unicast::authenticator::UserPasswordAuthenticator;
 use zenoh::net::protocol::session::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    SessionManagerConfig, SessionManagerConfigUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -41,10 +41,7 @@ impl SHRouterAuthenticator {
 }
 
 impl SessionHandler for SHRouterAuthenticator {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(MHRouterAuthenticator::new()))
     }
 }
@@ -81,11 +78,8 @@ impl SHClientAuthenticator {
 }
 
 impl SessionHandler for SHClientAuthenticator {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(DummySessionEventHandler::new()))
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+        Ok(Arc::new(DummySessionEventHandler::default()))
     }
 }
 
@@ -110,111 +104,75 @@ async fn authenticator_user_password(
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-
     let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     lookup.insert(user01.clone().into(), password01.clone().into());
     lookup.insert(user03.clone().into(), password03.clone().into());
 
     let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_router.clone().into()]),
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let router_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(router_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .peer_authenticator(vec![peer_authenticator_router.clone().into()])
+                .build(),
+        )
+        .build(router_handler.clone());
+    let router_manager = SessionManager::new(config);
 
     // Create the transport session manager for the first client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client01_id.clone(),
-        handler: Arc::new(SHClientAuthenticator::new()),
-    };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client01 = UserPasswordAuthenticator::new(
         lookup,
         Some((user01.clone().into(), password01.clone().into())),
     );
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_client01.into()]),
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let client01_manager = SessionManager::new(config, Some(opt_config));
+
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client01_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .peer_authenticator(vec![peer_authenticator_client01.into()])
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::new()));
+    let client01_manager = SessionManager::new(config);
 
     // Create the transport session manager for the second client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client02_id.clone(),
-        handler: Arc::new(SHClientAuthenticator::new()),
-    };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client02 = UserPasswordAuthenticator::new(
         lookup,
         Some((user02.clone().into(), password02.clone().into())),
     );
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_client02.into()]),
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let client02_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client02_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .peer_authenticator(vec![peer_authenticator_client02.into()])
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::new()));
+    let client02_manager = SessionManager::new(config);
 
     // Create the transport session manager for the third client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client03_id.clone(),
-        handler: Arc::new(SHClientAuthenticator::new()),
-    };
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client03 =
         UserPasswordAuthenticator::new(lookup, Some((user03.into(), password03.into())));
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_client03.into()]),
-        link_authenticator: None,
-        locator_property,
-    };
-    let client03_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client03_id.clone())
+        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .peer_authenticator(vec![peer_authenticator_client03.into()])
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::new()));
+    let client03_manager = SessionManager::new(config);
 
     /* [1] */
     println!("\nSession Authenticator UserPassword [1a1]");
@@ -315,51 +273,32 @@ async fn authenticator_shared_memory(
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-
     let peer_authenticator_router = SharedMemoryAuthenticator::new();
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_router.into()]),
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let router_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(router_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .peer_authenticator(vec![peer_authenticator_router.into()])
+                .build(),
+        )
+        .build(router_handler.clone());
+    let router_manager = SessionManager::new(config);
 
     // Create the transport session manager for the first client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client_id.clone(),
-        handler: Arc::new(SHClientAuthenticator::new()),
-    };
     let peer_authenticator_client = SharedMemoryAuthenticator::new();
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: Some(vec![peer_authenticator_client.into()]),
-        link_authenticator: None,
-        locator_property,
-    };
-    let client_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(client_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .peer_authenticator(vec![peer_authenticator_client.into()])
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::new()));
+    let client_manager = SessionManager::new(config);
 
     /* [1] */
     println!("\nSession Authenticator SharedMemory [1a1]");
@@ -567,10 +506,11 @@ fn authenticator_quic() {
         zasync_executor_init!();
     });
 
-    use zenoh::net::protocol::link::quic::{
+    use quinn::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
-        ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,
+        ServerConfigBuilder, TransportConfig,
     };
+    use zenoh::net::protocol::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real

@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
-use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use super::*;
+use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -22,101 +22,14 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::Signal;
-use zenoh_util::{zerror, zerror2, zread, zwrite};
+use zenoh_util::{zerror2, zread, zwrite};
 
-// Default MTU (TCP PDU) in bytes.
-// NOTE: Since TCP is a byte-stream oriented transport, theoretically it has
-//       no limit regarding the MTU. However, given the batching strategy
-//       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
-//       payload length in byte-streamed, the TCP MTU is constrained to
-//       2^16 + 1 bytes (i.e., 65537).
-const TCP_MAX_MTU: usize = 65_537;
-
-zconfigurable! {
-    // Default MTU (TCP PDU) in bytes.
-    static ref TCP_DEFAULT_MTU: usize = TCP_MAX_MTU;
-    // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
-    // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
-    // More info on the LINGER option and its dynamics can be found at:
-    // https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable
-    static ref TCP_LINGER_TIMEOUT: i32 = 10;
-    // Amount of time in microseconds to throttle the accept loop upon an error.
-    // Default set to 100 ms.
-    static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
-}
-
-#[allow(unreachable_patterns)]
-async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match locator {
-        Locator::Tcp(addr) => match addr {
-            LocatorTcp::SocketAddr(addr) => Ok(*addr),
-            LocatorTcp::DnsName(addr) => match addr.to_socket_addrs().await {
-                Ok(mut addr_iter) => {
-                    if let Some(addr) = addr_iter.next() {
-                        Ok(addr)
-                    } else {
-                        let e = format!("Couldn't resolve TCP locator: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
-                    }
-                }
-                Err(e) => {
-                    let e = format!("{}: {}", e, addr);
-                    zerror!(ZErrorKind::InvalidLocator { descr: e })
-                }
-            },
-        },
-        _ => {
-            let e = format!("Not a TCP locator: {}", locator);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-/*************************************/
-/*             LOCATOR               */
-/*************************************/
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum LocatorTcp {
-    SocketAddr(SocketAddr),
-    DnsName(String),
-}
-
-impl FromStr for LocatorTcp {
-    type Err = ZError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.parse() {
-            Ok(addr) => Ok(LocatorTcp::SocketAddr(addr)),
-            Err(_) => Ok(LocatorTcp::DnsName(s.to_string())),
-        }
-    }
-}
-
-impl fmt::Display for LocatorTcp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LocatorTcp::SocketAddr(addr) => write!(f, "{}", addr)?,
-            LocatorTcp::DnsName(addr) => write!(f, "{}", addr)?,
-        }
-        Ok(())
-    }
-}
-
-/*************************************/
-/*            PROPERTY               */
-/*************************************/
-pub type LocatorPropertyTcp = ();
-
-/*************************************/
-/*              LINK                 */
-/*************************************/
-pub struct LinkTcp {
+pub struct LinkUnicastTcp {
     // The underlying socket as returned from the async-std library
     socket: TcpStream,
     // The source socket address of this link (address used on the local host)
@@ -125,8 +38,8 @@ pub struct LinkTcp {
     dst_addr: SocketAddr,
 }
 
-impl LinkTcp {
-    fn new(socket: TcpStream, src_addr: SocketAddr, dst_addr: SocketAddr) -> LinkTcp {
+impl LinkUnicastTcp {
+    fn new(socket: TcpStream, src_addr: SocketAddr, dst_addr: SocketAddr) -> LinkUnicastTcp {
         // Set the TCP nodelay option
         if let Err(err) = socket.set_nodelay(true) {
             log::warn!(
@@ -153,7 +66,7 @@ impl LinkTcp {
         }
 
         // Build the Tcp object
-        LinkTcp {
+        LinkUnicastTcp {
             socket,
             src_addr,
             dst_addr,
@@ -162,7 +75,7 @@ impl LinkTcp {
 }
 
 #[async_trait]
-impl LinkTrait for LinkTcp {
+impl LinkTrait for LinkUnicastTcp {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TCP link: {}", self);
         // Close the underlying TCP socket
@@ -231,21 +144,21 @@ impl LinkTrait for LinkTcp {
     }
 }
 
-impl Drop for LinkTcp {
+impl Drop for LinkUnicastTcp {
     fn drop(&mut self) {
         // Close the underlying TCP socket
         let _ = self.socket.shutdown(Shutdown::Both);
     }
 }
 
-impl fmt::Display for LinkTcp {
+impl fmt::Display for LinkUnicastTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_addr, self.dst_addr)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for LinkTcp {
+impl fmt::Debug for LinkUnicastTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tcp")
             .field("src", &self.src_addr)
@@ -257,19 +170,19 @@ impl fmt::Debug for LinkTcp {
 /*************************************/
 /*          LISTENER                 */
 /*************************************/
-struct ListenerTcp {
+struct ListenerUnicastTcp {
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
 }
 
-impl ListenerTcp {
+impl ListenerUnicastTcp {
     fn new(
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
-    ) -> ListenerTcp {
-        ListenerTcp {
+    ) -> ListenerUnicastTcp {
+        ListenerUnicastTcp {
             active,
             signal,
             handle,
@@ -277,12 +190,12 @@ impl ListenerTcp {
     }
 }
 
-pub struct LinkManagerTcp {
+pub struct LinkManagerUnicastTcp {
     manager: SessionManager,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerTcp>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastTcp>>>,
 }
 
-impl LinkManagerTcp {
+impl LinkManagerUnicastTcp {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
@@ -292,7 +205,7 @@ impl LinkManagerTcp {
 }
 
 #[async_trait]
-impl LinkManagerTrait for LinkManagerTcp {
+impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, locator: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let dst_addr = get_tcp_addr(locator).await?;
 
@@ -311,7 +224,7 @@ impl LinkManagerTrait for LinkManagerTcp {
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
 
-        let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
         Ok(Link(link))
     }
@@ -350,7 +263,7 @@ impl LinkManagerTrait for LinkManagerTcp {
             res
         });
 
-        let listener = ListenerTcp::new(active, signal, handle);
+        let listener = ListenerUnicastTcp::new(active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
@@ -462,10 +375,10 @@ async fn accept_task(
 
         log::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
         // Create the new link object
-        let link = Arc::new(LinkTcp::new(stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial session manager
-        manager.handle_new_link(Link(link), None).await;
+        manager.handle_new_link_unicast(Link(link), None).await;
     }
 
     Ok(())

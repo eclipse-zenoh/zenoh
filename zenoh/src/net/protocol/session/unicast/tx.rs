@@ -12,10 +12,10 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::proto::ZenohMessage;
-use super::SessionTransport;
+use super::transport::SessionTransportUnicast;
 use zenoh_util::zread;
 
-impl SessionTransport {
+impl SessionTransportUnicast {
     #[inline(always)]
     pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) {
         macro_rules! zpush {

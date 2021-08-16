@@ -11,24 +11,16 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod batch;
-mod pipeline;
-
-use super::super::super::link::Link;
+use super::common::{conduit::SessionTransportConduitTx, pipeline::TransmissionPipeline};
 use super::core::{Priority, ZInt};
-use super::io;
 use super::io::{ZBuf, ZSlice};
-use super::proto;
 use super::proto::SessionMessage;
-use super::session;
 use super::session::defaults::ZN_RX_BUFF_SIZE;
-use super::SessionTransport;
-use super::{core, SessionTransportConduitTx};
+use super::transport::SessionTransportUnicast;
+use crate::net::protocol::link::Link;
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
-use batch::*;
-pub(crate) use pipeline::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -42,7 +34,7 @@ pub(crate) struct SessionTransportLink {
     // The underlying link
     pub(super) inner: Link,
     // The transport this link is associated to
-    transport: SessionTransport,
+    transport: SessionTransportUnicast,
     // The transmission pipeline
     pipeline: Option<Arc<TransmissionPipeline>>,
     // The signals to stop TX/RX tasks
@@ -53,7 +45,7 @@ pub(crate) struct SessionTransportLink {
 }
 
 impl SessionTransportLink {
-    pub(crate) fn new(transport: SessionTransport, link: Link) -> SessionTransportLink {
+    pub(crate) fn new(transport: SessionTransportUnicast, link: Link) -> SessionTransportLink {
         SessionTransportLink {
             transport,
             inner: link,
@@ -213,7 +205,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
 
 async fn rx_task_stream(
     link: Link,
-    transport: SessionTransport,
+    transport: SessionTransportUnicast,
     lease: ZInt,
     signal: Signal,
     active: Arc<AtomicBool>,
@@ -281,7 +273,7 @@ async fn rx_task_stream(
 
 async fn rx_task_dgram(
     link: Link,
-    transport: SessionTransport,
+    transport: SessionTransportUnicast,
     lease: ZInt,
     signal: Signal,
     active: Arc<AtomicBool>,
@@ -352,7 +344,7 @@ async fn rx_task_dgram(
 
 async fn rx_task(
     link: Link,
-    transport: SessionTransport,
+    transport: SessionTransportUnicast,
     lease: ZInt,
     signal: Signal,
     active: Arc<AtomicBool>,

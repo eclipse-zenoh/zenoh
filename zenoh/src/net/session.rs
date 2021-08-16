@@ -954,6 +954,7 @@ impl Session {
                 priority: Priority::default(),
                 reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             },
+            CongestionControl::default(), // @TODO: default for the time being
             data_info.clone(),
             None,
         );
@@ -988,7 +989,7 @@ impl Session {
         payload: ZBuf,
         encoding: ZInt,
         kind: ZInt,
-        _congestion_control: CongestionControl,
+        congestion_control: CongestionControl,
     ) -> impl ZFuture<Output = ZResult<()>> {
         trace!("write_ext({:?}, [...])", resource);
         let state = zread!(self.state);
@@ -1009,6 +1010,7 @@ impl Session {
                 priority: Priority::default(),
                 reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             },
+            congestion_control,
             data_info.clone(),
             None,
         );
@@ -1364,14 +1366,16 @@ impl Primitives for Session {
         reskey: &ResKey,
         payload: ZBuf,
         channel: Channel,
+        congestion_control: CongestionControl,
         info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
-            "recv Data {:?} {:?} {:?} {:?}",
+            "recv Data {:?} {:?} {:?} {:?} {:?}",
             reskey,
             payload,
             channel,
+            congestion_control,
             info,
         );
         self.handle_data(false, reskey, info, payload)

@@ -20,7 +20,6 @@ use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -38,10 +37,7 @@ impl SH {
 }
 
 impl SessionHandler for SH {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         let arc = Arc::new(SC::new());
         Ok(arc)
     }
@@ -72,26 +68,12 @@ impl SessionEventHandler for SC {
 
 async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>>) {
     // Create the session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::PEER,
-        id: PeerId::new(1, [0u8; PeerId::MAX_SIZE]),
-        handler: Arc::new(SH::new()),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property,
-    };
-    let sm = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::PEER)
+        .pid(PeerId::new(1, [0u8; PeerId::MAX_SIZE]))
+        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .build(Arc::new(SH::new()));
+    let sm = SessionManager::new(config);
 
     for _ in 0..RUNS {
         // Create the listeners
@@ -293,7 +275,7 @@ fn locator_quic() {
         zasync_executor_init!();
     });
 
-    use zenoh::net::protocol::link::quic::ServerConfigBuilder;
+    use quinn::ServerConfigBuilder;
 
     // Define the locators
     let locators = vec!["quic/localhost:9453".parse().unwrap()];

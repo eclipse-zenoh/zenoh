@@ -16,9 +16,11 @@ pub mod rname;
 use std::convert::{From, TryFrom};
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::Timestamp;
-use zenoh_util::core::{ZError, ZErrorKind};
+use uuid::Uuid;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
 pub type TimestampId = uhlc::ID;
@@ -30,8 +32,9 @@ pub const ZINT_MAX_BYTES: usize = 10;
 
 // WhatAmI values
 pub type WhatAmI = whatami::Type;
+
 pub mod whatami {
-    use super::ZInt;
+    use super::{ZError, ZErrorKind, ZInt, ZResult};
 
     pub type Type = ZInt;
 
@@ -46,6 +49,17 @@ pub mod whatami {
             PEER => "Peer".to_string(),
             CLIENT => "Client".to_string(),
             i => i.to_string(),
+        }
+    }
+
+    pub(crate) fn parse(m: &str) -> ZResult<Type> {
+        match m {
+            "peer" => Ok(PEER),
+            "client" => Ok(CLIENT),
+            "router" => Ok(ROUTER),
+            unknown => zerror!(ZErrorKind::ValueDecodingFailed {
+                descr: format!("{} is not a valid WhatAmI value", unknown)
+            }),
         }
     }
 }
@@ -197,6 +211,10 @@ impl PeerId {
     pub fn as_slice(&self) -> &[u8] {
         &self.id[..self.size]
     }
+
+    pub fn rand() -> PeerId {
+        PeerId::from(Uuid::new_v4())
+    }
 }
 
 impl From<uuid::Uuid> for PeerId {
@@ -206,6 +224,23 @@ impl From<uuid::Uuid> for PeerId {
             size: 16,
             id: *uuid.as_bytes(),
         }
+    }
+}
+
+impl FromStr for PeerId {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let id = s.parse::<Uuid>().map_err(|e| {
+            zerror2!(ZErrorKind::ValueDecodingFailed {
+                descr: e.to_string()
+            })
+        })?;
+        let pid = PeerId {
+            size: 16,
+            id: *id.as_bytes(),
+        };
+        Ok(pid)
     }
 }
 
@@ -314,6 +349,19 @@ impl Default for Channel {
             priority: Priority::default(),
             reliability: Reliability::default(),
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
+pub enum CongestionControl {
+    Block,
+    Drop,
+}
+
+impl Default for CongestionControl {
+    fn default() -> CongestionControl {
+        CongestionControl::Drop
     }
 }
 

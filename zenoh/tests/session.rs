@@ -19,7 +19,7 @@ use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::link::{Locator, LocatorProperty};
 use zenoh::net::protocol::session::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    SessionManagerConfig, SessionManagerConfigUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -37,11 +37,8 @@ impl SHRouterOpenClose {
 }
 
 impl SessionHandler for SHRouterOpenClose {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(DummySessionEventHandler::new()))
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+        Ok(Arc::new(DummySessionEventHandler::default()))
     }
 }
 
@@ -55,11 +52,8 @@ impl SHClientOpenClose {
 }
 
 impl SessionHandler for SHClientOpenClose {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(DummySessionEventHandler::new()))
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+        Ok(Arc::new(DummySessionEventHandler::default()))
     }
 }
 
@@ -69,74 +63,50 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
 
     let router_handler = Arc::new(SHRouterOpenClose::new());
     // Create the router session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: Some(1),
-        max_links: Some(2),
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let router_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(router_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .max_sessions(1)
+                .max_links(2)
+                .build(),
+        )
+        .build(router_handler.clone());
+    let router_manager = SessionManager::new(config);
 
     /* [CLIENT] */
     let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
     let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
 
     // Create the transport session manager for the first client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client01_id.clone(),
-        handler: Arc::new(SHClientOpenClose::new()),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: Some(1),
-        max_links: Some(2),
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let client01_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client01_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .max_sessions(1)
+                .max_links(2)
+                .build(),
+        )
+        .build(Arc::new(SHClientOpenClose::new()));
+    let client01_manager = SessionManager::new(config);
 
     // Create the transport session manager for the second client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client02_id.clone(),
-        handler: Arc::new(SHClientOpenClose::new()),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: Some(1),
-        max_links: Some(2),
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property,
-    };
-    let client02_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client02_id.clone())
+        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .max_sessions(1)
+                .max_links(1)
+                .build(),
+        )
+        .build(Arc::new(SHClientOpenClose::new()));
+    let client02_manager = SessionManager::new(config);
 
     /* [1] */
     println!("\nSession Open Close [1a1]");
@@ -598,10 +568,11 @@ fn session_quic_only() {
         zasync_executor_init!();
     });
 
-    use zenoh::net::protocol::link::quic::{
+    use quinn::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
-        ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,
+        ServerConfigBuilder, TransportConfig,
     };
+    use zenoh::net::protocol::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real

@@ -14,7 +14,7 @@
 use super::core::{Reliability, ZInt};
 use super::io::{ZBuf, ZSlice};
 use super::proto::ZenohMessage;
-use super::SeqNum;
+use super::seq_num::SeqNum;
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 

@@ -62,14 +62,7 @@ pub use super::protocol::core::ConsolidationMode;
 pub use super::protocol::core::QueryConsolidation;
 
 /// The kind of congestion control.
-// #[deprecated(
-//     since = "0.5.0",
-//     note = "CongestionControl will be removed in the next release"
-// )]
-pub enum CongestionControl {
-    Block,
-    Drop,
-}
+pub use super::protocol::core::CongestionControl;
 
 /// The kind of reliability.
 pub use super::protocol::core::Reliability;

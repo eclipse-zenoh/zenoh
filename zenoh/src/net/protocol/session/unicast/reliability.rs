@@ -14,8 +14,8 @@
 use std::convert::TryInto;
 use std::fmt;
 
+use super::common::seq_num::SeqNum;
 use super::core::ZInt;
-use super::proto::SeqNum;
 
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
@@ -433,7 +433,7 @@ mod tests {
         let mut rng = thread_rng();
         while sequence.len() > 0 {
             // Get random sequence number
-            let index = rng.gen_range(0, sequence.len());
+            let index = rng.gen_range(0..sequence.len());
             let sn = sequence.remove(index);
             // Update the tail
             if sn > tail {

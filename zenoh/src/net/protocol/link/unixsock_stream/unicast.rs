@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
+use super::*;
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::{Path, PathBuf};
 use async_std::prelude::*;
@@ -24,100 +24,15 @@ use std::fmt;
 use std::fs::remove_file;
 use std::net::Shutdown;
 use std::os::unix::io::RawFd;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uuid::Uuid;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::Signal;
-use zenoh_util::{zerror, zerror2, zread, zwrite};
+use zenoh_util::{zerror2, zread, zwrite};
 
-// Default MTU (UnixSocketStream PDU) in bytes.
-// NOTE: Since UnixSocketStream is a byte-stream oriented transport, theoretically it has
-//       no limit regarding the MTU. However, given the batching strategy
-//       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
-//       payload length in byte-streamed, the UNIXSOCKSTREAM MTU is constrained to
-//       2^16 + 1 bytes (i.e., 65537).
-const UNIXSOCKSTREAM_MAX_MTU: usize = 65_537;
-
-zconfigurable! {
-    // Default MTU (UNIXSOCKSTREAM PDU) in bytes.
-    static ref UNIXSOCKSTREAM_DEFAULT_MTU: usize = UNIXSOCKSTREAM_MAX_MTU;
-    // Amount of time in microseconds to throttle the accept loop upon an error.
-    // Default set to 100 ms.
-    static ref UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME: u64 = 100_000;
-}
-
-#[allow(unreachable_patterns)]
-fn get_unix_path(locator: &Locator) -> ZResult<PathBuf> {
-    match locator {
-        Locator::UnixSocketStream(path) => Ok(path.0.clone()),
-        _ => {
-            let e = format!("Not a UnixSocketStream locator: {:?}", locator);
-            log::debug!("{}", e);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-#[allow(unreachable_patterns)]
-fn get_unix_path_as_string(locator: &Locator) -> String {
-    match locator {
-        Locator::UnixSocketStream(path) => match path.0.to_str() {
-            Some(path_str) => path_str.to_string(),
-            None => {
-                let e = format!("Not a UnixSocketStream locator: {:?}", locator);
-                log::debug!("{}", e);
-                "None".to_string()
-            }
-        },
-        _ => {
-            let e = format!("Not a UnixSocketStream locator: {:?}", locator);
-            log::debug!("{}", e);
-            "None".to_string()
-        }
-    }
-}
-
-/*************************************/
-/*             LOCATOR               */
-/*************************************/
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct LocatorUnixSocketStream(PathBuf);
-
-impl FromStr for LocatorUnixSocketStream {
-    type Err = ZError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let addr = match PathBuf::from(s).to_str() {
-            Some(path) => Ok(PathBuf::from(path)),
-            None => {
-                let e = format!("Invalid UnixSocketStream locator: {:?}", s);
-                zerror!(ZErrorKind::InvalidLocator { descr: e })
-            }
-        };
-        addr.map(LocatorUnixSocketStream)
-    }
-}
-
-impl fmt::Display for LocatorUnixSocketStream {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let path = self.0.to_str().unwrap_or("None");
-        write!(f, "{}", path)?;
-        Ok(())
-    }
-}
-
-/*************************************/
-/*            PROPERTY               */
-/*************************************/
-pub type LocatorPropertyUnixSocketStream = ();
-
-/*************************************/
-/*              LINK                 */
-/*************************************/
-pub struct LinkUnixSocketStream {
+pub struct LinkUnicastUnixSocketStream {
     // The underlying socket as returned from the async-std library
     socket: UnixStream,
     // The Unix domain socket source path
@@ -126,9 +41,9 @@ pub struct LinkUnixSocketStream {
     dst_path: String,
 }
 
-impl LinkUnixSocketStream {
-    fn new(socket: UnixStream, src_path: String, dst_path: String) -> LinkUnixSocketStream {
-        LinkUnixSocketStream {
+impl LinkUnicastUnixSocketStream {
+    fn new(socket: UnixStream, src_path: String, dst_path: String) -> LinkUnicastUnixSocketStream {
+        LinkUnicastUnixSocketStream {
             socket,
             src_path,
             dst_path,
@@ -137,7 +52,7 @@ impl LinkUnixSocketStream {
 }
 
 #[async_trait]
-impl LinkTrait for LinkUnixSocketStream {
+impl LinkTrait for LinkUnicastUnixSocketStream {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UnixSocketStream link: {}", self);
         // Close the underlying UnixSocketStream socket
@@ -184,16 +99,16 @@ impl LinkTrait for LinkUnixSocketStream {
 
     #[inline(always)]
     fn get_src(&self) -> Locator {
-        Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
-            self.src_path.clone(),
-        )))
+        Locator::UnixSocketStream(LocatorUnixSocketStream {
+            path: PathBuf::from(self.src_path.clone()),
+        })
     }
 
     #[inline(always)]
     fn get_dst(&self) -> Locator {
-        Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(
-            self.dst_path.clone(),
-        )))
+        Locator::UnixSocketStream(LocatorUnixSocketStream {
+            path: PathBuf::from(self.dst_path.clone()),
+        })
     }
 
     #[inline(always)]
@@ -212,21 +127,21 @@ impl LinkTrait for LinkUnixSocketStream {
     }
 }
 
-impl Drop for LinkUnixSocketStream {
+impl Drop for LinkUnicastUnixSocketStream {
     fn drop(&mut self) {
         // Close the underlying UnixSocketStream socket
         let _ = self.socket.shutdown(Shutdown::Both);
     }
 }
 
-impl fmt::Display for LinkUnixSocketStream {
+impl fmt::Display for LinkUnicastUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_path, self.dst_path)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for LinkUnixSocketStream {
+impl fmt::Debug for LinkUnicastUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UnixSocketStream")
             .field("src", &self.src_path)
@@ -261,12 +176,12 @@ impl ListenerUnixSocketStream {
     }
 }
 
-pub struct LinkManagerUnixSocketStream {
+pub struct LinkManagerUnicastUnixSocketStream {
     manager: SessionManager,
     listeners: Arc<RwLock<HashMap<String, ListenerUnixSocketStream>>>,
 }
 
-impl LinkManagerUnixSocketStream {
+impl LinkManagerUnicastUnixSocketStream {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
@@ -276,7 +191,7 @@ impl LinkManagerUnixSocketStream {
 }
 
 #[async_trait]
-impl LinkManagerTrait for LinkManagerUnixSocketStream {
+impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     async fn new_link(&self, locator: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let path = get_unix_path(locator)?;
 
@@ -345,7 +260,7 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
             })?
             .to_string();
 
-        let link = Arc::new(LinkUnixSocketStream::new(
+        let link = Arc::new(LinkUnicastUnixSocketStream::new(
             stream,
             local_path_str,
             remote_path_str,
@@ -466,9 +381,9 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
         let listener = ListenerUnixSocketStream::new(active, signal, handle, lock_fd);
         zwrite!(self.listeners).insert(local_path_str, listener);
 
-        Ok(Locator::UnixSocketStream(LocatorUnixSocketStream(
-            local_path,
-        )))
+        Ok(Locator::UnixSocketStream(LocatorUnixSocketStream {
+            path: local_path,
+        }))
     }
 
     async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
@@ -504,7 +419,11 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
     fn get_listeners(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .keys()
-            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream(PathBuf::from(x))))
+            .map(|x| {
+                Locator::UnixSocketStream(LocatorUnixSocketStream {
+                    path: PathBuf::from(x),
+                })
+            })
             .collect()
     }
 
@@ -520,7 +439,7 @@ impl LinkManagerTrait for LinkManagerUnixSocketStream {
         }
         locators
             .into_iter()
-            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream(x)))
+            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream { path: x }))
             .collect()
     }
 }
@@ -607,14 +526,14 @@ async fn accept_task(
         log::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
 
         // Create the new link object
-        let link = Arc::new(LinkUnixSocketStream::new(
+        let link = Arc::new(LinkUnicastUnixSocketStream::new(
             stream,
             src_path.clone(),
             dst_path,
         ));
 
         // Communicate the new link to the initial session manager
-        manager.handle_new_link(Link(link), None).await;
+        manager.handle_new_link_unicast(Link(link), None).await;
     }
 
     Ok(())

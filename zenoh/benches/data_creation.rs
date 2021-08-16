@@ -17,7 +17,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::{Channel, PeerId, ResKey};
+use zenoh::net::protocol::core::{Channel, CongestionControl, PeerId, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
@@ -37,6 +37,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
                 let payload = ZBuf::from(vec![0; *s]);
                 let channel = Channel::default();
+                let congestion_control = CongestionControl::default();
                 let info = Some(DataInfo {
                     #[cfg(feature = "zero-copy")]
                     sliced: false,
@@ -52,8 +53,16 @@ fn criterion_benchmark(c: &mut Criterion) {
                     first_router_sn: Some(12345),
                 });
 
-                let msg =
-                    ZenohMessage::make_data(res_key, payload, channel, info, None, None, None);
+                let msg = ZenohMessage::make_data(
+                    res_key,
+                    payload,
+                    channel,
+                    congestion_control,
+                    info,
+                    None,
+                    None,
+                    None,
+                );
                 consume_message(msg);
             })
         });
@@ -63,10 +72,19 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
                 let payload = ZBuf::from(vec![0; *s]);
                 let channel = Channel::default();
+                let congestion_control = CongestionControl::default();
                 let info = None;
 
-                let msg =
-                    ZenohMessage::make_data(res_key, payload, channel, info, None, None, None);
+                let msg = ZenohMessage::make_data(
+                    res_key,
+                    payload,
+                    channel,
+                    congestion_control,
+                    info,
+                    None,
+                    None,
+                    None,
+                );
                 consume_message(msg);
             })
         });
@@ -89,9 +107,17 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     let payload = ZBuf::from(vec![0; 1024]);
     let channel = Channel::default();
+    let congestion_control = CongestionControl::default();
 
     let msg = Arc::new(ZenohMessage::make_data(
-        res_key, payload, channel, info, None, None, None,
+        res_key,
+        payload,
+        channel,
+        congestion_control,
+        info,
+        None,
+        None,
+        None,
     ));
 
     c.bench_function(&"arc_msg_clone".to_string(), |b| {

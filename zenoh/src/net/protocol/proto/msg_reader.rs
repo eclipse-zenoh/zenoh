@@ -411,6 +411,12 @@ impl ZBuf {
 
     #[inline(always)]
     fn read_data(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
+        let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
+            CongestionControl::Drop
+        } else {
+            CongestionControl::Block
+        };
+
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
 
         #[cfg(feature = "zero-copy")]
@@ -436,6 +442,7 @@ impl ZBuf {
             key,
             data_info,
             payload,
+            congestion_control,
             reply_context,
         });
         Some(body)
@@ -490,8 +497,16 @@ impl ZBuf {
         Some(info)
     }
 
-    fn read_unit(&mut self, _header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
-        Some(ZenohBody::Unit(Unit { reply_context }))
+    fn read_unit(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
+        let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
+            CongestionControl::Drop
+        } else {
+            CongestionControl::Block
+        };
+        Some(ZenohBody::Unit(Unit {
+            congestion_control,
+            reply_context,
+        }))
     }
 
     fn read_pull(&mut self, header: u8) -> Option<ZenohBody> {

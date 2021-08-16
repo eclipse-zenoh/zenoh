@@ -19,13 +19,15 @@ use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
-use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
+use zenoh::net::protocol::core::{
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerOptionalConfig,
+    SessionManagerConfig, SessionManagerConfigUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -46,11 +48,8 @@ impl SHRouterIntermittent {
 }
 
 impl SessionHandler for SHRouterIntermittent {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(DummySessionEventHandler::new()))
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+        Ok(Arc::new(DummySessionEventHandler::default()))
     }
 }
 
@@ -64,11 +63,8 @@ impl SHClientIntermittent {
 }
 
 impl SessionHandler for SHClientIntermittent {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        Ok(Arc::new(DummySessionEventHandler::new()))
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+        Ok(Arc::new(DummySessionEventHandler::default()))
     }
 }
 
@@ -84,10 +80,7 @@ impl SHClientStable {
 }
 
 impl SessionHandler for SHClientStable {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(SCClient::new(self.counter.clone())))
     }
 }
@@ -125,26 +118,18 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
 
     let router_handler = Arc::new(SHRouterIntermittent::new());
     // Create the router session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: Some(3),
-        max_links: Some(1),
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let router_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(router_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .max_sessions(3)
+                .max_links(1)
+                .build(),
+        )
+        .build(router_handler.clone());
+    let router_manager = SessionManager::new(config);
 
     /* [CLIENT] */
     let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -153,70 +138,46 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
 
     // Create the transport session manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client01_id.clone(),
-        handler: Arc::new(SHClientStable::new(counter.clone())),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: Some(1),
-        max_links: Some(1),
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let client01_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client01_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .max_sessions(1)
+                .max_links(1)
+                .build(),
+        )
+        .build(Arc::new(SHClientStable::new(counter.clone())));
+    let client01_manager = SessionManager::new(config);
 
     // Create the transport session manager for the second client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client02_id.clone(),
-        handler: Arc::new(SHClientIntermittent::new()),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: Some(1),
-        max_links: Some(1),
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let client02_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client02_id.clone())
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .max_sessions(1)
+                .max_links(1)
+                .build(),
+        )
+        .build(Arc::new(SHClientIntermittent::new()));
+    let client02_manager = SessionManager::new(config);
 
     // Create the transport session manager for the third client
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client03_id.clone(),
-        handler: Arc::new(SHClientIntermittent::new()),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: Some(1),
-        max_links: Some(1),
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property,
-    };
-    let client03_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client03_id.clone())
+        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .unicast(
+            SessionManagerConfigUnicast::builder()
+                .max_sessions(1)
+                .max_links(1)
+                .build(),
+        )
+        .build(Arc::new(SHClientIntermittent::new()));
+    let client03_manager = SessionManager::new(config);
 
     /* [1] */
     // Add a listener to the router
@@ -294,6 +255,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
             priority: Priority::default(),
             reliability: Reliability::Reliable,
         };
+        let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
@@ -303,6 +265,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
             key,
             payload,
             channel,
+            congestion_control,
             data_info,
             routing_context,
             reply_context,

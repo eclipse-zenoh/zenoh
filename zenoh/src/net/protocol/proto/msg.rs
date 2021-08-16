@@ -24,16 +24,17 @@ pub(crate) mod imsg {
     use super::ZInt;
 
     pub(crate) mod id {
-        // Session Messages
-        pub(crate) const SCOUT: u8 = 0x01;
-        pub(crate) const HELLO: u8 = 0x02;
+        // Session Messages Unicast
         pub(crate) const INIT: u8 = 0x03;
         pub(crate) const OPEN: u8 = 0x04;
         pub(crate) const CLOSE: u8 = 0x05;
         pub(crate) const SYNC: u8 = 0x06;
         pub(crate) const ACK_NACK: u8 = 0x07;
-        pub(crate) const KEEP_ALIVE: u8 = 0x08;
         pub(crate) const PING_PONG: u8 = 0x09;
+        // Session Messages
+        pub(crate) const SCOUT: u8 = 0x01;
+        pub(crate) const HELLO: u8 = 0x02;
+        pub(crate) const KEEP_ALIVE: u8 = 0x08;
         pub(crate) const FRAME: u8 = 0x0a;
 
         // Zenoh Messages
@@ -148,7 +149,7 @@ pub mod smsg {
 }
 
 pub mod zmsg {
-    use super::{imsg, Channel, Priority, Reliability, ZInt};
+    use super::{imsg, Channel, CongestionControl, Priority, Reliability, ZInt};
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -171,6 +172,7 @@ pub mod zmsg {
 
     // Zenoh message flags
     pub mod flag {
+        pub const D: u8 = 1 << 5; // 0x20 Drop          if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final         if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
         pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then resource key has name
@@ -283,6 +285,19 @@ pub mod zmsg {
             priority: Priority::Control,
             reliability: Reliability::Reliable,
         };
+    }
+
+    // Default congestion control for each Zenoh Message
+    pub mod default_congestion_control {
+        use super::CongestionControl;
+
+        pub const DECLARE: CongestionControl = CongestionControl::Block;
+        pub const DATA: CongestionControl = CongestionControl::Drop;
+        pub const QUERY: CongestionControl = CongestionControl::Block;
+        pub const PULL: CongestionControl = CongestionControl::Block;
+        pub const REPLY: CongestionControl = CongestionControl::Block;
+        pub const UNIT: CongestionControl = CongestionControl::Block;
+        pub const LINK_STATE_LIST: CongestionControl = CongestionControl::Block;
     }
 }
 
@@ -602,7 +617,7 @@ impl PartialOrd for DataInfo {
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |K|I|X|  DATA   |
+/// |K|I|D|  DATA   |
 /// +-+-+-+---------+
 /// ~    ResKey     ~ if K==1 -- Only numerical id
 /// +---------------+
@@ -617,6 +632,7 @@ pub struct Data {
     pub key: ResKey,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
+    pub congestion_control: CongestionControl,
     pub reply_context: Option<ReplyContext>,
 }
 
@@ -630,6 +646,9 @@ impl Header for Data {
         if self.key.is_string() {
             header |= zmsg::flag::K;
         }
+        if self.congestion_control == CongestionControl::Drop {
+            header |= zmsg::flag::D;
+        }
         header
     }
 }
@@ -639,19 +658,24 @@ impl Header for Data {
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |X|X|X|  UNIT   |
+/// |X|X|D|  UNIT   |
 /// +-+-+-+---------+
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
+    pub congestion_control: CongestionControl,
     pub reply_context: Option<ReplyContext>,
 }
 
 impl Header for Unit {
     #[inline(always)]
     fn header(&self) -> u8 {
-        zmsg::id::UNIT
+        let mut header = zmsg::id::UNIT;
+        if self.congestion_control == CongestionControl::Drop {
+            header |= zmsg::flag::D;
+        }
+        header
     }
 }
 
@@ -1111,6 +1135,7 @@ impl ZenohMessage {
         key: ResKey,
         payload: ZBuf,
         channel: Channel,
+        congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
         reply_context: Option<ReplyContext>,
@@ -1121,6 +1146,7 @@ impl ZenohMessage {
                 key,
                 data_info,
                 payload,
+                congestion_control,
                 reply_context,
             }),
             channel,
@@ -1133,11 +1159,15 @@ impl ZenohMessage {
 
     pub fn make_unit(
         channel: Channel,
+        congestion_control: CongestionControl,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
-            body: ZenohBody::Unit(Unit { reply_context }),
+            body: ZenohBody::Unit(Unit {
+                congestion_control,
+                reply_context,
+            }),
             channel,
             routing_context: None,
             attachment,
@@ -1212,6 +1242,24 @@ impl ZenohMessage {
     #[inline]
     pub fn is_reliable(&self) -> bool {
         self.channel.reliability == Reliability::Reliable
+    }
+
+    #[inline]
+    pub fn is_droppable(&self) -> bool {
+        if !self.is_reliable() {
+            return true;
+        }
+
+        let cc = match &self.body {
+            ZenohBody::Data(data) => data.congestion_control,
+            ZenohBody::Unit(unit) => unit.congestion_control,
+            ZenohBody::Declare(_) => zmsg::default_congestion_control::DECLARE,
+            ZenohBody::Pull(_) => zmsg::default_congestion_control::PULL,
+            ZenohBody::Query(_) => zmsg::default_congestion_control::QUERY,
+            ZenohBody::LinkStateList(_) => zmsg::default_congestion_control::LINK_STATE_LIST,
+        };
+
+        cc == CongestionControl::Drop
     }
 }
 

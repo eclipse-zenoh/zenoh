@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
-use async_std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use super::*;
+use async_std::net::{SocketAddr, UdpSocket};
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
@@ -21,7 +21,6 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
@@ -30,116 +29,15 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::{Mvar, Signal};
 use zenoh_util::{zasynclock, zerror};
 
-// NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
-//       UDP buffer size on the host to a reasonable size. Usually, default values for UDP buffers
-//       size are undersized. Setting UDP buffers on the host to a size of 4M can be considered
-//       as a safe choice.
-//       Usually, on Linux systems this could be achieved by executing:
-//           $ sysctl -w net.core.rmem_max=4194304
-//           $ sysctl -w net.core.rmem_default=4194304
-
-// Maximum MTU (UDP PDU) in bytes.
-// NOTE: The UDP field size sets a theoretical limit of 65,535 bytes (8 byte header + 65,527 bytes of
-//       data) for a UDP datagram. However the actual limit for the data length, which is imposed by
-//       the underlying IPv4 protocol, is 65,507 bytes (65,535 − 8 byte UDP header − 20 byte IP header).
-//       Although in IPv6 it is possible to have UDP datagrams of size greater than 65,535 bytes via
-//       IPv6 Jumbograms, its usage in Zenoh is discouraged unless the consequences are very well
-//       understood.
-const UDP_MAX_MTU: usize = 65_507;
-
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-// Linux default value of a maximum datagram size is set to UDP MAX MTU.
-const UDP_MTU_LIMIT: usize = UDP_MAX_MTU;
-
-#[cfg(target_os = "macos")]
-// Mac OS X default value of a maximum datagram size is set to 9216 bytes.
-const UDP_MTU_LIMIT: usize = 9_216;
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-const UDP_MTU_LIMIT: usize = 8_192;
-
-zconfigurable! {
-    // Default MTU (UDP PDU) in bytes.
-    static ref UDP_DEFAULT_MTU: usize = UDP_MTU_LIMIT;
-    // Amount of time in microseconds to throttle the accept loop upon an error.
-    // Default set to 100 ms.
-    static ref UDP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
-}
-
-#[allow(unreachable_patterns)]
-async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match locator {
-        Locator::Udp(addr) => match addr {
-            LocatorUdp::SocketAddr(addr) => Ok(*addr),
-            LocatorUdp::DnsName(addr) => match addr.to_socket_addrs().await {
-                Ok(mut addr_iter) => {
-                    if let Some(addr) = addr_iter.next() {
-                        Ok(addr)
-                    } else {
-                        let e = format!("Couldn't resolve UDP locator: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
-                    }
-                }
-                Err(e) => {
-                    let e = format!("{}: {}", e, addr);
-                    zerror!(ZErrorKind::InvalidLocator { descr: e })
-                }
-            },
-        },
-        _ => {
-            let e = format!("Not a UDP locator: {}", locator);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-/*************************************/
-/*             LOCATOR               */
-/*************************************/
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum LocatorUdp {
-    SocketAddr(SocketAddr),
-    DnsName(String),
-}
-
-impl FromStr for LocatorUdp {
-    type Err = ZError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.parse() {
-            Ok(addr) => Ok(LocatorUdp::SocketAddr(addr)),
-            Err(_) => Ok(LocatorUdp::DnsName(s.to_string())),
-        }
-    }
-}
-
-impl fmt::Display for LocatorUdp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LocatorUdp::SocketAddr(addr) => write!(f, "{}", addr)?,
-            LocatorUdp::DnsName(addr) => write!(f, "{}", addr)?,
-        }
-        Ok(())
-    }
-}
-
-/*************************************/
-/*            PROPERTY               */
-/*************************************/
-pub type LocatorPropertyUdp = ();
-
-/*************************************/
-/*              LINK                 */
-/*************************************/
-type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUdpUnconnected>>>>;
+type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (RecyclingObject<Box<[u8]>>, usize);
 type LinkLeftOver = (RecyclingObject<Box<[u8]>>, usize, usize);
 
-struct LinkUdpConnected {
+struct LinkUnicastUdpConnected {
     socket: Arc<UdpSocket>,
 }
 
-impl LinkUdpConnected {
+impl LinkUnicastUdpConnected {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         (&self.socket).recv(buffer).await.map_err(|e| {
             zerror2!(ZErrorKind::IoError {
@@ -161,14 +59,14 @@ impl LinkUdpConnected {
     }
 }
 
-struct LinkUdpUnconnected {
+struct LinkUnicastUdpUnconnected {
     socket: Weak<UdpSocket>,
     links: LinkHashMap,
     input: Mvar<LinkInput>,
     leftover: AsyncMutex<Option<LinkLeftOver>>,
 }
 
-impl LinkUdpUnconnected {
+impl LinkUnicastUdpUnconnected {
     async fn received(&self, buffer: RecyclingObject<Box<[u8]>>, len: usize) {
         self.input.put((buffer, len)).await;
     }
@@ -217,23 +115,27 @@ impl LinkUdpUnconnected {
     }
 }
 
-enum LinkUdpVariant {
-    Connected(LinkUdpConnected),
-    Unconnected(Arc<LinkUdpUnconnected>),
+enum LinkUnicastUdpVariant {
+    Connected(LinkUnicastUdpConnected),
+    Unconnected(Arc<LinkUnicastUdpUnconnected>),
 }
 
-pub struct LinkUdp {
+pub struct LinkUnicastUdp {
     // The source socket address of this link (address used on the local host)
     src_addr: SocketAddr,
     // The destination socket address of this link (address used on the remote host)
     dst_addr: SocketAddr,
     // The UDP socket is connected to the peer
-    variant: LinkUdpVariant,
+    variant: LinkUnicastUdpVariant,
 }
 
-impl LinkUdp {
-    fn new(src_addr: SocketAddr, dst_addr: SocketAddr, variant: LinkUdpVariant) -> LinkUdp {
-        LinkUdp {
+impl LinkUnicastUdp {
+    fn new(
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+        variant: LinkUnicastUdpVariant,
+    ) -> LinkUnicastUdp {
+        LinkUnicastUdp {
             src_addr,
             dst_addr,
             variant,
@@ -242,19 +144,21 @@ impl LinkUdp {
 }
 
 #[async_trait]
-impl LinkTrait for LinkUdp {
+impl LinkTrait for LinkUnicastUdp {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
         match &self.variant {
-            LinkUdpVariant::Connected(link) => link.close().await,
-            LinkUdpVariant::Unconnected(link) => link.close(self.src_addr, self.dst_addr).await,
+            LinkUnicastUdpVariant::Connected(link) => link.close().await,
+            LinkUnicastUdpVariant::Unconnected(link) => {
+                link.close(self.src_addr, self.dst_addr).await
+            }
         }
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         match &self.variant {
-            LinkUdpVariant::Connected(link) => link.write(buffer).await,
-            LinkUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await,
+            LinkUnicastUdpVariant::Connected(link) => link.write(buffer).await,
+            LinkUnicastUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await,
         }
     }
 
@@ -268,8 +172,8 @@ impl LinkTrait for LinkUdp {
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         match &self.variant {
-            LinkUdpVariant::Connected(link) => link.read(buffer).await,
-            LinkUdpVariant::Unconnected(link) => link.read(buffer).await,
+            LinkUnicastUdpVariant::Connected(link) => link.read(buffer).await,
+            LinkUnicastUdpVariant::Unconnected(link) => link.read(buffer).await,
         }
     }
 
@@ -310,14 +214,14 @@ impl LinkTrait for LinkUdp {
     }
 }
 
-impl fmt::Display for LinkUdp {
+impl fmt::Display for LinkUnicastUdp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_addr, self.dst_addr)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for LinkUdp {
+impl fmt::Debug for LinkUnicastUdp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Udp")
             .field("src", &self.src_addr)
@@ -329,19 +233,19 @@ impl fmt::Debug for LinkUdp {
 /*************************************/
 /*          LISTENER                 */
 /*************************************/
-struct ListenerUdp {
+struct ListenerUnicastUdp {
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
 }
 
-impl ListenerUdp {
+impl ListenerUnicastUdp {
     fn new(
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
-    ) -> ListenerUdp {
-        ListenerUdp {
+    ) -> ListenerUnicastUdp {
+        ListenerUnicastUdp {
             active,
             signal,
             handle,
@@ -349,12 +253,12 @@ impl ListenerUdp {
     }
 }
 
-pub struct LinkManagerUdp {
+pub struct LinkManagerUnicastUdp {
     manager: SessionManager,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUdp>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastUdp>>>,
 }
 
-impl LinkManagerUdp {
+impl LinkManagerUnicastUdp {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
@@ -364,7 +268,7 @@ impl LinkManagerUdp {
 }
 
 #[async_trait]
-impl LinkManagerTrait for LinkManagerUdp {
+impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     async fn new_link(&self, dst: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let dst_addr = get_udp_addr(dst).await?;
         // Establish a UDP socket
@@ -402,10 +306,10 @@ impl LinkManagerTrait for LinkManagerUdp {
         })?;
 
         // Create UDP link
-        let link = Arc::new(LinkUdp::new(
+        let link = Arc::new(LinkUnicastUdp::new(
             src_addr,
             dst_addr,
-            LinkUdpVariant::Connected(LinkUdpConnected {
+            LinkUnicastUdpVariant::Connected(LinkUnicastUdpConnected {
                 socket: Arc::new(socket),
             }),
         ));
@@ -449,7 +353,7 @@ impl LinkManagerTrait for LinkManagerUdp {
             res
         });
 
-        let listener = ListenerUdp::new(active, signal, handle);
+        let listener = ListenerUnicastUdp::new(active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
@@ -573,7 +477,7 @@ async fn accept_read_task(
                 None => {
                     // A new peers has sent data to this socket
                     log::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
-                    let unconnected = Arc::new(LinkUdpUnconnected {
+                    let unconnected = Arc::new(LinkUnicastUdpUnconnected {
                         socket: Arc::downgrade(&socket),
                         links: links.clone(),
                         input: Mvar::new(),
@@ -581,13 +485,13 @@ async fn accept_read_task(
                     });
                     zaddlink!(src_addr, dst_addr, Arc::downgrade(&unconnected));
                     // Create the new link object
-                    let link = Arc::new(LinkUdp::new(
+                    let link = Arc::new(LinkUnicastUdp::new(
                         src_addr,
                         dst_addr,
-                        LinkUdpVariant::Unconnected(unconnected),
+                        LinkUnicastUdpVariant::Unconnected(unconnected),
                     ));
                     // Add the new link to the set of connected peers
-                    manager.handle_new_link(Link(link), None).await;
+                    manager.handle_new_link_unicast(Link(link), None).await;
                 }
             }
         };

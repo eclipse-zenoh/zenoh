@@ -18,13 +18,15 @@ use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey, ZInt};
+use zenoh::net::protocol::core::{
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, ZInt,
+};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
+    SessionManagerConfigUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -52,10 +54,7 @@ impl SHPeer {
 }
 
 impl SessionHandler for SHPeer {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         let mh = Arc::new(MHPeer::new(self.count.clone()));
         Ok(mh)
     }
@@ -99,49 +98,21 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
     // Create the peer01 session manager
     let peer_sh01 = Arc::new(SHPeer::new());
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::PEER,
-        id: peer_id01.clone(),
-        handler: peer_sh01.clone(),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: Some(lease),
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: None,
-    };
-    let peer01_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::PEER)
+        .pid(peer_id01.clone())
+        .unicast(SessionManagerConfigUnicast::builder().lease(lease).build())
+        .build(peer_sh01.clone());
+    let peer01_manager = SessionManager::new(config);
 
     // Create the peer01 session manager
     let peer_sh02 = Arc::new(SHPeer::new());
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::PEER,
-        id: peer_id02.clone(),
-        handler: peer_sh02.clone(),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: Some(lease),
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: None,
-    };
-    let peer02_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::PEER)
+        .pid(peer_id02.clone())
+        .unicast(SessionManagerConfigUnicast::builder().lease(lease).build())
+        .build(peer_sh02.clone());
+    let peer02_manager = SessionManager::new(config);
 
     // Barrier to synchronize the two tasks
     let barrier_peer = Arc::new(Barrier::new(2));
@@ -211,6 +182,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             priority: Priority::default(),
             reliability: Reliability::Reliable,
         };
+        let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
@@ -220,6 +192,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             key,
             payload,
             channel,
+            congestion_control,
             data_info,
             routing_context,
             reply_context,
@@ -319,6 +292,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             priority: Priority::default(),
             reliability: Reliability::Reliable,
         };
+        let congestion_control = CongestionControl::Block;
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
@@ -328,6 +302,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
             key,
             payload,
             channel,
+            congestion_control,
             data_info,
             routing_context,
             reply_context,

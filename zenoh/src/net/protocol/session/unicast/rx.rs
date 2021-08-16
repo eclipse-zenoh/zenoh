@@ -11,11 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::super::link::Link;
+use super::common::conduit::SessionTransportChannelRx;
 use super::core::{PeerId, Priority, Reliability, ZInt};
 use super::proto::{
     Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage, ZenohMessage,
 };
-use super::{Link, SessionTransport, SessionTransportChannelRx};
+use super::transport::SessionTransportUnicast;
 use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -24,7 +26,7 @@ use zenoh_util::{zerror2, zread};
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
-impl SessionTransport {
+impl SessionTransportUnicast {
     #[allow(unused_mut)]
     fn trigger_callback(&self, mut msg: ZenohMessage) -> ZResult<()> {
         let callback = zread!(self.callback).clone();

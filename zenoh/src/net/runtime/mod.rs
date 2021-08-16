@@ -21,7 +21,6 @@ use super::protocol::link::{Link, Locator};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
 use super::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
 };
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
@@ -42,15 +41,6 @@ pub struct RuntimeState {
     pub config: ConfigProperties,
     pub manager: SessionManager,
     pub hlc: Option<Arc<HLC>>,
-}
-
-pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
-    match m {
-        "peer" => Ok(whatami::PEER),
-        "client" => Ok(whatami::CLIENT),
-        "router" => Ok(whatami::ROUTER),
-        _ => Err(()),
-    }
 }
 
 #[derive(Clone)]
@@ -94,7 +84,7 @@ impl Runtime {
 
         log::info!("Using PID: {}", pid);
 
-        let whatami = parse_mode(config.get_or(&ZN_MODE_KEY, ZN_MODE_DEFAULT)).unwrap();
+        let whatami = whatami::parse(config.get_or(&ZN_MODE_KEY, ZN_MODE_DEFAULT)).unwrap();
         let hlc = if config
             .get_or(&ZN_ADD_TIMESTAMP_KEY, ZN_ADD_TIMESTAMP_DEFAULT)
             .to_lowercase()
@@ -110,15 +100,15 @@ impl Runtime {
         let handler = Arc::new(RuntimeSessionHandler {
             runtime: std::sync::RwLock::new(None),
         });
-        let sm_config = SessionManagerConfig {
-            version,
-            whatami,
-            id: pid.clone(),
-            handler: handler.clone(),
-        };
-        let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
+        let sm_config = SessionManagerConfig::builder()
+            .from_properties(&config)
+            .await?
+            .version(version)
+            .whatami(whatami)
+            .pid(pid.clone())
+            .build(handler.clone());
 
-        let session_manager = SessionManager::new(sm_config, sm_opt_config);
+        let session_manager = SessionManager::new(sm_config);
         let mut runtime = Runtime {
             state: Arc::new(RuntimeState {
                 pid,
@@ -187,7 +177,7 @@ struct RuntimeSessionHandler {
 }
 
 impl SessionHandler for RuntimeSessionHandler {
-    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         match &*self.runtime.read().unwrap() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
@@ -220,6 +210,7 @@ impl SessionEventHandler for RuntimeSession {
                     rid,
                     suffix,
                     msg.channel,
+                    data.congestion_control,
                     data.data_info,
                     data.payload,
                     msg.routing_context,

@@ -17,7 +17,9 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
+use zenoh::net::protocol::core::{
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -65,10 +67,7 @@ impl SHRouter {
 }
 
 impl SessionHandler for SHRouter {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         let arc = Arc::new(SCRouter::new(self.count.clone(), self.priority));
         Ok(arc)
     }
@@ -113,10 +112,7 @@ impl SHClient {
 }
 
 impl SessionHandler for SHClient {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(SCClient::new()))
     }
 }
@@ -155,22 +151,18 @@ async fn open_session(
 
     // Create the router session manager
     let router_handler = Arc::new(SHRouter::new(priority));
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let router_manager = SessionManager::new(config, None);
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(router_id.clone())
+        .build(router_handler.clone());
+    let router_manager = SessionManager::new(config);
 
     // Create the client session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client_id,
-        handler: Arc::new(SHClient::new()),
-    };
-    let client_manager = SessionManager::new(config, None);
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client_id)
+        .build(Arc::new(SHClient::new()));
+    let client_manager = SessionManager::new(config);
 
     // Create the listener on the router
     for l in locators.iter() {
@@ -254,6 +246,7 @@ async fn single_run(
         key,
         payload,
         channel,
+        CongestionControl::Block,
         data_info,
         routing_context,
         reply_context,

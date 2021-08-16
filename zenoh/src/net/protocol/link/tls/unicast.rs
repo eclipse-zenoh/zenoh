@@ -12,12 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::session::SessionManager;
-use super::{Link, LinkManagerTrait, LinkTrait, Locator, LocatorProperty};
+use super::*;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
-use async_rustls::{rustls::internal::pemfile, TlsAcceptor, TlsConnector, TlsStream};
-use async_std::fs;
-use async_std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
+use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
@@ -27,287 +26,15 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
-use std::io::Cursor;
 use std::net::Shutdown;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::*;
 use zenoh_util::sync::Signal;
-use zenoh_util::{zerror, zerror2, zread, zwrite};
+use zenoh_util::{zerror2, zread, zwrite};
 
-// Default MTU (TLS PDU) in bytes.
-// NOTE: Since TLS is a byte-stream oriented transport, theoretically it has
-//       no limit regarding the MTU. However, given the batching strategy
-//       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
-//       payload length in byte-streamed, the TLS MTU is constrained to
-//       2^16 + 1 bytes (i.e., 65537).
-const TLS_MAX_MTU: usize = 65_537;
-
-zconfigurable! {
-    // Default MTU (TLS PDU) in bytes.
-    static ref TLS_DEFAULT_MTU: usize = TLS_MAX_MTU;
-    // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
-    // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
-    // More info on the LINGER option and its dynamics can be found at:
-    // https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable
-    static ref TLS_LINGER_TIMEOUT: i32 = 10;
-    // Amount of time in microseconds to throttle the accept loop upon an error.
-    // Default set to 100 ms.
-    static ref TLS_ACCEPT_THROTTLE_TIME: u64 = 100_000;
-}
-
-#[allow(unreachable_patterns)]
-async fn get_tls_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match locator {
-        Locator::Tls(addr) => match addr {
-            LocatorTls::SocketAddr(addr) => Ok(*addr),
-            LocatorTls::DnsName(addr) => match addr.to_socket_addrs().await {
-                Ok(mut addr_iter) => {
-                    if let Some(addr) = addr_iter.next() {
-                        Ok(addr)
-                    } else {
-                        let e = format!("Couldn't resolve TLS locator: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
-                    }
-                }
-                Err(e) => {
-                    let e = format!("{}: {}", e, addr);
-                    zerror!(ZErrorKind::InvalidLocator { descr: e })
-                }
-            },
-        },
-        _ => {
-            let e = format!("Not a TLS locator: {}", locator);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-#[allow(unreachable_patterns)]
-async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
-    match locator {
-        Locator::Tls(addr) => match addr {
-            LocatorTls::SocketAddr(addr) => {
-                let e = format!("Couldn't get domain from SocketAddr: {}", addr);
-                zerror!(ZErrorKind::InvalidLocator { descr: e })
-            }
-            LocatorTls::DnsName(addr) => {
-                // Separate the domain from the port.
-                // E.g. zenoh.io:7447 returns (zenoh.io, 7447).
-                let split: Vec<&str> = addr.split(':').collect();
-                match split.get(0) {
-                    Some(dom) => {
-                        let domain = DNSNameRef::try_from_ascii_str(dom).map_err(|e| {
-                            let e = e.to_string();
-                            zerror2!(ZErrorKind::InvalidLocator { descr: e })
-                        })?;
-                        Ok(domain.to_owned())
-                    }
-                    None => {
-                        let e = format!("Couldn't get domain for: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
-                    }
-                }
-            }
-        },
-        _ => {
-            let e = format!("Not a TLS locator: {}", locator);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-#[allow(unreachable_patterns)]
-fn get_tls_prop(property: &LocatorProperty) -> ZResult<&LocatorPropertyTls> {
-    match property {
-        LocatorProperty::Tls(prop) => Ok(prop),
-        _ => {
-            let e = "Not a TLS property".to_string();
-            log::debug!("{}", e);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
-        }
-    }
-}
-
-/*************************************/
-/*             LOCATOR               */
-/*************************************/
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum LocatorTls {
-    SocketAddr(SocketAddr),
-    DnsName(String),
-}
-
-impl FromStr for LocatorTls {
-    type Err = ZError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.parse() {
-            Ok(addr) => Ok(LocatorTls::SocketAddr(addr)),
-            Err(_) => Ok(LocatorTls::DnsName(s.to_string())),
-        }
-    }
-}
-
-impl fmt::Display for LocatorTls {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LocatorTls::SocketAddr(addr) => write!(f, "{}", addr)?,
-            LocatorTls::DnsName(addr) => write!(f, "{}", addr)?,
-        }
-        Ok(())
-    }
-}
-
-/*************************************/
-/*            PROPERTY               */
-/*************************************/
-#[derive(Clone)]
-pub struct LocatorPropertyTls {
-    client: Option<Arc<ClientConfig>>,
-    server: Option<Arc<ServerConfig>>,
-}
-
-impl LocatorPropertyTls {
-    fn new(
-        client: Option<Arc<ClientConfig>>,
-        server: Option<Arc<ServerConfig>>,
-    ) -> LocatorPropertyTls {
-        LocatorPropertyTls { client, server }
-    }
-
-    pub(super) async fn from_properties(
-        config: &ConfigProperties,
-    ) -> ZResult<Option<LocatorProperty>> {
-        let mut client_config: Option<ClientConfig> = None;
-        if let Some(tls_ca_certificate) = config.get(&ZN_TLS_ROOT_CA_CERTIFICATE_KEY) {
-            let ca = fs::read(tls_ca_certificate).await.map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: format!("Invalid TLS CA certificate file: {}", e)
-                })
-            })?;
-            let mut cc = ClientConfig::new();
-            let _ = cc
-                .root_store
-                .add_pem_file(&mut Cursor::new(ca))
-                .map_err(|_| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: "Invalid TLS CA certificate file".to_string()
-                    })
-                })?;
-            client_config = Some(cc);
-            log::debug!("TLS client is configured");
-        }
-
-        let mut server_config: Option<ServerConfig> = None;
-        if let Some(tls_server_private_key) = config.get(&ZN_TLS_SERVER_PRIVATE_KEY_KEY) {
-            if let Some(tls_server_certificate) = config.get(&ZN_TLS_SERVER_CERTIFICATE_KEY) {
-                let pkey = fs::read(tls_server_private_key).await.map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: format!("Invalid TLS private key file: {}", e)
-                    })
-                })?;
-                let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(pkey)).unwrap();
-
-                let cert = fs::read(tls_server_certificate).await.map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: format!("Invalid TLS server certificate file: {}", e)
-                    })
-                })?;
-                let certs = pemfile::certs(&mut Cursor::new(cert)).unwrap();
-
-                let mut sc = ServerConfig::new(NoClientAuth::new());
-                sc.set_single_cert(certs, keys.remove(0)).unwrap();
-                server_config = Some(sc);
-                log::debug!("TLS server is configured");
-            }
-        }
-
-        if client_config.is_none() && server_config.is_none() {
-            Ok(None)
-        } else {
-            Ok(Some((client_config, server_config).into()))
-        }
-    }
-}
-
-impl From<LocatorPropertyTls> for LocatorProperty {
-    fn from(property: LocatorPropertyTls) -> LocatorProperty {
-        LocatorProperty::Tls(property)
-    }
-}
-
-impl From<(Arc<ClientConfig>, Arc<ServerConfig>)> for LocatorProperty {
-    fn from(tuple: (Arc<ClientConfig>, Arc<ServerConfig>)) -> LocatorProperty {
-        Self::from(LocatorPropertyTls::new(Some(tuple.0), Some(tuple.1)))
-    }
-}
-
-impl From<(ClientConfig, ServerConfig)> for LocatorProperty {
-    fn from(tuple: (ClientConfig, ServerConfig)) -> LocatorProperty {
-        Self::from((Arc::new(tuple.0), Arc::new(tuple.1)))
-    }
-}
-
-impl From<Arc<ClientConfig>> for LocatorProperty {
-    fn from(client: Arc<ClientConfig>) -> LocatorProperty {
-        Self::from(LocatorPropertyTls::new(Some(client), None))
-    }
-}
-
-impl From<ClientConfig> for LocatorProperty {
-    fn from(client: ClientConfig) -> LocatorProperty {
-        Self::from(Arc::new(client))
-    }
-}
-
-impl From<Arc<ServerConfig>> for LocatorProperty {
-    fn from(server: Arc<ServerConfig>) -> LocatorProperty {
-        Self::from(LocatorPropertyTls::new(None, Some(server)))
-    }
-}
-
-impl From<ServerConfig> for LocatorProperty {
-    fn from(server: ServerConfig) -> LocatorProperty {
-        Self::from(Arc::new(server))
-    }
-}
-
-impl From<(Option<Arc<ClientConfig>>, Option<Arc<ServerConfig>>)> for LocatorProperty {
-    fn from(tuple: (Option<Arc<ClientConfig>>, Option<Arc<ServerConfig>>)) -> LocatorProperty {
-        Self::from(LocatorPropertyTls::new(tuple.0, tuple.1))
-    }
-}
-
-impl From<(Option<Arc<ServerConfig>>, Option<Arc<ClientConfig>>)> for LocatorProperty {
-    fn from(tuple: (Option<Arc<ServerConfig>>, Option<Arc<ClientConfig>>)) -> LocatorProperty {
-        Self::from(LocatorPropertyTls::new(tuple.1, tuple.0))
-    }
-}
-
-impl From<(Option<ClientConfig>, Option<ServerConfig>)> for LocatorProperty {
-    fn from(mut tuple: (Option<ClientConfig>, Option<ServerConfig>)) -> LocatorProperty {
-        let client_config = tuple.0.take().map(Arc::new);
-        let server_config = tuple.1.take().map(Arc::new);
-        Self::from((client_config, server_config))
-    }
-}
-
-impl From<(Option<ServerConfig>, Option<ClientConfig>)> for LocatorProperty {
-    fn from(mut tuple: (Option<ServerConfig>, Option<ClientConfig>)) -> LocatorProperty {
-        let client_config = tuple.1.take().map(Arc::new);
-        let server_config = tuple.0.take().map(Arc::new);
-        Self::from((client_config, server_config))
-    }
-}
-
-/*************************************/
-/*              LINK                 */
-/*************************************/
-pub struct LinkTls {
+pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library
     // NOTE: TlsStream requires &mut for read and write operations. This means
     //       that concurrent reads and writes are not possible. To achieve that,
@@ -326,11 +53,15 @@ pub struct LinkTls {
     read_mtx: AsyncMutex<()>,
 }
 
-unsafe impl Send for LinkTls {}
-unsafe impl Sync for LinkTls {}
+unsafe impl Send for LinkUnicastTls {}
+unsafe impl Sync for LinkUnicastTls {}
 
-impl LinkTls {
-    fn new(socket: TlsStream<TcpStream>, src_addr: SocketAddr, dst_addr: SocketAddr) -> LinkTls {
+impl LinkUnicastTls {
+    fn new(
+        socket: TlsStream<TcpStream>,
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+    ) -> LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
         if let Err(err) = tcp_stream.set_nodelay(true) {
@@ -358,7 +89,7 @@ impl LinkTls {
         }
 
         // Build the Tls object
-        LinkTls {
+        LinkUnicastTls {
             inner: UnsafeCell::new(socket),
             src_addr,
             dst_addr,
@@ -377,7 +108,7 @@ impl LinkTls {
 }
 
 #[async_trait]
-impl LinkTrait for LinkTls {
+impl LinkTrait for LinkUnicastTls {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
@@ -462,7 +193,7 @@ impl LinkTrait for LinkTls {
     }
 }
 
-impl Drop for LinkTls {
+impl Drop for LinkUnicastTls {
     fn drop(&mut self) {
         // Close the underlying TCP stream
         let (tcp_stream, _) = self.get_sock_mut().get_ref();
@@ -470,14 +201,14 @@ impl Drop for LinkTls {
     }
 }
 
-impl fmt::Display for LinkTls {
+impl fmt::Display for LinkUnicastTls {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.src_addr, self.dst_addr)?;
         Ok(())
     }
 }
 
-impl fmt::Debug for LinkTls {
+impl fmt::Debug for LinkUnicastTls {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tls")
             .field("src", &self.src_addr)
@@ -489,19 +220,19 @@ impl fmt::Debug for LinkTls {
 /*************************************/
 /*          LISTENER                 */
 /*************************************/
-struct ListenerTls {
+struct ListenerUnicastTls {
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
 }
 
-impl ListenerTls {
+impl ListenerUnicastTls {
     fn new(
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
-    ) -> ListenerTls {
-        ListenerTls {
+    ) -> ListenerUnicastTls {
+        ListenerUnicastTls {
             active,
             signal,
             handle,
@@ -509,12 +240,12 @@ impl ListenerTls {
     }
 }
 
-pub struct LinkManagerTls {
+pub struct LinkManagerUnicastTls {
     manager: SessionManager,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerTls>>>,
+    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastTls>>>,
 }
 
-impl LinkManagerTls {
+impl LinkManagerUnicastTls {
     pub(crate) fn new(manager: SessionManager) -> Self {
         Self {
             manager,
@@ -524,7 +255,7 @@ impl LinkManagerTls {
 }
 
 #[async_trait]
-impl LinkManagerTrait for LinkManagerTls {
+impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     async fn new_link(&self, locator: &Locator, ps: Option<&LocatorProperty>) -> ZResult<Link> {
         let domain = get_tls_dns(locator).await?;
         let addr = get_tls_addr(locator).await?;
@@ -567,7 +298,7 @@ impl LinkManagerTrait for LinkManagerTls {
             })?;
         let tls_stream = TlsStream::Client(tls_stream);
 
-        let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
 
         Ok(Link(link))
     }
@@ -625,7 +356,7 @@ impl LinkManagerTrait for LinkManagerTls {
             res
         });
 
-        let listener = ListenerTls::new(active, signal, handle);
+        let listener = ListenerUnicastTls::new(active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
@@ -747,10 +478,10 @@ async fn accept_task(
 
         log::debug!("Accepted TLS connection on {:?}: {:?}", src_addr, dst_addr);
         // Create the new link object
-        let link = Arc::new(LinkTls::new(tls_stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial session manager
-        manager.handle_new_link(Link(link), None).await;
+        manager.handle_new_link_unicast(Link(link), None).await;
     }
 
     Ok(())

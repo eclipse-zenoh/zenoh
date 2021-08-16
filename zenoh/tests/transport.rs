@@ -17,13 +17,14 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
+use zenoh::net::protocol::core::{
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -54,10 +55,7 @@ impl SHRouter {
 }
 
 impl SessionHandler for SHRouter {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         let arc = Arc::new(SCRouter::new(self.count.clone()));
         Ok(arc)
     }
@@ -100,10 +98,7 @@ impl SHClient {
 }
 
 impl SessionHandler for SHClient {
-    fn new_session(
-        &self,
-        _session: Session,
-    ) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
+    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
         Ok(Arc::new(SCClient::new()))
     }
 }
@@ -142,48 +137,20 @@ async fn open_session(
 
     // Create the router session manager
     let router_handler = Arc::new(SHRouter::new());
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::ROUTER,
-        id: router_id.clone(),
-        handler: router_handler.clone(),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property: locator_property.clone(),
-    };
-    let router_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .pid(router_id.clone())
+        .whatami(whatami::ROUTER)
+        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .build(router_handler.clone());
+    let router_manager = SessionManager::new(config);
 
     // Create the client session manager
-    let config = SessionManagerConfig {
-        version: 0,
-        whatami: whatami::CLIENT,
-        id: client_id,
-        handler: Arc::new(SHClient::new()),
-    };
-    let opt_config = SessionManagerOptionalConfig {
-        lease: None,
-        keep_alive: None,
-        sn_resolution: None,
-        open_timeout: None,
-        open_incoming_pending: None,
-        batch_size: None,
-        max_sessions: None,
-        max_links: None,
-        peer_authenticator: None,
-        link_authenticator: None,
-        locator_property,
-    };
-    let client_manager = SessionManager::new(config, Some(opt_config));
+    let config = SessionManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client_id)
+        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .build(Arc::new(SHClient::new()));
+    let client_manager = SessionManager::new(config);
 
     // Create the listener on the router
     for l in locators.iter() {
@@ -267,6 +234,7 @@ async fn single_run(
         key,
         payload,
         channel,
+        CongestionControl::Block,
         data_info,
         routing_context,
         reply_context,
@@ -683,10 +651,11 @@ fn transport_quic_only() {
         zasync_executor_init!();
     });
 
-    use zenoh::net::protocol::link::quic::{
+    use quinn::{
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
-        ServerConfigBuilder, TransportConfig, ALPN_QUIC_HTTP,
+        ServerConfigBuilder, TransportConfig,
     };
+    use zenoh::net::protocol::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
