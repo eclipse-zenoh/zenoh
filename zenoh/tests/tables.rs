@@ -21,8 +21,8 @@ use zenoh::net::protocol::core::{
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
-use zenoh::net::protocol::session::{DummyPrimitives, Primitives};
 use zenoh::net::routing::router::*;
+use zenoh::net::transport::{DummyPrimitives, Primitives};
 use zenoh_util::zlock;
 
 #[test]

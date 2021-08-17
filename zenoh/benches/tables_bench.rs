@@ -19,10 +19,10 @@ use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Reliability, SubInfo, SubMode,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::session::DummyPrimitives;
 use zenoh::net::routing::pubsub::*;
 use zenoh::net::routing::resource::*;
 use zenoh::net::routing::router::Tables;
+use zenoh::net::transport::DummyPrimitives;
 
 fn tables_bench(c: &mut Criterion) {
     let mut tables = Tables::new(PeerId::new(0, [0; 16]), whatami::ROUTER, None);

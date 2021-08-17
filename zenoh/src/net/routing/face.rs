@@ -17,8 +17,8 @@ use super::protocol::core::{
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
-use super::protocol::session::Primitives;
 use super::router::*;
+use super::transport::Primitives;
 use async_std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use std::fmt;

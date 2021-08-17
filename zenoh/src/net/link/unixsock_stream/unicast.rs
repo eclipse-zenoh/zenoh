@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::*;
-use crate::net::protocol::session::SessionManager;
+use crate::net::transport::SessionManager;
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::{Path, PathBuf};
 use async_std::prelude::*;

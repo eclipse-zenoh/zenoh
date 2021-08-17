@@ -14,8 +14,8 @@
 use super::link::Locator;
 use super::protocol::core::{whatami, PeerId, ZInt};
 use super::protocol::proto::{LinkState, ZenohMessage};
-use super::protocol::session::Session;
 use super::runtime::Runtime;
+use super::transport::Session;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;

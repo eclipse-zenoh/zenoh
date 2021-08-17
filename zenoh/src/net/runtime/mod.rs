@@ -20,12 +20,13 @@ use super::plugins;
 use super::protocol;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::protocol::session::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
+use super::transport;
+use super::transport::{
+    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+};
 pub use adminspace::AdminSpace;
 use async_std::sync::Arc;
 use std::any::Any;

@@ -17,9 +17,9 @@ use super::protocol::{
     },
     io::ZBuf,
     proto::{encoding, DataInfo, RoutingContext},
-    session::Primitives,
 };
 use super::routing::face::Face;
+use super::transport::Primitives;
 use super::Runtime;
 use async_std::sync::Arc;
 use async_std::task;

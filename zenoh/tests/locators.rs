@@ -18,7 +18,7 @@ use std::time::Duration;
 use zenoh::net::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
-use zenoh::net::protocol::session::{
+use zenoh::net::transport::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
 };
 use zenoh_util::core::ZResult;

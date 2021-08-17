@@ -20,9 +20,9 @@ use zenoh::net::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 #[cfg(feature = "zero-copy")]
-use zenoh::net::protocol::session::unicast::authenticator::SharedMemoryAuthenticator;
-use zenoh::net::protocol::session::unicast::authenticator::UserPasswordAuthenticator;
-use zenoh::net::protocol::session::{
+use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
+use zenoh::net::transport::unicast::authenticator::UserPasswordAuthenticator;
+use zenoh::net::transport::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
     SessionManagerConfig, SessionManagerConfigUnicast,
 };

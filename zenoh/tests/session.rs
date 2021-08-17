@@ -17,7 +17,7 @@ use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::{Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
-use zenoh::net::protocol::session::{
+use zenoh::net::transport::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
     SessionManagerConfig, SessionManagerConfigUnicast,
 };

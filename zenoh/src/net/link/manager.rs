@@ -22,7 +22,7 @@ use super::udp::LinkManagerUnicastUdp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use super::unixsock_stream::LinkManagerUnicastUnixSocketStream;
 use super::{Link, Locator, LocatorProperty, LocatorProtocol};
-use crate::net::protocol::session::SessionManager;
+use crate::net::transport::SessionManager;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use zenoh_util::core::ZResult;

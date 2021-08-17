@@ -19,7 +19,7 @@ use criterion::Criterion;
 use zenoh::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ResKey};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::ZenohMessage;
-use zenoh::net::protocol::session::defaults::ZN_DEFAULT_BATCH_SIZE;
+use zenoh::net::transport::defaults::ZN_DEFAULT_BATCH_SIZE;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let batch_size = ZN_DEFAULT_BATCH_SIZE;

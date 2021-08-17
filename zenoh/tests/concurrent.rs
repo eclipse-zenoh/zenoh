@@ -24,7 +24,7 @@ use zenoh::net::protocol::core::{
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
-use zenoh::net::protocol::session::{
+use zenoh::net::transport::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
     SessionManagerConfigUnicast,
 };

@@ -15,7 +15,7 @@ use super::link::Locator;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
-use super::protocol::session::Session;
+use super::transport::Session;
 use super::{Runtime, RuntimeSession};
 use async_std::net::UdpSocket;
 use futures::prelude::*;

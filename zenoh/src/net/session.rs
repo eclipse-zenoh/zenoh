@@ -25,7 +25,6 @@ use protocol::{
     },
     io::ZBuf,
     proto::RoutingContext,
-    session::Primitives,
 };
 use runtime::Runtime;
 use std::collections::HashMap;
@@ -33,6 +32,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use std::time::Duration;
+use transport::Primitives;
 use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::zpinbox;

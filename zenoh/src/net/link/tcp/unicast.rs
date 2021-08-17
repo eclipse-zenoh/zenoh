@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::*;
-use crate::net::protocol::session::SessionManager;
+use crate::net::transport::SessionManager;
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task;

@@ -75,6 +75,8 @@ pub mod protocol;
 pub mod routing;
 #[doc(hidden)]
 pub mod runtime;
+#[macro_use]
+pub mod transport;
 
 use async_std::net::UdpSocket;
 use flume::bounded;
@@ -95,7 +97,7 @@ pub use types::*;
 
 pub mod info;
 
-#[macro_use]
+#[doc(hidden)]
 mod session;
 pub use session::*;
 

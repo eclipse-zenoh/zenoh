@@ -20,7 +20,7 @@ use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::protocol::session::{DeMux, Mux, Primitives, Session, SessionEventHandler};
+use super::transport::{DeMux, Mux, Primitives, Session, SessionEventHandler};
 use crate::net::link::Link;
 
 use zenoh_util::core::ZResult;

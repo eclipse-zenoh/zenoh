@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::*;
-use crate::net::protocol::session::SessionManager;
+use crate::net::transport::SessionManager;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
