@@ -24,14 +24,14 @@ pub(crate) mod imsg {
     use super::ZInt;
 
     pub(crate) mod id {
-        // Session Messages Unicast
+        // Transport Messages Unicast
         pub(crate) const INIT: u8 = 0x03;
         pub(crate) const OPEN: u8 = 0x04;
         pub(crate) const CLOSE: u8 = 0x05;
         pub(crate) const SYNC: u8 = 0x06;
         pub(crate) const ACK_NACK: u8 = 0x07;
         pub(crate) const PING_PONG: u8 = 0x09;
-        // Session Messages
+        // Transport Messages
         pub(crate) const SCOUT: u8 = 0x01;
         pub(crate) const HELLO: u8 = 0x02;
         pub(crate) const KEEP_ALIVE: u8 = 0x08;
@@ -76,7 +76,7 @@ pub(crate) mod imsg {
 pub mod smsg {
     use super::{imsg, Priority, ZInt};
 
-    // Session message IDs -- Re-export of some of the Inner Message IDs
+    // Transport message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
         use super::imsg;
 
@@ -97,7 +97,7 @@ pub mod smsg {
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
     }
 
-    // Session message flags
+    // Transport message flags
     pub mod flag {
         pub const A: u8 = 1 << 5; // 0x20 Ack           if A==1 then the message is an acknowledgment
         pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
@@ -327,7 +327,7 @@ pub(crate) trait Options {
 ///
 /// The Attachment can decorate any message (i.e., TransportMessage and ZenohMessage) and it allows to
 /// append to the message any additional information. Since the information contained in the
-/// Attachement is relevant only to the layer that provided them (e.g., Session, Zenoh, User) it
+/// Attachement is relevant only to the layer that provided them (e.g., Transport, Zenoh, User) it
 /// is the duty of that layer to serialize and de-serialize the attachment whenever deemed necessary.
 /// The attachement always contains serialized properties.
 ///
@@ -1264,10 +1264,10 @@ impl ZenohMessage {
 }
 
 /*************************************/
-/*        SESSION MESSAGES           */
+/*       TRANSPORTMESSAGES           */
 /*************************************/
 #[derive(Debug, Clone)]
-pub enum SessionMode {
+pub enum TransportMode {
     Push,
     Pull,
     PeriodicPush(u32),

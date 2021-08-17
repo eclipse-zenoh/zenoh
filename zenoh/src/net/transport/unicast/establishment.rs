@@ -22,7 +22,7 @@ use super::protocol::io::{WBuf, ZBuf, ZSlice};
 use super::protocol::proto::{
     smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, TransportBody, TransportMessage,
 };
-use super::{SessionConfigUnicast, TransportUnicast};
+use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::Link;
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -465,7 +465,7 @@ pub(crate) async fn open_link(
         }
     };
 
-    let config = SessionConfigUnicast {
+    let config = TransportConfigUnicast {
         peer: info.pid.clone(),
         whatami: info.whatami,
         sn_resolution: info.sn_resolution,
@@ -853,7 +853,7 @@ async fn accept_recv_open_syn(
 }
 
 // Validate the OpenSyn cookie and eventually initialize a new transport
-struct AcceptInitSessionOutput {
+struct AcceptInitTransportOutput {
     transport: TransportUnicast,
     initial_sn: ZInt,
     lease: ZInt,
@@ -864,7 +864,7 @@ async fn accept_init_transport(
     link: &Link,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptOpenSynOutput,
-) -> IResult<AcceptInitSessionOutput> {
+) -> IResult<AcceptInitTransportOutput> {
     // Initialize the transport if it is new
     // NOTE: Keep the lock on the manager.opened and use it to protect concurrent
     //       addition of new transports and links
@@ -910,7 +910,7 @@ async fn accept_init_transport(
         }
     };
 
-    let config = SessionConfigUnicast {
+    let config = TransportConfigUnicast {
         peer: input.cookie.pid.clone(),
         whatami: input.cookie.whatami,
         sn_resolution: input.cookie.sn_resolution,
@@ -935,7 +935,7 @@ async fn accept_init_transport(
         link
     );
 
-    let output = AcceptInitSessionOutput {
+    let output = AcceptInitTransportOutput {
         transport,
         initial_sn: open_ack_initial_sn,
         lease: input.lease,
@@ -953,7 +953,7 @@ async fn accept_send_open_ack(
     manager: &TransportManager,
     link: &Link,
     _auth_link: &AuthenticatedPeerLink,
-    input: AcceptInitSessionOutput,
+    input: AcceptInitTransportOutput,
 ) -> ZResult<AcceptOpenAckOutput> {
     // Build OpenAck message
     let message = TransportMessage::make_open_ack(
@@ -1039,7 +1039,7 @@ async fn accept_link_stages(
     manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
-) -> IResult<AcceptInitSessionOutput> {
+) -> IResult<AcceptInitTransportOutput> {
     let output = accept_recv_init_syn(manager, link, auth_link).await?;
     let output = accept_send_init_ack(manager, link, auth_link, output).await?;
     let output = accept_recv_open_syn(manager, link, auth_link, output).await?;
@@ -1050,7 +1050,7 @@ async fn accept_transport_stages(
     manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
-    input: AcceptInitSessionOutput,
+    input: AcceptInitTransportOutput,
 ) -> ZResult<()> {
     let output = accept_send_open_ack(manager, link, auth_link, input).await?;
     accept_finalize_transport(manager, link, auth_link, output).await

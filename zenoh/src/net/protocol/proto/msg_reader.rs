@@ -92,7 +92,7 @@ impl ZBuf {
                     }
                 }
                 unknown => {
-                    log::trace!("Session message with unknown ID: {}", unknown);
+                    log::trace!("Transport message with unknown ID: {}", unknown);
                     return None;
                 }
             }

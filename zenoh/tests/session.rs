@@ -37,7 +37,7 @@ impl TransportHandler for SHRouterOpenClose {
     }
 }
 
-// Session Handler for the client
+// Transport Handler for the client
 struct SHClientOpenClose {}
 
 impl SHClientOpenClose {
@@ -104,35 +104,35 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
     let client02_manager = TransportManager::new(config);
 
     /* [1] */
-    println!("\nSession Open Close [1a1]");
+    println!("\nTransport Open Close [1a1]");
     // Add the locator on the router
     let res = router_manager.add_listener(&locator).await;
-    println!("Session Open Close [1a1]: {:?}", res);
+    println!("Transport Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Open Close [1a2]");
+    println!("Transport Open Close [1a2]");
     let locators = router_manager.get_listeners();
-    println!("Session Open Close [1a2]: {:?}", locators);
+    println!("Transport Open Close [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     // Open a first transport from the client to the router
     // -> This should be accepted
-    println!("Session Open Close [1c1]");
+    println!("Transport Open Close [1c1]");
     let res = client01_manager.open_transport(&locator).await;
-    println!("Session Open Close [1c2]: {:?}", res);
+    println!("Transport Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
-    println!("Session Open Close [1d1]");
+    println!("Transport Open Close [1d1]");
     let transports = client01_manager.get_transports();
-    println!("Session Open Close [1d2]: {:?}", transports);
+    println!("Transport Open Close [1d2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
-    println!("Session Open Close [1e1]");
+    println!("Transport Open Close [1e1]");
     let links = c_ses1.get_links().unwrap();
-    println!("Session Open Close [1e2]: {:?}", links);
+    println!("Transport Open Close [1e2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
     // Verify that the transport has been open on the router
-    println!("Session Open Close [1f1]");
+    println!("Transport Open Close [1f1]");
     let check = async {
         loop {
             let transports = router_manager.get_transports();
@@ -151,29 +151,29 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         }
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [1f2]: {:?}", res);
+    println!("Transport Open Close [1f2]: {:?}", res);
 
     /* [2] */
     // Open a second transport from the client to the router
     // -> This should be accepted
-    println!("\nSession Open Close [2a1]");
+    println!("\nTransport Open Close [2a1]");
     let res = client01_manager.open_transport(&locator).await;
-    println!("Session Open Close [2a2]: {:?}", res);
+    println!("Transport Open Close [2a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
-    println!("Session Open Close [2b1]");
+    println!("Transport Open Close [2b1]");
     let transports = client01_manager.get_transports();
-    println!("Session Open Close [2b2]: {:?}", transports);
+    println!("Transport Open Close [2b2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
     assert_eq!(c_ses2.get_pid().unwrap(), router_id);
-    println!("Session Open Close [2c1]");
+    println!("Transport Open Close [2c1]");
     let links = c_ses2.get_links().unwrap();
-    println!("Session Open Close [2c2]: {:?}", links);
+    println!("Transport Open Close [2c2]: {:?}", links);
     assert_eq!(links.len(), 2);
     assert_eq!(c_ses2, c_ses1);
 
     // Verify that the transport has been open on the router
-    println!("Session Open Close [2d1]");
+    println!("Transport Open Close [2d1]");
     let check = async {
         loop {
             let transports = router_manager.get_transports();
@@ -190,27 +190,27 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         }
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [2d2]: {:?}", res);
+    println!("Transport Open Close [2d2]: {:?}", res);
 
     /* [3] */
     // Open transport -> This should be rejected because
     // of the maximum limit of links per transport
-    println!("\nSession Open Close [3a1]");
+    println!("\nTransport Open Close [3a1]");
     let res = client01_manager.open_transport(&locator).await;
-    println!("Session Open Close [3a2]: {:?}", res);
+    println!("Transport Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
-    println!("Session Open Close [3b1]");
+    println!("Transport Open Close [3b1]");
     let transports = client01_manager.get_transports();
-    println!("Session Open Close [3b2]: {:?}", transports);
+    println!("Transport Open Close [3b2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
-    println!("Session Open Close [3c1]");
+    println!("Transport Open Close [3c1]");
     let links = c_ses1.get_links().unwrap();
-    println!("Session Open Close [3c2]: {:?}", links);
+    println!("Transport Open Close [3c2]: {:?}", links);
     assert_eq!(links.len(), 2);
 
     // Verify that the transport has not been open on the router
-    println!("Session Open Close [3d1]");
+    println!("Transport Open Close [3d1]");
     let check = async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
@@ -223,21 +223,21 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         assert_eq!(links.len(), 2);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [3d2]: {:?}", res);
+    println!("Transport Open Close [3d2]: {:?}", res);
 
     /* [4] */
     // Close the open transport on the client
-    println!("\nSession Open Close [4a1]");
+    println!("\nTransport Open Close [4a1]");
     let res = c_ses1.close().await;
-    println!("Session Open Close [4a2]: {:?}", res);
+    println!("Transport Open Close [4a2]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Open Close [4b1]");
+    println!("Transport Open Close [4b1]");
     let transports = client01_manager.get_transports();
-    println!("Session Open Close [4b2]: {:?}", transports);
+    println!("Transport Open Close [4b2]: {:?}", transports);
     assert_eq!(transports.len(), 0);
 
     // Verify that the transport has been closed also on the router
-    println!("Session Open Close [4c1]");
+    println!("Transport Open Close [4c1]");
     let check = async {
         loop {
             let transports = router_manager.get_transports();
@@ -251,28 +251,28 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         }
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [4c2]: {:?}", res);
+    println!("Transport Open Close [4c2]: {:?}", res);
 
     /* [5] */
     // Open transport -> This should be accepted because
     // the number of links should be back to 0
-    println!("\nSession Open Close [5a1]");
+    println!("\nTransport Open Close [5a1]");
     let res = client01_manager.open_transport(&locator).await;
-    println!("Session Open Close [5a2]: {:?}", res);
+    println!("Transport Open Close [5a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
-    println!("Session Open Close [5b1]");
+    println!("Transport Open Close [5b1]");
     let transports = client01_manager.get_transports();
-    println!("Session Open Close [5b2]: {:?}", transports);
+    println!("Transport Open Close [5b2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
     assert_eq!(c_ses3.get_pid().unwrap(), router_id);
-    println!("Session Open Close [5c1]");
+    println!("Transport Open Close [5c1]");
     let links = c_ses3.get_links().unwrap();
-    println!("Session Open Close [5c2]: {:?}", links);
+    println!("Transport Open Close [5c2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
     // Verify that the transport has not been open on the router
-    println!("Session Open Close [5d1]");
+    println!("Transport Open Close [5d1]");
     let check = async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
@@ -285,22 +285,22 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         assert_eq!(links.len(), 1);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [5d2]: {:?}", res);
+    println!("Transport Open Close [5d2]: {:?}", res);
 
     /* [6] */
     // Open transport -> This should be rejected because
     // of the maximum limit of transports
-    println!("\nSession Open Close [6a1]");
+    println!("\nTransport Open Close [6a1]");
     let res = client02_manager.open_transport(&locator).await;
-    println!("Session Open Close [6a2]: {:?}", res);
+    println!("Transport Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
-    println!("Session Open Close [6b1]");
+    println!("Transport Open Close [6b1]");
     let transports = client02_manager.get_transports();
-    println!("Session Open Close [6b2]: {:?}", transports);
+    println!("Transport Open Close [6b2]: {:?}", transports);
     assert_eq!(transports.len(), 0);
 
     // Verify that the transport has not been open on the router
-    println!("Session Open Close [6c1]");
+    println!("Transport Open Close [6c1]");
     let check = async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
@@ -313,21 +313,21 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         assert_eq!(links.len(), 1);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [6c2]: {:?}", res);
+    println!("Transport Open Close [6c2]: {:?}", res);
 
     /* [7] */
     // Close the open transport on the client
-    println!("\nSession Open Close [7a1]");
+    println!("\nTransport Open Close [7a1]");
     let res = c_ses3.close().await;
-    println!("Session Open Close [7a2]: {:?}", res);
+    println!("Transport Open Close [7a2]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Open Close [7b1]");
+    println!("Transport Open Close [7b1]");
     let transports = client01_manager.get_transports();
-    println!("Session Open Close [7b2]: {:?}", transports);
+    println!("Transport Open Close [7b2]: {:?}", transports);
     assert_eq!(transports.len(), 0);
 
     // Verify that the transport has been closed also on the router
-    println!("Session Open Close [7c1]");
+    println!("Transport Open Close [7c1]");
     let check = async {
         loop {
             let transports = router_manager.get_transports();
@@ -338,27 +338,27 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         }
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [7c2]: {:?}", res);
+    println!("Transport Open Close [7c2]: {:?}", res);
 
     /* [8] */
     // Open transport -> This should be accepted because
     // the number of transports should be back to 0
-    println!("\nSession Open Close [8a1]");
+    println!("\nTransport Open Close [8a1]");
     let res = client02_manager.open_transport(&locator).await;
-    println!("Session Open Close [8a2]: {:?}", res);
+    println!("Transport Open Close [8a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();
-    println!("Session Open Close [8b1]");
+    println!("Transport Open Close [8b1]");
     let transports = client02_manager.get_transports();
-    println!("Session Open Close [8b2]: {:?}", transports);
+    println!("Transport Open Close [8b2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
-    println!("Session Open Close [8c1]");
+    println!("Transport Open Close [8c1]");
     let links = c_ses4.get_links().unwrap();
-    println!("Session Open Close [8c2]: {:?}", links);
+    println!("Transport Open Close [8c2]: {:?}", links);
     assert_eq!(links.len(), 1);
 
     // Verify that the transport has been open on the router
-    println!("Session Open Close [8d1]");
+    println!("Transport Open Close [8d1]");
     let check = async {
         loop {
             let transports = router_manager.get_transports();
@@ -376,21 +376,21 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         }
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [8d2]: {:?}", res);
+    println!("Transport Open Close [8d2]: {:?}", res);
 
     /* [9] */
     // Close the open transport on the client
-    println!("Session Open Close [9a1]");
+    println!("Transport Open Close [9a1]");
     let res = c_ses4.close().await;
-    println!("Session Open Close [9a2]: {:?}", res);
+    println!("Transport Open Close [9a2]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Open Close [9b1]");
+    println!("Transport Open Close [9b1]");
     let transports = client02_manager.get_transports();
-    println!("Session Open Close [9b2]: {:?}", transports);
+    println!("Transport Open Close [9b2]: {:?}", transports);
     assert_eq!(transports.len(), 0);
 
     // Verify that the transport has been closed also on the router
-    println!("Session Open Close [9c1]");
+    println!("Transport Open Close [9c1]");
     let check = async {
         loop {
             let transports = router_manager.get_transports();
@@ -401,13 +401,13 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
         }
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Open Close [9c2]: {:?}", res);
+    println!("Transport Open Close [9c2]: {:?}", res);
 
     /* [10] */
     // Perform clean up of the open locators
-    println!("\nSession Open Close [10a1]");
+    println!("\nTransport Open Close [10a1]");
     let res = router_manager.del_listener(&locator).await;
-    println!("Session Open Close [10a2]: {:?}", res);
+    println!("Transport Open Close [10a2]: {:?}", res);
     assert!(res.is_ok());
 
     task::sleep(SLEEP).await;

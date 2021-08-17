@@ -28,7 +28,7 @@ use transport::TransportUnicastInner;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror2;
 
-pub(crate) struct SessionConfigUnicast {
+pub(crate) struct TransportConfigUnicast {
     pub(crate) peer: PeerId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
@@ -49,7 +49,7 @@ impl TransportUnicast {
     pub(super) fn get_transport(&self) -> ZResult<Arc<TransportUnicastInner>> {
         self.upgrade().ok_or_else(|| {
             zerror2!(ZErrorKind::InvalidReference {
-                descr: "Session closed".to_string()
+                descr: "Transport closed".to_string()
             })
         })
     }

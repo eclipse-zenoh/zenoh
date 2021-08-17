@@ -36,7 +36,7 @@ const MSG_SIZE: usize = 1_024;
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
 
-// Session Handler for the router
+// Transport Handler for the router
 struct SHPeer {
     count: Arc<AtomicUsize>,
 }
@@ -138,12 +138,15 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
         // Add the locators on the first peer
         for loc in c_loc01.iter() {
             let res = peer01_manager.add_listener(loc).await;
-            println!("[Session Peer 01a] => Adding locator {:?}: {:?}", loc, res);
+            println!(
+                "[Transport Peer 01a] => Adding locator {:?}: {:?}",
+                loc, res
+            );
             assert!(res.is_ok());
         }
         let locs = peer01_manager.get_listeners();
         println!(
-            "[Session Peer 01b] => Getting locators: {:?} {:?}",
+            "[Transport Peer 01b] => Getting locators: {:?} {:?}",
             c_loc01, locs
         );
         assert_eq!(c_loc01.len(), locs.len());
@@ -155,13 +158,13 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
             let c_p01m = peer01_manager.clone();
             let c_loc = loc.clone();
             task::spawn(async move {
-                println!("[Session Peer 01c] => Waiting for opening transport");
+                println!("[Transport Peer 01c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
                 let res = c_p01m.open_transport(&c_loc).await;
                 println!(
-                    "[Session Peer 01d] => Opening transport with {:?}: {:?}",
+                    "[Transport Peer 01d] => Opening transport with {:?}: {:?}",
                     c_loc, res
                 );
                 assert!(res.is_ok());
@@ -173,7 +176,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
 
         // Syncrhonize after opening the transports
         c_barod.wait().timeout(TIMEOUT).await.unwrap();
-        println!("[Session Peer 01e] => Waiting... OK");
+        println!("[Transport Peer 01e] => Waiting... OK");
 
         // Verify that the transport has been correctly open
         assert_eq!(peer01_manager.get_transports().len(), 1);
@@ -209,13 +212,13 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
 
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
-        println!("[Session Peer 01f] => Waiting... OK");
+        println!("[Transport Peer 01f] => Waiting... OK");
 
         for i in 0..MSG_COUNT {
-            println!("[Session Peer 01g] Scheduling message {}", i);
+            println!("[Transport Peer 01g] Scheduling message {}", i);
             s02.schedule(message.clone()).unwrap();
         }
-        println!("[Session Peer 01g] => Scheduling OK");
+        println!("[Transport Peer 01g] => Scheduling OK");
 
         // Wait for the messages to arrive to the other side
         let count = async {
@@ -228,9 +231,9 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
 
-        println!("[Session Peer 01h] => Closing {:?}...", s02);
+        println!("[Transport Peer 01h] => Closing {:?}...", s02);
         let res = s02.close().timeout(TIMEOUT).await.unwrap();
-        println!("[Session Peer 01l] => Closing {:?}: {:?}", s02, res);
+        println!("[Transport Peer 01l] => Closing {:?}: {:?}", s02, res);
         assert!(res.is_ok());
     });
 
@@ -245,12 +248,15 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
         // Add the locators on the first peer
         for loc in c_loc02.iter() {
             let res = peer02_manager.add_listener(loc).await;
-            println!("[Session Peer 02a] => Adding locator {:?}: {:?}", loc, res);
+            println!(
+                "[Transport Peer 02a] => Adding locator {:?}: {:?}",
+                loc, res
+            );
             assert!(res.is_ok());
         }
         let locs = peer02_manager.get_listeners();
         println!(
-            "[Session Peer 02b] => Getting locators: {:?} {:?}",
+            "[Transport Peer 02b] => Getting locators: {:?} {:?}",
             c_loc02, locs
         );
         assert_eq!(c_loc02.len(), locs.len());
@@ -262,13 +268,13 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
             let c_p02m = peer02_manager.clone();
             let c_loc = loc.clone();
             task::spawn(async move {
-                println!("[Session Peer 02c] => Waiting for opening transport");
+                println!("[Transport Peer 02c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
                 let res = c_p02m.open_transport(&c_loc).await;
                 println!(
-                    "[Session Peer 02d] => Opening transport with {:?}: {:?}",
+                    "[Transport Peer 02d] => Opening transport with {:?}: {:?}",
                     c_loc, res
                 );
                 assert!(res.is_ok());
@@ -283,7 +289,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
 
         // Verify that the transport has been correctly open
         println!(
-            "[Session Peer 02e] => Sessions: {:?}",
+            "[Transport Peer 02e] => Transports: {:?}",
             peer02_manager.get_transports()
         );
         assert_eq!(peer02_manager.get_transports().len(), 1);
@@ -319,13 +325,13 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
 
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
-        println!("[Session Peer 02f] => Waiting... OK");
+        println!("[Transport Peer 02f] => Waiting... OK");
 
         for i in 0..MSG_COUNT {
-            println!("[Session Peer 02g] Scheduling message {}", i);
+            println!("[Transport Peer 02g] Scheduling message {}", i);
             s01.schedule(message.clone()).unwrap();
         }
-        println!("[Session Peer 02g] => Scheduling OK");
+        println!("[Transport Peer 02g] => Scheduling OK");
 
         // Wait for the messages to arrive to the other side
         let count = async {
@@ -339,15 +345,15 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
         // Synchronize wit the peer
         c_barp.wait().timeout(TIMEOUT).await.unwrap();
 
-        println!("[Session Peer 02h] => Closing {:?}...", s01);
+        println!("[Transport Peer 02h] => Closing {:?}...", s01);
         let res = s01.close().timeout(TIMEOUT).await.unwrap();
-        println!("[Session Peer 02l] => Closing {:?}: {:?}", s01, res);
+        println!("[Transport Peer 02l] => Closing {:?}: {:?}", s01, res);
         assert!(res.is_ok());
     });
 
-    println!("[Session Current 01] => Starting...");
+    println!("[Transport Current 01] => Starting...");
     peer01_task.join(peer02_task).await;
-    println!("[Session Current 02] => ...Stopped");
+    println!("[Transport Current 02] => ...Stopped");
 
     task::sleep(SLEEP).await;
 }

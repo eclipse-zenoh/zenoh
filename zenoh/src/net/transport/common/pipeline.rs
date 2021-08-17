@@ -317,7 +317,7 @@ impl TransmissionPipeline {
         }
 
         log::warn!(
-            "Session message dropped because it can not be fragmented: {:?}",
+            "Transport message dropped because it can not be fragmented: {:?}",
             message
         );
     }

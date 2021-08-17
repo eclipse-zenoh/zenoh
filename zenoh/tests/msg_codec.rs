@@ -248,7 +248,7 @@ fn test_write_read_zenoh_message(msg: ZenohMessage) {
 }
 
 /*************************************/
-/*        SESSION MESSAGES           */
+/*       TRANSPORTMESSAGES           */
 /*************************************/
 
 #[test]

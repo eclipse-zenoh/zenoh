@@ -305,11 +305,11 @@ impl TransportManager {
     }
 
     /*************************************/
-    /*              SESSION              */
+    /*             TRANSPORT             */
     /*************************************/
     pub(super) fn init_transport_unicast(
         &self,
-        config: SessionConfigUnicast,
+        config: TransportConfigUnicast,
     ) -> ZResult<TransportUnicast> {
         let mut guard = zlock!(self.state.unicast.transports);
 
@@ -317,7 +317,7 @@ impl TransportManager {
         if let Some(transport) = guard.get(&config.peer) {
             if transport.whatami != config.whatami {
                 let e = format!(
-                    "Session with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
+                    "Transport with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
                     config.peer, config.whatami, transport.whatami
                 );
                 log::trace!("{}", e);
@@ -326,7 +326,7 @@ impl TransportManager {
 
             if transport.sn_resolution != config.sn_resolution {
                 let e = format!(
-                    "Session with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
+                    "Transport with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
                     config.peer, config.sn_resolution, transport.sn_resolution
                 );
                 log::trace!("{}", e);
@@ -335,7 +335,7 @@ impl TransportManager {
 
             if transport.is_shm != config.is_shm {
                 let e = format!(
-                    "Session with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
+                    "Transport with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
                     config.peer, config.is_shm, transport.is_shm
                 );
                 log::trace!("{}", e);

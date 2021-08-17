@@ -39,7 +39,7 @@ mod tests {
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE: usize = 1_024;
 
-    // Session Handler for the router
+    // Transport Handler for the router
     struct SHPeer {
         count: Arc<AtomicUsize>,
         is_shm: bool,
@@ -65,7 +65,7 @@ mod tests {
         }
     }
 
-    // Session Callback for the peer
+    // Transport Callback for the peer
     pub struct SCPeer {
         count: Arc<AtomicUsize>,
         is_shm: bool,
@@ -154,7 +154,7 @@ mod tests {
         let peer_net01_manager = TransportManager::new(config);
 
         // Create the listener on the peer
-        println!("\nSession SHM [1a]");
+        println!("\nTransport SHM [1a]");
         let _ = peer_shm01_manager
             .add_listener(locator)
             .timeout(TIMEOUT)
@@ -163,7 +163,7 @@ mod tests {
             .unwrap();
 
         // Create a transport with the peer
-        println!("Session SHM [1b]");
+        println!("Transport SHM [1b]");
         let _ = peer_shm02_manager
             .open_transport(locator)
             .timeout(TIMEOUT)
@@ -172,7 +172,7 @@ mod tests {
             .unwrap();
 
         // Create a transport with the peer
-        println!("Session SHM [1c]");
+        println!("Transport SHM [1c]");
         let _ = peer_net01_manager
             .open_transport(locator)
             .timeout(TIMEOUT)
@@ -181,14 +181,14 @@ mod tests {
             .unwrap();
 
         // Retrieve the transports
-        println!("Session SHM [2a]");
+        println!("Transport SHM [2a]");
         let peer_shm02_transport = peer_shm01_manager.get_transport(&peer_shm02).unwrap();
 
-        println!("Session SHM [2b]");
+        println!("Transport SHM [2b]");
         let peer_net01_transport = peer_shm01_manager.get_transport(&peer_net01).unwrap();
 
         // Send the message
-        println!("Session SHM [3a]");
+        println!("Transport SHM [3a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
@@ -237,7 +237,7 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Wait for the messages to arrive to the other side
-        println!("\nSession SHM [3b]");
+        println!("\nTransport SHM [3b]");
         let count = async {
             while peer_shm02_handler.get_count() != MSG_COUNT {
                 task::sleep(SLEEP).await;
@@ -246,7 +246,7 @@ mod tests {
         let _ = count.timeout(TIMEOUT).await.unwrap();
 
         // Send the message
-        println!("Session SHM [4a]");
+        println!("Transport SHM [4a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
@@ -294,7 +294,7 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Wait for the messages to arrive to the other side
-        println!("\nSession SHM [4b]");
+        println!("\nTransport SHM [4b]");
         let count = async {
             while peer_net01_handler.get_count() != MSG_COUNT {
                 task::sleep(SLEEP).await;
@@ -306,7 +306,7 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Close the transports
-        println!("Session SHM [5a]");
+        println!("Transport SHM [5a]");
         let _ = peer_shm02_transport
             .close()
             .timeout(TIMEOUT)
@@ -314,7 +314,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        println!("Session SHM [5b]");
+        println!("Transport SHM [5b]");
         let _ = peer_net01_transport
             .close()
             .timeout(TIMEOUT)
@@ -326,7 +326,7 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Delete the listener
-        println!("Session SHM [6a]");
+        println!("Transport SHM [6a]");
         let _ = peer_shm01_manager
             .del_listener(locator)
             .timeout(TIMEOUT)

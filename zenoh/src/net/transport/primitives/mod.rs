@@ -23,7 +23,7 @@ use super::protocol::proto::{DataInfo, RoutingContext};
 pub use demux::*;
 pub use mux::*;
 
-pub trait Primitives {
+pub trait Primitives: Send + Sync {
     fn decl_resource(&self, rid: ZInt, reskey: &ResKey);
     fn forget_resource(&self, rid: ZInt);
 

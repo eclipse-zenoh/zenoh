@@ -68,7 +68,7 @@ impl TransportEventHandler for MHRouterAuthenticator {
     }
 }
 
-// Session Handler for the client
+// Transport Handler for the client
 #[derive(Default)]
 struct SHClientAuthenticator;
 
@@ -170,45 +170,45 @@ async fn authenticator_user_password(
     let client03_manager = TransportManager::new(config);
 
     /* [1] */
-    println!("\nSession Authenticator UserPassword [1a1]");
+    println!("\nTransport Authenticator UserPassword [1a1]");
     // Add the locator on the router
     let res = router_manager.add_listener(&locator).await;
-    println!("Session Authenticator UserPassword [1a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [1a1]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Authenticator UserPassword [1a2]");
+    println!("Transport Authenticator UserPassword [1a2]");
     let locators = router_manager.get_listeners();
-    println!("Session Authenticator UserPassword [1a2]: {:?}", locators);
+    println!("Transport Authenticator UserPassword [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     /* [2] */
     // Open a first transport from the client to the router
     // -> This should be accepted
-    println!("Session Authenticator UserPassword [2a1]");
+    println!("Transport Authenticator UserPassword [2a1]");
     let res = client01_manager.open_transport(&locator).await;
-    println!("Session Authenticator UserPassword [2a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
 
     /* [3] */
-    println!("Session Authenticator UserPassword [3a1]");
+    println!("Transport Authenticator UserPassword [3a1]");
     let res = c_ses1.close().await;
-    println!("Session Authenticator UserPassword [3a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [3a1]: {:?}", res);
     assert!(res.is_ok());
 
     /* [4] */
     // Open a second transport from the client to the router
     // -> This should be rejected
-    println!("Session Authenticator UserPassword [4a1]");
+    println!("Transport Authenticator UserPassword [4a1]");
     let res = client02_manager.open_transport(&locator).await;
-    println!("Session Authenticator UserPassword [4a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [4a1]: {:?}", res);
     assert!(res.is_err());
 
     /* [5] */
     // Open a third transport from the client to the router
     // -> This should be accepted
-    println!("Session Authenticator UserPassword [5a1]");
+    println!("Transport Authenticator UserPassword [5a1]");
     let res = client01_manager.open_transport(&locator).await;
-    println!("Session Authenticator UserPassword [5a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [5a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
 
@@ -220,37 +220,37 @@ async fn authenticator_user_password(
     assert!(res.is_ok());
     // Open a fourth transport from the client to the router
     // -> This should be accepted
-    println!("Session Authenticator UserPassword [6a1]");
+    println!("Transport Authenticator UserPassword [6a1]");
     let res = client02_manager.open_transport(&locator).await;
-    println!("Session Authenticator UserPassword [6a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [6a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
 
     /* [7] */
     // Open a fourth transport from the client to the router
     // -> This should be rejected
-    println!("Session Authenticator UserPassword [7a1]");
+    println!("Transport Authenticator UserPassword [7a1]");
     let res = client03_manager.open_transport(&locator).await;
-    println!("Session Authenticator UserPassword [7a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [7a1]: {:?}", res);
     assert!(res.is_err());
 
     /* [8] */
-    println!("Session Authenticator UserPassword [8a1]");
+    println!("Transport Authenticator UserPassword [8a1]");
     let res = c_ses1.close().await;
-    println!("Session Authenticator UserPassword [8a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [8a1]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Authenticator UserPassword [8a2]");
+    println!("Transport Authenticator UserPassword [8a2]");
     let res = c_ses2.close().await;
-    println!("Session Authenticator UserPassword [8a2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [8a2]: {:?}", res);
     assert!(res.is_ok());
 
     task::sleep(SLEEP).await;
 
     /* [9] */
     // Perform clean up of the open locators
-    println!("Session Authenticator UserPassword [9a1]");
+    println!("Transport Authenticator UserPassword [9a1]");
     let res = router_manager.del_listener(&locator).await;
-    println!("Session Authenticator UserPassword [9a2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [9a2]: {:?}", res);
     assert!(res.is_ok());
 
     task::sleep(SLEEP).await;
@@ -296,39 +296,39 @@ async fn authenticator_shared_memory(
     let client_manager = TransportManager::new(config);
 
     /* [1] */
-    println!("\nSession Authenticator SharedMemory [1a1]");
+    println!("\nTransport Authenticator SharedMemory [1a1]");
     // Add the locator on the router
     let res = router_manager.add_listener(&locator).await;
-    println!("Session Authenticator SharedMemory [1a1]: {:?}", res);
+    println!("Transport Authenticator SharedMemory [1a1]: {:?}", res);
     assert!(res.is_ok());
-    println!("Session Authenticator SharedMemory [1a2]");
+    println!("Transport Authenticator SharedMemory [1a2]");
     let locators = router_manager.get_listeners();
-    println!("Session Authenticator SharedMemory 1a2]: {:?}", locators);
+    println!("Transport Authenticator SharedMemory 1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     /* [2] */
     // Open a transport from the client to the router
     // -> This should be accepted
-    println!("Session Authenticator SharedMemory [2a1]");
+    println!("Transport Authenticator SharedMemory [2a1]");
     let res = client_manager.open_transport(&locator).await;
-    println!("Session Authenticator SharedMemory [2a1]: {:?}", res);
+    println!("Transport Authenticator SharedMemory [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
     assert!(c_ses1.is_shm().unwrap());
 
     /* [3] */
-    println!("Session Authenticator SharedMemory [3a1]");
+    println!("Transport Authenticator SharedMemory [3a1]");
     let res = c_ses1.close().await;
-    println!("Session Authenticator SharedMemory [3a1]: {:?}", res);
+    println!("Transport Authenticator SharedMemory [3a1]: {:?}", res);
     assert!(res.is_ok());
 
     task::sleep(SLEEP).await;
 
     /* [4] */
     // Perform clean up of the open locators
-    println!("Session Authenticator SharedMemory [4a1]");
+    println!("Transport Authenticator SharedMemory [4a1]");
     let res = router_manager.del_listener(&locator).await;
-    println!("Session Authenticator SharedMemory [4a2]: {:?}", res);
+    println!("Transport Authenticator SharedMemory [4a2]: {:?}", res);
     assert!(res.is_ok());
 
     task::sleep(SLEEP).await;

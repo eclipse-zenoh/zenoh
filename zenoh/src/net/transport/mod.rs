@@ -77,7 +77,7 @@ impl TransportEventHandler for DummyTransportEventHandler {
 }
 
 /*************************************/
-/*              SESSION              */
+/*             TRANSPORT             */
 /*************************************/
 macro_rules! zweakinner {
     ($var:expr) => {

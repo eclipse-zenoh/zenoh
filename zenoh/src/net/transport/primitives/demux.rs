@@ -21,17 +21,17 @@ use std::any::Any;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
-pub struct DeMux<P: Primitives + Send + Sync> {
+pub struct DeMux<P: Primitives> {
     primitives: P,
 }
 
-impl<P: Primitives + Send + Sync> DeMux<P> {
+impl<P: Primitives> DeMux<P> {
     pub fn new(primitives: P) -> DeMux<P> {
         DeMux { primitives }
     }
 }
 
-impl<P: 'static + Primitives + Send + Sync> TransportEventHandler for DeMux<P> {
+impl<P: 'static + Primitives> TransportEventHandler for DeMux<P> {
     fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         match msg.body {
             ZenohBody::Declare(Declare { declarations, .. }) => {

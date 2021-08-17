@@ -274,7 +274,7 @@ impl TransportUnicastInner {
 
     pub(crate) async fn del_link(&self, link: &Link) -> ZResult<()> {
         enum Target {
-            Session,
+            Transport,
             Link(Box<TransportLink>),
         }
 
@@ -286,7 +286,7 @@ impl TransportUnicastInner {
                 if is_last {
                     // Close the whole transport
                     drop(guard);
-                    Target::Session
+                    Target::Transport
                 } else {
                     // Remove the link
                     let mut links = guard.to_vec();
@@ -307,7 +307,7 @@ impl TransportUnicastInner {
         };
 
         match target {
-            Target::Session => self.delete().await,
+            Target::Transport => self.delete().await,
             Target::Link(stl) => stl.close().await,
         }
     }

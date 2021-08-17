@@ -74,7 +74,7 @@ impl WBuf {
     }
 
     /*************************************/
-    /*             SESSION               */
+    /*            TRANSPORT              */
     /*************************************/
     pub fn write_transport_message(&mut self, msg: &TransportMessage) -> bool {
         if let Some(attachment) = msg.attachment.as_ref() {

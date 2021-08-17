@@ -35,7 +35,7 @@ const USRPWD_VERSION: ZInt = 0;
 /// ```text
 /// The Attachment can decorate any message (i.e., TransportMessage and ZenohMessage) and it allows to
 /// append to the message any additional information. Since the information contained in the
-/// Attachement is relevant only to the layer that provided them (e.g., Session, Zenoh, User) it
+/// Attachement is relevant only to the layer that provided them (e.g., Transport, Zenoh, User) it
 /// is the duty of that layer to serialize and de-serialize the attachment whenever deemed necessary.
 ///
 ///  7 6 5 4 3 2 1 0

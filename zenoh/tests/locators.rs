@@ -27,7 +27,7 @@ use zenoh_util::zasync_executor_init;
 const SLEEP: Duration = Duration::from_millis(100);
 const RUNS: usize = 10;
 
-// Session Handler
+// Transport Handler
 #[derive(Default)]
 struct SH;
 
@@ -38,7 +38,7 @@ impl TransportHandler for SH {
     }
 }
 
-// Session Callback for the router
+// Transport Callback for the router
 #[derive(Default)]
 pub struct SC;
 

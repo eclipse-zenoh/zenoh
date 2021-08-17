@@ -30,13 +30,13 @@ pub(crate) mod establishment;
 // use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 // use zenoh_util::zerror2;
 
-// pub(crate) struct SessionConfigMulticast;
+// pub(crate) struct TransportConfigMulticast;
 
 // pub type TransportMulticast = ();
 // #[derive(Clone)]
-// pub(crate) struct SessionMulticast(Weak<TransportMulticast>);
+// pub(crate) struct TransportMulticast(Weak<TransportMulticast>);
 
-// impl SessionMulticast {
+// impl TransportMulticast {
 //     pub(crate) fn upgrade(&self) -> Option<Arc<TransportMulticast>> {
 //         self.0.upgrade()
 //     }
@@ -44,21 +44,21 @@ pub(crate) mod establishment;
 //     pub(super) fn get_transport(&self) -> ZResult<Arc<TransportMulticast>> {
 //         self.upgrade().ok_or_else(|| {
 //             zerror2!(ZErrorKind::InvalidReference {
-//                 descr: "Session closed".to_string()
+//                 descr: "Transport closed".to_string()
 //             })
 //         })
 //     }
 // }
 
-// impl From<&Arc<TransportMulticast>> for SessionMulticast {
-//     fn from(s: &Arc<TransportMulticast>) -> SessionMulticast {
-//         SessionMulticast(Arc::downgrade(s))
+// impl From<&Arc<TransportMulticast>> for TransportMulticast {
+//     fn from(s: &Arc<TransportMulticast>) -> TransportMulticast {
+//         TransportMulticast(Arc::downgrade(s))
 //     }
 // }
 
-// impl Eq for SessionMulticast {}
+// impl Eq for TransportMulticast {}
 
-// impl PartialEq for SessionMulticast {
+// impl PartialEq for TransportMulticast {
 //     fn eq(&self, other: &Self) -> bool {
 //         Weak::ptr_eq(&self.0, &other.0)
 //     }

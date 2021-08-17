@@ -47,7 +47,7 @@ const PRIORITY_ALL: [Priority; 8] = [
     Priority::Background,
 ];
 
-// Session Handler for the router
+// Transport Handler for the router
 struct SHRouter {
     priority: Priority,
     count: Arc<AtomicUsize>,
@@ -73,7 +73,7 @@ impl TransportHandler for SHRouter {
     }
 }
 
-// Session Callback for the router
+// Transport Callback for the router
 pub struct SCRouter {
     priority: Priority,
     count: Arc<AtomicUsize>,
@@ -102,7 +102,7 @@ impl TransportEventHandler for SCRouter {
     }
 }
 
-// Session Handler for the client
+// Transport Handler for the client
 struct SHClient;
 
 impl Default for SHClient {
@@ -117,7 +117,7 @@ impl TransportHandler for SHClient {
     }
 }
 
-// Session Callback for the client
+// Transport Callback for the client
 pub struct SCClient;
 
 impl Default for SCClient {

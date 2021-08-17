@@ -38,7 +38,7 @@ impl TransportUnicastInner {
             }
             None => {
                 log::debug!(
-                    "Session: {}. No callback available, dropping message: {}",
+                    "Transport: {}. No callback available, dropping message: {}",
                     self.pid,
                     msg
                 );
@@ -96,7 +96,7 @@ impl TransportUnicastInner {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
             log::debug!(
-                "Session: {}. Frame with invalid SN dropped: {}. Expected: {}.",
+                "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
                 self.pid,
                 sn,
                 guard.sn.get()
@@ -121,7 +121,7 @@ impl TransportUnicastInner {
                 if is_final {
                     // When zero-copy feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
-                        let e = format!("Session: {}. Defragmentation error.", self.pid);
+                        let e = format!("Transport: {}. Defragmentation error.", self.pid);
                         zerror2!(ZErrorKind::InvalidMessage { descr: e })
                     })?;
                     self.trigger_callback(msg)
@@ -153,7 +153,7 @@ impl TransportUnicastInner {
                     &self.conduit_rx[0]
                 } else {
                     let e = format!(
-                        "Session: {}. Unknown conduit: {:?}.",
+                        "Transport: {}. Unknown conduit: {:?}.",
                         self.pid, channel.priority
                     );
                     return zerror!(ZErrorKind::InvalidMessage { descr: e });
@@ -174,7 +174,7 @@ impl TransportUnicastInner {
             TransportBody::KeepAlive(KeepAlive { .. }) => Ok(()),
             _ => {
                 log::debug!(
-                    "Session: {}. Message handling not implemented: {:?}",
+                    "Transport: {}. Message handling not implemented: {:?}",
                     self.pid,
                     msg
                 );
