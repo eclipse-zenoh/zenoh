@@ -217,12 +217,12 @@ fn gen_data_info() -> DataInfo {
     }
 }
 
-fn test_write_read_session_message(msg: SessionMessage) {
+fn test_write_read_transport_message(msg: TransportMessage) {
     let mut buf = WBuf::new(164, false);
     println!("\nWrite message: {:?}", msg);
-    buf.write_session_message(&msg);
+    buf.write_transport_message(&msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(&buf).read_session_message().unwrap();
+    let mut result = ZBuf::from(&buf).read_transport_message().unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = result.attachment.as_mut() {
         let properties = attachment.buffer.read_properties();
@@ -261,8 +261,8 @@ fn codec_scout() {
         for w in wami.iter() {
             for p in pid_req.iter() {
                 for a in attachment.iter() {
-                    let msg = SessionMessage::make_scout(*w, *p, a.clone());
-                    test_write_read_session_message(msg);
+                    let msg = TransportMessage::make_scout(*w, *p, a.clone());
+                    test_write_read_transport_message(msg);
                 }
             }
         }
@@ -287,8 +287,8 @@ fn codec_hello() {
             for w in wami.iter() {
                 for l in locators.iter() {
                     for a in attachment.iter() {
-                        let msg = SessionMessage::make_hello(p.clone(), *w, l.clone(), a.clone());
-                        test_write_read_session_message(msg);
+                        let msg = TransportMessage::make_hello(p.clone(), *w, l.clone(), a.clone());
+                        test_write_read_transport_message(msg);
                     }
                 }
             }
@@ -308,7 +308,7 @@ fn codec_init() {
             for w in wami.iter() {
                 for s in sn_resolution.iter() {
                     for a in attachment.iter() {
-                        let msg = SessionMessage::make_init_syn(
+                        let msg = TransportMessage::make_init_syn(
                             gen!(u8),
                             *w,
                             gen_pid(),
@@ -316,7 +316,7 @@ fn codec_init() {
                             *q,
                             a.clone(),
                         );
-                        test_write_read_session_message(msg);
+                        test_write_read_transport_message(msg);
                     }
                 }
             }
@@ -326,7 +326,7 @@ fn codec_init() {
             for w in wami.iter() {
                 for s in sn_resolution.iter() {
                     for a in attachment.iter() {
-                        let msg = SessionMessage::make_init_ack(
+                        let msg = TransportMessage::make_init_ack(
                             *w,
                             gen_pid(),
                             *s,
@@ -334,7 +334,7 @@ fn codec_init() {
                             gen_buffer(64).into(),
                             a.clone(),
                         );
-                        test_write_read_session_message(msg);
+                        test_write_read_transport_message(msg);
                     }
                 }
             }
@@ -348,18 +348,18 @@ fn codec_open() {
         let attachment = [None, Some(gen_attachment())];
 
         for a in attachment.iter() {
-            let msg = SessionMessage::make_open_syn(
+            let msg = TransportMessage::make_open_syn(
                 gen!(ZInt),
                 gen!(ZInt),
                 gen_buffer(64).into(),
                 a.clone(),
             );
-            test_write_read_session_message(msg);
+            test_write_read_transport_message(msg);
         }
 
         for a in attachment.iter() {
-            let msg = SessionMessage::make_open_ack(gen!(ZInt), gen!(ZInt), a.clone());
-            test_write_read_session_message(msg);
+            let msg = TransportMessage::make_open_ack(gen!(ZInt), gen!(ZInt), a.clone());
+            test_write_read_transport_message(msg);
         }
     }
 }
@@ -374,8 +374,8 @@ fn codec_close() {
         for p in pid.iter() {
             for k in link_only.iter() {
                 for a in attachment.iter() {
-                    let msg = SessionMessage::make_close(p.clone(), gen!(u8), *k, a.clone());
-                    test_write_read_session_message(msg);
+                    let msg = TransportMessage::make_close(p.clone(), gen!(u8), *k, a.clone());
+                    test_write_read_transport_message(msg);
                 }
             }
         }
@@ -392,8 +392,8 @@ fn codec_sync() {
         for c in ch.iter() {
             for n in count.iter() {
                 for a in attachment.iter() {
-                    let msg = SessionMessage::make_sync(*c, gen!(ZInt), *n, a.clone());
-                    test_write_read_session_message(msg);
+                    let msg = TransportMessage::make_sync(*c, gen!(ZInt), *n, a.clone());
+                    test_write_read_transport_message(msg);
                 }
             }
         }
@@ -408,8 +408,8 @@ fn codec_ack_nack() {
 
         for m in mask.iter() {
             for a in attachment.iter() {
-                let msg = SessionMessage::make_ack_nack(gen!(ZInt), *m, a.clone());
-                test_write_read_session_message(msg);
+                let msg = TransportMessage::make_ack_nack(gen!(ZInt), *m, a.clone());
+                test_write_read_transport_message(msg);
             }
         }
     }
@@ -423,8 +423,8 @@ fn codec_keep_alive() {
 
         for p in pid.iter() {
             for a in attachment.iter() {
-                let msg = SessionMessage::make_keep_alive(p.clone(), a.clone());
-                test_write_read_session_message(msg);
+                let msg = TransportMessage::make_keep_alive(p.clone(), a.clone());
+                test_write_read_transport_message(msg);
             }
         }
     }
@@ -436,8 +436,8 @@ fn codec_ping() {
         let attachment = [None, Some(gen_attachment())];
 
         for a in attachment.iter() {
-            let msg = SessionMessage::make_ping(gen!(ZInt), a.clone());
-            test_write_read_session_message(msg);
+            let msg = TransportMessage::make_ping(gen!(ZInt), a.clone());
+            test_write_read_transport_message(msg);
         }
     }
 }
@@ -448,8 +448,8 @@ fn codec_pong() {
         let attachment = [None, Some(gen_attachment())];
 
         for a in attachment.iter() {
-            let msg = SessionMessage::make_pong(gen!(ZInt), a.clone());
-            test_write_read_session_message(msg);
+            let msg = TransportMessage::make_pong(gen!(ZInt), a.clone());
+            test_write_read_transport_message(msg);
         }
     }
 }
@@ -526,8 +526,9 @@ fn codec_frame() {
 
                 for p in payload.drain(..) {
                     for a in attachment.iter() {
-                        let msg = SessionMessage::make_frame(*ch, gen!(ZInt), p.clone(), a.clone());
-                        test_write_read_session_message(msg);
+                        let msg =
+                            TransportMessage::make_frame(*ch, gen!(ZInt), p.clone(), a.clone());
+                        test_write_read_transport_message(msg);
                     }
                 }
             }
@@ -541,7 +542,7 @@ fn codec_frame_batching() {
         // Contigous batch
         let mut wbuf = WBuf::new(64, true);
         // Written messages
-        let mut written: Vec<SessionMessage> = Vec::new();
+        let mut written: Vec<TransportMessage> = Vec::new();
 
         // Create empty frame message
         let channel = Channel::default();
@@ -549,10 +550,10 @@ fn codec_frame_batching() {
         let payload = FramePayload::Messages { messages: vec![] };
         let sn = gen!(ZInt);
         let sattachment = None;
-        let frame = SessionMessage::make_frame(channel, sn, payload, sattachment.clone());
+        let frame = TransportMessage::make_frame(channel, sn, payload, sattachment.clone());
 
         // Write the first frame header
-        assert!(wbuf.write_session_message(&frame));
+        assert!(wbuf.write_transport_message(&frame));
 
         // Create data message
         let key = ResKey::RName("test".to_string());
@@ -575,11 +576,11 @@ fn codec_frame_batching() {
         // Write the first data message
         assert!(wbuf.write_zenoh_message(&data));
 
-        // Store the first session message written
+        // Store the first transport message written
         let payload = FramePayload::Messages {
             messages: vec![data.clone(); 1],
         };
-        written.push(SessionMessage::make_frame(
+        written.push(TransportMessage::make_frame(
             channel,
             sn,
             payload,
@@ -587,7 +588,7 @@ fn codec_frame_batching() {
         ));
 
         // Write the second frame header
-        assert!(wbuf.write_session_message(&frame));
+        assert!(wbuf.write_transport_message(&frame));
 
         // Write until we fill the batch
         let mut messages: Vec<ZenohMessage> = Vec::new();
@@ -601,9 +602,9 @@ fn codec_frame_batching() {
             }
         }
 
-        // Store the second session message written
+        // Store the second transport message written
         let payload = FramePayload::Messages { messages };
-        written.push(SessionMessage::make_frame(
+        written.push(TransportMessage::make_frame(
             channel,
             sn,
             payload,
@@ -613,8 +614,8 @@ fn codec_frame_batching() {
         // Deserialize from the buffer
         let mut zbuf = ZBuf::from(&wbuf);
 
-        let mut read: Vec<SessionMessage> = Vec::new();
-        while let Some(msg) = zbuf.read_session_message() {
+        let mut read: Vec<TransportMessage> = Vec::new();
+        while let Some(msg) = zbuf.read_transport_message() {
             read.push(msg);
         }
 

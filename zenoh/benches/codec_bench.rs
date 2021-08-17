@@ -19,7 +19,9 @@ use criterion::{black_box, Criterion};
 
 use zenoh::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ResKey, ZInt};
 use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
-use zenoh::net::protocol::proto::{Attachment, Frame, FramePayload, SessionMessage, ZenohMessage};
+use zenoh::net::protocol::proto::{
+    Attachment, Frame, FramePayload, TransportMessage, ZenohMessage,
+};
 
 fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
     buf.write_zint(v);
@@ -92,19 +94,19 @@ fn bench_write_frame_header(
 }
 
 fn bench_make_frame_data(payload: FramePayload) {
-    let _ = SessionMessage::make_frame(Channel::default(), 42, payload, None);
+    let _ = TransportMessage::make_frame(Channel::default(), 42, payload, None);
 }
 
-fn bench_write_frame_data(buf: &mut WBuf, data: &SessionMessage) {
-    buf.write_session_message(data);
+fn bench_write_frame_data(buf: &mut WBuf, data: &TransportMessage) {
+    buf.write_transport_message(data);
 }
 
 fn bench_make_frame_frag(payload: FramePayload) {
-    let _ = SessionMessage::make_frame(Channel::default(), 42, payload, None);
+    let _ = TransportMessage::make_frame(Channel::default(), 42, payload, None);
 }
 
-fn bench_write_frame_frag(buf: &mut WBuf, data: &SessionMessage) {
-    buf.write_session_message(data);
+fn bench_write_frame_frag(buf: &mut WBuf, data: &TransportMessage) {
+    buf.write_transport_message(data);
 }
 
 fn bench_write_10bytes1((v, buf): (u8, &mut WBuf)) {
@@ -220,7 +222,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let frame_data_payload = FramePayload::Messages {
         messages: vec![data; 1],
     };
-    let frame_data = SessionMessage::make_frame(Channel::default(), 42, frame_data_payload, None);
+    let frame_data = TransportMessage::make_frame(Channel::default(), 42, frame_data_payload, None);
     c.bench_function("bench_write_frame_data", |b| {
         b.iter(|| {
             let _ = bench_write_frame_data(&mut buf, &frame_data);
@@ -242,7 +244,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         buffer: fragment,
         is_final: false,
     };
-    let frame_frag = SessionMessage::make_frame(Channel::default(), 42, frame_frag_payload, None);
+    let frame_frag = TransportMessage::make_frame(Channel::default(), 42, frame_frag_payload, None);
     c.bench_function("bench_write_frame_frag", |b| {
         b.iter(|| {
             let _ = bench_write_frame_frag(&mut buf, &frame_frag);

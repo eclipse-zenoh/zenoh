@@ -19,14 +19,14 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
+    use zenoh::net::link::{Link, Locator};
     use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
-    use zenoh::net::protocol::link::{Link, Locator};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
-    use zenoh::net::protocol::session::unicast::authenticator::SharedMemoryAuthenticator;
-    use zenoh::net::protocol::session::{
-        Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-        SessionManagerConfigUnicast,
+    use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
+    use zenoh::net::transport::{
+        Transport, TransportEventHandler, TransportHandler, TransportManager,
+        TransportManagerConfig, TransportManagerConfigUnicast,
     };
     use zenoh::net::CongestionControl;
     use zenoh_util::core::ZResult;
@@ -58,8 +58,8 @@ mod tests {
         }
     }
 
-    impl SessionHandler for SHPeer {
-        fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+    impl TransportHandler for SHPeer {
+        fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
         }
@@ -77,7 +77,7 @@ mod tests {
         }
     }
 
-    impl SessionEventHandler for SCPeer {
+    impl TransportEventHandler for SCPeer {
         fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
             if self.is_shm {
                 print!("s");
@@ -121,37 +121,37 @@ mod tests {
 
         // Create a peer manager with zero-copy authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
-        let config = SessionManagerConfig::builder()
+        let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
             .pid(peer_shm01.clone())
             .unicast(
-                SessionManagerConfigUnicast::builder()
+                TransportManagerConfigUnicast::builder()
                     .peer_authenticator(vec![SharedMemoryAuthenticator::new().into()])
                     .build(),
             )
             .build(peer_shm01_handler.clone());
-        let peer_shm01_manager = SessionManager::new(config);
+        let peer_shm01_manager = TransportManager::new(config);
 
         // Create a peer manager with zero-copy authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
-        let config = SessionManagerConfig::builder()
+        let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
             .pid(peer_shm02.clone())
             .unicast(
-                SessionManagerConfigUnicast::builder()
+                TransportManagerConfigUnicast::builder()
                     .peer_authenticator(vec![SharedMemoryAuthenticator::new().into()])
                     .build(),
             )
             .build(peer_shm02_handler.clone());
-        let peer_shm02_manager = SessionManager::new(config);
+        let peer_shm02_manager = TransportManager::new(config);
 
         // Create a peer manager with zero-copy authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
-        let config = SessionManagerConfig::builder()
+        let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
             .pid(peer_net01.clone())
             .build(peer_net01_handler.clone());
-        let peer_net01_manager = SessionManager::new(config);
+        let peer_net01_manager = TransportManager::new(config);
 
         // Create the listener on the peer
         println!("\nSession SHM [1a]");
@@ -162,30 +162,30 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // Create a session with the peer
+        // Create a transport with the peer
         println!("Session SHM [1b]");
         let _ = peer_shm02_manager
-            .open_session(locator)
+            .open_transport(locator)
             .timeout(TIMEOUT)
             .await
             .unwrap()
             .unwrap();
 
-        // Create a session with the peer
+        // Create a transport with the peer
         println!("Session SHM [1c]");
         let _ = peer_net01_manager
-            .open_session(locator)
+            .open_transport(locator)
             .timeout(TIMEOUT)
             .await
             .unwrap()
             .unwrap();
 
-        // Retrieve the sessions
+        // Retrieve the transports
         println!("Session SHM [2a]");
-        let peer_shm02_session = peer_shm01_manager.get_session(&peer_shm02).unwrap();
+        let peer_shm02_transport = peer_shm01_manager.get_transport(&peer_shm02).unwrap();
 
         println!("Session SHM [2b]");
-        let peer_net01_session = peer_shm01_manager.get_session(&peer_net01).unwrap();
+        let peer_net01_transport = peer_shm01_manager.get_transport(&peer_net01).unwrap();
 
         // Send the message
         println!("Session SHM [3a]");
@@ -230,7 +230,7 @@ mod tests {
                 attachment,
             );
 
-            peer_shm02_session.schedule(message.clone()).unwrap();
+            peer_shm02_transport.schedule(message.clone()).unwrap();
         }
 
         // Wait a little bit
@@ -287,7 +287,7 @@ mod tests {
                 attachment,
             );
 
-            peer_net01_session.schedule(message.clone()).unwrap();
+            peer_net01_transport.schedule(message.clone()).unwrap();
         }
 
         // Wait a little bit
@@ -305,9 +305,9 @@ mod tests {
         // Wait a little bit
         task::sleep(SLEEP).await;
 
-        // Close the sessions
+        // Close the transports
         println!("Session SHM [5a]");
-        let _ = peer_shm02_session
+        let _ = peer_shm02_transport
             .close()
             .timeout(TIMEOUT)
             .await
@@ -315,7 +315,7 @@ mod tests {
             .unwrap();
 
         println!("Session SHM [5b]");
-        let _ = peer_net01_session
+        let _ = peer_net01_transport
             .close()
             .timeout(TIMEOUT)
             .await
@@ -340,7 +340,7 @@ mod tests {
 
     #[cfg(all(feature = "transport_tcp", feature = "zero-copy"))]
     #[test]
-    fn session_tcp_shm() {
+    fn transport_tcp_shm() {
         env_logger::init();
         task::block_on(async {
             zasync_executor_init!();

@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::link::Locator;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::link::Locator;
-use super::protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
-use super::protocol::session::Session;
+use super::protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
+use super::transport::Transport;
 use super::{Runtime, RuntimeSession};
 use async_std::net::UdpSocket;
 use futures::prelude::*;
@@ -114,7 +114,7 @@ impl Runtime {
             }
             _ => {
                 for locator in &peers {
-                    match self.manager().open_session(locator).await {
+                    match self.manager().open_transport(locator).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -468,16 +468,16 @@ impl Runtime {
         let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
-            if let Ok(session) = self.manager().open_session(&peer).await {
+            if let Ok(transport) = self.manager().open_transport(&peer).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
-                if let Some(orch_session) = session
+                if let Some(orch_transport) = transport
                     .get_callback()
                     .unwrap()
                     .unwrap()
                     .as_any()
                     .downcast_ref::<super::RuntimeSession>()
                 {
-                    *zwrite!(orch_session.locator) = Some(peer);
+                    *zwrite!(orch_transport.locator) = Some(peer);
                 }
                 break;
             }
@@ -507,8 +507,8 @@ impl Runtime {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-            let scout = SessionMessage::make_scout(Some(what), true, None);
-            wbuf.write_session_message(&scout);
+            let scout = TransportMessage::make_scout(Some(what), true, None);
+            wbuf.write_transport_message(&scout);
             loop {
                 for socket in sockets {
                     log::trace!(
@@ -546,9 +546,9 @@ impl Runtime {
                 loop {
                     let (n, peer) = socket.recv_from(&mut buf).await.unwrap();
                     let mut zbuf = ZBuf::from(&buf[..n]);
-                    if let Some(msg) = zbuf.read_session_message() {
+                    if let Some(msg) = zbuf.read_transport_message() {
                         log::trace!("Received {:?} from {}", msg.body, peer);
-                        if let SessionBody::Hello(hello) = &msg.body {
+                        if let TransportBody::Hello(hello) = &msg.body {
                             let whatami = hello.whatami.or(Some(whatami::ROUTER)).unwrap();
                             if whatami & what != 0 {
                                 if let Loop::Break = f(hello.clone()).await {
@@ -568,11 +568,11 @@ impl Runtime {
         async_std::prelude::FutureExt::race(send, recvs).await;
     }
 
-    async fn connect(&self, locators: &[Locator]) -> ZResult<Session> {
+    async fn connect(&self, locators: &[Locator]) -> ZResult<Transport> {
         for locator in locators {
-            let session = self.manager().open_session(locator).await;
-            if session.is_ok() {
-                return session;
+            let transport = self.manager().open_transport(locator).await;
+            if transport.is_ok() {
+                return transport;
             }
         }
         zerror!(ZErrorKind::Other {
@@ -582,9 +582,9 @@ impl Runtime {
 
     pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
         if pid != &self.manager().pid() {
-            if self.manager().get_session(pid).is_none() {
-                let session = self.connect(locators).await;
-                if session.is_ok() {
+            if self.manager().get_transport(pid).is_none() {
+                let transport = self.connect(locators).await;
+                if transport.is_ok() {
                     log::debug!("Successfully connected to newly scouted {}", pid);
                 } else {
                     log::warn!("Unable to connect to scouted {}", pid);
@@ -686,9 +686,9 @@ impl Runtime {
             }
 
             let mut zbuf = ZBuf::from(&buf[..n]);
-            if let Some(msg) = zbuf.read_session_message() {
+            if let Some(msg) = zbuf.read_transport_message() {
                 log::trace!("Received {:?} from {}", msg.body, peer);
-                if let SessionBody::Scout(Scout {
+                if let TransportBody::Scout(Scout {
                     what, pid_request, ..
                 }) = &msg.body
                 {
@@ -700,7 +700,7 @@ impl Runtime {
                         } else {
                             None
                         };
-                        let hello = SessionMessage::make_hello(
+                        let hello = TransportMessage::make_hello(
                             pid,
                             Some(self.whatami),
                             Some(self.manager().get_locators().clone()),
@@ -715,7 +715,7 @@ impl Runtime {
                                 .local_addr()
                                 .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                         );
-                        wbuf.write_session_message(&hello);
+                        wbuf.write_transport_message(&hello);
                         if let Err(err) =
                             socket.send_to(&ZBuf::from(&wbuf).contiguous(), peer).await
                         {

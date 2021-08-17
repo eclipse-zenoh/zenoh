@@ -14,17 +14,19 @@
 mod adminspace;
 pub mod orchestrator;
 
+use super::link;
+use super::link::{Link, Locator};
 use super::plugins;
 use super::protocol;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
-use super::protocol::link::{Link, Locator};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::protocol::session::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
+use super::transport;
+use super::transport::{
+    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
+};
 pub use adminspace::AdminSpace;
 use async_std::sync::Arc;
 use std::any::Any;
@@ -39,7 +41,7 @@ pub struct RuntimeState {
     pub whatami: WhatAmI,
     pub router: Arc<Router>,
     pub config: ConfigProperties,
-    pub manager: SessionManager,
+    pub manager: TransportManager,
     pub hlc: Option<Arc<HLC>>,
 }
 
@@ -97,10 +99,10 @@ impl Runtime {
 
         let router = Arc::new(Router::new(pid.clone(), whatami, hlc.clone()));
 
-        let handler = Arc::new(RuntimeSessionHandler {
+        let handler = Arc::new(RuntimeTransportHandler {
             runtime: std::sync::RwLock::new(None),
         });
-        let sm_config = SessionManagerConfig::builder()
+        let sm_config = TransportManagerConfig::builder()
             .from_properties(&config)
             .await?
             .version(version)
@@ -108,14 +110,14 @@ impl Runtime {
             .pid(pid.clone())
             .build(handler.clone());
 
-        let session_manager = SessionManager::new(sm_config);
+        let transport_manager = TransportManager::new(sm_config);
         let mut runtime = Runtime {
             state: Arc::new(RuntimeState {
                 pid,
                 whatami,
                 router,
                 config: config.clone(),
-                manager: session_manager,
+                manager: transport_manager,
                 hlc,
             }),
         };
@@ -151,13 +153,13 @@ impl Runtime {
     }
 
     #[inline(always)]
-    pub fn manager(&self) -> &SessionManager {
+    pub fn manager(&self) -> &TransportManager {
         &self.manager
     }
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        for session in &mut self.manager().get_sessions() {
+        for session in &mut self.manager().get_transports() {
             session.close().await?;
         }
         Ok(())
@@ -172,17 +174,17 @@ impl Runtime {
     }
 }
 
-struct RuntimeSessionHandler {
+struct RuntimeTransportHandler {
     runtime: std::sync::RwLock<Option<Runtime>>,
 }
 
-impl SessionHandler for RuntimeSessionHandler {
-    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+impl TransportHandler for RuntimeTransportHandler {
+    fn new_transport(&self, transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
         match &*self.runtime.read().unwrap() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
                 locator: std::sync::RwLock::new(None),
-                sub_event_handler: runtime.router.new_session(session).unwrap(),
+                sub_event_handler: runtime.router.new_transport(transport).unwrap(),
             })),
             None => zerror!(ZErrorKind::Other {
                 descr: "Runtime not yet ready!".to_string()
@@ -197,7 +199,7 @@ pub(super) struct RuntimeSession {
     pub(super) sub_event_handler: Arc<LinkStateInterceptor>,
 }
 
-impl SessionEventHandler for RuntimeSession {
+impl TransportEventHandler for RuntimeSession {
     fn handle_message(&self, mut msg: ZenohMessage) -> ZResult<()> {
         // critical path shortcut
         if let ZenohBody::Data(data) = msg.body {

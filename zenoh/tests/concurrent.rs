@@ -18,15 +18,15 @@ use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use zenoh::net::link::{Link, Locator};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, ZInt,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::link::{Link, Locator};
 use zenoh::net::protocol::proto::ZenohMessage;
-use zenoh::net::protocol::session::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerConfigUnicast,
+use zenoh::net::transport::{
+    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
+    TransportManagerConfigUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -53,8 +53,8 @@ impl SHPeer {
     }
 }
 
-impl SessionHandler for SHPeer {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+impl TransportHandler for SHPeer {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
         let mh = Arc::new(MHPeer::new(self.count.clone()));
         Ok(mh)
     }
@@ -70,7 +70,7 @@ impl MHPeer {
     }
 }
 
-impl SessionEventHandler for MHPeer {
+impl TransportEventHandler for MHPeer {
     fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
@@ -86,8 +86,8 @@ impl SessionEventHandler for MHPeer {
     }
 }
 
-async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
-    // Common session lease in milliseconds
+async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
+    // Common transport lease in milliseconds
     let lease: ZInt = 1_000;
 
     /* [Peers] */
@@ -96,23 +96,31 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
     // let router_handler = Arc::new(SHPeer::new(router_new_barrier.clone()));
 
-    // Create the peer01 session manager
+    // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new());
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
         .pid(peer_id01.clone())
-        .unicast(SessionManagerConfigUnicast::builder().lease(lease).build())
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .lease(lease)
+                .build(),
+        )
         .build(peer_sh01.clone());
-    let peer01_manager = SessionManager::new(config);
+    let peer01_manager = TransportManager::new(config);
 
-    // Create the peer01 session manager
+    // Create the peer01 transport manager
     let peer_sh02 = Arc::new(SHPeer::new());
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
         .pid(peer_id02.clone())
-        .unicast(SessionManagerConfigUnicast::builder().lease(lease).build())
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .lease(lease)
+                .build(),
+        )
         .build(peer_sh02.clone());
-    let peer02_manager = SessionManager::new(config);
+    let peer02_manager = TransportManager::new(config);
 
     // Barrier to synchronize the two tasks
     let barrier_peer = Arc::new(Barrier::new(2));
@@ -140,36 +148,36 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         );
         assert_eq!(c_loc01.len(), locs.len());
 
-        // Open the session with the second peer
+        // Open the transport with the second peer
         for loc in c_loc02.iter() {
             let cc_barow = c_barow.clone();
             let cc_barod = c_barod.clone();
             let c_p01m = peer01_manager.clone();
             let c_loc = loc.clone();
             task::spawn(async move {
-                println!("[Session Peer 01c] => Waiting for opening session");
-                // Syncrhonize before opening the sessions
+                println!("[Session Peer 01c] => Waiting for opening transport");
+                // Syncrhonize before opening the transports
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let res = c_p01m.open_session(&c_loc).await;
+                let res = c_p01m.open_transport(&c_loc).await;
                 println!(
-                    "[Session Peer 01d] => Opening session with {:?}: {:?}",
+                    "[Session Peer 01d] => Opening transport with {:?}: {:?}",
                     c_loc, res
                 );
                 assert!(res.is_ok());
 
-                // Syncrhonize after opening the sessions
+                // Syncrhonize after opening the transports
                 cc_barod.wait().timeout(TIMEOUT).await.unwrap();
             });
         }
 
-        // Syncrhonize after opening the sessions
+        // Syncrhonize after opening the transports
         c_barod.wait().timeout(TIMEOUT).await.unwrap();
         println!("[Session Peer 01e] => Waiting... OK");
 
-        // Verify that the session has been correctly open
-        assert_eq!(peer01_manager.get_sessions().len(), 1);
-        let s02 = peer01_manager.get_session(&c_pid02).unwrap();
+        // Verify that the transport has been correctly open
+        assert_eq!(peer01_manager.get_transports().len(), 1);
+        let s02 = peer01_manager.get_transport(&c_pid02).unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_loc01.len() + c_loc02.len()
@@ -247,39 +255,39 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         );
         assert_eq!(c_loc02.len(), locs.len());
 
-        // Open the session with the first peer
+        // Open the transport with the first peer
         for loc in c_loc01.iter() {
             let cc_barow = c_barow.clone();
             let cc_barod = c_barod.clone();
             let c_p02m = peer02_manager.clone();
             let c_loc = loc.clone();
             task::spawn(async move {
-                println!("[Session Peer 02c] => Waiting for opening session");
-                // Syncrhonize before opening the sessions
+                println!("[Session Peer 02c] => Waiting for opening transport");
+                // Syncrhonize before opening the transports
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let res = c_p02m.open_session(&c_loc).await;
+                let res = c_p02m.open_transport(&c_loc).await;
                 println!(
-                    "[Session Peer 02d] => Opening session with {:?}: {:?}",
+                    "[Session Peer 02d] => Opening transport with {:?}: {:?}",
                     c_loc, res
                 );
                 assert!(res.is_ok());
 
-                // Syncrhonize after opening the sessions
+                // Syncrhonize after opening the transports
                 cc_barod.wait().timeout(TIMEOUT).await.unwrap();
             });
         }
 
-        // Syncrhonize after opening the sessions
+        // Syncrhonize after opening the transports
         c_barod.wait().timeout(TIMEOUT).await.unwrap();
 
-        // Verify that the session has been correctly open
+        // Verify that the transport has been correctly open
         println!(
             "[Session Peer 02e] => Sessions: {:?}",
-            peer02_manager.get_sessions()
+            peer02_manager.get_transports()
         );
-        assert_eq!(peer02_manager.get_sessions().len(), 1);
-        let s01 = peer02_manager.get_session(&c_pid01).unwrap();
+        assert_eq!(peer02_manager.get_transports().len(), 1);
+        let s01 = peer02_manager.get_transport(&c_pid01).unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_loc01.len() + c_loc02.len()
@@ -346,7 +354,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-fn session_tcp_concurrent() {
+fn transport_tcp_concurrent() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -373,6 +381,6 @@ fn session_tcp_concurrent() {
     ];
 
     task::block_on(async {
-        session_concurrent(locator01, locator02).await;
+        transport_concurrent(locator01, locator02).await;
     });
 }
