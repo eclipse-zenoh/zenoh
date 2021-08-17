@@ -14,10 +14,11 @@
 mod adminspace;
 pub mod orchestrator;
 
+use super::link;
+use super::link::{Link, Locator};
 use super::plugins;
 use super::protocol;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
-use super::protocol::link::{Link, Locator};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
 use super::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,

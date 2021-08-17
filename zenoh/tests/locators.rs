@@ -15,8 +15,8 @@ use async_std::sync::Arc;
 use async_std::task;
 use std::any::Any;
 use std::time::Duration;
+use zenoh::net::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
-use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
@@ -250,7 +250,7 @@ fn locator_tls() {
         zasync_executor_init!();
     });
 
-    use zenoh::net::protocol::link::tls::{NoClientAuth, ServerConfig};
+    use zenoh::net::link::tls::{NoClientAuth, ServerConfig};
 
     // Define the locators
     let locators = vec!["tls/localhost:9452".parse().unwrap()];

@@ -11,17 +11,15 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::link::Locator;
+use super::protocol::core::{whatami, PeerId, ZInt};
+use super::protocol::proto::{LinkState, ZenohMessage};
+use super::protocol::session::Session;
+use super::runtime::Runtime;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
-
-use super::protocol::core::{whatami, PeerId, ZInt};
-use super::protocol::link::Locator;
-use super::protocol::proto::{LinkState, ZenohMessage};
-use super::protocol::session::Session;
-
-use super::runtime::Runtime;
 
 pub(crate) struct Node {
     pub(crate) pid: PeerId,

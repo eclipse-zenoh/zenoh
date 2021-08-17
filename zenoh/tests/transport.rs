@@ -17,11 +17,11 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
+use zenoh::net::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::protocol::session::{
     Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
@@ -517,9 +517,7 @@ fn transport_tls_only() {
     });
 
     use std::io::Cursor;
-    use zenoh::net::protocol::link::tls::{
-        internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
-    };
+    use zenoh::net::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -647,7 +645,7 @@ fn transport_quic_only() {
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig,
     };
-    use zenoh::net::protocol::link::quic::ALPN_QUIC_HTTP;
+    use zenoh::net::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real

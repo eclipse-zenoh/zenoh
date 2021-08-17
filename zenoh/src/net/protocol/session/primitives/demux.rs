@@ -12,11 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::SessionEventHandler;
-use super::link::Link;
 use super::proto::{
     Data, Declaration, Declare, LinkStateList, Pull, Query, Unit, ZenohBody, ZenohMessage,
 };
 use super::Primitives;
+use crate::net::link::Link;
 use std::any::Any;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;

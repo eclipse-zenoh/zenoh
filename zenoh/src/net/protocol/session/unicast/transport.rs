@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::link::Link;
 use super::common::{
     conduit::{SessionTransportConduitRx, SessionTransportConduitTx},
     pipeline::TransmissionPipeline,
@@ -20,6 +19,7 @@ use super::core::{PeerId, Priority, WhatAmI, ZInt};
 use super::link::SessionTransportLink;
 use super::proto::{SessionMessage, ZenohMessage};
 use super::session::{SessionEventHandler, SessionManager};
+use crate::net::link::Link;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};

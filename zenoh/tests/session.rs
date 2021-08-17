@@ -15,8 +15,8 @@ use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
 use std::time::Duration;
+use zenoh::net::link::{Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
-use zenoh::net::protocol::link::{Locator, LocatorProperty};
 use zenoh::net::protocol::session::{
     DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
     SessionManagerConfig, SessionManagerConfigUnicast,
@@ -464,9 +464,7 @@ fn session_tls_only() {
     });
 
     use std::io::Cursor;
-    use zenoh::net::protocol::link::tls::{
-        internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
-    };
+    use zenoh::net::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -572,7 +570,7 @@ fn session_quic_only() {
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig,
     };
-    use zenoh::net::protocol::link::quic::ALPN_QUIC_HTTP;
+    use zenoh::net::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real

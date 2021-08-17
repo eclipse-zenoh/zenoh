@@ -22,7 +22,7 @@ use super::core::{PeerId, Property, ZInt};
 #[cfg(feature = "zero-copy")]
 use super::io;
 use super::io::{WBuf, ZBuf};
-use crate::net::protocol::link::{Link, Locator, LocatorProperty};
+use crate::net::link::{Link, Locator, LocatorProperty};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "zero-copy")]

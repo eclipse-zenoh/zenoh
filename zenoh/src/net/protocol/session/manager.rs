@@ -15,9 +15,9 @@ use super::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::defaults::*;
 #[cfg(feature = "zero-copy")]
 use super::io::SharedMemoryReader;
-use super::link::{Locator, LocatorProperty, LocatorProtocol};
 use super::unicast::manager::{SessionManagerConfigUnicast, SessionManagerStateUnicast};
 use super::{Session, SessionHandler};
+use crate::net::link::{Locator, LocatorProperty, LocatorProtocol};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;

@@ -17,7 +17,7 @@ use super::defaults::*;
 use super::session::SessionManager;
 use super::transport::{SessionTransportUnicast, SessionTransportUnicastConfig};
 use super::*;
-use crate::net::protocol::link::*;
+use crate::net::link::*;
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;

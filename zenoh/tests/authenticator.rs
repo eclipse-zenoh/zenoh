@@ -16,8 +16,8 @@ use async_std::task;
 use std::any::Any;
 use std::collections::HashMap;
 use std::time::Duration;
+use zenoh::net::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
-use zenoh::net::protocol::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::proto::ZenohMessage;
 #[cfg(feature = "zero-copy")]
 use zenoh::net::protocol::session::unicast::authenticator::SharedMemoryAuthenticator;
@@ -397,9 +397,7 @@ fn authenticator_tls() {
     });
 
     use std::io::Cursor;
-    use zenoh::net::protocol::link::tls::{
-        internal::pemfile, ClientConfig, NoClientAuth, ServerConfig,
-    };
+    use zenoh::net::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -510,7 +508,7 @@ fn authenticator_quic() {
         Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
         ServerConfigBuilder, TransportConfig,
     };
-    use zenoh::net::protocol::link::quic::ALPN_QUIC_HTTP;
+    use zenoh::net::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real

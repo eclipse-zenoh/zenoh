@@ -16,7 +16,6 @@ mod mux;
 
 use super::core;
 use super::io;
-use super::link;
 use super::proto;
 use super::session;
 

@@ -11,9 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::link::Locator;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::link::Locator;
 use super::protocol::proto::{Hello, Scout, SessionBody, SessionMessage};
 use super::protocol::session::Session;
 use super::{Runtime, RuntimeSession};

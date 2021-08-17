@@ -12,12 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{PeerId, Property, ZInt, ZINT_MAX_BYTES};
-use super::link::Locator;
 #[cfg(feature = "zero-copy")]
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
 use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
+use crate::net::link::Locator;
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 #[cfg(feature = "zero-copy")]

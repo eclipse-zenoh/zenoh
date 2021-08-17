@@ -19,9 +19,9 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
+    use zenoh::net::link::{Link, Locator};
     use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
-    use zenoh::net::protocol::link::{Link, Locator};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::protocol::session::unicast::authenticator::SharedMemoryAuthenticator;
     use zenoh::net::protocol::session::{

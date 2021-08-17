@@ -13,7 +13,7 @@
 //
 use super::core::*;
 use super::io::{ZBuf, ZSlice};
-use super::link::Locator;
+use crate::net::link::Locator;
 use std::fmt;
 
 /*************************************/

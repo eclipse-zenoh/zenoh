@@ -11,13 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::link::Link;
 use super::common::conduit::SessionTransportChannelRx;
 use super::core::{PeerId, Priority, Reliability, ZInt};
 use super::proto::{
     Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage, ZenohMessage,
 };
 use super::transport::SessionTransportUnicast;
+use crate::net::link::Link;
 use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};

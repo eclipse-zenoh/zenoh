@@ -23,7 +23,7 @@ use super::proto::{
 };
 use super::session::SessionManager;
 use super::{SessionConfigUnicast, SessionUnicast};
-use crate::net::protocol::link::Link;
+use crate::net::link::Link;
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::hmac;

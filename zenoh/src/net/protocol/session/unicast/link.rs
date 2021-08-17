@@ -17,7 +17,7 @@ use super::io::{ZBuf, ZSlice};
 use super::proto::SessionMessage;
 use super::session::defaults::ZN_RX_BUFF_SIZE;
 use super::transport::SessionTransportUnicast;
-use crate::net::protocol::link::Link;
+use crate::net::link::Link;
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
