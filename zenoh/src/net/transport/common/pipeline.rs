@@ -25,10 +25,10 @@ use super::super::defaults::{
     ZN_QUEUE_SIZE_REAL_TIME,
 };
 use super::batch::SerializationBatch;
-use super::conduit::{SessionTransportChannelTx, SessionTransportConduitTx};
+use super::conduit::{TransportChannelTx, TransportConduitTx};
 use super::protocol::core::Priority;
 use super::protocol::io::WBuf;
-use super::protocol::proto::{SessionMessage, ZenohMessage};
+use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::task;
 use std::collections::VecDeque;
 use std::fmt;
@@ -188,7 +188,7 @@ pub(crate) struct TransmissionPipeline {
     // Status variable of transmission pipeline
     active: Arc<AtomicBool>,
     // The conduit TX containing the SN generators
-    conduit: Box<[SessionTransportConduitTx]>,
+    conduit: Box<[TransportConduitTx]>,
     // Each conduit queue has its own Mutex
     stage_in: Box<[Arc<Mutex<StageIn>>]>,
     // Amount of bytes available in each stage IN conduit queue
@@ -212,7 +212,7 @@ impl TransmissionPipeline {
     pub(crate) fn new(
         batch_size: usize,
         is_streamed: bool,
-        conduit: Box<[SessionTransportConduitTx]>,
+        conduit: Box<[TransportConduitTx]>,
     ) -> TransmissionPipeline {
         // Conditional variables
         let mut cond_canrefill = vec![];
@@ -281,7 +281,7 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_session_message(&self, message: SessionMessage, priority: Priority) {
+    pub(crate) fn push_transport_message(&self, message: TransportMessage, priority: Priority) {
         // Check it is a valid conduit
         let queue = if self.is_qos() { priority as usize } else { 0 };
         let mut in_guard = zlock!(self.stage_in[queue]);
@@ -290,7 +290,7 @@ impl TransmissionPipeline {
             () => {
                 // Get the current serialization batch
                 let batch = zgetbatch!(self, queue, in_guard, false);
-                if batch.serialize_session_message(&message) {
+                if batch.serialize_transport_message(&message) {
                     self.bytes_in[queue].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return;
@@ -384,7 +384,7 @@ impl TransmissionPipeline {
         &self,
         message: ZenohMessage,
         queue: usize,
-        channel: MutexGuard<'_, SessionTransportChannelTx>,
+        channel: MutexGuard<'_, TransportChannelTx>,
         stage_in: MutexGuard<'_, StageIn>,
     ) {
         // Assign the stage_in to in_guard to avoid lifetime warnings
@@ -612,7 +612,7 @@ mod tests {
         Channel, CongestionControl, Priority, Reliability, ResKey, ZInt,
     };
     use crate::net::protocol::io::ZBuf;
-    use crate::net::protocol::proto::{Frame, FramePayload, SessionBody, ZenohMessage};
+    use crate::net::protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
     use crate::net::transport::defaults::{
         ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_QUEUE_SIZE_CONTROL,
     };
@@ -675,9 +675,9 @@ mod tests {
                 // Create a ZBuf for deserialization starting from the batch
                 let mut zbuf: ZBuf = batch.get_serialized_messages().into();
                 // Deserialize the messages
-                while let Some(msg) = zbuf.read_session_message() {
+                while let Some(msg) = zbuf.read_transport_message() {
                     match msg.body {
-                        SessionBody::Frame(Frame { payload, .. }) => match payload {
+                        TransportBody::Frame(Frame { payload, .. }) => match payload {
                             FramePayload::Messages { messages } => {
                                 msgs += messages.len();
                             }
@@ -706,7 +706,7 @@ mod tests {
         // Pipeline
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
-        let conduit = vec![SessionTransportConduitTx::new(
+        let conduit = vec![TransportConduitTx::new(
             Priority::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
@@ -800,7 +800,7 @@ mod tests {
         // Pipeline
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
-        let conduit = vec![SessionTransportConduitTx::new(
+        let conduit = vec![TransportConduitTx::new(
             Priority::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
@@ -906,7 +906,7 @@ mod tests {
         // Queue
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
-        let conduit = vec![SessionTransportConduitTx::new(
+        let conduit = vec![TransportConduitTx::new(
             Priority::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
@@ -966,7 +966,7 @@ mod tests {
         // Queue
         let batch_size = ZN_DEFAULT_BATCH_SIZE;
         let is_streamed = true;
-        let conduit = vec![SessionTransportConduitTx::new(
+        let conduit = vec![TransportConduitTx::new(
             Priority::Control,
             0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,

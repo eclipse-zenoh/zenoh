@@ -121,7 +121,7 @@ pub mod smsg {
     pub mod init_options {
         use super::ZInt;
 
-        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the session supports QoS
+        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
     }
 
     // Reason for the Close message
@@ -325,7 +325,7 @@ pub(crate) trait Options {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
-/// The Attachment can decorate any message (i.e., SessionMessage and ZenohMessage) and it allows to
+/// The Attachment can decorate any message (i.e., TransportMessage and ZenohMessage) and it allows to
 /// append to the message any additional information. Since the information contained in the
 /// Attachement is relevant only to the layer that provided them (e.g., Session, Zenoh, User) it
 /// is the duty of that layer to serialize and de-serialize the attachment whenever deemed necessary.
@@ -1325,7 +1325,7 @@ impl Header for Scout {
 /// The HELLO message is sent in any of the following three cases:
 ///     1) in response to a SCOUT message;
 ///     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
-///     3) in a already established session to update the corresponding peer on the new capabilities
+///     3) in a already established transport to update the corresponding peer on the new capabilities
 ///        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
 /// Locators are expressed as:
 /// <code>
@@ -1399,9 +1399,9 @@ impl fmt::Display for Hello {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
-/// The INIT message is sent on a specific Locator to initiate a session with the peer associated
+/// The INIT message is sent on a specific Locator to initiate a transport with the peer associated
 /// with that Locator. The initiator MUST send an INIT message with the A flag set to 0.  If the
-/// corresponding peer deems appropriate to initialize a session with the initiator, the corresponding
+/// corresponding peer deems appropriate to initialize a transport with the initiator, the corresponding
 /// peer MUST reply with an INIT message with the A flag set to 1.
 ///
 ///  7 6 5 4 3 2 1 0
@@ -1510,7 +1510,7 @@ impl Options for InitAck {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
-/// The OPEN message is sent on a link to finally open an initialized session with the peer.
+/// The OPEN message is sent on a link to finally open an initialized transport with the peer.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -1573,7 +1573,7 @@ impl Header for OpenAck {
 ///
 /// The CLOSE message is sent in any of the following two cases:
 ///     1) in response to an OPEN message which is not accepted;
-///     2) at any time to arbitrarly close the session with the corresponding peer.
+///     2) at any time to arbitrarly close the transport with the corresponding peer.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -1584,10 +1584,10 @@ impl Header for OpenAck {
 /// |     reason    |
 /// +---------------+
 ///
-/// - if K==0 then close the whole zenoh session.
+/// - if K==0 then close the whole zenoh transport.
 /// - if K==1 then close the transport link the CLOSE message was sent on (e.g., TCP socket) but
-///           keep the whole session open. NOTE: the session will be automatically closed when
-///           the session's lease period expires.
+///           keep the whole transport open. NOTE: the transport will be automatically closed when
+///           the transport's lease period expires.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Close {
@@ -1703,7 +1703,7 @@ impl Header for AckNack {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
-/// The KEEP_ALIVE message can be sent periodically to avoid the expiration of the session lease
+/// The KEEP_ALIVE message can be sent periodically to avoid the expiration of the transport lease
 /// period in case there are no messages to be sent.
 ///
 ///  7 6 5 4 3 2 1 0
@@ -1874,9 +1874,9 @@ pub enum FramePayload {
     Messages { messages: Vec<ZenohMessage> },
 }
 
-// Zenoh messages at zenoh-session level
+// Zenoh messages at zenoh-transport level
 #[derive(Debug, Clone, PartialEq)]
-pub enum SessionBody {
+pub enum TransportBody {
     Scout(Scout),
     Hello(Hello),
     InitSyn(InitSyn),
@@ -1893,19 +1893,19 @@ pub enum SessionBody {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SessionMessage {
-    pub body: SessionBody,
+pub struct TransportMessage {
+    pub body: TransportBody,
     pub attachment: Option<Attachment>,
 }
 
-impl SessionMessage {
+impl TransportMessage {
     pub fn make_scout(
         what: Option<WhatAmI>,
         pid_request: bool,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Scout(Scout { what, pid_request }),
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Scout(Scout { what, pid_request }),
             attachment,
         }
     }
@@ -1915,9 +1915,9 @@ impl SessionMessage {
         whatami: Option<WhatAmI>,
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Hello(Hello {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Hello(Hello {
                 pid,
                 whatami,
                 locators,
@@ -1933,9 +1933,9 @@ impl SessionMessage {
         sn_resolution: Option<ZInt>,
         is_qos: bool,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::InitSyn(InitSyn {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::InitSyn(InitSyn {
                 version,
                 whatami,
                 pid,
@@ -1953,9 +1953,9 @@ impl SessionMessage {
         is_qos: bool,
         cookie: ZSlice,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::InitAck(InitAck {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::InitAck(InitAck {
                 whatami,
                 pid,
                 sn_resolution,
@@ -1971,9 +1971,9 @@ impl SessionMessage {
         initial_sn: ZInt,
         cookie: ZSlice,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::OpenSyn(OpenSyn {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::OpenSyn(OpenSyn {
                 lease,
                 initial_sn,
                 cookie,
@@ -1986,9 +1986,9 @@ impl SessionMessage {
         lease: ZInt,
         initial_sn: ZInt,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::OpenAck(OpenAck { lease, initial_sn }),
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::OpenAck(OpenAck { lease, initial_sn }),
             attachment,
         }
     }
@@ -1998,9 +1998,9 @@ impl SessionMessage {
         reason: u8,
         link_only: bool,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Close(Close {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Close(Close {
                 pid,
                 reason,
                 link_only,
@@ -2014,9 +2014,9 @@ impl SessionMessage {
         sn: ZInt,
         count: Option<ZInt>,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Sync(Sync {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Sync(Sync {
                 reliability,
                 sn,
                 count,
@@ -2029,30 +2029,33 @@ impl SessionMessage {
         sn: ZInt,
         mask: Option<ZInt>,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::AckNack(AckNack { sn, mask }),
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::AckNack(AckNack { sn, mask }),
             attachment,
         }
     }
 
-    pub fn make_keep_alive(pid: Option<PeerId>, attachment: Option<Attachment>) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::KeepAlive(KeepAlive { pid }),
+    pub fn make_keep_alive(
+        pid: Option<PeerId>,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::KeepAlive(KeepAlive { pid }),
             attachment,
         }
     }
 
-    pub fn make_ping(hash: ZInt, attachment: Option<Attachment>) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Ping(Ping { hash }),
+    pub fn make_ping(hash: ZInt, attachment: Option<Attachment>) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Ping(Ping { hash }),
             attachment,
         }
     }
 
-    pub fn make_pong(hash: ZInt, attachment: Option<Attachment>) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Pong(Pong { hash }),
+    pub fn make_pong(hash: ZInt, attachment: Option<Attachment>) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Pong(Pong { hash }),
             attachment,
         }
     }
@@ -2062,9 +2065,9 @@ impl SessionMessage {
         sn: ZInt,
         payload: FramePayload,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Frame(Frame {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Frame(Frame {
                 channel,
                 sn,
                 payload,

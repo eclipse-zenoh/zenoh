@@ -15,7 +15,7 @@ use super::protocol::core::ZInt;
 
 // These are the properties IDs to be included in the
 // attachment of the four messages used for opening a
-// session: InitSyn, InitAck, OpenSyn, and OpenAck.
+// transport: InitSyn, InitAck, OpenSyn, and OpenAck.
 
 #[allow(dead_code)]
 pub mod authorization {

@@ -15,8 +15,8 @@ use super::defaults::*;
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 #[cfg(feature = "zero-copy")]
 use super::protocol::io::SharedMemoryReader;
-use super::unicast::manager::{SessionManagerConfigUnicast, SessionManagerStateUnicast};
-use super::{Session, SessionHandler};
+use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
+use super::{Transport, TransportHandler};
 use crate::net::link::{Locator, LocatorProperty, LocatorProtocol};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
@@ -33,80 +33,75 @@ use zenoh_util::properties::config::*;
 /// ```
 /// use async_std::sync::Arc;
 /// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
-/// use zenoh::net::transport::{DummySessionEventHandler, SessionEventHandler, Session,
-///         SessionHandler, SessionManager, SessionManagerConfig, SessionManagerConfigUnicast};
+/// use zenoh::net::transport::{DummyTransportEventHandler, TransportEventHandler, Transport,
+///         TransportHandler, TransportManager, TransportManagerConfig, TransportManagerConfigUnicast};
 /// use zenoh_util::core::ZResult;
 ///
-/// // Create my session handler to be notified when a new session is initiated with me
+/// // Create my transport handler to be notified when a new transport is initiated with me
+/// #[derive(Default)]
 /// struct MySH;
 ///
-/// impl MySH {
-///     fn new() -> MySH {
-///         MySH
+/// impl TransportHandler for MySH {
+///     fn new_transport(&self,
+///         _transport: Transport
+///     ) -> ZResult<Arc<dyn TransportEventHandler>> {
+///         Ok(Arc::new(DummyTransportEventHandler::default()))
 ///     }
 /// }
 ///
-/// impl SessionHandler for MySH {
-///     fn new_session(&self,
-///         _session: Session
-///     ) -> ZResult<Arc<dyn SessionEventHandler>> {
-///         Ok(Arc::new(DummySessionEventHandler::default()))
-///     }
-/// }
+/// // Create the default TransportManager
+/// let config = TransportManagerConfig::builder()
+///         .build(Arc::new(MySH::default()));
+/// let manager = TransportManager::new(config);
 ///
-/// // Create the default SessionManager
-/// let config = SessionManagerConfig::builder()
-///         .build(Arc::new(MySH::new()));
-/// let manager = SessionManager::new(config);
-///
-/// // Create the SessionManager with custom configuration
-/// // Configure the unicast sessions parameters
-/// let unicast = SessionManagerConfigUnicast::builder()
+/// // Create the TransportManager with custom configuration
+/// // Configure the unicast transports parameters
+/// let unicast = TransportManagerConfigUnicast::builder()
 ///         .lease(1_000)                   // Set the link lease to 1s
 ///         .keep_alive(100)                // Set the link keep alive interval to 100ms
 ///         .open_timeout(1_000)            // Set an open timeout to 1s
-///         .open_pending(10)               // Set to 10 the number of simultanous pending incoming sessions
-///         .max_sessions(5)                // Allow max 5 sessions open
-///         .max_links(2)                   // Allow max 2 links per session
+///         .open_pending(10)               // Set to 10 the number of simultanous pending incoming transports
+///         .max_transports(5)              // Allow max 5 transports open
+///         .max_links(2)                   // Allow max 2 links per transport
 ///         .build();
-/// let config = SessionManagerConfig::builder()
+/// let config = TransportManagerConfig::builder()
 ///         .pid(PeerId::rand())
 ///         .whatami(whatami::PEER)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .sn_resolution(128)             // Use a sequence number resolution of 128
 ///         .unicast(unicast)               // Configure unicast parameters
-///         .build(Arc::new(MySH::new()));
-/// let manager = SessionManager::new(config);
+///         .build(Arc::new(MySH::default()));
+/// let manager = TransportManager::new(config);
 /// ```
 
-pub struct SessionManagerConfig {
+pub struct TransportManagerConfig {
     pub version: u8,
     pub pid: PeerId,
     pub whatami: WhatAmI,
     pub sn_resolution: ZInt,
     pub batch_size: usize,
-    pub unicast: SessionManagerConfigUnicast,
+    pub unicast: TransportManagerConfigUnicast,
     pub locator_property: HashMap<LocatorProtocol, LocatorProperty>,
-    pub handler: Arc<dyn SessionHandler>,
+    pub handler: Arc<dyn TransportHandler>,
 }
 
-impl SessionManagerConfig {
-    pub fn builder() -> SessionManagerConfigBuilder {
-        SessionManagerConfigBuilder::default()
+impl TransportManagerConfig {
+    pub fn builder() -> TransportManagerConfigBuilder {
+        TransportManagerConfigBuilder::default()
     }
 }
 
-pub struct SessionManagerConfigBuilder {
+pub struct TransportManagerConfigBuilder {
     version: u8,
     pid: PeerId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
     batch_size: usize,
-    unicast: SessionManagerConfigUnicast,
+    unicast: TransportManagerConfigUnicast,
     locator_property: HashMap<LocatorProtocol, LocatorProperty>,
 }
 
-impl SessionManagerConfigBuilder {
+impl TransportManagerConfigBuilder {
     pub fn version(mut self, version: u8) -> Self {
         self.version = version;
         self
@@ -141,13 +136,13 @@ impl SessionManagerConfigBuilder {
         self
     }
 
-    pub fn unicast(mut self, unicast: SessionManagerConfigUnicast) -> Self {
+    pub fn unicast(mut self, unicast: TransportManagerConfigUnicast) -> Self {
         self.unicast = unicast;
         self
     }
 
-    pub fn build(self, handler: Arc<dyn SessionHandler>) -> SessionManagerConfig {
-        SessionManagerConfig {
+    pub fn build(self, handler: Arc<dyn TransportHandler>) -> TransportManagerConfig {
+        TransportManagerConfig {
             version: self.version,
             pid: self.pid,
             whatami: self.whatami,
@@ -162,7 +157,7 @@ impl SessionManagerConfigBuilder {
     pub async fn from_properties(
         mut self,
         properties: &ConfigProperties,
-    ) -> ZResult<SessionManagerConfigBuilder> {
+    ) -> ZResult<TransportManagerConfigBuilder> {
         macro_rules! zparse {
             ($str:expr) => {
                 $str.parse().map_err(|_| {
@@ -193,7 +188,7 @@ impl SessionManagerConfigBuilder {
         }
         self = self.locator_property(LocatorProperty::from_properties(properties).await?);
         self = self.unicast(
-            SessionManagerConfigUnicast::builder()
+            TransportManagerConfigUnicast::builder()
                 .from_properties(properties)
                 .await?
                 .build(),
@@ -203,7 +198,7 @@ impl SessionManagerConfigBuilder {
     }
 }
 
-impl Default for SessionManagerConfigBuilder {
+impl Default for TransportManagerConfigBuilder {
     fn default() -> Self {
         Self {
             version: ZN_VERSION,
@@ -212,44 +207,44 @@ impl Default for SessionManagerConfigBuilder {
             sn_resolution: ZN_DEFAULT_SEQ_NUM_RESOLUTION,
             batch_size: ZN_DEFAULT_BATCH_SIZE,
             locator_property: HashMap::new(),
-            unicast: SessionManagerConfigUnicast::default(),
+            unicast: TransportManagerConfigUnicast::default(),
         }
     }
 }
 
-pub struct SessionManagerState {
-    pub unicast: SessionManagerStateUnicast,
+pub struct TransportManagerState {
+    pub unicast: TransportManagerStateUnicast,
 }
 
-impl Default for SessionManagerState {
-    fn default() -> SessionManagerState {
-        SessionManagerState {
-            unicast: SessionManagerStateUnicast::default(),
+impl Default for TransportManagerState {
+    fn default() -> TransportManagerState {
+        TransportManagerState {
+            unicast: TransportManagerStateUnicast::default(),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct SessionManager {
-    pub(crate) config: Arc<SessionManagerConfig>,
-    pub(crate) state: Arc<SessionManagerState>,
+pub struct TransportManager {
+    pub(crate) config: Arc<TransportManagerConfig>,
+    pub(crate) state: Arc<TransportManagerState>,
     pub(crate) prng: AsyncArc<AsyncMutex<PseudoRng>>,
     pub(crate) cipher: Arc<BlockCipher>,
     #[cfg(feature = "zero-copy")]
     pub(crate) shmr: Arc<RwLock<SharedMemoryReader>>,
 }
 
-impl SessionManager {
-    pub fn new(config: SessionManagerConfig) -> SessionManager {
+impl TransportManager {
+    pub fn new(config: TransportManagerConfig) -> TransportManager {
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
         let mut key = [0u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
         let cipher = BlockCipher::new(key);
 
-        SessionManager {
+        TransportManager {
             config: Arc::new(config),
-            state: Arc::new(SessionManagerState::default()),
+            state: Arc::new(TransportManagerState::default()),
             prng: AsyncArc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
             #[cfg(feature = "zero-copy")]
@@ -293,30 +288,30 @@ impl SessionManager {
     }
 
     /*************************************/
-    /*              SESSION              */
+    /*             TRANSPORT             */
     /*************************************/
-    pub fn get_session(&self, peer: &PeerId) -> Option<Session> {
-        if let Some(s) = self.get_session_unicast(peer) {
+    pub fn get_transport(&self, peer: &PeerId) -> Option<Transport> {
+        if let Some(s) = self.get_transport_unicast(peer) {
             return Some(s.into());
         }
         // @TODO multicast
         None
     }
 
-    pub fn get_sessions(&self) -> Vec<Session> {
-        self.get_sessions_unicast()
+    pub fn get_transports(&self) -> Vec<Transport> {
+        self.get_transports_unicast()
             .drain(..)
             .map(|s| s.into())
             .collect()
         // @TODO multicast
     }
 
-    pub async fn open_session(&self, locator: &Locator) -> ZResult<Session> {
+    pub async fn open_transport(&self, locator: &Locator) -> ZResult<Transport> {
         if locator.is_multicast() {
             // @TODO multicast
             unimplemented!("");
         } else {
-            let s = self.open_session_unicast(locator).await?;
+            let s = self.open_transport_unicast(locator).await?;
             Ok(s.into())
         }
     }

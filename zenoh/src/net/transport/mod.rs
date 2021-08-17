@@ -23,19 +23,19 @@ use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{smsg, ZenohMessage};
 use crate::net::link::Link;
 pub use manager::*;
-// use multicast::SessionMulticast;
+// use multicast::TransportMulticast;
 pub use primitives::*;
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
 pub use unicast::manager::*;
-use unicast::SessionUnicast;
+use unicast::TransportUnicast;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*********************************************************/
-/* Session Callback to be implemented by the Upper Layer */
+/* Transport Callback to be implemented by the Upper Layer */
 /*********************************************************/
-pub trait SessionEventHandler: Send + Sync {
+pub trait TransportEventHandler: Send + Sync {
     fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
     fn new_link(&self, link: Link);
     fn del_link(&self, link: Link);
@@ -44,24 +44,24 @@ pub trait SessionEventHandler: Send + Sync {
     fn as_any(&self) -> &dyn Any;
 }
 
-pub trait SessionHandler: Send + Sync {
-    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler>>;
+pub trait TransportHandler: Send + Sync {
+    fn new_transport(&self, transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>>;
 }
 
 #[derive(Default)]
-pub struct DummySessionHandler;
+pub struct DummyTransportHandler;
 
-impl SessionHandler for DummySessionHandler {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
-        Ok(Arc::new(DummySessionEventHandler::default()))
+impl TransportHandler for DummyTransportHandler {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+        Ok(Arc::new(DummyTransportEventHandler::default()))
     }
 }
 
-// Define an empty SessionCallback for the listener session
+// Define an empty TransportCallback for the listener transport
 #[derive(Default)]
-pub struct DummySessionEventHandler;
+pub struct DummyTransportEventHandler;
 
-impl SessionEventHandler for DummySessionEventHandler {
+impl TransportEventHandler for DummyTransportEventHandler {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
@@ -83,7 +83,7 @@ macro_rules! zweakinner {
     ($var:expr) => {
         $var.upgrade().ok_or_else(|| {
             zerror2!(ZErrorKind::InvalidReference {
-                descr: "Session closed".to_string()
+                descr: "Transport closed".to_string()
             })
         })
     };
@@ -92,21 +92,21 @@ macro_rules! zweakinner {
 macro_rules! zweak {
     ($ses:expr) => {{
         match $ses {
-            Session::Unicast(s) => zweakinner!(s),
-            Session::Multicast(s) => zweakinner!(s),
+            Transport::Unicast(s) => zweakinner!(s),
+            Transport::Multicast(s) => zweakinner!(s),
         }
     }};
 }
 
-/// [`Session`] is the session handler returned when opening a new session
+/// [`Transport`] is the transport handler returned when opening a new transport
 #[derive(Clone, PartialEq)]
-pub enum Session {
-    Unicast(SessionUnicast),
-    Multicast(SessionUnicast),
-    // @TODO: Multicast(SessionMulticast),
+pub enum Transport {
+    Unicast(TransportUnicast),
+    Multicast(TransportUnicast),
+    // @TODO: Multicast(TransportMulticast),
 }
 
-impl Session {
+impl Transport {
     #[inline(always)]
     pub fn get_pid(&self) -> ZResult<PeerId> {
         let transport = zweak!(self)?;
@@ -138,7 +138,7 @@ impl Session {
     }
 
     #[inline(always)]
-    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn SessionEventHandler>>> {
+    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportEventHandler>>> {
         let transport = zweak!(self)?;
         Ok(transport.get_callback())
     }
@@ -172,7 +172,7 @@ impl Session {
 
     #[inline(always)]
     pub async fn close(&self) -> ZResult<()> {
-        // Return Ok if the session has already been closed
+        // Return Ok if the transport has already been closed
         match zweak!(self) {
             Ok(transport) => transport.close(smsg::close_reason::GENERIC).await,
             Err(_) => Ok(()),
@@ -180,11 +180,11 @@ impl Session {
     }
 }
 
-impl fmt::Debug for Session {
+impl fmt::Debug for Transport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match zweak!(self) {
             Ok(transport) => f
-                .debug_struct("Session")
+                .debug_struct("Transport")
                 .field("peer", &transport.get_pid())
                 .field("sn_resolution", &transport.get_sn_resolution())
                 .field("is_shm", &transport.is_shm())
@@ -196,15 +196,15 @@ impl fmt::Debug for Session {
     }
 }
 
-impl From<SessionUnicast> for Session {
-    fn from(su: SessionUnicast) -> Session {
-        Session::Unicast(su)
+impl From<TransportUnicast> for Transport {
+    fn from(su: TransportUnicast) -> Transport {
+        Transport::Unicast(su)
     }
 }
 
 // @TODO
-// impl From<SessionMulticast> for Session {
-//     fn from(sm: SessionMulticast) -> Session {
-//         Session::SessionMulticast(sm)
+// impl From<TransportMulticast> for Transport {
+//     fn from(sm: TransportMulticast) -> Transport {
+//         Transport::TransportMulticast(sm)
 //     }
 // }

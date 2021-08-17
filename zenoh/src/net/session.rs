@@ -309,7 +309,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> impl ZFuture<Output = InfoProperties> {
         trace!("info()");
-        let sessions = self.runtime.manager().get_sessions();
+        let sessions = self.runtime.manager().get_transports();
         let peer_pids = sessions
             .iter()
             .filter(|s| {

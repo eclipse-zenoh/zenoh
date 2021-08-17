@@ -76,25 +76,25 @@ impl WBuf {
     /*************************************/
     /*             SESSION               */
     /*************************************/
-    pub fn write_session_message(&mut self, msg: &SessionMessage) -> bool {
+    pub fn write_transport_message(&mut self, msg: &TransportMessage) -> bool {
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
         }
 
         match &msg.body {
-            SessionBody::Frame(frame) => self.write_frame(frame),
-            SessionBody::Scout(scout) => self.write_scout(scout),
-            SessionBody::Hello(hello) => self.write_hello(hello),
-            SessionBody::InitSyn(init_syn) => self.write_init_syn(init_syn),
-            SessionBody::InitAck(init_ack) => self.write_init_ack(init_ack),
-            SessionBody::OpenSyn(open_syn) => self.write_open_syn(open_syn),
-            SessionBody::OpenAck(open_ack) => self.write_open_ack(open_ack),
-            SessionBody::Close(close) => self.write_close(close),
-            SessionBody::Sync(sync) => self.write_sync(sync),
-            SessionBody::AckNack(ack_nack) => self.write_ack_nack(ack_nack),
-            SessionBody::KeepAlive(keep_alive) => self.write_keep_alive(keep_alive),
-            SessionBody::Ping(ping) => self.write_ping(ping),
-            SessionBody::Pong(pong) => self.write_pong(pong),
+            TransportBody::Frame(frame) => self.write_frame(frame),
+            TransportBody::Scout(scout) => self.write_scout(scout),
+            TransportBody::Hello(hello) => self.write_hello(hello),
+            TransportBody::InitSyn(init_syn) => self.write_init_syn(init_syn),
+            TransportBody::InitAck(init_ack) => self.write_init_ack(init_ack),
+            TransportBody::OpenSyn(open_syn) => self.write_open_syn(open_syn),
+            TransportBody::OpenAck(open_ack) => self.write_open_ack(open_ack),
+            TransportBody::Close(close) => self.write_close(close),
+            TransportBody::Sync(sync) => self.write_sync(sync),
+            TransportBody::AckNack(ack_nack) => self.write_ack_nack(ack_nack),
+            TransportBody::KeepAlive(keep_alive) => self.write_keep_alive(keep_alive),
+            TransportBody::Ping(ping) => self.write_ping(ping),
+            TransportBody::Pong(pong) => self.write_pong(pong),
         }
     }
 

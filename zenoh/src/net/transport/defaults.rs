@@ -46,17 +46,17 @@ zconfigurable! {
 
     // Default interval for keep alive messages in milliseconds: 2.5 seconds
     // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
-    //       set the actual keep_alive timeout to one fourth of the agreed session lease.
+    //       set the actual keep_alive timeout to one fourth of the agreed transport lease.
     //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
     //       check which considers a link as failed when no messages are received in 3.5 times the
     //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
-    //       session lease.
+    //       transport lease.
     pub static ref ZN_LINK_KEEP_ALIVE: ZInt = 2_500;
 
-    // Default timeout when opening a session in milliseconds
+    // Default timeout when opening a transport in milliseconds
     pub static ref ZN_OPEN_TIMEOUT: ZInt = 10_000;
 
-    // Default maximum number of pending sessions being opened with the host
+    // Default maximum number of pending transports being opened with the host
     pub static ref ZN_OPEN_INCOMING_PENDING: usize = 1_024;
 
     // Parameters of the link transmission queue

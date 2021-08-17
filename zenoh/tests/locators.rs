@@ -19,7 +19,7 @@ use zenoh::net::link::{Link, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -31,8 +31,8 @@ const RUNS: usize = 10;
 #[derive(Default)]
 struct SH;
 
-impl SessionHandler for SH {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+impl TransportHandler for SH {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
         let arc = Arc::new(SC::default());
         Ok(arc)
     }
@@ -42,7 +42,7 @@ impl SessionHandler for SH {
 #[derive(Default)]
 pub struct SC;
 
-impl SessionEventHandler for SC {
+impl TransportEventHandler for SC {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
@@ -57,13 +57,13 @@ impl SessionEventHandler for SC {
 }
 
 async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>>) {
-    // Create the session manager
-    let config = SessionManagerConfig::builder()
+    // Create the transport manager
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
         .pid(PeerId::new(1, [0u8; PeerId::MAX_SIZE]))
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .build(Arc::new(SH::default()));
-    let sm = SessionManager::new(config);
+    let sm = TransportManager::new(config);
 
     for _ in 0..RUNS {
         // Create the listeners

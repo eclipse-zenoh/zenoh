@@ -12,10 +12,10 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::proto::ZenohMessage;
-use super::transport::SessionTransportUnicast;
+use super::transport::TransportUnicastInner;
 use zenoh_util::zread;
 
-impl SessionTransportUnicast {
+impl TransportUnicastInner {
     #[inline(always)]
     pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) {
         macro_rules! zpush {
@@ -51,6 +51,9 @@ impl SessionTransportUnicast {
         }
 
         // No Link found
-        log::trace!("Message dropped because the session has no links: {}", msg);
+        log::trace!(
+            "Message dropped because the transport has no links: {}",
+            msg
+        );
     }
 }

@@ -11,18 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::SessionManager;
+use super::super::TransportManager;
 use super::authenticator::{
-    AuthenticatedPeerLink, AuthenticatedPeerSession, PeerAuthenticatorOutput,
+    AuthenticatedPeerLink, AuthenticatedPeerTransport, PeerAuthenticatorOutput,
 };
 use super::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
 use super::manager::Opened;
 use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf, ZSlice};
 use super::protocol::proto::{
-    smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, SessionBody, SessionMessage,
+    smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, TransportBody, TransportMessage,
 };
-use super::{SessionConfigUnicast, SessionUnicast};
+use super::{SessionConfigUnicast, TransportUnicast};
 use crate::net::link::Link;
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -98,7 +98,7 @@ impl ZBuf {
 }
 
 async fn close_link(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
     mut reason: Option<u8>,
@@ -108,9 +108,9 @@ async fn close_link(
         let peer_id = Some(manager.config.pid.clone());
         let link_only = true;
         let attachment = None;
-        let message = SessionMessage::make_close(peer_id, reason, link_only, attachment);
+        let message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
         // Send the close message on the link
-        let _ = link.write_session_message(message).await;
+        let _ = link.write_transport_message(message).await;
     }
     // Close the link
     let _ = link.close().await;
@@ -125,10 +125,10 @@ async fn close_link(
 /*************************************/
 struct OpenInitSynOutput {
     sn_resolution: ZInt,
-    auth_session: AuthenticatedPeerSession,
+    auth_transport: AuthenticatedPeerTransport,
 }
 async fn open_send_init_syn(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<OpenInitSynOutput> {
@@ -154,7 +154,7 @@ async fn open_send_init_syn(
     let init_syn_attachment = attachment_from_properties(&auth.properties).ok();
 
     // Build and send the InitSyn message
-    let message = SessionMessage::make_init_syn(
+    let message = TransportMessage::make_init_syn(
         init_syn_version,
         init_syn_whatami,
         init_syn_pid,
@@ -163,13 +163,13 @@ async fn open_send_init_syn(
         init_syn_attachment,
     );
     let _ = link
-        .write_session_message(message)
+        .write_transport_message(message)
         .await
         .map_err(|e| (e, None))?;
 
     let output = OpenInitSynOutput {
         sn_resolution: manager.config.sn_resolution,
-        auth_session: auth.session,
+        auth_transport: auth.transport,
     };
     Ok(output)
 }
@@ -182,16 +182,16 @@ struct OpenInitAckOutput {
     initial_sn_tx: ZInt,
     cookie: ZSlice,
     open_syn_attachment: Option<Attachment>,
-    auth_session: AuthenticatedPeerSession,
+    auth_transport: AuthenticatedPeerTransport,
 }
 async fn open_recv_init_ack(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
     input: OpenInitSynOutput,
 ) -> IResult<OpenInitAckOutput> {
     // Wait to read an InitAck
-    let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
+    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
         let e = format!(
             "Received multiple messages in response to an InitSyn on link {}: {:?}",
@@ -206,14 +206,14 @@ async fn open_recv_init_ack(
     let mut msg = messages.remove(0);
     let (init_ack_whatami, init_ack_pid, init_ack_sn_resolution, init_ack_is_qos, init_ack_cookie) =
         match msg.body {
-            SessionBody::InitAck(InitAck {
+            TransportBody::InitAck(InitAck {
                 whatami,
                 pid,
                 sn_resolution,
                 is_qos,
                 cookie,
             }) => (whatami, pid, sn_resolution, is_qos, cookie),
-            SessionBody::Close(Close { reason, .. }) => {
+            TransportBody::Close(Close { reason, .. }) => {
                 let e = format!(
                     "Received a close message (reason {}) in response to an InitSyn on link: {}",
                     reason, link,
@@ -232,7 +232,7 @@ async fn open_recv_init_ack(
             }
         };
 
-    // Check if a session is already open with the target peer
+    // Check if a transport is already open with the target peer
     let mut guard = zasynclock!(manager.state.unicast.opened);
     let (sn_resolution, initial_sn_tx, is_opened) = if let Some(s) = guard.get(&init_ack_pid) {
         if let Some(sn_resolution) = init_ack_sn_resolution {
@@ -277,7 +277,7 @@ async fn open_recv_init_ack(
     };
 
     let mut auth = PeerAuthenticatorOutput {
-        session: input.auth_session,
+        transport: input.auth_transport,
         ..Default::default()
     };
     for pa in manager.config.unicast.peer_authenticator.iter() {
@@ -314,7 +314,7 @@ async fn open_recv_init_ack(
         initial_sn_tx,
         cookie: init_ack_cookie,
         open_syn_attachment: attachment_from_properties(&auth.properties).ok(),
-        auth_session: auth.session,
+        auth_transport: auth.transport,
     };
     Ok(output)
 }
@@ -325,24 +325,24 @@ struct OpenOpenSynOutput {
     sn_resolution: ZInt,
     initial_sn_tx: ZInt,
     is_qos: bool,
-    auth_session: AuthenticatedPeerSession,
+    auth_transport: AuthenticatedPeerTransport,
 }
 async fn open_send_open_syn(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     _auth_link: &AuthenticatedPeerLink,
     input: OpenInitAckOutput,
 ) -> IResult<OpenOpenSynOutput> {
     // Build and send an OpenSyn message
     let lease = manager.config.unicast.lease;
-    let message = SessionMessage::make_open_syn(
+    let message = TransportMessage::make_open_syn(
         lease,
         input.initial_sn_tx,
         input.cookie,
         input.open_syn_attachment,
     );
     let _ = link
-        .write_session_message(message)
+        .write_transport_message(message)
         .await
         .map_err(|e| (e, None))?;
 
@@ -352,7 +352,7 @@ async fn open_send_open_syn(
         sn_resolution: input.sn_resolution,
         initial_sn_tx: input.initial_sn_tx,
         is_qos: input.is_qos,
-        auth_session: input.auth_session,
+        auth_transport: input.auth_transport,
     };
     Ok(output)
 }
@@ -365,16 +365,16 @@ struct OpenAckOutput {
     initial_sn_tx: ZInt,
     initial_sn_rx: ZInt,
     lease: ZInt,
-    auth_session: AuthenticatedPeerSession,
+    auth_transport: AuthenticatedPeerTransport,
 }
 async fn open_recv_open_ack(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
     input: OpenOpenSynOutput,
 ) -> IResult<OpenAckOutput> {
     // Wait to read an OpenAck
-    let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
+    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
         let e = format!(
             "Received multiple messages in response to an InitSyn on link {}: {:?}",
@@ -388,8 +388,8 @@ async fn open_recv_open_ack(
 
     let mut msg = messages.remove(0);
     let (lease, initial_sn_rx) = match msg.body {
-        SessionBody::OpenAck(OpenAck { lease, initial_sn }) => (lease, initial_sn),
-        SessionBody::Close(Close { reason, .. }) => {
+        TransportBody::OpenAck(OpenAck { lease, initial_sn }) => (lease, initial_sn),
+        TransportBody::Close(Close { reason, .. }) => {
             let e = format!(
                 "Received a close message (reason {}) in response to an OpenSyn on link: {:?}",
                 reason, link,
@@ -429,13 +429,13 @@ async fn open_recv_open_ack(
         initial_sn_tx: input.initial_sn_tx,
         initial_sn_rx,
         lease,
-        auth_session: input.auth_session,
+        auth_transport: input.auth_transport,
     };
     Ok(output)
 }
 
 async fn open_stages(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<OpenAckOutput> {
@@ -445,7 +445,10 @@ async fn open_stages(
     open_recv_open_ack(manager, link, auth_link, output).await
 }
 
-pub(crate) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<SessionUnicast> {
+pub(crate) async fn open_link(
+    manager: &TransportManager,
+    link: &Link,
+) -> ZResult<TransportUnicast> {
     let auth_link = AuthenticatedPeerLink {
         src: link.get_src(),
         dst: link.get_src(),
@@ -468,11 +471,11 @@ pub(crate) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         sn_resolution: info.sn_resolution,
         initial_sn_tx: info.initial_sn_tx,
         initial_sn_rx: info.initial_sn_rx,
-        is_shm: info.auth_session.is_shm,
+        is_shm: info.auth_transport.is_shm,
         is_qos: info.is_qos,
     };
-    let res = manager.init_session_unicast(config);
-    let session = match res {
+    let res = manager.init_transport_unicast(config);
+    let transport = match res {
         Ok(s) => s,
         Err(e) => {
             let _ = close_link(manager, link, &auth_link, Some(smsg::close_reason::INVALID)).await;
@@ -480,53 +483,56 @@ pub(crate) async fn open_link(manager: &SessionManager, link: &Link) -> ZResult<
         }
     };
 
-    // Retrive the session's transport
-    let transport = session.get_transport()?;
+    // Retrive the transport's transport
+    let t = transport.get_transport()?;
 
-    // Acquire the lock to avoid concurrent new_session and closing/closed notifications
-    let a_guard = transport.get_alive().await;
+    // Acquire the lock to avoid concurrent new_transport and closing/closed notifications
+    let a_guard = t.get_alive().await;
     if *a_guard {
         // Compute a suitable keep alive interval based on the lease
         // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
-        //       set the actual keep_alive timeout to one fourth of the agreed session lease.
+        //       set the actual keep_alive timeout to one fourth of the agreed transport lease.
         //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
         //       check which considers a link as failed when no messages are received in 3.5 times the
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
-        //       session lease.
+        //       transport lease.
         let keep_alive = manager.config.unicast.keep_alive.min(info.lease / 4);
-        let _ = transport.add_link(link.clone())?;
+        let _ = t.add_link(link.clone())?;
 
         // Start the TX loop
-        let _ = transport.start_tx(link, keep_alive, manager.config.batch_size)?;
+        let _ = t.start_tx(link, keep_alive, manager.config.batch_size)?;
 
-        // Assign a callback if the session is new
+        // Assign a callback if the transport is new
         loop {
-            match transport.get_callback() {
+            match t.get_callback() {
                 Some(callback) => {
-                    // Notify the session handler there is a new link on this session
+                    // Notify the transport handler there is a new link on this transport
                     callback.new_link(link.clone());
                     break;
                 }
                 None => {
-                    // Notify the session handler that there is a new session and get back a callback
+                    // Notify the transport handler that there is a new transport and get back a callback
                     // NOTE: the read loop of the link the open message was sent on remains blocked
-                    //       until the new_session() returns. The read_loop in the various links
+                    //       until the new_transport() returns. The read_loop in the various links
                     //       waits for any eventual transport to associate to.
-                    let callback = manager.config.handler.new_session(session.clone().into())?;
+                    let callback = manager
+                        .config
+                        .handler
+                        .new_transport(transport.clone().into())?;
                     // Set the callback on the transport
-                    let _ = transport.set_callback(callback);
+                    let _ = t.set_callback(callback);
                 }
             }
         }
 
         // Start the RX loop
-        let _ = transport.start_rx(link, info.lease)?;
+        let _ = t.start_rx(link, info.lease)?;
     }
     drop(a_guard);
 
     zasynclock!(manager.state.unicast.opened).remove(&info.pid);
 
-    Ok(session)
+    Ok(transport)
 }
 
 /*************************************/
@@ -540,15 +546,15 @@ struct AcceptInitSynOutput {
     sn_resolution: ZInt,
     is_qos: bool,
     init_ack_attachment: Option<Attachment>,
-    auth_session: AuthenticatedPeerSession,
+    auth_transport: AuthenticatedPeerTransport,
 }
 async fn accept_recv_init_syn(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<AcceptInitSynOutput> {
     // Wait to read an InitSyn
-    let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
+    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
         let e = format!(
             "Received multiple messages instead of a single InitSyn on link {}: {:?}",
@@ -563,7 +569,7 @@ async fn accept_recv_init_syn(
     let mut msg = messages.remove(0);
     let (init_syn_version, init_syn_whatami, init_syn_pid, init_syn_sn_resolution, init_syn_is_qos) =
         match msg.body {
-            SessionBody::InitSyn(InitSyn {
+            TransportBody::InitSyn(InitSyn {
                 version,
                 whatami,
                 pid,
@@ -582,9 +588,9 @@ async fn accept_recv_init_syn(
             }
         };
 
-    // Check if we are allowed to open more links if the session is established
-    if let Some(s) = manager.get_session_unicast(&init_syn_pid) {
-        // Check if we have reached maximum number of links for this session
+    // Check if we are allowed to open more links if the transport is established
+    if let Some(s) = manager.get_transport_unicast(&init_syn_pid) {
+        // Check if we have reached maximum number of links for this transport
         let links = s.get_transport().map_err(|e| (e, None))?.get_links();
         if links.len() >= manager.config.unicast.max_links {
             let e = format!(
@@ -644,17 +650,17 @@ async fn accept_recv_init_syn(
         sn_resolution: init_syn_sn_resolution,
         is_qos: init_syn_is_qos,
         init_ack_attachment: attachment_from_properties(&auth.properties).ok(),
-        auth_session: auth.session,
+        auth_transport: auth.transport,
     };
     Ok(output)
 }
 
 // Send an InitAck
 struct AcceptInitAckOutput {
-    auth_session: AuthenticatedPeerSession,
+    auth_transport: AuthenticatedPeerTransport,
 }
 async fn accept_send_init_ack(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptInitSynOutput,
@@ -694,7 +700,7 @@ async fn accept_send_init_ack(
 
     // Send the cookie
     let cookie: ZSlice = encrypted.into();
-    let message = SessionMessage::make_init_ack(
+    let message = TransportMessage::make_init_ack(
         whatami,
         apid,
         sn_resolution,
@@ -705,12 +711,12 @@ async fn accept_send_init_ack(
 
     // Send the message on the link
     let _ = link
-        .write_session_message(message)
+        .write_transport_message(message)
         .await
         .map_err(|e| (e, None))?;
 
     let output = AcceptInitAckOutput {
-        auth_session: input.auth_session,
+        auth_transport: input.auth_transport,
     };
     Ok(output)
 }
@@ -721,16 +727,16 @@ struct AcceptOpenSynOutput {
     initial_sn: ZInt,
     lease: ZInt,
     open_ack_attachment: Option<Attachment>,
-    auth_session: AuthenticatedPeerSession,
+    auth_transport: AuthenticatedPeerTransport,
 }
 async fn accept_recv_open_syn(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
     input: AcceptInitAckOutput,
 ) -> IResult<AcceptOpenSynOutput> {
     // Wait to read an OpenSyn
-    let mut messages = link.read_session_message().await.map_err(|e| (e, None))?;
+    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
         let e = format!(
             "Received multiple messages instead of a single OpenSyn on link {}: {:?}",
@@ -744,12 +750,12 @@ async fn accept_recv_open_syn(
 
     let mut msg = messages.remove(0);
     let (open_syn_lease, open_syn_initial_sn, open_syn_cookie) = match msg.body {
-        SessionBody::OpenSyn(OpenSyn {
+        TransportBody::OpenSyn(OpenSyn {
             lease,
             initial_sn,
             cookie,
         }) => (lease, initial_sn, cookie),
-        SessionBody::Close(Close { reason, .. }) => {
+        TransportBody::Close(Close { reason, .. }) => {
             let e = format!(
                 "Received a close message (reason {}) instead of an OpenSyn on link: {:?}",
                 reason, link,
@@ -825,7 +831,7 @@ async fn accept_recv_open_syn(
         None => vec![],
     };
     let mut auth = PeerAuthenticatorOutput {
-        session: input.auth_session,
+        transport: input.auth_transport,
         ..Default::default()
     };
     for pa in manager.config.unicast.peer_authenticator.iter() {
@@ -841,27 +847,27 @@ async fn accept_recv_open_syn(
         initial_sn: open_syn_initial_sn,
         lease: open_syn_lease,
         open_ack_attachment: attachment_from_properties(&auth.properties).ok(),
-        auth_session: auth.session,
+        auth_transport: auth.transport,
     };
     Ok(output)
 }
 
-// Validate the OpenSyn cookie and eventually initialize a new session
+// Validate the OpenSyn cookie and eventually initialize a new transport
 struct AcceptInitSessionOutput {
-    session: SessionUnicast,
+    transport: TransportUnicast,
     initial_sn: ZInt,
     lease: ZInt,
     open_ack_attachment: Option<Attachment>,
 }
-async fn accept_init_session(
-    manager: &SessionManager,
+async fn accept_init_transport(
+    manager: &TransportManager,
     link: &Link,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptOpenSynOutput,
 ) -> IResult<AcceptInitSessionOutput> {
-    // Initialize the session if it is new
+    // Initialize the transport if it is new
     // NOTE: Keep the lock on the manager.opened and use it to protect concurrent
-    //       addition of new sessions and links
+    //       addition of new transports and links
     let mut guard = zasynclock!(manager.state.unicast.opened);
 
     let open_ack_initial_sn = match guard.get(&input.cookie.pid) {
@@ -910,27 +916,27 @@ async fn accept_init_session(
         sn_resolution: input.cookie.sn_resolution,
         initial_sn_tx: open_ack_initial_sn,
         initial_sn_rx: input.initial_sn,
-        is_shm: input.auth_session.is_shm,
+        is_shm: input.auth_transport.is_shm,
         is_qos: input.cookie.is_qos,
     };
-    let session = manager
-        .init_session_unicast(config)
+    let transport = manager
+        .init_transport_unicast(config)
         .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
 
-    // Retrieve the session's transport
-    let transport = session.get_transport().map_err(|e| (e, None))?;
-    let _ = transport
+    // Retrieve the transport's transport
+    let t = transport.get_transport().map_err(|e| (e, None))?;
+    let _ = t
         .add_link(link.clone())
         .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?;
 
     log::debug!(
-        "New session link established from {}: {}",
+        "New transport link established from {}: {}",
         input.cookie.pid,
         link
     );
 
     let output = AcceptInitSessionOutput {
-        session,
+        transport,
         initial_sn: open_ack_initial_sn,
         lease: input.lease,
         open_ack_attachment: input.open_ack_attachment,
@@ -940,77 +946,77 @@ async fn accept_init_session(
 
 // Send an OpenAck
 struct AcceptOpenAckOutput {
-    session: SessionUnicast,
+    transport: TransportUnicast,
     lease: ZInt,
 }
 async fn accept_send_open_ack(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptInitSessionOutput,
 ) -> ZResult<AcceptOpenAckOutput> {
     // Build OpenAck message
-    let message = SessionMessage::make_open_ack(
+    let message = TransportMessage::make_open_ack(
         manager.config.unicast.lease,
         input.initial_sn,
         input.open_ack_attachment,
     );
 
     // Send the message on the link
-    let _ = link.write_session_message(message).await?;
+    let _ = link.write_transport_message(message).await?;
 
     let output = AcceptOpenAckOutput {
-        session: input.session,
+        transport: input.transport,
         lease: input.lease,
     };
     Ok(output)
 }
 
 // Notify the callback and start the link tasks
-async fn accept_finalize_session(
-    manager: &SessionManager,
+async fn accept_finalize_transport(
+    manager: &TransportManager,
     link: &Link,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptOpenAckOutput,
 ) -> ZResult<()> {
-    // Retrive the session's transport
-    let transport = input.session.get_transport()?;
+    // Retrive the transport's transport
+    let transport = input.transport.get_transport()?;
 
-    // Acquire the lock to avoid concurrent new_session and closing/closed notifications
+    // Acquire the lock to avoid concurrent new_transport and closing/closed notifications
     let a_guard = transport.get_alive().await;
     if *a_guard {
-        // Add the link to the session
+        // Add the link to the transport
         // Compute a suitable keep alive interval based on the lease
         // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
-        //       set the actual keep_alive timeout to one fourth of the agreed session lease.
+        //       set the actual keep_alive timeout to one fourth of the agreed transport lease.
         //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
         //       check which considers a link as failed when no messages are received in 3.5 times the
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
-        //       session lease.
+        //       transport lease.
         let keep_alive = manager.config.unicast.keep_alive.min(input.lease / 4);
         // Start the TX loop
         let _ = transport.start_tx(link, keep_alive, manager.config.batch_size)?;
 
-        // Assign a callback if the session is new
+        // Assign a callback if the transport is new
         loop {
             match transport.get_callback() {
                 Some(callback) => {
-                    // Notify the session handler there is a new link on this session
+                    // Notify the transport handler there is a new link on this transport
                     callback.new_link(link.clone());
                     break;
                 }
                 None => {
-                    // Notify the session handler that there is a new session and get back a callback
+                    // Notify the transport handler that there is a new transport and get back a callback
                     // NOTE: the read loop of the link the open message was sent on remains blocked
-                    //       until the new_session() returns. The read_loop in the various links
+                    //       until the new_transport() returns. The read_loop in the various links
                     //       waits for any eventual transport to associate to.
                     let callback = manager
                         .config
                         .handler
-                        .new_session(input.session.clone().into())
+                        .new_transport(input.transport.clone().into())
                         .map_err(|e| {
                             let e = format!(
-                                "Rejecting OpenSyn on link: {}. New session error: {:?}",
+                                "Rejecting OpenSyn on link: {}. New transport error: {:?}",
                                 link, e
                             );
                             zerror2!(ZErrorKind::InvalidSession { descr: e })
@@ -1030,28 +1036,28 @@ async fn accept_finalize_session(
 }
 
 async fn accept_link_stages(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<AcceptInitSessionOutput> {
     let output = accept_recv_init_syn(manager, link, auth_link).await?;
     let output = accept_send_init_ack(manager, link, auth_link, output).await?;
     let output = accept_recv_open_syn(manager, link, auth_link, output).await?;
-    accept_init_session(manager, link, auth_link, output).await
+    accept_init_transport(manager, link, auth_link, output).await
 }
 
-async fn accept_session_stages(
-    manager: &SessionManager,
+async fn accept_transport_stages(
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
     input: AcceptInitSessionOutput,
 ) -> ZResult<()> {
     let output = accept_send_open_ack(manager, link, auth_link, input).await?;
-    accept_finalize_session(manager, link, auth_link, output).await
+    accept_finalize_transport(manager, link, auth_link, output).await
 }
 
 pub(crate) async fn accept_link(
-    manager: &SessionManager,
+    manager: &TransportManager,
     link: &Link,
     auth_link: &AuthenticatedPeerLink,
 ) -> ZResult<()> {
@@ -1064,10 +1070,10 @@ pub(crate) async fn accept_link(
         }
     };
 
-    let session = output.session.clone();
-    let res = accept_session_stages(manager, link, auth_link, output).await;
+    let transport = output.transport.clone();
+    let res = accept_transport_stages(manager, link, auth_link, output).await;
     if let Err(e) = res {
-        let _ = session
+        let _ = transport
             .get_transport()?
             .close(smsg::close_reason::GENERIC)
             .await;

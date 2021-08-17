@@ -11,14 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::{SessionEventHandler, SessionManager};
+use super::super::{TransportEventHandler, TransportManager};
 use super::common::{
-    conduit::{SessionTransportConduitRx, SessionTransportConduitTx},
+    conduit::{TransportConduitRx, TransportConduitTx},
     pipeline::TransmissionPipeline,
 };
-use super::link::SessionTransportLink;
+use super::link::TransportLink;
 use super::protocol::core::{PeerId, Priority, WhatAmI, ZInt};
-use super::protocol::proto::{SessionMessage, ZenohMessage};
+use super::protocol::proto::{TransportMessage, ZenohMessage};
 use crate::net::link::Link;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
@@ -48,9 +48,9 @@ macro_rules! zlinkindex {
 /*             TRANSPORT             */
 /*************************************/
 #[derive(Clone)]
-pub(crate) struct SessionTransportUnicast {
+pub(crate) struct TransportUnicastInner {
     // The manager this channel is associated to
-    pub(super) manager: SessionManager,
+    pub(super) manager: TransportManager,
     // The remote peer id
     pub(super) pid: PeerId,
     // The remote whatami
@@ -58,21 +58,21 @@ pub(crate) struct SessionTransportUnicast {
     // The SN resolution
     pub(super) sn_resolution: ZInt,
     // Tx conduits
-    pub(super) conduit_tx: Box<[SessionTransportConduitTx]>,
+    pub(super) conduit_tx: Box<[TransportConduitTx]>,
     // Rx conduits
-    pub(super) conduit_rx: Box<[SessionTransportConduitRx]>,
+    pub(super) conduit_rx: Box<[TransportConduitRx]>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Box<[SessionTransportLink]>>>,
+    pub(super) links: Arc<RwLock<Box<[TransportLink]>>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn SessionEventHandler>>>>,
+    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportEventHandler>>>>,
     // Mutex for notification
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
-    // The session transport can do shm
+    // The transport can do shm
     pub(super) is_shm: bool,
 }
 
-pub(crate) struct SessionTransportUnicastConfig {
-    pub(crate) manager: SessionManager,
+pub(crate) struct TransportUnicastInnerConfig {
+    pub(crate) manager: TransportManager,
     pub(crate) pid: PeerId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
@@ -82,14 +82,14 @@ pub(crate) struct SessionTransportUnicastConfig {
     pub(crate) is_qos: bool,
 }
 
-impl SessionTransportUnicast {
-    pub(super) fn new(config: SessionTransportUnicastConfig) -> SessionTransportUnicast {
+impl TransportUnicastInner {
+    pub(super) fn new(config: TransportUnicastInnerConfig) -> TransportUnicastInner {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
 
         if config.is_qos {
             for c in 0..Priority::num() {
-                conduit_tx.push(SessionTransportConduitTx::new(
+                conduit_tx.push(TransportConduitTx::new(
                     (c as u8).try_into().unwrap(),
                     config.initial_sn_tx,
                     config.sn_resolution,
@@ -97,27 +97,27 @@ impl SessionTransportUnicast {
             }
 
             for c in 0..Priority::num() {
-                conduit_rx.push(SessionTransportConduitRx::new(
+                conduit_rx.push(TransportConduitRx::new(
                     (c as u8).try_into().unwrap(),
                     config.initial_sn_rx,
                     config.sn_resolution,
                 ));
             }
         } else {
-            conduit_tx.push(SessionTransportConduitTx::new(
+            conduit_tx.push(TransportConduitTx::new(
                 Priority::default(),
                 config.initial_sn_tx,
                 config.sn_resolution,
             ));
 
-            conduit_rx.push(SessionTransportConduitRx::new(
+            conduit_rx.push(TransportConduitRx::new(
                 Priority::default(),
                 config.initial_sn_rx,
                 config.sn_resolution,
             ));
         }
 
-        SessionTransportUnicast {
+        TransportUnicastInner {
             manager: config.manager,
             pid: config.pid,
             whatami: config.whatami,
@@ -131,7 +131,7 @@ impl SessionTransportUnicast {
         }
     }
 
-    pub(super) fn set_callback(&self, callback: Arc<dyn SessionEventHandler>) {
+    pub(super) fn set_callback(&self, callback: Arc<dyn TransportEventHandler>) {
         let mut guard = zwrite!(self.callback);
         *guard = Some(callback);
     }
@@ -144,21 +144,21 @@ impl SessionTransportUnicast {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) -> ZResult<()> {
-        log::debug!("Closing session with peer: {}", self.pid);
+        log::debug!("Closing transport with peer: {}", self.pid);
 
         // Mark the transport as no longer alive and keep the lock
-        // to avoid concurrent new_session and closing/closed notifications
+        // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;
         *a_guard = false;
 
-        // Notify the callback that we are going to close the session
+        // Notify the callback that we are going to close the transport
         let callback = zwrite!(self.callback).take();
         if let Some(cb) = callback.as_ref() {
             cb.closing();
         }
 
-        // Delete the session on the manager
-        let _ = self.manager.del_session_unicast(&self.pid).await;
+        // Delete the transport on the manager
+        let _ = self.manager.del_transport_unicast(&self.pid).await;
 
         // Close all the links
         let mut links = {
@@ -171,7 +171,7 @@ impl SessionTransportUnicast {
             let _ = l.close().await;
         }
 
-        // Notify the callback that we have closed the session
+        // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {
             cb.closed();
         }
@@ -200,7 +200,7 @@ impl SessionTransportUnicast {
         }
 
         // Create a channel link from a link
-        let link = SessionTransportLink::new(self.clone(), link);
+        let link = TransportLink::new(self.clone(), link);
 
         // Add the link to the channel
         let mut links = Vec::with_capacity(guard.len() + 1);
@@ -275,7 +275,7 @@ impl SessionTransportUnicast {
     pub(crate) async fn del_link(&self, link: &Link) -> ZResult<()> {
         enum Target {
             Session,
-            Link(Box<SessionTransportLink>),
+            Link(Box<TransportLink>),
         }
 
         // Try to remove the link
@@ -284,7 +284,7 @@ impl SessionTransportUnicast {
             if let Some(index) = zlinkindex!(guard, link) {
                 let is_last = guard.len() == 1;
                 if is_last {
-                    // Close the whole session
+                    // Close the whole transport
                     drop(guard);
                     Target::Session
                 } else {
@@ -313,7 +313,7 @@ impl SessionTransportUnicast {
     }
 }
 
-impl SessionTransportUnicast {
+impl TransportUnicastInner {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
@@ -337,7 +337,7 @@ impl SessionTransportUnicast {
         self.conduit_tx.len() > 1
     }
 
-    pub(crate) fn get_callback(&self) -> Option<Arc<dyn SessionEventHandler>> {
+    pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportEventHandler>> {
         zread!(self.callback).clone()
     }
 
@@ -360,9 +360,9 @@ impl SessionTransportUnicast {
                 let reason_id = reason;
                 let link_only = true; // This is should always be true when closing a link
                 let attachment = None; // No attachment here
-                let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+                let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-                pipeline.push_session_message(msg, Priority::Background);
+                pipeline.push_transport_message(msg, Priority::Background);
             }
 
             // Remove the link from the channel
@@ -373,7 +373,7 @@ impl SessionTransportUnicast {
     }
 
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing session with peer: {}", self.pid);
+        log::trace!("Closing transport with peer: {}", self.pid);
 
         let mut pipelines: Vec<Arc<TransmissionPipeline>> = zread!(self.links)
             .iter()
@@ -385,14 +385,14 @@ impl SessionTransportUnicast {
             let reason_id = reason;
             // link_only should always be false for user-triggered close. However, in case of
             // multiple links, it is safer to close all the links first. When no links are left,
-            // the session is then considered closed.
+            // the transport is then considered closed.
             let link_only = true;
             let attachment = None; // No attachment here
-            let msg = SessionMessage::make_close(peer_id, reason_id, link_only, attachment);
+            let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            p.push_session_message(msg, Priority::Background);
+            p.push_transport_message(msg, Priority::Background);
         }
-        // Terminate and clean up the session
+        // Terminate and clean up the transport
         self.delete().await
     }
 

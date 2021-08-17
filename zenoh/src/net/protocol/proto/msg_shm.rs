@@ -98,7 +98,7 @@ impl ZenohMessage {
 
 #[allow(dead_code)]
 #[cfg(feature = "zero-copy")]
-impl SessionMessage {
+impl TransportMessage {
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;
 

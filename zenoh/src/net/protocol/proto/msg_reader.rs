@@ -40,9 +40,9 @@ impl ZBuf {
     }
 
     /*************************************/
-    /*             SESSION               */
+    /*            TRANSPORT              */
     /*************************************/
-    pub fn read_session_message(&mut self) -> Option<SessionMessage> {
+    pub fn read_transport_message(&mut self) -> Option<TransportMessage> {
         use super::smsg::id::*;
 
         let mut attachment = None;
@@ -98,11 +98,11 @@ impl ZBuf {
             }
         };
 
-        Some(SessionMessage { body, attachment })
+        Some(TransportMessage { body, attachment })
     }
 
     #[inline(always)]
-    fn read_frame(&mut self, header: u8, priority: Priority) -> Option<SessionBody> {
+    fn read_frame(&mut self, header: u8, priority: Priority) -> Option<TransportBody> {
         let reliability = match imsg::has_flag(header, smsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
@@ -135,14 +135,14 @@ impl ZBuf {
             FramePayload::Messages { messages }
         };
 
-        Some(SessionBody::Frame(Frame {
+        Some(TransportBody::Frame(Frame {
             channel,
             sn,
             payload,
         }))
     }
 
-    fn read_scout(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_scout(&mut self, header: u8) -> Option<TransportBody> {
         let pid_request = imsg::has_flag(header, smsg::flag::I);
         let what = if imsg::has_flag(header, smsg::flag::W) {
             Some(self.read_zint()?)
@@ -150,10 +150,10 @@ impl ZBuf {
             None
         };
 
-        Some(SessionBody::Scout(Scout { what, pid_request }))
+        Some(TransportBody::Scout(Scout { what, pid_request }))
     }
 
-    fn read_hello(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_hello(&mut self, header: u8) -> Option<TransportBody> {
         let pid = if imsg::has_flag(header, smsg::flag::I) {
             Some(self.read_peerid()?)
         } else {
@@ -170,14 +170,14 @@ impl ZBuf {
             None
         };
 
-        Some(SessionBody::Hello(Hello {
+        Some(TransportBody::Hello(Hello {
             pid,
             whatami,
             locators,
         }))
     }
 
-    fn read_init_syn(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_init_syn(&mut self, header: u8) -> Option<TransportBody> {
         let options = if imsg::has_flag(header, smsg::flag::O) {
             self.read_zint()?
         } else {
@@ -193,7 +193,7 @@ impl ZBuf {
         };
         let is_qos = imsg::has_option(options, smsg::init_options::QOS);
 
-        Some(SessionBody::InitSyn(InitSyn {
+        Some(TransportBody::InitSyn(InitSyn {
             version,
             whatami,
             pid,
@@ -202,7 +202,7 @@ impl ZBuf {
         }))
     }
 
-    fn read_init_ack(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_init_ack(&mut self, header: u8) -> Option<TransportBody> {
         let options = if imsg::has_flag(header, smsg::flag::O) {
             self.read_zint()?
         } else {
@@ -218,7 +218,7 @@ impl ZBuf {
         let is_qos = imsg::has_option(options, smsg::init_options::QOS);
         let cookie = self.read_zslice_array()?;
 
-        Some(SessionBody::InitAck(InitAck {
+        Some(TransportBody::InitAck(InitAck {
             whatami,
             pid,
             sn_resolution,
@@ -227,7 +227,7 @@ impl ZBuf {
         }))
     }
 
-    fn read_open_syn(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_open_syn(&mut self, header: u8) -> Option<TransportBody> {
         let lease = if imsg::has_flag(header, smsg::flag::T) {
             1_000 * self.read_zint()?
         } else {
@@ -236,14 +236,14 @@ impl ZBuf {
         let initial_sn = self.read_zint()?;
 
         let cookie = self.read_zslice_array()?;
-        Some(SessionBody::OpenSyn(OpenSyn {
+        Some(TransportBody::OpenSyn(OpenSyn {
             lease,
             initial_sn,
             cookie,
         }))
     }
 
-    fn read_open_ack(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_open_ack(&mut self, header: u8) -> Option<TransportBody> {
         let lease = if imsg::has_flag(header, smsg::flag::T) {
             1_000 * self.read_zint()?
         } else {
@@ -251,10 +251,10 @@ impl ZBuf {
         };
         let initial_sn = self.read_zint()?;
 
-        Some(SessionBody::OpenAck(OpenAck { lease, initial_sn }))
+        Some(TransportBody::OpenAck(OpenAck { lease, initial_sn }))
     }
 
-    fn read_close(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_close(&mut self, header: u8) -> Option<TransportBody> {
         let link_only = imsg::has_flag(header, smsg::flag::K);
         let pid = if imsg::has_flag(header, smsg::flag::I) {
             Some(self.read_peerid()?)
@@ -263,14 +263,14 @@ impl ZBuf {
         };
         let reason = self.read()?;
 
-        Some(SessionBody::Close(Close {
+        Some(TransportBody::Close(Close {
             pid,
             reason,
             link_only,
         }))
     }
 
-    fn read_sync(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_sync(&mut self, header: u8) -> Option<TransportBody> {
         let reliability = match imsg::has_flag(header, smsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
@@ -282,14 +282,14 @@ impl ZBuf {
             None
         };
 
-        Some(SessionBody::Sync(Sync {
+        Some(TransportBody::Sync(Sync {
             reliability,
             sn,
             count,
         }))
     }
 
-    fn read_ack_nack(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_ack_nack(&mut self, header: u8) -> Option<TransportBody> {
         let sn = self.read_zint()?;
         let mask = if imsg::has_flag(header, smsg::flag::M) {
             Some(self.read_zint()?)
@@ -297,27 +297,27 @@ impl ZBuf {
             None
         };
 
-        Some(SessionBody::AckNack(AckNack { sn, mask }))
+        Some(TransportBody::AckNack(AckNack { sn, mask }))
     }
 
-    fn read_keep_alive(&mut self, header: u8) -> Option<SessionBody> {
+    fn read_keep_alive(&mut self, header: u8) -> Option<TransportBody> {
         let pid = if imsg::has_flag(header, smsg::flag::I) {
             Some(self.read_peerid()?)
         } else {
             None
         };
 
-        Some(SessionBody::KeepAlive(KeepAlive { pid }))
+        Some(TransportBody::KeepAlive(KeepAlive { pid }))
     }
 
-    fn read_ping(&mut self, _header: u8) -> Option<SessionBody> {
+    fn read_ping(&mut self, _header: u8) -> Option<TransportBody> {
         let hash = self.read_zint()?;
-        Some(SessionBody::Ping(Ping { hash }))
+        Some(TransportBody::Ping(Ping { hash }))
     }
 
-    fn read_pong(&mut self, _header: u8) -> Option<SessionBody> {
+    fn read_pong(&mut self, _header: u8) -> Option<TransportBody> {
         let hash = self.read_zint()?;
-        Some(SessionBody::Pong(Pong { hash }))
+        Some(TransportBody::Pong(Pong { hash }))
     }
 
     /*************************************/

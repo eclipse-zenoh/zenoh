@@ -15,7 +15,7 @@ use super::link::Locator;
 use super::protocol::core::{whatami, PeerId, ZInt};
 use super::protocol::proto::{LinkState, ZenohMessage};
 use super::runtime::Runtime;
-use super::transport::Session;
+use super::transport::Transport;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
@@ -36,17 +36,17 @@ impl std::fmt::Debug for Node {
 }
 
 pub(crate) struct Link {
-    pub(crate) session: Session,
+    pub(crate) transport: Transport,
     pid: PeerId,
     mappings: VecMap<PeerId>,
     local_mappings: VecMap<ZInt>,
 }
 
 impl Link {
-    fn new(session: Session) -> Self {
-        let pid = session.get_pid().unwrap();
+    fn new(transport: Transport) -> Self {
+        let pid = transport.get_pid().unwrap();
         Link {
-            session,
+            transport,
             pid,
             mappings: VecMap::new(),
             local_mappings: VecMap::new(),
@@ -217,10 +217,10 @@ impl Network {
         ZenohMessage::make_link_state_list(list, None)
     }
 
-    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, session: &Session) {
+    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, transport: &Transport) {
         let msg = self.make_msg(idxs);
-        log::trace!("{} Send to {:?} {:?}", self.name, session.get_pid(), msg);
-        if let Err(e) = session.handle_message(msg) {
+        log::trace!("{} Send to {:?} {:?}", self.name, transport.get_pid(), msg);
+        if let Err(e) = transport.handle_message(msg) {
             log::debug!("{} Error sending LinkStateList: {}", self.name, e);
         }
     }
@@ -233,7 +233,7 @@ impl Network {
         for link in self.links.values() {
             if predicate(link) {
                 log::trace!("{} Send to {} {:?}", self.name, link.pid, msg);
-                if let Err(e) = link.session.handle_message(msg.clone()) {
+                if let Err(e) = link.transport.handle_message(msg.clone()) {
                     log::debug!("{} Error sending LinkStateList: {}", self.name, e);
                 }
             }
@@ -503,18 +503,18 @@ impl Network {
                     if !new_idxs.is_empty() || !updated_idxs.is_empty() {
                         self.send_on_link(
                             [&new_idxs[..], &updated_idxs[..]].concat(),
-                            &link.session,
+                            &link.transport,
                         );
                     }
                 } else if !new_idxs.is_empty() {
-                    self.send_on_link(new_idxs.clone(), &link.session);
+                    self.send_on_link(new_idxs.clone(), &link.transport);
                 }
             }
         }
         removed
     }
 
-    pub(crate) fn add_link(&mut self, session: Session) -> usize {
+    pub(crate) fn add_link(&mut self, transport: Transport) -> usize {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -522,10 +522,10 @@ impl Network {
             }
             i
         };
-        self.links.insert(free_index, Link::new(session.clone()));
+        self.links.insert(free_index, Link::new(transport.clone()));
 
-        let pid = session.get_pid().unwrap();
-        let whatami = session.get_whatami().unwrap();
+        let pid = transport.get_pid().unwrap();
+        let whatami = transport.get_whatami().unwrap();
         let (idx, new) = match self.get_idx(&pid) {
             Some(idx) => (idx, false),
             None => {
@@ -556,7 +556,7 @@ impl Network {
         }
 
         let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
-        self.send_on_link(idxs, &session);
+        self.send_on_link(idxs, &transport);
         free_index
     }
 
@@ -595,7 +595,7 @@ impl Network {
         );
 
         for link in self.links.values() {
-            if let Err(e) = link.session.handle_message(msg.clone()) {
+            if let Err(e) = link.transport.handle_message(msg.clone()) {
                 log::debug!("{} Error sending LinkStateList: {}", self.name, e);
             }
         }

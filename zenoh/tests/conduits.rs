@@ -24,7 +24,7 @@ use zenoh::net::protocol::core::{
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
+    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -66,8 +66,8 @@ impl SHRouter {
     }
 }
 
-impl SessionHandler for SHRouter {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+impl TransportHandler for SHRouter {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
         let arc = Arc::new(SCRouter::new(self.count.clone(), self.priority));
         Ok(arc)
     }
@@ -85,7 +85,7 @@ impl SCRouter {
     }
 }
 
-impl SessionEventHandler for SCRouter {
+impl TransportEventHandler for SCRouter {
     fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
         assert_eq!(self.priority, message.channel.priority);
         self.count.fetch_add(1, Ordering::SeqCst);
@@ -111,8 +111,8 @@ impl Default for SHClient {
     }
 }
 
-impl SessionHandler for SHClient {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+impl TransportHandler for SHClient {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
         Ok(Arc::new(SCClient::default()))
     }
 }
@@ -126,7 +126,7 @@ impl Default for SCClient {
     }
 }
 
-impl SessionEventHandler for SCClient {
+impl TransportEventHandler for SCClient {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
@@ -141,28 +141,28 @@ impl SessionEventHandler for SCClient {
     }
 }
 
-async fn open_session(
+async fn open_transport(
     locators: &[Locator],
     priority: Priority,
-) -> (SessionManager, Arc<SHRouter>, Session) {
+) -> (TransportManager, Arc<SHRouter>, Transport) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
-    // Create the router session manager
+    // Create the router transport manager
     let router_handler = Arc::new(SHRouter::new(priority));
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id.clone())
         .build(router_handler.clone());
-    let router_manager = SessionManager::new(config);
+    let router_manager = TransportManager::new(config);
 
-    // Create the client session manager
-    let config = SessionManagerConfig::builder()
+    // Create the client transport manager
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client_id)
         .build(Arc::new(SHClient::default()));
-    let client_manager = SessionManager::new(config);
+    let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
     for l in locators.iter() {
@@ -175,36 +175,36 @@ async fn open_session(
             .unwrap();
     }
 
-    // Create an empty session with the client
-    // Open session -> This should be accepted
+    // Create an empty transport with the client
+    // Open transport -> This should be accepted
     for l in locators.iter() {
-        println!("Opening session with {}", l);
+        println!("Opening transport with {}", l);
         let _ = client_manager
-            .open_session(l)
+            .open_transport(l)
             .timeout(TIMEOUT)
             .await
             .unwrap()
             .unwrap();
     }
 
-    let client_session = client_manager.get_session(&router_id).unwrap();
+    let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Return the handlers
-    (router_manager, router_handler, client_session)
+    (router_manager, router_handler, client_transport)
 }
 
-async fn close_session(
-    router_manager: SessionManager,
-    client_session: Session,
+async fn close_transport(
+    router_manager: TransportManager,
+    client_transport: Transport,
     locators: &[Locator],
 ) {
-    // Close the client session
+    // Close the client transport
     let mut ll = "".to_string();
     for l in locators.iter() {
         ll.push_str(&format!("{} ", l));
     }
-    println!("Closing session with {}", ll);
-    let _ = client_session
+    println!("Closing transport with {}", ll);
+    let _ = client_transport
         .close()
         .timeout(TIMEOUT)
         .await
@@ -231,7 +231,7 @@ async fn close_session(
 
 async fn single_run(
     router_handler: Arc<SHRouter>,
-    client_session: Session,
+    client_transport: Transport,
     channel: Channel,
     msg_size: usize,
 ) {
@@ -258,7 +258,7 @@ async fn single_run(
         MSG_COUNT, channel, msg_size
     );
     for _ in 0..MSG_COUNT {
-        client_session.schedule(message.clone()).unwrap();
+        client_transport.schedule(message.clone()).unwrap();
     }
 
     // Wait for the messages to arrive to the other side
@@ -276,10 +276,10 @@ async fn single_run(
 async fn run(locators: &[Locator], channel: &[Channel], msg_size: &[usize]) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
-            let (router_manager, router_handler, client_session) =
-                open_session(locators, ch.priority).await;
-            single_run(router_handler.clone(), client_session.clone(), *ch, *ms).await;
-            close_session(router_manager, client_session, locators).await;
+            let (router_manager, router_handler, client_transport) =
+                open_transport(locators, ch.priority).await;
+            single_run(router_handler.clone(), client_transport.clone(), *ch, *ms).await;
+            close_transport(router_manager, client_transport, locators).await;
         }
     }
 }

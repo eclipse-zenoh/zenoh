@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::SessionManager;
+use super::super::TransportManager;
 use super::authenticator::*;
 use super::defaults::*;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
-use super::transport::{SessionTransportUnicast, SessionTransportUnicastConfig};
+use super::transport::{TransportUnicastInner, TransportUnicastInnerConfig};
 use super::*;
 use crate::net::link::*;
 use async_std::prelude::*;
@@ -29,48 +29,48 @@ use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
 use zenoh_util::{zasynclock, zerror, zlock};
 
-pub struct SessionManagerConfigUnicast {
+pub struct TransportManagerConfigUnicast {
     pub lease: ZInt,
     pub keep_alive: ZInt,
     pub open_timeout: ZInt,
     pub open_pending: usize,
-    pub max_sessions: usize,
+    pub max_transports: usize,
     pub max_links: usize,
     pub peer_authenticator: Vec<PeerAuthenticator>,
     pub link_authenticator: Vec<LinkAuthenticator>,
 }
 
-impl Default for SessionManagerConfigUnicast {
+impl Default for TransportManagerConfigUnicast {
     fn default() -> Self {
         Self::builder().build()
     }
 }
 
-impl SessionManagerConfigUnicast {
-    pub fn builder() -> SessionManagerConfigBuilderUnicast {
-        SessionManagerConfigBuilderUnicast::default()
+impl TransportManagerConfigUnicast {
+    pub fn builder() -> TransportManagerConfigBuilderUnicast {
+        TransportManagerConfigBuilderUnicast::default()
     }
 }
 
-pub struct SessionManagerConfigBuilderUnicast {
+pub struct TransportManagerConfigBuilderUnicast {
     lease: ZInt,
     keep_alive: ZInt,
     open_timeout: ZInt,
     open_pending: usize,
-    max_sessions: usize,
+    max_transports: usize,
     max_links: usize,
     peer_authenticator: Vec<PeerAuthenticator>,
     link_authenticator: Vec<LinkAuthenticator>,
 }
 
-impl Default for SessionManagerConfigBuilderUnicast {
-    fn default() -> SessionManagerConfigBuilderUnicast {
-        SessionManagerConfigBuilderUnicast {
+impl Default for TransportManagerConfigBuilderUnicast {
+    fn default() -> TransportManagerConfigBuilderUnicast {
+        TransportManagerConfigBuilderUnicast {
             lease: *ZN_LINK_LEASE,
             keep_alive: *ZN_LINK_KEEP_ALIVE,
             open_timeout: *ZN_OPEN_TIMEOUT,
             open_pending: *ZN_OPEN_INCOMING_PENDING,
-            max_sessions: usize::MAX,
+            max_transports: usize::MAX,
             max_links: usize::MAX,
             peer_authenticator: vec![DummyPeerAuthenticator::make()],
             link_authenticator: vec![DummyLinkAuthenticator::make()],
@@ -78,7 +78,7 @@ impl Default for SessionManagerConfigBuilderUnicast {
     }
 }
 
-impl SessionManagerConfigBuilderUnicast {
+impl TransportManagerConfigBuilderUnicast {
     pub fn lease(mut self, lease: ZInt) -> Self {
         self.lease = lease;
         self
@@ -99,8 +99,8 @@ impl SessionManagerConfigBuilderUnicast {
         self
     }
 
-    pub fn max_sessions(mut self, max_sessions: usize) -> Self {
-        self.max_sessions = max_sessions;
+    pub fn max_transports(mut self, max_transports: usize) -> Self {
+        self.max_transports = max_transports;
         self
     }
 
@@ -122,7 +122,7 @@ impl SessionManagerConfigBuilderUnicast {
     pub async fn from_properties(
         mut self,
         properties: &ConfigProperties,
-    ) -> ZResult<SessionManagerConfigBuilderUnicast> {
+    ) -> ZResult<TransportManagerConfigBuilderUnicast> {
         macro_rules! zparse {
             ($str:expr) => {
                 $str.parse().map_err(|_| {
@@ -149,7 +149,7 @@ impl SessionManagerConfigBuilderUnicast {
             self = self.open_pending(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_MAX_SESSIONS_KEY) {
-            self = self.max_sessions(zparse!(v)?);
+            self = self.max_transports(zparse!(v)?);
         }
         if let Some(v) = properties.get(&ZN_MAX_LINKS_KEY) {
             self = self.max_links(zparse!(v)?);
@@ -161,13 +161,13 @@ impl SessionManagerConfigBuilderUnicast {
         Ok(self)
     }
 
-    pub fn build(self) -> SessionManagerConfigUnicast {
-        SessionManagerConfigUnicast {
+    pub fn build(self) -> TransportManagerConfigUnicast {
+        TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             open_timeout: self.open_timeout,
             open_pending: self.open_pending,
-            max_sessions: self.max_sessions,
+            max_transports: self.max_transports,
             max_links: self.max_links,
             peer_authenticator: self.peer_authenticator,
             link_authenticator: self.link_authenticator,
@@ -175,24 +175,24 @@ impl SessionManagerConfigBuilderUnicast {
     }
 }
 
-pub struct SessionManagerStateUnicast {
-    // Outgoing and incoming opened (i.e. established) sessions
+pub struct TransportManagerStateUnicast {
+    // Outgoing and incoming opened (i.e. established) transports
     pub(super) opened: AsyncArc<AsyncMutex<HashMap<PeerId, Opened>>>,
-    // Incoming uninitialized sessions
+    // Incoming uninitialized transports
     pub(super) incoming: AsyncArc<AsyncMutex<HashMap<Link, Option<Vec<u8>>>>>,
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
-    // Established sessions
-    pub(super) sessions: Arc<Mutex<HashMap<PeerId, Arc<SessionTransportUnicast>>>>,
+    // Established transports
+    pub(super) transports: Arc<Mutex<HashMap<PeerId, Arc<TransportUnicastInner>>>>,
 }
 
-impl Default for SessionManagerStateUnicast {
-    fn default() -> SessionManagerStateUnicast {
-        SessionManagerStateUnicast {
+impl Default for TransportManagerStateUnicast {
+    fn default() -> TransportManagerStateUnicast {
+        TransportManagerStateUnicast {
             opened: AsyncArc::new(AsyncMutex::new(HashMap::new())),
             incoming: AsyncArc::new(AsyncMutex::new(HashMap::new())),
             protocols: Arc::new(Mutex::new(HashMap::new())),
-            sessions: Arc::new(Mutex::new(HashMap::new())),
+            transports: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -203,7 +203,7 @@ pub(super) struct Opened {
     pub(super) initial_sn: ZInt,
 }
 
-impl SessionManager {
+impl TransportManager {
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
@@ -307,56 +307,56 @@ impl SessionManager {
     /*************************************/
     /*              SESSION              */
     /*************************************/
-    pub(super) fn init_session_unicast(
+    pub(super) fn init_transport_unicast(
         &self,
         config: SessionConfigUnicast,
-    ) -> ZResult<SessionUnicast> {
-        let mut guard = zlock!(self.state.unicast.sessions);
+    ) -> ZResult<TransportUnicast> {
+        let mut guard = zlock!(self.state.unicast.transports);
 
-        // First verify if the session already exists
-        if let Some(session) = guard.get(&config.peer) {
-            if session.whatami != config.whatami {
+        // First verify if the transport already exists
+        if let Some(transport) = guard.get(&config.peer) {
+            if transport.whatami != config.whatami {
                 let e = format!(
                     "Session with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
-                    config.peer, config.whatami, session.whatami
+                    config.peer, config.whatami, transport.whatami
                 );
                 log::trace!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });
             }
 
-            if session.sn_resolution != config.sn_resolution {
+            if transport.sn_resolution != config.sn_resolution {
                 let e = format!(
                     "Session with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
-                    config.peer, config.sn_resolution, session.sn_resolution
+                    config.peer, config.sn_resolution, transport.sn_resolution
                 );
                 log::trace!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });
             }
 
-            if session.is_shm != config.is_shm {
+            if transport.is_shm != config.is_shm {
                 let e = format!(
                     "Session with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
-                    config.peer, config.is_shm, session.is_shm
+                    config.peer, config.is_shm, transport.is_shm
                 );
                 log::trace!("{}", e);
                 return zerror!(ZErrorKind::Other { descr: e });
             }
 
-            return Ok(session.into());
+            return Ok(transport.into());
         }
 
-        // Then verify that we haven't reached the session number limit
-        if guard.len() >= self.config.unicast.max_sessions {
+        // Then verify that we haven't reached the transport number limit
+        if guard.len() >= self.config.unicast.max_transports {
             let e = format!(
-                "Max sessions reached ({}). Denying new session with peer: {}",
-                self.config.unicast.max_sessions, config.peer
+                "Max transports reached ({}). Denying new transport with peer: {}",
+                self.config.unicast.max_transports, config.peer
             );
             log::trace!("{}", e);
             return zerror!(ZErrorKind::Other { descr: e });
         }
 
-        // Create the session transport
-        let stc = SessionTransportUnicastConfig {
+        // Create the transport transport
+        let stc = TransportUnicastInnerConfig {
             manager: self.clone(),
             pid: config.peer.clone(),
             whatami: config.whatami,
@@ -366,15 +366,15 @@ impl SessionManager {
             is_shm: config.is_shm,
             is_qos: config.is_qos,
         };
-        let a_st = Arc::new(SessionTransportUnicast::new(stc));
+        let a_st = Arc::new(TransportUnicastInner::new(stc));
 
-        // Create a weak reference to the session transport
-        let session: SessionUnicast = (&a_st).into();
-        // Add the session transport to the list of active sessions
+        // Create a weak reference to the transport transport
+        let transport: TransportUnicast = (&a_st).into();
+        // Add the transport transport to the list of active transports
         guard.insert(config.peer.clone(), a_st);
 
         log::debug!(
-            "New session opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}, shm: {}, qos: {}",
+            "New transport opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}, shm: {}, qos: {}",
             config.peer,
             config.whatami,
             config.sn_resolution,
@@ -384,10 +384,10 @@ impl SessionManager {
             config.is_qos
         );
 
-        Ok(session)
+        Ok(transport)
     }
 
-    pub async fn open_session_unicast(&self, locator: &Locator) -> ZResult<SessionUnicast> {
+    pub async fn open_transport_unicast(&self, locator: &Locator) -> ZResult<TransportUnicast> {
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self
             .get_or_new_link_manager_unicast(&locator.get_proto())
@@ -399,24 +399,24 @@ impl SessionManager {
         super::establishment::open_link(self, &link).await
     }
 
-    pub fn get_session_unicast(&self, peer: &PeerId) -> Option<SessionUnicast> {
-        zlock!(self.state.unicast.sessions)
+    pub fn get_transport_unicast(&self, peer: &PeerId) -> Option<TransportUnicast> {
+        zlock!(self.state.unicast.transports)
             .get(peer)
             .map(|t| t.into())
     }
 
-    pub fn get_sessions_unicast(&self) -> Vec<SessionUnicast> {
-        zlock!(self.state.unicast.sessions)
+    pub fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
+        zlock!(self.state.unicast.transports)
             .values()
             .map(|t| t.into())
             .collect()
     }
 
-    pub(super) async fn del_session_unicast(&self, peer: &PeerId) -> ZResult<()> {
-        let _ = zlock!(self.state.unicast.sessions)
+    pub(super) async fn del_transport_unicast(&self, peer: &PeerId) -> ZResult<()> {
+        let _ = zlock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {
-                let e = format!("Can not delete the session of peer: {}", peer);
+                let e = format!("Can not delete the transport of peer: {}", peer);
                 log::trace!("{}", e);
                 zerror2!(ZErrorKind::Other { descr: e })
             })?;
@@ -434,7 +434,7 @@ impl SessionManager {
     ) {
         let mut guard = zasynclock!(self.state.unicast.incoming);
         if guard.len() >= self.config.unicast.open_pending {
-            // We reached the limit of concurrent incoming session, this means two things:
+            // We reached the limit of concurrent incoming transport, this means two things:
             // - the values configured for ZN_OPEN_INCOMING_PENDING and ZN_OPEN_TIMEOUT
             //   are too small for the scenario zenoh is deployed in;
             // - there is a tentative of DoS attack.

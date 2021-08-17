@@ -368,7 +368,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let mut res = PeerAuthenticatorOutput::default();
         res.properties.push(prop);
         if init_ack_property.challenge == self.challenge {
-            res.session.is_shm = true;
+            res.transport.is_shm = true;
         }
         Ok(res)
     }
@@ -399,7 +399,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
         let mut res = PeerAuthenticatorOutput::default();
         if open_syn_property.challenge == self.challenge {
-            res.session.is_shm = true;
+            res.transport.is_shm = true;
         }
         Ok(res)
     }

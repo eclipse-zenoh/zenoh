@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::Session;
+use super::super::Transport;
 use super::protocol::core::{
     Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt,
 };
@@ -24,11 +24,11 @@ use super::protocol::proto::{
 use super::Primitives;
 
 pub struct Mux {
-    handler: Session,
+    handler: Transport,
 }
 
 impl Mux {
-    pub(crate) fn new(handler: Session) -> Mux {
+    pub(crate) fn new(handler: Transport) -> Mux {
         Mux { handler }
     }
 }

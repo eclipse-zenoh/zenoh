@@ -11,12 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::common::conduit::SessionTransportChannelRx;
+use super::common::conduit::TransportChannelRx;
 use super::protocol::core::{PeerId, Priority, Reliability, ZInt};
 use super::protocol::proto::{
-    Close, Frame, FramePayload, KeepAlive, SessionBody, SessionMessage, ZenohMessage,
+    Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
-use super::transport::SessionTransportUnicast;
+use super::transport::TransportUnicastInner;
 use crate::net::link::Link;
 use async_std::task;
 use std::sync::MutexGuard;
@@ -26,7 +26,7 @@ use zenoh_util::{zerror2, zread};
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
-impl SessionTransportUnicast {
+impl TransportUnicastInner {
     #[allow(unused_mut)]
     fn trigger_callback(&self, mut msg: ZenohMessage) -> ZResult<()> {
         let callback = zread!(self.callback).clone();
@@ -91,7 +91,7 @@ impl SessionTransportUnicast {
         &self,
         sn: ZInt,
         payload: FramePayload,
-        mut guard: MutexGuard<'_, SessionTransportChannelRx>,
+        mut guard: MutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<()> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
@@ -138,11 +138,11 @@ impl SessionTransportUnicast {
         }
     }
 
-    pub(super) fn receive_message(&self, msg: SessionMessage, link: &Link) -> ZResult<()> {
+    pub(super) fn receive_message(&self, msg: TransportMessage, link: &Link) -> ZResult<()> {
         log::trace!("Received: {:?}", msg);
         // Process the received message
         match msg.body {
-            SessionBody::Frame(Frame {
+            TransportBody::Frame(Frame {
                 channel,
                 sn,
                 payload,
@@ -166,12 +166,12 @@ impl SessionTransportUnicast {
                     }
                 }
             }
-            SessionBody::Close(Close {
+            TransportBody::Close(Close {
                 pid,
                 reason,
                 link_only,
             }) => self.handle_close(link, pid, reason, link_only),
-            SessionBody::KeepAlive(KeepAlive { .. }) => Ok(()),
+            TransportBody::KeepAlive(KeepAlive { .. }) => Ok(()),
             _ => {
                 log::debug!(
                     "Session: {}. Message handling not implemented: {:?}",

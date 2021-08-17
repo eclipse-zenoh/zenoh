@@ -267,7 +267,7 @@ impl Primitives for AdminSpace {
 }
 
 pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
-    let session_mgr = context.runtime.manager().clone();
+    let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
     let plugins: Vec<serde_json::Value> = context
@@ -283,17 +283,17 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
         .collect();
 
     // locators info
-    let locators: Vec<serde_json::Value> = session_mgr
+    let locators: Vec<serde_json::Value> = transport_mgr
         .get_locators()
         .iter()
         .map(|locator| json!(locator.to_string()))
         .collect();
 
-    // sessions info
-    let sessions = future::join_all(session_mgr.get_sessions().iter().map(move |session| async move {
+    // transports info
+    let transports = future::join_all(transport_mgr.get_transports().iter().map(move |transport| async move {
         json!({
-            "peer": session.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
-            "links": session.get_links().map_or_else(
+            "peer": transport.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
+            "links": transport.get_links().map_or_else(
                 |_| Vec::new(),
                 |links| links.iter().map(|link| link.get_dst().to_string()).collect()
             )
@@ -305,7 +305,7 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
         "pid": context.pid_str,
         "version": context.version,
         "locators": locators,
-        "sessions": sessions,
+        "sessions": transports,
         "plugins": plugins,
     });
     log::trace!("AdminSpace router_data: {:?}", json);

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::*;
-use crate::net::transport::SessionManager;
+use crate::net::transport::TransportManager;
 use async_std::net::{SocketAddr, UdpSocket};
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
@@ -254,12 +254,12 @@ impl ListenerUnicastUdp {
 }
 
 pub struct LinkManagerUnicastUdp {
-    manager: SessionManager,
+    manager: TransportManager,
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastUdp>>>,
 }
 
 impl LinkManagerUnicastUdp {
-    pub(crate) fn new(manager: SessionManager) -> Self {
+    pub(crate) fn new(manager: TransportManager) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -395,7 +395,7 @@ async fn accept_read_task(
     socket: UdpSocket,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: SessionManager,
+    manager: TransportManager,
 ) -> ZResult<()> {
     let socket = Arc::new(socket);
     let links: LinkHashMap = Arc::new(Mutex::new(HashMap::new()));

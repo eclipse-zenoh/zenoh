@@ -23,8 +23,8 @@ use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
 use zenoh::net::transport::unicast::authenticator::UserPasswordAuthenticator;
 use zenoh::net::transport::{
-    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerConfigUnicast,
+    DummyTransportEventHandler, Transport, TransportEventHandler, TransportHandler,
+    TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -40,8 +40,8 @@ impl SHRouterAuthenticator {
     }
 }
 
-impl SessionHandler for SHRouterAuthenticator {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+impl TransportHandler for SHRouterAuthenticator {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
         Ok(Arc::new(MHRouterAuthenticator::new()))
     }
 }
@@ -54,7 +54,7 @@ impl MHRouterAuthenticator {
     }
 }
 
-impl SessionEventHandler for MHRouterAuthenticator {
+impl TransportEventHandler for MHRouterAuthenticator {
     fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
@@ -69,17 +69,12 @@ impl SessionEventHandler for MHRouterAuthenticator {
 }
 
 // Session Handler for the client
-struct SHClientAuthenticator {}
+#[derive(Default)]
+struct SHClientAuthenticator;
 
-impl SHClientAuthenticator {
-    fn new() -> Self {
-        Self {}
-    }
-}
-
-impl SessionHandler for SHClientAuthenticator {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
-        Ok(Arc::new(DummySessionEventHandler::default()))
+impl TransportHandler for SHClientAuthenticator {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+        Ok(Arc::new(DummyTransportEventHandler::default()))
     }
 }
 
@@ -103,76 +98,76 @@ async fn authenticator_user_password(
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_handler = Arc::new(SHRouterAuthenticator::new());
-    // Create the router session manager
+    // Create the router transport manager
     let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     lookup.insert(user01.clone().into(), password01.clone().into());
     lookup.insert(user03.clone().into(), password03.clone().into());
 
     let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id.clone())
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
+            TransportManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_router.clone().into()])
                 .build(),
         )
         .build(router_handler.clone());
-    let router_manager = SessionManager::new(config);
+    let router_manager = TransportManager::new(config);
 
-    // Create the transport session manager for the first client
+    // Create the transport transport manager for the first client
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client01 = UserPasswordAuthenticator::new(
         lookup,
         Some((user01.clone().into(), password01.clone().into())),
     );
 
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client01_id.clone())
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
+            TransportManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_client01.into()])
                 .build(),
         )
-        .build(Arc::new(SHClientAuthenticator::new()));
-    let client01_manager = SessionManager::new(config);
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client01_manager = TransportManager::new(config);
 
-    // Create the transport session manager for the second client
+    // Create the transport transport manager for the second client
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client02 = UserPasswordAuthenticator::new(
         lookup,
         Some((user02.clone().into(), password02.clone().into())),
     );
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client02_id.clone())
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
+            TransportManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_client02.into()])
                 .build(),
         )
-        .build(Arc::new(SHClientAuthenticator::new()));
-    let client02_manager = SessionManager::new(config);
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client02_manager = TransportManager::new(config);
 
-    // Create the transport session manager for the third client
+    // Create the transport transport manager for the third client
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
     let peer_authenticator_client03 =
         UserPasswordAuthenticator::new(lookup, Some((user03.into(), password03.into())));
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client03_id.clone())
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
+            TransportManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_client03.into()])
                 .build(),
         )
-        .build(Arc::new(SHClientAuthenticator::new()));
-    let client03_manager = SessionManager::new(config);
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client03_manager = TransportManager::new(config);
 
     /* [1] */
     println!("\nSession Authenticator UserPassword [1a1]");
@@ -186,10 +181,10 @@ async fn authenticator_user_password(
     assert_eq!(locators.len(), 1);
 
     /* [2] */
-    // Open a first session from the client to the router
+    // Open a first transport from the client to the router
     // -> This should be accepted
     println!("Session Authenticator UserPassword [2a1]");
-    let res = client01_manager.open_session(&locator).await;
+    let res = client01_manager.open_transport(&locator).await;
     println!("Session Authenticator UserPassword [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -201,18 +196,18 @@ async fn authenticator_user_password(
     assert!(res.is_ok());
 
     /* [4] */
-    // Open a second session from the client to the router
+    // Open a second transport from the client to the router
     // -> This should be rejected
     println!("Session Authenticator UserPassword [4a1]");
-    let res = client02_manager.open_session(&locator).await;
+    let res = client02_manager.open_transport(&locator).await;
     println!("Session Authenticator UserPassword [4a1]: {:?}", res);
     assert!(res.is_err());
 
     /* [5] */
-    // Open a third session from the client to the router
+    // Open a third transport from the client to the router
     // -> This should be accepted
     println!("Session Authenticator UserPassword [5a1]");
-    let res = client01_manager.open_session(&locator).await;
+    let res = client01_manager.open_transport(&locator).await;
     println!("Session Authenticator UserPassword [5a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -223,19 +218,19 @@ async fn authenticator_user_password(
         .add_user(user02.into(), password02.into())
         .await;
     assert!(res.is_ok());
-    // Open a fourth session from the client to the router
+    // Open a fourth transport from the client to the router
     // -> This should be accepted
     println!("Session Authenticator UserPassword [6a1]");
-    let res = client02_manager.open_session(&locator).await;
+    let res = client02_manager.open_transport(&locator).await;
     println!("Session Authenticator UserPassword [6a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
 
     /* [7] */
-    // Open a fourth session from the client to the router
+    // Open a fourth transport from the client to the router
     // -> This should be rejected
     println!("Session Authenticator UserPassword [7a1]");
-    let res = client03_manager.open_session(&locator).await;
+    let res = client03_manager.open_transport(&locator).await;
     println!("Session Authenticator UserPassword [7a1]: {:?}", res);
     assert!(res.is_err());
 
@@ -272,33 +267,33 @@ async fn authenticator_shared_memory(
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_handler = Arc::new(SHRouterAuthenticator::new());
-    // Create the router session manager
+    // Create the router transport manager
     let peer_authenticator_router = SharedMemoryAuthenticator::new();
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id.clone())
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
+            TransportManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_router.into()])
                 .build(),
         )
         .build(router_handler.clone());
-    let router_manager = SessionManager::new(config);
+    let router_manager = TransportManager::new(config);
 
-    // Create the transport session manager for the first client
+    // Create the transport transport manager for the first client
     let peer_authenticator_client = SharedMemoryAuthenticator::new();
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(client_id.clone())
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
+            TransportManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_client.into()])
                 .build(),
         )
-        .build(Arc::new(SHClientAuthenticator::new()));
-    let client_manager = SessionManager::new(config);
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client_manager = TransportManager::new(config);
 
     /* [1] */
     println!("\nSession Authenticator SharedMemory [1a1]");
@@ -312,10 +307,10 @@ async fn authenticator_shared_memory(
     assert_eq!(locators.len(), 1);
 
     /* [2] */
-    // Open a session from the client to the router
+    // Open a transport from the client to the router
     // -> This should be accepted
     println!("Session Authenticator SharedMemory [2a1]");
-    let res = client_manager.open_session(&locator).await;
+    let res = client_manager.open_transport(&locator).await;
     println!("Session Authenticator SharedMemory [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();

@@ -24,24 +24,24 @@ pub(crate) mod establishment;
 // use super::defaults;
 // use super::io;
 // use super::proto;
-// use super::session;
+// use super::transport;
 // use std::sync::{Arc, Weak};
-// use transport::SessionTransportUnicast;
+// use transport::TransportUnicastInner;
 // use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 // use zenoh_util::zerror2;
 
 // pub(crate) struct SessionConfigMulticast;
 
-// pub type SessionTransportMulticast = ();
+// pub type TransportMulticast = ();
 // #[derive(Clone)]
-// pub(crate) struct SessionMulticast(Weak<SessionTransportMulticast>);
+// pub(crate) struct SessionMulticast(Weak<TransportMulticast>);
 
 // impl SessionMulticast {
-//     pub(crate) fn upgrade(&self) -> Option<Arc<SessionTransportMulticast>> {
+//     pub(crate) fn upgrade(&self) -> Option<Arc<TransportMulticast>> {
 //         self.0.upgrade()
 //     }
 
-//     pub(super) fn get_transport(&self) -> ZResult<Arc<SessionTransportMulticast>> {
+//     pub(super) fn get_transport(&self) -> ZResult<Arc<TransportMulticast>> {
 //         self.upgrade().ok_or_else(|| {
 //             zerror2!(ZErrorKind::InvalidReference {
 //                 descr: "Session closed".to_string()
@@ -50,8 +50,8 @@ pub(crate) mod establishment;
 //     }
 // }
 
-// impl From<&Arc<SessionTransportMulticast>> for SessionMulticast {
-//     fn from(s: &Arc<SessionTransportMulticast>) -> SessionMulticast {
+// impl From<&Arc<TransportMulticast>> for SessionMulticast {
+//     fn from(s: &Arc<TransportMulticast>) -> SessionMulticast {
 //         SessionMulticast(Arc::downgrade(s))
 //     }
 // }

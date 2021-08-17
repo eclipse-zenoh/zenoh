@@ -26,8 +26,8 @@ use zenoh::net::protocol::core::{
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    DummySessionEventHandler, Session, SessionEventHandler, SessionHandler, SessionManager,
-    SessionManagerConfig, SessionManagerConfigUnicast,
+    DummyTransportEventHandler, Transport, TransportEventHandler, TransportHandler,
+    TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -39,36 +39,26 @@ const SLEEP: Duration = Duration::from_millis(100);
 const USLEEP: Duration = Duration::from_millis(1);
 
 #[cfg(test)]
+#[derive(Default)]
 struct SHRouterIntermittent;
 
-impl SHRouterIntermittent {
-    fn new() -> Self {
-        Self
+impl TransportHandler for SHRouterIntermittent {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+        Ok(Arc::new(DummyTransportEventHandler::default()))
     }
 }
 
-impl SessionHandler for SHRouterIntermittent {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
-        Ok(Arc::new(DummySessionEventHandler::default()))
-    }
-}
-
-// Session Handler for the intermittent clients
+// Transport Handler for the intermittent clients
+#[derive(Default)]
 struct SHClientIntermittent;
 
-impl SHClientIntermittent {
-    fn new() -> Self {
-        Self
+impl TransportHandler for SHClientIntermittent {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+        Ok(Arc::new(DummyTransportEventHandler::default()))
     }
 }
 
-impl SessionHandler for SHClientIntermittent {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
-        Ok(Arc::new(DummySessionEventHandler::default()))
-    }
-}
-
-// Session Handler for the stable client
+// Transport Handler for the stable client
 struct SHClientStable {
     counter: Arc<AtomicUsize>,
 }
@@ -79,13 +69,13 @@ impl SHClientStable {
     }
 }
 
-impl SessionHandler for SHClientStable {
-    fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
+impl TransportHandler for SHClientStable {
+    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
         Ok(Arc::new(SCClient::new(self.counter.clone())))
     }
 }
 
-// Session Callback for the client
+// Transport Callback for the client
 pub struct SCClient {
     counter: Arc<AtomicUsize>,
 }
@@ -96,7 +86,7 @@ impl SCClient {
     }
 }
 
-impl SessionEventHandler for SCClient {
+impl TransportEventHandler for SCClient {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         self.counter.fetch_add(1, Ordering::AcqRel);
         Ok(())
@@ -112,90 +102,90 @@ impl SessionEventHandler for SCClient {
     }
 }
 
-async fn session_intermittent(locator: Locator, locator_property: Option<Vec<LocatorProperty>>) {
+async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<LocatorProperty>>) {
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
-    let router_handler = Arc::new(SHRouterIntermittent::new());
-    // Create the router session manager
-    let config = SessionManagerConfig::builder()
+    let router_handler = Arc::new(SHRouterIntermittent::default());
+    // Create the router transport manager
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id.clone())
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
-                .max_sessions(3)
+            TransportManagerConfigUnicast::builder()
+                .max_transports(3)
                 .max_links(1)
                 .build(),
         )
         .build(router_handler.clone());
-    let router_manager = SessionManager::new(config);
+    let router_manager = TransportManager::new(config);
 
     /* [CLIENT] */
     let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
     let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
     let client03_id = PeerId::new(1, [3u8; PeerId::MAX_SIZE]);
 
-    // Create the transport session manager for the first client
+    // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
-    let config = SessionManagerConfig::builder()
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client01_id.clone())
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
-                .max_sessions(1)
+            TransportManagerConfigUnicast::builder()
+                .max_transports(1)
                 .max_links(1)
                 .build(),
         )
         .build(Arc::new(SHClientStable::new(counter.clone())));
-    let client01_manager = SessionManager::new(config);
+    let client01_manager = TransportManager::new(config);
 
-    // Create the transport session manager for the second client
-    let config = SessionManagerConfig::builder()
+    // Create the transport transport manager for the second client
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client02_id.clone())
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
-                .max_sessions(1)
+            TransportManagerConfigUnicast::builder()
+                .max_transports(1)
                 .max_links(1)
                 .build(),
         )
-        .build(Arc::new(SHClientIntermittent::new()));
-    let client02_manager = SessionManager::new(config);
+        .build(Arc::new(SHClientIntermittent::default()));
+    let client02_manager = TransportManager::new(config);
 
-    // Create the transport session manager for the third client
-    let config = SessionManagerConfig::builder()
+    // Create the transport transport manager for the third client
+    let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client03_id.clone())
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
-            SessionManagerConfigUnicast::builder()
-                .max_sessions(1)
+            TransportManagerConfigUnicast::builder()
+                .max_transports(1)
                 .max_links(1)
                 .build(),
         )
-        .build(Arc::new(SHClientIntermittent::new()));
-    let client03_manager = SessionManager::new(config);
+        .build(Arc::new(SHClientIntermittent::default()));
+    let client03_manager = TransportManager::new(config);
 
     /* [1] */
     // Add a listener to the router
-    println!("\nSession Intermittent [1a1]");
+    println!("\nTransport Intermittent [1a1]");
     let _ = router_manager.add_listener(&locator).await.unwrap();
     let locators = router_manager.get_listeners();
-    println!("Session Intermittent [1a2]: {:?}", locators);
+    println!("Transport Intermittent [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     /* [2] */
-    // Open a session from client01 to the router
-    let c_ses1 = client01_manager.open_session(&locator).await.unwrap();
+    // Open a transport from client01 to the router
+    let c_ses1 = client01_manager.open_transport(&locator).await.unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
-    assert_eq!(client01_manager.get_sessions().len(), 1);
+    assert_eq!(client01_manager.get_transports().len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
 
     /* [3] */
-    // Continously open and close session from client02 and client03 to the router
+    // Continously open and close transport from client02 and client03 to the router
     let c_client02_manager = client02_manager.clone();
     let c_locator = locator.clone();
     let c_router_id = router_id.clone();
@@ -204,9 +194,9 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
             print!("+");
             std::io::stdout().flush().unwrap();
 
-            let c_ses2 = c_client02_manager.open_session(&c_locator).await.unwrap();
+            let c_ses2 = c_client02_manager.open_transport(&c_locator).await.unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
-            assert_eq!(c_client02_manager.get_sessions().len(), 1);
+            assert_eq!(c_client02_manager.get_transports().len(), 1);
             assert_eq!(c_ses2.get_pid().unwrap(), c_router_id);
 
             task::sleep(SLEEP).await;
@@ -228,9 +218,9 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
             print!("*");
             std::io::stdout().flush().unwrap();
 
-            let c_ses3 = c_client03_manager.open_session(&c_locator).await.unwrap();
+            let c_ses3 = c_client03_manager.open_transport(&c_locator).await.unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
-            assert_eq!(c_client03_manager.get_sessions().len(), 1);
+            assert_eq!(c_client03_manager.get_transports().len(), 1);
             assert_eq!(c_ses3.get_pid().unwrap(), c_router_id);
 
             task::sleep(SLEEP).await;
@@ -245,7 +235,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
     });
 
     /* [4] */
-    println!("Session Intermittent [4a1]");
+    println!("Transport Intermittent [4a1]");
     let c_router_manager = router_manager.clone();
     let res = task::spawn_blocking(move || {
         // Create the message to send
@@ -281,9 +271,9 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
                 println!("\nScheduled {}", count);
                 ticks.remove(0);
             }
-            let sessions = c_router_manager.get_sessions();
-            if !sessions.is_empty() {
-                for s in sessions.iter() {
+            let transports = c_router_manager.get_transports();
+            if !transports.is_empty() {
+                for s in transports.iter() {
                     if let Ok(ll) = s.get_links() {
                         if ll.is_empty() {
                             print!("#");
@@ -310,58 +300,58 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
     // Stop the tasks
     c2_handle.cancel().await;
     c3_handle.cancel().await;
-    println!("\nSession Intermittent [4a2]: {:?}", res);
+    println!("\nTransport Intermittent [4a2]: {:?}", res);
 
     // Check that client01 received all the messages
-    println!("Session Intermittent [4b1]");
+    println!("Transport Intermittent [4b1]");
     let check = async {
         loop {
             let c = counter.load(Ordering::Acquire);
             if c == MSG_COUNT {
                 break;
             }
-            println!("Session Intermittent [4b2]: Received {}/{}", c, MSG_COUNT);
+            println!("Transport Intermittent [4b2]: Received {}/{}", c, MSG_COUNT);
             task::sleep(SLEEP).await;
         }
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Intermittent [4b3]: {:?}", res);
+    println!("Transport Intermittent [4b3]: {:?}", res);
 
     /* [5] */
-    // Close the open session on the client
-    println!("Session Intermittent [5a1]");
-    for s in client01_manager.get_sessions().iter() {
+    // Close the open transport on the client
+    println!("Transport Intermittent [5a1]");
+    for s in client01_manager.get_transports().iter() {
         s.close().timeout(TIMEOUT).await.unwrap().unwrap();
     }
-    println!("Session Intermittent [5a2]");
-    for s in client02_manager.get_sessions().iter() {
+    println!("Transport Intermittent [5a2]");
+    for s in client02_manager.get_transports().iter() {
         s.close().timeout(TIMEOUT).await.unwrap().unwrap();
     }
-    println!("Session Intermittent [5a3]");
-    for s in client03_manager.get_sessions().iter() {
+    println!("Transport Intermittent [5a3]");
+    for s in client03_manager.get_transports().iter() {
         s.close().timeout(TIMEOUT).await.unwrap().unwrap();
     }
 
     /* [6] */
-    // Verify that the session has been closed also on the router
-    println!("Session Intermittent [6a1]");
+    // Verify that the transport has been closed also on the router
+    println!("Transport Intermittent [6a1]");
     let check = async {
         loop {
-            let sessions = router_manager.get_sessions();
-            if sessions.is_empty() {
+            let transports = router_manager.get_transports();
+            if transports.is_empty() {
                 break;
             }
             task::sleep(SLEEP).await;
         }
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Session Intermittent [6a2]: {:?}", res);
+    println!("Transport Intermittent [6a2]: {:?}", res);
 
     /* [7] */
     // Perform clean up of the open locators
-    println!("\nSession Intermittent [7a1]");
+    println!("\nTransport Intermittent [7a1]");
     let res = router_manager.del_listener(&locator).await;
-    println!("Session Intermittent [7a2]: {:?}", res);
+    println!("Transport Intermittent [7a2]: {:?}", res);
     assert!(res.is_ok());
 
     task::sleep(SLEEP).await;
@@ -369,7 +359,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-fn session_tcp_intermittent() {
+fn transport_tcp_intermittent() {
     env_logger::init();
 
     task::block_on(async {
@@ -377,5 +367,5 @@ fn session_tcp_intermittent() {
     });
 
     let locator = "tcp/127.0.0.1:12447".parse().unwrap();
-    task::block_on(session_intermittent(locator, None));
+    task::block_on(transport_intermittent(locator, None));
 }

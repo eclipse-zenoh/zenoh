@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::*;
-use crate::net::transport::SessionManager;
+use crate::net::transport::TransportManager;
 use async_std::net::SocketAddr;
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
@@ -193,12 +193,12 @@ impl ListenerUnicastQuic {
 }
 
 pub struct LinkManagerUnicastQuic {
-    manager: SessionManager,
+    manager: TransportManager,
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastQuic>>>,
 }
 
 impl LinkManagerUnicastQuic {
-    pub(crate) fn new(manager: SessionManager) -> Self {
+    pub(crate) fn new(manager: TransportManager) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -383,7 +383,7 @@ async fn accept_task(
     mut acceptor: Incoming,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: SessionManager,
+    manager: TransportManager,
 ) -> ZResult<()> {
     enum Action {
         Accept(NewConnection),
@@ -458,7 +458,7 @@ async fn accept_task(
         // Create the new link object
         let link = Arc::new(LinkUnicastQuic::new(quic_conn, src_addr, send, recv));
 
-        // Communicate the new link to the initial session manager
+        // Communicate the new link to the initial transport manager
         manager.handle_new_link_unicast(Link(link), None).await;
     }
 

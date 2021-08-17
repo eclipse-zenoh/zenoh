@@ -24,7 +24,7 @@ use super::defaults;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use std::sync::{Arc, Weak};
-use transport::SessionTransportUnicast;
+use transport::TransportUnicastInner;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror2;
 
@@ -39,14 +39,14 @@ pub(crate) struct SessionConfigUnicast {
 }
 
 #[derive(Clone)]
-pub struct SessionUnicast(Weak<SessionTransportUnicast>);
+pub struct TransportUnicast(Weak<TransportUnicastInner>);
 
-impl SessionUnicast {
-    pub(crate) fn upgrade(&self) -> Option<Arc<SessionTransportUnicast>> {
+impl TransportUnicast {
+    pub(crate) fn upgrade(&self) -> Option<Arc<TransportUnicastInner>> {
         self.0.upgrade()
     }
 
-    pub(super) fn get_transport(&self) -> ZResult<Arc<SessionTransportUnicast>> {
+    pub(super) fn get_transport(&self) -> ZResult<Arc<TransportUnicastInner>> {
         self.upgrade().ok_or_else(|| {
             zerror2!(ZErrorKind::InvalidReference {
                 descr: "Session closed".to_string()
@@ -55,15 +55,15 @@ impl SessionUnicast {
     }
 }
 
-impl From<&Arc<SessionTransportUnicast>> for SessionUnicast {
-    fn from(s: &Arc<SessionTransportUnicast>) -> SessionUnicast {
-        SessionUnicast(Arc::downgrade(s))
+impl From<&Arc<TransportUnicastInner>> for TransportUnicast {
+    fn from(s: &Arc<TransportUnicastInner>) -> TransportUnicast {
+        TransportUnicast(Arc::downgrade(s))
     }
 }
 
-impl Eq for SessionUnicast {}
+impl Eq for TransportUnicast {}
 
-impl PartialEq for SessionUnicast {
+impl PartialEq for TransportUnicast {
     fn eq(&self, other: &Self) -> bool {
         Weak::ptr_eq(&self.0, &other.0)
     }

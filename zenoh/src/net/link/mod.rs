@@ -25,7 +25,7 @@ pub mod udp;
 pub mod unixsock_stream;
 
 use crate::net::protocol::io::{WBuf, ZBuf};
-use crate::net::protocol::proto::SessionMessage;
+use crate::net::protocol::proto::TransportMessage;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 pub use locator::*;
@@ -59,7 +59,7 @@ pub trait LinkTrait {
 }
 
 impl Link {
-    pub(crate) async fn write_session_message(&self, msg: SessionMessage) -> ZResult<()> {
+    pub(crate) async fn write_transport_message(&self, msg: TransportMessage) -> ZResult<()> {
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         if self.is_streamed() {
@@ -67,7 +67,7 @@ impl Link {
             wbuf.write_bytes(&[0u8, 0u8]);
         }
         // Serialize the message
-        wbuf.write_session_message(&msg);
+        wbuf.write_transport_message(&msg);
         if self.is_streamed() {
             // Write the length on the first 16 bits
             let length: u16 = wbuf.len() as u16 - 2;
@@ -81,7 +81,7 @@ impl Link {
         self.0.write_all(&buffer).await
     }
 
-    pub(crate) async fn read_session_message(&self) -> ZResult<Vec<SessionMessage>> {
+    pub(crate) async fn read_transport_message(&self) -> ZResult<Vec<TransportMessage>> {
         // Read from the link
         let buffer = if self.is_streamed() {
             // Read and decode the message length
@@ -101,9 +101,9 @@ impl Link {
         };
 
         let mut zbuf = ZBuf::from(buffer);
-        let mut messages: Vec<SessionMessage> = Vec::with_capacity(1);
+        let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
         while zbuf.can_read() {
-            match zbuf.read_session_message() {
+            match zbuf.read_transport_message() {
                 Some(msg) => messages.push(msg),
                 None => {
                     let e = format!("Decoding error on link: {}", self);

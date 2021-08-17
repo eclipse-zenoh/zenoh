@@ -145,12 +145,12 @@ impl fmt::Display for AuthenticatedPeerLink {
     }
 }
 
-// Authenticated peer session
-pub struct AuthenticatedPeerSession {
+// Authenticated peer transport
+pub struct AuthenticatedPeerTransport {
     pub is_shm: bool,
 }
 
-impl AuthenticatedPeerSession {
+impl AuthenticatedPeerTransport {
     pub fn merge(self, other: Self) -> Self {
         Self {
             is_shm: self.is_shm || other.is_shm,
@@ -158,7 +158,7 @@ impl AuthenticatedPeerSession {
     }
 }
 
-impl Default for AuthenticatedPeerSession {
+impl Default for AuthenticatedPeerTransport {
     fn default() -> Self {
         Self { is_shm: false }
     }
@@ -166,7 +166,7 @@ impl Default for AuthenticatedPeerSession {
 
 pub struct PeerAuthenticatorOutput {
     pub properties: Vec<Property>,
-    pub session: AuthenticatedPeerSession,
+    pub transport: AuthenticatedPeerTransport,
 }
 
 impl PeerAuthenticatorOutput {
@@ -174,7 +174,7 @@ impl PeerAuthenticatorOutput {
         self.properties.append(&mut other.properties);
         Self {
             properties: self.properties,
-            session: self.session.merge(other.session),
+            transport: self.transport.merge(other.transport),
         }
     }
 }
@@ -183,7 +183,7 @@ impl Default for PeerAuthenticatorOutput {
     fn default() -> Self {
         Self {
             properties: vec![],
-            session: AuthenticatedPeerSession::default(),
+            transport: AuthenticatedPeerTransport::default(),
         }
     }
 }
@@ -196,7 +196,7 @@ pub trait PeerAuthenticatorTrait {
     /// * `link`        - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the initial InitSyn message will be sent on
     ///
     /// * `peer_id`     - The [`PeerId`][PeerId] of the sender of the InitSyn, i.e., the peer
-    ///                   initiating a new session.
+    ///                   initiating a new transport.
     ///
     async fn get_init_syn_properties(
         &self,
@@ -283,7 +283,7 @@ pub trait PeerAuthenticatorTrait {
     /// of the authenticator in such a way no unnecessary data is left around
     ///
     /// # Arguments
-    /// * `peerd_id` - The [`PeerId`][PeerId] of the session being closed.
+    /// * `peerd_id` - The [`PeerId`][PeerId] of the transport being closed.
     ///
     async fn handle_close(&self, peer_id: &PeerId);
 }

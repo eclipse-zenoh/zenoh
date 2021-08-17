@@ -20,7 +20,7 @@ use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::transport::{DeMux, Mux, Primitives, Session, SessionEventHandler};
+use super::transport::{DeMux, Mux, Primitives, Transport, TransportEventHandler};
 use crate::net::link::Link;
 
 use zenoh_util::core::ZResult;
@@ -295,21 +295,23 @@ impl Router {
         })
     }
 
-    pub fn new_session(&self, session: Session) -> ZResult<Arc<LinkStateInterceptor>> {
+    pub fn new_transport(&self, transport: Transport) -> ZResult<Arc<LinkStateInterceptor>> {
         let mut tables = zwrite!(self.tables);
-        let whatami = session.get_whatami()?;
+        let whatami = transport.get_whatami()?;
 
         let link_id = match (self.whatami, whatami) {
             (whatami::ROUTER, whatami::ROUTER) => tables
                 .routers_net
                 .as_mut()
                 .unwrap()
-                .add_link(session.clone()),
+                .add_link(transport.clone()),
             (whatami::ROUTER, whatami::PEER)
             | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => {
-                tables.peers_net.as_mut().unwrap().add_link(session.clone())
-            }
+            | (whatami::PEER, whatami::PEER) => tables
+                .peers_net
+                .as_mut()
+                .unwrap()
+                .add_link(transport.clone()),
             _ => 0,
         };
 
@@ -321,15 +323,15 @@ impl Router {
         }
 
         let handler = Arc::new(LinkStateInterceptor::new(
-            session.clone(),
+            transport.clone(),
             self.tables.clone(),
             Face {
                 tables: self.tables.clone(),
                 state: tables
                     .open_net_face(
-                        session.get_pid().unwrap(),
+                        transport.get_pid().unwrap(),
                         whatami,
-                        Arc::new(Mux::new(session)),
+                        Arc::new(Mux::new(transport)),
                         link_id,
                     )
                     .upgrade()
@@ -353,16 +355,16 @@ impl Router {
 }
 
 pub struct LinkStateInterceptor {
-    pub(crate) session: Session,
+    pub(crate) transport: Transport,
     pub(crate) tables: Arc<RwLock<Tables>>,
     pub(crate) face: Face,
     pub(crate) demux: DeMux<Face>,
 }
 
 impl LinkStateInterceptor {
-    fn new(session: Session, tables: Arc<RwLock<Tables>>, face: Face) -> Self {
+    fn new(transport: Transport, tables: Arc<RwLock<Tables>>, face: Face) -> Self {
         LinkStateInterceptor {
-            session,
+            transport,
             tables,
             face: face.clone(),
             demux: DeMux::new(face),
@@ -373,9 +375,9 @@ impl LinkStateInterceptor {
         log::trace!("Recv {:?}", msg);
         match msg.body {
             ZenohBody::LinkStateList(list) => {
-                let pid = self.session.get_pid().unwrap();
+                let pid = self.transport.get_pid().unwrap();
                 let mut tables = zwrite!(self.tables);
-                let whatami = self.session.get_whatami()?;
+                let whatami = self.transport.get_whatami()?;
                 match (tables.whatami, whatami) {
                     (whatami::ROUTER, whatami::ROUTER) => {
                         for (_, removed_node) in tables
@@ -433,8 +435,8 @@ impl LinkStateInterceptor {
     pub(crate) fn closing(&self) {
         self.demux.closing();
         let tables_ref = self.tables.clone();
-        let pid = self.session.get_pid().unwrap();
-        let whatami = self.session.get_whatami();
+        let pid = self.transport.get_pid().unwrap();
+        let whatami = self.transport.get_whatami();
         async_std::task::spawn(async move {
             async_std::task::sleep(std::time::Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
             let mut tables = zwrite!(tables_ref);

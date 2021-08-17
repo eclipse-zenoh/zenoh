@@ -13,7 +13,7 @@
 //
 use super::protocol::core::{Priority, Reliability};
 use super::protocol::io::WBuf;
-use super::protocol::proto::{SessionMessage, ZenohMessage};
+use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
 
 type LengthType = u16;
@@ -29,15 +29,15 @@ enum CurrentFrame {
 /// Serialization Batch
 ///
 /// A [`SerializationBatch`][SerializationBatch] is a non-expandable and contiguous region of memory
-/// that is used to serialize [`SessionMessage`][SessionMessage] and [`ZenohMessage`][ZenohMessage].
+/// that is used to serialize [`TransportMessage`][TransportMessage] and [`ZenohMessage`][ZenohMessage].
 ///
-/// [`SessionMessage`][SessionMessage] are always serialized on the batch as they are, while
-/// [`ZenohMessage`][ZenohMessage] are always serializaed on the batch as part of a [`SessionMessage`]
-/// [SessionMessage] Frame. Reliable and Best Effort Frames can be interleaved on the same
+/// [`TransportMessage`][TransportMessage] are always serialized on the batch as they are, while
+/// [`ZenohMessage`][ZenohMessage] are always serializaed on the batch as part of a [`TransportMessage`]
+/// [TransportMessage] Frame. Reliable and Best Effort Frames can be interleaved on the same
 /// [`SerializationBatch`][SerializationBatch] as long as they fit in the remaining buffer capacity.
 ///
 /// In the serialized form, the [`SerializationBatch`][SerializationBatch] always contains one or more
-/// [`SessionMessage`][SessionMessage]. In the particular case of [`SessionMessage`][SessionMessage] Frame,
+/// [`TransportMessage`][TransportMessage]. In the particular case of [`TransportMessage`][TransportMessage] Frame,
 /// its payload is either (i) one or more complete [`ZenohMessage`][ZenohMessage] or (ii) a fragment of a
 /// a [`ZenohMessage`][ZenohMessage].
 ///
@@ -271,15 +271,15 @@ impl SerializationBatch {
         res
     }
 
-    /// Try to serialize a [`SessionMessage`][SessionMessage] on the [`SerializationBatch`][SerializationBatch].
+    /// Try to serialize a [`TransportMessage`][TransportMessage] on the [`SerializationBatch`][SerializationBatch].
     ///
     /// # Arguments
-    /// * `message` - The [`SessionMessage`][SessionMessage] to serialize.
+    /// * `message` - The [`TransportMessage`][TransportMessage] to serialize.
     ///
-    pub(crate) fn serialize_session_message(&mut self, message: &SessionMessage) -> bool {
+    pub(crate) fn serialize_transport_message(&mut self, message: &TransportMessage) -> bool {
         // Mark the write operation
         self.buffer.mark();
-        let res = self.buffer.write_session_message(message);
+        let res = self.buffer.write_transport_message(message);
         if res {
             // Reset the current frame value
             self.current_frame = CurrentFrame::None;
@@ -308,7 +308,7 @@ mod tests {
     };
     use crate::net::protocol::io::{WBuf, ZBuf};
     use crate::net::protocol::proto::{
-        Frame, FramePayload, SessionBody, SessionMessage, ZenohMessage,
+        Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
     };
     use crate::net::transport::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
     use std::convert::TryFrom;
@@ -326,20 +326,20 @@ mod tests {
             let mut batch = SerializationBatch::new(batch_size, *is_streamed);
 
             // Serialize the messages until the batch is full
-            let mut smsgs_in: Vec<SessionMessage> = Vec::new();
+            let mut smsgs_in: Vec<TransportMessage> = Vec::new();
             let mut zmsgs_in: Vec<ZenohMessage> = Vec::new();
             let mut reliable = true;
             let mut dropping = true;
             loop {
-                // Insert a session message every 3 ZenohMessage
+                // Insert a transport message every 3 ZenohMessage
                 if zmsgs_in.len() % 3 == 0 {
-                    // Create a SessionMessage
+                    // Create a TransportMessage
                     let pid = None;
                     let attachment = None;
-                    let msg = SessionMessage::make_keep_alive(pid, attachment);
+                    let msg = TransportMessage::make_keep_alive(pid, attachment);
 
-                    // Serialize the SessionMessage
-                    let res = batch.serialize_session_message(&msg);
+                    // Serialize the TransportMessage
+                    let res = batch.serialize_transport_message(&msg);
                     if !res {
                         assert!(!zmsgs_in.is_empty());
                         break;
@@ -393,20 +393,20 @@ mod tests {
             }
 
             // Verify that we deserialize the same messages we have serialized
-            let mut deserialized: Vec<SessionMessage> = Vec::new();
+            let mut deserialized: Vec<TransportMessage> = Vec::new();
             // Convert the buffer into an ZBuf
             let mut zbuf: ZBuf = batch.get_serialized_messages().into();
             // Deserialize the messages
-            while let Some(msg) = zbuf.read_session_message() {
+            while let Some(msg) = zbuf.read_transport_message() {
                 deserialized.push(msg);
             }
             assert!(!deserialized.is_empty());
 
-            let mut smsgs_out: Vec<SessionMessage> = Vec::new();
+            let mut smsgs_out: Vec<TransportMessage> = Vec::new();
             let mut zmsgs_out: Vec<ZenohMessage> = Vec::new();
             for msg in deserialized.drain(..) {
                 match msg.body {
-                    SessionBody::Frame(Frame { payload, .. }) => match payload {
+                    TransportBody::Frame(Frame { payload, .. }) => match payload {
                         FramePayload::Messages { mut messages } => zmsgs_out.append(&mut messages),
                         _ => panic!(),
                     },
@@ -486,10 +486,10 @@ mod tests {
                     // Convert the buffer into an ZBuf
                     let mut zbuf: ZBuf = batch.get_serialized_messages().into();
                     // Deserialize the messages
-                    let msg = zbuf.read_session_message().unwrap();
+                    let msg = zbuf.read_transport_message().unwrap();
 
                     match msg.body {
-                        SessionBody::Frame(Frame {
+                        TransportBody::Frame(Frame {
                             payload: FramePayload::Fragment { buffer, is_final },
                             ..
                         }) => {

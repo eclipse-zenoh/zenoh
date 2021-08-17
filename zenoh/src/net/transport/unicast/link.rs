@@ -12,11 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::defaults::ZN_RX_BUFF_SIZE;
-use super::common::{conduit::SessionTransportConduitTx, pipeline::TransmissionPipeline};
+use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::core::{Priority, ZInt};
 use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::proto::SessionMessage;
-use super::transport::SessionTransportUnicast;
+use super::protocol::proto::TransportMessage;
+use super::transport::TransportUnicastInner;
 use crate::net::link::Link;
 use async_std::prelude::*;
 use async_std::task;
@@ -30,11 +30,11 @@ use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
 #[derive(Clone)]
-pub(crate) struct SessionTransportLink {
+pub(crate) struct TransportLink {
     // The underlying link
     pub(super) inner: Link,
     // The transport this link is associated to
-    transport: SessionTransportUnicast,
+    transport: TransportUnicastInner,
     // The transmission pipeline
     pipeline: Option<Arc<TransmissionPipeline>>,
     // The signals to stop TX/RX tasks
@@ -44,9 +44,9 @@ pub(crate) struct SessionTransportLink {
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
 
-impl SessionTransportLink {
-    pub(crate) fn new(transport: SessionTransportUnicast, link: Link) -> SessionTransportLink {
-        SessionTransportLink {
+impl TransportLink {
+    pub(crate) fn new(transport: TransportUnicastInner, link: Link) -> TransportLink {
+        TransportLink {
             transport,
             inner: link,
             pipeline: None,
@@ -58,7 +58,7 @@ impl SessionTransportLink {
     }
 }
 
-impl SessionTransportLink {
+impl TransportLink {
     #[inline]
     pub(crate) fn get_link(&self) -> &Link {
         &self.inner
@@ -73,7 +73,7 @@ impl SessionTransportLink {
         &mut self,
         keep_alive: ZInt,
         batch_size: usize,
-        conduit_tx: Box<[SessionTransportConduitTx]>,
+        conduit_tx: Box<[TransportConduitTx]>,
     ) {
         if self.handle_tx.is_none() {
             // The pipeline
@@ -181,8 +181,8 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
             Err(_) => {
                 let pid = None;
                 let attachment = None;
-                let message = SessionMessage::make_keep_alive(pid, attachment);
-                pipeline.push_session_message(message, Priority::Control);
+                let message = TransportMessage::make_keep_alive(pid, attachment);
+                pipeline.push_transport_message(message, Priority::Control);
             }
         }
     }
@@ -205,7 +205,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
 
 async fn rx_task_stream(
     link: Link,
-    transport: SessionTransportUnicast,
+    transport: TransportUnicastInner,
     lease: ZInt,
     signal: Signal,
     active: Arc<AtomicBool>,
@@ -256,7 +256,7 @@ async fn rx_task_stream(
                 zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
 
                 while zbuf.can_read() {
-                    match zbuf.read_session_message() {
+                    match zbuf.read_transport_message() {
                         Some(msg) => transport.receive_message(msg, &link)?,
                         None => {
                             let e = format!("{}: decoding error", link);
@@ -273,7 +273,7 @@ async fn rx_task_stream(
 
 async fn rx_task_dgram(
     link: Link,
-    transport: SessionTransportUnicast,
+    transport: TransportUnicastInner,
     lease: ZInt,
     signal: Signal,
     active: Arc<AtomicBool>,
@@ -327,7 +327,7 @@ async fn rx_task_dgram(
 
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {
-                    match zbuf.read_session_message() {
+                    match zbuf.read_transport_message() {
                         Some(msg) => transport.receive_message(msg, &link)?,
                         None => {
                             let e = format!("{}: decoding error", link);
@@ -344,7 +344,7 @@ async fn rx_task_dgram(
 
 async fn rx_task(
     link: Link,
-    transport: SessionTransportUnicast,
+    transport: TransportUnicastInner,
     lease: ZInt,
     signal: Signal,
     active: Arc<AtomicBool>,

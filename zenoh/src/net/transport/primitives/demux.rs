@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::SessionEventHandler;
+use super::super::TransportEventHandler;
 use super::protocol::proto::{
     Data, Declaration, Declare, LinkStateList, Pull, Query, Unit, ZenohBody, ZenohMessage,
 };
@@ -31,7 +31,7 @@ impl<P: Primitives + Send + Sync> DeMux<P> {
     }
 }
 
-impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
+impl<P: 'static + Primitives + Send + Sync> TransportEventHandler for DeMux<P> {
     fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         match msg.body {
             ZenohBody::Declare(Declare { declarations, .. }) => {

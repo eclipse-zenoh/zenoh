@@ -167,7 +167,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     let mut zbuf = ZBuf::from(&wbuf);
                     b.iter(|| {
                         zbuf.reset();
-                        let _ = zbuf.read_session_message().unwrap();
+                        let _ = zbuf.read_transport_message().unwrap();
                     })
                 },
             );
@@ -189,7 +189,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     let mut zbuf = ZBuf::from(&wbuf);
                     b.iter(|| {
                         zbuf.reset();
-                        let _ = zbuf.read_session_message().unwrap();
+                        let _ = zbuf.read_transport_message().unwrap();
                     })
                 },
             );
