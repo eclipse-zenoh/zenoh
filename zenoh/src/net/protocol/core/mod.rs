@@ -52,7 +52,7 @@ pub mod whatami {
         }
     }
 
-    pub(crate) fn parse(m: &str) -> ZResult<Type> {
+    pub fn parse(m: &str) -> ZResult<Type> {
         match m {
             "peer" => Ok(PEER),
             "client" => Ok(CLIENT),
