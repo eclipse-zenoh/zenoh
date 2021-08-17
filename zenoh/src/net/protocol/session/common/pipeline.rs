@@ -1018,7 +1018,7 @@ mod tests {
             }
         });
 
-        let c_pipeline = pipeline.clone();
+        let c_pipeline = pipeline;
         let c_count = count.clone();
         task::spawn(async move {
             loop {

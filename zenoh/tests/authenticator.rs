@@ -112,7 +112,7 @@ async fn authenticator_user_password(
     let config = SessionManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_router.clone().into()])
@@ -131,7 +131,7 @@ async fn authenticator_user_password(
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client01_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_client01.into()])
@@ -149,7 +149,7 @@ async fn authenticator_user_password(
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client02_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_client02.into()])
@@ -165,7 +165,7 @@ async fn authenticator_user_password(
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client03_id.clone())
-        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_client03.into()])
@@ -277,7 +277,7 @@ async fn authenticator_shared_memory(
     let config = SessionManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_router.into()])
@@ -291,7 +291,7 @@ async fn authenticator_shared_memory(
     let config = SessionManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(client_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .peer_authenticator(vec![peer_authenticator_client.into()])

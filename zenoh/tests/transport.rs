@@ -42,13 +42,15 @@ struct SHRouter {
     count: Arc<AtomicUsize>,
 }
 
-impl SHRouter {
-    fn new() -> Self {
+impl Default for SHRouter {
+    fn default() -> Self {
         Self {
             count: Arc::new(AtomicUsize::new(0)),
         }
     }
+}
 
+impl SHRouter {
     fn get_count(&self) -> usize {
         self.count.load(Ordering::SeqCst)
     }
@@ -89,28 +91,18 @@ impl SessionEventHandler for SCRouter {
 }
 
 // Session Handler for the client
-struct SHClient {}
-
-impl SHClient {
-    fn new() -> Self {
-        Self {}
-    }
-}
+#[derive(Default)]
+struct SHClient;
 
 impl SessionHandler for SHClient {
     fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
-        Ok(Arc::new(SCClient::new()))
+        Ok(Arc::new(SCClient::default()))
     }
 }
 
 // Session Callback for the client
+#[derive(Default)]
 pub struct SCClient;
-
-impl SCClient {
-    pub fn new() -> Self {
-        Self
-    }
-}
 
 impl SessionEventHandler for SCClient {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
@@ -136,11 +128,11 @@ async fn open_session(
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
     // Create the router session manager
-    let router_handler = Arc::new(SHRouter::new());
+    let router_handler = Arc::new(SHRouter::default());
     let config = SessionManagerConfig::builder()
         .pid(router_id.clone())
         .whatami(whatami::ROUTER)
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .build(router_handler.clone());
     let router_manager = SessionManager::new(config);
 
@@ -148,8 +140,8 @@ async fn open_session(
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client_id)
-        .locator_property(locator_property.unwrap_or_else(|| vec![]))
-        .build(Arc::new(SHClient::new()));
+        .locator_property(locator_property.unwrap_or_else(Vec::new))
+        .build(Arc::new(SHClient::default()));
     let client_manager = SessionManager::new(config);
 
     // Create the listener on the router

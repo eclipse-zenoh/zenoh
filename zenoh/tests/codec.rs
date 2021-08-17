@@ -23,8 +23,9 @@ fn test_zint(v: ZInt) {
 #[test]
 fn test_zint_codec_limits() {
     test_zint(0);
+    let one: ZInt = 1;
     for i in 1..ZINT_MAX_BYTES {
-        let res = (1 as ZInt).checked_shl(7 * i as u32);
+        let res = one.checked_shl(7 * i as u32);
         if let Some(v) = res {
             test_zint(v - 1);
             test_zint(v);

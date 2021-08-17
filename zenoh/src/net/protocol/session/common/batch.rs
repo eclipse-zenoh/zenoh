@@ -404,7 +404,7 @@ mod tests {
                 match msg.body {
                     SessionBody::Frame(Frame { payload, .. }) => match payload {
                         FramePayload::Messages { mut messages } => zmsgs_out.append(&mut messages),
-                        _ => assert!(false),
+                        _ => panic!(),
                     },
                     _ => smsgs_out.push(msg),
                 }
@@ -485,17 +485,17 @@ mod tests {
                     let msg = zbuf.read_session_message().unwrap();
 
                     match msg.body {
-                        SessionBody::Frame(Frame { payload, .. }) => match payload {
-                            FramePayload::Fragment { buffer, is_final } => {
-                                assert!(!buffer.is_empty());
-                                fragments.write_zslice(buffer.clone());
-                                if is_final {
-                                    break;
-                                }
+                        SessionBody::Frame(Frame {
+                            payload: FramePayload::Fragment { buffer, is_final },
+                            ..
+                        }) => {
+                            assert!(!buffer.is_empty());
+                            fragments.write_zslice(buffer.clone());
+                            if is_final {
+                                break;
                             }
-                            _ => assert!(false),
-                        },
-                        _ => assert!(false),
+                        }
+                        _ => panic!(),
                     }
                 }
                 let mut fragments: ZBuf = fragments.into();

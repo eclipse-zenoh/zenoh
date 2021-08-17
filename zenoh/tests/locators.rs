@@ -28,29 +28,19 @@ const SLEEP: Duration = Duration::from_millis(100);
 const RUNS: usize = 10;
 
 // Session Handler
+#[derive(Default)]
 struct SH;
-
-impl SH {
-    fn new() -> Self {
-        Self
-    }
-}
 
 impl SessionHandler for SH {
     fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
-        let arc = Arc::new(SC::new());
+        let arc = Arc::new(SC::default());
         Ok(arc)
     }
 }
 
 // Session Callback for the router
+#[derive(Default)]
 pub struct SC;
-
-impl SC {
-    pub fn new() -> Self {
-        Self
-    }
-}
 
 impl SessionEventHandler for SC {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
@@ -71,8 +61,8 @@ async fn run(locators: &[Locator], locator_property: Option<Vec<LocatorProperty>
     let config = SessionManagerConfig::builder()
         .whatami(whatami::PEER)
         .pid(PeerId::new(1, [0u8; PeerId::MAX_SIZE]))
-        .locator_property(locator_property.unwrap_or_else(|| vec![]))
-        .build(Arc::new(SH::new()));
+        .locator_property(locator_property.unwrap_or_else(Vec::new))
+        .build(Arc::new(SH::default()));
     let sm = SessionManager::new(config);
 
     for _ in 0..RUNS {

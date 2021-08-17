@@ -466,13 +466,24 @@ mod tests {
         };
     }
 
+    macro_rules! vec_vec_is_empty {
+        ($wbuf:ident) => {
+            $wbuf
+                .as_ioslices()
+                .iter()
+                .map(|s| s.to_vec())
+                .next()
+                .is_none()
+        };
+    }
+
     #[test]
     fn wbuf_contiguous_new() {
         let buf = WBuf::new(10, true);
         assert_eq!(buf.len(), 0);
         assert!(buf.is_empty());
         assert_eq!(buf.capacity(), 10);
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
     }
 
     #[test]
@@ -501,7 +512,7 @@ mod tests {
         assert_eq!(buf.len(), 0);
         assert!(buf.is_empty());
         assert_eq!(buf.capacity(), 2);
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
     }
 
     #[test]
@@ -532,7 +543,7 @@ mod tests {
         assert_eq!(buf.len(), 0);
         assert!(buf.is_empty());
         assert_eq!(buf.capacity(), 6);
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
     }
 
     #[test]
@@ -582,7 +593,7 @@ mod tests {
         let mut buf = WBuf::new(6, true);
         assert!(buf.write_bytes(&[0, 1, 2]));
         buf.revert();
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
 
         assert!(buf.write_bytes(&[0, 1, 2]));
         buf.mark();
@@ -632,7 +643,7 @@ mod tests {
         assert_eq!(buf.len(), 0);
         assert!(buf.is_empty());
         assert_eq!(buf.capacity(), 10);
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
     }
 
     #[test]
@@ -661,7 +672,7 @@ mod tests {
         assert_eq!(buf.len(), 0);
         assert!(buf.is_empty());
         assert!(buf.capacity() > 2);
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
     }
 
     #[test]
@@ -687,7 +698,7 @@ mod tests {
         assert_eq!(buf.len(), 0);
         assert!(buf.is_empty());
         assert!(buf.capacity() > 6);
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
     }
 
     #[test]
@@ -771,15 +782,15 @@ mod tests {
         assert!(buf.write(0));
         assert!(buf.write(1));
         buf.revert();
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
 
         assert!(buf.write_bytes(&[0, 1]));
         buf.revert();
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
 
         assert!(buf.write_zslice(ZSlice::from(&[0u8, 1] as &[u8])));
         buf.revert();
-        assert!(to_vec_vec!(buf).is_empty());
+        assert!(vec_vec_is_empty!(buf));
 
         assert!(buf.write_bytes(&[0, 1, 2]));
         buf.mark();

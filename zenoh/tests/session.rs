@@ -66,7 +66,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     let config = SessionManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -84,7 +84,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client01_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -98,7 +98,7 @@ async fn session_open_close(locator: Locator, locator_property: Option<Vec<Locat
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client02_id.clone())
-        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .max_sessions(1)

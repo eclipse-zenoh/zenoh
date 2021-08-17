@@ -103,25 +103,25 @@ impl SessionEventHandler for SCRouter {
 }
 
 // Session Handler for the client
-struct SHClient {}
+struct SHClient;
 
-impl SHClient {
-    fn new() -> Self {
-        Self {}
+impl Default for SHClient {
+    fn default() -> Self {
+        Self
     }
 }
 
 impl SessionHandler for SHClient {
     fn new_session(&self, _session: Session) -> ZResult<Arc<dyn SessionEventHandler>> {
-        Ok(Arc::new(SCClient::new()))
+        Ok(Arc::new(SCClient::default()))
     }
 }
 
 // Session Callback for the client
 pub struct SCClient;
 
-impl SCClient {
-    pub fn new() -> Self {
+impl Default for SCClient {
+    fn default() -> Self {
         Self
     }
 }
@@ -161,7 +161,7 @@ async fn open_session(
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client_id)
-        .build(Arc::new(SHClient::new()));
+        .build(Arc::new(SHClient::default()));
     let client_manager = SessionManager::new(config);
 
     // Create the listener on the router

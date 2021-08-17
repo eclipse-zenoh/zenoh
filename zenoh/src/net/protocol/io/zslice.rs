@@ -510,9 +510,7 @@ mod tests {
         let buf: Vec<u8> = (0u8..16).into_iter().collect();
         unsafe {
             let mbuf = zslice.as_mut_slice();
-            for i in 0..buf.len() {
-                mbuf[i] = buf[i];
-            }
+            mbuf[..buf.len()].clone_from_slice(&buf[..]);
         }
         println!("[02] {:?} {:?}", buf.as_slice(), zslice.as_slice());
         assert_eq!(buf.as_slice(), zslice.as_slice());

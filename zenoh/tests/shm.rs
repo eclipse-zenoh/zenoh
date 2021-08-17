@@ -190,8 +190,7 @@ mod tests {
         // Send the message
         println!("Session SHM [3a]");
         // The msg count
-        let mut msg_count: u64 = 0;
-        for _ in 0..MSG_COUNT {
+        for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
             let mut sbuf = async {
                 loop {
@@ -232,8 +231,6 @@ mod tests {
             );
 
             peer_shm02_session.schedule(message.clone()).unwrap();
-
-            msg_count += 1;
         }
 
         // Wait a little bit
@@ -251,8 +248,7 @@ mod tests {
         // Send the message
         println!("Session SHM [4a]");
         // The msg count
-        let mut msg_count: u64 = 0;
-        for _ in 0..MSG_COUNT {
+        for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
             let mut sbuf = async {
                 loop {
@@ -292,8 +288,6 @@ mod tests {
             );
 
             peer_net01_session.schedule(message.clone()).unwrap();
-
-            msg_count += 1;
         }
 
         // Wait a little bit

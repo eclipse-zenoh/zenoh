@@ -44,7 +44,7 @@ fn tables_bench(c: &mut Criterion) {
         "/bench/tables/*",
     );
 
-    let face1 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone());
+    let face1 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
 
     let mut tables_bench = c.benchmark_group("tables_bench");
     let sub_info = SubInfo {
@@ -79,7 +79,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    2 as u64,
+                    2,
                     "",
                     Channel::default(),
                     CongestionControl::default(),
@@ -95,7 +95,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    0 as u64,
+                    0,
                     "/bench/tables/*",
                     Channel::default(),
                     CongestionControl::default(),
@@ -111,7 +111,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    0 as u64,
+                    0,
                     "/bench/tables/A*",
                     Channel::default(),
                     CongestionControl::default(),

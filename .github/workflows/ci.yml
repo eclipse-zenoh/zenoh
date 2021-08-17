@@ -49,7 +49,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: clippy
-        args: --all --examples -- -D warnings
+        args: --all-targets -- -D warnings
 
     - name: Build
       uses: actions-rs/cargo@v1

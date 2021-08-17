@@ -51,38 +51,38 @@ impl Default for &QueryTarget {
 pub fn pass_by_ref_option(arg: &Option<QueryTarget>, sum: &mut u64) {
     let v = arg.as_ref().unwrap_or_default();
     match v.eval {
-        Target::BestMatching => *sum = *sum * 3,
-        Target::Complete { n: _ } => *sum = *sum * 2,
-        Target::All => *sum = *sum * 1,
-        Target::None => *sum = *sum * 5,
+        Target::BestMatching => *sum *= 3,
+        Target::Complete { n: _ } => *sum *= 2,
+        Target::All => (),
+        Target::None => *sum *= 5,
     }
 }
 
 pub fn pass_by_option(arg: Option<QueryTarget>, sum: &mut u64) {
     let v = arg.unwrap_or_default();
     match v.eval {
-        Target::BestMatching => *sum = *sum * 3,
-        Target::Complete { n: _ } => *sum = *sum * 2,
-        Target::All => *sum = *sum * 1,
-        Target::None => *sum = *sum * 5,
+        Target::BestMatching => *sum *= 3,
+        Target::Complete { n: _ } => *sum *= 2,
+        Target::All => (),
+        Target::None => *sum *= 5,
     }
 }
 
 pub fn pass_by_ref(arg: &QueryTarget, sum: &mut u64) {
     match arg.eval {
-        Target::BestMatching => *sum = *sum * 3,
-        Target::Complete { n: _ } => *sum = *sum * 2,
-        Target::All => *sum = *sum * 1,
-        Target::None => *sum = *sum * 5,
+        Target::BestMatching => *sum *= 3,
+        Target::Complete { n: _ } => *sum *= 2,
+        Target::All => (),
+        Target::None => *sum *= 5,
     }
 }
 
 pub fn pass_by_val(arg: QueryTarget, sum: &mut u64) {
     match arg.eval {
-        Target::BestMatching => *sum = *sum * 3,
-        Target::Complete { n: _ } => *sum = *sum * 2,
-        Target::All => *sum = *sum * 1,
-        Target::None => *sum = *sum * 5,
+        Target::BestMatching => *sum *= 3,
+        Target::Complete { n: _ } => *sum *= 2,
+        Target::All => (),
+        Target::None => *sum *= 5,
     }
 }
 

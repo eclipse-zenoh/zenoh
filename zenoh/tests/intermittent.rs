@@ -121,7 +121,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
     let config = SessionManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .max_sessions(3)
@@ -141,7 +141,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client01_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -155,7 +155,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client02_id.clone())
-        .locator_property(locator_property.clone().unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -169,7 +169,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
     let config = SessionManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client03_id.clone())
-        .locator_property(locator_property.unwrap_or_else(|| vec![]))
+        .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             SessionManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -282,7 +282,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
                 ticks.remove(0);
             }
             let sessions = c_router_manager.get_sessions();
-            if sessions.len() > 0 {
+            if !sessions.is_empty() {
                 for s in sessions.iter() {
                     if let Ok(ll) = s.get_links() {
                         if ll.is_empty() {

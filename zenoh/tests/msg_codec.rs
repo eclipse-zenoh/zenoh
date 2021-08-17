@@ -46,8 +46,7 @@ macro_rules! option_gen {
 
 fn gen_buffer(max_size: usize) -> Vec<u8> {
     let len: usize = thread_rng().gen_range(1..max_size + 1);
-    let mut buf: Vec<u8> = Vec::with_capacity(len);
-    buf.resize(len, 0);
+    let mut buf: Vec<u8> = vec![0; len];
     thread_rng().fill(buf.as_mut_slice());
     buf
 }
@@ -93,77 +92,69 @@ fn gen_attachment() -> Attachment {
 }
 
 fn gen_declarations() -> Vec<Declaration> {
-    let mut decls = Vec::new();
-    decls.push(Declaration::Resource(Resource {
-        rid: gen!(ZInt),
-        key: gen_key(),
-    }));
-    decls.push(Declaration::ForgetResource(ForgetResource {
-        rid: gen!(ZInt),
-    }));
-    decls.push(Declaration::Publisher(Publisher { key: gen_key() }));
-    decls.push(Declaration::ForgetPublisher(ForgetPublisher {
-        key: gen_key(),
-    }));
-    decls.push(Declaration::Subscriber(Subscriber {
-        key: gen_key(),
-        info: SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        },
-    }));
-    decls.push(Declaration::Subscriber(Subscriber {
-        key: gen_key(),
-        info: SubInfo {
-            reliability: Reliability::BestEffort,
-            mode: SubMode::Pull,
-            period: None,
-        },
-    }));
-    decls.push(Declaration::Subscriber(Subscriber {
-        key: gen_key(),
-        info: SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Pull,
-            period: Some(Period {
-                origin: gen!(ZInt),
-                period: gen!(ZInt),
-                duration: gen!(ZInt),
-            }),
-        },
-    }));
-    decls.push(Declaration::Subscriber(Subscriber {
-        key: gen_key(),
-        info: SubInfo {
-            reliability: Reliability::BestEffort,
-            mode: SubMode::Push,
-            period: Some(Period {
-                origin: gen!(ZInt),
-                period: gen!(ZInt),
-                duration: gen!(ZInt),
-            }),
-        },
-    }));
-    decls.push(Declaration::ForgetSubscriber(ForgetSubscriber {
-        key: gen_key(),
-    }));
-    decls.push(Declaration::Queryable(Queryable {
-        key: gen_key(),
-        kind: queryable::ALL_KINDS,
-    }));
-    decls.push(Declaration::Queryable(Queryable {
-        key: gen_key(),
-        kind: queryable::STORAGE,
-    }));
-    decls.push(Declaration::Queryable(Queryable {
-        key: gen_key(),
-        kind: queryable::EVAL,
-    }));
-    decls.push(Declaration::ForgetQueryable(ForgetQueryable {
-        key: gen_key(),
-    }));
-    decls
+    vec![
+        Declaration::Resource(Resource {
+            rid: gen!(ZInt),
+            key: gen_key(),
+        }),
+        Declaration::ForgetResource(ForgetResource { rid: gen!(ZInt) }),
+        Declaration::Publisher(Publisher { key: gen_key() }),
+        Declaration::ForgetPublisher(ForgetPublisher { key: gen_key() }),
+        Declaration::Subscriber(Subscriber {
+            key: gen_key(),
+            info: SubInfo {
+                reliability: Reliability::Reliable,
+                mode: SubMode::Push,
+                period: None,
+            },
+        }),
+        Declaration::Subscriber(Subscriber {
+            key: gen_key(),
+            info: SubInfo {
+                reliability: Reliability::BestEffort,
+                mode: SubMode::Pull,
+                period: None,
+            },
+        }),
+        Declaration::Subscriber(Subscriber {
+            key: gen_key(),
+            info: SubInfo {
+                reliability: Reliability::Reliable,
+                mode: SubMode::Pull,
+                period: Some(Period {
+                    origin: gen!(ZInt),
+                    period: gen!(ZInt),
+                    duration: gen!(ZInt),
+                }),
+            },
+        }),
+        Declaration::Subscriber(Subscriber {
+            key: gen_key(),
+            info: SubInfo {
+                reliability: Reliability::BestEffort,
+                mode: SubMode::Push,
+                period: Some(Period {
+                    origin: gen!(ZInt),
+                    period: gen!(ZInt),
+                    duration: gen!(ZInt),
+                }),
+            },
+        }),
+        Declaration::ForgetSubscriber(ForgetSubscriber { key: gen_key() }),
+        Declaration::Queryable(Queryable {
+            key: gen_key(),
+            kind: queryable::ALL_KINDS,
+        }),
+        Declaration::Queryable(Queryable {
+            key: gen_key(),
+            kind: queryable::STORAGE,
+        }),
+        Declaration::Queryable(Queryable {
+            key: gen_key(),
+            kind: queryable::EVAL,
+        }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+    ]
 }
 
 fn gen_key() -> ResKey {
@@ -270,7 +261,7 @@ fn codec_scout() {
         for w in wami.iter() {
             for p in pid_req.iter() {
                 for a in attachment.iter() {
-                    let msg = SessionMessage::make_scout(w.clone(), *p, a.clone());
+                    let msg = SessionMessage::make_scout(*w, *p, a.clone());
                     test_write_read_session_message(msg);
                 }
             }
@@ -296,8 +287,7 @@ fn codec_hello() {
             for w in wami.iter() {
                 for l in locators.iter() {
                     for a in attachment.iter() {
-                        let msg =
-                            SessionMessage::make_hello(p.clone(), w.clone(), l.clone(), a.clone());
+                        let msg = SessionMessage::make_hello(p.clone(), *w, l.clone(), a.clone());
                         test_write_read_session_message(msg);
                     }
                 }
@@ -402,7 +392,7 @@ fn codec_sync() {
         for c in ch.iter() {
             for n in count.iter() {
                 for a in attachment.iter() {
-                    let msg = SessionMessage::make_sync(*c, gen!(ZInt), n.clone(), a.clone());
+                    let msg = SessionMessage::make_sync(*c, gen!(ZInt), *n, a.clone());
                     test_write_read_session_message(msg);
                 }
             }
@@ -418,7 +408,7 @@ fn codec_ack_nack() {
 
         for m in mask.iter() {
             for a in attachment.iter() {
-                let msg = SessionMessage::make_ack_nack(gen!(ZInt), m.clone(), a.clone());
+                let msg = SessionMessage::make_ack_nack(gen!(ZInt), *m, a.clone());
                 test_write_read_session_message(msg);
             }
         }
@@ -499,15 +489,16 @@ fn codec_frame() {
 
         for ch in channel.iter() {
             for cc in congestion_control.iter() {
-                let mut payload = Vec::new();
-                payload.push(FramePayload::Fragment {
-                    buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
-                    is_final: false,
-                });
-                payload.push(FramePayload::Fragment {
-                    buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
-                    is_final: true,
-                });
+                let mut payload = vec![
+                    FramePayload::Fragment {
+                        buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
+                        is_final: false,
+                    },
+                    FramePayload::Fragment {
+                        buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
+                        is_final: true,
+                    },
+                ];
 
                 for di in data_info.iter() {
                     for rec in reply_context.iter() {
@@ -521,7 +512,7 @@ fn codec_frame() {
                                             *ch,
                                             *cc,
                                             di.clone(),
-                                            roc.clone(),
+                                            *roc,
                                             rec.clone(),
                                             a.clone(),
                                         );
@@ -623,11 +614,8 @@ fn codec_frame_batching() {
         let mut zbuf = ZBuf::from(&wbuf);
 
         let mut read: Vec<SessionMessage> = Vec::new();
-        loop {
-            match zbuf.read_session_message() {
-                Some(msg) => read.push(msg),
-                None => break,
-            }
+        while let Some(msg) = zbuf.read_session_message() {
+            read.push(msg);
         }
 
         assert_eq!(written, read);
@@ -646,7 +634,7 @@ fn codec_declare() {
 
         for roc in routing_context.iter() {
             for a in attachment.iter() {
-                let msg = ZenohMessage::make_declare(gen_declarations(), roc.clone(), a.clone());
+                let msg = ZenohMessage::make_declare(gen_declarations(), *roc, a.clone());
                 test_write_read_zenoh_message(msg);
             }
         }
@@ -696,7 +684,7 @@ fn codec_data() {
                                     *ch,
                                     *cc,
                                     di.clone(),
-                                    roc.clone(),
+                                    *roc,
                                     rec.clone(),
                                     a.clone(),
                                 );
@@ -762,8 +750,7 @@ fn codec_pull() {
         for f in is_final.iter() {
             for m in max_samples.iter() {
                 for a in attachment.iter() {
-                    let msg =
-                        ZenohMessage::make_pull(*f, gen_key(), gen!(ZInt), m.clone(), a.clone());
+                    let msg = ZenohMessage::make_pull(*f, gen_key(), gen!(ZInt), *m, a.clone());
                     test_write_read_zenoh_message(msg);
                 }
             }
@@ -789,7 +776,7 @@ fn codec_query() {
                             gen!(ZInt),
                             t.clone(),
                             gen_consolidation(),
-                            roc.clone(),
+                            *roc,
                             a.clone(),
                         );
                         test_write_read_zenoh_message(msg);
