@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::{TransportUnicastEventHandler, TransportManager};
+use super::super::{TransportManager, TransportUnicastEventHandler};
 use super::common::{
     conduit::{TransportConduitRx, TransportConduitTx},
     pipeline::TransmissionPipeline,
