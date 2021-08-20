@@ -217,6 +217,13 @@ fn gen_data_info() -> DataInfo {
     }
 }
 
+fn gen_initial_sn() -> InitialSn {
+    InitialSn {
+        reliable: gen!(ZInt),
+        best_effort: gen!(ZInt),
+    }
+}
+
 fn test_write_read_transport_message(msg: TransportMessage) {
     let mut buf = WBuf::new(164, false);
     println!("\nWrite message: {:?}", msg);
@@ -360,6 +367,37 @@ fn codec_open() {
         for a in attachment.iter() {
             let msg = TransportMessage::make_open_ack(gen!(ZInt), gen!(ZInt), a.clone());
             test_write_read_transport_message(msg);
+        }
+    }
+}
+
+#[test]
+fn codec_join() {
+    for _ in 0..NUM_ITER {
+        let wami = [whatami::ROUTER, whatami::CLIENT];
+        let sn_resolution = [None, Some(gen!(ZInt))];
+        let initial_sns = [
+            InitialSnList::Plain(gen_initial_sn()),
+            InitialSnList::QoS(Box::new([gen_initial_sn(); Priority::NUM])),
+        ];
+        let attachment = [None, Some(gen_attachment())];
+
+        for w in wami.iter() {
+            for s in sn_resolution.iter() {
+                for i in initial_sns.iter() {
+                    for a in attachment.iter() {
+                        let msg = TransportMessage::make_join(
+                            gen!(u8),
+                            *w,
+                            gen_pid(),
+                            *s,
+                            i.clone(),
+                            a.clone(),
+                        );
+                        test_write_read_transport_message(msg);
+                    }
+                }
+            }
         }
     }
 }

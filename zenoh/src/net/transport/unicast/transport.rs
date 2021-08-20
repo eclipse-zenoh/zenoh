@@ -88,7 +88,7 @@ impl TransportUnicastInner {
         let mut conduit_rx = vec![];
 
         if config.is_qos {
-            for c in 0..Priority::num() {
+            for c in 0..Priority::NUM {
                 conduit_tx.push(TransportConduitTx::new(
                     (c as u8).try_into().unwrap(),
                     config.initial_sn_tx,
@@ -96,7 +96,7 @@ impl TransportUnicastInner {
                 ));
             }
 
-            for c in 0..Priority::num() {
+            for c in 0..Priority::NUM {
                 conduit_rx.push(TransportConduitRx::new(
                     (c as u8).try_into().unwrap(),
                     config.initial_sn_rx,

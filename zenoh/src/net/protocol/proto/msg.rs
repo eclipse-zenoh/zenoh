@@ -24,17 +24,17 @@ pub(crate) mod imsg {
     use super::ZInt;
 
     pub(crate) mod id {
-        // Transport Messages Unicast
-        pub(crate) const INIT: u8 = 0x03;
-        pub(crate) const OPEN: u8 = 0x04;
+        // Transport Messages
+        pub(crate) const JOIN: u8 = 0x00; // For multicast communications only
+        pub(crate) const SCOUT: u8 = 0x01;
+        pub(crate) const HELLO: u8 = 0x02;
+        pub(crate) const INIT: u8 = 0x03; // For unicast communications only
+        pub(crate) const OPEN: u8 = 0x04; // For unicast communications only
         pub(crate) const CLOSE: u8 = 0x05;
         pub(crate) const SYNC: u8 = 0x06;
         pub(crate) const ACK_NACK: u8 = 0x07;
-        pub(crate) const PING_PONG: u8 = 0x09;
-        // Transport Messages
-        pub(crate) const SCOUT: u8 = 0x01;
-        pub(crate) const HELLO: u8 = 0x02;
         pub(crate) const KEEP_ALIVE: u8 = 0x08;
+        pub(crate) const PING_PONG: u8 = 0x09;
         pub(crate) const FRAME: u8 = 0x0a;
 
         // Zenoh Messages
@@ -44,9 +44,6 @@ pub(crate) mod imsg {
         pub(crate) const PULL: u8 = 0x0e;
         pub(crate) const UNIT: u8 = 0x0f;
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
-
-        // Transport Messages Multicast
-        pub(crate) const JOIN: u8 = 0x11;
 
         // Message decorators
         pub(crate) const PRIORITY: u8 = 0x1c;
@@ -123,6 +120,12 @@ pub mod tmsg {
     }
 
     pub mod init_options {
+        use super::ZInt;
+
+        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
+    }
+
+    pub mod join_options {
         use super::ZInt;
 
         pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
@@ -1566,6 +1569,95 @@ impl Header for OpenAck {
     }
 }
 
+/// # Join message
+///
+/// ```text
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65_535 bytes.
+///
+/// The JOIN message is sent on a multicast Locator to advertise the transport parameters.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|S|X|   JOIN  |
+/// +-+-+-+-+-------+
+/// ~             |Q~ if O==1
+/// +---------------+
+/// | v_maj | v_min | if A==0 -- Protocol Version VMaj.VMin
+/// +-------+-------+
+/// ~    whatami    ~ -- Router, Peer or a combination of them
+/// +---------------+
+/// ~    peer_id    ~ -- PID of the sender of the JOIN message
+/// +---------------+
+/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
+/// +---------------+
+/// ~  [initial_sn] ~
+/// +---------------+
+///
+/// (*) if S==0 then 2^28 is assumed.
+///
+/// - if Q==1 then the sender support QoS.
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub enum InitialSnList {
+    Plain(InitialSn),
+    QoS(Box<[InitialSn; Priority::NUM]>),
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct InitialSn {
+    pub reliable: ZInt,
+    pub best_effort: ZInt,
+}
+
+impl Default for InitialSn {
+    fn default() -> InitialSn {
+        InitialSn {
+            reliable: 0,
+            best_effort: 0,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct Join {
+    pub version: u8,
+    pub whatami: WhatAmI,
+    pub pid: PeerId,
+    pub sn_resolution: Option<ZInt>,
+    pub initial_sns: InitialSnList,
+}
+
+impl Header for Join {
+    #[inline(always)]
+    fn header(&self) -> u8 {
+        let mut header = tmsg::id::JOIN;
+        if self.sn_resolution.is_some() {
+            header |= tmsg::flag::S;
+        }
+        if self.has_options() {
+            header |= tmsg::flag::O;
+        }
+        header
+    }
+}
+
+impl Options for Join {
+    fn options(&self) -> ZInt {
+        let mut options = 0;
+        if let InitialSnList::QoS(_) = self.initial_sns {
+            options |= tmsg::join_options::QOS;
+        }
+        options
+    }
+
+    fn has_options(&self) -> bool {
+        self.options() > 0
+    }
+}
+
 /// # Close message
 ///
 /// ```text
@@ -1887,6 +1979,7 @@ pub enum TransportBody {
     InitAck(InitAck),
     OpenSyn(OpenSyn),
     OpenAck(OpenAck),
+    Join(Join),
     Close(Close),
     Sync(Sync),
     AckNack(AckNack),
@@ -1993,6 +2086,26 @@ impl TransportMessage {
     ) -> TransportMessage {
         TransportMessage {
             body: TransportBody::OpenAck(OpenAck { lease, initial_sn }),
+            attachment,
+        }
+    }
+
+    pub fn make_join(
+        version: u8,
+        whatami: WhatAmI,
+        pid: PeerId,
+        sn_resolution: Option<ZInt>,
+        initial_sns: InitialSnList,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Join(Join {
+                version,
+                whatami,
+                pid,
+                sn_resolution,
+                initial_sns,
+            }),
             attachment,
         }
     }

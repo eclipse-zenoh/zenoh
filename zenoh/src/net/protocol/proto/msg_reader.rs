@@ -80,6 +80,7 @@ impl ZBuf {
                         break self.read_open_syn(header)?;
                     }
                 }
+                JOIN => break self.read_join(header)?,
                 CLOSE => break self.read_close(header)?,
                 SYNC => break self.read_sync(header)?,
                 ACK_NACK => break self.read_ack_nack(header)?,
@@ -252,6 +253,44 @@ impl ZBuf {
         let initial_sn = self.read_zint()?;
 
         Some(TransportBody::OpenAck(OpenAck { lease, initial_sn }))
+    }
+
+    fn read_join(&mut self, header: u8) -> Option<TransportBody> {
+        let options = if imsg::has_flag(header, tmsg::flag::O) {
+            self.read_zint()?
+        } else {
+            0
+        };
+        let version = self.read()?;
+        let whatami = self.read_zint()?;
+        let pid = self.read_peerid()?;
+        let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
+            Some(self.read_zint()?)
+        } else {
+            None
+        };
+        let is_qos = imsg::has_option(options, tmsg::join_options::QOS);
+        let initial_sns = if is_qos {
+            let mut sns = Box::new([InitialSn::default(); Priority::NUM]);
+            for i in 0..Priority::NUM {
+                sns[i].reliable = self.read_zint()?;
+                sns[i].best_effort = self.read_zint()?;
+            }
+            InitialSnList::QoS(sns)
+        } else {
+            InitialSnList::Plain(InitialSn {
+                reliable: self.read_zint()?,
+                best_effort: self.read_zint()?,
+            })
+        };
+
+        Some(TransportBody::Join(Join {
+            version,
+            whatami,
+            pid,
+            sn_resolution,
+            initial_sns,
+        }))
     }
 
     fn read_close(&mut self, header: u8) -> Option<TransportBody> {

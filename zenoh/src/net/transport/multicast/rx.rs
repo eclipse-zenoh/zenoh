@@ -143,7 +143,7 @@ impl TransportMulticastInner {
             //     if !guard.contains_key(locator) {
             //         let mut conduit_rx = vec![];
             //         if self.is_qos() {
-            //             for c in 0..Priority::num() {
+            //             for c in 0..Priority::NUM {
             //                 conduit_rx.push(TransportConduitRx::new(
             //                     (c as u8).try_into().unwrap(),
             //                     config.initial_sn_rx,

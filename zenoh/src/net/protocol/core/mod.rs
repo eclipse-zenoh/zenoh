@@ -290,9 +290,7 @@ pub enum Priority {
 }
 
 impl Priority {
-    pub fn num() -> usize {
-        8
-    }
+    pub const NUM: usize = 8;
 }
 
 impl Default for Priority {
