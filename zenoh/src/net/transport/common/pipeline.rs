@@ -40,7 +40,7 @@ use zenoh_util::sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondva
 use zenoh_util::zlock;
 
 macro_rules! zgetbatch {
-    ($self:expr, $conduit:expr, $stage_in:expr, $is_droppable:expr) => {
+    ($self:expr, $priority:expr, $stage_in:expr, $is_droppable:expr) => {
         // Try to get a pointer to the first batch
         loop {
             if let Some(batch) = $stage_in.inner.front_mut() {
@@ -48,7 +48,7 @@ macro_rules! zgetbatch {
             }
 
             // Refill the batches
-            let mut refill_guard = zlock!($self.stage_refill[$conduit]);
+            let mut refill_guard = zlock!($self.stage_refill[$priority]);
             if refill_guard.is_empty() {
                 // Execute the dropping strategy if provided
                 if $is_droppable {
@@ -68,14 +68,14 @@ macro_rules! zgetbatch {
                     return;
                 }
 
-                refill_guard = $self.cond_canrefill[$conduit].wait(refill_guard).unwrap();
+                refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
 
                 // Verify that the pipeline is still active
                 if !$self.active.load(Ordering::Acquire) {
                     return;
                 }
 
-                $stage_in = zlock!($self.stage_in[$conduit]);
+                $stage_in = zlock!($self.stage_in[$priority]);
             }
 
             // Drain all the empty batches
@@ -87,17 +87,19 @@ macro_rules! zgetbatch {
 }
 
 struct StageIn {
+    priority: usize,
     inner: VecDeque<SerializationBatch>,
-    bytes_topull: Arc<AtomicUsize>,
+    bytes_topull: Arc<[AtomicUsize]>,
     fragbuf: Option<WBuf>,
 }
 
 impl StageIn {
     fn new(
+        priority: usize,
         capacity: usize,
         batch_size: usize,
         is_streamed: bool,
-        bytes_topull: Arc<AtomicUsize>,
+        bytes_topull: Arc<[AtomicUsize]>,
     ) -> StageIn {
         let mut inner = VecDeque::<SerializationBatch>::with_capacity(capacity);
         for _ in 0..capacity {
@@ -105,6 +107,7 @@ impl StageIn {
         }
 
         StageIn {
+            priority,
             inner,
             bytes_topull,
             fragbuf: Some(WBuf::new(batch_size, false)),
@@ -114,7 +117,7 @@ impl StageIn {
     fn try_pull(&mut self) -> Option<SerializationBatch> {
         if let Some(batch) = self.inner.front_mut() {
             if !batch.is_empty() {
-                self.bytes_topull.store(0, Ordering::Release);
+                self.bytes_topull[self.priority].store(0, Ordering::Release);
                 // Write the batch len before removing the batch
                 batch.write_len();
                 // There is an incomplete batch, pop it
@@ -126,13 +129,15 @@ impl StageIn {
 }
 
 struct StageOut {
+    priority: usize,
     inner: VecDeque<SerializationBatch>,
-    batches_out: Arc<AtomicUsize>,
+    batches_out: Arc<[AtomicUsize]>,
 }
 
 impl StageOut {
-    fn new(capacity: usize, batches_out: Arc<AtomicUsize>) -> StageOut {
+    fn new(priority: usize, capacity: usize, batches_out: Arc<[AtomicUsize]>) -> StageOut {
         StageOut {
+            priority,
             inner: VecDeque::<SerializationBatch>::with_capacity(capacity),
             batches_out,
         }
@@ -140,14 +145,14 @@ impl StageOut {
 
     #[inline]
     fn push(&mut self, batch: SerializationBatch) {
-        self.batches_out.store(self.inner.len(), Ordering::Release);
+        self.batches_out[self.priority].store(self.inner.len(), Ordering::Release);
         self.inner.push_back(batch);
     }
 
     #[inline]
     fn try_pull(&mut self) -> Option<SerializationBatch> {
         if let Some(batch) = self.inner.pop_front() {
-            self.batches_out.store(self.inner.len(), Ordering::Release);
+            self.batches_out[self.priority].store(self.inner.len(), Ordering::Release);
             Some(batch)
         } else {
             None
@@ -186,22 +191,22 @@ impl StageRefill {
 /// Link queue
 pub(crate) struct TransmissionPipeline {
     // Status variable of transmission pipeline
-    active: Arc<AtomicBool>,
+    active: AtomicBool,
     // The conduit TX containing the SN generators
     conduit: Arc<[TransportConduitTx]>,
     // Each conduit queue has its own Mutex
-    stage_in: Box<[Arc<Mutex<StageIn>>]>,
+    stage_in: Box<[Mutex<StageIn>]>,
     // Amount of bytes available in each stage IN conduit queue
-    bytes_in: Box<[Arc<AtomicUsize>]>,
+    bytes_in: Arc<[AtomicUsize]>,
     // A single Mutex for all the conduit queues
-    stage_out: Arc<Mutex<Box<[StageOut]>>>,
+    stage_out: Mutex<Box<[StageOut]>>,
     // Number of batches in each stage OUT conduit queue
-    batches_out: Box<[Arc<AtomicUsize>]>,
+    batches_out: Arc<[AtomicUsize]>,
     // Each conduit queue has its own Mutex
-    stage_refill: Box<[Arc<Mutex<StageRefill>>]>,
+    stage_refill: Box<[Mutex<StageRefill>]>,
     // Each conduit queue has its own Conditional variable
     // The conditional variable requires a MutexGuard from stage_refill
-    cond_canrefill: Box<[Arc<Condvar>]>,
+    cond_canrefill: Box<[Condvar]>,
     // A single conditional variable for all the conduit queues
     // The conditional variable requires a MutexGuard from stage_out
     cond_canpull: AsyncCondvar,
@@ -216,33 +221,48 @@ impl TransmissionPipeline {
     ) -> TransmissionPipeline {
         // Conditional variables
         let mut cond_canrefill = vec![];
-        cond_canrefill.resize_with(conduit.len(), || Arc::new(Condvar::new()));
+        cond_canrefill.resize_with(conduit.len(), || Condvar::new());
+        let cond_canrefill = cond_canrefill.into_boxed_slice();
+
         let cond_canpull = AsyncCondvar::new();
 
         // Build the stage REFILL
         let mut stage_refill = Vec::with_capacity(conduit.len());
         for i in 0..conduit.len() {
-            stage_refill.push(Arc::new(Mutex::new(StageRefill::new(i))));
+            stage_refill.push(Mutex::new(StageRefill::new(i)));
         }
+        let stage_refill = stage_refill.into_boxed_slice();
 
         // Batches to be pulled from stage OUT
         let mut batches_out = vec![];
-        batches_out.resize_with(conduit.len(), || Arc::new(AtomicUsize::new(0)));
+        batches_out.resize_with(conduit.len(), || AtomicUsize::new(0));
+        let batches_out: Arc<[AtomicUsize]> = batches_out.into_boxed_slice().into();
 
         // Build the stage OUT
         let mut stage_out = Vec::with_capacity(conduit.len());
-        for (i, _) in batches_out.iter().enumerate().take(conduit.len()) {
-            stage_out.push(StageOut::new(i, batches_out[i].clone()));
+        for (priority, c) in conduit.iter().enumerate() {
+            let capacity = match c.id {
+                Priority::Control => *ZN_QUEUE_SIZE_CONTROL,
+                Priority::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
+                Priority::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
+                Priority::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
+                Priority::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
+                Priority::Data => *ZN_QUEUE_SIZE_DATA,
+                Priority::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
+                Priority::Background => *ZN_QUEUE_SIZE_BACKGROUND,
+            };
+            stage_out.push(StageOut::new(priority, capacity, batches_out.clone()));
         }
-        let stage_out = Arc::new(Mutex::new(stage_out.into_boxed_slice()));
+        let stage_out = Mutex::new(stage_out.into_boxed_slice());
 
         // Bytes to be pulled from stage IN
         let mut bytes_in = vec![];
-        bytes_in.resize_with(conduit.len(), || Arc::new(AtomicUsize::new(0)));
+        bytes_in.resize_with(conduit.len(), || AtomicUsize::new(0));
+        let bytes_in: Arc<[AtomicUsize]> = bytes_in.into_boxed_slice().into();
 
         // Build the stage IN
         let mut stage_in = Vec::with_capacity(conduit.len());
-        for (i, c) in conduit.iter().enumerate() {
+        for (priority, c) in conduit.iter().enumerate() {
             let capacity = match c.id {
                 Priority::Control => *ZN_QUEUE_SIZE_CONTROL,
                 Priority::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
@@ -254,23 +274,25 @@ impl TransmissionPipeline {
                 Priority::Background => *ZN_QUEUE_SIZE_BACKGROUND,
             };
 
-            stage_in.push(Arc::new(Mutex::new(StageIn::new(
+            stage_in.push(Mutex::new(StageIn::new(
+                priority,
                 capacity,
                 batch_size,
                 is_streamed,
-                bytes_in[i].clone(),
-            ))));
+                bytes_in.clone(),
+            )));
         }
+        let stage_in = stage_in.into_boxed_slice();
 
         TransmissionPipeline {
-            active: Arc::new(AtomicBool::new(true)),
+            active: AtomicBool::new(true),
             conduit,
-            stage_in: stage_in.into_boxed_slice(),
-            bytes_in: bytes_in.into_boxed_slice(),
+            stage_in,
+            bytes_in,
             stage_out,
-            batches_out: batches_out.into_boxed_slice(),
-            stage_refill: stage_refill.into_boxed_slice(),
-            cond_canrefill: cond_canrefill.into_boxed_slice(),
+            batches_out,
+            stage_refill,
+            cond_canrefill,
             cond_canpull,
         }
     }
@@ -283,15 +305,15 @@ impl TransmissionPipeline {
     #[inline]
     pub(crate) fn push_transport_message(&self, message: TransportMessage, priority: Priority) {
         // Check it is a valid conduit
-        let queue = if self.is_qos() { priority as usize } else { 0 };
-        let mut in_guard = zlock!(self.stage_in[queue]);
+        let priority = if self.is_qos() { priority as usize } else { 0 };
+        let mut in_guard = zlock!(self.stage_in[priority]);
 
         macro_rules! zserialize {
             () => {
                 // Get the current serialization batch
-                let batch = zgetbatch!(self, queue, in_guard, false);
+                let batch = zgetbatch!(self, priority, in_guard, false);
                 if batch.serialize_transport_message(&message) {
-                    self.bytes_in[queue].store(batch.len(), Ordering::Release);
+                    self.bytes_in[priority].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return;
                 }
@@ -308,7 +330,7 @@ impl TransmissionPipeline {
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty
             let mut out_guard = zlock!(self.stage_out);
-            out_guard[queue].push(batch);
+            out_guard[priority].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
 
@@ -325,31 +347,31 @@ impl TransmissionPipeline {
     #[inline]
     pub(crate) fn push_zenoh_message(&self, message: ZenohMessage) {
         // If the queue is not QoS, it means that we only have one priority with index 0.
-        let queue = if self.is_qos() {
+        let priority = if self.is_qos() {
             message.channel.priority as usize
         } else {
             0
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut ch_guard = if message.is_reliable() {
-            zlock!(self.conduit[queue].reliable)
+            zlock!(self.conduit[priority].reliable)
         } else {
-            zlock!(self.conduit[queue].best_effort)
+            zlock!(self.conduit[priority].best_effort)
         };
         // Lock the stage in containing the serialization batches.
-        let mut in_guard = zlock!(self.stage_in[queue]);
+        let mut in_guard = zlock!(self.stage_in[priority]);
 
         macro_rules! zserialize {
             () => {
                 // Get the current serialization batch. Drop the message
                 // if no batches are available
-                let batch = zgetbatch!(self, queue, in_guard, message.is_droppable());
+                let batch = zgetbatch!(self, priority, in_guard, message.is_droppable());
                 if batch.serialize_zenoh_message(
                     &message,
                     message.channel.priority,
                     &mut ch_guard.sn,
                 ) {
-                    self.bytes_in[queue].store(batch.len(), Ordering::Release);
+                    self.bytes_in[priority].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return;
                 }
@@ -367,7 +389,7 @@ impl TransmissionPipeline {
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty, move it to the stage OUT pipeline
             let mut out_guard = zlock!(self.stage_out);
-            out_guard[queue].push(batch);
+            out_guard[priority].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
 
@@ -377,13 +399,13 @@ impl TransmissionPipeline {
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
-        self.fragment_zenoh_message(message, queue, ch_guard, in_guard);
+        self.fragment_zenoh_message(message, priority, ch_guard, in_guard);
     }
 
     fn fragment_zenoh_message(
         &self,
         message: ZenohMessage,
-        queue: usize,
+        priority: usize,
         channel: MutexGuard<'_, TransportChannelTx>,
         stage_in: MutexGuard<'_, StageIn>,
     ) {
@@ -401,7 +423,7 @@ impl TransmissionPipeline {
         while to_write > 0 {
             // Get the current serialization batch
             // Treat all messages as non-droppable once we start fragmenting
-            let batch = zgetbatch!(self, queue, in_guard, false);
+            let batch = zgetbatch!(self, priority, in_guard, false);
 
             // Serialize the message
             let written = batch.serialize_zenoh_fragment(
@@ -420,7 +442,7 @@ impl TransmissionPipeline {
                 // Move the serialization batch into the OUT pipeline
                 let batch = in_guard.try_pull().unwrap();
                 let mut out_guard = zlock!(self.stage_out);
-                out_guard[queue].push(batch);
+                out_guard[priority].push(batch);
                 drop(out_guard);
                 self.cond_canpull.notify_one();
             } else {
@@ -435,18 +457,18 @@ impl TransmissionPipeline {
         in_guard.fragbuf = Some(fragbuf);
     }
 
-    pub(crate) async fn try_pull_queue(&self, queue: usize) -> Option<SerializationBatch> {
+    pub(crate) async fn try_pull_queue(&self, priority: usize) -> Option<SerializationBatch> {
         let mut backoff = Duration::from_nanos(*ZN_QUEUE_PULL_BACKOFF);
         let mut bytes_in_pre: usize = 0;
         loop {
             // Check first if we have complete batches available for transmission
-            if self.batches_out[queue].load(Ordering::Acquire) > 0 {
+            if self.batches_out[priority].load(Ordering::Acquire) > 0 {
                 let mut out_guard = zlock!(self.stage_out);
-                return out_guard[queue].try_pull();
+                return out_guard[priority].try_pull();
             }
 
             // Check then if there are incomplete batches available for transmission
-            let bytes_in_now = self.bytes_in[queue].load(Ordering::Acquire);
+            let bytes_in_now = self.bytes_in[priority].load(Ordering::Acquire);
             if bytes_in_now == 0 {
                 // Nothing in the batch, return immediately
                 return None;
@@ -462,12 +484,12 @@ impl TransmissionPipeline {
                 // No new bytes have been written on the batch, try to pull
                 // First try to pull from stage OUT
                 let mut out_guard = zlock!(self.stage_out);
-                if let Some(batch) = out_guard[queue].try_pull() {
+                if let Some(batch) = out_guard[priority].try_pull() {
                     return Some(batch);
                 }
 
                 // An incomplete (non-empty) batch is available in the state IN pipeline.
-                if let Ok(mut in_guard) = self.stage_in[queue].try_lock() {
+                if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
                     return in_guard.try_pull();
                 }
             }
