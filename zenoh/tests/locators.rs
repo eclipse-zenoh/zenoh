@@ -15,11 +15,12 @@ use async_std::sync::Arc;
 use async_std::task;
 use std::any::Any;
 use std::time::Duration;
-use zenoh::net::link::{Link, Locator, LocatorProperty};
+use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
+    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
+    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -31,10 +32,20 @@ const RUNS: usize = 10;
 #[derive(Default)]
 struct SH;
 
-impl TransportHandler for SH {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+impl TransportEventHandler for SH {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
         let arc = Arc::new(SC::default());
         Ok(arc)
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -42,12 +53,12 @@ impl TransportHandler for SH {
 #[derive(Default)]
 pub struct SC;
 
-impl TransportEventHandler for SC {
+impl TransportUnicastEventHandler for SC {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
-    fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn new_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
     fn closing(&self) {}
     fn closed(&self) {}
 

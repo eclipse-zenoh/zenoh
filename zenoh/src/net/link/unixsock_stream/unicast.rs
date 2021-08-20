@@ -52,7 +52,7 @@ impl LinkUnicastUnixSocketStream {
 }
 
 #[async_trait]
-impl LinkTrait for LinkUnicastUnixSocketStream {
+impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UnixSocketStream link: {}", self);
         // Close the underlying UnixSocketStream socket
@@ -192,7 +192,11 @@ impl LinkManagerUnicastUnixSocketStream {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
-    async fn new_link(&self, locator: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
+    async fn new_link(
+        &self,
+        locator: &Locator,
+        _ps: Option<&LocatorProperty>,
+    ) -> ZResult<LinkUnicast> {
         let path = get_unix_path(locator)?;
 
         // Create the UnixSocketStream connection
@@ -266,7 +270,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             remote_path_str,
         ));
 
-        Ok(Link(link))
+        Ok(LinkUnicast(link))
     }
 
     async fn new_listener(
@@ -533,7 +537,9 @@ async fn accept_task(
         ));
 
         // Communicate the new link to the initial transport manager
-        manager.handle_new_link_unicast(Link(link), None).await;
+        manager
+            .handle_new_link_unicast(LinkUnicast(link), None)
+            .await;
     }
 
     Ok(())

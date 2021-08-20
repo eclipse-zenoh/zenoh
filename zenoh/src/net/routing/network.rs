@@ -15,7 +15,7 @@ use super::link::Locator;
 use super::protocol::core::{whatami, PeerId, ZInt};
 use super::protocol::proto::{LinkState, ZenohMessage};
 use super::runtime::Runtime;
-use super::transport::Transport;
+use super::transport::TransportUnicast;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
@@ -36,14 +36,14 @@ impl std::fmt::Debug for Node {
 }
 
 pub(crate) struct Link {
-    pub(crate) transport: Transport,
+    pub(crate) transport: TransportUnicast,
     pid: PeerId,
     mappings: VecMap<PeerId>,
     local_mappings: VecMap<ZInt>,
 }
 
 impl Link {
-    fn new(transport: Transport) -> Self {
+    fn new(transport: TransportUnicast) -> Self {
         let pid = transport.get_pid().unwrap();
         Link {
             transport,
@@ -217,7 +217,7 @@ impl Network {
         ZenohMessage::make_link_state_list(list, None)
     }
 
-    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, transport: &Transport) {
+    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, transport: &TransportUnicast) {
         let msg = self.make_msg(idxs);
         log::trace!("{} Send to {:?} {:?}", self.name, transport.get_pid(), msg);
         if let Err(e) = transport.handle_message(msg) {
@@ -514,7 +514,7 @@ impl Network {
         removed
     }
 
-    pub(crate) fn add_link(&mut self, transport: Transport) -> usize {
+    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {

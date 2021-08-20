@@ -326,7 +326,7 @@ mod tests {
             let mut batch = SerializationBatch::new(batch_size, *is_streamed);
 
             // Serialize the messages until the batch is full
-            let mut smsgs_in: Vec<TransportMessage> = Vec::new();
+            let mut tmsgs_in: Vec<TransportMessage> = Vec::new();
             let mut zmsgs_in: Vec<ZenohMessage> = Vec::new();
             let mut reliable = true;
             let mut dropping = true;
@@ -344,7 +344,7 @@ mod tests {
                         assert!(!zmsgs_in.is_empty());
                         break;
                     }
-                    smsgs_in.push(msg);
+                    tmsgs_in.push(msg);
                 }
 
                 // Create a ZenohMessage
@@ -402,7 +402,7 @@ mod tests {
             }
             assert!(!deserialized.is_empty());
 
-            let mut smsgs_out: Vec<TransportMessage> = Vec::new();
+            let mut tmsgs_out: Vec<TransportMessage> = Vec::new();
             let mut zmsgs_out: Vec<ZenohMessage> = Vec::new();
             for msg in deserialized.drain(..) {
                 match msg.body {
@@ -410,11 +410,11 @@ mod tests {
                         FramePayload::Messages { mut messages } => zmsgs_out.append(&mut messages),
                         _ => panic!(),
                     },
-                    _ => smsgs_out.push(msg),
+                    _ => tmsgs_out.push(msg),
                 }
             }
 
-            assert_eq!(smsgs_in, smsgs_out);
+            assert_eq!(tmsgs_in, tmsgs_out);
             assert_eq!(zmsgs_in, zmsgs_out);
 
             println!("\t\tMessages: {}", zmsgs_out.len());

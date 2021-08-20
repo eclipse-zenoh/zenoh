@@ -54,7 +54,7 @@ impl LinkUnicastQuic {
 }
 
 #[async_trait]
-impl LinkTrait for LinkUnicastQuic {
+impl LinkUnicastTrait for LinkUnicastQuic {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
@@ -208,7 +208,11 @@ impl LinkManagerUnicastQuic {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
-    async fn new_link(&self, locator: &Locator, ps: Option<&LocatorProperty>) -> ZResult<Link> {
+    async fn new_link(
+        &self,
+        locator: &Locator,
+        ps: Option<&LocatorProperty>,
+    ) -> ZResult<LinkUnicast> {
         let domain = get_quic_dns(locator).await?;
         let addr = get_quic_addr(locator).await?;
         let host: &str = domain.as_ref().into();
@@ -263,7 +267,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let link = Arc::new(LinkUnicastQuic::new(quic_conn, src_addr, send, recv));
 
-        Ok(Link(link))
+        Ok(LinkUnicast(link))
     }
 
     async fn new_listener(
@@ -459,7 +463,9 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastQuic::new(quic_conn, src_addr, send, recv));
 
         // Communicate the new link to the initial transport manager
-        manager.handle_new_link_unicast(Link(link), None).await;
+        manager
+            .handle_new_link_unicast(LinkUnicast(link), None)
+            .await;
     }
 
     Ok(())

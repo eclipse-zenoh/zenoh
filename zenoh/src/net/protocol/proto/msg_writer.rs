@@ -170,7 +170,7 @@ impl WBuf {
     fn write_open_syn(&mut self, open_syn: &OpenSyn) -> bool {
         let header = open_syn.header();
         zcheck!(self.write(header));
-        if imsg::has_flag(header, smsg::flag::T) {
+        if imsg::has_flag(header, tmsg::flag::T) {
             zcheck!(self.write_zint(open_syn.lease / 1_000));
         } else {
             zcheck!(self.write_zint(open_syn.lease));
@@ -182,7 +182,7 @@ impl WBuf {
     fn write_open_ack(&mut self, open_ack: &OpenAck) -> bool {
         let header = open_ack.header();
         zcheck!(self.write(header));
-        if imsg::has_flag(header, smsg::flag::T) {
+        if imsg::has_flag(header, tmsg::flag::T) {
             zcheck!(self.write_zint(open_ack.lease / 1_000));
         } else {
             zcheck!(self.write_zint(open_ack.lease));

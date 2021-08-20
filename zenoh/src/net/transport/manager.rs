@@ -12,11 +12,13 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::defaults::*;
+use super::multicast::manager::{TransportManagerConfigMulticast, TransportManagerStateMulticast};
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 #[cfg(feature = "zero-copy")]
 use super::protocol::io::SharedMemoryReader;
 use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
-use super::{Transport, TransportHandler};
+use super::unicast::TransportUnicast;
+use super::TransportEventHandler;
 use crate::net::link::{Locator, LocatorProperty, LocatorProtocol};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
@@ -33,19 +35,24 @@ use zenoh_util::properties::config::*;
 /// ```
 /// use async_std::sync::Arc;
 /// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
-/// use zenoh::net::transport::{DummyTransportEventHandler, TransportEventHandler, Transport,
-///         TransportHandler, TransportManager, TransportManagerConfig, TransportManagerConfigUnicast};
+/// use zenoh::net::transport::*;
 /// use zenoh_util::core::ZResult;
 ///
 /// // Create my transport handler to be notified when a new transport is initiated with me
 /// #[derive(Default)]
 /// struct MySH;
 ///
-/// impl TransportHandler for MySH {
-///     fn new_transport(&self,
-///         _transport: Transport
-///     ) -> ZResult<Arc<dyn TransportEventHandler>> {
-///         Ok(Arc::new(DummyTransportEventHandler::default()))
+/// impl TransportEventHandler for MySH {
+///     fn new_unicast(&self,
+///         _transport: TransportUnicast
+///     ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+///         Ok(Arc::new(DummyTransportUnicastEventHandler::default()))
+///     }
+///
+///     fn new_multicast(&self,
+///         _transport: TransportMulticast
+///     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+///         Ok(Arc::new(DummyTransportMulticastEventHandler::default()))
 ///     }
 /// }
 ///
@@ -61,7 +68,7 @@ use zenoh_util::properties::config::*;
 ///         .keep_alive(100)                // Set the link keep alive interval to 100ms
 ///         .open_timeout(1_000)            // Set an open timeout to 1s
 ///         .open_pending(10)               // Set to 10 the number of simultanous pending incoming transports
-///         .max_transports(5)              // Allow max 5 transports open
+///         .max_sessions(5)                // Allow max 5 transports open
 ///         .max_links(2)                   // Allow max 2 links per transport
 ///         .build();
 /// let config = TransportManagerConfig::builder()
@@ -81,8 +88,9 @@ pub struct TransportManagerConfig {
     pub sn_resolution: ZInt,
     pub batch_size: usize,
     pub unicast: TransportManagerConfigUnicast,
+    pub multicast: TransportManagerConfigMulticast,
     pub locator_property: HashMap<LocatorProtocol, LocatorProperty>,
-    pub handler: Arc<dyn TransportHandler>,
+    pub handler: Arc<dyn TransportEventHandler>,
 }
 
 impl TransportManagerConfig {
@@ -98,6 +106,7 @@ pub struct TransportManagerConfigBuilder {
     sn_resolution: ZInt,
     batch_size: usize,
     unicast: TransportManagerConfigUnicast,
+    multicast: TransportManagerConfigMulticast,
     locator_property: HashMap<LocatorProtocol, LocatorProperty>,
 }
 
@@ -141,7 +150,7 @@ impl TransportManagerConfigBuilder {
         self
     }
 
-    pub fn build(self, handler: Arc<dyn TransportHandler>) -> TransportManagerConfig {
+    pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> TransportManagerConfig {
         TransportManagerConfig {
             version: self.version,
             pid: self.pid,
@@ -149,6 +158,7 @@ impl TransportManagerConfigBuilder {
             sn_resolution: self.sn_resolution,
             batch_size: self.batch_size,
             unicast: self.unicast,
+            multicast: self.multicast,
             locator_property: self.locator_property,
             handler,
         }
@@ -208,18 +218,21 @@ impl Default for TransportManagerConfigBuilder {
             batch_size: ZN_DEFAULT_BATCH_SIZE,
             locator_property: HashMap::new(),
             unicast: TransportManagerConfigUnicast::default(),
+            multicast: TransportManagerConfigMulticast::default(),
         }
     }
 }
 
 pub struct TransportManagerState {
     pub unicast: TransportManagerStateUnicast,
+    pub multicast: TransportManagerStateMulticast,
 }
 
 impl Default for TransportManagerState {
     fn default() -> TransportManagerState {
         TransportManagerState {
             unicast: TransportManagerStateUnicast::default(),
+            multicast: TransportManagerStateMulticast::default(),
         }
     }
 }
@@ -261,8 +274,8 @@ impl TransportManager {
     /*************************************/
     pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
         if locator.is_multicast() {
-            // @TODO multicast
-            unimplemented!("");
+            // @TODO: multicast
+            unimplemented!();
         } else {
             self.add_listener_unicast(locator).await
         }
@@ -270,8 +283,8 @@ impl TransportManager {
 
     pub async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
         if locator.is_multicast() {
-            // @TODO multicast
-            Ok(())
+            // @TODO: multicast
+            unimplemented!();
         } else {
             self.del_listener_unicast(locator).await
         }
@@ -279,40 +292,33 @@ impl TransportManager {
 
     pub fn get_listeners(&self) -> Vec<Locator> {
         self.get_listeners_unicast()
-        // @TODO multicast
+        // @TODO: multicast
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
         self.get_locators_unicast()
-        // @TODO multicast
+        // @TODO: multicast
     }
 
     /*************************************/
     /*             TRANSPORT             */
     /*************************************/
-    pub fn get_transport(&self, peer: &PeerId) -> Option<Transport> {
-        if let Some(s) = self.get_transport_unicast(peer) {
-            return Some(s.into());
-        }
-        // @TODO multicast
-        None
+    pub fn get_transport(&self, peer: &PeerId) -> Option<TransportUnicast> {
+        self.get_transport_unicast(peer)
+        // @TODO: multicast
     }
 
-    pub fn get_transports(&self) -> Vec<Transport> {
+    pub fn get_transports(&self) -> Vec<TransportUnicast> {
         self.get_transports_unicast()
-            .drain(..)
-            .map(|s| s.into())
-            .collect()
-        // @TODO multicast
+        // @TODO: multicast
     }
 
-    pub async fn open_transport(&self, locator: &Locator) -> ZResult<Transport> {
+    pub async fn open_transport(&self, locator: &Locator) -> ZResult<TransportUnicast> {
         if locator.is_multicast() {
-            // @TODO multicast
-            unimplemented!("");
+            // @TODO: multicast
+            unimplemented!();
         } else {
-            let s = self.open_transport_unicast(locator).await?;
-            Ok(s.into())
+            self.open_transport_unicast(locator).await
         }
     }
 }

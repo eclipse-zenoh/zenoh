@@ -19,7 +19,7 @@ mod userpassword;
 use super::protocol;
 use super::protocol::core::{PeerId, Property, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
-use crate::net::link::{Link, Locator, LocatorProperty};
+use crate::net::link::{LinkUnicast, Locator, LocatorProperty};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "zero-copy")]
@@ -33,7 +33,7 @@ use zenoh_util::properties::config::*;
 /*************************************/
 /*              LINK                 */
 /*************************************/
-pub struct LinkAuthenticator(Arc<dyn LinkAuthenticatorTrait + Send + Sync>);
+pub struct LinkAuthenticator(Arc<dyn LinkUnicastAuthenticatorTrait + Send + Sync>);
 
 impl LinkAuthenticator {
     pub(crate) async fn from_properties(
@@ -45,7 +45,7 @@ impl LinkAuthenticator {
 }
 
 impl Deref for LinkAuthenticator {
-    type Target = Arc<dyn LinkAuthenticatorTrait + Send + Sync>;
+    type Target = Arc<dyn LinkUnicastAuthenticatorTrait + Send + Sync>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -56,10 +56,10 @@ impl Deref for LinkAuthenticator {
 /*           DUMMY LINK              */
 /*************************************/
 #[async_trait]
-pub trait LinkAuthenticatorTrait {
+pub trait LinkUnicastAuthenticatorTrait {
     async fn handle_new_link(
         &self,
-        link: &Link,
+        link: &LinkUnicast,
         properties: Option<&LocatorProperty>,
     ) -> ZResult<Option<PeerId>>;
 
@@ -69,28 +69,28 @@ pub trait LinkAuthenticatorTrait {
     /// # Arguments
     /// * `link` - The [`Link`][Link] generating the error
     ///
-    async fn handle_link_err(&self, link: &Link);
+    async fn handle_link_err(&self, link: &LinkUnicast);
 }
 
-pub struct DummyLinkAuthenticator;
+pub struct DummyLinkUnicastAuthenticator;
 
-impl DummyLinkAuthenticator {
+impl DummyLinkUnicastAuthenticator {
     pub fn make() -> LinkAuthenticator {
-        LinkAuthenticator(Arc::new(DummyLinkAuthenticator))
+        LinkAuthenticator(Arc::new(DummyLinkUnicastAuthenticator))
     }
 }
 
 #[async_trait]
-impl LinkAuthenticatorTrait for DummyLinkAuthenticator {
+impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
     async fn handle_new_link(
         &self,
-        _link: &Link,
+        _link: &LinkUnicast,
         _properties: Option<&LocatorProperty>,
     ) -> ZResult<Option<PeerId>> {
         Ok(None)
     }
 
-    async fn handle_link_err(&self, _link: &Link) {}
+    async fn handle_link_err(&self, _link: &LinkUnicast) {}
 }
 
 /*************************************/

@@ -15,7 +15,7 @@ mod adminspace;
 pub mod orchestrator;
 
 use super::link;
-use super::link::{Link, Locator};
+use super::link::{LinkUnicast, Locator};
 use super::plugins;
 use super::protocol;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
@@ -25,7 +25,8 @@ use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use super::transport;
 use super::transport::{
-    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
+    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
+    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
 };
 pub use adminspace::AdminSpace;
 use async_std::sync::Arc;
@@ -99,7 +100,7 @@ impl Runtime {
 
         let router = Arc::new(Router::new(pid.clone(), whatami, hlc.clone()));
 
-        let handler = Arc::new(RuntimeTransportHandler {
+        let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),
         });
         let sm_config = TransportManagerConfig::builder()
@@ -174,12 +175,15 @@ impl Runtime {
     }
 }
 
-struct RuntimeTransportHandler {
+struct RuntimeTransportEventHandler {
     runtime: std::sync::RwLock<Option<Runtime>>,
 }
 
-impl TransportHandler for RuntimeTransportHandler {
-    fn new_transport(&self, transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+impl TransportEventHandler for RuntimeTransportEventHandler {
+    fn new_unicast(
+        &self,
+        transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
         match &*self.runtime.read().unwrap() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
@@ -191,6 +195,14 @@ impl TransportHandler for RuntimeTransportHandler {
             }),
         }
     }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        // @TODO
+        unimplemented!();
+    }
 }
 
 pub(super) struct RuntimeSession {
@@ -199,7 +211,7 @@ pub(super) struct RuntimeSession {
     pub(super) sub_event_handler: Arc<LinkStateInterceptor>,
 }
 
-impl TransportEventHandler for RuntimeSession {
+impl TransportUnicastEventHandler for RuntimeSession {
     fn handle_message(&self, mut msg: ZenohMessage) -> ZResult<()> {
         // critical path shortcut
         if let ZenohBody::Data(data) = msg.body {
@@ -226,11 +238,11 @@ impl TransportEventHandler for RuntimeSession {
         self.sub_event_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: LinkUnicast) {
         self.sub_event_handler.new_link(link)
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: LinkUnicast) {
         self.sub_event_handler.del_link(link)
     }
 

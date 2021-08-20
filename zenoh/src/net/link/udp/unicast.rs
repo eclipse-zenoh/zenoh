@@ -144,7 +144,7 @@ impl LinkUnicastUdp {
 }
 
 #[async_trait]
-impl LinkTrait for LinkUnicastUdp {
+impl LinkUnicastTrait for LinkUnicastUdp {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing UDP link: {}", self);
         match &self.variant {
@@ -179,13 +179,11 @@ impl LinkTrait for LinkUnicastUdp {
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         let mut read: usize = 0;
-        loop {
+        while read < buffer.len() {
             let n = self.read(&mut buffer[read..]).await?;
             read += n;
-            if read == buffer.len() {
-                return Ok(());
-            }
         }
+        Ok(())
     }
 
     #[inline(always)]
@@ -269,7 +267,7 @@ impl LinkManagerUnicastUdp {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
-    async fn new_link(&self, dst: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<Link> {
+    async fn new_link(&self, dst: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<LinkUnicast> {
         let dst_addr = get_udp_addr(dst).await?;
         // Establish a UDP socket
         let socket = if dst_addr.is_ipv4() {
@@ -314,7 +312,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             }),
         ));
 
-        Ok(Link(link))
+        Ok(LinkUnicast(link))
     }
 
     async fn new_listener(
@@ -491,7 +489,9 @@ async fn accept_read_task(
                         LinkUnicastUdpVariant::Unconnected(unconnected),
                     ));
                     // Add the new link to the set of connected peers
-                    manager.handle_new_link_unicast(Link(link), None).await;
+                    manager
+                        .handle_new_link_unicast(LinkUnicast(link), None)
+                        .await;
                 }
             }
         };

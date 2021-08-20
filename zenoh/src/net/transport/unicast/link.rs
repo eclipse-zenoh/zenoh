@@ -17,7 +17,7 @@ use super::protocol::core::{Priority, ZInt};
 use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::TransportMessage;
 use super::transport::TransportUnicastInner;
-use crate::net::link::Link;
+use crate::net::link::LinkUnicast;
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -30,9 +30,9 @@ use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
 #[derive(Clone)]
-pub(crate) struct TransportLink {
+pub(crate) struct TransportLinkUnicast {
     // The underlying link
-    pub(super) inner: Link,
+    pub(super) inner: LinkUnicast,
     // The transport this link is associated to
     transport: TransportUnicastInner,
     // The transmission pipeline
@@ -44,9 +44,9 @@ pub(crate) struct TransportLink {
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
 
-impl TransportLink {
-    pub(crate) fn new(transport: TransportUnicastInner, link: Link) -> TransportLink {
-        TransportLink {
+impl TransportLinkUnicast {
+    pub(crate) fn new(transport: TransportUnicastInner, link: LinkUnicast) -> TransportLinkUnicast {
+        TransportLinkUnicast {
             transport,
             inner: link,
             pipeline: None,
@@ -58,9 +58,9 @@ impl TransportLink {
     }
 }
 
-impl TransportLink {
+impl TransportLinkUnicast {
     #[inline]
-    pub(crate) fn get_link(&self) -> &Link {
+    pub(crate) fn get_link(&self) -> &LinkUnicast {
         &self.inner
     }
 
@@ -165,7 +165,11 @@ impl TransportLink {
 /*************************************/
 /*              TASKS                */
 /*************************************/
-async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZInt) -> ZResult<()> {
+async fn tx_task(
+    pipeline: Arc<TransmissionPipeline>,
+    link: LinkUnicast,
+    keep_alive: ZInt,
+) -> ZResult<()> {
     let keep_alive = Duration::from_millis(keep_alive);
     loop {
         match pipeline.pull().timeout(keep_alive).await {
@@ -204,7 +208,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: Link, keep_alive: ZI
 }
 
 async fn rx_task_stream(
-    link: Link,
+    link: LinkUnicast,
     transport: TransportUnicastInner,
     lease: ZInt,
     signal: Signal,
@@ -215,7 +219,7 @@ async fn rx_task_stream(
         Stop,
     }
 
-    async fn read(link: &Link, buffer: &mut [u8]) -> ZResult<Action> {
+    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<Action> {
         // 16 bits for reading the batch length
         let mut length = [0u8, 0u8];
         link.read_exact(&mut length).await?;
@@ -272,7 +276,7 @@ async fn rx_task_stream(
 }
 
 async fn rx_task_dgram(
-    link: Link,
+    link: LinkUnicast,
     transport: TransportUnicastInner,
     lease: ZInt,
     signal: Signal,
@@ -283,7 +287,7 @@ async fn rx_task_dgram(
         Stop,
     }
 
-    async fn read(link: &Link, buffer: &mut [u8]) -> ZResult<Action> {
+    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<Action> {
         let n = link.read(buffer).await?;
         Ok(Action::Read(n))
     }
@@ -343,7 +347,7 @@ async fn rx_task_dgram(
 }
 
 async fn rx_task(
-    link: Link,
+    link: LinkUnicast,
     transport: TransportUnicastInner,
     lease: ZInt,
     signal: Signal,

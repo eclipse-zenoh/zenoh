@@ -45,6 +45,9 @@ pub(crate) mod imsg {
         pub(crate) const UNIT: u8 = 0x0f;
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
+        // Transport Messages Multicast
+        pub(crate) const JOIN: u8 = 0x11;
+
         // Message decorators
         pub(crate) const PRIORITY: u8 = 0x1c;
         pub(crate) const ROUTING_CONTEXT: u8 = 0x1d;
@@ -73,7 +76,7 @@ pub(crate) mod imsg {
     }
 }
 
-pub mod smsg {
+pub mod tmsg {
     use super::{imsg, Priority, ZInt};
 
     // Transport message IDs -- Re-export of some of the Inner Message IDs
@@ -91,6 +94,7 @@ pub mod smsg {
         pub const KEEP_ALIVE: u8 = imsg::id::KEEP_ALIVE;
         pub const PING_PONG: u8 = imsg::id::PING_PONG;
         pub const FRAME: u8 = imsg::id::FRAME;
+        pub const JOIN: u8 = imsg::id::JOIN;
 
         // Message decorators
         pub const PRIORITY: u8 = imsg::id::PRIORITY;
@@ -347,10 +351,10 @@ impl Header for Attachment {
     #[inline(always)]
     fn header(&self) -> u8 {
         #[allow(unused_mut)]
-        let mut header = smsg::id::ATTACHMENT;
+        let mut header = tmsg::id::ATTACHMENT;
         #[cfg(feature = "zero-copy")]
         if self.buffer.has_shminfo() {
-            header |= smsg::flag::Z;
+            header |= tmsg::flag::Z;
         }
         header
     }
@@ -466,7 +470,7 @@ impl RoutingContext {
 /// ```
 impl Priority {
     pub fn header(self) -> u8 {
-        smsg::id::PRIORITY | ((self as u8) << imsg::HEADER_BITS)
+        tmsg::id::PRIORITY | ((self as u8) << imsg::HEADER_BITS)
     }
 }
 
@@ -1264,7 +1268,7 @@ impl ZenohMessage {
 }
 
 /*************************************/
-/*       TRANSPORTMESSAGES           */
+/*       TRANSPORT MESSAGES          */
 /*************************************/
 #[derive(Debug, Clone)]
 pub enum TransportMode {
@@ -1302,12 +1306,12 @@ pub struct Scout {
 impl Header for Scout {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::SCOUT;
+        let mut header = tmsg::id::SCOUT;
         if self.pid_request {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         if self.what.is_some() {
-            header |= smsg::flag::W;
+            header |= tmsg::flag::W;
         }
         header
     }
@@ -1355,15 +1359,15 @@ pub struct Hello {
 impl Header for Hello {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::HELLO;
+        let mut header = tmsg::id::HELLO;
         if self.pid.is_some() {
-            header |= smsg::flag::I
+            header |= tmsg::flag::I
         }
         if self.whatami.is_some() && self.whatami.unwrap() != whatami::ROUTER {
-            header |= smsg::flag::W;
+            header |= tmsg::flag::W;
         }
         if self.locators.is_some() {
-            header |= smsg::flag::L;
+            header |= tmsg::flag::L;
         }
         header
     }
@@ -1438,12 +1442,12 @@ pub struct InitSyn {
 impl Header for InitSyn {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::INIT;
+        let mut header = tmsg::id::INIT;
         if self.sn_resolution.is_some() {
-            header |= smsg::flag::S;
+            header |= tmsg::flag::S;
         }
         if self.has_options() {
-            header |= smsg::flag::O;
+            header |= tmsg::flag::O;
         }
         header
     }
@@ -1453,7 +1457,7 @@ impl Options for InitSyn {
     fn options(&self) -> ZInt {
         let mut options = 0;
         if self.is_qos {
-            options |= smsg::init_options::QOS;
+            options |= tmsg::init_options::QOS;
         }
         options
     }
@@ -1475,13 +1479,13 @@ pub struct InitAck {
 impl Header for InitAck {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::INIT;
-        header |= smsg::flag::A;
+        let mut header = tmsg::id::INIT;
+        header |= tmsg::flag::A;
         if self.sn_resolution.is_some() {
-            header |= smsg::flag::S;
+            header |= tmsg::flag::S;
         }
         if self.has_options() {
-            header |= smsg::flag::O;
+            header |= tmsg::flag::O;
         }
         header
     }
@@ -1491,7 +1495,7 @@ impl Options for InitAck {
     fn options(&self) -> ZInt {
         let mut options = 0;
         if self.is_qos {
-            options |= smsg::init_options::QOS;
+            options |= tmsg::init_options::QOS;
         }
         options
     }
@@ -1536,9 +1540,9 @@ pub struct OpenSyn {
 impl Header for OpenSyn {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::OPEN;
+        let mut header = tmsg::id::OPEN;
         if self.lease % 1_000 == 0 {
-            header |= smsg::flag::T;
+            header |= tmsg::flag::T;
         }
         header
     }
@@ -1553,10 +1557,10 @@ pub struct OpenAck {
 impl Header for OpenAck {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::OPEN;
-        header |= smsg::flag::A;
+        let mut header = tmsg::id::OPEN;
+        header |= tmsg::flag::A;
         if self.lease % 1_000 == 0 {
-            header |= smsg::flag::T;
+            header |= tmsg::flag::T;
         }
         header
     }
@@ -1599,12 +1603,12 @@ pub struct Close {
 impl Header for Close {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::CLOSE;
+        let mut header = tmsg::id::CLOSE;
         if self.pid.is_some() {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         if self.link_only {
-            header |= smsg::flag::K;
+            header |= tmsg::flag::K;
         }
         header
     }
@@ -1645,12 +1649,12 @@ pub struct Sync {
 impl Header for Sync {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::SYNC;
+        let mut header = tmsg::id::SYNC;
         if let Reliability::Reliable = self.reliability {
-            header |= smsg::flag::R;
+            header |= tmsg::flag::R;
         }
         if self.count.is_some() {
-            header |= smsg::flag::C;
+            header |= tmsg::flag::C;
         }
         header
     }
@@ -1686,9 +1690,9 @@ pub struct AckNack {
 impl Header for AckNack {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::ACK_NACK;
+        let mut header = tmsg::id::ACK_NACK;
         if self.mask.is_some() {
-            header |= smsg::flag::M;
+            header |= tmsg::flag::M;
         }
         header
     }
@@ -1721,9 +1725,9 @@ pub struct KeepAlive {
 impl Header for KeepAlive {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::KEEP_ALIVE;
+        let mut header = tmsg::id::KEEP_ALIVE;
         if self.pid.is_some() {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         header
     }
@@ -1755,8 +1759,8 @@ pub struct Ping {
 impl Header for Ping {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::PING_PONG;
-        header |= smsg::flag::P;
+        let mut header = tmsg::id::PING_PONG;
+        header |= tmsg::flag::P;
         header
     }
 }
@@ -1769,7 +1773,7 @@ pub struct Pong {
 impl Header for Pong {
     #[inline(always)]
     fn header(&self) -> u8 {
-        smsg::id::PING_PONG
+        tmsg::id::PING_PONG
     }
 }
 
@@ -1816,14 +1820,14 @@ pub struct Frame {
 impl Header for Frame {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::FRAME;
+        let mut header = tmsg::id::FRAME;
         if let Reliability::Reliable = self.channel.reliability {
-            header |= smsg::flag::R;
+            header |= tmsg::flag::R;
         }
         if let FramePayload::Fragment { is_final, .. } = self.payload {
-            header |= smsg::flag::F;
+            header |= tmsg::flag::F;
             if is_final {
-                header |= smsg::flag::E;
+                header |= tmsg::flag::E;
             }
         }
         header
@@ -1832,14 +1836,14 @@ impl Header for Frame {
 
 impl Frame {
     pub fn make_header(reliability: Reliability, is_fragment: Option<bool>) -> u8 {
-        let mut header = smsg::id::FRAME;
+        let mut header = tmsg::id::FRAME;
         if let Reliability::Reliable = reliability {
-            header |= smsg::flag::R;
+            header |= tmsg::flag::R;
         }
         if let Some(is_final) = is_fragment {
-            header |= smsg::flag::F;
+            header |= tmsg::flag::F;
             if is_final {
-                header |= smsg::flag::E;
+                header |= tmsg::flag::E;
             }
         }
         header

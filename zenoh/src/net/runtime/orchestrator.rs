@@ -15,7 +15,7 @@ use super::link::Locator;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
-use super::transport::Transport;
+use super::transport::TransportUnicast;
 use super::{Runtime, RuntimeSession};
 use async_std::net::UdpSocket;
 use futures::prelude::*;
@@ -568,7 +568,7 @@ impl Runtime {
         async_std::prelude::FutureExt::race(send, recvs).await;
     }
 
-    async fn connect(&self, locators: &[Locator]) -> ZResult<Transport> {
+    async fn connect(&self, locators: &[Locator]) -> ZResult<TransportUnicast> {
         for locator in locators {
             let transport = self.manager().open_transport(locator).await;
             if transport.is_ok() {

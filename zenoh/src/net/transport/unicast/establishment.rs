@@ -20,10 +20,10 @@ use super::manager::Opened;
 use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf, ZSlice};
 use super::protocol::proto::{
-    smsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, TransportBody, TransportMessage,
+    tmsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, TransportBody, TransportMessage,
 };
 use super::{TransportConfigUnicast, TransportUnicast};
-use crate::net::link::Link;
+use crate::net::link::LinkUnicast;
 use rand::Rng;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::hmac;
@@ -99,7 +99,7 @@ impl ZBuf {
 
 async fn close_link(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
     mut reason: Option<u8>,
 ) {
@@ -129,7 +129,7 @@ struct OpenInitSynOutput {
 }
 async fn open_send_init_syn(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<OpenInitSynOutput> {
     let mut auth = PeerAuthenticatorOutput::default();
@@ -186,7 +186,7 @@ struct OpenInitAckOutput {
 }
 async fn open_recv_init_ack(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
     input: OpenInitSynOutput,
 ) -> IResult<OpenInitAckOutput> {
@@ -199,7 +199,7 @@ async fn open_recv_init_ack(
         );
         return Err((
             zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-            Some(smsg::close_reason::INVALID),
+            Some(tmsg::close_reason::INVALID),
         ));
     }
 
@@ -227,7 +227,7 @@ async fn open_recv_init_ack(
                 );
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(smsg::close_reason::INVALID),
+                    Some(tmsg::close_reason::INVALID),
                 ));
             }
         };
@@ -243,7 +243,7 @@ async fn open_recv_init_ack(
                 );
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(smsg::close_reason::INVALID),
+                    Some(tmsg::close_reason::INVALID),
                 ));
             }
         }
@@ -258,7 +258,7 @@ async fn open_recv_init_ack(
                     );
                     return Err((
                         zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                        Some(smsg::close_reason::INVALID),
+                        Some(tmsg::close_reason::INVALID),
                     ));
                 }
                 sn_resolution
@@ -271,7 +271,7 @@ async fn open_recv_init_ack(
 
     let init_ack_properties: Vec<Property> = match msg.attachment.take() {
         Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
         }
         None => vec![],
     };
@@ -289,7 +289,7 @@ async fn open_recv_init_ack(
                 &init_ack_properties,
             )
             .await
-            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
         auth = auth.merge(ps);
     }
 
@@ -329,7 +329,7 @@ struct OpenOpenSynOutput {
 }
 async fn open_send_open_syn(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     _auth_link: &AuthenticatedPeerLink,
     input: OpenInitAckOutput,
 ) -> IResult<OpenOpenSynOutput> {
@@ -369,7 +369,7 @@ struct OpenAckOutput {
 }
 async fn open_recv_open_ack(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
     input: OpenOpenSynOutput,
 ) -> IResult<OpenAckOutput> {
@@ -382,7 +382,7 @@ async fn open_recv_open_ack(
         );
         return Err((
             zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-            Some(smsg::close_reason::INVALID),
+            Some(tmsg::close_reason::INVALID),
         ));
     }
 
@@ -403,14 +403,14 @@ async fn open_recv_open_ack(
             );
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
+                Some(tmsg::close_reason::INVALID),
             ));
         }
     };
 
     let opean_ack_properties: Vec<Property> = match msg.attachment.take() {
         Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
         }
         None => vec![],
     };
@@ -418,7 +418,7 @@ async fn open_recv_open_ack(
         let _ = pa
             .handle_open_ack(auth_link, &opean_ack_properties)
             .await
-            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
     }
 
     let output = OpenAckOutput {
@@ -436,7 +436,7 @@ async fn open_recv_open_ack(
 
 async fn open_stages(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<OpenAckOutput> {
     let output = open_send_init_syn(manager, link, auth_link).await?;
@@ -447,7 +447,7 @@ async fn open_stages(
 
 pub(crate) async fn open_link(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
 ) -> ZResult<TransportUnicast> {
     let auth_link = AuthenticatedPeerLink {
         src: link.get_src(),
@@ -478,7 +478,7 @@ pub(crate) async fn open_link(
     let transport = match res {
         Ok(s) => s,
         Err(e) => {
-            let _ = close_link(manager, link, &auth_link, Some(smsg::close_reason::INVALID)).await;
+            let _ = close_link(manager, link, &auth_link, Some(tmsg::close_reason::INVALID)).await;
             return Err(e);
         }
     };
@@ -515,10 +515,7 @@ pub(crate) async fn open_link(
                     // NOTE: the read loop of the link the open message was sent on remains blocked
                     //       until the new_transport() returns. The read_loop in the various links
                     //       waits for any eventual transport to associate to.
-                    let callback = manager
-                        .config
-                        .handler
-                        .new_transport(transport.clone().into())?;
+                    let callback = manager.config.handler.new_unicast(transport.clone())?;
                     // Set the callback on the transport
                     let _ = t.set_callback(callback);
                 }
@@ -550,7 +547,7 @@ struct AcceptInitSynOutput {
 }
 async fn accept_recv_init_syn(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<AcceptInitSynOutput> {
     // Wait to read an InitSyn
@@ -562,7 +559,7 @@ async fn accept_recv_init_syn(
         );
         return Err((
             zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-            Some(smsg::close_reason::INVALID),
+            Some(tmsg::close_reason::INVALID),
         ));
     }
 
@@ -583,15 +580,15 @@ async fn accept_recv_init_syn(
                 );
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(smsg::close_reason::INVALID),
+                    Some(tmsg::close_reason::INVALID),
                 ));
             }
         };
 
     // Check if we are allowed to open more links if the transport is established
-    if let Some(s) = manager.get_transport_unicast(&init_syn_pid) {
+    if let Some(t) = manager.get_transport_unicast(&init_syn_pid) {
         // Check if we have reached maximum number of links for this transport
-        let links = s.get_transport().map_err(|e| (e, None))?.get_links();
+        let links = t.get_transport().map_err(|e| (e, None))?.get_links();
         if links.len() >= manager.config.unicast.max_links {
             let e = format!(
                 "Rejecting Open on link {} because of maximum links ({}) limit reached for peer: {}",
@@ -599,7 +596,7 @@ async fn accept_recv_init_syn(
             );
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
+                Some(tmsg::close_reason::INVALID),
             ));
         }
     }
@@ -612,7 +609,7 @@ async fn accept_recv_init_syn(
         );
         return Err((
             zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-            Some(smsg::close_reason::INVALID),
+            Some(tmsg::close_reason::INVALID),
         ));
     }
 
@@ -626,7 +623,7 @@ async fn accept_recv_init_syn(
     // Validate the InitSyn with the peer authenticators
     let init_syn_properties: Vec<Property> = match msg.attachment.take() {
         Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
         }
         None => vec![],
     };
@@ -640,7 +637,7 @@ async fn accept_recv_init_syn(
                 &init_syn_properties,
             )
             .await
-            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
         auth = auth.merge(ps);
     }
 
@@ -661,7 +658,7 @@ struct AcceptInitAckOutput {
 }
 async fn accept_send_init_ack(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptInitSynOutput,
 ) -> IResult<AcceptInitAckOutput> {
@@ -731,7 +728,7 @@ struct AcceptOpenSynOutput {
 }
 async fn accept_recv_open_syn(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
     input: AcceptInitAckOutput,
 ) -> IResult<AcceptOpenSynOutput> {
@@ -744,7 +741,7 @@ async fn accept_recv_open_syn(
         );
         return Err((
             zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-            Some(smsg::close_reason::INVALID),
+            Some(tmsg::close_reason::INVALID),
         ));
     }
 
@@ -769,7 +766,7 @@ async fn accept_recv_open_syn(
             );
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
+                Some(tmsg::close_reason::INVALID),
             ));
         }
     };
@@ -783,7 +780,7 @@ async fn accept_recv_open_syn(
                     let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link);
                     return Err((
                         zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                        Some(smsg::close_reason::INVALID),
+                        Some(tmsg::close_reason::INVALID),
                     ));
                 }
             }
@@ -791,7 +788,7 @@ async fn accept_recv_open_syn(
                 let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link,);
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(smsg::close_reason::INVALID),
+                    Some(tmsg::close_reason::INVALID),
                 ));
             }
         },
@@ -799,7 +796,7 @@ async fn accept_recv_open_syn(
             let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link,);
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
+                Some(tmsg::close_reason::INVALID),
             ));
         }
     }
@@ -808,7 +805,7 @@ async fn accept_recv_open_syn(
     let decrypted = manager
         .cipher
         .decrypt(encrypted)
-        .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
     let mut open_syn_cookie = ZBuf::from(decrypted);
 
     // Verify the cookie
@@ -818,7 +815,7 @@ async fn accept_recv_open_syn(
             let e = format!("Rejecting OpenSyn on link: {}. Invalid cookie.", link,);
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                Some(smsg::close_reason::INVALID),
+                Some(tmsg::close_reason::INVALID),
             ));
         }
     };
@@ -826,7 +823,7 @@ async fn accept_recv_open_syn(
     // Validate with the peer authenticators
     let open_syn_properties: Vec<Property> = match msg.attachment.take() {
         Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(smsg::close_reason::INVALID)))?
+            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
         }
         None => vec![],
     };
@@ -838,7 +835,7 @@ async fn accept_recv_open_syn(
         let ps = pa
             .handle_open_syn(auth_link, &open_syn_properties)
             .await
-            .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
         auth = auth.merge(ps);
     }
 
@@ -861,7 +858,7 @@ struct AcceptInitTransportOutput {
 }
 async fn accept_init_transport(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptOpenSynOutput,
 ) -> IResult<AcceptInitTransportOutput> {
@@ -879,7 +876,7 @@ async fn accept_init_transport(
             );
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(smsg::close_reason::INVALID),
+                    Some(tmsg::close_reason::INVALID),
                 ));
             }
 
@@ -890,7 +887,7 @@ async fn accept_init_transport(
                 );
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(smsg::close_reason::INVALID),
+                    Some(tmsg::close_reason::INVALID),
                 ));
             }
 
@@ -921,13 +918,13 @@ async fn accept_init_transport(
     };
     let transport = manager
         .init_transport_unicast(config)
-        .map_err(|e| (e, Some(smsg::close_reason::INVALID)))?;
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
 
     // Retrieve the transport's transport
     let t = transport.get_transport().map_err(|e| (e, None))?;
     let _ = t
         .add_link(link.clone())
-        .map_err(|e| (e, Some(smsg::close_reason::GENERIC)))?;
+        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 
     log::debug!(
         "New transport link established from {}: {}",
@@ -951,7 +948,7 @@ struct AcceptOpenAckOutput {
 }
 async fn accept_send_open_ack(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptInitTransportOutput,
 ) -> ZResult<AcceptOpenAckOutput> {
@@ -975,7 +972,7 @@ async fn accept_send_open_ack(
 // Notify the callback and start the link tasks
 async fn accept_finalize_transport(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     _auth_link: &AuthenticatedPeerLink,
     input: AcceptOpenAckOutput,
 ) -> ZResult<()> {
@@ -1013,7 +1010,7 @@ async fn accept_finalize_transport(
                     let callback = manager
                         .config
                         .handler
-                        .new_transport(input.transport.clone().into())
+                        .new_unicast(input.transport.clone())
                         .map_err(|e| {
                             let e = format!(
                                 "Rejecting OpenSyn on link: {}. New transport error: {:?}",
@@ -1037,7 +1034,7 @@ async fn accept_finalize_transport(
 
 async fn accept_link_stages(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
 ) -> IResult<AcceptInitTransportOutput> {
     let output = accept_recv_init_syn(manager, link, auth_link).await?;
@@ -1048,7 +1045,7 @@ async fn accept_link_stages(
 
 async fn accept_transport_stages(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
     input: AcceptInitTransportOutput,
 ) -> ZResult<()> {
@@ -1058,7 +1055,7 @@ async fn accept_transport_stages(
 
 pub(crate) async fn accept_link(
     manager: &TransportManager,
-    link: &Link,
+    link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
 ) -> ZResult<()> {
     let res = accept_link_stages(manager, link, auth_link).await;
@@ -1075,7 +1072,7 @@ pub(crate) async fn accept_link(
     if let Err(e) = res {
         let _ = transport
             .get_transport()?
-            .close(smsg::close_reason::GENERIC)
+            .close(tmsg::close_reason::GENERIC)
             .await;
         return Err(e);
     }

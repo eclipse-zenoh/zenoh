@@ -17,7 +17,7 @@ use super::protocol::proto::{
     Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::TransportUnicastInner;
-use crate::net::link::Link;
+use crate::net::link::LinkUnicast;
 use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -49,7 +49,7 @@ impl TransportUnicastInner {
 
     fn handle_close(
         &self,
-        link: &Link,
+        link: &LinkUnicast,
         pid: Option<PeerId>,
         reason: u8,
         link_only: bool,
@@ -138,7 +138,7 @@ impl TransportUnicastInner {
         }
     }
 
-    pub(super) fn receive_message(&self, msg: TransportMessage, link: &Link) -> ZResult<()> {
+    pub(super) fn receive_message(&self, msg: TransportMessage, link: &LinkUnicast) -> ZResult<()> {
         log::trace!("Received: {:?}", msg);
         // Process the received message
         match msg.body {

@@ -12,10 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 mod locator;
+mod multicast;
 mod unicast;
 
-use super::{Link, LinkManagerUnicastTrait, LinkTrait, Locator, LocatorProperty};
+use super::*;
 pub use locator::*;
+pub use multicast::*;
 pub use unicast::*;
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
