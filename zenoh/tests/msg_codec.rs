@@ -217,8 +217,8 @@ fn gen_data_info() -> DataInfo {
     }
 }
 
-fn gen_initial_sn() -> InitialSn {
-    InitialSn {
+fn gen_initial_sn() -> ConduitSn {
+    ConduitSn {
         reliable: gen!(ZInt),
         best_effort: gen!(ZInt),
     }
@@ -377,8 +377,8 @@ fn codec_join() {
         let wami = [whatami::ROUTER, whatami::CLIENT];
         let sn_resolution = [None, Some(gen!(ZInt))];
         let initial_sns = [
-            InitialSnList::Plain(gen_initial_sn()),
-            InitialSnList::QoS(Box::new([gen_initial_sn(); Priority::NUM])),
+            ConduitSnList::Plain(gen_initial_sn()),
+            ConduitSnList::QoS(Box::new([gen_initial_sn(); Priority::NUM])),
         ];
         let attachment = [None, Some(gen_attachment())];
 

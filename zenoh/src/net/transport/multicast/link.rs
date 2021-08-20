@@ -69,7 +69,7 @@ impl TransportLinkMulticast {
         self.pipeline.clone()
     }
 
-    pub(crate) fn start_tx(&mut self, batch_size: usize, conduit_tx: Box<[TransportConduitTx]>) {
+    pub(crate) fn start_tx(&mut self, batch_size: usize, conduit_tx: Arc<[TransportConduitTx]>) {
         if self.handle_tx.is_none() {
             // The pipeline
             let pipeline = Arc::new(TransmissionPipeline::new(

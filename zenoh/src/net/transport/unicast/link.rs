@@ -73,7 +73,7 @@ impl TransportLinkUnicast {
         &mut self,
         keep_alive: ZInt,
         batch_size: usize,
-        conduit_tx: Box<[TransportConduitTx]>,
+        conduit_tx: Arc<[TransportConduitTx]>,
     ) {
         if self.handle_tx.is_none() {
             // The pipeline

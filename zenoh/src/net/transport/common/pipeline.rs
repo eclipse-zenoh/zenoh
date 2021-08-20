@@ -188,7 +188,7 @@ pub(crate) struct TransmissionPipeline {
     // Status variable of transmission pipeline
     active: Arc<AtomicBool>,
     // The conduit TX containing the SN generators
-    conduit: Box<[TransportConduitTx]>,
+    conduit: Arc<[TransportConduitTx]>,
     // Each conduit queue has its own Mutex
     stage_in: Box<[Arc<Mutex<StageIn>>]>,
     // Amount of bytes available in each stage IN conduit queue
@@ -212,7 +212,7 @@ impl TransmissionPipeline {
     pub(crate) fn new(
         batch_size: usize,
         is_streamed: bool,
-        conduit: Box<[TransportConduitTx]>,
+        conduit: Arc<[TransportConduitTx]>,
     ) -> TransmissionPipeline {
         // Conditional variables
         let mut cond_canrefill = vec![];
@@ -609,7 +609,7 @@ impl fmt::Debug for TransmissionPipeline {
 mod tests {
     use super::*;
     use crate::net::protocol::core::{
-        Channel, CongestionControl, Priority, Reliability, ResKey, ZInt,
+        Channel, ConduitSn, CongestionControl, Priority, Reliability, ResKey, ZInt,
     };
     use crate::net::protocol::io::ZBuf;
     use crate::net::protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
@@ -708,11 +708,15 @@ mod tests {
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
-            0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            ConduitSn::default(),
         )]
         .into_boxed_slice();
-        let queue = Arc::new(TransmissionPipeline::new(batch_size, is_streamed, conduit));
+        let queue = Arc::new(TransmissionPipeline::new(
+            batch_size,
+            is_streamed,
+            conduit.into(),
+        ));
 
         // Total amount of bytes to send in each test
         let bytes: usize = 100_000_000;
@@ -802,11 +806,15 @@ mod tests {
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
-            0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            ConduitSn::default(),
         )]
         .into_boxed_slice();
-        let queue = Arc::new(TransmissionPipeline::new(batch_size, is_streamed, conduit));
+        let queue = Arc::new(TransmissionPipeline::new(
+            batch_size,
+            is_streamed,
+            conduit.into(),
+        ));
 
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -908,11 +916,15 @@ mod tests {
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
-            0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            ConduitSn::default(),
         )]
         .into_boxed_slice();
-        let queue = Arc::new(TransmissionPipeline::new(batch_size, is_streamed, conduit));
+        let queue = Arc::new(TransmissionPipeline::new(
+            batch_size,
+            is_streamed,
+            conduit.into(),
+        ));
 
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -968,11 +980,15 @@ mod tests {
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
-            0,
             ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            ConduitSn::default(),
         )]
         .into_boxed_slice();
-        let pipeline = Arc::new(TransmissionPipeline::new(batch_size, is_streamed, conduit));
+        let pipeline = Arc::new(TransmissionPipeline::new(
+            batch_size,
+            is_streamed,
+            conduit.into(),
+        ));
         let count = Arc::new(AtomicUsize::new(0));
         let size = Arc::new(AtomicUsize::new(0));
 

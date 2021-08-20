@@ -344,7 +344,7 @@ impl TransportManager {
         guard.insert(config.peer.clone(), a_st);
 
         log::debug!(
-            "New transport opened with {}: whatami {}, sn resolution {}, initial sn tx {}, initial sn rx {}, shm: {}, qos: {}",
+            "New transport opened with {}: whatami {}, sn resolution {}, initial sn tx {:?}, initial sn rx {:?}, shm: {}, qos: {}",
             config.peer,
             config.whatami,
             config.sn_resolution,

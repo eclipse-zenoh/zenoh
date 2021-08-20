@@ -28,6 +28,8 @@ pub struct TransportManagerConfigMulticast {
     pub lease: ZInt,
     pub keep_alive: ZInt,
     pub max_sessions: usize,
+    pub is_shm: bool,
+    pub is_qos: bool,
 }
 
 impl Default for TransportManagerConfigMulticast {
@@ -46,6 +48,8 @@ pub struct TransportManagerConfigBuilderMulticast {
     lease: ZInt,
     keep_alive: ZInt,
     max_sessions: usize,
+    is_shm: bool,
+    is_qos: bool,
 }
 
 impl Default for TransportManagerConfigBuilderMulticast {
@@ -54,6 +58,8 @@ impl Default for TransportManagerConfigBuilderMulticast {
             lease: *ZN_LINK_LEASE,
             keep_alive: *ZN_LINK_KEEP_ALIVE,
             max_sessions: usize::MAX,
+            is_qos: true,
+            is_shm: false,
         }
     }
 }
@@ -71,6 +77,16 @@ impl TransportManagerConfigBuilderMulticast {
 
     pub fn max_sessions(mut self, max_sessions: usize) -> Self {
         self.max_sessions = max_sessions;
+        self
+    }
+
+    pub fn qos(mut self, is_qos: bool) -> Self {
+        self.is_qos = is_qos;
+        self
+    }
+
+    pub fn shm(mut self, is_shm: bool) -> Self {
+        self.is_shm = is_shm;
         self
     }
 
@@ -109,6 +125,8 @@ impl TransportManagerConfigBuilderMulticast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             max_sessions: self.max_sessions,
+            is_qos: self.is_qos,
+            is_shm: self.is_shm,
         }
     }
 }

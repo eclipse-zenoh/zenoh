@@ -271,14 +271,14 @@ impl ZBuf {
         };
         let is_qos = imsg::has_option(options, tmsg::join_options::QOS);
         let initial_sns = if is_qos {
-            let mut sns = Box::new([InitialSn::default(); Priority::NUM]);
+            let mut sns = Box::new([ConduitSn::default(); Priority::NUM]);
             for i in 0..Priority::NUM {
                 sns[i].reliable = self.read_zint()?;
                 sns[i].best_effort = self.read_zint()?;
             }
-            InitialSnList::QoS(sns)
+            ConduitSnList::QoS(sns)
         } else {
-            InitialSnList::Plain(InitialSn {
+            ConduitSnList::Plain(ConduitSn {
                 reliable: self.read_zint()?,
                 best_effort: self.read_zint()?,
             })

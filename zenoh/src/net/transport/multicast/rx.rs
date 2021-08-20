@@ -11,13 +11,15 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{PeerId, Priority, Reliability, ZInt};
+use super::common::conduit::{TransportChannelRx, TransportConduitRx};
+use super::protocol::core::{ConduitSnList, PeerId, Priority, Reliability, ZInt};
 use super::protocol::proto::{
-    Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
+    Close, Frame, FramePayload, Join, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
-use super::transport::TransportMulticastInner;
+use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
+use crate::net::transport::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
+use std::convert::TryInto;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror2;
@@ -37,8 +39,9 @@ impl TransportMulticastInner {
             }
             None => {
                 log::debug!(
-                    "Transport: {}. No callback available, dropping message: {}",
-                    self.pid,
+                    "Transport {}: {}. No callback available, dropping message: {}",
+                    self.manager.config.pid,
+                    self.locator,
                     msg
                 );
                 Ok(())
@@ -57,7 +60,7 @@ impl TransportMulticastInner {
         if !precedes {
             log::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
-                self.pid,
+                self.manager.config.pid,
                 sn,
                 guard.sn.get()
             );
@@ -81,7 +84,10 @@ impl TransportMulticastInner {
                 if is_final {
                     // When zero-copy feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
-                        let e = format!("Transport: {}. Defragmentation error.", self.pid);
+                        let e = format!(
+                            "Transport {}: {}. Defragmentation error.",
+                            self.manager.config.pid, self.locator
+                        );
                         zerror2!(ZErrorKind::InvalidMessage { descr: e })
                     })?;
                     self.trigger_callback(msg, peer)
@@ -98,15 +104,78 @@ impl TransportMulticastInner {
         }
     }
 
+    pub(super) fn handle_join(&self, join: Join, locator: &Locator) -> ZResult<()> {
+        if join.version != self.manager.config.version {
+            return Ok(());
+        }
+        let sn_resolution = match join.sn_resolution {
+            Some(snr) => {
+                if snr > self.manager.config.sn_resolution {
+                    return Ok(());
+                }
+                snr
+            }
+            None => ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+        };
+
+        let mut guard = zwrite!(self.peers);
+        if !guard.contains_key(locator) {
+            let conduit_rx = match join.initial_sns {
+                ConduitSnList::Plain(sn) => {
+                    vec![TransportConduitRx::new(
+                        Priority::default(),
+                        sn_resolution,
+                        sn,
+                    )]
+                }
+                ConduitSnList::QoS(sns) => sns
+                    .iter()
+                    .enumerate()
+                    .map(|(prio, sn)| {
+                        TransportConduitRx::new(
+                            (prio as u8).try_into().unwrap(),
+                            sn_resolution,
+                            *sn,
+                        )
+                    })
+                    .collect(),
+            }
+            .into_boxed_slice();
+
+            let peer = TransportMulticastPeer {
+                pid: join.pid,
+                whatami: join.whatami,
+                conduit_rx,
+            };
+            guard.insert(locator.clone(), peer);
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn handle_close(&self, close: Close, locator: &Locator) -> ZResult<()> {
+        let mut guard = zwrite!(self.peers);
+        if let Some(peer) = guard.remove(locator) {
+            log::debug!(
+                "Peer {}/{}/{} has left multicast {} with reason: {}",
+                peer.pid,
+                peer.whatami,
+                locator,
+                self.locator,
+                close.reason
+            );
+        }
+        Ok(())
+    }
+
     pub(super) fn receive_message(&self, msg: TransportMessage, locator: &Locator) -> ZResult<()> {
-        log::trace!("Received: {:?}", msg);
         // Process the received message
         match msg.body {
             TransportBody::Frame(Frame {
                 channel,
                 sn,
                 payload,
-            }) => match zlock!(self.peers).get(locator) {
+            }) => match zread!(self.peers).get(locator) {
                 Some(p) => {
                     let c = if self.is_qos() {
                         &p.conduit_rx[channel.priority as usize]
@@ -114,8 +183,8 @@ impl TransportMulticastInner {
                         &p.conduit_rx[0]
                     } else {
                         let e = format!(
-                            "Transport: {}. Unknown conduit: {:?}.",
-                            self.pid, channel.priority
+                            "Transport {}: {}. Unknown conduit {:?} from {}.",
+                            self.manager.config.pid, self.locator, channel.priority, locator
                         );
                         return zerror!(ZErrorKind::InvalidMessage { descr: e });
                     };
@@ -131,39 +200,21 @@ impl TransportMulticastInner {
                 }
                 None => {
                     log::debug!(
-                        "Transport: {}. {} is not a multicast member.",
-                        self.pid,
+                        "Transport {}: {}. {} is not a multicast member.",
+                        self.manager.config.pid,
+                        self.locator,
                         locator
                     );
                     Ok(())
                 }
             },
-            // TransportBody::Sync(Sync { pid, sn, .. }) => {
-            //                     let mut guard = zlock!(self.peers);
-            //     if !guard.contains_key(locator) {
-            //         let mut conduit_rx = vec![];
-            //         if self.is_qos() {
-            //             for c in 0..Priority::NUM {
-            //                 conduit_rx.push(TransportConduitRx::new(
-            //                     (c as u8).try_into().unwrap(),
-            //                     config.initial_sn_rx,
-            //                     config.sn_resolution,
-            //                 ));
-            //             }
-            //         } else {
-
-            //         }
-            // }
-            //         let conduit_rx = TransportMulticastPeer {pid, conduit_rx: };
-            //         guard.insert(locator.clone(), pid);
-            //     Ok(())
-            // }
-            TransportBody::Close(_) => panic!(),
+            TransportBody::Join(join) => self.handle_join(join, locator),
+            TransportBody::Close(close) => self.handle_close(close, locator),
             TransportBody::KeepAlive(KeepAlive { .. }) => Ok(()),
             _ => {
                 log::debug!(
                     "Transport: {}. Message handling not implemented: {:?}",
-                    self.pid,
+                    self.manager.config.pid,
                     msg
                 );
                 Ok(())

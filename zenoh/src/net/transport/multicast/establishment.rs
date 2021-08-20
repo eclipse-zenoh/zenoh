@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::TransportManager;
+use super::protocol::core::{ConduitSn, ConduitSnList, Priority};
 use super::{TransportMulticast, TransportMulticastConfig, TransportMulticastInner};
 use crate::net::link::LinkMulticast;
 use rand::Rng;
@@ -23,17 +24,28 @@ pub(crate) async fn open_link(
     manager: &TransportManager,
     link: LinkMulticast,
 ) -> ZResult<TransportMulticast> {
-    let locator = link.get_dst();
-
     // Create and configure the multicast transport
+    let mut prng = zasynclock!(manager.prng);
+
+    macro_rules! zgen_conduit_sn {
+        () => {
+            ConduitSn {
+                reliable: prng.gen_range(0..manager.config.sn_resolution),
+                best_effort: prng.gen_range(0..manager.config.sn_resolution),
+            }
+        };
+    }
+
+    let locator = link.get_dst();
+    let initial_sns = if manager.config.multicast.is_qos {
+        ConduitSnList::Plain(zgen_conduit_sn!())
+    } else {
+        ConduitSnList::QoS([zgen_conduit_sn!(); Priority::NUM].into())
+    };
     let config = TransportMulticastConfig {
         manager: manager.clone(),
-        pid: manager.config.pid.clone(),
-        whatami: manager.config.whatami,
-        sn_resolution: manager.config.sn_resolution,
-        initial_sn_tx: zasynclock!(manager.prng).gen_range(0..manager.config.sn_resolution),
         is_shm: false, // @TODO: allow dynamic configuration
-        is_qos: true,  // @TODO: allow dynamic configuration
+        initial_sns,
         link,
     };
     let ti = Arc::new(TransportMulticastInner::new(config));

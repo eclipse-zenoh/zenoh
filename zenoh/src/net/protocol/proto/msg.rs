@@ -1423,7 +1423,7 @@ impl fmt::Display for Hello {
 /// +---------------+
 /// ~    peer_id    ~ -- PID of the sender of the INIT message
 /// +---------------+
-/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
+/// ~ sn_resolution ~ if S==1 -- the sequence number resolution(*)
 /// +---------------+
 /// ~     cookie    ~ if A==1
 /// +---------------+
@@ -1527,11 +1527,13 @@ impl Options for InitAck {
 /// +---------------+
 /// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(**)
 /// +---------------+
-/// ~    cookie     ~ if A==0(*)
+/// ~    cookie     ~ if A==0(***)
 /// +---------------+
 ///
-/// (*) if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
-/// (**) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
+/// (*)   if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
+/// (**)  the initial sequence number MUST be compatible with the sequence number resolution agreed in the
+///       InitSyn/InitAck message exchange
+/// (***) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenSyn {
@@ -1592,42 +1594,26 @@ impl Header for OpenAck {
 /// +---------------+
 /// ~    peer_id    ~ -- PID of the sender of the JOIN message
 /// +---------------+
+/// ~ lease_period  ~ -- Lease period of the sender of the JOIN message(*)
+/// +---------------+
 /// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
 /// +---------------+
 /// ~  [initial_sn] ~
 /// +---------------+
 ///
-/// (*) if S==0 then 2^28 is assumed.
+/// (*)  if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
+/// (**) if S==0 then 2^28 is assumed.
 ///
 /// - if Q==1 then the sender support QoS.
 /// ```
-#[derive(Debug, Clone, PartialEq)]
-pub enum InitialSnList {
-    Plain(InitialSn),
-    QoS(Box<[InitialSn; Priority::NUM]>),
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct InitialSn {
-    pub reliable: ZInt,
-    pub best_effort: ZInt,
-}
-
-impl Default for InitialSn {
-    fn default() -> InitialSn {
-        InitialSn {
-            reliable: 0,
-            best_effort: 0,
-        }
-    }
-}
 #[derive(Debug, Clone, PartialEq)]
 pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
     pub pid: PeerId,
+    // pub lease_period: ZInt,
     pub sn_resolution: Option<ZInt>,
-    pub initial_sns: InitialSnList,
+    pub initial_sns: ConduitSnList,
 }
 
 impl Header for Join {
@@ -1647,7 +1633,7 @@ impl Header for Join {
 impl Options for Join {
     fn options(&self) -> ZInt {
         let mut options = 0;
-        if let InitialSnList::QoS(_) = self.initial_sns {
+        if let ConduitSnList::QoS(_) = self.initial_sns {
             options |= tmsg::join_options::QOS;
         }
         options
@@ -2094,8 +2080,9 @@ impl TransportMessage {
         version: u8,
         whatami: WhatAmI,
         pid: PeerId,
+        // lease_period: ZInt,
         sn_resolution: Option<ZInt>,
-        initial_sns: InitialSnList,
+        initial_sns: ConduitSnList,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
@@ -2103,6 +2090,7 @@ impl TransportMessage {
                 version,
                 whatami,
                 pid,
+                // lease_period,
                 sn_resolution,
                 initial_sns,
             }),

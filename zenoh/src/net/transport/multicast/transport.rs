@@ -14,13 +14,13 @@
 use super::super::TransportManager;
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::TransportLinkMulticast;
-use super::protocol::core::{PeerId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::TransportMulticastEventHandler;
 use crate::net::link::{LinkMulticast, Locator};
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*************************************/
@@ -28,6 +28,8 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 /*************************************/
 pub(super) struct TransportMulticastPeer {
     pub(super) pid: PeerId,
+    pub(super) whatami: WhatAmI,
+    // pub(super) lease: ZInt
     pub(super) conduit_rx: Box<[TransportConduitRx]>,
 }
 
@@ -35,18 +37,12 @@ pub(super) struct TransportMulticastPeer {
 pub(crate) struct TransportMulticastInner {
     // The manager this channel is associated to
     pub(super) manager: TransportManager,
-    // The remote peer id
-    pub(super) pid: PeerId,
-    // The local whatami
-    pub(super) whatami: WhatAmI,
     // The multicast locator
     pub(super) locator: Locator,
-    // The SN resolution
-    pub(super) sn_resolution: ZInt,
     // Tx conduits
-    pub(super) conduit_tx: Box<[TransportConduitTx]>,
+    pub(super) conduit_tx: Arc<[TransportConduitTx]>,
     // Remote peers
-    pub(super) peers: Arc<Mutex<HashMap<Locator, TransportMulticastPeer>>>,
+    pub(super) peers: Arc<RwLock<HashMap<Locator, TransportMulticastPeer>>>,
     // The multicast link
     pub(super) link: Arc<RwLock<Option<TransportLinkMulticast>>>,
     // The callback
@@ -57,12 +53,8 @@ pub(crate) struct TransportMulticastInner {
 
 pub(crate) struct TransportMulticastConfig {
     pub(crate) manager: TransportManager,
-    pub(crate) pid: PeerId,
-    pub(crate) whatami: WhatAmI,
-    pub(crate) sn_resolution: ZInt,
-    pub(crate) initial_sn_tx: ZInt,
     pub(crate) is_shm: bool,
-    pub(crate) is_qos: bool,
+    pub(crate) initial_sns: ConduitSnList,
     pub(crate) link: LinkMulticast,
 }
 
@@ -71,30 +63,28 @@ impl TransportMulticastInner {
         let mut conduit_tx = vec![];
         // let mut conduit_rx = vec![];
 
-        if config.is_qos {
-            for c in 0..Priority::NUM {
-                conduit_tx.push(TransportConduitTx::new(
-                    (c as u8).try_into().unwrap(),
-                    config.initial_sn_tx,
-                    config.sn_resolution,
-                ));
-            }
-        } else {
-            conduit_tx.push(TransportConduitTx::new(
+        match config.initial_sns {
+            ConduitSnList::Plain(sn) => conduit_tx.push(TransportConduitTx::new(
                 Priority::default(),
-                config.initial_sn_tx,
-                config.sn_resolution,
-            ));
+                config.manager.config.sn_resolution,
+                sn,
+            )),
+            ConduitSnList::QoS(sns) => {
+                for (i, sn) in sns.iter().enumerate() {
+                    conduit_tx.push(TransportConduitTx::new(
+                        (i as u8).try_into().unwrap(),
+                        config.manager.config.sn_resolution,
+                        *sn,
+                    ));
+                }
+            }
         }
 
         let ti = TransportMulticastInner {
             manager: config.manager,
-            pid: config.pid,
-            whatami: config.whatami,
             locator: config.link.get_dst(),
-            sn_resolution: config.sn_resolution,
-            conduit_tx: conduit_tx.into_boxed_slice(),
-            peers: Arc::new(Mutex::new(HashMap::new())),
+            conduit_tx: conduit_tx.into_boxed_slice().into(),
+            peers: Arc::new(RwLock::new(HashMap::new())),
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
             is_shm: config.is_shm,
@@ -156,7 +146,7 @@ impl TransportMulticastInner {
                 zerror!(ZErrorKind::InvalidLink {
                     descr: format!(
                         "Can not start multicast Link TX of peer {}: {}",
-                        self.pid, self.locator
+                        self.manager.config.pid, self.locator
                     )
                 })
             }
@@ -174,7 +164,7 @@ impl TransportMulticastInner {
                 zerror!(ZErrorKind::InvalidLink {
                     descr: format!(
                         "Can not stop multicast Link TX of peer {}: {}",
-                        self.pid, self.locator
+                        self.manager.config.pid, self.locator
                     )
                 })
             }
@@ -192,7 +182,7 @@ impl TransportMulticastInner {
                 zerror!(ZErrorKind::InvalidLink {
                     descr: format!(
                         "Can not start multicast Link RX of peer {}: {}",
-                        self.pid, self.locator
+                        self.manager.config.pid, self.locator
                     )
                 })
             }
@@ -210,7 +200,7 @@ impl TransportMulticastInner {
                 zerror!(ZErrorKind::InvalidLink {
                     descr: format!(
                         "Can not stop multicast Link RX of peer {}: {}",
-                        self.pid, self.locator
+                        self.manager.config.pid, self.locator
                     )
                 })
             }
@@ -223,15 +213,15 @@ impl TransportMulticastInner {
     /*            ACCESSORS              */
     /*************************************/
     pub(crate) fn get_pid(&self) -> PeerId {
-        self.pid.clone()
+        self.manager.config.pid.clone()
     }
 
     pub(crate) fn get_whatami(&self) -> WhatAmI {
-        self.whatami
+        self.manager.config.whatami
     }
 
     pub(crate) fn get_sn_resolution(&self) -> ZInt {
-        self.sn_resolution
+        self.manager.config.sn_resolution
     }
 
     pub(crate) fn is_shm(&self) -> bool {
@@ -250,7 +240,11 @@ impl TransportMulticastInner {
     /*           TERMINATION             */
     /*************************************/
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing transport with peer: {}", self.pid);
+        log::trace!(
+            "Closing multicast transport of peer {}: {}",
+            self.manager.config.pid,
+            self.locator
+        );
 
         let pipeline = zread!(self.link).as_ref().unwrap().get_pipeline().unwrap();
 

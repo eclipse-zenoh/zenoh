@@ -17,7 +17,7 @@ use super::common::{
     pipeline::TransmissionPipeline,
 };
 use super::link::TransportLinkUnicast;
-use super::protocol::core::{PeerId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use crate::net::link::LinkUnicast;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -58,9 +58,9 @@ pub(crate) struct TransportUnicastInner {
     // The SN resolution
     pub(super) sn_resolution: ZInt,
     // Tx conduits
-    pub(super) conduit_tx: Box<[TransportConduitTx]>,
+    pub(super) conduit_tx: Arc<[TransportConduitTx]>,
     // Rx conduits
-    pub(super) conduit_rx: Box<[TransportConduitRx]>,
+    pub(super) conduit_rx: Arc<[TransportConduitRx]>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicast]>>>,
     // The callback
@@ -87,33 +87,43 @@ impl TransportUnicastInner {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
 
+        // @TODO: potentially manager different initial SNs per conduit channel
+        let conduit_sn_tx = ConduitSn {
+            reliable: config.initial_sn_tx,
+            best_effort: config.initial_sn_tx,
+        };
+        let conduit_sn_rx = ConduitSn {
+            reliable: config.initial_sn_rx,
+            best_effort: config.initial_sn_rx,
+        };
+
         if config.is_qos {
             for c in 0..Priority::NUM {
                 conduit_tx.push(TransportConduitTx::new(
                     (c as u8).try_into().unwrap(),
-                    config.initial_sn_tx,
                     config.sn_resolution,
+                    conduit_sn_tx,
                 ));
             }
 
             for c in 0..Priority::NUM {
                 conduit_rx.push(TransportConduitRx::new(
                     (c as u8).try_into().unwrap(),
-                    config.initial_sn_rx,
                     config.sn_resolution,
+                    conduit_sn_rx,
                 ));
             }
         } else {
             conduit_tx.push(TransportConduitTx::new(
                 Priority::default(),
-                config.initial_sn_tx,
                 config.sn_resolution,
+                conduit_sn_tx,
             ));
 
             conduit_rx.push(TransportConduitRx::new(
                 Priority::default(),
-                config.initial_sn_rx,
                 config.sn_resolution,
+                conduit_sn_rx,
             ));
         }
 
@@ -122,8 +132,8 @@ impl TransportUnicastInner {
             pid: config.pid,
             whatami: config.whatami,
             sn_resolution: config.sn_resolution,
-            conduit_tx: conduit_tx.into_boxed_slice(),
-            conduit_rx: conduit_rx.into_boxed_slice(),
+            conduit_tx: conduit_tx.into_boxed_slice().into(),
+            conduit_rx: conduit_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
             alive: AsyncArc::new(AsyncMutex::new(true)),

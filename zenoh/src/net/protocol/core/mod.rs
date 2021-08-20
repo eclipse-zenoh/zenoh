@@ -350,6 +350,27 @@ impl Default for Channel {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConduitSnList {
+    Plain(ConduitSn),
+    QoS(Box<[ConduitSn; Priority::NUM]>),
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct ConduitSn {
+    pub reliable: ZInt,
+    pub best_effort: ZInt,
+}
+
+impl Default for ConduitSn {
+    fn default() -> ConduitSn {
+        ConduitSn {
+            reliable: 0,
+            best_effort: 0,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum CongestionControl {

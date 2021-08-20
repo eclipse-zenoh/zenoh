@@ -203,11 +203,11 @@ impl WBuf {
             zcheck!(self.write_zint(snr));
         }
         match &join.initial_sns {
-            InitialSnList::Plain(sn) => {
+            ConduitSnList::Plain(sn) => {
                 zcheck!(self.write_zint(sn.reliable));
                 zcheck!(self.write_zint(sn.best_effort));
             }
-            InitialSnList::QoS(sns) => {
+            ConduitSnList::QoS(sns) => {
                 for sn in sns.iter() {
                     zcheck!(self.write_zint(sn.reliable));
                     zcheck!(self.write_zint(sn.best_effort));
