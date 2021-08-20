@@ -1167,10 +1167,12 @@ impl Session {
         let mut state = zwrite!(self.state);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE);
+        let nb_final = if state.local_routing { 2 } else { 1 };
+        trace!("Register query {} (nb_final = {})", qid, nb_final);
         state.queries.insert(
             qid,
             QueryState {
-                nb_final: 2,
+                nb_final,
                 reception_mode: consolidation.reception,
                 replies: if consolidation.reception != ConsolidationMode::None {
                     Some(HashMap::new())
@@ -1514,6 +1516,7 @@ impl Primitives for Session {
                             let _ = query.rep_sender.send(reply);
                         }
                     }
+                    trace!("Close query {}", qid);
                 }
             }
             None => {
