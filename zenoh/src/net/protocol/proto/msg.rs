@@ -107,7 +107,7 @@ pub mod tmsg {
         pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
         pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
         pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
-        pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is present
+        pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is requested or present
         pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
         pub const L: u8 = 1 << 7; // 0x80 Locators      if L==1 then Locators are present
         pub const M: u8 = 1 << 5; // 0x20 Mask          if M==1 then a Mask is present
