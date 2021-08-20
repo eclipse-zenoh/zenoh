@@ -13,7 +13,7 @@
 //
 use super::super::defaults::ZN_RX_BUFF_SIZE;
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
-use super::protocol::core::{Priority, ZInt};
+use super::protocol::core::Priority;
 use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::TransportMessage;
 use super::transport::TransportUnicastInner;
@@ -71,7 +71,7 @@ impl TransportLinkUnicast {
 
     pub(crate) fn start_tx(
         &mut self,
-        keep_alive: ZInt,
+        keep_alive: Duration,
         batch_size: usize,
         conduit_tx: Arc<[TransportConduitTx]>,
     ) {
@@ -106,7 +106,7 @@ impl TransportLinkUnicast {
         }
     }
 
-    pub(crate) fn start_rx(&mut self, lease: ZInt) {
+    pub(crate) fn start_rx(&mut self, lease: Duration) {
         if self.handle_rx.is_none() {
             self.active_rx.store(true, Ordering::Release);
             // Spawn the RX task
@@ -168,9 +168,8 @@ impl TransportLinkUnicast {
 async fn tx_task(
     pipeline: Arc<TransmissionPipeline>,
     link: LinkUnicast,
-    keep_alive: ZInt,
+    keep_alive: Duration,
 ) -> ZResult<()> {
-    let keep_alive = Duration::from_millis(keep_alive);
     loop {
         match pipeline.pull().timeout(keep_alive).await {
             Ok(res) => match res {
@@ -210,7 +209,7 @@ async fn tx_task(
 async fn rx_task_stream(
     link: LinkUnicast,
     transport: TransportUnicastInner,
-    lease: ZInt,
+    lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,
 ) -> ZResult<()> {
@@ -233,7 +232,6 @@ async fn rx_task_stream(
         Ok(Action::Stop)
     }
 
-    let lease = Duration::from_millis(lease);
     // The ZBuf to read a message batch onto
     let mut zbuf = ZBuf::new();
     // The pool of buffers
@@ -278,7 +276,7 @@ async fn rx_task_stream(
 async fn rx_task_dgram(
     link: LinkUnicast,
     transport: TransportUnicastInner,
-    lease: ZInt,
+    lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,
 ) -> ZResult<()> {
@@ -297,7 +295,6 @@ async fn rx_task_dgram(
         Ok(Action::Stop)
     }
 
-    let lease = Duration::from_millis(lease);
     // The ZBuf to read a message batch onto
     let mut zbuf = ZBuf::new();
     // The pool of buffers
@@ -349,7 +346,7 @@ async fn rx_task_dgram(
 async fn rx_task(
     link: LinkUnicast,
     transport: TransportUnicastInner,
-    lease: ZInt,
+    lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,
 ) -> ZResult<()> {

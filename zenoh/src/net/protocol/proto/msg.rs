@@ -12,9 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::*;
+use super::defaults::SEQ_NUM_RES;
 use super::io::{ZBuf, ZSlice};
 use crate::net::link::Locator;
 use std::fmt;
+use std::time::Duration;
 
 /*************************************/
 /*               IDS                 */
@@ -1438,7 +1440,7 @@ pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
     pub pid: PeerId,
-    pub sn_resolution: Option<ZInt>,
+    pub sn_resolution: ZInt,
     pub is_qos: bool,
 }
 
@@ -1446,7 +1448,7 @@ impl Header for InitSyn {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::INIT;
-        if self.sn_resolution.is_some() {
+        if self.sn_resolution != SEQ_NUM_RES {
             header |= tmsg::flag::S;
         }
         if self.has_options() {
@@ -1537,7 +1539,7 @@ impl Options for InitAck {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenSyn {
-    pub lease: ZInt,
+    pub lease: Duration,
     pub initial_sn: ZInt,
     pub cookie: ZSlice,
 }
@@ -1546,7 +1548,7 @@ impl Header for OpenSyn {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::OPEN;
-        if self.lease % 1_000 == 0 {
+        if self.lease.as_millis() % 1_000 == 0 {
             header |= tmsg::flag::T;
         }
         header
@@ -1555,7 +1557,7 @@ impl Header for OpenSyn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenAck {
-    pub lease: ZInt,
+    pub lease: Duration,
     pub initial_sn: ZInt,
 }
 
@@ -1564,7 +1566,7 @@ impl Header for OpenAck {
     fn header(&self) -> u8 {
         let mut header = tmsg::id::OPEN;
         header |= tmsg::flag::A;
-        if self.lease % 1_000 == 0 {
+        if self.lease.as_millis() % 1_000 == 0 {
             header |= tmsg::flag::T;
         }
         header
@@ -1611,8 +1613,8 @@ pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
     pub pid: PeerId,
-    // pub lease_period: ZInt,
-    pub sn_resolution: Option<ZInt>,
+    // pub lease_period: Duration,
+    pub sn_resolution: ZInt,
     pub initial_sns: ConduitSnList,
 }
 
@@ -1620,7 +1622,7 @@ impl Header for Join {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::JOIN;
-        if self.sn_resolution.is_some() {
+        if self.sn_resolution != SEQ_NUM_RES {
             header |= tmsg::flag::S;
         }
         if self.has_options() {
@@ -2013,7 +2015,7 @@ impl TransportMessage {
         version: u8,
         whatami: WhatAmI,
         pid: PeerId,
-        sn_resolution: Option<ZInt>,
+        sn_resolution: ZInt,
         is_qos: bool,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
@@ -2050,7 +2052,7 @@ impl TransportMessage {
     }
 
     pub fn make_open_syn(
-        lease: ZInt,
+        lease: Duration,
         initial_sn: ZInt,
         cookie: ZSlice,
         attachment: Option<Attachment>,
@@ -2066,7 +2068,7 @@ impl TransportMessage {
     }
 
     pub fn make_open_ack(
-        lease: ZInt,
+        lease: Duration,
         initial_sn: ZInt,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
@@ -2080,8 +2082,8 @@ impl TransportMessage {
         version: u8,
         whatami: WhatAmI,
         pid: PeerId,
-        // lease_period: ZInt,
-        sn_resolution: Option<ZInt>,
+        // lease_period: Duration,
+        sn_resolution: ZInt,
         initial_sns: ConduitSnList,
         attachment: Option<Attachment>,
     ) -> TransportMessage {

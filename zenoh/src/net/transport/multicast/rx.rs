@@ -18,7 +18,6 @@ use super::protocol::proto::{
 };
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
-use crate::net::transport::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
 use std::convert::TryInto;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -108,15 +107,9 @@ impl TransportMulticastInner {
         if join.version != self.manager.config.version {
             return Ok(());
         }
-        let sn_resolution = match join.sn_resolution {
-            Some(snr) => {
-                if snr > self.manager.config.sn_resolution {
-                    return Ok(());
-                }
-                snr
-            }
-            None => ZN_DEFAULT_SEQ_NUM_RESOLUTION,
-        };
+        if join.sn_resolution > self.manager.config.sn_resolution {
+            return Ok(());
+        }
 
         let mut guard = zwrite!(self.peers);
         if !guard.contains_key(locator) {
@@ -124,17 +117,17 @@ impl TransportMulticastInner {
                 ConduitSnList::Plain(sn) => {
                     vec![TransportConduitRx::new(
                         Priority::default(),
-                        sn_resolution,
+                        join.sn_resolution,
                         sn,
                     )]
                 }
-                ConduitSnList::QoS(sns) => sns
+                ConduitSnList::QoS(ref sns) => sns
                     .iter()
                     .enumerate()
                     .map(|(prio, sn)| {
                         TransportConduitRx::new(
                             (prio as u8).try_into().unwrap(),
-                            sn_resolution,
+                            join.sn_resolution,
                             *sn,
                         )
                     })

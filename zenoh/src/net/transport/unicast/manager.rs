@@ -30,9 +30,9 @@ use zenoh_util::properties::config::*;
 use zenoh_util::{zasynclock, zerror, zlock};
 
 pub struct TransportManagerConfigUnicast {
-    pub lease: ZInt,
-    pub keep_alive: ZInt,
-    pub open_timeout: ZInt,
+    pub lease: Duration,
+    pub keep_alive: Duration,
+    pub open_timeout: Duration,
     pub open_pending: usize,
     pub max_sessions: usize,
     pub max_links: usize,
@@ -53,9 +53,9 @@ impl TransportManagerConfigUnicast {
 }
 
 pub struct TransportManagerConfigBuilderUnicast {
-    lease: ZInt,
-    keep_alive: ZInt,
-    open_timeout: ZInt,
+    lease: Duration,
+    keep_alive: Duration,
+    open_timeout: Duration,
     open_pending: usize,
     max_sessions: usize,
     max_links: usize,
@@ -66,9 +66,9 @@ pub struct TransportManagerConfigBuilderUnicast {
 impl Default for TransportManagerConfigBuilderUnicast {
     fn default() -> TransportManagerConfigBuilderUnicast {
         TransportManagerConfigBuilderUnicast {
-            lease: *ZN_LINK_LEASE,
-            keep_alive: *ZN_LINK_KEEP_ALIVE,
-            open_timeout: *ZN_OPEN_TIMEOUT,
+            lease: Duration::from_millis(*ZN_LINK_LEASE),
+            keep_alive: Duration::from_millis(*ZN_LINK_KEEP_ALIVE),
+            open_timeout: Duration::from_millis(*ZN_OPEN_TIMEOUT),
             open_pending: *ZN_OPEN_INCOMING_PENDING,
             max_sessions: usize::MAX,
             max_links: usize::MAX,
@@ -79,17 +79,17 @@ impl Default for TransportManagerConfigBuilderUnicast {
 }
 
 impl TransportManagerConfigBuilderUnicast {
-    pub fn lease(mut self, lease: ZInt) -> Self {
+    pub fn lease(mut self, lease: Duration) -> Self {
         self.lease = lease;
         self
     }
 
-    pub fn keep_alive(mut self, keep_alive: ZInt) -> Self {
+    pub fn keep_alive(mut self, keep_alive: Duration) -> Self {
         self.keep_alive = keep_alive;
         self
     }
 
-    pub fn open_timeout(mut self, open_timeout: ZInt) -> Self {
+    pub fn open_timeout(mut self, open_timeout: Duration) -> Self {
         self.open_timeout = open_timeout;
         self
     }
@@ -137,13 +137,13 @@ impl TransportManagerConfigBuilderUnicast {
         }
 
         if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
-            self = self.lease(zparse!(v)?);
+            self = self.lease(Duration::from_millis(zparse!(v)?));
         }
         if let Some(v) = properties.get(&ZN_LINK_KEEP_ALIVE_KEY) {
-            self = self.keep_alive(zparse!(v)?);
+            self = self.keep_alive(Duration::from_millis(zparse!(v)?));
         }
         if let Some(v) = properties.get(&ZN_OPEN_TIMEOUT_KEY) {
-            self = self.open_timeout(zparse!(v)?);
+            self = self.open_timeout(Duration::from_millis(zparse!(v)?));
         }
         if let Some(v) = properties.get(&ZN_OPEN_INCOMING_PENDING_KEY) {
             self = self.open_pending(zparse!(v)?);
@@ -463,9 +463,8 @@ impl TransportManager {
                 properties,
             };
 
-            let timeout = Duration::from_millis(c_manager.config.unicast.open_timeout);
             let res = super::establishment::accept_link(&c_manager, &link, &auth_link)
-                .timeout(timeout)
+                .timeout(c_manager.config.unicast.open_timeout)
                 .await;
             match res {
                 Ok(res) => {

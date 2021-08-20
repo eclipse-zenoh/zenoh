@@ -23,6 +23,7 @@ use crate::net::link::LinkUnicast;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
@@ -224,7 +225,7 @@ impl TransportUnicastInner {
     pub(super) fn start_tx(
         &self,
         link: &LinkUnicast,
-        keep_alive: ZInt,
+        keep_alive: Duration,
         batch_size: usize,
     ) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
@@ -257,7 +258,7 @@ impl TransportUnicastInner {
         }
     }
 
-    pub(super) fn start_rx(&self, link: &LinkUnicast, lease: ZInt) -> ZResult<()> {
+    pub(super) fn start_rx(&self, link: &LinkUnicast, lease: Duration) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {

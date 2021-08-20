@@ -142,15 +142,16 @@ impl WBuf {
     }
 
     fn write_init_syn(&mut self, init_syn: &InitSyn) -> bool {
-        zcheck!(self.write(init_syn.header()));
+        let header = init_syn.header();
+        zcheck!(self.write(header));
         if init_syn.has_options() {
             zcheck!(self.write_zint(init_syn.options()));
         }
         zcheck!(self.write(init_syn.version));
         zcheck!(self.write_zint(init_syn.whatami));
         zcheck!(self.write_peerid(&init_syn.pid));
-        if let Some(snr) = init_syn.sn_resolution {
-            zcheck!(self.write_zint(snr));
+        if imsg::has_flag(header, tmsg::flag::S) {
+            zcheck!(self.write_zint(init_syn.sn_resolution));
         }
         true
     }
@@ -172,9 +173,9 @@ impl WBuf {
         let header = open_syn.header();
         zcheck!(self.write(header));
         if imsg::has_flag(header, tmsg::flag::T) {
-            zcheck!(self.write_zint(open_syn.lease / 1_000));
+            zcheck!(self.write_zint(open_syn.lease.as_secs() as ZInt));
         } else {
-            zcheck!(self.write_zint(open_syn.lease));
+            zcheck!(self.write_zint(open_syn.lease.as_millis() as ZInt));
         }
         zcheck!(self.write_zint(open_syn.initial_sn));
         self.write_zslice_array(open_syn.cookie.clone())
@@ -184,23 +185,24 @@ impl WBuf {
         let header = open_ack.header();
         zcheck!(self.write(header));
         if imsg::has_flag(header, tmsg::flag::T) {
-            zcheck!(self.write_zint(open_ack.lease / 1_000));
+            zcheck!(self.write_zint(open_ack.lease.as_secs() as ZInt));
         } else {
-            zcheck!(self.write_zint(open_ack.lease));
+            zcheck!(self.write_zint(open_ack.lease.as_millis() as ZInt));
         }
         self.write_zint(open_ack.initial_sn)
     }
 
     fn write_join(&mut self, join: &Join) -> bool {
-        zcheck!(self.write(join.header()));
+        let header = join.header();
+        zcheck!(self.write(header));
         if join.has_options() {
             zcheck!(self.write_zint(join.options()));
         }
         zcheck!(self.write(join.version));
         zcheck!(self.write_zint(join.whatami));
         zcheck!(self.write_peerid(&join.pid));
-        if let Some(snr) = join.sn_resolution {
-            zcheck!(self.write_zint(snr));
+        if imsg::has_flag(header, tmsg::flag::S) {
+            zcheck!(self.write_zint(join.sn_resolution));
         }
         match &join.initial_sns {
             ConduitSnList::Plain(sn) => {

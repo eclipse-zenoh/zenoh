@@ -12,9 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use rand::*;
+use std::time::Duration;
 use uhlc::Timestamp;
 use zenoh::net::protocol::core::*;
 use zenoh::net::protocol::io::{WBuf, ZBuf};
+use zenoh::net::protocol::proto::defaults::SEQ_NUM_RES;
 use zenoh::net::protocol::proto::*;
 
 const NUM_ITER: usize = 100;
@@ -308,7 +310,7 @@ fn codec_init() {
     for _ in 0..NUM_ITER {
         let is_qos = [true, false];
         let wami = [whatami::ROUTER, whatami::CLIENT];
-        let sn_resolution = [None, Some(gen!(ZInt))];
+        let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
         let attachment = [None, Some(gen_attachment())];
 
         for q in is_qos.iter() {
@@ -329,6 +331,7 @@ fn codec_init() {
             }
         }
 
+        let sn_resolution = [None, Some(gen!(ZInt))];
         for q in is_qos.iter() {
             for w in wami.iter() {
                 for s in sn_resolution.iter() {
@@ -352,21 +355,26 @@ fn codec_init() {
 #[test]
 fn codec_open() {
     for _ in 0..NUM_ITER {
+        let lease = [Duration::from_secs(1), Duration::from_millis(1234)];
         let attachment = [None, Some(gen_attachment())];
 
-        for a in attachment.iter() {
-            let msg = TransportMessage::make_open_syn(
-                gen!(ZInt),
-                gen!(ZInt),
-                gen_buffer(64).into(),
-                a.clone(),
-            );
-            test_write_read_transport_message(msg);
+        for l in lease.iter() {
+            for a in attachment.iter() {
+                let msg = TransportMessage::make_open_syn(
+                    *l,
+                    gen!(ZInt),
+                    gen_buffer(64).into(),
+                    a.clone(),
+                );
+                test_write_read_transport_message(msg);
+            }
         }
 
-        for a in attachment.iter() {
-            let msg = TransportMessage::make_open_ack(gen!(ZInt), gen!(ZInt), a.clone());
-            test_write_read_transport_message(msg);
+        for l in lease.iter() {
+            for a in attachment.iter() {
+                let msg = TransportMessage::make_open_ack(*l, gen!(ZInt), a.clone());
+                test_write_read_transport_message(msg);
+            }
         }
     }
 }
@@ -375,7 +383,7 @@ fn codec_open() {
 fn codec_join() {
     for _ in 0..NUM_ITER {
         let wami = [whatami::ROUTER, whatami::CLIENT];
-        let sn_resolution = [None, Some(gen!(ZInt))];
+        let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
         let initial_sns = [
             ConduitSnList::Plain(gen_initial_sn()),
             ConduitSnList::QoS(Box::new([gen_initial_sn(); Priority::NUM])),

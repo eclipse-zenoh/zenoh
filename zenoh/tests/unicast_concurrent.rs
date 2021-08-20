@@ -17,10 +17,9 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-
 use zenoh::net::link::{LinkUnicast, Locator};
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, ZInt,
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -99,7 +98,7 @@ impl TransportUnicastEventHandler for MHPeer {
 
 async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
     // Common transport lease in milliseconds
-    let lease: ZInt = 1_000;
+    let lease = Duration::from_millis(1_000);
 
     /* [Peers] */
     let peer_id01 = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);

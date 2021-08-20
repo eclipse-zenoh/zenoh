@@ -307,10 +307,10 @@ mod tests {
         Channel, CongestionControl, Priority, Reliability, ResKey, ZInt,
     };
     use crate::net::protocol::io::{WBuf, ZBuf};
+    use crate::net::protocol::proto::defaults::SEQ_NUM_RES;
     use crate::net::protocol::proto::{
         Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
     };
-    use crate::net::transport::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
     use std::convert::TryFrom;
 
     fn serialize_no_fragmentation(batch_size: usize, payload_size: usize) {
@@ -322,7 +322,7 @@ mod tests {
 
             // Create the serialization batch
             let priority = Priority::default();
-            let mut sn_gen = SeqNumGenerator::new(0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
+            let mut sn_gen = SeqNumGenerator::new(0, SEQ_NUM_RES);
             let mut batch = SerializationBatch::new(batch_size, *is_streamed);
 
             // Serialize the messages until the batch is full
@@ -424,7 +424,7 @@ mod tests {
     fn serialize_fragmentation(batch_size: usize, payload_size: usize) {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
-            let mut sn_gen = SeqNumGenerator::new(0, ZN_DEFAULT_SEQ_NUM_RESOLUTION);
+            let mut sn_gen = SeqNumGenerator::new(0, SEQ_NUM_RES);
 
             for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
                 let channel = Channel {

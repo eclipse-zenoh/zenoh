@@ -634,10 +634,9 @@ mod tests {
         Channel, ConduitSn, CongestionControl, Priority, Reliability, ResKey, ZInt,
     };
     use crate::net::protocol::io::ZBuf;
+    use crate::net::protocol::proto::defaults::SEQ_NUM_RES;
     use crate::net::protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
-    use crate::net::transport::defaults::{
-        ZN_DEFAULT_BATCH_SIZE, ZN_DEFAULT_SEQ_NUM_RESOLUTION, ZN_QUEUE_SIZE_CONTROL,
-    };
+    use crate::net::transport::defaults::{ZN_DEFAULT_BATCH_SIZE, ZN_QUEUE_SIZE_CONTROL};
     use async_std::prelude::*;
     use async_std::task;
     use std::convert::TryFrom;
@@ -730,7 +729,7 @@ mod tests {
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
-            ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            SEQ_NUM_RES,
             ConduitSn::default(),
         )]
         .into_boxed_slice();
@@ -828,7 +827,7 @@ mod tests {
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
-            ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            SEQ_NUM_RES,
             ConduitSn::default(),
         )]
         .into_boxed_slice();
@@ -938,7 +937,7 @@ mod tests {
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
-            ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            SEQ_NUM_RES,
             ConduitSn::default(),
         )]
         .into_boxed_slice();
@@ -1002,7 +1001,7 @@ mod tests {
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
-            ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            SEQ_NUM_RES,
             ConduitSn::default(),
         )]
         .into_boxed_slice();

@@ -15,7 +15,6 @@ use super::super::TransportManager;
 use super::authenticator::{
     AuthenticatedPeerLink, AuthenticatedPeerTransport, PeerAuthenticatorOutput,
 };
-use super::defaults::ZN_DEFAULT_SEQ_NUM_RESOLUTION;
 use super::manager::Opened;
 use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf, ZSlice};
@@ -25,6 +24,7 @@ use super::protocol::proto::{
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::LinkUnicast;
 use rand::Rng;
+use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::hmac;
 use zenoh_util::{zasynclock, zerror, zerror2};
@@ -145,11 +145,7 @@ async fn open_send_init_syn(
     let init_syn_version = manager.config.version;
     let init_syn_whatami = manager.config.whatami;
     let init_syn_pid = manager.config.pid.clone();
-    let init_syn_sn_resolution = if manager.config.sn_resolution == ZN_DEFAULT_SEQ_NUM_RESOLUTION {
-        None
-    } else {
-        Some(manager.config.sn_resolution)
-    };
+    let init_syn_sn_resolution = manager.config.sn_resolution;
     let init_syn_qos = true;
     let init_syn_attachment = attachment_from_properties(&auth.properties).ok();
 
@@ -194,7 +190,7 @@ async fn open_recv_init_ack(
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
         let e = format!(
-            "Received multiple messages in response to an InitSyn on link {}: {:?}",
+            "Received multiple messages in response to an InitSyn on {}: {:?}",
             link, messages,
         );
         return Err((
@@ -215,14 +211,14 @@ async fn open_recv_init_ack(
             }) => (whatami, pid, sn_resolution, is_qos, cookie),
             TransportBody::Close(Close { reason, .. }) => {
                 let e = format!(
-                    "Received a close message (reason {}) in response to an InitSyn on link: {}",
+                    "Received a close message (reason {}) in response to an InitSyn on: {}",
                     reason, link,
                 );
                 return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
             }
             _ => {
                 let e = format!(
-                    "Received an invalid message in response to an InitSyn on link {}: {:?}",
+                    "Received an invalid message in response to an InitSyn on {}: {:?}",
                     link, msg.body
                 );
                 return Err((
@@ -238,8 +234,8 @@ async fn open_recv_init_ack(
         if let Some(sn_resolution) = init_ack_sn_resolution {
             if sn_resolution != s.sn_resolution {
                 let e = format!(
-                    "Rejecting InitAck on link {} because of invalid sn resolution: {}",
-                    link, init_ack_pid
+                    "Rejecting InitAck on {}. Invalid sn resolution: {}",
+                    link, sn_resolution
                 );
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
@@ -253,8 +249,8 @@ async fn open_recv_init_ack(
             Some(sn_resolution) => {
                 if sn_resolution > input.sn_resolution {
                     let e = format!(
-                        "Rejecting InitAck on link {} because of invalid sn resolution: {}",
-                        link, init_ack_pid
+                        "Rejecting InitAck on {}. Invalid sn resolution: {}",
+                        link, sn_resolution
                     );
                     return Err((
                         zerror2!(ZErrorKind::InvalidMessage { descr: e }),
@@ -364,7 +360,7 @@ struct OpenAckOutput {
     is_qos: bool,
     initial_sn_tx: ZInt,
     initial_sn_rx: ZInt,
-    lease: ZInt,
+    lease: Duration,
     auth_transport: AuthenticatedPeerTransport,
 }
 async fn open_recv_open_ack(
@@ -377,7 +373,7 @@ async fn open_recv_open_ack(
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
         let e = format!(
-            "Received multiple messages in response to an InitSyn on link {}: {:?}",
+            "Received multiple messages in response to an InitSyn on {}: {:?}",
             link, messages,
         );
         return Err((
@@ -391,14 +387,14 @@ async fn open_recv_open_ack(
         TransportBody::OpenAck(OpenAck { lease, initial_sn }) => (lease, initial_sn),
         TransportBody::Close(Close { reason, .. }) => {
             let e = format!(
-                "Received a close message (reason {}) in response to an OpenSyn on link: {:?}",
+                "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
                 reason, link,
             );
             return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
         }
         _ => {
             let e = format!(
-                "Received an invalid message in response to an OpenSyn on link {}: {:?}",
+                "Received an invalid message in response to an OpenSyn on {}: {:?}",
                 link, msg.body
             );
             return Err((
@@ -496,7 +492,10 @@ pub(crate) async fn open_link(
         //       check which considers a link as failed when no messages are received in 3.5 times the
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
         //       transport lease.
-        let keep_alive = manager.config.unicast.keep_alive.min(info.lease / 4);
+        let keep_alive = Duration::from_millis(
+            (manager.config.unicast.keep_alive.as_millis() as ZInt)
+                .min(info.lease.as_millis() as ZInt / 4),
+        );
         let _ = t.add_link(link.clone())?;
 
         // Start the TX loop
@@ -554,7 +553,7 @@ async fn accept_recv_init_syn(
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
         let e = format!(
-            "Received multiple messages instead of a single InitSyn on link {}: {:?}",
+            "Received multiple messages instead of a single InitSyn on {}: {:?}",
             link, messages,
         );
         return Err((
@@ -575,7 +574,7 @@ async fn accept_recv_init_syn(
             }) => (version, whatami, pid, sn_resolution, is_qos),
             _ => {
                 let e = format!(
-                    "Received invalid message instead of an InitSyn on link {}: {:?}",
+                    "Received invalid message instead of an InitSyn on {}: {:?}",
                     link, msg.body
                 );
                 return Err((
@@ -591,7 +590,7 @@ async fn accept_recv_init_syn(
         let links = t.get_transport().map_err(|e| (e, None))?.get_links();
         if links.len() >= manager.config.unicast.max_links {
             let e = format!(
-                "Rejecting Open on link {} because of maximum links ({}) limit reached for peer: {}",
+                "Rejecting Open on {} because of maximum links ({}) limit reached for peer: {}",
                 manager.config.unicast.max_links, link, init_syn_pid
             );
             return Err((
@@ -604,7 +603,7 @@ async fn accept_recv_init_syn(
     // Check if the version is supported
     if init_syn_version > manager.config.version {
         let e = format!(
-            "Rejecting InitSyn on link {} because of unsupported Zenoh version from peer: {}",
+            "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
             link, init_syn_pid
         );
         return Err((
@@ -612,13 +611,6 @@ async fn accept_recv_init_syn(
             Some(tmsg::close_reason::INVALID),
         ));
     }
-
-    // Get the SN Resolution
-    let init_syn_sn_resolution = if let Some(snr) = init_syn_sn_resolution {
-        snr
-    } else {
-        ZN_DEFAULT_SEQ_NUM_RESOLUTION
-    };
 
     // Validate the InitSyn with the peer authenticators
     let init_syn_properties: Vec<Property> = match msg.attachment.take() {
@@ -722,7 +714,7 @@ async fn accept_send_init_ack(
 struct AcceptOpenSynOutput {
     cookie: Cookie,
     initial_sn: ZInt,
-    lease: ZInt,
+    lease: Duration,
     open_ack_attachment: Option<Attachment>,
     auth_transport: AuthenticatedPeerTransport,
 }
@@ -736,7 +728,7 @@ async fn accept_recv_open_syn(
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
         let e = format!(
-            "Received multiple messages instead of a single OpenSyn on link {}: {:?}",
+            "Received multiple messages instead of a single OpenSyn on {}: {:?}",
             link, messages,
         );
         return Err((
@@ -754,14 +746,14 @@ async fn accept_recv_open_syn(
         }) => (lease, initial_sn, cookie),
         TransportBody::Close(Close { reason, .. }) => {
             let e = format!(
-                "Received a close message (reason {}) instead of an OpenSyn on link: {:?}",
+                "Received a close message (reason {}) instead of an OpenSyn on: {:?}",
                 reason, link,
             );
             return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
         }
         _ => {
             let e = format!(
-                "Received invalid message instead of an OpenSyn on link {}: {:?}",
+                "Received invalid message instead of an OpenSyn on {}: {:?}",
                 link, msg.body
             );
             return Err((
@@ -777,7 +769,7 @@ async fn accept_recv_open_syn(
         Some(cookie_hash) => match cookie_hash {
             Some(cookie_hash) => {
                 if cookie_hash != &hmac::digest(&encrypted) {
-                    let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link);
+                    let e = format!("Rejecting OpenSyn on: {}. Unkwown cookie.", link);
                     return Err((
                         zerror2!(ZErrorKind::InvalidMessage { descr: e }),
                         Some(tmsg::close_reason::INVALID),
@@ -785,7 +777,7 @@ async fn accept_recv_open_syn(
                 }
             }
             None => {
-                let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link,);
+                let e = format!("Rejecting OpenSyn on: {}. Unkwown cookie.", link,);
                 return Err((
                     zerror2!(ZErrorKind::InvalidMessage { descr: e }),
                     Some(tmsg::close_reason::INVALID),
@@ -793,7 +785,7 @@ async fn accept_recv_open_syn(
             }
         },
         None => {
-            let e = format!("Rejecting OpenSyn on link: {}. Unkwown cookie.", link,);
+            let e = format!("Rejecting OpenSyn on: {}. Unkwown cookie.", link,);
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),
                 Some(tmsg::close_reason::INVALID),
@@ -812,7 +804,7 @@ async fn accept_recv_open_syn(
     let cookie = match open_syn_cookie.read_cookie() {
         Some(ck) => ck,
         None => {
-            let e = format!("Rejecting OpenSyn on link: {}. Invalid cookie.", link,);
+            let e = format!("Rejecting OpenSyn on: {}. Invalid cookie.", link,);
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),
                 Some(tmsg::close_reason::INVALID),
@@ -853,7 +845,7 @@ async fn accept_recv_open_syn(
 struct AcceptInitTransportOutput {
     transport: TransportUnicast,
     initial_sn: ZInt,
-    lease: ZInt,
+    lease: Duration,
     open_ack_attachment: Option<Attachment>,
 }
 async fn accept_init_transport(
@@ -871,7 +863,7 @@ async fn accept_init_transport(
         Some(opened) => {
             if opened.sn_resolution != input.cookie.sn_resolution {
                 let e = format!(
-                "Rejecting OpenSyn cookie on link {} for peer: {}. Invalid sn resolution: {}. Expected: {}",
+                "Rejecting OpenSyn cookie on {} for peer: {}. Invalid sn resolution: {}. Expected: {}",
                 link, input.cookie.pid, input.cookie.sn_resolution, opened.sn_resolution
             );
                 return Err((
@@ -882,7 +874,7 @@ async fn accept_init_transport(
 
             if opened.whatami != input.cookie.whatami {
                 let e = format!(
-                    "Rejecting OpenSyn cookie on link: {}. Invalid whatami: {}",
+                    "Rejecting OpenSyn cookie on: {}. Invalid whatami: {}",
                     link, input.cookie.pid
                 );
                 return Err((
@@ -944,7 +936,7 @@ async fn accept_init_transport(
 // Send an OpenAck
 struct AcceptOpenAckOutput {
     transport: TransportUnicast,
-    lease: ZInt,
+    lease: Duration,
 }
 async fn accept_send_open_ack(
     manager: &TransportManager,
@@ -990,7 +982,10 @@ async fn accept_finalize_transport(
         //       check which considers a link as failed when no messages are received in 3.5 times the
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
         //       transport lease.
-        let keep_alive = manager.config.unicast.keep_alive.min(input.lease / 4);
+        let keep_alive = Duration::from_millis(
+            (manager.config.unicast.keep_alive.as_millis() as ZInt)
+                .min(input.lease.as_millis() as ZInt / 4),
+        );
         // Start the TX loop
         let _ = transport.start_tx(link, keep_alive, manager.config.batch_size)?;
 
@@ -1013,7 +1008,7 @@ async fn accept_finalize_transport(
                         .new_unicast(input.transport.clone())
                         .map_err(|e| {
                             let e = format!(
-                                "Rejecting OpenSyn on link: {}. New transport error: {:?}",
+                                "Rejecting OpenSyn on: {}. New transport error: {:?}",
                                 link, e
                             );
                             zerror2!(ZErrorKind::InvalidSession { descr: e })

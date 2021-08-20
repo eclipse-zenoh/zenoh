@@ -12,9 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::*;
+use super::defaults::SEQ_NUM_RES;
 use super::io::ZBuf;
 use super::msg::*;
 use std::convert::TryInto;
+use std::time::Duration;
 
 impl ZBuf {
     #[allow(unused_variables)]
@@ -188,9 +190,9 @@ impl ZBuf {
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
-            Some(self.read_zint()?)
+            self.read_zint()?
         } else {
-            None
+            SEQ_NUM_RES
         };
         let is_qos = imsg::has_option(options, tmsg::init_options::QOS);
 
@@ -229,10 +231,11 @@ impl ZBuf {
     }
 
     fn read_open_syn(&mut self, header: u8) -> Option<TransportBody> {
+        let lease = self.read_zint()?;
         let lease = if imsg::has_flag(header, tmsg::flag::T) {
-            1_000 * self.read_zint()?
+            Duration::from_secs(lease)
         } else {
-            self.read_zint()?
+            Duration::from_millis(lease)
         };
         let initial_sn = self.read_zint()?;
 
@@ -245,10 +248,11 @@ impl ZBuf {
     }
 
     fn read_open_ack(&mut self, header: u8) -> Option<TransportBody> {
+        let lease = self.read_zint()?;
         let lease = if imsg::has_flag(header, tmsg::flag::T) {
-            1_000 * self.read_zint()?
+            Duration::from_secs(lease)
         } else {
-            self.read_zint()?
+            Duration::from_millis(lease)
         };
         let initial_sn = self.read_zint()?;
 
@@ -265,9 +269,9 @@ impl ZBuf {
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
-            Some(self.read_zint()?)
+            self.read_zint()?
         } else {
-            None
+            SEQ_NUM_RES
         };
         let is_qos = imsg::has_option(options, tmsg::join_options::QOS);
         let initial_sns = if is_qos {

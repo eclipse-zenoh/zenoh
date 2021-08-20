@@ -34,6 +34,7 @@ use zenoh_util::properties::config::*;
 /// # Examples
 /// ```
 /// use async_std::sync::Arc;
+/// use std::time::Duration;
 /// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
 /// use zenoh::net::transport::*;
 /// use zenoh_util::core::ZResult;
@@ -64,12 +65,12 @@ use zenoh_util::properties::config::*;
 /// // Create the TransportManager with custom configuration
 /// // Configure the unicast transports parameters
 /// let unicast = TransportManagerConfigUnicast::builder()
-///         .lease(1_000)                   // Set the link lease to 1s
-///         .keep_alive(100)                // Set the link keep alive interval to 100ms
-///         .open_timeout(1_000)            // Set an open timeout to 1s
-///         .open_pending(10)               // Set to 10 the number of simultanous pending incoming transports
-///         .max_sessions(5)                // Allow max 5 transports open
-///         .max_links(2)                   // Allow max 2 links per transport
+///         .lease(Duration::from_secs(1))
+///         .keep_alive(Duration::from_millis(100))
+///         .open_timeout(Duration::from_secs(1))
+///         .open_pending(10)   // Set to 10 the number of simultanous pending incoming transports
+///         .max_sessions(5)    // Allow max 5 transports open
+///         .max_links(2)       // Allow max 2 links per transport
 ///         .build();
 /// let config = TransportManagerConfig::builder()
 ///         .pid(PeerId::rand())
@@ -214,7 +215,7 @@ impl Default for TransportManagerConfigBuilder {
             version: ZN_VERSION,
             pid: PeerId::rand(),
             whatami: ZN_DEFAULT_WHATAMI,
-            sn_resolution: ZN_DEFAULT_SEQ_NUM_RESOLUTION,
+            sn_resolution: super::protocol::proto::defaults::SEQ_NUM_RES,
             batch_size: ZN_DEFAULT_BATCH_SIZE,
             locator_property: HashMap::new(),
             unicast: TransportManagerConfigUnicast::default(),
