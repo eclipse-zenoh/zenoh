@@ -221,7 +221,7 @@ impl TransmissionPipeline {
     ) -> TransmissionPipeline {
         // Conditional variables
         let mut cond_canrefill = vec![];
-        cond_canrefill.resize_with(conduit.len(), || Condvar::new());
+        cond_canrefill.resize_with(conduit.len(), Condvar::new);
         let cond_canrefill = cond_canrefill.into_boxed_slice();
 
         let cond_canpull = AsyncCondvar::new();
