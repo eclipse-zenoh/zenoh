@@ -492,10 +492,7 @@ pub(crate) async fn open_link(
         //       check which considers a link as failed when no messages are received in 3.5 times the
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
         //       transport lease.
-        let keep_alive = Duration::from_millis(
-            (manager.config.unicast.keep_alive.as_millis() as ZInt)
-                .min(info.lease.as_millis() as ZInt / 4),
-        );
+        let keep_alive = manager.config.unicast.keep_alive.min(info.lease / 4);
         let _ = t.add_link(link.clone())?;
 
         // Start the TX loop
@@ -590,7 +587,7 @@ async fn accept_recv_init_syn(
         let links = t.get_transport().map_err(|e| (e, None))?.get_links();
         if links.len() >= manager.config.unicast.max_links {
             let e = format!(
-                "Rejecting Open on {} because of maximum links ({}) limit reached for peer: {}",
+                "Rejecting InitSyn on {} because of maximum links ({}) limit reached for peer: {}",
                 manager.config.unicast.max_links, link, init_syn_pid
             );
             return Err((
@@ -601,7 +598,7 @@ async fn accept_recv_init_syn(
     }
 
     // Check if the version is supported
-    if init_syn_version > manager.config.version {
+    if init_syn_version != manager.config.version {
         let e = format!(
             "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
             link, init_syn_pid
@@ -982,10 +979,7 @@ async fn accept_finalize_transport(
         //       check which considers a link as failed when no messages are received in 3.5 times the
         //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
         //       transport lease.
-        let keep_alive = Duration::from_millis(
-            (manager.config.unicast.keep_alive.as_millis() as ZInt)
-                .min(input.lease.as_millis() as ZInt / 4),
-        );
+        let keep_alive = manager.config.unicast.keep_alive.min(input.lease / 4);
         // Start the TX loop
         let _ = transport.start_tx(link, keep_alive, manager.config.batch_size)?;
 
