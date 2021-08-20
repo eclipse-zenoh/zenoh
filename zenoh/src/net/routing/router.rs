@@ -132,10 +132,9 @@ impl Tables {
             .clone();
         log::debug!("New {}", newface);
 
-        if whatami == whatami::CLIENT {
-            pubsub_new_face(self, &mut newface);
-            queries_new_face(self, &mut newface);
-        }
+        pubsub_new_face(self, &mut newface);
+        queries_new_face(self, &mut newface);
+
         Arc::downgrade(&newface)
     }
 
