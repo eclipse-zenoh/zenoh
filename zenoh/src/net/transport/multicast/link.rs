@@ -169,7 +169,7 @@ async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: LinkMulticast) -> ZR
 
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
-    for b in batches.drain(..) {
+    for (b, _) in batches.drain(..) {
         let _ = link.write_all(b.as_bytes()).await?;
     }
 

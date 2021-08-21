@@ -219,6 +219,21 @@ impl TransmissionPipeline {
         is_streamed: bool,
         conduit: Arc<[TransportConduitTx]>,
     ) -> TransmissionPipeline {
+        macro_rules! zcapacity {
+            ($conduit:expr) => {
+                match $conduit.id {
+                    Priority::Control => *ZN_QUEUE_SIZE_CONTROL,
+                    Priority::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
+                    Priority::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
+                    Priority::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
+                    Priority::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
+                    Priority::Data => *ZN_QUEUE_SIZE_DATA,
+                    Priority::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
+                    Priority::Background => *ZN_QUEUE_SIZE_BACKGROUND,
+                }
+            };
+        }
+
         // Conditional variables
         let mut cond_canrefill = vec![];
         cond_canrefill.resize_with(conduit.len(), Condvar::new);
@@ -228,8 +243,9 @@ impl TransmissionPipeline {
 
         // Build the stage REFILL
         let mut stage_refill = Vec::with_capacity(conduit.len());
-        for i in 0..conduit.len() {
-            stage_refill.push(Mutex::new(StageRefill::new(i)));
+        for c in conduit.iter() {
+            let capacity = zcapacity!(c);
+            stage_refill.push(Mutex::new(StageRefill::new(capacity)));
         }
         let stage_refill = stage_refill.into_boxed_slice();
 
@@ -241,16 +257,7 @@ impl TransmissionPipeline {
         // Build the stage OUT
         let mut stage_out = Vec::with_capacity(conduit.len());
         for (priority, c) in conduit.iter().enumerate() {
-            let capacity = match c.id {
-                Priority::Control => *ZN_QUEUE_SIZE_CONTROL,
-                Priority::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
-                Priority::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
-                Priority::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
-                Priority::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
-                Priority::Data => *ZN_QUEUE_SIZE_DATA,
-                Priority::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
-                Priority::Background => *ZN_QUEUE_SIZE_BACKGROUND,
-            };
+            let capacity = zcapacity!(c);
             stage_out.push(StageOut::new(priority, capacity, batches_out.clone()));
         }
         let stage_out = Mutex::new(stage_out.into_boxed_slice());
@@ -263,17 +270,7 @@ impl TransmissionPipeline {
         // Build the stage IN
         let mut stage_in = Vec::with_capacity(conduit.len());
         for (priority, c) in conduit.iter().enumerate() {
-            let capacity = match c.id {
-                Priority::Control => *ZN_QUEUE_SIZE_CONTROL,
-                Priority::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
-                Priority::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
-                Priority::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
-                Priority::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
-                Priority::Data => *ZN_QUEUE_SIZE_DATA,
-                Priority::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
-                Priority::Background => *ZN_QUEUE_SIZE_BACKGROUND,
-            };
-
+            let capacity = zcapacity!(c);
             stage_in.push(Mutex::new(StageIn::new(
                 priority,
                 capacity,
@@ -591,7 +588,7 @@ impl TransmissionPipeline {
         self.cond_canpull.notify_all();
     }
 
-    pub(crate) fn drain(&self) -> Vec<SerializationBatch> {
+    pub(crate) fn drain(&self) -> Vec<(SerializationBatch, usize)> {
         // Drain the remaining batches
         let mut batches = vec![];
 
@@ -601,17 +598,14 @@ impl TransmissionPipeline {
             self.stage_in.iter().map(|x| zlock!(x)).collect();
         let mut out_guard = zlock!(self.stage_out);
 
-        // Drain first the batches in stage OUT
-        for conduit in 0..out_guard.len() {
-            if let Some(b) = out_guard[conduit].try_pull() {
-                batches.push(b);
+        for priority in 0..out_guard.len() {
+            // Drain first the batches in stage OUT
+            if let Some(b) = out_guard[priority].try_pull() {
+                batches.push((b, priority));
             }
-        }
-
-        // Then try to drain what left in the stage IN
-        for ig in in_guards.iter_mut() {
-            if let Some(b) = ig.try_pull() {
-                batches.push(b);
+            // Then try to drain what left in the stage IN
+            if let Some(b) = in_guards[priority].try_pull() {
+                batches.push((b, priority));
             }
         }
 
@@ -690,7 +684,7 @@ mod tests {
             let mut fragments: usize = 0;
 
             while msgs != num_msg {
-                let (batch, conduit) = queue.pull().await.unwrap();
+                let (batch, priority) = queue.pull().await.unwrap();
                 batches += 1;
                 bytes += batch.len();
                 // Create a ZBuf for deserialization starting from the batch
@@ -715,7 +709,7 @@ mod tests {
                     }
                 }
                 // Reinsert the batch
-                queue.refill(batch, conduit);
+                queue.refill(batch, priority);
             }
 
             println!(
@@ -1061,10 +1055,10 @@ mod tests {
         let c_count = count.clone();
         task::spawn(async move {
             loop {
-                let (batch, conduit) = c_pipeline.pull().await.unwrap();
+                let (batch, priority) = c_pipeline.pull().await.unwrap();
                 c_count.fetch_add(batch.len(), Ordering::AcqRel);
                 task::sleep(Duration::from_nanos(100)).await;
-                c_pipeline.refill(batch, conduit);
+                c_pipeline.refill(batch, priority);
             }
         });
 

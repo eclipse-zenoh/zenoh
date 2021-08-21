@@ -173,11 +173,11 @@ async fn tx_task(
     loop {
         match pipeline.pull().timeout(keep_alive).await {
             Ok(res) => match res {
-                Some((batch, index)) => {
+                Some((batch, priority)) => {
                     // Send the buffer on the link
                     let _ = link.write_all(batch.as_bytes()).await?;
                     // Reinsert the batch into the queue
-                    pipeline.refill(batch, index);
+                    pipeline.refill(batch, priority);
                 }
                 None => break,
             },
@@ -192,7 +192,7 @@ async fn tx_task(
 
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
-    for b in batches.drain(..) {
+    for (b, _) in batches.drain(..) {
         let _ = link
             .write_all(b.as_bytes())
             .timeout(keep_alive)
