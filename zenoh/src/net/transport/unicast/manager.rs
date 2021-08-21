@@ -21,7 +21,7 @@ use crate::net::link::*;
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use async_std::task;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -36,8 +36,10 @@ pub struct TransportManagerConfigUnicast {
     pub open_pending: usize,
     pub max_sessions: usize,
     pub max_links: usize,
-    pub peer_authenticator: Vec<PeerAuthenticator>,
-    pub link_authenticator: Vec<LinkAuthenticator>,
+    pub is_qos: bool,
+    pub is_shm: bool,
+    pub peer_authenticator: HashSet<PeerAuthenticator>,
+    pub link_authenticator: HashSet<LinkAuthenticator>,
 }
 
 impl Default for TransportManagerConfigUnicast {
@@ -53,14 +55,16 @@ impl TransportManagerConfigUnicast {
 }
 
 pub struct TransportManagerConfigBuilderUnicast {
-    lease: Duration,
-    keep_alive: Duration,
-    open_timeout: Duration,
-    open_pending: usize,
-    max_sessions: usize,
-    max_links: usize,
-    peer_authenticator: Vec<PeerAuthenticator>,
-    link_authenticator: Vec<LinkAuthenticator>,
+    pub(super) lease: Duration,
+    pub(super) keep_alive: Duration,
+    pub(super) open_timeout: Duration,
+    pub(super) open_pending: usize,
+    pub(super) max_sessions: usize,
+    pub(super) max_links: usize,
+    pub(super) is_qos: bool,
+    pub(super) is_shm: bool,
+    pub(super) peer_authenticator: HashSet<PeerAuthenticator>,
+    pub(super) link_authenticator: HashSet<LinkAuthenticator>,
 }
 
 impl Default for TransportManagerConfigBuilderUnicast {
@@ -72,8 +76,10 @@ impl Default for TransportManagerConfigBuilderUnicast {
             open_pending: *ZN_OPEN_INCOMING_PENDING,
             max_sessions: usize::MAX,
             max_links: usize::MAX,
-            peer_authenticator: vec![DummyPeerAuthenticator::make()],
-            link_authenticator: vec![DummyLinkUnicastAuthenticator::make()],
+            peer_authenticator: HashSet::new(),
+            link_authenticator: HashSet::new(),
+            is_qos: true,
+            is_shm: true,
         }
     }
 }
@@ -109,13 +115,23 @@ impl TransportManagerConfigBuilderUnicast {
         self
     }
 
-    pub fn peer_authenticator(mut self, peer_authenticator: Vec<PeerAuthenticator>) -> Self {
+    pub fn peer_authenticator(mut self, peer_authenticator: HashSet<PeerAuthenticator>) -> Self {
         self.peer_authenticator = peer_authenticator;
         self
     }
 
-    pub fn link_authenticator(mut self, link_authenticator: Vec<LinkAuthenticator>) -> Self {
+    pub fn link_authenticator(mut self, link_authenticator: HashSet<LinkAuthenticator>) -> Self {
         self.link_authenticator = link_authenticator;
+        self
+    }
+
+    pub fn qos(mut self, is_qos: bool) -> Self {
+        self.is_qos = is_qos;
+        self
+    }
+
+    pub fn shm(mut self, is_shm: bool) -> Self {
+        self.is_shm = is_shm;
         self
     }
 
@@ -154,6 +170,12 @@ impl TransportManagerConfigBuilderUnicast {
         if let Some(v) = properties.get(&ZN_MAX_LINKS_KEY) {
             self = self.max_links(zparse!(v)?);
         }
+        if let Some(v) = properties.get(&ZN_QOS_KEY) {
+            self = self.qos(zparse!(v)?);
+        }
+        if let Some(v) = properties.get(&ZN_SHM_KEY) {
+            self = self.shm(zparse!(v)?);
+        }
 
         self = self.peer_authenticator(PeerAuthenticator::from_properties(properties).await?);
         self = self.link_authenticator(LinkAuthenticator::from_properties(properties).await?);
@@ -161,7 +183,16 @@ impl TransportManagerConfigBuilderUnicast {
         Ok(self)
     }
 
-    pub fn build(self) -> TransportManagerConfigUnicast {
+    pub fn build(mut self) -> TransportManagerConfigUnicast {
+        if self.is_shm
+            && !self
+                .peer_authenticator
+                .iter()
+                .any(|a| a.id() == PeerAuthenticatorId::Shm)
+        {
+            self.peer_authenticator
+                .insert(SharedMemoryAuthenticator::new().into());
+        }
         TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
@@ -171,6 +202,8 @@ impl TransportManagerConfigBuilderUnicast {
             max_links: self.max_links,
             peer_authenticator: self.peer_authenticator,
             link_authenticator: self.link_authenticator,
+            is_qos: self.is_qos,
+            is_shm: self.is_shm,
         }
     }
 }

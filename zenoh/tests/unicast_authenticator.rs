@@ -14,7 +14,8 @@
 use async_std::sync::Arc;
 use async_std::task;
 use std::any::Any;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::iter::FromIterator;
 use std::time::Duration;
 use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
@@ -131,7 +132,9 @@ async fn authenticator_user_password(
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(vec![peer_authenticator_router.clone().into()])
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_router
+                    .clone()
+                    .into()]))
                 .build(),
         )
         .build(router_handler.clone());
@@ -150,7 +153,7 @@ async fn authenticator_user_password(
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(vec![peer_authenticator_client01.into()])
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client01.into()]))
                 .build(),
         )
         .build(Arc::new(SHClientAuthenticator::default()));
@@ -168,7 +171,7 @@ async fn authenticator_user_password(
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(vec![peer_authenticator_client02.into()])
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client02.into()]))
                 .build(),
         )
         .build(Arc::new(SHClientAuthenticator::default()));
@@ -176,15 +179,17 @@ async fn authenticator_user_password(
 
     // Create the transport transport manager for the third client
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client03 =
-        UserPasswordAuthenticator::new(lookup, Some((user03.into(), password03.into())));
+    let peer_authenticator_client03 = UserPasswordAuthenticator::new(
+        lookup,
+        Some((user03.clone().into(), password03.clone().into())),
+    );
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client03_id.clone())
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(vec![peer_authenticator_client03.into()])
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client03.into()]))
                 .build(),
         )
         .build(Arc::new(SHClientAuthenticator::default()));
@@ -296,7 +301,7 @@ async fn authenticator_shared_memory(
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(vec![peer_authenticator_router.into()])
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_router.into()]))
                 .build(),
         )
         .build(router_handler.clone());
@@ -310,7 +315,7 @@ async fn authenticator_shared_memory(
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(vec![peer_authenticator_client.into()])
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client.into()]))
                 .build(),
         )
         .build(Arc::new(SHClientAuthenticator::default()));

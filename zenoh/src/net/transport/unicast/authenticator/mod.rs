@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub(super) mod attachment;
 #[cfg(feature = "zero-copy")]
 mod shm;
 mod userpassword;
@@ -24,7 +23,9 @@ use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "zero-copy")]
 pub use shm::*;
+use std::collections::HashSet;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 pub use userpassword::*;
 use zenoh_util::core::ZResult;
@@ -33,14 +34,19 @@ use zenoh_util::properties::config::*;
 /*************************************/
 /*              LINK                 */
 /*************************************/
+#[derive(PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum LinkAuthenticatorId {
+    Reserved = 0,
+}
+
 pub struct LinkAuthenticator(Arc<dyn LinkUnicastAuthenticatorTrait + Send + Sync>);
 
 impl LinkAuthenticator {
     pub(crate) async fn from_properties(
         _config: &ConfigProperties,
-    ) -> ZResult<Vec<LinkAuthenticator>> {
-        let las: Vec<LinkAuthenticator> = vec![];
-        Ok(las)
+    ) -> ZResult<HashSet<LinkAuthenticator>> {
+        Ok(HashSet::new())
     }
 }
 
@@ -52,11 +58,27 @@ impl Deref for LinkAuthenticator {
     }
 }
 
+impl Eq for LinkAuthenticator {}
+
+impl PartialEq for LinkAuthenticator {
+    fn eq(&self, other: &Self) -> bool {
+        self.id() == other.id()
+    }
+}
+
+impl Hash for LinkAuthenticator {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id().hash(state);
+    }
+}
+
 /*************************************/
 /*           DUMMY LINK              */
 /*************************************/
 #[async_trait]
 pub trait LinkUnicastAuthenticatorTrait {
+    fn id(&self) -> LinkAuthenticatorId;
+
     async fn handle_new_link(
         &self,
         link: &LinkUnicast,
@@ -82,6 +104,10 @@ impl DummyLinkUnicastAuthenticator {
 
 #[async_trait]
 impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
+    fn id(&self) -> LinkAuthenticatorId {
+        LinkAuthenticatorId::Reserved
+    }
+
     async fn handle_new_link(
         &self,
         _link: &LinkUnicast,
@@ -96,25 +122,33 @@ impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
 /*************************************/
 /*              PEER                 */
 /*************************************/
+#[derive(PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum PeerAuthenticatorId {
+    Reserved = 0,
+    UserPassword = 1,
+    Shm = 2,
+}
+
 #[derive(Clone)]
-pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait + Send + Sync>);
+pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait>);
 
 impl PeerAuthenticator {
     pub(crate) async fn from_properties(
         config: &ConfigProperties,
-    ) -> ZResult<Vec<PeerAuthenticator>> {
-        let mut pas: Vec<PeerAuthenticator> = vec![];
+    ) -> ZResult<HashSet<PeerAuthenticator>> {
+        let mut pas = HashSet::new();
 
         let mut res = UserPasswordAuthenticator::from_properties(config).await?;
         if let Some(pa) = res.take() {
-            pas.push(pa.into());
+            pas.insert(pa.into());
         }
 
         #[cfg(feature = "zero-copy")]
         {
             let mut res = SharedMemoryAuthenticator::from_properties(config).await?;
             if let Some(pa) = res.take() {
-                pas.push(pa.into());
+                pas.insert(pa.into());
             }
         }
 
@@ -123,10 +157,24 @@ impl PeerAuthenticator {
 }
 
 impl Deref for PeerAuthenticator {
-    type Target = Arc<dyn PeerAuthenticatorTrait + Send + Sync>;
+    type Target = Arc<dyn PeerAuthenticatorTrait>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl Eq for PeerAuthenticator {}
+
+impl PartialEq for PeerAuthenticator {
+    fn eq(&self, other: &Self) -> bool {
+        self.id() == other.id()
+    }
+}
+
+impl Hash for PeerAuthenticator {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id().hash(state);
     }
 }
 
@@ -189,7 +237,9 @@ impl Default for PeerAuthenticatorOutput {
 }
 
 #[async_trait]
-pub trait PeerAuthenticatorTrait {
+pub trait PeerAuthenticatorTrait: Send + Sync {
+    fn id(&self) -> PeerAuthenticatorId;
+
     /// Return the attachment to be included in the InitSyn message.
     ///
     /// # Arguments
@@ -301,6 +351,10 @@ impl DummyPeerAuthenticator {
 
 #[async_trait]
 impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
+    fn id(&self) -> PeerAuthenticatorId {
+        PeerAuthenticatorId::Reserved
+    }
+
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,

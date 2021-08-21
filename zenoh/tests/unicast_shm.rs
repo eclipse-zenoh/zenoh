@@ -16,6 +16,8 @@ mod tests {
     use async_std::prelude::*;
     use async_std::task;
     use std::any::Any;
+    use std::collections::HashSet;
+    use std::iter::FromIterator;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
@@ -137,7 +139,9 @@ mod tests {
             .pid(peer_shm01.clone())
             .unicast(
                 TransportManagerConfigUnicast::builder()
-                    .peer_authenticator(vec![SharedMemoryAuthenticator::new().into()])
+                    .peer_authenticator(HashSet::from_iter(vec![
+                        SharedMemoryAuthenticator::new().into()
+                    ]))
                     .build(),
             )
             .build(peer_shm01_handler.clone());
@@ -150,7 +154,9 @@ mod tests {
             .pid(peer_shm02.clone())
             .unicast(
                 TransportManagerConfigUnicast::builder()
-                    .peer_authenticator(vec![SharedMemoryAuthenticator::new().into()])
+                    .peer_authenticator(HashSet::from_iter(vec![
+                        SharedMemoryAuthenticator::new().into()
+                    ]))
                     .build(),
             )
             .build(peer_shm02_handler.clone());

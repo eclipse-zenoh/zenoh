@@ -19,7 +19,7 @@ use super::manager::Opened;
 use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf, ZSlice};
 use super::protocol::proto::{
-    tmsg, Attachment, Close, InitAck, InitSyn, OpenAck, OpenSyn, TransportBody, TransportMessage,
+    tmsg, Attachment, Close, OpenAck, OpenSyn, TransportBody, TransportMessage,
 };
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::LinkUnicast;
@@ -141,22 +141,14 @@ async fn open_send_init_syn(
         auth = auth.merge(ps);
     }
 
-    // Build and send an InitSyn Message
-    let init_syn_version = manager.config.version;
-    let init_syn_whatami = manager.config.whatami;
-    let init_syn_pid = manager.config.pid.clone();
-    let init_syn_sn_resolution = manager.config.sn_resolution;
-    let init_syn_qos = true;
-    let init_syn_attachment = attachment_from_properties(&auth.properties).ok();
-
     // Build and send the InitSyn message
     let message = TransportMessage::make_init_syn(
-        init_syn_version,
-        init_syn_whatami,
-        init_syn_pid,
-        init_syn_sn_resolution,
-        init_syn_qos,
-        init_syn_attachment,
+        manager.config.version,
+        manager.config.whatami,
+        manager.config.pid.clone(),
+        manager.config.sn_resolution,
+        manager.config.unicast.is_qos,
+        attachment_from_properties(&auth.properties).ok(),
     );
     let _ = link
         .write_transport_message(message)
@@ -200,38 +192,31 @@ async fn open_recv_init_ack(
     }
 
     let mut msg = messages.remove(0);
-    let (init_ack_whatami, init_ack_pid, init_ack_sn_resolution, init_ack_is_qos, init_ack_cookie) =
-        match msg.body {
-            TransportBody::InitAck(InitAck {
-                whatami,
-                pid,
-                sn_resolution,
-                is_qos,
-                cookie,
-            }) => (whatami, pid, sn_resolution, is_qos, cookie),
-            TransportBody::Close(Close { reason, .. }) => {
-                let e = format!(
-                    "Received a close message (reason {}) in response to an InitSyn on: {}",
-                    reason, link,
-                );
-                return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
-            }
-            _ => {
-                let e = format!(
-                    "Received an invalid message in response to an InitSyn on {}: {:?}",
-                    link, msg.body
-                );
-                return Err((
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(tmsg::close_reason::INVALID),
-                ));
-            }
-        };
+    let init_ack = match msg.body {
+        TransportBody::InitAck(init_ack) => init_ack,
+        TransportBody::Close(Close { reason, .. }) => {
+            let e = format!(
+                "Received a close message (reason {}) in response to an InitSyn on: {}",
+                reason, link,
+            );
+            return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
+        }
+        _ => {
+            let e = format!(
+                "Received an invalid message in response to an InitSyn on {}: {:?}",
+                link, msg.body
+            );
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(tmsg::close_reason::INVALID),
+            ));
+        }
+    };
 
     // Check if a transport is already open with the target peer
     let mut guard = zasynclock!(manager.state.unicast.opened);
-    let (sn_resolution, initial_sn_tx, is_opened) = if let Some(s) = guard.get(&init_ack_pid) {
-        if let Some(sn_resolution) = init_ack_sn_resolution {
+    let (sn_resolution, initial_sn_tx, is_opened) = if let Some(s) = guard.get(&init_ack.pid) {
+        if let Some(sn_resolution) = init_ack.sn_resolution {
             if sn_resolution != s.sn_resolution {
                 let e = format!(
                     "Rejecting InitAck on {}. Invalid sn resolution: {}",
@@ -245,7 +230,7 @@ async fn open_recv_init_ack(
         }
         (s.sn_resolution, s.initial_sn, true)
     } else {
-        let sn_resolution = match init_ack_sn_resolution {
+        let sn_resolution = match init_ack.sn_resolution {
             Some(sn_resolution) => {
                 if sn_resolution > input.sn_resolution {
                     let e = format!(
@@ -280,7 +265,7 @@ async fn open_recv_init_ack(
         let ps = pa
             .handle_init_ack(
                 auth_link,
-                &init_ack_pid,
+                &init_ack.pid,
                 sn_resolution,
                 &init_ack_properties,
             )
@@ -292,9 +277,9 @@ async fn open_recv_init_ack(
     if !is_opened {
         // Store the data
         guard.insert(
-            init_ack_pid.clone(),
+            init_ack.pid.clone(),
             Opened {
-                whatami: init_ack_whatami,
+                whatami: init_ack.whatami,
                 sn_resolution,
                 initial_sn: initial_sn_tx,
             },
@@ -303,12 +288,12 @@ async fn open_recv_init_ack(
     drop(guard);
 
     let output = OpenInitAckOutput {
-        pid: init_ack_pid,
-        whatami: init_ack_whatami,
+        pid: init_ack.pid,
+        whatami: init_ack.whatami,
         sn_resolution,
-        is_qos: init_ack_is_qos,
+        is_qos: init_ack.is_qos,
         initial_sn_tx,
-        cookie: init_ack_cookie,
+        cookie: init_ack.cookie,
         open_syn_attachment: attachment_from_properties(&auth.properties).ok(),
         auth_transport: auth.transport,
     };
@@ -560,35 +545,28 @@ async fn accept_recv_init_syn(
     }
 
     let mut msg = messages.remove(0);
-    let (init_syn_version, init_syn_whatami, init_syn_pid, init_syn_sn_resolution, init_syn_is_qos) =
-        match msg.body {
-            TransportBody::InitSyn(InitSyn {
-                version,
-                whatami,
-                pid,
-                sn_resolution,
-                is_qos,
-            }) => (version, whatami, pid, sn_resolution, is_qos),
-            _ => {
-                let e = format!(
-                    "Received invalid message instead of an InitSyn on {}: {:?}",
-                    link, msg.body
-                );
-                return Err((
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
-                    Some(tmsg::close_reason::INVALID),
-                ));
-            }
-        };
+    let init_syn = match msg.body {
+        TransportBody::InitSyn(init_syn) => init_syn,
+        _ => {
+            let e = format!(
+                "Received invalid message instead of an InitSyn on {}: {:?}",
+                link, msg.body
+            );
+            return Err((
+                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                Some(tmsg::close_reason::INVALID),
+            ));
+        }
+    };
 
     // Check if we are allowed to open more links if the transport is established
-    if let Some(t) = manager.get_transport_unicast(&init_syn_pid) {
+    if let Some(t) = manager.get_transport_unicast(&init_syn.pid) {
         // Check if we have reached maximum number of links for this transport
         let links = t.get_transport().map_err(|e| (e, None))?.get_links();
         if links.len() >= manager.config.unicast.max_links {
             let e = format!(
                 "Rejecting InitSyn on {} because of maximum links ({}) limit reached for peer: {}",
-                manager.config.unicast.max_links, link, init_syn_pid
+                manager.config.unicast.max_links, link, init_syn.pid
             );
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),
@@ -598,10 +576,10 @@ async fn accept_recv_init_syn(
     }
 
     // Check if the version is supported
-    if init_syn_version != manager.config.version {
+    if init_syn.version != manager.config.version {
         let e = format!(
             "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
-            link, init_syn_pid
+            link, init_syn.pid
         );
         return Err((
             zerror2!(ZErrorKind::InvalidMessage { descr: e }),
@@ -621,8 +599,8 @@ async fn accept_recv_init_syn(
         let ps = pa
             .handle_init_syn(
                 auth_link,
-                &init_syn_pid,
-                init_syn_sn_resolution,
+                &init_syn.pid,
+                init_syn.sn_resolution,
                 &init_syn_properties,
             )
             .await
@@ -631,10 +609,10 @@ async fn accept_recv_init_syn(
     }
 
     let output = AcceptInitSynOutput {
-        whatami: init_syn_whatami,
-        pid: init_syn_pid,
-        sn_resolution: init_syn_sn_resolution,
-        is_qos: init_syn_is_qos,
+        whatami: init_syn.whatami,
+        pid: init_syn.pid,
+        sn_resolution: init_syn.sn_resolution,
+        is_qos: init_syn.is_qos,
         init_ack_attachment: attachment_from_properties(&auth.properties).ok(),
         auth_transport: auth.transport,
     };
