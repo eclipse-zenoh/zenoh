@@ -296,10 +296,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         };
 
         // Insert the nonce in the set of sent nonces
-        zasynclock!(self.nonces).insert(
-            (link.src.clone(), link.dst.clone()),
-            (peer_id.clone(), nonce),
-        );
+        zasynclock!(self.nonces).insert((link.src.clone(), link.dst.clone()), (*peer_id, nonce));
 
         let mut res = PeerAuthenticatorOutput::default();
         res.properties.push(prop);
@@ -461,7 +458,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         for (peer_id, auth) in guard.iter_mut() {
             auth.links.remove(&(link.src.clone(), link.dst.clone()));
             if auth.links.is_empty() {
-                to_del = Some(peer_id.clone());
+                to_del = Some(*peer_id);
                 break;
             }
         }

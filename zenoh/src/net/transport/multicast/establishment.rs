@@ -46,7 +46,7 @@ pub(crate) async fn open_link(
         manager: manager.clone(),
         is_shm: false, // @TODO: allow dynamic configuration
         initial_sns,
-        link,
+        link: link.clone(),
     };
     let ti = Arc::new(TransportMulticastInner::new(config));
 
@@ -55,7 +55,8 @@ pub(crate) async fn open_link(
     zlock!(manager.state.multicast.transports).insert(locator.clone(), ti.clone());
 
     // Notify the transport event handler
-    ti.start_tx(manager.config.batch_size).map_err(|e| {
+    let batch_size = manager.config.batch_size.min(link.get_mtu());
+    ti.start_tx(batch_size).map_err(|e| {
         zlock!(manager.state.multicast.transports).remove(&locator);
         let _ = ti.stop_tx();
         e

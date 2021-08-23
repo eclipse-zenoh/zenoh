@@ -30,7 +30,7 @@ use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
 #[derive(Clone)]
-pub(crate) struct TransportLinkUnicast {
+pub(super) struct TransportLinkUnicast {
     // The underlying link
     pub(super) inner: LinkUnicast,
     // The transport this link is associated to
@@ -45,7 +45,7 @@ pub(crate) struct TransportLinkUnicast {
 }
 
 impl TransportLinkUnicast {
-    pub(crate) fn new(transport: TransportUnicastInner, link: LinkUnicast) -> TransportLinkUnicast {
+    pub(super) fn new(transport: TransportUnicastInner, link: LinkUnicast) -> TransportLinkUnicast {
         TransportLinkUnicast {
             transport,
             inner: link,
@@ -60,16 +60,16 @@ impl TransportLinkUnicast {
 
 impl TransportLinkUnicast {
     #[inline]
-    pub(crate) fn get_link(&self) -> &LinkUnicast {
+    pub(super) fn get_link(&self) -> &LinkUnicast {
         &self.inner
     }
 
     #[inline]
-    pub(crate) fn get_pipeline(&self) -> Option<Arc<TransmissionPipeline>> {
+    pub(super) fn get_pipeline(&self) -> Option<Arc<TransmissionPipeline>> {
         self.pipeline.clone()
     }
 
-    pub(crate) fn start_tx(
+    pub(super) fn start_tx(
         &mut self,
         keep_alive: Duration,
         batch_size: usize,
@@ -100,13 +100,13 @@ impl TransportLinkUnicast {
         }
     }
 
-    pub(crate) fn stop_tx(&mut self) {
+    pub(super) fn stop_tx(&mut self) {
         if let Some(pipeline) = self.pipeline.take() {
             pipeline.disable();
         }
     }
 
-    pub(crate) fn start_rx(&mut self, lease: Duration) {
+    pub(super) fn start_rx(&mut self, lease: Duration) {
         if self.handle_rx.is_none() {
             self.active_rx.store(true, Ordering::Release);
             // Spawn the RX task
@@ -137,12 +137,12 @@ impl TransportLinkUnicast {
         }
     }
 
-    pub(crate) fn stop_rx(&mut self) {
+    pub(super) fn stop_rx(&mut self) {
         self.active_rx.store(false, Ordering::Release);
         self.signal_rx.trigger();
     }
 
-    pub(crate) async fn close(mut self) -> ZResult<()> {
+    pub(super) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.inner);
         self.stop_rx();
         if let Some(handle) = self.handle_rx.take() {
@@ -185,7 +185,7 @@ async fn tx_task(
                 let pid = None;
                 let attachment = None;
                 let message = TransportMessage::make_keep_alive(pid, attachment);
-                pipeline.push_transport_message(message, Priority::Control);
+                pipeline.push_transport_message(message, Priority::Background);
             }
         }
     }

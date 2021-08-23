@@ -138,7 +138,7 @@ fn register_router_subscription(
             get_mut_unchecked(res)
                 .context_mut()
                 .router_subs
-                .insert(router.clone());
+                .insert(router);
             tables.router_subs.insert(res.clone());
         }
 
@@ -147,7 +147,7 @@ fn register_router_subscription(
 
         // Propagate subscription to peers
         if face.whatami != whatami::PEER {
-            register_peer_subscription(tables, face, res, sub_info, tables.pid.clone())
+            register_peer_subscription(tables, face, res, sub_info, tables.pid)
         }
     }
 
@@ -186,10 +186,7 @@ fn register_peer_subscription(
         // Register peer subscription
         {
             log::debug!("Register peer subscription {} (peer: {})", res.name(), peer);
-            get_mut_unchecked(res)
-                .context_mut()
-                .peer_subs
-                .insert(peer.clone());
+            get_mut_unchecked(res).context_mut().peer_subs.insert(peer);
             tables.peer_subs.insert(res.clone());
         }
 
@@ -215,13 +212,7 @@ pub fn declare_peer_subscription(
             if tables.whatami == whatami::ROUTER {
                 let mut propa_sub_info = sub_info.clone();
                 propa_sub_info.mode = SubMode::Push;
-                register_router_subscription(
-                    tables,
-                    face,
-                    &mut res,
-                    &propa_sub_info,
-                    tables.pid.clone(),
-                );
+                register_router_subscription(tables, face, &mut res, &propa_sub_info, tables.pid);
             }
 
             compute_matches_data_routes(tables, &mut res);
@@ -291,19 +282,13 @@ pub fn declare_client_subscription(
                         face,
                         &mut res,
                         &propa_sub_info,
-                        tables.pid.clone(),
+                        tables.pid,
                     );
                 }
                 whatami::PEER => {
                     let mut propa_sub_info = sub_info.clone();
                     propa_sub_info.mode = SubMode::Push;
-                    register_peer_subscription(
-                        tables,
-                        face,
-                        &mut res,
-                        &propa_sub_info,
-                        tables.pid.clone(),
-                    );
+                    register_peer_subscription(tables, face, &mut res, &propa_sub_info, tables.pid);
                 }
                 _ => {
                     propagate_simple_subscription(tables, &res, sub_info, face);
@@ -677,7 +662,7 @@ pub(crate) fn pubsub_tree_change(
             let net = tables.get_net(net_type).unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
-                let tree_id = net.graph[tree_idx].pid.clone();
+                let tree_id = net.graph[tree_idx].pid;
 
                 let subs_res = match net_type {
                     whatami::ROUTER => &tables.router_subs,

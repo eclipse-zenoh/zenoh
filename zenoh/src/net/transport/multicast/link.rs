@@ -16,18 +16,34 @@ use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline}
 use super::protocol::io::{ZBuf, ZSlice};
 use super::transport::TransportMulticastInner;
 use crate::net::link::{LinkMulticast, Locator};
+use crate::net::protocol::core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
+use crate::net::protocol::proto::TransportMessage;
+use crate::net::transport::common::batch::SerializationBatch;
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
+use std::convert::TryInto;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
+pub(super) struct TransportLinkMulticastConfig {
+    pub(super) version: u8,
+    pub(super) pid: PeerId,
+    pub(super) whatami: WhatAmI,
+    pub(super) lease: Duration,
+    pub(super) keep_alive: Duration,
+    pub(super) join_interval: Duration,
+    pub(super) sn_resolution: ZInt,
+    pub(super) batch_size: usize,
+}
+
 #[derive(Clone)]
-pub(crate) struct TransportLinkMulticast {
+pub(super) struct TransportLinkMulticast {
     // The underlying link
     pub(super) inner: LinkMulticast,
     // The transport this link is associated to
@@ -42,7 +58,7 @@ pub(crate) struct TransportLinkMulticast {
 }
 
 impl TransportLinkMulticast {
-    pub(crate) fn new(
+    pub(super) fn new(
         transport: TransportMulticastInner,
         link: LinkMulticast,
     ) -> TransportLinkMulticast {
@@ -60,20 +76,32 @@ impl TransportLinkMulticast {
 
 impl TransportLinkMulticast {
     #[inline]
-    pub(crate) fn get_link(&self) -> &LinkMulticast {
+    pub(super) fn get_link(&self) -> &LinkMulticast {
         &self.inner
     }
 
     #[inline]
-    pub(crate) fn get_pipeline(&self) -> Option<Arc<TransmissionPipeline>> {
+    pub(super) fn get_pipeline(&self) -> Option<Arc<TransmissionPipeline>> {
         self.pipeline.clone()
     }
 
-    pub(crate) fn start_tx(&mut self, batch_size: usize, conduit_tx: Arc<[TransportConduitTx]>) {
+    pub(super) fn start_tx(
+        &mut self,
+        config: TransportLinkMulticastConfig,
+        conduit_tx: Arc<[TransportConduitTx]>,
+    ) {
+        let initial_sns: Vec<ConduitSn> = conduit_tx
+            .iter()
+            .map(|x| ConduitSn {
+                reliable: zlock!(x.reliable).sn.now(),
+                best_effort: zlock!(x.best_effort).sn.now(),
+            })
+            .collect();
+
         if self.handle_tx.is_none() {
             // The pipeline
             let pipeline = Arc::new(TransmissionPipeline::new(
-                batch_size.min(self.inner.get_mtu()),
+                config.batch_size.min(self.inner.get_mtu()),
                 false,
                 conduit_tx,
             ));
@@ -83,7 +111,7 @@ impl TransportLinkMulticast {
             let c_link = self.inner.clone();
             let c_transport = self.transport.clone();
             let handle = task::spawn(async move {
-                let res = tx_task(pipeline, c_link.clone()).await;
+                let res = tx_task(pipeline, c_link.clone(), config, initial_sns).await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
@@ -95,13 +123,13 @@ impl TransportLinkMulticast {
         }
     }
 
-    pub(crate) fn stop_tx(&mut self) {
+    pub(super) fn stop_tx(&mut self) {
         if let Some(pipeline) = self.pipeline.take() {
             pipeline.disable();
         }
     }
 
-    pub(crate) fn start_rx(&mut self) {
+    pub(super) fn start_rx(&mut self) {
         if self.handle_rx.is_none() {
             self.active_rx.store(true, Ordering::Release);
             // Spawn the RX task
@@ -131,12 +159,12 @@ impl TransportLinkMulticast {
         }
     }
 
-    pub(crate) fn stop_rx(&mut self) {
+    pub(super) fn stop_rx(&mut self) {
         self.active_rx.store(false, Ordering::Release);
         self.signal_rx.trigger();
     }
 
-    pub(crate) async fn close(mut self) -> ZResult<()> {
+    pub(super) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.inner);
         self.stop_rx();
         if let Some(handle) = self.handle_rx.take() {
@@ -159,18 +187,94 @@ impl TransportLinkMulticast {
 /*************************************/
 /*              TASKS                */
 /*************************************/
-async fn tx_task(pipeline: Arc<TransmissionPipeline>, link: LinkMulticast) -> ZResult<()> {
-    while let Some((batch, index)) = pipeline.pull().await {
-        // Send the buffer on the link
-        let _ = link.write_all(batch.as_bytes()).await?;
-        // Reinsert the batch into the queue
-        pipeline.refill(batch, index);
+async fn tx_task(
+    pipeline: Arc<TransmissionPipeline>,
+    link: LinkMulticast,
+    config: TransportLinkMulticastConfig,
+    mut next_sns: Vec<ConduitSn>,
+) -> ZResult<()> {
+    enum Action {
+        Pull((SerializationBatch, usize)),
+        Join,
+        KeepAlive,
+        Stop,
     }
 
-    // Drain the transmission pipeline and write remaining bytes on the wire
-    let mut batches = pipeline.drain();
-    for (b, _) in batches.drain(..) {
-        let _ = link.write_all(b.as_bytes()).await?;
+    async fn pull(pipeline: &TransmissionPipeline, keep_alive: Duration) -> Action {
+        match pipeline.pull().timeout(keep_alive).await {
+            Ok(res) => match res {
+                Some(sb) => Action::Pull(sb),
+                None => Action::Stop,
+            },
+            Err(_) => Action::KeepAlive,
+        }
+    }
+
+    async fn join(last_join: Instant, join_interval: Duration) -> Action {
+        let now = Instant::now();
+        let target = last_join + join_interval;
+        if now < target {
+            let left = target - now;
+            task::sleep(left).await;
+        }
+        Action::Join
+    }
+
+    let mut last_join = Instant::now() - config.join_interval;
+    loop {
+        match pull(&pipeline, config.keep_alive)
+            .race(join(last_join, config.join_interval))
+            .await
+        {
+            Action::Pull((batch, priority)) => {
+                // Send the buffer on the link
+                let _ = link.write_all(batch.as_bytes()).await?;
+                // Keep track of next SNs
+                if let Some(sn) = batch.sn.reliable {
+                    next_sns[priority].reliable = sn.next;
+                }
+                if let Some(sn) = batch.sn.best_effort {
+                    next_sns[priority].best_effort = sn.next;
+                }
+                // Reinsert the batch into the queue
+                pipeline.refill(batch, priority);
+            }
+            Action::Join => {
+                let attachment = None;
+                let initial_sns = if next_sns.len() == Priority::NUM {
+                    let tmp: [ConduitSn; Priority::NUM] = next_sns.clone().try_into().unwrap();
+                    ConduitSnList::QoS(tmp.into())
+                } else {
+                    assert_eq!(next_sns.len(), 1);
+                    ConduitSnList::Plain(next_sns[0])
+                };
+                let message = TransportMessage::make_join(
+                    config.version,
+                    config.whatami,
+                    config.pid,
+                    config.lease,
+                    config.sn_resolution,
+                    initial_sns,
+                    attachment,
+                );
+                link.write_transport_message(message).await?;
+                last_join = Instant::now();
+            }
+            Action::KeepAlive => {
+                let pid = Some(config.pid);
+                let attachment = None;
+                let message = TransportMessage::make_keep_alive(pid, attachment);
+                pipeline.push_transport_message(message, Priority::Background);
+            }
+            Action::Stop => {
+                // Drain the transmission pipeline and write remaining bytes on the wire
+                let mut batches = pipeline.drain();
+                for (b, _) in batches.drain(..) {
+                    let _ = link.write_all(b.as_bytes()).await?;
+                }
+                break;
+            }
+        }
     }
 
     Ok(())

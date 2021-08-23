@@ -267,7 +267,7 @@ impl TransportManager {
     }
 
     pub fn pid(&self) -> PeerId {
-        self.config.pid.clone()
+        self.config.pid
     }
 
     /*************************************/

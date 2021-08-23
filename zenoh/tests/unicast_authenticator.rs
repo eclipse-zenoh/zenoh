@@ -113,7 +113,7 @@ async fn authenticator_user_password(
     let user02 = "invalid".to_string();
     let password02 = "invalid".to_string();
 
-    let client03_id = client01_id.clone();
+    let client03_id = client01_id;
     let user03 = "user03".to_string();
     let password03 = "password03".to_string();
 
@@ -128,7 +128,7 @@ async fn authenticator_user_password(
     let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(router_id.clone())
+        .pid(router_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -149,7 +149,7 @@ async fn authenticator_user_password(
 
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client01_id.clone())
+        .pid(client01_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -167,7 +167,7 @@ async fn authenticator_user_password(
     );
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client02_id.clone())
+        .pid(client02_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -185,7 +185,7 @@ async fn authenticator_user_password(
     );
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client03_id.clone())
+        .pid(client03_id)
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -297,7 +297,7 @@ async fn authenticator_shared_memory(
     let peer_authenticator_router = SharedMemoryAuthenticator::new();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(router_id.clone())
+        .pid(router_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -311,7 +311,7 @@ async fn authenticator_shared_memory(
     let peer_authenticator_client = SharedMemoryAuthenticator::new();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(client_id.clone())
+        .pid(client_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()

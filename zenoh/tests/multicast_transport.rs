@@ -117,7 +117,7 @@
 //     // Create the peer01 transport manager
 //     let peer01_handler = Arc::new(SHPeer::default());
 //     let config = TransportManagerConfig::builder()
-//         .pid(peer01_id.clone())
+//         .pid(peer01_id)
 //         .whatami(whatami::PEER)
 //         .locator_property(
 //             locator_property

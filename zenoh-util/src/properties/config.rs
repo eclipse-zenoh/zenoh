@@ -266,6 +266,13 @@ mod consts {
     pub const ZN_QOS_KEY: u64 = 0x73;
     pub const ZN_QOS_STR: &str = "qos";
     pub const ZN_QOS_DEFAULT: &str = ZN_TRUE;
+
+    /// Configures the link keep alive expressed in milliseconds.
+    /// String key : `"join_interval"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `2500 (2.5 seconds)`.
+    pub const ZN_JOIN_INTERVAL_KEY: u64 = 0x74;
+    pub const ZN_JOIN_INTERVAL_STR: &str = "join_interval";
 }
 
 pub use consts::*;
@@ -311,6 +318,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_MAX_LINKS_STR => Some(ZN_MAX_LINKS_KEY),
             ZN_VERSION_STR => Some(ZN_VERSION_KEY),
             ZN_QOS_STR => Some(ZN_QOS_KEY),
+            ZN_JOIN_INTERVAL_STR => Some(ZN_JOIN_INTERVAL_KEY),
             _ => None,
         }
     }
@@ -354,6 +362,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_MAX_LINKS_KEY => Some(ZN_MAX_LINKS_STR.to_string()),
             ZN_VERSION_KEY => Some(ZN_VERSION_STR.to_string()),
             ZN_QOS_KEY => Some(ZN_QOS_STR.to_string()),
+            ZN_JOIN_INTERVAL_KEY => Some(ZN_JOIN_INTERVAL_STR.to_string()),
             _ => None,
         }
     }

@@ -76,7 +76,7 @@ impl AdminSpace {
             version,
         });
         let admin = Arc::new(AdminSpace {
-            pid: runtime.pid.clone(),
+            pid: runtime.pid,
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
@@ -184,7 +184,7 @@ impl Primitives for AdminSpace {
             target,
             _consolidation
         );
-        let pid = self.pid.clone();
+        let pid = self.pid;
         let context = self.context.clone();
         let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
@@ -210,7 +210,7 @@ impl Primitives for AdminSpace {
                 primitives.send_reply_data(
                     qid,
                     EVAL,
-                    pid.clone(),
+                    pid,
                     ResKey::RName(path),
                     Some(data_info),
                     payload,

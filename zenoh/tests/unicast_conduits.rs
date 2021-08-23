@@ -174,7 +174,7 @@ async fn open_transport(
     let router_handler = Arc::new(SHRouter::new(priority));
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(router_id.clone())
+        .pid(router_id)
         .build(router_handler.clone());
     let router_manager = TransportManager::new(config);
 

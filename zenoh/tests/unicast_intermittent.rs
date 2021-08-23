@@ -141,7 +141,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     // Create the router transport manager
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(router_id.clone())
+        .pid(router_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -161,7 +161,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     let counter = Arc::new(AtomicUsize::new(0));
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client01_id.clone())
+        .pid(client01_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -175,7 +175,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     // Create the transport transport manager for the second client
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client02_id.clone())
+        .pid(client02_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -189,7 +189,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     // Create the transport transport manager for the third client
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client03_id.clone())
+        .pid(client03_id)
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -219,7 +219,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     // Continously open and close transport from client02 and client03 to the router
     let c_client02_manager = client02_manager.clone();
     let c_locator = locator.clone();
-    let c_router_id = router_id.clone();
+    let c_router_id = router_id;
     let c2_handle = task::spawn(async move {
         loop {
             print!("+");
@@ -243,7 +243,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
 
     let c_client03_manager = client03_manager.clone();
     let c_locator = locator.clone();
-    let c_router_id = router_id.clone();
+    let c_router_id = router_id;
     let c3_handle = task::spawn(async move {
         loop {
             print!("*");

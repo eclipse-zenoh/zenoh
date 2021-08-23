@@ -201,6 +201,11 @@ impl WBuf {
         zcheck!(self.write(join.version));
         zcheck!(self.write_zint(join.whatami));
         zcheck!(self.write_peerid(&join.pid));
+        if imsg::has_flag(header, tmsg::flag::U) {
+            zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
+        } else {
+            zcheck!(self.write_zint(join.lease.as_millis() as ZInt));
+        }
         if imsg::has_flag(header, tmsg::flag::S) {
             zcheck!(self.write_zint(join.sn_resolution));
         }

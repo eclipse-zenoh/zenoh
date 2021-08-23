@@ -48,6 +48,9 @@ zconfigurable! {
     //       transport lease.
     pub static ref ZN_LINK_KEEP_ALIVE: ZInt = 2_500;
 
+     // Default timeout when opening a transport in milliseconds
+    pub static ref ZN_JOIN_INTERVAL: ZInt = 2_500;
+
     // Default timeout when opening a transport in milliseconds
     pub static ref ZN_OPEN_TIMEOUT: ZInt = 10_000;
 

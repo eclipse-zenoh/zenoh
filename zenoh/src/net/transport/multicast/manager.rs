@@ -13,20 +13,21 @@
 //
 use super::super::TransportManager;
 use super::defaults::*;
-use super::protocol::core::ZInt;
 use super::transport::TransportMulticastInner;
 use super::*;
 use crate::net::link::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
 use zenoh_util::{zerror, zlock};
 
 pub struct TransportManagerConfigMulticast {
-    pub lease: ZInt,
-    pub keep_alive: ZInt,
+    pub lease: Duration,
+    pub keep_alive: Duration,
+    pub join_interval: Duration,
     pub max_sessions: usize,
     pub is_qos: bool,
 }
@@ -44,8 +45,9 @@ impl TransportManagerConfigMulticast {
 }
 
 pub struct TransportManagerConfigBuilderMulticast {
-    lease: ZInt,
-    keep_alive: ZInt,
+    lease: Duration,
+    keep_alive: Duration,
+    join_interval: Duration,
     max_sessions: usize,
     is_qos: bool,
 }
@@ -53,8 +55,9 @@ pub struct TransportManagerConfigBuilderMulticast {
 impl Default for TransportManagerConfigBuilderMulticast {
     fn default() -> TransportManagerConfigBuilderMulticast {
         TransportManagerConfigBuilderMulticast {
-            lease: *ZN_LINK_LEASE,
-            keep_alive: *ZN_LINK_KEEP_ALIVE,
+            lease: Duration::from_millis(*ZN_LINK_LEASE),
+            keep_alive: Duration::from_millis(*ZN_LINK_KEEP_ALIVE),
+            join_interval: Duration::from_millis(*ZN_JOIN_INTERVAL),
             max_sessions: usize::MAX,
             is_qos: true,
         }
@@ -62,13 +65,18 @@ impl Default for TransportManagerConfigBuilderMulticast {
 }
 
 impl TransportManagerConfigBuilderMulticast {
-    pub fn lease(mut self, lease: ZInt) -> Self {
+    pub fn lease(mut self, lease: Duration) -> Self {
         self.lease = lease;
         self
     }
 
-    pub fn keep_alive(mut self, keep_alive: ZInt) -> Self {
+    pub fn keep_alive(mut self, keep_alive: Duration) -> Self {
         self.keep_alive = keep_alive;
+        self
+    }
+
+    pub fn join_interval(mut self, join_interval: Duration) -> Self {
+        self.join_interval = join_interval;
         self
     }
 
@@ -100,10 +108,13 @@ impl TransportManagerConfigBuilderMulticast {
         }
 
         if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
-            self = self.lease(zparse!(v)?);
+            self = self.lease(Duration::from_millis(zparse!(v)?));
         }
         if let Some(v) = properties.get(&ZN_LINK_KEEP_ALIVE_KEY) {
-            self = self.keep_alive(zparse!(v)?);
+            self = self.keep_alive(Duration::from_millis(zparse!(v)?));
+        }
+        if let Some(v) = properties.get(&ZN_JOIN_INTERVAL_KEY) {
+            self = self.join_interval(Duration::from_millis(zparse!(v)?));
         }
         if let Some(v) = properties.get(&ZN_MAX_SESSIONS_KEY) {
             self = self.max_sessions(zparse!(v)?);
@@ -119,6 +130,7 @@ impl TransportManagerConfigBuilderMulticast {
         TransportManagerConfigMulticast {
             lease: self.lease,
             keep_alive: self.keep_alive,
+            join_interval: self.join_interval,
             max_sessions: self.max_sessions,
             is_qos: self.is_qos,
         }

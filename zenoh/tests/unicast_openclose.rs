@@ -81,7 +81,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Create the router transport manager
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(router_id.clone())
+        .pid(router_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -99,7 +99,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Create the transport transport manager for the first client
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client01_id.clone())
+        .pid(client01_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -113,7 +113,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Create the transport transport manager for the second client
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client02_id.clone())
+        .pid(client02_id)
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()

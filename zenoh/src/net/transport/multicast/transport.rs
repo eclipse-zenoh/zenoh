@@ -13,7 +13,7 @@
 //
 use super::super::TransportManager;
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
-use super::link::TransportLinkMulticast;
+use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::TransportMulticastEventHandler;
@@ -139,7 +139,17 @@ impl TransportMulticastInner {
         match guard.as_mut() {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
-                l.start_tx(batch_size, self.conduit_tx.clone());
+                let config = TransportLinkMulticastConfig {
+                    version: self.manager.config.version,
+                    pid: self.manager.config.pid,
+                    whatami: self.manager.config.whatami,
+                    lease: self.manager.config.multicast.lease,
+                    keep_alive: self.manager.config.multicast.keep_alive,
+                    join_interval: self.manager.config.multicast.join_interval,
+                    sn_resolution: self.manager.config.sn_resolution,
+                    batch_size,
+                };
+                l.start_tx(config, self.conduit_tx.clone());
                 Ok(())
             }
             None => {
@@ -213,7 +223,7 @@ impl TransportMulticastInner {
     /*            ACCESSORS              */
     /*************************************/
     pub(crate) fn get_pid(&self) -> PeerId {
-        self.manager.config.pid.clone()
+        self.manager.config.pid
     }
 
     pub(crate) fn get_whatami(&self) -> WhatAmI {

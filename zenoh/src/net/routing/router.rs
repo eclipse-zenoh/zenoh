@@ -260,7 +260,7 @@ impl Router {
         let mut tables = zwrite!(self.tables);
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
-            tables.pid.clone(),
+            tables.pid,
             runtime.clone(),
             peers_autoconnect,
             routers_autoconnect_gossip,
@@ -268,7 +268,7 @@ impl Router {
         if runtime.whatami == whatami::ROUTER {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
-                tables.pid.clone(),
+                tables.pid,
                 runtime,
                 peers_autoconnect,
                 routers_autoconnect_gossip,
@@ -285,7 +285,7 @@ impl Router {
             tables: self.tables.clone(),
             state: {
                 let mut tables = zwrite!(self.tables);
-                let pid = tables.pid.clone();
+                let pid = tables.pid;
                 tables
                     .open_face(pid, whatami::CLIENT, primitives)
                     .upgrade()

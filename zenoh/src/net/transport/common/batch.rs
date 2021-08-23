@@ -1,3 +1,5 @@
+use crate::net::ZInt;
+
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -19,11 +21,30 @@ use super::seq_num::SeqNumGenerator;
 type LengthType = u16;
 const LENGTH_BYTES: [u8; 2] = [0u8, 0u8];
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 enum CurrentFrame {
     Reliable,
     BestEffort,
     None,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SerializationBatchSeqNumState {
+    pub(crate) last: ZInt,
+    pub(crate) next: ZInt,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SerializationBatchSeqNum {
+    pub(crate) reliable: Option<SerializationBatchSeqNumState>,
+    pub(crate) best_effort: Option<SerializationBatchSeqNumState>,
+}
+
+impl SerializationBatchSeqNum {
+    fn clear(&mut self) {
+        self.reliable = None;
+        self.best_effort = None;
+    }
 }
 
 /// Serialization Batch
@@ -53,6 +74,8 @@ pub(crate) struct SerializationBatch {
     is_streamed: bool,
     // The current frame being serialized: BestEffort/Reliable
     current_frame: CurrentFrame,
+    // The last SeqNum serialized on this batch
+    pub(crate) sn: SerializationBatchSeqNum,
 }
 
 impl SerializationBatch {
@@ -77,6 +100,10 @@ impl SerializationBatch {
             buffer: WBuf::new(size, true),
             is_streamed,
             current_frame: CurrentFrame::None,
+            sn: SerializationBatchSeqNum {
+                reliable: None,
+                best_effort: None,
+            },
         };
 
         // Bring the batch in a clear state
@@ -117,6 +144,7 @@ impl SerializationBatch {
         if self.is_streamed() {
             self.buffer.write_bytes(&LENGTH_BYTES);
         }
+        self.sn.clear();
     }
 
     /// In case the [`SerializationBatch`][SerializationBatch] is for a stream-based protocol, use the first 2 bytes
@@ -134,6 +162,108 @@ impl SerializationBatch {
     #[inline(always)]
     pub(crate) fn as_bytes(&self) -> &[u8] {
         self.buffer.get_first_slice(..)
+    }
+
+    /// Try to serialize a [`TransportMessage`][TransportMessage] on the [`SerializationBatch`][SerializationBatch].
+    ///
+    /// # Arguments
+    /// * `message` - The [`TransportMessage`][TransportMessage] to serialize.
+    ///
+    pub(crate) fn serialize_transport_message(&mut self, message: &TransportMessage) -> bool {
+        // Mark the write operation
+        self.buffer.mark();
+        let res = self.buffer.write_transport_message(message);
+        if res {
+            // Reset the current frame value
+            self.current_frame = CurrentFrame::None;
+        } else {
+            // Revert the write operation
+            self.buffer.revert();
+        }
+        res
+    }
+
+    /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
+    ///
+    /// # Arguments
+    /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
+    ///
+    pub(crate) fn serialize_zenoh_message(
+        &mut self,
+        message: &ZenohMessage,
+        priority: Priority,
+        sn_gen: &mut SeqNumGenerator,
+    ) -> bool {
+        // Keep track of eventual new frame and new sn
+        let mut new_frame = None;
+
+        // Eventually update the current frame and sn based on the current status
+        match self.current_frame {
+            CurrentFrame::Reliable => {
+                if !message.is_reliable() {
+                    // A new best-effort frame needs to be started
+                    new_frame = Some(CurrentFrame::BestEffort);
+                }
+            }
+            CurrentFrame::BestEffort => {
+                if message.is_reliable() {
+                    // A new reliable frame needs to be started
+                    new_frame = Some(CurrentFrame::Reliable);
+                }
+            }
+            CurrentFrame::None => {
+                if message.is_reliable() {
+                    // A new reliable frame needs to be started
+                    new_frame = Some(CurrentFrame::Reliable);
+                } else {
+                    // A new best-effort frame needs to be started
+                    new_frame = Some(CurrentFrame::BestEffort);
+                }
+            }
+        }
+
+        // Mark the write operation
+        self.buffer.mark();
+
+        // If a new sequence number has been provided, it means we are in the case we need
+        // to start a new frame. Write a new frame header.
+        let res = if let Some(frame) = new_frame {
+            // Get a new sequence number
+            let sn = sn_gen.get();
+
+            // Serialize the new frame and the zenoh message
+            let res = self.buffer.write_frame_header(
+                priority,
+                message.channel.reliability,
+                sn,
+                None,
+                None,
+            ) && self.buffer.write_zenoh_message(message);
+            if res {
+                self.current_frame = frame;
+                let sn_state = SerializationBatchSeqNumState {
+                    last: sn,
+                    next: sn_gen.now(),
+                };
+                match message.channel.reliability {
+                    Reliability::Reliable => self.sn.reliable = Some(sn_state),
+                    Reliability::BestEffort => self.sn.best_effort = Some(sn_state),
+                }
+            } else {
+                // Restore the sequence number
+                sn_gen.set(sn);
+            }
+            res
+        } else {
+            self.buffer.write_zenoh_message(message)
+        };
+
+        if !res {
+            // Revert the write operation
+            self.buffer.revert();
+        }
+
+        res
     }
 
     /// Gets a serialized [`ZenohMessage`][ZenohMessage] and fragment it on the [`SerializationBatch`][SerializationBatch].
@@ -182,6 +312,16 @@ impl SerializationBatch {
                 let written = to_write.min(space_left);
                 to_fragment.copy_into_wbuf(&mut self.buffer, written);
 
+                // Keep track of the latest serialized SN
+                let sn_state = SerializationBatchSeqNumState {
+                    last: sn,
+                    next: sn_gen.now(),
+                };
+                match reliability {
+                    Reliability::Reliable => self.sn.reliable = Some(sn_state),
+                    Reliability::BestEffort => self.sn.best_effort = Some(sn_state),
+                }
+
                 return written;
             } else {
                 // Revert the buffer and the SN
@@ -190,104 +330,6 @@ impl SerializationBatch {
                 return 0;
             }
         }
-    }
-
-    /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
-    ///
-    /// # Arguments
-    /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
-    ///
-    pub(crate) fn serialize_zenoh_message(
-        &mut self,
-        message: &ZenohMessage,
-        priority: Priority,
-        sn_gen: &mut SeqNumGenerator,
-    ) -> bool {
-        // Keep track of eventual new frame and new sn
-        let mut new_frame = None;
-
-        // Eventually update the current frame and sn based on the current status
-        match self.current_frame {
-            CurrentFrame::Reliable => {
-                if !message.is_reliable() {
-                    // A new best-effort frame needs to be started
-                    new_frame = Some(CurrentFrame::BestEffort);
-                }
-            }
-            CurrentFrame::BestEffort => {
-                if message.is_reliable() {
-                    // A new reliable frame needs to be started
-                    new_frame = Some(CurrentFrame::Reliable);
-                }
-            }
-            CurrentFrame::None => {
-                if message.is_reliable() {
-                    // A new reliable frame needs to be started
-                    new_frame = Some(CurrentFrame::Reliable);
-                } else {
-                    // A new best-effort frame needs to be started
-                    new_frame = Some(CurrentFrame::BestEffort);
-                }
-            }
-        }
-
-        // Mark the write operation
-        self.buffer.mark();
-
-        // If a new sequence number has been provided, it means we are in the case we need
-        // to start a new frame. Write a new frame header.
-        let res = if let Some(frame) = new_frame {
-            // Acquire the lock on the sn generator
-            let is_reliable = message.is_reliable();
-            // Get a new sequence number
-            let sn = sn_gen.get();
-
-            // Serialize the new frame and the zenoh message
-            let reliability = if is_reliable {
-                Reliability::Reliable
-            } else {
-                Reliability::BestEffort
-            };
-            let res = self
-                .buffer
-                .write_frame_header(priority, reliability, sn, None, None)
-                && self.buffer.write_zenoh_message(message);
-            if res {
-                self.current_frame = frame;
-            } else {
-                // Restore the sequence number
-                sn_gen.set(sn);
-            }
-            res
-        } else {
-            self.buffer.write_zenoh_message(message)
-        };
-
-        if !res {
-            // Revert the write operation
-            self.buffer.revert();
-        }
-
-        res
-    }
-
-    /// Try to serialize a [`TransportMessage`][TransportMessage] on the [`SerializationBatch`][SerializationBatch].
-    ///
-    /// # Arguments
-    /// * `message` - The [`TransportMessage`][TransportMessage] to serialize.
-    ///
-    pub(crate) fn serialize_transport_message(&mut self, message: &TransportMessage) -> bool {
-        // Mark the write operation
-        self.buffer.mark();
-        let res = self.buffer.write_transport_message(message);
-        if res {
-            // Reset the current frame value
-            self.current_frame = CurrentFrame::None;
-        } else {
-            // Revert the write operation
-            self.buffer.revert();
-        }
-        res
     }
 
     #[cfg(test)]

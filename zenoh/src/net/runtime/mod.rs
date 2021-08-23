@@ -98,7 +98,7 @@ impl Runtime {
             None
         };
 
-        let router = Arc::new(Router::new(pid.clone(), whatami, hlc.clone()));
+        let router = Arc::new(Router::new(pid, whatami, hlc.clone()));
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),
@@ -108,7 +108,7 @@ impl Runtime {
             .await?
             .version(version)
             .whatami(whatami)
-            .pid(pid.clone())
+            .pid(pid)
             .build(handler.clone());
 
         let transport_manager = TransportManager::new(sm_config);

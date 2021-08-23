@@ -268,6 +268,12 @@ impl ZBuf {
         let version = self.read()?;
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
+        let lease = self.read_zint()?;
+        let lease = if imsg::has_flag(header, tmsg::flag::U) {
+            Duration::from_secs(lease)
+        } else {
+            Duration::from_millis(lease)
+        };
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             self.read_zint()?
         } else {
@@ -292,6 +298,7 @@ impl ZBuf {
             version,
             whatami,
             pid,
+            lease,
             sn_resolution,
             initial_sns,
         }))

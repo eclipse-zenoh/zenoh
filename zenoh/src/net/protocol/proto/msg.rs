@@ -115,6 +115,7 @@ pub mod tmsg {
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
         pub const T: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
+        pub const U: u8 = 1 << 5; // 0x20 TimeRes       if T==1 then the time resolution is in seconds // @TODO: harmonize flags
         pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
         pub const Z: u8 = 1 << 5; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
@@ -1525,7 +1526,7 @@ impl Options for InitAck {
 /// +-+-+-+-+-+-+-+-+
 /// |X|T|A|   OPEN  |
 /// +-+-+-+-+-------+
-/// ~ lease_period  ~ -- Lease period of the sender of the OPEN message(*)
+/// ~    lease      ~ -- Lease period of the sender of the OPEN message(*)
 /// +---------------+
 /// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(**)
 /// +---------------+
@@ -1586,7 +1587,7 @@ impl Header for OpenAck {
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |O|S|X|   JOIN  |
+/// |O|S|U|   JOIN  |
 /// +-+-+-+-+-------+
 /// ~             |Q~ if O==1
 /// +---------------+
@@ -1596,7 +1597,7 @@ impl Header for OpenAck {
 /// +---------------+
 /// ~    peer_id    ~ -- PID of the sender of the JOIN message
 /// +---------------+
-/// ~ lease_period  ~ -- Lease period of the sender of the JOIN message(*)
+/// ~     lease     ~ -- Lease period of the sender of the JOIN message(*)
 /// +---------------+
 /// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
 /// +---------------+
@@ -1613,7 +1614,7 @@ pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
     pub pid: PeerId,
-    // pub lease_period: Duration,
+    pub lease: Duration,
     pub sn_resolution: ZInt,
     pub initial_sns: ConduitSnList,
 }
@@ -1622,6 +1623,9 @@ impl Header for Join {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::JOIN;
+        if self.lease.as_millis() % 1_000 == 0 {
+            header |= tmsg::flag::U;
+        }
         if self.sn_resolution != SEQ_NUM_RES {
             header |= tmsg::flag::S;
         }
@@ -2082,7 +2086,7 @@ impl TransportMessage {
         version: u8,
         whatami: WhatAmI,
         pid: PeerId,
-        // lease_period: Duration,
+        lease: Duration,
         sn_resolution: ZInt,
         initial_sns: ConduitSnList,
         attachment: Option<Attachment>,
@@ -2092,7 +2096,7 @@ impl TransportMessage {
                 version,
                 whatami,
                 pid,
-                // lease_period,
+                lease,
                 sn_resolution,
                 initial_sns,
             }),

@@ -189,7 +189,7 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
-#[derive(Clone, Eq)]
+#[derive(Clone, Copy, Eq)]
 pub struct PeerId {
     size: usize,
     id: [u8; PeerId::MAX_SIZE],

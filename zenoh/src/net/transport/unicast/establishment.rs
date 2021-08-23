@@ -105,7 +105,7 @@ async fn close_link(
 ) {
     if let Some(reason) = reason.take() {
         // Build the close message
-        let peer_id = Some(manager.config.pid.clone());
+        let peer_id = Some(manager.config.pid);
         let link_only = true;
         let attachment = None;
         let message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
@@ -145,7 +145,7 @@ async fn open_send_init_syn(
     let message = TransportMessage::make_init_syn(
         manager.config.version,
         manager.config.whatami,
-        manager.config.pid.clone(),
+        manager.config.pid,
         manager.config.sn_resolution,
         manager.config.unicast.is_qos,
         attachment_from_properties(&auth.properties).ok(),
@@ -277,7 +277,7 @@ async fn open_recv_init_ack(
     if !is_opened {
         // Store the data
         guard.insert(
-            init_ack.pid.clone(),
+            init_ack.pid,
             Opened {
                 whatami: init_ack.whatami,
                 sn_resolution,
@@ -447,7 +447,7 @@ pub(crate) async fn open_link(
     };
 
     let config = TransportConfigUnicast {
-        peer: info.pid.clone(),
+        peer: info.pid,
         whatami: info.whatami,
         sn_resolution: info.sn_resolution,
         initial_sn_tx: info.initial_sn_tx,
@@ -636,7 +636,7 @@ async fn accept_send_init_ack(
     let mut wbuf = WBuf::new(64, false);
     let cookie = Cookie {
         whatami: input.whatami,
-        pid: input.pid.clone(),
+        pid: input.pid,
         sn_resolution: agreed_sn_resolution,
         is_qos: input.is_qos,
         nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
@@ -645,7 +645,7 @@ async fn accept_send_init_ack(
 
     // Build the fields for the InitAck message
     let whatami = manager.config.whatami;
-    let apid = manager.config.pid.clone();
+    let apid = manager.config.pid;
     let sn_resolution = if agreed_sn_resolution == input.sn_resolution {
         None
     } else {
@@ -863,7 +863,7 @@ async fn accept_init_transport(
         None => {
             let initial_sn = zasynclock!(manager.prng).gen_range(0..input.cookie.sn_resolution);
             guard.insert(
-                input.cookie.pid.clone(),
+                input.cookie.pid,
                 Opened {
                     whatami: input.cookie.whatami,
                     sn_resolution: input.cookie.sn_resolution,
@@ -875,7 +875,7 @@ async fn accept_init_transport(
     };
 
     let config = TransportConfigUnicast {
-        peer: input.cookie.pid.clone(),
+        peer: input.cookie.pid,
         whatami: input.cookie.whatami,
         sn_resolution: input.cookie.sn_resolution,
         initial_sn_tx: open_ack_initial_sn,

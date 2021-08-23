@@ -110,7 +110,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     let peer_sh01 = Arc::new(SHPeer::new());
     let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
-        .pid(peer_id01.clone())
+        .pid(peer_id01)
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .lease(lease)
@@ -123,7 +123,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     let peer_sh02 = Arc::new(SHPeer::new());
     let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
-        .pid(peer_id02.clone())
+        .pid(peer_id02)
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .lease(lease)
@@ -141,7 +141,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     let c_barp = barrier_peer.clone();
     let c_barow = barrier_open_wait.clone();
     let c_barod = barrier_open_done.clone();
-    let c_pid02 = peer_id02.clone();
+    let c_pid02 = peer_id02;
     let c_loc01 = locator01.clone();
     let c_loc02 = locator02.clone();
     let peer01_task = task::spawn(async move {
@@ -248,10 +248,10 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     });
 
     // Peer02
-    let c_barp = barrier_peer.clone();
+    let c_barp = barrier_peer;
     let c_barow = barrier_open_wait.clone();
     let c_barod = barrier_open_done.clone();
-    let c_pid01 = peer_id01.clone();
+    let c_pid01 = peer_id01;
     let c_loc01 = locator01.clone();
     let c_loc02 = locator02.clone();
     let peer02_task = task::spawn(async move {

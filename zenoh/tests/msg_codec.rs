@@ -296,7 +296,7 @@ fn codec_hello() {
             for w in wami.iter() {
                 for l in locators.iter() {
                     for a in attachment.iter() {
-                        let msg = TransportMessage::make_hello(p.clone(), *w, l.clone(), a.clone());
+                        let msg = TransportMessage::make_hello(*p, *w, l.clone(), a.clone());
                         test_write_read_transport_message(msg);
                     }
                 }
@@ -382,6 +382,7 @@ fn codec_open() {
 #[test]
 fn codec_join() {
     for _ in 0..NUM_ITER {
+        let lease = [Duration::from_secs(1), Duration::from_millis(1234)];
         let wami = [whatami::ROUTER, whatami::CLIENT];
         let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
         let initial_sns = [
@@ -390,19 +391,22 @@ fn codec_join() {
         ];
         let attachment = [None, Some(gen_attachment())];
 
-        for w in wami.iter() {
-            for s in sn_resolution.iter() {
-                for i in initial_sns.iter() {
-                    for a in attachment.iter() {
-                        let msg = TransportMessage::make_join(
-                            gen!(u8),
-                            *w,
-                            gen_pid(),
-                            *s,
-                            i.clone(),
-                            a.clone(),
-                        );
-                        test_write_read_transport_message(msg);
+        for l in lease.iter() {
+            for w in wami.iter() {
+                for s in sn_resolution.iter() {
+                    for i in initial_sns.iter() {
+                        for a in attachment.iter() {
+                            let msg = TransportMessage::make_join(
+                                gen!(u8),
+                                *w,
+                                gen_pid(),
+                                *l,
+                                *s,
+                                i.clone(),
+                                a.clone(),
+                            );
+                            test_write_read_transport_message(msg);
+                        }
                     }
                 }
             }
@@ -420,7 +424,7 @@ fn codec_close() {
         for p in pid.iter() {
             for k in link_only.iter() {
                 for a in attachment.iter() {
-                    let msg = TransportMessage::make_close(p.clone(), gen!(u8), *k, a.clone());
+                    let msg = TransportMessage::make_close(*p, gen!(u8), *k, a.clone());
                     test_write_read_transport_message(msg);
                 }
             }
@@ -469,7 +473,7 @@ fn codec_keep_alive() {
 
         for p in pid.iter() {
             for a in attachment.iter() {
-                let msg = TransportMessage::make_keep_alive(p.clone(), a.clone());
+                let msg = TransportMessage::make_keep_alive(*p, a.clone());
                 test_write_read_transport_message(msg);
             }
         }

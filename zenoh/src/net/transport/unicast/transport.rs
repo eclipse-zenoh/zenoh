@@ -334,7 +334,7 @@ impl TransportUnicastInner {
     /*            ACCESSORS              */
     /*************************************/
     pub(crate) fn get_pid(&self) -> PeerId {
-        self.pid.clone()
+        self.pid
     }
 
     pub(crate) fn get_whatami(&self) -> WhatAmI {

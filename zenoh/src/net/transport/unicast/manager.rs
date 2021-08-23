@@ -361,7 +361,7 @@ impl TransportManager {
         // Create the transport transport
         let stc = TransportUnicastConfig {
             manager: self.clone(),
-            pid: config.peer.clone(),
+            pid: config.peer,
             whatami: config.whatami,
             sn_resolution: config.sn_resolution,
             initial_sn_tx: config.initial_sn_tx,
@@ -374,7 +374,7 @@ impl TransportManager {
         // Create a weak reference to the transport transport
         let transport: TransportUnicast = (&a_st).into();
         // Add the transport transport to the list of active transports
-        guard.insert(config.peer.clone(), a_st);
+        guard.insert(config.peer, a_st);
 
         log::debug!(
             "New transport opened with {}: whatami {}, sn resolution {}, initial sn tx {:?}, initial sn rx {:?}, shm: {}, qos: {}",

@@ -136,7 +136,7 @@ mod tests {
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
-            .pid(peer_shm01.clone())
+            .pid(peer_shm01)
             .unicast(
                 TransportManagerConfigUnicast::builder()
                     .peer_authenticator(HashSet::from_iter(vec![
@@ -151,7 +151,7 @@ mod tests {
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
         let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
-            .pid(peer_shm02.clone())
+            .pid(peer_shm02)
             .unicast(
                 TransportManagerConfigUnicast::builder()
                     .peer_authenticator(HashSet::from_iter(vec![
@@ -166,7 +166,7 @@ mod tests {
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
-            .pid(peer_net01.clone())
+            .pid(peer_net01)
             .build(peer_net01_handler.clone());
         let peer_net01_manager = TransportManager::new(config);
 
