@@ -23,11 +23,6 @@ pub const ZN_VERSION: u8 = 0x05;
 // Zenoh default whatami
 pub const ZN_DEFAULT_WHATAMI: WhatAmI = whatami::PEER;
 
-// The default sequence number resolution takes 4 bytes on the wire.
-// Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.
-// 2^28 = 268_435_456 => Max Seq Num = 268_435_455
-pub const ZN_DEFAULT_SEQ_NUM_RESOLUTION: ZInt = 268_435_456;
-
 // The default batch size in bytes for the transport
 // NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 //       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
@@ -52,6 +47,9 @@ zconfigurable! {
     //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
     //       transport lease.
     pub static ref ZN_LINK_KEEP_ALIVE: ZInt = 2_500;
+
+     // Default timeout when opening a transport in milliseconds
+    pub static ref ZN_JOIN_INTERVAL: ZInt = 2_500;
 
     // Default timeout when opening a transport in milliseconds
     pub static ref ZN_OPEN_TIMEOUT: ZInt = 10_000;

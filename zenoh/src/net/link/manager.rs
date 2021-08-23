@@ -18,18 +18,27 @@ use super::tcp::LinkManagerUnicastTcp;
 #[cfg(feature = "transport_tls")]
 use super::tls::LinkManagerUnicastTls;
 #[cfg(feature = "transport_udp")]
-use super::udp::LinkManagerUnicastUdp;
+use super::udp::{LinkManagerMulticastUdp, LinkManagerUnicastUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use super::unixsock_stream::LinkManagerUnicastUnixSocketStream;
-use super::{Link, Locator, LocatorProperty, LocatorProtocol};
+use super::{LinkMulticast, LinkUnicast, Locator, LocatorProperty, LocatorProtocol};
 use crate::net::transport::TransportManager;
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use zenoh_util::core::ZResult;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::zerror;
 
+/*************************************/
+/*             UNICAST               */
+/*************************************/
+pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
 pub trait LinkManagerUnicastTrait: Send + Sync {
-    async fn new_link(&self, dst: &Locator, property: Option<&LocatorProperty>) -> ZResult<Link>;
+    async fn new_link(
+        &self,
+        dst: &Locator,
+        property: Option<&LocatorProperty>,
+    ) -> ZResult<LinkUnicast>;
     async fn new_listener(
         &self,
         locator: &Locator,
@@ -39,8 +48,6 @@ pub trait LinkManagerUnicastTrait: Send + Sync {
     fn get_listeners(&self) -> Vec<Locator>;
     fn get_locators(&self) -> Vec<Locator>;
 }
-
-pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 
 pub struct LinkManagerBuilderUnicast;
 
@@ -62,6 +69,34 @@ impl LinkManagerBuilderUnicast {
             LocatorProtocol::UnixSocketStream => {
                 Ok(Arc::new(LinkManagerUnicastUnixSocketStream::new(manager)))
             }
+        }
+    }
+}
+
+/*************************************/
+/*            MULTICAST              */
+/*************************************/
+#[async_trait]
+pub trait LinkManagerMulticastTrait: Send + Sync {
+    async fn new_link(
+        &self,
+        dst: &Locator,
+        property: Option<&LocatorProperty>,
+    ) -> ZResult<LinkMulticast>;
+}
+
+pub type LinkManagerMulticast = Arc<dyn LinkManagerMulticastTrait>;
+
+pub struct LinkManagerBuilderMulticast;
+
+impl LinkManagerBuilderMulticast {
+    pub(crate) fn make(protocol: &LocatorProtocol) -> ZResult<LinkManagerMulticast> {
+        match protocol {
+            #[cfg(feature = "transport_udp")]
+            LocatorProtocol::Udp => Ok(Arc::new(LinkManagerMulticastUdp::default())),
+            _ => zerror!(ZErrorKind::InvalidLocator {
+                descr: format!("Multicast not supported for {} protocol", protocol)
+            }),
         }
     }
 }

@@ -154,12 +154,12 @@ mod consts {
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_STR: &str = "tls_root_ca_certificate";
 
     /// Indicates if the zero-copy features should be used.
-    /// String key : `"zero_copy"`.
+    /// String key : `"shm"`.
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"true"`.
-    pub const ZN_ZERO_COPY_KEY: u64 = 0x51;
-    pub const ZN_ZERO_COPY_STR: &str = "zero_copy";
-    pub const ZN_ZERO_COPY_DEFAULT: &str = ZN_TRUE;
+    pub const ZN_SHM_KEY: u64 = 0x51;
+    pub const ZN_SHM_STR: &str = "shm";
+    pub const ZN_SHM_DEFAULT: &str = ZN_TRUE;
 
     /// Indicates if routers should connect to each other
     /// when they discover each other through multicast.
@@ -258,6 +258,21 @@ mod consts {
     /// Accepted values : `<unsigned integer>`.
     pub const ZN_VERSION_KEY: u64 = 0x72;
     pub const ZN_VERSION_STR: &str = "version";
+
+    /// Configures the QoS support.
+    /// String key : `"qos"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"true"`.
+    pub const ZN_QOS_KEY: u64 = 0x73;
+    pub const ZN_QOS_STR: &str = "qos";
+    pub const ZN_QOS_DEFAULT: &str = ZN_TRUE;
+
+    /// Configures the link keep alive expressed in milliseconds.
+    /// String key : `"join_interval"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `2500 (2.5 seconds)`.
+    pub const ZN_JOIN_INTERVAL_KEY: u64 = 0x74;
+    pub const ZN_JOIN_INTERVAL_STR: &str = "join_interval";
 }
 
 pub use consts::*;
@@ -286,7 +301,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_TLS_SERVER_PRIVATE_KEY_STR => Some(ZN_TLS_SERVER_PRIVATE_KEY_KEY),
             ZN_TLS_SERVER_CERTIFICATE_STR => Some(ZN_TLS_SERVER_CERTIFICATE_KEY),
             ZN_TLS_ROOT_CA_CERTIFICATE_STR => Some(ZN_TLS_ROOT_CA_CERTIFICATE_KEY),
-            ZN_ZERO_COPY_STR => Some(ZN_ZERO_COPY_KEY),
+            ZN_SHM_STR => Some(ZN_SHM_KEY),
             ZN_ROUTERS_AUTOCONNECT_MULTICAST_STR => Some(ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY),
             ZN_ROUTERS_AUTOCONNECT_GOSSIP_STR => Some(ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY),
             ZN_LOCAL_ROUTING_STR => Some(ZN_LOCAL_ROUTING_KEY),
@@ -302,6 +317,8 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_MAX_SESSIONS_STR => Some(ZN_MAX_SESSIONS_KEY),
             ZN_MAX_LINKS_STR => Some(ZN_MAX_LINKS_KEY),
             ZN_VERSION_STR => Some(ZN_VERSION_KEY),
+            ZN_QOS_STR => Some(ZN_QOS_KEY),
+            ZN_JOIN_INTERVAL_STR => Some(ZN_JOIN_INTERVAL_KEY),
             _ => None,
         }
     }
@@ -325,7 +342,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_TLS_SERVER_PRIVATE_KEY_KEY => Some(ZN_TLS_SERVER_PRIVATE_KEY_STR.to_string()),
             ZN_TLS_SERVER_CERTIFICATE_KEY => Some(ZN_TLS_SERVER_CERTIFICATE_STR.to_string()),
             ZN_TLS_ROOT_CA_CERTIFICATE_KEY => Some(ZN_TLS_ROOT_CA_CERTIFICATE_STR.to_string()),
-            ZN_ZERO_COPY_KEY => Some(ZN_ZERO_COPY_STR.to_string()),
+            ZN_SHM_KEY => Some(ZN_SHM_STR.to_string()),
             ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY => {
                 Some(ZN_ROUTERS_AUTOCONNECT_MULTICAST_STR.to_string())
             }
@@ -344,6 +361,8 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_BATCH_SIZE_KEY => Some(ZN_BATCH_SIZE_STR.to_string()),
             ZN_MAX_LINKS_KEY => Some(ZN_MAX_LINKS_STR.to_string()),
             ZN_VERSION_KEY => Some(ZN_VERSION_STR.to_string()),
+            ZN_QOS_KEY => Some(ZN_QOS_STR.to_string()),
+            ZN_JOIN_INTERVAL_KEY => Some(ZN_JOIN_INTERVAL_STR.to_string()),
             _ => None,
         }
     }

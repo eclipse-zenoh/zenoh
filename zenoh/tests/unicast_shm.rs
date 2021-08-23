@@ -16,17 +16,20 @@ mod tests {
     use async_std::prelude::*;
     use async_std::task;
     use std::any::Any;
+    use std::collections::HashSet;
+    use std::iter::FromIterator;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh::net::link::{Link, Locator};
+    use zenoh::net::link::{LinkUnicast, Locator};
     use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
     use zenoh::net::transport::{
-        Transport, TransportEventHandler, TransportHandler, TransportManager,
-        TransportManagerConfig, TransportManagerConfigUnicast,
+        TransportEventHandler, TransportManager, TransportManagerConfig,
+        TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
+        TransportUnicast, TransportUnicastEventHandler,
     };
     use zenoh::net::CongestionControl;
     use zenoh_util::core::ZResult;
@@ -58,10 +61,20 @@ mod tests {
         }
     }
 
-    impl TransportHandler for SHPeer {
-        fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+    impl TransportEventHandler for SHPeer {
+        fn new_unicast(
+            &self,
+            _transport: TransportUnicast,
+        ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
         }
     }
 
@@ -77,7 +90,7 @@ mod tests {
         }
     }
 
-    impl TransportEventHandler for SCPeer {
+    impl TransportUnicastEventHandler for SCPeer {
         fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
             if self.is_shm {
                 print!("s");
@@ -100,8 +113,8 @@ mod tests {
             Ok(())
         }
 
-        fn new_link(&self, _link: Link) {}
-        fn del_link(&self, _link: Link) {}
+        fn new_link(&self, _link: LinkUnicast) {}
+        fn del_link(&self, _link: LinkUnicast) {}
         fn closing(&self) {}
         fn closed(&self) {}
 
@@ -123,10 +136,12 @@ mod tests {
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
-            .pid(peer_shm01.clone())
+            .pid(peer_shm01)
             .unicast(
                 TransportManagerConfigUnicast::builder()
-                    .peer_authenticator(vec![SharedMemoryAuthenticator::new().into()])
+                    .peer_authenticator(HashSet::from_iter(vec![
+                        SharedMemoryAuthenticator::new().into()
+                    ]))
                     .build(),
             )
             .build(peer_shm01_handler.clone());
@@ -136,10 +151,12 @@ mod tests {
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
         let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
-            .pid(peer_shm02.clone())
+            .pid(peer_shm02)
             .unicast(
                 TransportManagerConfigUnicast::builder()
-                    .peer_authenticator(vec![SharedMemoryAuthenticator::new().into()])
+                    .peer_authenticator(HashSet::from_iter(vec![
+                        SharedMemoryAuthenticator::new().into()
+                    ]))
                     .build(),
             )
             .build(peer_shm02_handler.clone());
@@ -149,7 +166,7 @@ mod tests {
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
-            .pid(peer_net01.clone())
+            .pid(peer_net01)
             .build(peer_net01_handler.clone());
         let peer_net01_manager = TransportManager::new(config);
 

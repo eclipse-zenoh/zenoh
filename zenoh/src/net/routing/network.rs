@@ -15,7 +15,7 @@ use super::link::Locator;
 use super::protocol::core::{whatami, PeerId, ZInt};
 use super::protocol::proto::{LinkState, ZenohMessage};
 use super::runtime::Runtime;
-use super::transport::Transport;
+use super::transport::TransportUnicast;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
@@ -36,14 +36,14 @@ impl std::fmt::Debug for Node {
 }
 
 pub(crate) struct Link {
-    pub(crate) transport: Transport,
+    pub(crate) transport: TransportUnicast,
     pid: PeerId,
     mappings: VecMap<PeerId>,
     local_mappings: VecMap<ZInt>,
 }
 
 impl Link {
-    fn new(transport: Transport) -> Self {
+    fn new(transport: TransportUnicast) -> Self {
         let pid = transport.get_pid().unwrap();
         Link {
             transport,
@@ -164,7 +164,7 @@ impl Network {
     }
 
     fn add_node(&mut self, node: Node) -> NodeIndex {
-        let pid = node.pid.clone();
+        let pid = node.pid;
         let idx = self.graph.add_node(node);
         for link in self.links.values_mut() {
             if let Some((psid, _)) = link.mappings.iter().find(|(_, p)| **p == pid) {
@@ -195,7 +195,7 @@ impl Network {
             psid: idx.index().try_into().unwrap(),
             sn: self.graph[idx].sn,
             pid: if details {
-                Some(self.graph[idx].pid.clone())
+                Some(self.graph[idx].pid)
             } else {
                 None
             },
@@ -217,7 +217,7 @@ impl Network {
         ZenohMessage::make_link_state_list(list, None)
     }
 
-    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, transport: &Transport) {
+    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, transport: &TransportUnicast) {
         let msg = self.make_msg(idxs);
         log::trace!("{} Send to {:?} {:?}", self.name, transport.get_pid(), msg);
         if let Err(e) = transport.handle_message(msg) {
@@ -281,7 +281,7 @@ impl Network {
             .into_iter()
             .filter_map(|link_state| {
                 if let Some(pid) = link_state.pid {
-                    src_link.set_pid_mapping(link_state.psid, pid.clone());
+                    src_link.set_pid_mapping(link_state.psid, pid);
                     if let Some(idx) = graph.node_indices().find(|idx| graph[*idx].pid == pid) {
                         src_link.set_local_psid_mapping(link_state.psid, idx.index() as u64);
                     }
@@ -295,7 +295,7 @@ impl Network {
                 } else {
                     match src_link.get_pid(&link_state.psid) {
                         Some(pid) => Some((
-                            pid.clone(),
+                            *pid,
                             link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
                             link_state.locators,
                             link_state.sn,
@@ -323,7 +323,7 @@ impl Network {
                     .iter()
                     .filter_map(|l| {
                         if let Some(pid) = src_link.get_pid(l) {
-                            Some(pid.clone())
+                            Some(*pid)
                         } else {
                             log::error!(
                                 "{} Received LinkState from {} with unknown link mapping {}",
@@ -385,7 +385,7 @@ impl Network {
                     }
                     None => {
                         let node = Node {
-                            pid: pid.clone(),
+                            pid,
                             whatami,
                             locators,
                             sn,
@@ -415,7 +415,7 @@ impl Network {
                     }
                 } else {
                     let node = Node {
-                        pid: link.clone(),
+                        pid: *link,
                         whatami: 0,
                         locators: None,
                         sn: 0,
@@ -459,7 +459,7 @@ impl Network {
                 {
                     if let Some(locators) = &node.locators {
                         let runtime = self.runtime.clone();
-                        let pid = node.pid.clone();
+                        let pid = node.pid;
                         let locators = locators.clone();
                         async_std::task::spawn(async move {
                             // random backoff
@@ -514,7 +514,7 @@ impl Network {
         removed
     }
 
-    pub(crate) fn add_link(&mut self, transport: Transport) -> usize {
+    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -532,7 +532,7 @@ impl Network {
                 log::debug!("{} Add node (link) {}", self.name, pid);
                 (
                     self.add_node(Node {
-                        pid: pid.clone(),
+                        pid,
                         whatami,
                         locators: None,
                         sn: 0,
@@ -546,7 +546,7 @@ impl Network {
             log::trace!("Update edge (link) {} {}", self.graph[self.idx].pid, pid);
             self.update_edge(self.idx, idx);
         }
-        self.graph[self.idx].links.push(pid.clone());
+        self.graph[self.idx].links.push(pid);
         self.graph[self.idx].sn += 1;
 
         if new {
@@ -654,8 +654,8 @@ impl Network {
                         o.map(|ip| {
                             format!(
                                 "{} <- {}",
-                                self.graph[ip].pid.clone(),
-                                self.graph[NodeIndex::new(is)].pid.clone()
+                                self.graph[ip].pid,
+                                self.graph[NodeIndex::new(is)].pid
                             )
                         })
                     })
@@ -734,7 +734,7 @@ pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<PeerId> {
             net2.graph
                 .node_references()
                 .any(|(_, node2)| node1.pid == node2.pid)
-                .then(|| node1.pid.clone())
+                .then(|| node1.pid)
         })
         .collect()
 }

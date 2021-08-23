@@ -13,28 +13,41 @@
 //
 use super::super::defaults::ZN_RX_BUFF_SIZE;
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
-use super::protocol::core::Priority;
 use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::proto::TransportMessage;
-use super::transport::TransportUnicastInner;
-use crate::net::link::LinkUnicast;
+use super::transport::TransportMulticastInner;
+use crate::net::link::{LinkMulticast, Locator};
+use crate::net::protocol::core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
+use crate::net::protocol::proto::TransportMessage;
+use crate::net::transport::common::batch::SerializationBatch;
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
+use std::convert::TryInto;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
+pub(super) struct TransportLinkMulticastConfig {
+    pub(super) version: u8,
+    pub(super) pid: PeerId,
+    pub(super) whatami: WhatAmI,
+    pub(super) lease: Duration,
+    pub(super) keep_alive: Duration,
+    pub(super) join_interval: Duration,
+    pub(super) sn_resolution: ZInt,
+    pub(super) batch_size: usize,
+}
+
 #[derive(Clone)]
-pub(super) struct TransportLinkUnicast {
+pub(super) struct TransportLinkMulticast {
     // The underlying link
-    pub(super) inner: LinkUnicast,
+    pub(super) inner: LinkMulticast,
     // The transport this link is associated to
-    transport: TransportUnicastInner,
+    transport: TransportMulticastInner,
     // The transmission pipeline
     pipeline: Option<Arc<TransmissionPipeline>>,
     // The signals to stop TX/RX tasks
@@ -44,9 +57,12 @@ pub(super) struct TransportLinkUnicast {
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
 
-impl TransportLinkUnicast {
-    pub(super) fn new(transport: TransportUnicastInner, link: LinkUnicast) -> TransportLinkUnicast {
-        TransportLinkUnicast {
+impl TransportLinkMulticast {
+    pub(super) fn new(
+        transport: TransportMulticastInner,
+        link: LinkMulticast,
+    ) -> TransportLinkMulticast {
+        TransportLinkMulticast {
             transport,
             inner: link,
             pipeline: None,
@@ -58,9 +74,9 @@ impl TransportLinkUnicast {
     }
 }
 
-impl TransportLinkUnicast {
+impl TransportLinkMulticast {
     #[inline]
-    pub(super) fn get_link(&self) -> &LinkUnicast {
+    pub(super) fn get_link(&self) -> &LinkMulticast {
         &self.inner
     }
 
@@ -71,15 +87,22 @@ impl TransportLinkUnicast {
 
     pub(super) fn start_tx(
         &mut self,
-        keep_alive: Duration,
-        batch_size: usize,
+        config: TransportLinkMulticastConfig,
         conduit_tx: Arc<[TransportConduitTx]>,
     ) {
+        let initial_sns: Vec<ConduitSn> = conduit_tx
+            .iter()
+            .map(|x| ConduitSn {
+                reliable: zlock!(x.reliable).sn.now(),
+                best_effort: zlock!(x.best_effort).sn.now(),
+            })
+            .collect();
+
         if self.handle_tx.is_none() {
             // The pipeline
             let pipeline = Arc::new(TransmissionPipeline::new(
-                batch_size.min(self.inner.get_mtu()),
-                self.inner.is_streamed(),
+                config.batch_size.min(self.inner.get_mtu()),
+                false,
                 conduit_tx,
             ));
             self.pipeline = Some(pipeline.clone());
@@ -88,12 +111,12 @@ impl TransportLinkUnicast {
             let c_link = self.inner.clone();
             let c_transport = self.transport.clone();
             let handle = task::spawn(async move {
-                let res = tx_task(pipeline, c_link.clone(), keep_alive).await;
+                let res = tx_task(pipeline, c_link.clone(), config, initial_sns).await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(&c_link).await });
+                    task::spawn(async move { c_transport.delete().await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -106,7 +129,7 @@ impl TransportLinkUnicast {
         }
     }
 
-    pub(super) fn start_rx(&mut self, lease: Duration) {
+    pub(super) fn start_rx(&mut self) {
         if self.handle_rx.is_none() {
             self.active_rx.store(true, Ordering::Release);
             // Spawn the RX task
@@ -120,7 +143,6 @@ impl TransportLinkUnicast {
                 let res = rx_task(
                     c_link.clone(),
                     c_transport.clone(),
-                    lease,
                     c_signal.clone(),
                     c_active.clone(),
                 )
@@ -130,7 +152,7 @@ impl TransportLinkUnicast {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(&c_link).await });
+                    task::spawn(async move { c_transport.delete().await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));
@@ -167,127 +189,111 @@ impl TransportLinkUnicast {
 /*************************************/
 async fn tx_task(
     pipeline: Arc<TransmissionPipeline>,
-    link: LinkUnicast,
-    keep_alive: Duration,
+    link: LinkMulticast,
+    config: TransportLinkMulticastConfig,
+    mut next_sns: Vec<ConduitSn>,
 ) -> ZResult<()> {
-    loop {
+    enum Action {
+        Pull((SerializationBatch, usize)),
+        Join,
+        KeepAlive,
+        Stop,
+    }
+
+    async fn pull(pipeline: &TransmissionPipeline, keep_alive: Duration) -> Action {
         match pipeline.pull().timeout(keep_alive).await {
             Ok(res) => match res {
-                Some((batch, priority)) => {
-                    // Send the buffer on the link
-                    let _ = link.write_all(batch.as_bytes()).await?;
-                    // Reinsert the batch into the queue
-                    pipeline.refill(batch, priority);
-                }
-                None => break,
+                Some(sb) => Action::Pull(sb),
+                None => Action::Stop,
             },
-            Err(_) => {
-                let pid = None;
+            Err(_) => Action::KeepAlive,
+        }
+    }
+
+    async fn join(last_join: Instant, join_interval: Duration) -> Action {
+        let now = Instant::now();
+        let target = last_join + join_interval;
+        if now < target {
+            let left = target - now;
+            task::sleep(left).await;
+        }
+        Action::Join
+    }
+
+    let mut last_join = Instant::now() - config.join_interval;
+    loop {
+        match pull(&pipeline, config.keep_alive)
+            .race(join(last_join, config.join_interval))
+            .await
+        {
+            Action::Pull((batch, priority)) => {
+                // Send the buffer on the link
+                let _ = link.write_all(batch.as_bytes()).await?;
+                // Keep track of next SNs
+                if let Some(sn) = batch.sn.reliable {
+                    next_sns[priority].reliable = sn.next;
+                }
+                if let Some(sn) = batch.sn.best_effort {
+                    next_sns[priority].best_effort = sn.next;
+                }
+                // Reinsert the batch into the queue
+                pipeline.refill(batch, priority);
+            }
+            Action::Join => {
+                let attachment = None;
+                let initial_sns = if next_sns.len() == Priority::NUM {
+                    let tmp: [ConduitSn; Priority::NUM] = next_sns.clone().try_into().unwrap();
+                    ConduitSnList::QoS(tmp.into())
+                } else {
+                    assert_eq!(next_sns.len(), 1);
+                    ConduitSnList::Plain(next_sns[0])
+                };
+                let message = TransportMessage::make_join(
+                    config.version,
+                    config.whatami,
+                    config.pid,
+                    config.lease,
+                    config.sn_resolution,
+                    initial_sns,
+                    attachment,
+                );
+                link.write_transport_message(message).await?;
+                last_join = Instant::now();
+            }
+            Action::KeepAlive => {
+                let pid = Some(config.pid);
                 let attachment = None;
                 let message = TransportMessage::make_keep_alive(pid, attachment);
                 pipeline.push_transport_message(message, Priority::Background);
             }
-        }
-    }
-
-    // Drain the transmission pipeline and write remaining bytes on the wire
-    let mut batches = pipeline.drain();
-    for (b, _) in batches.drain(..) {
-        let _ = link
-            .write_all(b.as_bytes())
-            .timeout(keep_alive)
-            .await
-            .map_err(|_| {
-                let e = format!("{}: flush failed after {} ms", link, keep_alive.as_millis());
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })??;
-    }
-
-    Ok(())
-}
-
-async fn rx_task_stream(
-    link: LinkUnicast,
-    transport: TransportUnicastInner,
-    lease: Duration,
-    signal: Signal,
-    active: Arc<AtomicBool>,
-) -> ZResult<()> {
-    enum Action {
-        Read(usize),
-        Stop,
-    }
-
-    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<Action> {
-        // 16 bits for reading the batch length
-        let mut length = [0u8, 0u8];
-        link.read_exact(&mut length).await?;
-        let n = u16::from_le_bytes(length) as usize;
-        link.read_exact(&mut buffer[0..n]).await?;
-        Ok(Action::Read(n))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
-    }
-
-    // The ZBuf to read a message batch onto
-    let mut zbuf = ZBuf::new();
-    // The pool of buffers
-    let n = 1 + (*ZN_RX_BUFF_SIZE / link.get_mtu());
-    let pool = RecyclingObjectPool::new(n, || vec![0u8; link.get_mtu()].into_boxed_slice());
-    while active.load(Ordering::Acquire) {
-        // Clear the ZBuf
-        zbuf.clear();
-
-        // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
-
-        // Async read from the underlying link
-        let action = read(&link, &mut buffer)
-            .race(stop(signal.clone()))
-            .timeout(lease)
-            .await
-            .map_err(|_| {
-                let e = format!("{}: expired after {} milliseconds", link, lease.as_millis());
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })??;
-        match action {
-            Action::Read(n) => {
-                zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
-
-                while zbuf.can_read() {
-                    match zbuf.read_transport_message() {
-                        Some(msg) => transport.receive_message(msg, &link)?,
-                        None => {
-                            let e = format!("{}: decoding error", link);
-                            return zerror!(ZErrorKind::IoError { descr: e });
-                        }
-                    }
+            Action::Stop => {
+                // Drain the transmission pipeline and write remaining bytes on the wire
+                let mut batches = pipeline.drain();
+                for (b, _) in batches.drain(..) {
+                    let _ = link.write_all(b.as_bytes()).await?;
                 }
+                break;
             }
-            Action::Stop => break,
         }
     }
+
     Ok(())
 }
 
-async fn rx_task_dgram(
-    link: LinkUnicast,
-    transport: TransportUnicastInner,
-    lease: Duration,
+async fn rx_task(
+    link: LinkMulticast,
+    transport: TransportMulticastInner,
     signal: Signal,
     active: Arc<AtomicBool>,
 ) -> ZResult<()> {
     enum Action {
-        Read(usize),
+        Read((usize, Locator)),
         Stop,
     }
 
-    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<Action> {
-        let n = link.read(buffer).await?;
-        Ok(Action::Read(n))
+    async fn read(link: &LinkMulticast, buffer: &mut [u8]) -> ZResult<Action> {
+        let (n, loc) = link.read(buffer).await?;
+        Ok(Action::Read((n, loc)))
     }
 
     async fn stop(signal: Signal) -> ZResult<Action> {
@@ -307,16 +313,9 @@ async fn rx_task_dgram(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let action = read(&link, &mut buffer)
-            .race(stop(signal.clone()))
-            .timeout(lease)
-            .await
-            .map_err(|_| {
-                let e = format!("{}: expired after {} milliseconds", link, lease.as_millis());
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })??;
+        let action = read(&link, &mut buffer).race(stop(signal.clone())).await?;
         match action {
-            Action::Read(n) => {
+            Action::Read((n, loc)) => {
                 if n == 0 {
                     // Reading 0 bytes means error
                     let e = format!("{}: zero bytes reading", link);
@@ -329,7 +328,7 @@ async fn rx_task_dgram(
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {
                     match zbuf.read_transport_message() {
-                        Some(msg) => transport.receive_message(msg, &link)?,
+                        Some(msg) => transport.receive_message(msg, &loc)?,
                         None => {
                             let e = format!("{}: decoding error", link);
                             return zerror!(ZErrorKind::IoError { descr: e });
@@ -341,18 +340,4 @@ async fn rx_task_dgram(
         }
     }
     Ok(())
-}
-
-async fn rx_task(
-    link: LinkUnicast,
-    transport: TransportUnicastInner,
-    lease: Duration,
-    signal: Signal,
-    active: Arc<AtomicBool>,
-) -> ZResult<()> {
-    if link.is_streamed() {
-        rx_task_stream(link, transport, lease, signal, active).await
-    } else {
-        rx_task_dgram(link, transport, lease, signal, active).await
-    }
 }

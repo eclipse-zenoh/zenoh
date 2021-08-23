@@ -16,7 +16,7 @@ use super::protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice,
 };
 use super::{
-    attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
+    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
 };
 use async_trait::async_trait;
@@ -157,7 +157,7 @@ impl SharedMemoryAuthenticator {
     pub async fn from_properties(
         config: &ConfigProperties,
     ) -> ZResult<Option<SharedMemoryAuthenticator>> {
-        let zero_copy = config.get_or(&ZN_ZERO_COPY_KEY, ZN_ZERO_COPY_DEFAULT);
+        let zero_copy = config.get_or(&ZN_SHM_KEY, ZN_SHM_DEFAULT);
         if zero_copy == ZN_TRUE {
             let mut prng = PseudoRng::from_entropy();
             let challenge = prng.gen::<ZInt>();
@@ -181,9 +181,10 @@ impl SharedMemoryAuthenticator {
                 _manager,
                 reader: Arc::new(RwLock::new(SharedMemoryReader::new())),
             };
-            return Ok(Some(sma));
+            Ok(Some(sma))
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 }
 
@@ -198,6 +199,10 @@ unsafe impl Sync for SharedMemoryAuthenticator {}
 
 #[async_trait]
 impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
+    fn id(&self) -> PeerAuthenticatorId {
+        PeerAuthenticatorId::Shm
+    }
+
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,
@@ -212,7 +217,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let zbuf: ZBuf = wbuf.into();
 
         let prop = Property {
-            key: attachment::authorization::SHM,
+            key: PeerAuthenticatorId::Shm as ZInt,
             value: zbuf.to_vec(),
         };
         let mut res = PeerAuthenticatorOutput::default();
@@ -230,7 +235,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         log::debug!("Authenticator::handle_init_syn(...)");
         let res = properties
             .iter()
-            .find(|p| p.key == attachment::authorization::SHM);
+            .find(|p| p.key == PeerAuthenticatorId::Shm as ZInt);
         let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
@@ -293,7 +298,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let zbuf: ZBuf = wbuf.into();
 
         let prop = Property {
-            key: attachment::authorization::SHM,
+            key: PeerAuthenticatorId::Shm as ZInt,
             value: zbuf.to_vec(),
         };
         let mut res = PeerAuthenticatorOutput::default();
@@ -310,7 +315,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     ) -> ZResult<PeerAuthenticatorOutput> {
         let res = properties
             .iter()
-            .find(|p| p.key == attachment::authorization::SHM);
+            .find(|p| p.key == PeerAuthenticatorId::Shm as ZInt);
         let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
@@ -361,7 +366,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let zbuf: ZBuf = wbuf.into();
 
         let prop = Property {
-            key: attachment::authorization::SHM,
+            key: PeerAuthenticatorId::Shm as ZInt,
             value: zbuf.to_vec(),
         };
 
@@ -380,7 +385,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     ) -> ZResult<PeerAuthenticatorOutput> {
         let res = properties
             .iter()
-            .find(|p| p.key == attachment::authorization::SHM);
+            .find(|p| p.key == PeerAuthenticatorId::Shm as ZInt);
         let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {

@@ -36,16 +36,17 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
-/*************************************/
-/*              LINK                 */
-/*************************************/
 const WBUF_SIZE: usize = 64;
 
+/*************************************/
+/*            UNICAST                */
+/*************************************/
+
 #[derive(Clone)]
-pub struct Link(Arc<dyn LinkTrait + Send + Sync>);
+pub struct LinkUnicast(Arc<dyn LinkUnicastTrait>);
 
 #[async_trait]
-pub trait LinkTrait {
+pub trait LinkUnicastTrait: Send + Sync {
     fn get_mtu(&self) -> usize;
     fn get_src(&self) -> Locator;
     fn get_dst(&self) -> Locator;
@@ -58,7 +59,7 @@ pub trait LinkTrait {
     async fn close(&self) -> ZResult<()>;
 }
 
-impl Link {
+impl LinkUnicast {
     pub(crate) async fn write_transport_message(&self, msg: TransportMessage) -> ZResult<()> {
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
@@ -116,36 +117,36 @@ impl Link {
     }
 }
 
-impl Deref for Link {
-    type Target = Arc<dyn LinkTrait + Send + Sync>;
+impl Deref for LinkUnicast {
+    type Target = Arc<dyn LinkUnicastTrait>;
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl Eq for Link {}
+impl Eq for LinkUnicast {}
 
-impl PartialEq for Link {
+impl PartialEq for LinkUnicast {
     fn eq(&self, other: &Self) -> bool {
         self.get_src() == other.get_src() && self.get_dst() == other.get_dst()
     }
 }
 
-impl Hash for Link {
+impl Hash for LinkUnicast {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.get_src().hash(state);
         self.get_dst().hash(state);
     }
 }
 
-impl fmt::Display for Link {
+impl fmt::Display for LinkUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", self.get_src(), self.get_dst())
     }
 }
 
-impl fmt::Debug for Link {
+impl fmt::Debug for LinkUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Link")
             .field("src", &self.get_src())
@@ -157,8 +158,106 @@ impl fmt::Debug for Link {
     }
 }
 
-impl From<Arc<dyn LinkTrait + Send + Sync>> for Link {
-    fn from(link: Arc<dyn LinkTrait + Send + Sync>) -> Link {
-        Link(link)
+impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
+    fn from(link: Arc<dyn LinkUnicastTrait>) -> LinkUnicast {
+        LinkUnicast(link)
+    }
+}
+
+/*************************************/
+/*            MULTICAST              */
+/*************************************/
+#[derive(Clone)]
+pub struct LinkMulticast(Arc<dyn LinkMulticastTrait>);
+
+#[async_trait]
+pub trait LinkMulticastTrait: Send + Sync {
+    fn get_mtu(&self) -> usize;
+    fn get_src(&self) -> Locator;
+    fn get_dst(&self) -> Locator;
+    fn is_reliable(&self) -> bool;
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
+    async fn read(&self, buffer: &mut [u8]) -> ZResult<(usize, Locator)>;
+    async fn close(&self) -> ZResult<()>;
+}
+
+impl LinkMulticast {
+    pub(crate) async fn write_transport_message(&self, msg: TransportMessage) -> ZResult<()> {
+        // Create the buffer for serializing the message
+        let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        wbuf.write_transport_message(&msg);
+        let mut buffer = vec![0u8; wbuf.len()];
+        wbuf.copy_into_slice(&mut buffer[..]);
+
+        // Send the message on the link
+        self.0.write_all(&buffer).await
+    }
+
+    //     pub(crate) async fn read_transport_message(&self) -> ZResult<(Vec<TransportMessage>, Locator)> {
+    //         // Read the message
+    //         let mut buffer = vec![0u8; self.get_mtu()];
+    //         let (n, locator) = self.read(&mut buffer).await?;
+    //         buffer.truncate(n);
+
+    //         let mut zbuf = ZBuf::from(buffer);
+    //         let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
+    //         while zbuf.can_read() {
+    //             match zbuf.read_transport_message() {
+    //                 Some(msg) => messages.push(msg),
+    //                 None => {
+    //                     let e = format!("Decoding error on link: {}", self);
+    //                     return zerror!(ZErrorKind::InvalidMessage { descr: e });
+    //                 }
+    //             }
+    //         }
+
+    //         Ok((messages, locator))
+    //     }
+}
+
+impl Deref for LinkMulticast {
+    type Target = Arc<dyn LinkMulticastTrait>;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Eq for LinkMulticast {}
+
+impl PartialEq for LinkMulticast {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_src() == other.get_src() && self.get_dst() == other.get_dst()
+    }
+}
+
+impl Hash for LinkMulticast {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.get_src().hash(state);
+        self.get_dst().hash(state);
+    }
+}
+
+impl fmt::Display for LinkMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} => {}", self.get_src(), self.get_dst())
+    }
+}
+
+impl fmt::Debug for LinkMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Link")
+            .field("src", &self.get_src())
+            .field("dst", &self.get_dst())
+            .field("mtu", &self.get_mtu())
+            .field("is_reliable", &self.is_reliable())
+            .finish()
+    }
+}
+
+impl From<Arc<dyn LinkMulticastTrait>> for LinkMulticast {
+    fn from(link: Arc<dyn LinkMulticastTrait>) -> LinkMulticast {
+        LinkMulticast(link)
     }
 }

@@ -14,7 +14,7 @@
 mod locator;
 mod unicast;
 
-use super::{Link, LinkManagerUnicastTrait, LinkTrait, Locator, LocatorProperty};
+use super::*;
 pub use locator::*;
 pub use unicast::*;
 

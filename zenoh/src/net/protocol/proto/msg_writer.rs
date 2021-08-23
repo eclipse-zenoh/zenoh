@@ -89,6 +89,7 @@ impl WBuf {
             TransportBody::InitAck(init_ack) => self.write_init_ack(init_ack),
             TransportBody::OpenSyn(open_syn) => self.write_open_syn(open_syn),
             TransportBody::OpenAck(open_ack) => self.write_open_ack(open_ack),
+            TransportBody::Join(join) => self.write_join(join),
             TransportBody::Close(close) => self.write_close(close),
             TransportBody::Sync(sync) => self.write_sync(sync),
             TransportBody::AckNack(ack_nack) => self.write_ack_nack(ack_nack),
@@ -141,15 +142,16 @@ impl WBuf {
     }
 
     fn write_init_syn(&mut self, init_syn: &InitSyn) -> bool {
-        zcheck!(self.write(init_syn.header()));
+        let header = init_syn.header();
+        zcheck!(self.write(header));
         if init_syn.has_options() {
             zcheck!(self.write_zint(init_syn.options()));
         }
         zcheck!(self.write(init_syn.version));
         zcheck!(self.write_zint(init_syn.whatami));
         zcheck!(self.write_peerid(&init_syn.pid));
-        if let Some(snr) = init_syn.sn_resolution {
-            zcheck!(self.write_zint(snr));
+        if imsg::has_flag(header, tmsg::flag::S) {
+            zcheck!(self.write_zint(init_syn.sn_resolution));
         }
         true
     }
@@ -170,10 +172,10 @@ impl WBuf {
     fn write_open_syn(&mut self, open_syn: &OpenSyn) -> bool {
         let header = open_syn.header();
         zcheck!(self.write(header));
-        if imsg::has_flag(header, smsg::flag::T) {
-            zcheck!(self.write_zint(open_syn.lease / 1_000));
+        if imsg::has_flag(header, tmsg::flag::T) {
+            zcheck!(self.write_zint(open_syn.lease.as_secs() as ZInt));
         } else {
-            zcheck!(self.write_zint(open_syn.lease));
+            zcheck!(self.write_zint(open_syn.lease.as_millis() as ZInt));
         }
         zcheck!(self.write_zint(open_syn.initial_sn));
         self.write_zslice_array(open_syn.cookie.clone())
@@ -182,12 +184,44 @@ impl WBuf {
     fn write_open_ack(&mut self, open_ack: &OpenAck) -> bool {
         let header = open_ack.header();
         zcheck!(self.write(header));
-        if imsg::has_flag(header, smsg::flag::T) {
-            zcheck!(self.write_zint(open_ack.lease / 1_000));
+        if imsg::has_flag(header, tmsg::flag::T) {
+            zcheck!(self.write_zint(open_ack.lease.as_secs() as ZInt));
         } else {
-            zcheck!(self.write_zint(open_ack.lease));
+            zcheck!(self.write_zint(open_ack.lease.as_millis() as ZInt));
         }
         self.write_zint(open_ack.initial_sn)
+    }
+
+    fn write_join(&mut self, join: &Join) -> bool {
+        let header = join.header();
+        zcheck!(self.write(header));
+        if join.has_options() {
+            zcheck!(self.write_zint(join.options()));
+        }
+        zcheck!(self.write(join.version));
+        zcheck!(self.write_zint(join.whatami));
+        zcheck!(self.write_peerid(&join.pid));
+        if imsg::has_flag(header, tmsg::flag::U) {
+            zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
+        } else {
+            zcheck!(self.write_zint(join.lease.as_millis() as ZInt));
+        }
+        if imsg::has_flag(header, tmsg::flag::S) {
+            zcheck!(self.write_zint(join.sn_resolution));
+        }
+        match &join.initial_sns {
+            ConduitSnList::Plain(sn) => {
+                zcheck!(self.write_zint(sn.reliable));
+                zcheck!(self.write_zint(sn.best_effort));
+            }
+            ConduitSnList::QoS(sns) => {
+                for sn in sns.iter() {
+                    zcheck!(self.write_zint(sn.reliable));
+                    zcheck!(self.write_zint(sn.best_effort));
+                }
+            }
+        }
+        true
     }
 
     fn write_close(&mut self, close: &Close) -> bool {

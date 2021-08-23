@@ -19,15 +19,16 @@ use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
-use zenoh::net::link::{Link, Locator, LocatorProperty};
+use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    DummyTransportEventHandler, Transport, TransportEventHandler, TransportHandler,
-    TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
+    DummyTransportUnicastEventHandler, TransportEventHandler, TransportManager,
+    TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
+    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -42,9 +43,19 @@ const USLEEP: Duration = Duration::from_millis(1);
 #[derive(Default)]
 struct SHRouterIntermittent;
 
-impl TransportHandler for SHRouterIntermittent {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
-        Ok(Arc::new(DummyTransportEventHandler::default()))
+impl TransportEventHandler for SHRouterIntermittent {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+        Ok(Arc::new(DummyTransportUnicastEventHandler::default()))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -52,9 +63,19 @@ impl TransportHandler for SHRouterIntermittent {
 #[derive(Default)]
 struct SHClientIntermittent;
 
-impl TransportHandler for SHClientIntermittent {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
-        Ok(Arc::new(DummyTransportEventHandler::default()))
+impl TransportEventHandler for SHClientIntermittent {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+        Ok(Arc::new(DummyTransportUnicastEventHandler::default()))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -69,9 +90,19 @@ impl SHClientStable {
     }
 }
 
-impl TransportHandler for SHClientStable {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+impl TransportEventHandler for SHClientStable {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
         Ok(Arc::new(SCClient::new(self.counter.clone())))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -86,14 +117,14 @@ impl SCClient {
     }
 }
 
-impl TransportEventHandler for SCClient {
+impl TransportUnicastEventHandler for SCClient {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         self.counter.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
-    fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn new_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -110,11 +141,11 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     // Create the router transport manager
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(router_id.clone())
+        .pid(router_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .max_transports(3)
+                .max_sessions(3)
                 .max_links(1)
                 .build(),
         )
@@ -130,11 +161,11 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     let counter = Arc::new(AtomicUsize::new(0));
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client01_id.clone())
+        .pid(client01_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .max_transports(1)
+                .max_sessions(1)
                 .max_links(1)
                 .build(),
         )
@@ -144,11 +175,11 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     // Create the transport transport manager for the second client
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client02_id.clone())
+        .pid(client02_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .max_transports(1)
+                .max_sessions(1)
                 .max_links(1)
                 .build(),
         )
@@ -158,11 +189,11 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     // Create the transport transport manager for the third client
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client03_id.clone())
+        .pid(client03_id)
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .max_transports(1)
+                .max_sessions(1)
                 .max_links(1)
                 .build(),
         )
@@ -188,7 +219,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     // Continously open and close transport from client02 and client03 to the router
     let c_client02_manager = client02_manager.clone();
     let c_locator = locator.clone();
-    let c_router_id = router_id.clone();
+    let c_router_id = router_id;
     let c2_handle = task::spawn(async move {
         loop {
             print!("+");
@@ -212,7 +243,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
 
     let c_client03_manager = client03_manager.clone();
     let c_locator = locator.clone();
-    let c_router_id = router_id.clone();
+    let c_router_id = router_id;
     let c3_handle = task::spawn(async move {
         loop {
             print!("*");

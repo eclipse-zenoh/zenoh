@@ -172,10 +172,15 @@ impl SeqNumGenerator {
         SeqNumGenerator(SeqNum::new(initial_sn, sn_resolution))
     }
 
+    #[inline(always)]
+    pub(crate) fn now(&mut self) -> ZInt {
+        self.0.get()
+    }
+
     /// Generates the next sequence number
     #[inline(always)]
     pub(crate) fn get(&mut self) -> ZInt {
-        let now = self.0.get();
+        let now = self.now();
         self.0.increment();
         now
     }

@@ -12,9 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::*;
+use super::defaults::SEQ_NUM_RES;
 use super::io::ZBuf;
 use super::msg::*;
 use std::convert::TryInto;
+use std::time::Duration;
 
 impl ZBuf {
     #[allow(unused_variables)]
@@ -22,7 +24,7 @@ impl ZBuf {
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
         #[cfg(feature = "zero-copy")]
         {
-            let buffer = self.read_zbuf(imsg::has_flag(header, smsg::flag::Z))?;
+            let buffer = self.read_zbuf(imsg::has_flag(header, tmsg::flag::Z))?;
             Some(Attachment { buffer })
         }
 
@@ -43,7 +45,7 @@ impl ZBuf {
     /*            TRANSPORT              */
     /*************************************/
     pub fn read_transport_message(&mut self) -> Option<TransportMessage> {
-        use super::smsg::id::*;
+        use super::tmsg::id::*;
 
         let mut attachment = None;
         let mut priority = Priority::default();
@@ -67,25 +69,26 @@ impl ZBuf {
                 SCOUT => break self.read_scout(header)?,
                 HELLO => break self.read_hello(header)?,
                 INIT => {
-                    if imsg::has_flag(header, smsg::flag::A) {
+                    if imsg::has_flag(header, tmsg::flag::A) {
                         break self.read_init_ack(header)?;
                     } else {
                         break self.read_init_syn(header)?;
                     }
                 }
                 OPEN => {
-                    if imsg::has_flag(header, smsg::flag::A) {
+                    if imsg::has_flag(header, tmsg::flag::A) {
                         break self.read_open_ack(header)?;
                     } else {
                         break self.read_open_syn(header)?;
                     }
                 }
+                JOIN => break self.read_join(header)?,
                 CLOSE => break self.read_close(header)?,
                 SYNC => break self.read_sync(header)?,
                 ACK_NACK => break self.read_ack_nack(header)?,
                 KEEP_ALIVE => break self.read_keep_alive(header)?,
                 PING_PONG => {
-                    if imsg::has_flag(header, smsg::flag::P) {
+                    if imsg::has_flag(header, tmsg::flag::P) {
                         break self.read_ping(header)?;
                     } else {
                         break self.read_pong(header)?;
@@ -103,7 +106,7 @@ impl ZBuf {
 
     #[inline(always)]
     fn read_frame(&mut self, header: u8, priority: Priority) -> Option<TransportBody> {
-        let reliability = match imsg::has_flag(header, smsg::flag::R) {
+        let reliability = match imsg::has_flag(header, tmsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
         };
@@ -113,11 +116,11 @@ impl ZBuf {
         };
         let sn = self.read_zint()?;
 
-        let payload = if imsg::has_flag(header, smsg::flag::F) {
+        let payload = if imsg::has_flag(header, tmsg::flag::F) {
             // A fragmented frame is not supposed to be followed by
             // any other frame in the same batch. Read all the bytes.
             let buffer = self.read_zslice(self.readable())?;
-            let is_final = imsg::has_flag(header, smsg::flag::E);
+            let is_final = imsg::has_flag(header, tmsg::flag::E);
             FramePayload::Fragment { buffer, is_final }
         } else {
             let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
@@ -143,8 +146,8 @@ impl ZBuf {
     }
 
     fn read_scout(&mut self, header: u8) -> Option<TransportBody> {
-        let pid_request = imsg::has_flag(header, smsg::flag::I);
-        let what = if imsg::has_flag(header, smsg::flag::W) {
+        let pid_request = imsg::has_flag(header, tmsg::flag::I);
+        let what = if imsg::has_flag(header, tmsg::flag::W) {
             Some(self.read_zint()?)
         } else {
             None
@@ -154,17 +157,17 @@ impl ZBuf {
     }
 
     fn read_hello(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if imsg::has_flag(header, smsg::flag::I) {
+        let pid = if imsg::has_flag(header, tmsg::flag::I) {
             Some(self.read_peerid()?)
         } else {
             None
         };
-        let whatami = if imsg::has_flag(header, smsg::flag::W) {
+        let whatami = if imsg::has_flag(header, tmsg::flag::W) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let locators = if imsg::has_flag(header, smsg::flag::L) {
+        let locators = if imsg::has_flag(header, tmsg::flag::L) {
             Some(self.read_locators()?)
         } else {
             None
@@ -178,7 +181,7 @@ impl ZBuf {
     }
 
     fn read_init_syn(&mut self, header: u8) -> Option<TransportBody> {
-        let options = if imsg::has_flag(header, smsg::flag::O) {
+        let options = if imsg::has_flag(header, tmsg::flag::O) {
             self.read_zint()?
         } else {
             0
@@ -186,12 +189,12 @@ impl ZBuf {
         let version = self.read()?;
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
-        let sn_resolution = if imsg::has_flag(header, smsg::flag::S) {
-            Some(self.read_zint()?)
+        let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
+            self.read_zint()?
         } else {
-            None
+            SEQ_NUM_RES
         };
-        let is_qos = imsg::has_option(options, smsg::init_options::QOS);
+        let is_qos = imsg::has_option(options, tmsg::init_options::QOS);
 
         Some(TransportBody::InitSyn(InitSyn {
             version,
@@ -203,19 +206,19 @@ impl ZBuf {
     }
 
     fn read_init_ack(&mut self, header: u8) -> Option<TransportBody> {
-        let options = if imsg::has_flag(header, smsg::flag::O) {
+        let options = if imsg::has_flag(header, tmsg::flag::O) {
             self.read_zint()?
         } else {
             0
         };
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
-        let sn_resolution = if imsg::has_flag(header, smsg::flag::S) {
+        let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let is_qos = imsg::has_option(options, smsg::init_options::QOS);
+        let is_qos = imsg::has_option(options, tmsg::init_options::QOS);
         let cookie = self.read_zslice_array()?;
 
         Some(TransportBody::InitAck(InitAck {
@@ -228,10 +231,11 @@ impl ZBuf {
     }
 
     fn read_open_syn(&mut self, header: u8) -> Option<TransportBody> {
-        let lease = if imsg::has_flag(header, smsg::flag::T) {
-            1_000 * self.read_zint()?
+        let lease = self.read_zint()?;
+        let lease = if imsg::has_flag(header, tmsg::flag::T) {
+            Duration::from_secs(lease)
         } else {
-            self.read_zint()?
+            Duration::from_millis(lease)
         };
         let initial_sn = self.read_zint()?;
 
@@ -244,19 +248,65 @@ impl ZBuf {
     }
 
     fn read_open_ack(&mut self, header: u8) -> Option<TransportBody> {
-        let lease = if imsg::has_flag(header, smsg::flag::T) {
-            1_000 * self.read_zint()?
+        let lease = self.read_zint()?;
+        let lease = if imsg::has_flag(header, tmsg::flag::T) {
+            Duration::from_secs(lease)
         } else {
-            self.read_zint()?
+            Duration::from_millis(lease)
         };
         let initial_sn = self.read_zint()?;
 
         Some(TransportBody::OpenAck(OpenAck { lease, initial_sn }))
     }
 
+    fn read_join(&mut self, header: u8) -> Option<TransportBody> {
+        let options = if imsg::has_flag(header, tmsg::flag::O) {
+            self.read_zint()?
+        } else {
+            0
+        };
+        let version = self.read()?;
+        let whatami = self.read_zint()?;
+        let pid = self.read_peerid()?;
+        let lease = self.read_zint()?;
+        let lease = if imsg::has_flag(header, tmsg::flag::U) {
+            Duration::from_secs(lease)
+        } else {
+            Duration::from_millis(lease)
+        };
+        let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
+            self.read_zint()?
+        } else {
+            SEQ_NUM_RES
+        };
+        let is_qos = imsg::has_option(options, tmsg::join_options::QOS);
+        let initial_sns = if is_qos {
+            let mut sns = Box::new([ConduitSn::default(); Priority::NUM]);
+            for i in 0..Priority::NUM {
+                sns[i].reliable = self.read_zint()?;
+                sns[i].best_effort = self.read_zint()?;
+            }
+            ConduitSnList::QoS(sns)
+        } else {
+            ConduitSnList::Plain(ConduitSn {
+                reliable: self.read_zint()?,
+                best_effort: self.read_zint()?,
+            })
+        };
+
+        Some(TransportBody::Join(Join {
+            version,
+            whatami,
+            pid,
+            lease,
+            sn_resolution,
+            initial_sns,
+        }))
+    }
+
     fn read_close(&mut self, header: u8) -> Option<TransportBody> {
-        let link_only = imsg::has_flag(header, smsg::flag::K);
-        let pid = if imsg::has_flag(header, smsg::flag::I) {
+        let link_only = imsg::has_flag(header, tmsg::flag::K);
+        let pid = if imsg::has_flag(header, tmsg::flag::I) {
             Some(self.read_peerid()?)
         } else {
             None
@@ -271,12 +321,12 @@ impl ZBuf {
     }
 
     fn read_sync(&mut self, header: u8) -> Option<TransportBody> {
-        let reliability = match imsg::has_flag(header, smsg::flag::R) {
+        let reliability = match imsg::has_flag(header, tmsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
         };
         let sn = self.read_zint()?;
-        let count = if imsg::has_flag(header, smsg::flag::C) {
+        let count = if imsg::has_flag(header, tmsg::flag::C) {
             Some(self.read_zint()?)
         } else {
             None
@@ -291,7 +341,7 @@ impl ZBuf {
 
     fn read_ack_nack(&mut self, header: u8) -> Option<TransportBody> {
         let sn = self.read_zint()?;
-        let mask = if imsg::has_flag(header, smsg::flag::M) {
+        let mask = if imsg::has_flag(header, tmsg::flag::M) {
             Some(self.read_zint()?)
         } else {
             None
@@ -301,7 +351,7 @@ impl ZBuf {
     }
 
     fn read_keep_alive(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if imsg::has_flag(header, smsg::flag::I) {
+        let pid = if imsg::has_flag(header, tmsg::flag::I) {
             Some(self.read_peerid()?)
         } else {
             None

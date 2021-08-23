@@ -108,7 +108,7 @@ impl LinkUnicastTls {
 }
 
 #[async_trait]
-impl LinkTrait for LinkUnicastTls {
+impl LinkUnicastTrait for LinkUnicastTls {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing TLS link: {}", self);
         // Flush the TLS stream
@@ -256,7 +256,11 @@ impl LinkManagerUnicastTls {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
-    async fn new_link(&self, locator: &Locator, ps: Option<&LocatorProperty>) -> ZResult<Link> {
+    async fn new_link(
+        &self,
+        locator: &Locator,
+        ps: Option<&LocatorProperty>,
+    ) -> ZResult<LinkUnicast> {
         let domain = get_tls_dns(locator).await?;
         let addr = get_tls_addr(locator).await?;
         let host: &str = domain.as_ref().into();
@@ -300,7 +304,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
 
-        Ok(Link(link))
+        Ok(LinkUnicast(link))
     }
 
     async fn new_listener(
@@ -481,7 +485,9 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial transport manager
-        manager.handle_new_link_unicast(Link(link), None).await;
+        manager
+            .handle_new_link_unicast(LinkUnicast(link), None)
+            .await;
     }
 
     Ok(())

@@ -215,7 +215,7 @@ async fn advertise_view(z: &Arc<Session>, state: &Arc<GroupState>) {
     members.push(state.local_member.clone());
     if min == *sid {
         let evt = GroupNetEvent::NewGroupView(NewGroupViewEvent {
-            source: sid.clone(),
+            source: sid.to_string(),
             members,
         });
         log::debug!("Advertising NewGroupView: {:?}", &evt);

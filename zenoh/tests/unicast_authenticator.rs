@@ -11,403 +11,350 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
+use std::any::Any;
+use std::collections::{HashMap, HashSet};
+use std::iter::FromIterator;
 use std::time::Duration;
-use zenoh::net::link::{Locator, LocatorProperty};
+use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
+use zenoh::net::protocol::proto::ZenohMessage;
+#[cfg(feature = "zero-copy")]
+use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
+use zenoh::net::transport::unicast::authenticator::UserPasswordAuthenticator;
 use zenoh::net::transport::{
-    DummyTransportEventHandler, Transport, TransportEventHandler, TransportHandler,
-    TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
+    DummyTransportUnicastEventHandler, TransportEventHandler, TransportManager,
+    TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
+    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
 
-const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
 
 #[cfg(test)]
-#[derive(Default)]
-struct SHRouterOpenClose;
+struct SHRouterAuthenticator;
 
-impl TransportHandler for SHRouterOpenClose {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
-        Ok(Arc::new(DummyTransportEventHandler::default()))
+impl SHRouterAuthenticator {
+    fn new() -> Self {
+        Self
+    }
+}
+
+impl TransportEventHandler for SHRouterAuthenticator {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+        Ok(Arc::new(MHRouterAuthenticator::new()))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
+    }
+}
+
+struct MHRouterAuthenticator;
+
+impl MHRouterAuthenticator {
+    fn new() -> Self {
+        Self
+    }
+}
+
+impl TransportUnicastEventHandler for MHRouterAuthenticator {
+    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+        Ok(())
+    }
+    fn new_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
 // Transport Handler for the client
-struct SHClientOpenClose {}
+#[derive(Default)]
+struct SHClientAuthenticator;
 
-impl SHClientOpenClose {
-    fn new() -> Self {
-        Self {}
+impl TransportEventHandler for SHClientAuthenticator {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+        Ok(Arc::new(DummyTransportUnicastEventHandler::default()))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
-impl TransportHandler for SHClientOpenClose {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
-        Ok(Arc::new(DummyTransportEventHandler::default()))
-    }
-}
+async fn authenticator_user_password(
+    locator: Locator,
+    locator_property: Option<Vec<LocatorProperty>>,
+) {
+    /* [CLIENT] */
+    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+    let user01 = "user01".to_string();
+    let password01 = "password01".to_string();
 
-async fn transport_open_close(locator: Locator, locator_property: Option<Vec<LocatorProperty>>) {
+    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
+    let user02 = "invalid".to_string();
+    let password02 = "invalid".to_string();
+
+    let client03_id = client01_id;
+    let user03 = "user03".to_string();
+    let password03 = "password03".to_string();
+
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-
-    let router_handler = Arc::new(SHRouterOpenClose::default());
+    let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router transport manager
+    let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    lookup.insert(user01.clone().into(), password01.clone().into());
+    lookup.insert(user03.clone().into(), password03.clone().into());
+
+    let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(router_id.clone())
+        .pid(router_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .max_transports(1)
-                .max_links(2)
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_router
+                    .clone()
+                    .into()]))
                 .build(),
         )
         .build(router_handler.clone());
     let router_manager = TransportManager::new(config);
 
-    /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
-
     // Create the transport transport manager for the first client
+    let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let peer_authenticator_client01 = UserPasswordAuthenticator::new(
+        lookup,
+        Some((user01.clone().into(), password01.clone().into())),
+    );
+
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client01_id.clone())
+        .pid(client01_id)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .max_transports(1)
-                .max_links(2)
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client01.into()]))
                 .build(),
         )
-        .build(Arc::new(SHClientOpenClose::new()));
+        .build(Arc::new(SHClientAuthenticator::default()));
     let client01_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the second client
+    let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let peer_authenticator_client02 = UserPasswordAuthenticator::new(
+        lookup,
+        Some((user02.clone().into(), password02.clone().into())),
+    );
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
-        .pid(client02_id.clone())
+        .pid(client02_id)
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client02.into()]))
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client02_manager = TransportManager::new(config);
+
+    // Create the transport transport manager for the third client
+    let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    let peer_authenticator_client03 = UserPasswordAuthenticator::new(
+        lookup,
+        Some((user03.clone().into(), password03.clone().into())),
+    );
+    let config = TransportManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client03_id)
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .max_transports(1)
-                .max_links(1)
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client03.into()]))
                 .build(),
         )
-        .build(Arc::new(SHClientOpenClose::new()));
-    let client02_manager = TransportManager::new(config);
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client03_manager = TransportManager::new(config);
 
     /* [1] */
-    println!("\nTransport Open Close [1a1]");
+    println!("\nTransport Authenticator UserPassword [1a1]");
     // Add the locator on the router
     let res = router_manager.add_listener(&locator).await;
-    println!("Transport Open Close [1a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [1a1]: {:?}", res);
     assert!(res.is_ok());
-    println!("Transport Open Close [1a2]");
+    println!("Transport Authenticator UserPassword [1a2]");
     let locators = router_manager.get_listeners();
-    println!("Transport Open Close [1a2]: {:?}", locators);
+    println!("Transport Authenticator UserPassword [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
+    /* [2] */
     // Open a first transport from the client to the router
     // -> This should be accepted
-    println!("Transport Open Close [1c1]");
+    println!("Transport Authenticator UserPassword [2a1]");
     let res = client01_manager.open_transport(&locator).await;
-    println!("Transport Open Close [1c2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
-    println!("Transport Open Close [1d1]");
-    let transports = client01_manager.get_transports();
-    println!("Transport Open Close [1d2]: {:?}", transports);
-    assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses1.get_pid().unwrap(), router_id);
-    println!("Transport Open Close [1e1]");
-    let links = c_ses1.get_links().unwrap();
-    println!("Transport Open Close [1e2]: {:?}", links);
-    assert_eq!(links.len(), 1);
-
-    // Verify that the transport has been open on the router
-    println!("Transport Open Close [1f1]");
-    let check = async {
-        loop {
-            let transports = router_manager.get_transports();
-            let s = transports
-                .iter()
-                .find(|s| s.get_pid().unwrap() == client01_id);
-
-            match s {
-                Some(s) => {
-                    let links = s.get_links().unwrap();
-                    assert_eq!(links.len(), 1);
-                    break;
-                }
-                None => task::sleep(SLEEP).await,
-            }
-        }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [1f2]: {:?}", res);
-
-    /* [2] */
-    // Open a second transport from the client to the router
-    // -> This should be accepted
-    println!("\nTransport Open Close [2a1]");
-    let res = client01_manager.open_transport(&locator).await;
-    println!("Transport Open Close [2a2]: {:?}", res);
-    assert!(res.is_ok());
-    let c_ses2 = res.unwrap();
-    println!("Transport Open Close [2b1]");
-    let transports = client01_manager.get_transports();
-    println!("Transport Open Close [2b2]: {:?}", transports);
-    assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses2.get_pid().unwrap(), router_id);
-    println!("Transport Open Close [2c1]");
-    let links = c_ses2.get_links().unwrap();
-    println!("Transport Open Close [2c2]: {:?}", links);
-    assert_eq!(links.len(), 2);
-    assert_eq!(c_ses2, c_ses1);
-
-    // Verify that the transport has been open on the router
-    println!("Transport Open Close [2d1]");
-    let check = async {
-        loop {
-            let transports = router_manager.get_transports();
-            let s = transports
-                .iter()
-                .find(|s| s.get_pid().unwrap() == client01_id)
-                .unwrap();
-
-            let links = s.get_links().unwrap();
-            if links.len() == 2 {
-                break;
-            }
-            task::sleep(SLEEP).await;
-        }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [2d2]: {:?}", res);
 
     /* [3] */
-    // Open transport -> This should be rejected because
-    // of the maximum limit of links per transport
-    println!("\nTransport Open Close [3a1]");
-    let res = client01_manager.open_transport(&locator).await;
-    println!("Transport Open Close [3a2]: {:?}", res);
-    assert!(res.is_err());
-    println!("Transport Open Close [3b1]");
-    let transports = client01_manager.get_transports();
-    println!("Transport Open Close [3b2]: {:?}", transports);
-    assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses1.get_pid().unwrap(), router_id);
-    println!("Transport Open Close [3c1]");
-    let links = c_ses1.get_links().unwrap();
-    println!("Transport Open Close [3c2]: {:?}", links);
-    assert_eq!(links.len(), 2);
-
-    // Verify that the transport has not been open on the router
-    println!("Transport Open Close [3d1]");
-    let check = async {
-        task::sleep(SLEEP).await;
-        let transports = router_manager.get_transports();
-        assert_eq!(transports.len(), 1);
-        let s = transports
-            .iter()
-            .find(|s| s.get_pid().unwrap() == client01_id)
-            .unwrap();
-        let links = s.get_links().unwrap();
-        assert_eq!(links.len(), 2);
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [3d2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [3a1]");
+    let res = c_ses1.close().await;
+    println!("Transport Authenticator UserPassword [3a1]: {:?}", res);
+    assert!(res.is_ok());
 
     /* [4] */
-    // Close the open transport on the client
-    println!("\nTransport Open Close [4a1]");
-    let res = c_ses1.close().await;
-    println!("Transport Open Close [4a2]: {:?}", res);
-    assert!(res.is_ok());
-    println!("Transport Open Close [4b1]");
-    let transports = client01_manager.get_transports();
-    println!("Transport Open Close [4b2]: {:?}", transports);
-    assert_eq!(transports.len(), 0);
-
-    // Verify that the transport has been closed also on the router
-    println!("Transport Open Close [4c1]");
-    let check = async {
-        loop {
-            let transports = router_manager.get_transports();
-            let index = transports
-                .iter()
-                .find(|s| s.get_pid().unwrap() == client01_id);
-            if index.is_none() {
-                break;
-            }
-            task::sleep(SLEEP).await;
-        }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [4c2]: {:?}", res);
+    // Open a second transport from the client to the router
+    // -> This should be rejected
+    println!("Transport Authenticator UserPassword [4a1]");
+    let res = client02_manager.open_transport(&locator).await;
+    println!("Transport Authenticator UserPassword [4a1]: {:?}", res);
+    assert!(res.is_err());
 
     /* [5] */
-    // Open transport -> This should be accepted because
-    // the number of links should be back to 0
-    println!("\nTransport Open Close [5a1]");
+    // Open a third transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator UserPassword [5a1]");
     let res = client01_manager.open_transport(&locator).await;
-    println!("Transport Open Close [5a2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [5a1]: {:?}", res);
     assert!(res.is_ok());
-    let c_ses3 = res.unwrap();
-    println!("Transport Open Close [5b1]");
-    let transports = client01_manager.get_transports();
-    println!("Transport Open Close [5b2]: {:?}", transports);
-    assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses3.get_pid().unwrap(), router_id);
-    println!("Transport Open Close [5c1]");
-    let links = c_ses3.get_links().unwrap();
-    println!("Transport Open Close [5c2]: {:?}", links);
-    assert_eq!(links.len(), 1);
-
-    // Verify that the transport has not been open on the router
-    println!("Transport Open Close [5d1]");
-    let check = async {
-        task::sleep(SLEEP).await;
-        let transports = router_manager.get_transports();
-        assert_eq!(transports.len(), 1);
-        let s = transports
-            .iter()
-            .find(|s| s.get_pid().unwrap() == client01_id)
-            .unwrap();
-        let links = s.get_links().unwrap();
-        assert_eq!(links.len(), 1);
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [5d2]: {:?}", res);
+    let c_ses1 = res.unwrap();
 
     /* [6] */
-    // Open transport -> This should be rejected because
-    // of the maximum limit of transports
-    println!("\nTransport Open Close [6a1]");
+    // Add client02 credentials on the router
+    let res = peer_authenticator_router
+        .add_user(user02.into(), password02.into())
+        .await;
+    assert!(res.is_ok());
+    // Open a fourth transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator UserPassword [6a1]");
     let res = client02_manager.open_transport(&locator).await;
-    println!("Transport Open Close [6a2]: {:?}", res);
-    assert!(res.is_err());
-    println!("Transport Open Close [6b1]");
-    let transports = client02_manager.get_transports();
-    println!("Transport Open Close [6b2]: {:?}", transports);
-    assert_eq!(transports.len(), 0);
-
-    // Verify that the transport has not been open on the router
-    println!("Transport Open Close [6c1]");
-    let check = async {
-        task::sleep(SLEEP).await;
-        let transports = router_manager.get_transports();
-        assert_eq!(transports.len(), 1);
-        let s = transports
-            .iter()
-            .find(|s| s.get_pid().unwrap() == client01_id)
-            .unwrap();
-        let links = s.get_links().unwrap();
-        assert_eq!(links.len(), 1);
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [6c2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [6a1]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses2 = res.unwrap();
 
     /* [7] */
-    // Close the open transport on the client
-    println!("\nTransport Open Close [7a1]");
-    let res = c_ses3.close().await;
-    println!("Transport Open Close [7a2]: {:?}", res);
-    assert!(res.is_ok());
-    println!("Transport Open Close [7b1]");
-    let transports = client01_manager.get_transports();
-    println!("Transport Open Close [7b2]: {:?}", transports);
-    assert_eq!(transports.len(), 0);
-
-    // Verify that the transport has been closed also on the router
-    println!("Transport Open Close [7c1]");
-    let check = async {
-        loop {
-            let transports = router_manager.get_transports();
-            if transports.is_empty() {
-                break;
-            }
-            task::sleep(SLEEP).await;
-        }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [7c2]: {:?}", res);
+    // Open a fourth transport from the client to the router
+    // -> This should be rejected
+    println!("Transport Authenticator UserPassword [7a1]");
+    let res = client03_manager.open_transport(&locator).await;
+    println!("Transport Authenticator UserPassword [7a1]: {:?}", res);
+    assert!(res.is_err());
 
     /* [8] */
-    // Open transport -> This should be accepted because
-    // the number of transports should be back to 0
-    println!("\nTransport Open Close [8a1]");
-    let res = client02_manager.open_transport(&locator).await;
-    println!("Transport Open Close [8a2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [8a1]");
+    let res = c_ses1.close().await;
+    println!("Transport Authenticator UserPassword [8a1]: {:?}", res);
     assert!(res.is_ok());
-    let c_ses4 = res.unwrap();
-    println!("Transport Open Close [8b1]");
-    let transports = client02_manager.get_transports();
-    println!("Transport Open Close [8b2]: {:?}", transports);
-    assert_eq!(transports.len(), 1);
-    println!("Transport Open Close [8c1]");
-    let links = c_ses4.get_links().unwrap();
-    println!("Transport Open Close [8c2]: {:?}", links);
-    assert_eq!(links.len(), 1);
+    println!("Transport Authenticator UserPassword [8a2]");
+    let res = c_ses2.close().await;
+    println!("Transport Authenticator UserPassword [8a2]: {:?}", res);
+    assert!(res.is_ok());
 
-    // Verify that the transport has been open on the router
-    println!("Transport Open Close [8d1]");
-    let check = async {
-        loop {
-            let transports = router_manager.get_transports();
-            let s = transports
-                .iter()
-                .find(|s| s.get_pid().unwrap() == client02_id);
-            match s {
-                Some(s) => {
-                    let links = s.get_links().unwrap();
-                    assert_eq!(links.len(), 1);
-                    break;
-                }
-                None => task::sleep(SLEEP).await,
-            }
-        }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [8d2]: {:?}", res);
+    task::sleep(SLEEP).await;
 
     /* [9] */
-    // Close the open transport on the client
-    println!("Transport Open Close [9a1]");
-    let res = c_ses4.close().await;
-    println!("Transport Open Close [9a2]: {:?}", res);
-    assert!(res.is_ok());
-    println!("Transport Open Close [9b1]");
-    let transports = client02_manager.get_transports();
-    println!("Transport Open Close [9b2]: {:?}", transports);
-    assert_eq!(transports.len(), 0);
-
-    // Verify that the transport has been closed also on the router
-    println!("Transport Open Close [9c1]");
-    let check = async {
-        loop {
-            let transports = router_manager.get_transports();
-            if transports.is_empty() {
-                break;
-            }
-            task::sleep(SLEEP).await;
-        }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
-    println!("Transport Open Close [9c2]: {:?}", res);
-
-    /* [10] */
     // Perform clean up of the open locators
-    println!("\nTransport Open Close [10a1]");
+    println!("Transport Authenticator UserPassword [9a1]");
     let res = router_manager.del_listener(&locator).await;
-    println!("Transport Open Close [10a2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [9a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+}
+
+#[cfg(feature = "zero-copy")]
+async fn authenticator_shared_memory(
+    locator: Locator,
+    locator_property: Option<Vec<LocatorProperty>>,
+) {
+    /* [CLIENT] */
+    let client_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+
+    /* [ROUTER] */
+    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_handler = Arc::new(SHRouterAuthenticator::new());
+    // Create the router transport manager
+    let peer_authenticator_router = SharedMemoryAuthenticator::new();
+    let config = TransportManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(router_id)
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_router.into()]))
+                .build(),
+        )
+        .build(router_handler.clone());
+    let router_manager = TransportManager::new(config);
+
+    // Create the transport transport manager for the first client
+    let peer_authenticator_client = SharedMemoryAuthenticator::new();
+    let config = TransportManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(client_id)
+        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client.into()]))
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client_manager = TransportManager::new(config);
+
+    /* [1] */
+    println!("\nTransport Authenticator SharedMemory [1a1]");
+    // Add the locator on the router
+    let res = router_manager.add_listener(&locator).await;
+    println!("Transport Authenticator SharedMemory [1a1]: {:?}", res);
+    assert!(res.is_ok());
+    println!("Transport Authenticator SharedMemory [1a2]");
+    let locators = router_manager.get_listeners();
+    println!("Transport Authenticator SharedMemory 1a2]: {:?}", locators);
+    assert_eq!(locators.len(), 1);
+
+    /* [2] */
+    // Open a transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator SharedMemory [2a1]");
+    let res = client_manager.open_transport(&locator).await;
+    println!("Transport Authenticator SharedMemory [2a1]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+    assert!(c_ses1.is_shm().unwrap());
+
+    /* [3] */
+    println!("Transport Authenticator SharedMemory [3a1]");
+    let res = c_ses1.close().await;
+    println!("Transport Authenticator SharedMemory [3a1]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+
+    /* [4] */
+    // Perform clean up of the open locators
+    println!("Transport Authenticator SharedMemory [4a1]");
+    let res = router_manager.del_listener(&locator).await;
+    println!("Transport Authenticator SharedMemory [4a2]: {:?}", res);
     assert!(res.is_ok());
 
     task::sleep(SLEEP).await;
@@ -415,45 +362,57 @@ async fn transport_open_close(locator: Locator, locator_property: Option<Vec<Loc
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-fn transport_tcp_only() {
+fn authenticator_tcp() {
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let locator = "tcp/127.0.0.1:8447".parse().unwrap();
-    task::block_on(transport_open_close(locator, None));
+    let locator: Locator = "tcp/127.0.0.1:11447".parse().unwrap();
+    task::block_on(async {
+        authenticator_user_password(locator.clone(), None).await;
+        #[cfg(feature = "zero-copy")]
+        authenticator_shared_memory(locator, None).await;
+    });
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
-fn transport_udp_only() {
+fn authenticator_udp() {
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let locator = "udp/127.0.0.1:8447".parse().unwrap();
-    task::block_on(transport_open_close(locator, None));
+    let locator: Locator = "udp/127.0.0.1:11447".parse().unwrap();
+    task::block_on(async {
+        authenticator_user_password(locator.clone(), None).await;
+        #[cfg(feature = "zero-copy")]
+        authenticator_shared_memory(locator, None).await;
+    });
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
-fn transport_unix_only() {
+fn authenticator_unix() {
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
+    let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-10.sock"
         .parse()
         .unwrap();
-    task::block_on(transport_open_close(locator, None));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
+    task::block_on(async {
+        authenticator_user_password(locator.clone(), None).await;
+        #[cfg(feature = "zero-copy")]
+        authenticator_shared_memory(locator, None).await;
+    });
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
+    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");
 }
 
 #[cfg(feature = "transport_tls")]
 #[test]
-fn transport_tls_only() {
+fn authenticator_tls() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -549,14 +508,19 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .add_pem_file(&mut Cursor::new(ca.as_bytes()))
         .unwrap();
 
-    let locator = "tls/localhost:8448".parse().unwrap();
-    let property = vec![(client_config, server_config).into()];
-    task::block_on(transport_open_close(locator, Some(property)));
+    // Define the locator
+    let locator: Locator = "tls/localhost:11448".parse().unwrap();
+    let locator_property = vec![(client_config, server_config).into()];
+    task::block_on(async {
+        authenticator_user_password(locator.clone(), Some(locator_property.clone())).await;
+        #[cfg(feature = "zero-copy")]
+        authenticator_shared_memory(locator, Some(locator_property)).await;
+    });
 }
 
 #[cfg(feature = "transport_quic")]
 #[test]
-fn transport_quic_only() {
+fn authenticator_quic() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -661,7 +625,11 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     client_config.add_certificate_authority(ca).unwrap();
 
     // Define the locator
-    let locator = "quic/localhost:8449".parse().unwrap();
-    let property = vec![(client_config, server_config).into()];
-    task::block_on(transport_open_close(locator, Some(property)));
+    let locator: Locator = "quic/localhost:11448".parse().unwrap();
+    let locator_property = vec![(client_config, server_config).into()];
+    task::block_on(async {
+        authenticator_user_password(locator.clone(), Some(locator_property.clone())).await;
+        #[cfg(feature = "zero-copy")]
+        authenticator_shared_memory(locator, Some(locator_property)).await;
+    });
 }

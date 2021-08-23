@@ -12,9 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::*;
+use super::defaults::SEQ_NUM_RES;
 use super::io::{ZBuf, ZSlice};
 use crate::net::link::Locator;
 use std::fmt;
+use std::time::Duration;
 
 /*************************************/
 /*               IDS                 */
@@ -24,17 +26,17 @@ pub(crate) mod imsg {
     use super::ZInt;
 
     pub(crate) mod id {
-        // Transport Messages Unicast
-        pub(crate) const INIT: u8 = 0x03;
-        pub(crate) const OPEN: u8 = 0x04;
+        // Transport Messages
+        pub(crate) const JOIN: u8 = 0x00; // For multicast communications only
+        pub(crate) const SCOUT: u8 = 0x01;
+        pub(crate) const HELLO: u8 = 0x02;
+        pub(crate) const INIT: u8 = 0x03; // For unicast communications only
+        pub(crate) const OPEN: u8 = 0x04; // For unicast communications only
         pub(crate) const CLOSE: u8 = 0x05;
         pub(crate) const SYNC: u8 = 0x06;
         pub(crate) const ACK_NACK: u8 = 0x07;
-        pub(crate) const PING_PONG: u8 = 0x09;
-        // Transport Messages
-        pub(crate) const SCOUT: u8 = 0x01;
-        pub(crate) const HELLO: u8 = 0x02;
         pub(crate) const KEEP_ALIVE: u8 = 0x08;
+        pub(crate) const PING_PONG: u8 = 0x09;
         pub(crate) const FRAME: u8 = 0x0a;
 
         // Zenoh Messages
@@ -73,7 +75,7 @@ pub(crate) mod imsg {
     }
 }
 
-pub mod smsg {
+pub mod tmsg {
     use super::{imsg, Priority, ZInt};
 
     // Transport message IDs -- Re-export of some of the Inner Message IDs
@@ -91,6 +93,7 @@ pub mod smsg {
         pub const KEEP_ALIVE: u8 = imsg::id::KEEP_ALIVE;
         pub const PING_PONG: u8 = imsg::id::PING_PONG;
         pub const FRAME: u8 = imsg::id::FRAME;
+        pub const JOIN: u8 = imsg::id::JOIN;
 
         // Message decorators
         pub const PRIORITY: u8 = imsg::id::PRIORITY;
@@ -103,7 +106,7 @@ pub mod smsg {
         pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
         pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
         pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
-        pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is present
+        pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is requested or present
         pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
         pub const L: u8 = 1 << 7; // 0x80 Locators      if L==1 then Locators are present
         pub const M: u8 = 1 << 5; // 0x20 Mask          if M==1 then a Mask is present
@@ -112,6 +115,7 @@ pub mod smsg {
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
         pub const T: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
+        pub const U: u8 = 1 << 5; // 0x20 TimeRes       if T==1 then the time resolution is in seconds // @TODO: harmonize flags
         pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
         pub const Z: u8 = 1 << 5; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
@@ -119,6 +123,12 @@ pub mod smsg {
     }
 
     pub mod init_options {
+        use super::ZInt;
+
+        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
+    }
+
+    pub mod join_options {
         use super::ZInt;
 
         pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
@@ -347,10 +357,10 @@ impl Header for Attachment {
     #[inline(always)]
     fn header(&self) -> u8 {
         #[allow(unused_mut)]
-        let mut header = smsg::id::ATTACHMENT;
+        let mut header = tmsg::id::ATTACHMENT;
         #[cfg(feature = "zero-copy")]
         if self.buffer.has_shminfo() {
-            header |= smsg::flag::Z;
+            header |= tmsg::flag::Z;
         }
         header
     }
@@ -466,7 +476,7 @@ impl RoutingContext {
 /// ```
 impl Priority {
     pub fn header(self) -> u8 {
-        smsg::id::PRIORITY | ((self as u8) << imsg::HEADER_BITS)
+        tmsg::id::PRIORITY | ((self as u8) << imsg::HEADER_BITS)
     }
 }
 
@@ -1264,7 +1274,7 @@ impl ZenohMessage {
 }
 
 /*************************************/
-/*       TRANSPORTMESSAGES           */
+/*       TRANSPORT MESSAGES          */
 /*************************************/
 #[derive(Debug, Clone)]
 pub enum TransportMode {
@@ -1302,12 +1312,12 @@ pub struct Scout {
 impl Header for Scout {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::SCOUT;
+        let mut header = tmsg::id::SCOUT;
         if self.pid_request {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         if self.what.is_some() {
-            header |= smsg::flag::W;
+            header |= tmsg::flag::W;
         }
         header
     }
@@ -1355,15 +1365,15 @@ pub struct Hello {
 impl Header for Hello {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::HELLO;
+        let mut header = tmsg::id::HELLO;
         if self.pid.is_some() {
-            header |= smsg::flag::I
+            header |= tmsg::flag::I
         }
         if self.whatami.is_some() && self.whatami.unwrap() != whatami::ROUTER {
-            header |= smsg::flag::W;
+            header |= tmsg::flag::W;
         }
         if self.locators.is_some() {
-            header |= smsg::flag::L;
+            header |= tmsg::flag::L;
         }
         header
     }
@@ -1416,7 +1426,7 @@ impl fmt::Display for Hello {
 /// +---------------+
 /// ~    peer_id    ~ -- PID of the sender of the INIT message
 /// +---------------+
-/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
+/// ~ sn_resolution ~ if S==1 -- the sequence number resolution(*)
 /// +---------------+
 /// ~     cookie    ~ if A==1
 /// +---------------+
@@ -1431,19 +1441,19 @@ pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
     pub pid: PeerId,
-    pub sn_resolution: Option<ZInt>,
+    pub sn_resolution: ZInt,
     pub is_qos: bool,
 }
 
 impl Header for InitSyn {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::INIT;
-        if self.sn_resolution.is_some() {
-            header |= smsg::flag::S;
+        let mut header = tmsg::id::INIT;
+        if self.sn_resolution != SEQ_NUM_RES {
+            header |= tmsg::flag::S;
         }
         if self.has_options() {
-            header |= smsg::flag::O;
+            header |= tmsg::flag::O;
         }
         header
     }
@@ -1453,7 +1463,7 @@ impl Options for InitSyn {
     fn options(&self) -> ZInt {
         let mut options = 0;
         if self.is_qos {
-            options |= smsg::init_options::QOS;
+            options |= tmsg::init_options::QOS;
         }
         options
     }
@@ -1475,13 +1485,13 @@ pub struct InitAck {
 impl Header for InitAck {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::INIT;
-        header |= smsg::flag::A;
+        let mut header = tmsg::id::INIT;
+        header |= tmsg::flag::A;
         if self.sn_resolution.is_some() {
-            header |= smsg::flag::S;
+            header |= tmsg::flag::S;
         }
         if self.has_options() {
-            header |= smsg::flag::O;
+            header |= tmsg::flag::O;
         }
         header
     }
@@ -1491,7 +1501,7 @@ impl Options for InitAck {
     fn options(&self) -> ZInt {
         let mut options = 0;
         if self.is_qos {
-            options |= smsg::init_options::QOS;
+            options |= tmsg::init_options::QOS;
         }
         options
     }
@@ -1516,19 +1526,21 @@ impl Options for InitAck {
 /// +-+-+-+-+-+-+-+-+
 /// |X|T|A|   OPEN  |
 /// +-+-+-+-+-------+
-/// ~ lease_period  ~ -- Lease period of the sender of the OPEN message(*)
+/// ~    lease      ~ -- Lease period of the sender of the OPEN message(*)
 /// +---------------+
 /// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(**)
 /// +---------------+
-/// ~    cookie     ~ if A==0(*)
+/// ~    cookie     ~ if A==0(***)
 /// +---------------+
 ///
-/// (*) if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
-/// (**) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
+/// (*)   if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
+/// (**)  the initial sequence number MUST be compatible with the sequence number resolution agreed in the
+///       InitSyn/InitAck message exchange
+/// (***) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenSyn {
-    pub lease: ZInt,
+    pub lease: Duration,
     pub initial_sn: ZInt,
     pub cookie: ZSlice,
 }
@@ -1536,9 +1548,9 @@ pub struct OpenSyn {
 impl Header for OpenSyn {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::OPEN;
-        if self.lease % 1_000 == 0 {
-            header |= smsg::flag::T;
+        let mut header = tmsg::id::OPEN;
+        if self.lease.as_millis() % 1_000 == 0 {
+            header |= tmsg::flag::T;
         }
         header
     }
@@ -1546,19 +1558,104 @@ impl Header for OpenSyn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenAck {
-    pub lease: ZInt,
+    pub lease: Duration,
     pub initial_sn: ZInt,
 }
 
 impl Header for OpenAck {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::OPEN;
-        header |= smsg::flag::A;
-        if self.lease % 1_000 == 0 {
-            header |= smsg::flag::T;
+        let mut header = tmsg::id::OPEN;
+        header |= tmsg::flag::A;
+        if self.lease.as_millis() % 1_000 == 0 {
+            header |= tmsg::flag::T;
         }
         header
+    }
+}
+
+/// # Join message
+///
+/// ```text
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65_535 bytes.
+///
+/// The JOIN message is sent on a multicast Locator to advertise the transport parameters.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|S|U|   JOIN  |
+/// +-+-+-+-+-------+
+/// ~             |Q~ if O==1
+/// +---------------+
+/// | v_maj | v_min | if A==0 -- Protocol Version VMaj.VMin
+/// +-------+-------+
+/// ~    whatami    ~ -- Router, Peer or a combination of them
+/// +---------------+
+/// ~    peer_id    ~ -- PID of the sender of the JOIN message
+/// +---------------+
+/// ~     lease     ~ -- Lease period of the sender of the JOIN message(*)
+/// +---------------+
+/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
+/// +---------------+
+/// ~  [initial_sn] ~
+/// +---------------+
+///
+/// (*)  if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
+/// (**) if S==0 then 2^28 is assumed.
+///
+/// - if Q==1 then the sender support QoS.
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct Join {
+    pub version: u8,
+    pub whatami: WhatAmI,
+    pub pid: PeerId,
+    pub lease: Duration,
+    pub sn_resolution: ZInt,
+    pub initial_sns: ConduitSnList,
+}
+
+impl Join {
+    pub fn is_qos(&self) -> bool {
+        match self.initial_sns {
+            ConduitSnList::QoS(_) => true,
+            ConduitSnList::Plain(_) => false,
+        }
+    }
+}
+
+impl Header for Join {
+    #[inline(always)]
+    fn header(&self) -> u8 {
+        let mut header = tmsg::id::JOIN;
+        if self.lease.as_millis() % 1_000 == 0 {
+            header |= tmsg::flag::U;
+        }
+        if self.sn_resolution != SEQ_NUM_RES {
+            header |= tmsg::flag::S;
+        }
+        if self.has_options() {
+            header |= tmsg::flag::O;
+        }
+        header
+    }
+}
+
+impl Options for Join {
+    fn options(&self) -> ZInt {
+        let mut options = 0;
+        if self.is_qos() {
+            options |= tmsg::join_options::QOS;
+        }
+        options
+    }
+
+    fn has_options(&self) -> bool {
+        self.options() > 0
     }
 }
 
@@ -1599,12 +1696,12 @@ pub struct Close {
 impl Header for Close {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::CLOSE;
+        let mut header = tmsg::id::CLOSE;
         if self.pid.is_some() {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         if self.link_only {
-            header |= smsg::flag::K;
+            header |= tmsg::flag::K;
         }
         header
     }
@@ -1645,12 +1742,12 @@ pub struct Sync {
 impl Header for Sync {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::SYNC;
+        let mut header = tmsg::id::SYNC;
         if let Reliability::Reliable = self.reliability {
-            header |= smsg::flag::R;
+            header |= tmsg::flag::R;
         }
         if self.count.is_some() {
-            header |= smsg::flag::C;
+            header |= tmsg::flag::C;
         }
         header
     }
@@ -1686,9 +1783,9 @@ pub struct AckNack {
 impl Header for AckNack {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::ACK_NACK;
+        let mut header = tmsg::id::ACK_NACK;
         if self.mask.is_some() {
-            header |= smsg::flag::M;
+            header |= tmsg::flag::M;
         }
         header
     }
@@ -1721,9 +1818,9 @@ pub struct KeepAlive {
 impl Header for KeepAlive {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::KEEP_ALIVE;
+        let mut header = tmsg::id::KEEP_ALIVE;
         if self.pid.is_some() {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         header
     }
@@ -1755,8 +1852,8 @@ pub struct Ping {
 impl Header for Ping {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::PING_PONG;
-        header |= smsg::flag::P;
+        let mut header = tmsg::id::PING_PONG;
+        header |= tmsg::flag::P;
         header
     }
 }
@@ -1769,7 +1866,7 @@ pub struct Pong {
 impl Header for Pong {
     #[inline(always)]
     fn header(&self) -> u8 {
-        smsg::id::PING_PONG
+        tmsg::id::PING_PONG
     }
 }
 
@@ -1816,14 +1913,14 @@ pub struct Frame {
 impl Header for Frame {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::FRAME;
+        let mut header = tmsg::id::FRAME;
         if let Reliability::Reliable = self.channel.reliability {
-            header |= smsg::flag::R;
+            header |= tmsg::flag::R;
         }
         if let FramePayload::Fragment { is_final, .. } = self.payload {
-            header |= smsg::flag::F;
+            header |= tmsg::flag::F;
             if is_final {
-                header |= smsg::flag::E;
+                header |= tmsg::flag::E;
             }
         }
         header
@@ -1832,14 +1929,14 @@ impl Header for Frame {
 
 impl Frame {
     pub fn make_header(reliability: Reliability, is_fragment: Option<bool>) -> u8 {
-        let mut header = smsg::id::FRAME;
+        let mut header = tmsg::id::FRAME;
         if let Reliability::Reliable = reliability {
-            header |= smsg::flag::R;
+            header |= tmsg::flag::R;
         }
         if let Some(is_final) = is_fragment {
-            header |= smsg::flag::F;
+            header |= tmsg::flag::F;
             if is_final {
-                header |= smsg::flag::E;
+                header |= tmsg::flag::E;
             }
         }
         header
@@ -1883,6 +1980,7 @@ pub enum TransportBody {
     InitAck(InitAck),
     OpenSyn(OpenSyn),
     OpenAck(OpenAck),
+    Join(Join),
     Close(Close),
     Sync(Sync),
     AckNack(AckNack),
@@ -1930,7 +2028,7 @@ impl TransportMessage {
         version: u8,
         whatami: WhatAmI,
         pid: PeerId,
-        sn_resolution: Option<ZInt>,
+        sn_resolution: ZInt,
         is_qos: bool,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
@@ -1967,7 +2065,7 @@ impl TransportMessage {
     }
 
     pub fn make_open_syn(
-        lease: ZInt,
+        lease: Duration,
         initial_sn: ZInt,
         cookie: ZSlice,
         attachment: Option<Attachment>,
@@ -1983,12 +2081,34 @@ impl TransportMessage {
     }
 
     pub fn make_open_ack(
-        lease: ZInt,
+        lease: Duration,
         initial_sn: ZInt,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
             body: TransportBody::OpenAck(OpenAck { lease, initial_sn }),
+            attachment,
+        }
+    }
+
+    pub fn make_join(
+        version: u8,
+        whatami: WhatAmI,
+        pid: PeerId,
+        lease: Duration,
+        sn_resolution: ZInt,
+        initial_sns: ConduitSnList,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Join(Join {
+                version,
+                whatami,
+                pid,
+                lease,
+                sn_resolution,
+                initial_sns,
+            }),
             attachment,
         }
     }

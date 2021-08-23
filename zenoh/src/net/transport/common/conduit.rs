@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::defragmentation::DefragBuffer;
-use super::protocol::core::{Priority, Reliability, ZInt};
+use super::protocol::core::{ConduitSn, Priority, Reliability, ZInt};
 use super::seq_num::*;
 use std::sync::{Arc, Mutex};
 
@@ -65,17 +65,17 @@ pub(crate) struct TransportConduitTx {
 impl TransportConduitTx {
     pub(crate) fn new(
         priority: Priority,
-        initial_sn: ZInt,
         sn_resolution: ZInt,
+        initial_sn: ConduitSn,
     ) -> TransportConduitTx {
         TransportConduitTx {
             id: priority,
             reliable: Arc::new(Mutex::new(TransportChannelTx::new(
-                initial_sn,
+                initial_sn.reliable,
                 sn_resolution,
             ))),
             best_effort: Arc::new(Mutex::new(TransportChannelTx::new(
-                initial_sn,
+                initial_sn.best_effort,
                 sn_resolution,
             ))),
         }
@@ -92,19 +92,19 @@ pub(crate) struct TransportConduitRx {
 impl TransportConduitRx {
     pub(crate) fn new(
         priority: Priority,
-        initial_sn: ZInt,
         sn_resolution: ZInt,
+        initial_sn: ConduitSn,
     ) -> TransportConduitRx {
         TransportConduitRx {
             priority,
             reliable: Arc::new(Mutex::new(TransportChannelRx::new(
                 Reliability::Reliable,
-                initial_sn,
+                initial_sn.reliable,
                 sn_resolution,
             ))),
             best_effort: Arc::new(Mutex::new(TransportChannelRx::new(
                 Reliability::BestEffort,
-                initial_sn,
+                initial_sn.best_effort,
                 sn_resolution,
             ))),
         }

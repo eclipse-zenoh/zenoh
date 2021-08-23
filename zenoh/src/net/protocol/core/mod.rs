@@ -13,6 +13,7 @@
 //
 pub mod rname;
 
+use std::convert::TryInto;
 use std::convert::{From, TryFrom};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -189,7 +190,7 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
-#[derive(Clone, Eq)]
+#[derive(Clone, Copy, Eq)]
 pub struct PeerId {
     size: usize,
     id: [u8; PeerId::MAX_SIZE],
@@ -290,9 +291,7 @@ pub enum Priority {
 }
 
 impl Priority {
-    pub fn num() -> usize {
-        8
-    }
+    pub const NUM: usize = 8;
 }
 
 impl Default for Priority {
@@ -348,6 +347,58 @@ impl Default for Channel {
         Channel {
             priority: Priority::default(),
             reliability: Reliability::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConduitSnList {
+    Plain(ConduitSn),
+    QoS(Box<[ConduitSn; Priority::NUM]>),
+}
+
+impl fmt::Display for ConduitSnList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[ ")?;
+        match self {
+            ConduitSnList::Plain(sn) => {
+                write!(
+                    f,
+                    "{:?} {{ reliable: {}, best effort: {} }}",
+                    Priority::default(),
+                    sn.reliable,
+                    sn.best_effort
+                )?;
+            }
+            ConduitSnList::QoS(ref sns) => {
+                for (prio, sn) in sns.iter().enumerate() {
+                    let p: Priority = (prio as u8).try_into().unwrap();
+                    write!(
+                        f,
+                        "{:?} {{ reliable: {}, best effort: {} }}",
+                        p, sn.reliable, sn.best_effort
+                    )?;
+                    if p != Priority::Background {
+                        write!(f, ", ")?;
+                    }
+                }
+            }
+        }
+        write!(f, " ]")
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct ConduitSn {
+    pub reliable: ZInt,
+    pub best_effort: ZInt,
+}
+
+impl Default for ConduitSn {
+    fn default() -> ConduitSn {
+        ConduitSn {
+            reliable: 0,
+            best_effort: 0,
         }
     }
 }

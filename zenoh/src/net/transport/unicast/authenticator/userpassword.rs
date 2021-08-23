@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{
-    attachment, AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorOutput,
+    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
 };
 use super::{Locator, PeerId, Property, WBuf, ZBuf, ZInt};
@@ -220,6 +220,10 @@ impl UserPasswordAuthenticator {
 
 #[async_trait]
 impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
+    fn id(&self) -> PeerAuthenticatorId {
+        PeerAuthenticatorId::UserPassword
+    }
+
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,
@@ -239,7 +243,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let zbuf: ZBuf = wbuf.into();
 
         let prop = Property {
-            key: attachment::authorization::USRPWD,
+            key: PeerAuthenticatorId::UserPassword as ZInt,
             value: zbuf.to_vec(),
         };
         res.properties.push(prop);
@@ -255,7 +259,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     ) -> ZResult<PeerAuthenticatorOutput> {
         let res = properties
             .iter()
-            .find(|p| p.key == attachment::authorization::USRPWD);
+            .find(|p| p.key == PeerAuthenticatorId::UserPassword as ZInt);
         let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
@@ -287,15 +291,12 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         wbuf.write_init_ack_property_usrpwd(&init_ack_property);
         let zbuf: ZBuf = wbuf.into();
         let prop = Property {
-            key: attachment::authorization::USRPWD,
+            key: PeerAuthenticatorId::UserPassword as ZInt,
             value: zbuf.to_vec(),
         };
 
         // Insert the nonce in the set of sent nonces
-        zasynclock!(self.nonces).insert(
-            (link.src.clone(), link.dst.clone()),
-            (peer_id.clone(), nonce),
-        );
+        zasynclock!(self.nonces).insert((link.src.clone(), link.dst.clone()), (*peer_id, nonce));
 
         let mut res = PeerAuthenticatorOutput::default();
         res.properties.push(prop);
@@ -318,7 +319,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         let tmp = properties
             .iter()
-            .find(|p| p.key == attachment::authorization::USRPWD);
+            .find(|p| p.key == PeerAuthenticatorId::UserPassword as ZInt);
         let mut zbuf: ZBuf = match tmp {
             Some(p) => p.value.clone().into(),
             None => {
@@ -349,7 +350,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         wbuf.write_open_syn_property_usrpwd(&open_syn_property);
         let zbuf: ZBuf = wbuf.into();
         let prop = Property {
-            key: attachment::authorization::USRPWD,
+            key: PeerAuthenticatorId::UserPassword as ZInt,
             value: zbuf.to_vec(),
         };
         res.properties.push(prop);
@@ -376,7 +377,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         let res = properties
             .iter()
-            .find(|p| p.key == attachment::authorization::USRPWD);
+            .find(|p| p.key == PeerAuthenticatorId::UserPassword as ZInt);
         let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
@@ -457,7 +458,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         for (peer_id, auth) in guard.iter_mut() {
             auth.links.remove(&(link.src.clone(), link.dst.clone()));
             if auth.links.is_empty() {
-                to_del = Some(peer_id.clone());
+                to_del = Some(*peer_id);
                 break;
             }
         }

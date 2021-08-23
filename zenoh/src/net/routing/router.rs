@@ -20,8 +20,8 @@ use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::transport::{DeMux, Mux, Primitives, Transport, TransportEventHandler};
-use crate::net::link::Link;
+use super::transport::{DeMux, Mux, Primitives, TransportUnicast, TransportUnicastEventHandler};
+use crate::net::link::LinkUnicast;
 
 use zenoh_util::core::ZResult;
 use zenoh_util::zconfigurable;
@@ -260,7 +260,7 @@ impl Router {
         let mut tables = zwrite!(self.tables);
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
-            tables.pid.clone(),
+            tables.pid,
             runtime.clone(),
             peers_autoconnect,
             routers_autoconnect_gossip,
@@ -268,7 +268,7 @@ impl Router {
         if runtime.whatami == whatami::ROUTER {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
-                tables.pid.clone(),
+                tables.pid,
                 runtime,
                 peers_autoconnect,
                 routers_autoconnect_gossip,
@@ -285,7 +285,7 @@ impl Router {
             tables: self.tables.clone(),
             state: {
                 let mut tables = zwrite!(self.tables);
-                let pid = tables.pid.clone();
+                let pid = tables.pid;
                 tables
                     .open_face(pid, whatami::CLIENT, primitives)
                     .upgrade()
@@ -294,7 +294,7 @@ impl Router {
         })
     }
 
-    pub fn new_transport(&self, transport: Transport) -> ZResult<Arc<LinkStateInterceptor>> {
+    pub fn new_transport(&self, transport: TransportUnicast) -> ZResult<Arc<LinkStateInterceptor>> {
         let mut tables = zwrite!(self.tables);
         let whatami = transport.get_whatami()?;
 
@@ -354,14 +354,14 @@ impl Router {
 }
 
 pub struct LinkStateInterceptor {
-    pub(crate) transport: Transport,
+    pub(crate) transport: TransportUnicast,
     pub(crate) tables: Arc<RwLock<Tables>>,
     pub(crate) face: Face,
     pub(crate) demux: DeMux<Face>,
 }
 
 impl LinkStateInterceptor {
-    fn new(transport: Transport, tables: Arc<RwLock<Tables>>, face: Face) -> Self {
+    fn new(transport: TransportUnicast, tables: Arc<RwLock<Tables>>, face: Face) -> Self {
         LinkStateInterceptor {
             transport,
             tables,
@@ -427,9 +427,9 @@ impl LinkStateInterceptor {
         }
     }
 
-    pub(crate) fn new_link(&self, _link: Link) {}
+    pub(crate) fn new_link(&self, _link: LinkUnicast) {}
 
-    pub(crate) fn del_link(&self, _link: Link) {}
+    pub(crate) fn del_link(&self, _link: LinkUnicast) {}
 
     pub(crate) fn closing(&self) {
         self.demux.closing();

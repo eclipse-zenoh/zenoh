@@ -17,16 +17,16 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-
-use zenoh::net::link::{Link, Locator};
+use zenoh::net::link::{LinkUnicast, Locator};
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, ZInt,
+    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
-    TransportManagerConfigUnicast,
+    TransportEventHandler, TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
+    TransportMulticast, TransportMulticastEventHandler, TransportUnicast,
+    TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -53,10 +53,20 @@ impl SHPeer {
     }
 }
 
-impl TransportHandler for SHPeer {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+impl TransportEventHandler for SHPeer {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
         let mh = Arc::new(MHPeer::new(self.count.clone()));
         Ok(mh)
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -70,14 +80,14 @@ impl MHPeer {
     }
 }
 
-impl TransportEventHandler for MHPeer {
+impl TransportUnicastEventHandler for MHPeer {
     fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
 
-    fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn new_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -88,7 +98,7 @@ impl TransportEventHandler for MHPeer {
 
 async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
     // Common transport lease in milliseconds
-    let lease: ZInt = 1_000;
+    let lease = Duration::from_millis(1_000);
 
     /* [Peers] */
     let peer_id01 = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -100,7 +110,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     let peer_sh01 = Arc::new(SHPeer::new());
     let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
-        .pid(peer_id01.clone())
+        .pid(peer_id01)
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .lease(lease)
@@ -113,7 +123,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     let peer_sh02 = Arc::new(SHPeer::new());
     let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
-        .pid(peer_id02.clone())
+        .pid(peer_id02)
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .lease(lease)
@@ -131,7 +141,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     let c_barp = barrier_peer.clone();
     let c_barow = barrier_open_wait.clone();
     let c_barod = barrier_open_done.clone();
-    let c_pid02 = peer_id02.clone();
+    let c_pid02 = peer_id02;
     let c_loc01 = locator01.clone();
     let c_loc02 = locator02.clone();
     let peer01_task = task::spawn(async move {
@@ -238,10 +248,10 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     });
 
     // Peer02
-    let c_barp = barrier_peer.clone();
+    let c_barp = barrier_peer;
     let c_barow = barrier_open_wait.clone();
     let c_barod = barrier_open_done.clone();
-    let c_pid01 = peer_id01.clone();
+    let c_pid01 = peer_id01;
     let c_loc01 = locator01.clone();
     let c_loc02 = locator02.clone();
     let peer02_task = task::spawn(async move {

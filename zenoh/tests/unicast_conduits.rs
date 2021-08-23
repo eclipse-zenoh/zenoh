@@ -17,14 +17,15 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::link::{Link, Locator};
+use zenoh::net::link::{LinkUnicast, Locator};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
+    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
+    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -66,10 +67,20 @@ impl SHRouter {
     }
 }
 
-impl TransportHandler for SHRouter {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+impl TransportEventHandler for SHRouter {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
         let arc = Arc::new(SCRouter::new(self.count.clone(), self.priority));
         Ok(arc)
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -85,15 +96,15 @@ impl SCRouter {
     }
 }
 
-impl TransportEventHandler for SCRouter {
+impl TransportUnicastEventHandler for SCRouter {
     fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
         assert_eq!(self.priority, message.channel.priority);
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
-    fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn new_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -111,9 +122,19 @@ impl Default for SHClient {
     }
 }
 
-impl TransportHandler for SHClient {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+impl TransportEventHandler for SHClient {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
         Ok(Arc::new(SCClient::default()))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -126,13 +147,13 @@ impl Default for SCClient {
     }
 }
 
-impl TransportEventHandler for SCClient {
+impl TransportUnicastEventHandler for SCClient {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
 
-    fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn new_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -144,7 +165,7 @@ impl TransportEventHandler for SCClient {
 async fn open_transport(
     locators: &[Locator],
     priority: Priority,
-) -> (TransportManager, Arc<SHRouter>, Transport) {
+) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -153,7 +174,7 @@ async fn open_transport(
     let router_handler = Arc::new(SHRouter::new(priority));
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
-        .pid(router_id.clone())
+        .pid(router_id)
         .build(router_handler.clone());
     let router_manager = TransportManager::new(config);
 
@@ -195,7 +216,7 @@ async fn open_transport(
 
 async fn close_transport(
     router_manager: TransportManager,
-    client_transport: Transport,
+    client_transport: TransportUnicast,
     locators: &[Locator],
 ) {
     // Close the client transport
@@ -231,7 +252,7 @@ async fn close_transport(
 
 async fn single_run(
     router_handler: Arc<SHRouter>,
-    client_transport: Transport,
+    client_transport: TransportUnicast,
     channel: Channel,
     msg_size: usize,
 ) {

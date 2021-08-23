@@ -17,14 +17,15 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::link::{Link, Locator, LocatorProperty};
+use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    Transport, TransportEventHandler, TransportHandler, TransportManager, TransportManagerConfig,
+    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
+    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -56,10 +57,20 @@ impl SHRouter {
     }
 }
 
-impl TransportHandler for SHRouter {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+impl TransportEventHandler for SHRouter {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
         let arc = Arc::new(SCRouter::new(self.count.clone()));
         Ok(arc)
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -74,14 +85,14 @@ impl SCRouter {
     }
 }
 
-impl TransportEventHandler for SCRouter {
+impl TransportUnicastEventHandler for SCRouter {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
-    fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn new_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -94,9 +105,19 @@ impl TransportEventHandler for SCRouter {
 #[derive(Default)]
 struct SHClient;
 
-impl TransportHandler for SHClient {
-    fn new_transport(&self, _transport: Transport) -> ZResult<Arc<dyn TransportEventHandler>> {
+impl TransportEventHandler for SHClient {
+    fn new_unicast(
+        &self,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
         Ok(Arc::new(SCClient::default()))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -104,13 +125,13 @@ impl TransportHandler for SHClient {
 #[derive(Default)]
 pub struct SCClient;
 
-impl TransportEventHandler for SCClient {
+impl TransportUnicastEventHandler for SCClient {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
 
-    fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn new_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -122,7 +143,7 @@ impl TransportEventHandler for SCClient {
 async fn open_transport(
     locators: &[Locator],
     locator_property: Option<Vec<LocatorProperty>>,
-) -> (TransportManager, Arc<SHRouter>, Transport) {
+) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -130,7 +151,7 @@ async fn open_transport(
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
     let config = TransportManagerConfig::builder()
-        .pid(router_id.clone())
+        .pid(router_id)
         .whatami(whatami::ROUTER)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .build(router_handler.clone());
@@ -175,7 +196,7 @@ async fn open_transport(
 
 async fn close_transport(
     router_manager: TransportManager,
-    client_transport: Transport,
+    client_transport: TransportUnicast,
     locators: &[Locator],
 ) {
     // Close the client transport
@@ -211,7 +232,7 @@ async fn close_transport(
 
 async fn single_run(
     router_handler: Arc<SHRouter>,
-    client_transport: Transport,
+    client_transport: TransportUnicast,
     channel: Channel,
     msg_size: usize,
 ) {
@@ -282,7 +303,7 @@ async fn run(
 
 #[cfg(feature = "transport_tcp")]
 #[test]
-fn transport_tcp_only() {
+fn transport_unicast_tcp_only() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -315,7 +336,7 @@ fn transport_tcp_only() {
 
 #[cfg(feature = "transport_udp")]
 #[test]
-fn transport_udp_only() {
+fn transport_unicast_udp_only() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -340,7 +361,7 @@ fn transport_udp_only() {
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
-fn transport_unix_only() {
+fn transport_unicast_unix_only() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -370,7 +391,7 @@ fn transport_unix_only() {
 
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
-fn transport_tcp_udp() {
+fn transport_unicast_tcp_udp() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -402,7 +423,7 @@ fn transport_tcp_udp() {
     target_family = "unix"
 ))]
 #[test]
-fn transport_tcp_unix() {
+fn transport_unicast_tcp_unix() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -439,7 +460,7 @@ fn transport_tcp_unix() {
     target_family = "unix"
 ))]
 #[test]
-fn transport_udp_unix() {
+fn transport_unicast_udp_unix() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -477,7 +498,7 @@ fn transport_udp_unix() {
     target_family = "unix"
 ))]
 #[test]
-fn transport_tcp_udp_unix() {
+fn transport_unicast_tcp_udp_unix() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -511,7 +532,7 @@ fn transport_tcp_udp_unix() {
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
-fn transport_tls_only() {
+fn transport_unicast_tls_only() {
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -636,7 +657,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
 #[cfg(feature = "transport_quic")]
 #[test]
-fn transport_quic_only() {
+fn transport_unicast_quic_only() {
     task::block_on(async {
         zasync_executor_init!();
     });

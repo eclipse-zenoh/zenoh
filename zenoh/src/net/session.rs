@@ -1250,7 +1250,7 @@ impl Session {
         let predicate = predicate.to_string();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
-        let pid = self.runtime.pid.clone(); // @TODO build/use prebuilt specific pid
+        let pid = self.runtime.pid; // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
             let _ = req_sender.send(Query {
@@ -1273,7 +1273,7 @@ impl Session {
                     this.send_reply_data(
                         qid,
                         kind,
-                        pid.clone(),
+                        pid,
                         ResKey::RName(sample.res_name),
                         sample.data_info,
                         sample.payload,
@@ -1287,7 +1287,7 @@ impl Session {
                     primitives.send_reply_data(
                         qid,
                         kind,
-                        pid.clone(),
+                        pid,
                         ResKey::RName(sample.res_name),
                         sample.data_info,
                         sample.payload,

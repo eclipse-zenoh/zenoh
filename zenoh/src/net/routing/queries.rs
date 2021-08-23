@@ -134,9 +134,9 @@ fn propagate_simple_queryable(
     src_face: Option<&mut Arc<FaceState>>,
 ) {
     let whatami = tables.whatami;
-    let pid = &tables.pid;
+    let pid = tables.pid;
     for dst_face in &mut tables.faces.values_mut() {
-        let kind = local_qabl_kind(whatami, pid, res, dst_face);
+        let kind = local_qabl_kind(whatami, &pid, res, dst_face);
         // let current_qabl = dst_face.local_qabls.get(res);
         if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
             // && (current_qabl.is_none() || *current_qabl.unwrap() != kind) // @TODO
@@ -213,7 +213,7 @@ fn register_router_queryable(
             get_mut_unchecked(res)
                 .context_mut()
                 .router_qabls
-                .insert(router.clone(), kind);
+                .insert(router, kind);
             tables.router_qabls.insert(res.clone());
         }
 
@@ -223,7 +223,7 @@ fn register_router_queryable(
         // Propagate queryable to peers
         if face.is_none() || face.as_ref().unwrap().whatami != whatami::PEER {
             let local_kind = local_peer_qabl_kind(tables, res);
-            register_peer_queryable(tables, face.as_deref(), res, local_kind, tables.pid.clone())
+            register_peer_queryable(tables, face.as_deref(), res, local_kind, tables.pid)
         }
     }
 
@@ -271,7 +271,7 @@ fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
             get_mut_unchecked(res)
                 .context_mut()
                 .peer_qabls
-                .insert(peer.clone(), kind);
+                .insert(peer, kind);
             tables.peer_qabls.insert(res.clone());
         }
 
@@ -302,7 +302,7 @@ pub fn declare_peer_queryable(
                     face.as_deref_mut(),
                     &mut res,
                     local_kind,
-                    tables.pid.clone(),
+                    tables.pid,
                 );
             }
 
@@ -364,23 +364,11 @@ pub fn declare_client_queryable(
             match tables.whatami {
                 whatami::ROUTER => {
                     let local_kind = local_router_qabl_kind(tables, &res);
-                    register_router_queryable(
-                        tables,
-                        Some(face),
-                        &mut res,
-                        local_kind,
-                        tables.pid.clone(),
-                    );
+                    register_router_queryable(tables, Some(face), &mut res, local_kind, tables.pid);
                 }
                 whatami::PEER => {
                     let local_kind = local_peer_qabl_kind(tables, &res);
-                    register_peer_queryable(
-                        tables,
-                        Some(face),
-                        &mut res,
-                        local_kind,
-                        tables.pid.clone(),
-                    );
+                    register_peer_queryable(tables, Some(face), &mut res, local_kind, tables.pid);
                 }
                 _ => {
                     propagate_simple_queryable(tables, &res, Some(face));
@@ -595,13 +583,7 @@ pub fn forget_peer_queryable(
                         undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
                     } else {
                         let local_kind = local_router_qabl_kind(tables, &res);
-                        register_router_queryable(
-                            tables,
-                            None,
-                            &mut res,
-                            local_kind,
-                            tables.pid.clone(),
-                        );
+                        register_router_queryable(tables, None, &mut res, local_kind, tables.pid);
                     }
                 }
 
@@ -635,7 +617,7 @@ pub(crate) fn undeclare_client_queryable(
                 undeclare_router_queryable(tables, None, res, &tables.pid.clone());
             } else {
                 let local_kind = local_router_qabl_kind(tables, res);
-                register_router_queryable(tables, None, res, local_kind, tables.pid.clone());
+                register_router_queryable(tables, None, res, local_kind, tables.pid);
             }
         }
         whatami::PEER => {
@@ -644,11 +626,7 @@ pub(crate) fn undeclare_client_queryable(
             } else {
                 let local_kind = local_peer_qabl_kind(tables, res);
                 register_peer_queryable::<&Arc<FaceState>>(
-                    tables,
-                    None,
-                    res,
-                    local_kind,
-                    tables.pid.clone(),
+                    tables, None, res, local_kind, tables.pid,
                 );
             }
         }
@@ -695,7 +673,7 @@ pub fn forget_client_queryable(
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     if face.whatami == whatami::CLIENT && tables.whatami != whatami::CLIENT {
         for qabl in &tables.router_qabls {
-            let kind = local_qabl_kind(tables.whatami, &tables.pid, qabl, face);
+            let kind = local_qabl_kind(tables.whatami, &tables.pid.clone(), qabl, face);
             get_mut_unchecked(face)
                 .local_qabls
                 .insert(qabl.clone(), kind);
@@ -750,13 +728,7 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId, net_type: 
                         undeclare_router_queryable(tables, None, &mut res, &tables.pid.clone());
                     } else {
                         let local_kind = local_router_qabl_kind(tables, &res);
-                        register_router_queryable(
-                            tables,
-                            None,
-                            &mut res,
-                            local_kind,
-                            tables.pid.clone(),
-                        );
+                        register_router_queryable(tables, None, &mut res, local_kind, tables.pid);
                     }
                 }
 
@@ -779,7 +751,7 @@ pub(crate) fn queries_tree_change(
             let net = tables.get_net(net_type).unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
-                let tree_id = net.graph[tree_idx].pid.clone();
+                let tree_id = net.graph[tree_idx].pid;
 
                 let qabls_res = match net_type {
                     whatami::ROUTER => &tables.router_qabls,

@@ -13,6 +13,15 @@
 //
 use super::core::ZInt;
 
+pub mod defaults {
+    use super::ZInt;
+
+    // The default sequence number resolution takes 4 bytes on the wire.
+    // Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.
+    // 2^28 = 268_435_456 => Max Seq Num = 268_435_455
+    pub const SEQ_NUM_RES: ZInt = 268_435_456;
+}
+
 pub mod data_kind {
     use super::ZInt;
 
