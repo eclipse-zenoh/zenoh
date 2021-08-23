@@ -937,7 +937,6 @@ impl Session {
         trace!("write({:?}, [...])", resource);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
-        let local_routing = state.local_routing;
         drop(state);
 
         // if we can create a local timestamp, send it into a DataInfo
@@ -958,9 +957,7 @@ impl Session {
             data_info.clone(),
             None,
         );
-        if local_routing {
-            self.handle_data(true, resource, data_info, payload);
-        }
+        self.handle_data(true, resource, data_info, payload);
         zready(Ok(()))
     }
 
@@ -994,7 +991,6 @@ impl Session {
         trace!("write_ext({:?}, [...])", resource);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
-        let local_routing = state.local_routing;
         drop(state);
 
         let mut info = protocol::proto::DataInfo::new();
@@ -1014,9 +1010,7 @@ impl Session {
             data_info.clone(),
             None,
         );
-        if local_routing {
-            self.handle_data(true, resource, data_info, payload);
-        }
+        self.handle_data(true, resource, data_info, payload);
         zready(Ok(()))
     }
 
@@ -1057,13 +1051,15 @@ impl Session {
                         let sub = res.subscribers.get(0).unwrap();
                         Session::invoke_subscriber(&sub.invoker, res.name.clone(), payload, info);
                     } else {
-                        for sub in &res.subscribers {
-                            Session::invoke_subscriber(
-                                &sub.invoker,
-                                res.name.clone(),
-                                payload.clone(),
-                                info.clone(),
-                            );
+                        if !local || state.local_routing {
+                            for sub in &res.subscribers {
+                                Session::invoke_subscriber(
+                                    &sub.invoker,
+                                    res.name.clone(),
+                                    payload.clone(),
+                                    info.clone(),
+                                );
+                            }
                         }
                         if local {
                             for sub in &res.local_subscribers {
@@ -1084,14 +1080,16 @@ impl Session {
         } else {
             match state.reskey_to_resname(reskey, local) {
                 Ok(resname) => {
-                    for sub in state.subscribers.values() {
-                        if rname::matches(&sub.resname, &resname) {
-                            Session::invoke_subscriber(
-                                &sub.invoker,
-                                resname.clone(),
-                                payload.clone(),
-                                info.clone(),
-                            );
+                    if !local || state.local_routing {
+                        for sub in state.subscribers.values() {
+                            if rname::matches(&sub.resname, &resname) {
+                                Session::invoke_subscriber(
+                                    &sub.invoker,
+                                    resname.clone(),
+                                    payload.clone(),
+                                    info.clone(),
+                                );
+                            }
                         }
                     }
                     if local {
