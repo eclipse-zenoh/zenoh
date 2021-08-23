@@ -61,7 +61,6 @@ pub(crate) struct TransportMulticastConfig {
 impl TransportMulticastInner {
     pub(super) fn new(config: TransportMulticastConfig) -> TransportMulticastInner {
         let mut conduit_tx = vec![];
-        // let mut conduit_rx = vec![];
 
         match config.initial_sns {
             ConduitSnList::Plain(sn) => conduit_tx.push(TransportConduitTx::new(
@@ -115,7 +114,7 @@ impl TransportMulticastInner {
         }
 
         // Delete the transport on the manager
-        let _ = self.manager.del_transport_multicast(&self.locator).await;
+        let _ = self.manager.del_transport_multicast(&self.locator);
 
         // Close all the links
         let mut link = zwrite!(self.link).take();

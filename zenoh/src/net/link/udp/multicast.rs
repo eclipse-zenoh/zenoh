@@ -226,7 +226,15 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         }
         .map_err(|e| zerrmsg!(e))?;
         let ucast_addr = ucast_sock.local_addr().map_err(|e| zerrmsg!(e))?;
-        let local_addrs = get_local_addresses().map_err(|e| zerrmsg!(e))?;
+        let local_addrs = get_local_addresses()
+            .map_err(|e| zerrmsg!(e))?
+            .iter()
+            .filter(|a| match mcast_addr.ip() {
+                IpAddr::V4(_) => a.is_ipv4(),
+                IpAddr::V6(_) => a.is_ipv6(),
+            })
+            .copied()
+            .collect();
 
         let link = Arc::new(LinkMulticastUdp::new(
             ucast_addr,

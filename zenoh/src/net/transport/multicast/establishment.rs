@@ -38,9 +38,13 @@ pub(crate) async fn open_link(
 
     let locator = link.get_dst();
     let initial_sns = if manager.config.multicast.is_qos {
-        ConduitSnList::Plain(zgen_conduit_sn!())
+        let mut initial_sns = [ConduitSn::default(); Priority::NUM];
+        for isn in initial_sns.iter_mut() {
+            *isn = zgen_conduit_sn!();
+        }
+        ConduitSnList::QoS(initial_sns.into())
     } else {
-        ConduitSnList::QoS([zgen_conduit_sn!(); Priority::NUM].into())
+        ConduitSnList::Plain(zgen_conduit_sn!())
     };
     let config = TransportMulticastConfig {
         manager: manager.clone(),

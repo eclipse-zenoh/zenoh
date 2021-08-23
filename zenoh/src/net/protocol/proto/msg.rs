@@ -1619,6 +1619,15 @@ pub struct Join {
     pub initial_sns: ConduitSnList,
 }
 
+impl Join {
+    pub fn is_qos(&self) -> bool {
+        match self.initial_sns {
+            ConduitSnList::QoS(_) => true,
+            ConduitSnList::Plain(_) => false,
+        }
+    }
+}
+
 impl Header for Join {
     #[inline(always)]
     fn header(&self) -> u8 {
@@ -1639,7 +1648,7 @@ impl Header for Join {
 impl Options for Join {
     fn options(&self) -> ZInt {
         let mut options = 0;
-        if let ConduitSnList::QoS(_) = self.initial_sns {
+        if self.is_qos() {
             options |= tmsg::join_options::QOS;
         }
         options

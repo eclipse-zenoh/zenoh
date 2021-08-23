@@ -105,9 +105,31 @@ impl TransportMulticastInner {
 
     pub(super) fn handle_join(&self, join: Join, locator: &Locator) -> ZResult<()> {
         if join.version != self.manager.config.version {
+            log::debug!(
+                "Ingoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
+                locator,
+                join.pid,
+                join.version,
+                self.manager.config.version,
+            );
             return Ok(());
         }
         if join.sn_resolution > self.manager.config.sn_resolution {
+            log::debug!(
+                "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {}. Expected: <= {}.",
+                locator,
+                join.pid,
+                join.sn_resolution,
+                self.manager.config.sn_resolution,
+            );
+            return Ok(());
+        }
+        if !self.manager.config.multicast.is_qos && join.is_qos() {
+            log::debug!(
+                "Ingoring Join on {} from peer: {}. QoS is not supported.",
+                locator,
+                join.pid,
+            );
             return Ok(());
         }
 
@@ -141,7 +163,18 @@ impl TransportMulticastInner {
                 conduit_rx,
             };
             guard.insert(locator.clone(), peer);
-        }
+
+            log::debug!(
+                "New transport joined on {}: pid {}, whatami {}, sn resolution {}, locator {}, qos {}, initial sn: {}",
+                self.locator,
+                join.pid,
+                join.whatami,
+                join.sn_resolution,
+                locator,
+                join.is_qos(),
+                join.initial_sns,
+            );
+        };
 
         Ok(())
     }

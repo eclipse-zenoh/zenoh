@@ -172,21 +172,6 @@ impl TransportManager {
         }
     }
 
-    // fn get_link_manager_multicast(
-    //     &self,
-    //     protocol: &LocatorProtocol,
-    // ) -> ZResult<LinkManagerMulticast> {
-    //     match zlock!(self.state.multicast.protocols).get(protocol) {
-    //         Some(manager) => Ok(manager.clone()),
-    //         None => zerror!(ZErrorKind::Other {
-    //             descr: format!(
-    //                 "Can not get the link manager for protocol ({}) because it has not been found",
-    //                 protocol
-    //             )
-    //         }),
-    //     }
-    // }
-
     fn del_link_manager_multicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
         match zlock!(self.state.multicast.protocols).remove(protocol) {
             Some(_) => Ok(()),
@@ -231,7 +216,7 @@ impl TransportManager {
             .collect()
     }
 
-    pub(super) async fn del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {
+    pub(super) fn del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {
         let mut guard = zlock!(self.state.multicast.transports);
         let res = guard.remove(locator);
 

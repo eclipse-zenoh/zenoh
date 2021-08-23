@@ -13,6 +13,7 @@
 //
 pub mod rname;
 
+use std::convert::TryInto;
 use std::convert::{From, TryFrom};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -354,6 +355,37 @@ impl Default for Channel {
 pub enum ConduitSnList {
     Plain(ConduitSn),
     QoS(Box<[ConduitSn; Priority::NUM]>),
+}
+
+impl fmt::Display for ConduitSnList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[ ")?;
+        match self {
+            ConduitSnList::Plain(sn) => {
+                write!(
+                    f,
+                    "{:?} {{ reliable: {}, best effort: {} }}",
+                    Priority::default(),
+                    sn.reliable,
+                    sn.best_effort
+                )?;
+            }
+            ConduitSnList::QoS(ref sns) => {
+                for (prio, sn) in sns.iter().enumerate() {
+                    let p: Priority = (prio as u8).try_into().unwrap();
+                    write!(
+                        f,
+                        "{:?} {{ reliable: {}, best effort: {} }}",
+                        p, sn.reliable, sn.best_effort
+                    )?;
+                    if p != Priority::Background {
+                        write!(f, ", ")?;
+                    }
+                }
+            }
+        }
+        write!(f, " ]")
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

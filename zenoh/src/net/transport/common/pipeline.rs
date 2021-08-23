@@ -342,11 +342,12 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, message: ZenohMessage) {
+    pub(crate) fn push_zenoh_message(&self, mut message: ZenohMessage) {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let priority = if self.is_qos() {
             message.channel.priority as usize
         } else {
+            message.channel.priority = Priority::default();
             0
         };
         // Lock the channel. We are the only one that will be writing on it.
