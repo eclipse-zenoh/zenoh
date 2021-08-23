@@ -11,14 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::common::conduit::{TransportChannelRx, TransportConduitRx};
-use super::protocol::core::{ConduitSnList, PeerId, Priority, Reliability, ZInt};
+use super::common::conduit::TransportChannelRx;
+use super::protocol::core::{PeerId, Priority, Reliability, ZInt};
 use super::protocol::proto::{
-    Close, Frame, FramePayload, Join, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
+    Close, Frame, FramePayload, Join, TransportBody, TransportMessage, ZenohMessage,
 };
-use super::transport::{TransportMulticastInner, TransportMulticastPeer};
+use super::transport::TransportMulticastInner;
 use crate::net::link::Locator;
-use std::convert::TryInto;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror2;
@@ -104,6 +103,16 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn handle_join(&self, join: Join, locator: &Locator) -> ZResult<()> {
+        if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
+            log::debug!(
+                "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
+                locator,
+                join.pid,
+                self.manager.config.multicast.max_sessions,
+            );
+            return Ok(());
+        }
+
         if join.version != self.manager.config.version {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
@@ -133,117 +142,57 @@ impl TransportMulticastInner {
             return Ok(());
         }
 
-        let mut guard = zwrite!(self.peers);
-        if !guard.contains_key(locator) {
-            let conduit_rx = match join.initial_sns {
-                ConduitSnList::Plain(sn) => {
-                    vec![TransportConduitRx::new(
-                        Priority::default(),
-                        join.sn_resolution,
-                        sn,
-                    )]
-                }
-                ConduitSnList::QoS(ref sns) => sns
-                    .iter()
-                    .enumerate()
-                    .map(|(prio, sn)| {
-                        TransportConduitRx::new(
-                            (prio as u8).try_into().unwrap(),
-                            join.sn_resolution,
-                            *sn,
-                        )
-                    })
-                    .collect(),
-            }
-            .into_boxed_slice();
-
-            let peer = TransportMulticastPeer {
-                pid: join.pid,
-                whatami: join.whatami,
-                conduit_rx,
-            };
-            guard.insert(locator.clone(), peer);
-
-            log::debug!(
-                "New transport joined on {}: pid {}, whatami {}, sn resolution {}, locator {}, qos {}, initial sn: {}",
-                self.locator,
-                join.pid,
-                join.whatami,
-                join.sn_resolution,
-                locator,
-                join.is_qos(),
-                join.initial_sns,
-            );
-        };
-
-        Ok(())
+        self.new_peer(locator, join)
     }
 
     pub(super) fn handle_close(&self, close: Close, locator: &Locator) -> ZResult<()> {
-        let mut guard = zwrite!(self.peers);
-        if let Some(peer) = guard.remove(locator) {
-            log::debug!(
-                "Peer {}/{}/{} has left multicast {} with reason: {}",
-                peer.pid,
-                peer.whatami,
-                locator,
-                self.locator,
-                close.reason
-            );
-        }
-        Ok(())
+        self.del_peer(locator, close.reason)
     }
 
     pub(super) fn receive_message(&self, msg: TransportMessage, locator: &Locator) -> ZResult<()> {
         // Process the received message
-        match msg.body {
-            TransportBody::Frame(Frame {
-                channel,
-                sn,
-                payload,
-            }) => match zread!(self.peers).get(locator) {
-                Some(p) => {
-                    let c = if self.is_qos() {
-                        &p.conduit_rx[channel.priority as usize]
-                    } else if channel.priority == Priority::default() {
-                        &p.conduit_rx[0]
-                    } else {
-                        let e = format!(
-                            "Transport {}: {}. Unknown conduit {:?} from {}.",
-                            self.manager.config.pid, self.locator, channel.priority, locator
-                        );
-                        return zerror!(ZErrorKind::InvalidMessage { descr: e });
-                    };
+        let guard = zread!(self.peers);
+        match guard.get(locator) {
+            Some(peer) => {
+                peer.active();
 
-                    match channel.reliability {
-                        Reliability::Reliable => {
-                            self.handle_frame(sn, payload, zlock!(c.reliable), &p.pid)
-                        }
-                        Reliability::BestEffort => {
-                            self.handle_frame(sn, payload, zlock!(c.best_effort), &p.pid)
-                        }
+                match msg.body {
+                    TransportBody::Frame(Frame {
+                        channel,
+                        sn,
+                        payload,
+                    }) => {
+                        let c = if self.is_qos() {
+                            &peer.conduit_rx[channel.priority as usize]
+                        } else if channel.priority == Priority::default() {
+                            &peer.conduit_rx[0]
+                        } else {
+                            let e = format!(
+                                "Transport {}: {}. Unknown conduit {:?} from {}.",
+                                self.manager.config.pid, self.locator, channel.priority, locator
+                            );
+                            return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                        };
+
+                        let guard = match channel.reliability {
+                            Reliability::Reliable => zlock!(c.reliable),
+                            Reliability::BestEffort => zlock!(c.best_effort),
+                        };
+                        self.handle_frame(sn, payload, guard, &peer.pid)
                     }
+                    TransportBody::Close(close) => {
+                        drop(guard);
+                        self.handle_close(close, locator)
+                    }
+                    _ => Ok(()),
                 }
-                None => {
-                    log::debug!(
-                        "Transport {}: {}. {} is not a multicast member.",
-                        self.manager.config.pid,
-                        self.locator,
-                        locator
-                    );
-                    Ok(())
+            }
+            None => {
+                drop(guard);
+                match msg.body {
+                    TransportBody::Join(join) => self.handle_join(join, locator),
+                    _ => Ok(()),
                 }
-            },
-            TransportBody::Join(join) => self.handle_join(join, locator),
-            TransportBody::Close(close) => self.handle_close(close, locator),
-            TransportBody::KeepAlive(KeepAlive { .. }) => Ok(()),
-            _ => {
-                log::debug!(
-                    "Transport: {}. Message handling not implemented: {:?}",
-                    self.manager.config.pid,
-                    msg
-                );
-                Ok(())
             }
         }
     }

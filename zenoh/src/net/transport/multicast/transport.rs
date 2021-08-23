@@ -15,12 +15,16 @@ use super::super::TransportManager;
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
-use super::protocol::proto::{TransportMessage, ZenohMessage};
+use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
 use super::TransportMulticastEventHandler;
 use crate::net::link::{LinkMulticast, Locator};
+use async_std::task;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
+use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*************************************/
@@ -29,8 +33,34 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 pub(super) struct TransportMulticastPeer {
     pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
-    // pub(super) lease: ZInt
+    pub(super) active: Arc<AtomicBool>,
+    pub(super) handle: TimedHandle,
     pub(super) conduit_rx: Box<[TransportConduitRx]>,
+}
+
+impl TransportMulticastPeer {
+    pub(super) fn active(&self) {
+        self.active.store(true, Ordering::Release);
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct TransportMulticastPeerLeaseTimer {
+    pub(super) active: Arc<AtomicBool>,
+    locator: Locator,
+    transport: TransportMulticastInner,
+}
+
+#[async_trait]
+impl Timed for TransportMulticastPeerLeaseTimer {
+    async fn run(&mut self) {
+        let is_active = self.active.swap(false, Ordering::AcqRel);
+        if !is_active {
+            let _ = self
+                .transport
+                .del_peer(&self.locator, tmsg::close_reason::EXPIRED);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -49,6 +79,8 @@ pub(crate) struct TransportMulticastInner {
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
     // The transport can do shm
     pub(super) is_shm: bool,
+    // The timer for peer leases
+    pub(super) timer: Arc<Timer>,
 }
 
 pub(crate) struct TransportMulticastConfig {
@@ -87,6 +119,7 @@ impl TransportMulticastInner {
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
             is_shm: config.is_shm,
+            timer: Arc::new(Timer::new()),
         };
 
         let mut w_guard = zwrite!(ti.link);
@@ -99,6 +132,33 @@ impl TransportMulticastInner {
     pub(super) fn set_callback(&self, callback: Arc<dyn TransportMulticastEventHandler>) {
         let mut guard = zwrite!(self.callback);
         *guard = Some(callback);
+    }
+
+    /*************************************/
+    /*            ACCESSORS              */
+    /*************************************/
+    pub(crate) fn get_pid(&self) -> PeerId {
+        self.manager.config.pid
+    }
+
+    pub(crate) fn get_whatami(&self) -> WhatAmI {
+        self.manager.config.whatami
+    }
+
+    pub(crate) fn get_sn_resolution(&self) -> ZInt {
+        self.manager.config.sn_resolution
+    }
+
+    pub(crate) fn is_shm(&self) -> bool {
+        self.is_shm
+    }
+
+    pub(crate) fn is_qos(&self) -> bool {
+        self.conduit_tx.len() > 1
+    }
+
+    pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportMulticastEventHandler>> {
+        zread!(self.callback).clone()
     }
 
     /*************************************/
@@ -128,6 +188,61 @@ impl TransportMulticastInner {
         }
 
         Ok(())
+    }
+
+    pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
+        log::trace!(
+            "Closing multicast transport of peer {}: {}",
+            self.manager.config.pid,
+            self.locator
+        );
+
+        let pipeline = zread!(self.link).as_ref().unwrap().get_pipeline().unwrap();
+
+        // Close message to be sent on all the links
+        let peer_id = Some(self.manager.pid());
+        let reason_id = reason;
+        // link_only should always be false for user-triggered close. However, in case of
+        // multiple links, it is safer to close all the links first. When no links are left,
+        // the transport is then considered closed.
+        let link_only = true;
+        let attachment = None; // No attachment here
+        let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
+
+        pipeline.push_transport_message(msg, Priority::Background);
+
+        // Terminate and clean up the transport
+        self.delete().await
+    }
+
+    /*************************************/
+    /*        SCHEDULE AND SEND TX       */
+    /*************************************/
+    /// Schedule a Zenoh message on the transmission queue    
+    #[cfg(feature = "zero-copy")]
+    pub(crate) fn schedule(&self, mut message: ZenohMessage) {
+        let res = if self.is_shm {
+            message.map_to_shminfo()
+        } else {
+            message.map_to_shmbuf(self.manager.shmr.clone())
+        };
+        if let Err(e) = res {
+            log::trace!("Failed SHM conversion: {}", e);
+            return;
+        }
+        self.schedule_first_fit(message);
+    }
+
+    #[cfg(not(feature = "zero-copy"))]
+    pub(crate) fn schedule(&self, message: ZenohMessage) {
+        self.schedule_first_fit(message);
+    }
+
+    pub(crate) fn get_links(&self) -> Vec<LinkMulticast> {
+        match zread!(self.link).as_ref() {
+            Some(l) => vec![l.get_link().clone()],
+            None => vec![],
+        }
     }
 
     /*************************************/
@@ -215,91 +330,90 @@ impl TransportMulticastInner {
             }
         }
     }
-}
-
-impl TransportMulticastInner {
-    /*************************************/
-    /*            ACCESSORS              */
-    /*************************************/
-    pub(crate) fn get_pid(&self) -> PeerId {
-        self.manager.config.pid
-    }
-
-    pub(crate) fn get_whatami(&self) -> WhatAmI {
-        self.manager.config.whatami
-    }
-
-    pub(crate) fn get_sn_resolution(&self) -> ZInt {
-        self.manager.config.sn_resolution
-    }
-
-    pub(crate) fn is_shm(&self) -> bool {
-        self.is_shm
-    }
-
-    pub(crate) fn is_qos(&self) -> bool {
-        self.conduit_tx.len() > 1
-    }
-
-    pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportMulticastEventHandler>> {
-        zread!(self.callback).clone()
-    }
 
     /*************************************/
-    /*           TERMINATION             */
+    /*               PEER                */
     /*************************************/
-    pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!(
-            "Closing multicast transport of peer {}: {}",
-            self.manager.config.pid,
-            self.locator
-        );
+    pub(super) fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
+        let conduit_rx = match join.initial_sns {
+            ConduitSnList::Plain(sn) => {
+                vec![TransportConduitRx::new(
+                    Priority::default(),
+                    join.sn_resolution,
+                    sn,
+                )]
+            }
+            ConduitSnList::QoS(ref sns) => sns
+                .iter()
+                .enumerate()
+                .map(|(prio, sn)| {
+                    TransportConduitRx::new(
+                        (prio as u8).try_into().unwrap(),
+                        join.sn_resolution,
+                        *sn,
+                    )
+                })
+                .collect(),
+        }
+        .into_boxed_slice();
 
-        let pipeline = zread!(self.link).as_ref().unwrap().get_pipeline().unwrap();
-
-        // Close message to be sent on all the links
-        let peer_id = Some(self.manager.pid());
-        let reason_id = reason;
-        // link_only should always be false for user-triggered close. However, in case of
-        // multiple links, it is safer to close all the links first. When no links are left,
-        // the transport is then considered closed.
-        let link_only = true;
-        let attachment = None; // No attachment here
-        let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-        pipeline.push_transport_message(msg, Priority::Background);
-
-        // Terminate and clean up the transport
-        self.delete().await
-    }
-
-    /*************************************/
-    /*        SCHEDULE AND SEND TX       */
-    /*************************************/
-    /// Schedule a Zenoh message on the transmission queue    
-    #[cfg(feature = "zero-copy")]
-    pub(crate) fn schedule(&self, mut message: ZenohMessage) {
-        let res = if self.is_shm {
-            message.map_to_shminfo()
-        } else {
-            message.map_to_shmbuf(self.manager.shmr.clone())
+        // Create lease event
+        let active = Arc::new(AtomicBool::new(false));
+        let event = TransportMulticastPeerLeaseTimer {
+            active: active.clone(),
+            locator: locator.clone(),
+            transport: self.clone(),
         };
-        if let Err(e) = res {
-            log::trace!("Failed SHM conversion: {}", e);
-            return;
+        let event = TimedEvent::periodic(join.lease, event);
+        let handle = event.get_handle();
+
+        // Store the new peer
+        let peer = TransportMulticastPeer {
+            pid: join.pid,
+            whatami: join.whatami,
+            active,
+            handle,
+            conduit_rx,
+        };
+        zwrite!(self.peers).insert(locator.clone(), peer);
+
+        // Add the event to the timer
+        task::block_on(self.timer.add(event));
+
+        log::debug!(
+                "New transport joined on {}: pid {}, whatami {}, sn resolution {}, locator {}, qos {}, initial sn: {}",
+                self.locator,
+                join.pid,
+                join.whatami,
+                join.sn_resolution,
+                locator,
+                join.is_qos(),
+                join.initial_sns,
+            );
+
+        if let Some(cb) = zread!(self.callback).as_ref() {
+            cb.new_peer(join.pid);
         }
-        self.schedule_first_fit(message);
+
+        Ok(())
     }
 
-    #[cfg(not(feature = "zero-copy"))]
-    pub(crate) fn schedule(&self, message: ZenohMessage) {
-        self.schedule_first_fit(message);
-    }
-
-    pub(crate) fn get_links(&self) -> Vec<LinkMulticast> {
-        match zread!(self.link).as_ref() {
-            Some(l) => vec![l.get_link().clone()],
-            None => vec![],
+    pub(super) fn del_peer(&self, locator: &Locator, reason: u8) -> ZResult<()> {
+        let mut guard = zwrite!(self.peers);
+        if let Some(transport) = guard.remove(locator) {
+            log::debug!(
+                "Peer {}/{}/{} has left multicast {} with reason: {}",
+                transport.pid,
+                transport.whatami,
+                locator,
+                self.locator,
+                reason
+            );
+            transport.handle.defuse();
+            if let Some(cb) = zread!(self.callback).as_ref() {
+                cb.del_peer(transport.pid);
+            }
         }
+        Ok(())
     }
 }

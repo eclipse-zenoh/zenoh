@@ -151,6 +151,11 @@ impl TransportManagerConfigBuilder {
         self
     }
 
+    pub fn multicast(mut self, multicast: TransportManagerConfigMulticast) -> Self {
+        self.multicast = multicast;
+        self
+    }
+
     pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> TransportManagerConfig {
         TransportManagerConfig {
             version: self.version,
