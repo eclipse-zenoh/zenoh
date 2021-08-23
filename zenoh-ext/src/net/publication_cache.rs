@@ -92,7 +92,12 @@ pub struct PublicationCache<'a> {
 
 impl PublicationCache<'_> {
     fn new(conf: PublicationCacheBuilder<'_>) -> ZResult<PublicationCache<'_>> {
-        log::debug!("Declare PublicationCache on {}", conf.pub_reskey);
+        log::debug!(
+            "Declare PublicationCache on {} with history={} resource_limit={:?}",
+            conf.pub_reskey,
+            conf.history,
+            conf.resources_limit
+        );
 
         if conf.session.hlc().is_none() {
             return zerror!(ZErrorKind::Other {
@@ -136,7 +141,7 @@ impl PublicationCache<'_> {
         let queryable_prefix = conf.queryable_prefix;
         let history = conf.history;
 
-        let (stoptx, stoprx) = bounded::<bool>(1);
+        let (stoptx, mut stoprx) = bounded::<bool>(1);
         task::spawn(async move {
             let mut cache: HashMap<String, VecDeque<Sample>> =
                 HashMap::with_capacity(resources_limit.unwrap_or(32));
@@ -162,7 +167,7 @@ impl PublicationCache<'_> {
                                 log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
                                 pub_reskey);
                             } else {
-                                let mut queue: VecDeque<Sample> = VecDeque::with_capacity(history);
+                                let mut queue: VecDeque<Sample> = VecDeque::new();
                                 queue.push_back(sample);
                                 cache.insert(queryable_resname, queue);
                             }
@@ -191,7 +196,7 @@ impl PublicationCache<'_> {
                     },
 
                     // When stoptx is dropped, stop the task
-                    _ = stoprx.recv().fuse() => {
+                    _ = stoprx.next().fuse() => {
                         return
                     }
                 );
