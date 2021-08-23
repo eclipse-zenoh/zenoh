@@ -26,6 +26,7 @@ use super::protocol::proto::{tmsg, ZenohMessage};
 use crate::net::link::LinkMulticast;
 pub use manager::*;
 use std::any::Any;
+use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::{TransportMulticastConfig, TransportMulticastInner};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -154,5 +155,23 @@ impl Eq for TransportMulticast {}
 impl PartialEq for TransportMulticast {
     fn eq(&self, other: &Self) -> bool {
         Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl fmt::Debug for TransportMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match zweak!(self.0) {
+            Ok(transport) => f
+                .debug_struct("Transport Multicast")
+                .field("pid", &transport.get_pid())
+                .field("whatami", &transport.get_whatami())
+                .field("sn_resolution", &transport.get_sn_resolution())
+                .field("is_qos", &transport.is_qos())
+                .field("is_shm", &transport.is_shm())
+                .finish(),
+            Err(e) => {
+                write!(f, "{}", e)
+            }
+        }
     }
 }

@@ -189,9 +189,11 @@ impl fmt::Debug for TransportUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match zweak!(self.0) {
             Ok(transport) => f
-                .debug_struct("Transport")
-                .field("peer", &transport.get_pid())
+                .debug_struct("Transport Unicast")
+                .field("pid", &transport.get_pid())
+                .field("whatami", &transport.get_whatami())
                 .field("sn_resolution", &transport.get_sn_resolution())
+                .field("is_qos", &transport.is_qos())
                 .field("is_shm", &transport.is_shm())
                 .finish(),
             Err(e) => {

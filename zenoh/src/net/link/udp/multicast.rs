@@ -174,10 +174,9 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         }
 
         // Establish a multicast UDP socket
-        let domain = if mcast_addr.is_ipv4() {
-            Domain::IPV4
-        } else {
-            Domain::IPV6
+        let domain = match mcast_addr.ip() {
+            IpAddr::V4(_) => Domain::IPV4,
+            IpAddr::V6(_) => Domain::IPV6,
         };
 
         // Create the multicast socket
