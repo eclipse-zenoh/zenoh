@@ -309,7 +309,10 @@ fn transport_unicast_tcp_only() {
     });
 
     // Define the locators
-    let locators: Vec<Locator> = vec!["tcp/127.0.0.1:10447".parse().unwrap()];
+    let locators: Vec<Locator> = vec![
+        "tcp/127.0.0.1:10447".parse().unwrap(),
+        "tcp/[::1]:10447".parse().unwrap(),
+    ];
     let properties = None;
     // Define the reliability and congestion control
     let channel = [
@@ -342,7 +345,10 @@ fn transport_unicast_udp_only() {
     });
 
     // Define the locator
-    let locators: Vec<Locator> = vec!["udp/127.0.0.1:10447".parse().unwrap()];
+    let locators: Vec<Locator> = vec![
+        "udp/127.0.0.1:10447".parse().unwrap(),
+        "udp/[::1]:10447".parse().unwrap(),
+    ];
     let properties = None;
     // Define the reliability and congestion control
     let channel = [
@@ -400,6 +406,8 @@ fn transport_unicast_tcp_udp() {
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:10448".parse().unwrap(),
         "udp/127.0.0.1:10448".parse().unwrap(),
+        "tcp/[::1]:10448".parse().unwrap(),
+        "udp/[::1]:10448".parse().unwrap(),
     ];
     let properties = None;
     // Define the reliability and congestion control
@@ -432,6 +440,7 @@ fn transport_unicast_tcp_unix() {
     // Define the locator
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:10449".parse().unwrap(),
+        "tcp/[::1]:10449".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-6.sock"
             .parse()
             .unwrap(),
@@ -469,6 +478,7 @@ fn transport_unicast_udp_unix() {
     // Define the locator
     let locators: Vec<Locator> = vec![
         "udp/127.0.0.1:10449".parse().unwrap(),
+        "udp/[::1]:10449".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-7.sock"
             .parse()
             .unwrap(),
@@ -508,6 +518,8 @@ fn transport_unicast_tcp_udp_unix() {
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:10450".parse().unwrap(),
         "udp/127.0.0.1:10450".parse().unwrap(),
+        "tcp/[::1]:10450".parse().unwrap(),
+        "udp/[::1]:10450".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-8.sock"
             .parse()
             .unwrap(),
