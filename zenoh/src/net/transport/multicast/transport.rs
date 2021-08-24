@@ -77,15 +77,12 @@ pub(crate) struct TransportMulticastInner {
     pub(super) link: Arc<RwLock<Option<TransportLinkMulticast>>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
-    // The transport can do shm
-    pub(super) is_shm: bool,
     // The timer for peer leases
     pub(super) timer: Arc<Timer>,
 }
 
 pub(crate) struct TransportMulticastConfig {
     pub(crate) manager: TransportManager,
-    pub(crate) is_shm: bool,
     pub(crate) initial_sns: ConduitSnList,
     pub(crate) link: LinkMulticast,
 }
@@ -118,7 +115,6 @@ impl TransportMulticastInner {
             peers: Arc::new(RwLock::new(HashMap::new())),
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
-            is_shm: config.is_shm,
             timer: Arc::new(Timer::new()),
         };
 
@@ -149,12 +145,12 @@ impl TransportMulticastInner {
         self.manager.config.sn_resolution
     }
 
-    pub(crate) fn is_shm(&self) -> bool {
-        self.is_shm
-    }
-
     pub(crate) fn is_qos(&self) -> bool {
         self.conduit_tx.len() > 1
+    }
+
+    pub(crate) fn is_shm(&self) -> bool {
+        false
     }
 
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportMulticastEventHandler>> {
@@ -221,11 +217,8 @@ impl TransportMulticastInner {
     /// Schedule a Zenoh message on the transmission queue    
     #[cfg(feature = "zero-copy")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
-        let res = if self.is_shm {
-            message.map_to_shminfo()
-        } else {
-            message.map_to_shmbuf(self.manager.shmr.clone())
-        };
+        // Multicast transports do not support SHM for the time being
+        let res = message.map_to_shmbuf(self.manager.shmr.clone());
         if let Err(e) = res {
             log::trace!("Failed SHM conversion: {}", e);
             return;

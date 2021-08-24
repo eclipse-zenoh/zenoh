@@ -48,7 +48,6 @@ pub(crate) async fn open_link(
     };
     let config = TransportMulticastConfig {
         manager: manager.clone(),
-        is_shm: false, // @TODO: allow dynamic configuration
         initial_sns,
         link: link.clone(),
     };
