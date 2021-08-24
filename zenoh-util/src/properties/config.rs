@@ -281,6 +281,16 @@ mod consts {
     pub const ZN_JOIN_INTERVAL_KEY: u64 = 0x74;
     pub const ZN_JOIN_INTERVAL_STR: &str = "join_interval";
     pub const ZN_JOIN_INTERVAL_DEFAULT: &str = "2500";
+
+    /// Configures the maximum size in bytes of the defragmentation
+    /// buffer at receiving sides. Messages that have been fragmented
+    /// and that are larger than the configured size will be dropped.
+    /// String key : `"defrag_buff_size"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `1073741824` (1GiB).
+    pub const ZN_DEFRAG_BUFF_SIZE_KEY: u64 = 0x75;
+    pub const ZN_DEFRAG_BUFF_SIZE_STR: &str = "defrag_buff_size";
+    pub const ZN_DEFRAG_BUFF_SIZE_DEFAULT: &str = "1073741824";
 }
 
 pub use consts::*;
@@ -327,6 +337,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_VERSION_STR => Some(ZN_VERSION_KEY),
             ZN_QOS_STR => Some(ZN_QOS_KEY),
             ZN_JOIN_INTERVAL_STR => Some(ZN_JOIN_INTERVAL_KEY),
+            ZN_DEFRAG_BUFF_SIZE_STR => Some(ZN_DEFRAG_BUFF_SIZE_KEY),
             _ => None,
         }
     }
@@ -371,6 +382,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_VERSION_KEY => Some(ZN_VERSION_STR.to_string()),
             ZN_QOS_KEY => Some(ZN_QOS_STR.to_string()),
             ZN_JOIN_INTERVAL_KEY => Some(ZN_JOIN_INTERVAL_STR.to_string()),
+            ZN_DEFRAG_BUFF_SIZE_KEY => Some(ZN_DEFRAG_BUFF_SIZE_STR.to_string()),
             _ => None,
         }
     }

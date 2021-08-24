@@ -88,6 +88,7 @@ pub struct TransportManagerConfig {
     pub whatami: WhatAmI,
     pub sn_resolution: ZInt,
     pub batch_size: u16,
+    pub defrag_buff_size: usize,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
     pub locator_property: HashMap<LocatorProtocol, LocatorProperty>,
@@ -106,6 +107,7 @@ pub struct TransportManagerConfigBuilder {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     batch_size: u16,
+    defrag_buff_size: usize,
     unicast: TransportManagerConfigUnicast,
     multicast: TransportManagerConfigMulticast,
     locator_property: HashMap<LocatorProtocol, LocatorProperty>,
@@ -137,6 +139,11 @@ impl TransportManagerConfigBuilder {
         self
     }
 
+    pub fn defrag_buff_size(mut self, defrag_buff_size: usize) -> Self {
+        self.defrag_buff_size = defrag_buff_size;
+        self
+    }
+
     pub fn locator_property(mut self, mut locator_property: Vec<LocatorProperty>) -> Self {
         let mut hm = HashMap::new();
         for lp in locator_property.drain(..) {
@@ -163,6 +170,7 @@ impl TransportManagerConfigBuilder {
             whatami: self.whatami,
             sn_resolution: self.sn_resolution,
             batch_size: self.batch_size,
+            defrag_buff_size: self.defrag_buff_size,
             unicast: self.unicast,
             multicast: self.multicast,
             locator_property: self.locator_property,
@@ -209,6 +217,7 @@ impl Default for TransportManagerConfigBuilder {
             whatami: whatami::parse(ZN_MODE_DEFAULT).unwrap(),
             sn_resolution: SEQ_NUM_RES,
             batch_size: BATCH_SIZE,
+            defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
             locator_property: HashMap::new(),
             unicast: TransportManagerConfigUnicast::default(),
             multicast: TransportManagerConfigMulticast::default(),

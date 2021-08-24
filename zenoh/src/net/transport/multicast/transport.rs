@@ -345,6 +345,7 @@ impl TransportMulticastInner {
                     Priority::default(),
                     join.sn_resolution,
                     sn,
+                    self.manager.config.defrag_buff_size,
                 )]
             }
             ConduitSnList::QoS(ref sns) => sns
@@ -355,6 +356,7 @@ impl TransportMulticastInner {
                         (prio as u8).try_into().unwrap(),
                         join.sn_resolution,
                         *sn,
+                        self.manager.config.defrag_buff_size,
                     )
                 })
                 .collect(),

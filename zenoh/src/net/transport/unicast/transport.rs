@@ -112,6 +112,7 @@ impl TransportUnicastInner {
                     (c as u8).try_into().unwrap(),
                     config.sn_resolution,
                     conduit_sn_rx,
+                    config.manager.config.defrag_buff_size,
                 ));
             }
         } else {
@@ -125,6 +126,7 @@ impl TransportUnicastInner {
                 Priority::default(),
                 config.sn_resolution,
                 conduit_sn_rx,
+                config.manager.config.defrag_buff_size,
             ));
         }
 
