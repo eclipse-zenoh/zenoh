@@ -97,7 +97,7 @@ impl StageIn {
     fn new(
         priority: usize,
         capacity: usize,
-        batch_size: usize,
+        batch_size: u16,
         is_streamed: bool,
         bytes_topull: Arc<[AtomicUsize]>,
     ) -> StageIn {
@@ -110,7 +110,7 @@ impl StageIn {
             priority,
             inner,
             bytes_topull,
-            fragbuf: Some(WBuf::new(batch_size, false)),
+            fragbuf: Some(WBuf::new(batch_size as usize, false)),
         }
     }
 
@@ -215,7 +215,7 @@ pub(crate) struct TransmissionPipeline {
 impl TransmissionPipeline {
     /// Create a new link queue.
     pub(crate) fn new(
-        batch_size: usize,
+        batch_size: u16,
         is_streamed: bool,
         conduit: Arc<[TransportConduitTx]>,
     ) -> TransmissionPipeline {
@@ -629,9 +629,9 @@ mod tests {
         Channel, ConduitSn, CongestionControl, Priority, Reliability, ResKey, ZInt,
     };
     use crate::net::protocol::io::ZBuf;
-    use crate::net::protocol::proto::defaults::SEQ_NUM_RES;
+    use crate::net::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
     use crate::net::protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
-    use crate::net::transport::defaults::{ZN_DEFAULT_BATCH_SIZE, ZN_QUEUE_SIZE_CONTROL};
+    use crate::net::transport::defaults::ZN_QUEUE_SIZE_CONTROL;
     use async_std::prelude::*;
     use async_std::task;
     use std::convert::TryFrom;
@@ -720,7 +720,7 @@ mod tests {
         }
 
         // Pipeline
-        let batch_size = ZN_DEFAULT_BATCH_SIZE;
+        let batch_size = BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
@@ -772,7 +772,7 @@ mod tests {
             // Make sure to put only one message per batch: set the payload size
             // to half of the batch in such a way the serialized zenoh message
             // will be larger then half of the batch size (header + payload).
-            let payload_size: usize = ZN_DEFAULT_BATCH_SIZE / 2;
+            let payload_size = (BATCH_SIZE / 2) as usize;
 
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
@@ -818,7 +818,7 @@ mod tests {
         }
 
         // Pipeline
-        let batch_size = ZN_DEFAULT_BATCH_SIZE;
+        let batch_size = BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
@@ -884,7 +884,7 @@ mod tests {
             // Make sure to put only one message per batch: set the payload size
             // to half of the batch in such a way the serialized zenoh message
             // will be larger then half of the batch size (header + payload).
-            let payload_size: usize = ZN_DEFAULT_BATCH_SIZE / 2;
+            let payload_size = (BATCH_SIZE / 2) as usize;
 
             // Send reliable messages
             let key = ResKey::RName("test".to_string());
@@ -928,7 +928,7 @@ mod tests {
         }
 
         // Queue
-        let batch_size = ZN_DEFAULT_BATCH_SIZE;
+        let batch_size = BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,
@@ -992,7 +992,7 @@ mod tests {
     #[ignore]
     fn tx_pipeline_thr() {
         // Queue
-        let batch_size = ZN_DEFAULT_BATCH_SIZE;
+        let batch_size = BATCH_SIZE;
         let is_streamed = true;
         let conduit = vec![TransportConduitTx::new(
             Priority::Control,

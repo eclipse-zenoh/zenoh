@@ -72,7 +72,7 @@ impl TransportLinkUnicast {
     pub(super) fn start_tx(
         &mut self,
         keep_alive: Duration,
-        batch_size: usize,
+        batch_size: u16,
         conduit_tx: Arc<[TransportConduitTx]>,
     ) {
         if self.handle_tx.is_none() {
@@ -235,8 +235,9 @@ async fn rx_task_stream(
     // The ZBuf to read a message batch onto
     let mut zbuf = ZBuf::new();
     // The pool of buffers
-    let n = 1 + (*ZN_RX_BUFF_SIZE / link.get_mtu());
-    let pool = RecyclingObjectPool::new(n, || vec![0u8; link.get_mtu()].into_boxed_slice());
+    let mtu = link.get_mtu() as usize;
+    let n = 1 + (*ZN_RX_BUFF_SIZE / mtu);
+    let pool = RecyclingObjectPool::new(n, || vec![0u8; mtu].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the ZBuf
         zbuf.clear();
@@ -298,8 +299,9 @@ async fn rx_task_dgram(
     // The ZBuf to read a message batch onto
     let mut zbuf = ZBuf::new();
     // The pool of buffers
-    let n = 1 + (*ZN_RX_BUFF_SIZE / link.get_mtu());
-    let pool = RecyclingObjectPool::new(n, || vec![0u8; link.get_mtu()].into_boxed_slice());
+    let mtu = link.get_mtu() as usize;
+    let n = 1 + (*ZN_RX_BUFF_SIZE / mtu);
+    let pool = RecyclingObjectPool::new(n, || vec![0u8; mtu].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the zbuf
         zbuf.clear();

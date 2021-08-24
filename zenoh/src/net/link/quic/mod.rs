@@ -26,12 +26,12 @@ pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 //       no limit regarding the MTU. However, given the batching strategy
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the QUIC MTU is constrained to
-//       2^16 + 1 bytes (i.e., 65537).
-const QUIC_MAX_MTU: usize = 65_537;
+//       2^16 - 1 bytes (i.e., 65535).
+const QUIC_MAX_MTU: u16 = u16::MAX;
 
 zconfigurable! {
     // Default MTU (QUIC PDU) in bytes.
-    static ref QUIC_DEFAULT_MTU: usize = QUIC_MAX_MTU;
+    static ref QUIC_DEFAULT_MTU: u16 = QUIC_MAX_MTU;
     // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
     // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
     // More info on the LINGER option and its dynamics can be found at:

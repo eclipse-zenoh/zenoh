@@ -226,7 +226,7 @@ impl TransportUnicastInner {
         &self,
         link: &LinkUnicast,
         keep_alive: Duration,
-        batch_size: usize,
+        batch_size: u16,
     ) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {

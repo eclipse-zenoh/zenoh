@@ -157,8 +157,8 @@ impl SharedMemoryAuthenticator {
     pub async fn from_properties(
         config: &ConfigProperties,
     ) -> ZResult<Option<SharedMemoryAuthenticator>> {
-        let zero_copy = config.get_or(&ZN_SHM_KEY, ZN_SHM_DEFAULT);
-        if zero_copy == ZN_TRUE {
+        let is_shm: bool = zparse!(config.get_or(&ZN_SHM_KEY, ZN_SHM_DEFAULT))?;
+        if is_shm {
             let mut prng = PseudoRng::from_entropy();
             let challenge = prng.gen::<ZInt>();
 

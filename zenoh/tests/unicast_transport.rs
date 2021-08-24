@@ -24,8 +24,9 @@ use zenoh::net::protocol::core::{
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
-    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
+    TransportEventHandler, TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
+    TransportMulticast, TransportMulticastEventHandler, TransportUnicast,
+    TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -150,17 +151,25 @@ async fn open_transport(
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
+    let unicast = TransportManagerConfigUnicast::builder()
+        .max_links(locators.len())
+        .build();
     let config = TransportManagerConfig::builder()
         .pid(router_id)
         .whatami(whatami::ROUTER)
+        .unicast(unicast)
         .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .build(router_handler.clone());
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
+    let unicast = TransportManagerConfigUnicast::builder()
+        .max_links(locators.len())
+        .build();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client_id)
+        .unicast(unicast)
         .locator_property(locator_property.unwrap_or_else(Vec::new))
         .build(Arc::new(SHClient::default()));
     let client_manager = TransportManager::new(config);

@@ -20,7 +20,6 @@ pub(crate) mod transport;
 pub(crate) mod tx;
 
 use super::common;
-use super::defaults;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, ZenohMessage};

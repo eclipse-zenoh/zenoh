@@ -11,52 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::protocol::core::{whatami, WhatAmI, ZInt};
-
-// Zenoh version
-//  7 6 5 4 3 2 1 0
-// +-+-+-+-+-+-+-+-+
-// | v_maj | v_min |
-// +-------+-------+
-pub const ZN_VERSION: u8 = 0x05;
-
-// Zenoh default whatami
-pub const ZN_DEFAULT_WHATAMI: WhatAmI = whatami::PEER;
-
-// The default batch size in bytes for the transport
-// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-//       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-//       the boundary of the serialized messages. The length is encoded as little-endian.
-//       In any case, the length of a message must not exceed 65_535 bytes.
-//
-// This results in a maximum batch size of (2 + 65_535) 65_537 bytes. In case a transport link has
-// an MTU smaller than the ZN_BATCH_SIZE, the batch size will be automatically set to the
-// transport link MTU to avoid any transmission problems on the network.
-pub const ZN_DEFAULT_BATCH_SIZE: usize = 65_537;
-
 zconfigurable! {
-    // Default link lease in milliseconds: 10 seconds
-    pub static ref ZN_LINK_LEASE: ZInt = 10_000;
-
-    // Default interval for keep alive messages in milliseconds: 2.5 seconds
-    // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
-    //       set the actual keep_alive timeout to one fourth of the agreed transport lease.
-    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
-    //       check which considers a link as failed when no messages are received in 3.5 times the
-    //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
-    //       transport lease.
-    pub static ref ZN_LINK_KEEP_ALIVE: ZInt = 2_500;
-
-     // Default timeout when opening a transport in milliseconds
-    pub static ref ZN_JOIN_INTERVAL: ZInt = 2_500;
-
-    // Default timeout when opening a transport in milliseconds
-    pub static ref ZN_OPEN_TIMEOUT: ZInt = 10_000;
-
-    // Default maximum number of pending transports being opened with the host
-    pub static ref ZN_OPEN_INCOMING_PENDING: usize = 1_024;
-
     // Parameters of the link transmission queue
     // - The size of each queue relates to the number of batches a given queue can contain.
     // - The amount of memory being allocated for each queue is then QUEUE_SIZE_XXX * ZN_BATCH_SIZE.

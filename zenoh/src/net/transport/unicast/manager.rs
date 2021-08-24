@@ -13,7 +13,6 @@
 //
 use super::super::TransportManager;
 use super::authenticator::*;
-use super::defaults::*;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::transport::{TransportUnicastConfig, TransportUnicastInner};
 use super::*;
@@ -27,7 +26,7 @@ use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
-use zenoh_util::{zasynclock, zerror, zlock};
+use zenoh_util::{zasynclock, zerror, zlock, zparse};
 
 pub struct TransportManagerConfigUnicast {
     pub lease: Duration,
@@ -70,16 +69,16 @@ pub struct TransportManagerConfigBuilderUnicast {
 impl Default for TransportManagerConfigBuilderUnicast {
     fn default() -> TransportManagerConfigBuilderUnicast {
         TransportManagerConfigBuilderUnicast {
-            lease: Duration::from_millis(*ZN_LINK_LEASE),
-            keep_alive: Duration::from_millis(*ZN_LINK_KEEP_ALIVE),
-            open_timeout: Duration::from_millis(*ZN_OPEN_TIMEOUT),
-            open_pending: *ZN_OPEN_INCOMING_PENDING,
-            max_sessions: usize::MAX,
-            max_links: usize::MAX,
+            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
+            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
+            open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
+            open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_DEFAULT).unwrap(),
+            max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
+            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
+            is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
             peer_authenticator: HashSet::new(),
             link_authenticator: HashSet::new(),
-            is_qos: true,
-            is_shm: true,
         }
     }
 }

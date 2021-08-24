@@ -19,7 +19,6 @@ pub(crate) mod transport;
 pub(crate) mod tx;
 
 use super::common;
-use super::defaults;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, ZenohMessage};
@@ -120,6 +119,12 @@ impl TransportMulticast {
     pub fn get_links(&self) -> ZResult<Vec<LinkMulticast>> {
         let transport = zweak!(self.0)?;
         Ok(transport.get_links())
+    }
+
+    #[inline(always)]
+    pub fn get_peers(&self) -> ZResult<Vec<PeerId>> {
+        let transport = zweak!(self.0)?;
+        Ok(transport.get_peers())
     }
 
     #[inline(always)]

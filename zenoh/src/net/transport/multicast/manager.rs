@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::TransportManager;
-use super::defaults::*;
 use super::transport::TransportMulticastInner;
 use super::*;
 use crate::net::link::*;
@@ -22,7 +21,7 @@ use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
-use zenoh_util::{zerror, zlock};
+use zenoh_util::{zerror, zlock, zparse};
 
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,
@@ -55,11 +54,11 @@ pub struct TransportManagerConfigBuilderMulticast {
 impl Default for TransportManagerConfigBuilderMulticast {
     fn default() -> TransportManagerConfigBuilderMulticast {
         TransportManagerConfigBuilderMulticast {
-            lease: Duration::from_millis(*ZN_LINK_LEASE),
-            keep_alive: Duration::from_millis(*ZN_LINK_KEEP_ALIVE),
-            join_interval: Duration::from_millis(*ZN_JOIN_INTERVAL),
-            max_sessions: usize::MAX,
-            is_qos: true,
+            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
+            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
+            join_interval: Duration::from_millis(zparse!(ZN_JOIN_INTERVAL_DEFAULT).unwrap()),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_DEFAULT).unwrap(),
+            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
         }
     }
 }
@@ -94,19 +93,6 @@ impl TransportManagerConfigBuilderMulticast {
         mut self,
         properties: &ConfigProperties,
     ) -> ZResult<TransportManagerConfigBuilderMulticast> {
-        macro_rules! zparse {
-            ($str:expr) => {
-                $str.parse().map_err(|_| {
-                    let e = format!(
-                        "Failed to read configuration: {} is not a valid value",
-                        $str
-                    );
-                    log::warn!("{}", e);
-                    zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
-                })
-            };
-        }
-
         if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
             self = self.lease(Duration::from_millis(zparse!(v)?));
         }

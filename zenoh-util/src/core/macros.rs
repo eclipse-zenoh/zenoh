@@ -247,3 +247,18 @@ macro_rules! zasync_executor_init {
         );
     };
 }
+
+// This macro allows to parse a string to the target type
+#[macro_export]
+macro_rules! zparse {
+    ($str:expr) => {
+        $str.parse().map_err(|_| {
+            let e = format!(
+                "Failed to read configuration: {} is not a valid value",
+                $str
+            );
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
+        })
+    };
+}

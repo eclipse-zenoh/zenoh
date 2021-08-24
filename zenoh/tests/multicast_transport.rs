@@ -152,6 +152,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(peer01_manager.get_transport_multicast(locator).is_some());
+        println!("\t{:?}", peer01_manager.get_transports_multicast());
 
         println!("Opening transport with {}", locator);
         let _ = peer02_manager
@@ -161,9 +162,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(peer02_manager.get_transport_multicast(locator).is_some());
-
-        println!("{:?}", peer01_manager.get_transports_multicast());
-        println!("{:?}", peer02_manager.get_transports_multicast());
+        println!("\t{:?}", peer02_manager.get_transports_multicast());
 
         let peer01_transport = peer01_manager.get_transport_multicast(locator).unwrap();
         let peer02_transport = peer02_manager.get_transport_multicast(locator).unwrap();
@@ -193,7 +192,9 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(peer01.manager.get_transports_multicast().is_empty());
+        assert!(peer02.transport.get_peers().unwrap().is_empty());
 
+        // Close the peer02 transport
         println!("Closing transport with {}", locator);
         let _ = peer02
             .transport

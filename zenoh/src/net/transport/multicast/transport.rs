@@ -245,10 +245,14 @@ impl TransportMulticastInner {
         }
     }
 
+    pub(crate) fn get_peers(&self) -> Vec<PeerId> {
+        zread!(self.peers).iter().map(|(_, x)| x.pid).collect()
+    }
+
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(super) fn start_tx(&self, batch_size: usize) -> ZResult<()> {
+    pub(super) fn start_tx(&self, batch_size: u16) -> ZResult<()> {
         let mut guard = zwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {

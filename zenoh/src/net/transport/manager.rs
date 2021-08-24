@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::defaults::*;
 use super::multicast::manager::{TransportManagerConfigMulticast, TransportManagerStateMulticast};
 use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
 #[cfg(feature = "zero-copy")]
 use super::protocol::io::SharedMemoryReader;
+use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
@@ -28,8 +28,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
-use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
+use zenoh_util::zparse;
 
 /// # Examples
 /// ```
@@ -87,7 +87,7 @@ pub struct TransportManagerConfig {
     pub pid: PeerId,
     pub whatami: WhatAmI,
     pub sn_resolution: ZInt,
-    pub batch_size: usize,
+    pub batch_size: u16,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
     pub locator_property: HashMap<LocatorProtocol, LocatorProperty>,
@@ -105,7 +105,7 @@ pub struct TransportManagerConfigBuilder {
     pid: PeerId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
-    batch_size: usize,
+    batch_size: u16,
     unicast: TransportManagerConfigUnicast,
     multicast: TransportManagerConfigMulticast,
     locator_property: HashMap<LocatorProtocol, LocatorProperty>,
@@ -132,7 +132,7 @@ impl TransportManagerConfigBuilder {
         self
     }
 
-    pub fn batch_size(mut self, batch_size: usize) -> Self {
+    pub fn batch_size(mut self, batch_size: u16) -> Self {
         self.batch_size = batch_size;
         self
     }
@@ -174,19 +174,6 @@ impl TransportManagerConfigBuilder {
         mut self,
         properties: &ConfigProperties,
     ) -> ZResult<TransportManagerConfigBuilder> {
-        macro_rules! zparse {
-            ($str:expr) => {
-                $str.parse().map_err(|_| {
-                    let e = format!(
-                        "Failed to read configuration: {} is not a valid value",
-                        $str
-                    );
-                    log::warn!("{}", e);
-                    zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
-                })
-            };
-        }
-
         if let Some(v) = properties.get(&ZN_VERSION_KEY) {
             self = self.version(zparse!(v)?);
         }
@@ -217,11 +204,11 @@ impl TransportManagerConfigBuilder {
 impl Default for TransportManagerConfigBuilder {
     fn default() -> Self {
         Self {
-            version: ZN_VERSION,
+            version: VERSION,
             pid: PeerId::rand(),
-            whatami: ZN_DEFAULT_WHATAMI,
-            sn_resolution: super::protocol::proto::defaults::SEQ_NUM_RES,
-            batch_size: ZN_DEFAULT_BATCH_SIZE,
+            whatami: whatami::parse(ZN_MODE_DEFAULT).unwrap(),
+            sn_resolution: SEQ_NUM_RES,
+            batch_size: BATCH_SIZE,
             locator_property: HashMap::new(),
             unicast: TransportManagerConfigUnicast::default(),
             multicast: TransportManagerConfigMulticast::default(),

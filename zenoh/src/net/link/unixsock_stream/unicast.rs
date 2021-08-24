@@ -112,7 +112,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> u16 {
         *UNIXSOCKSTREAM_DEFAULT_MTU
     }
 
