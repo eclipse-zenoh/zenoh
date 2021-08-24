@@ -89,6 +89,7 @@ pub struct TransportManagerConfig {
     pub sn_resolution: ZInt,
     pub batch_size: u16,
     pub defrag_buff_size: usize,
+    pub link_rx_buff_size: usize,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
     pub locator_property: HashMap<LocatorProtocol, LocatorProperty>,
@@ -108,6 +109,7 @@ pub struct TransportManagerConfigBuilder {
     sn_resolution: ZInt,
     batch_size: u16,
     defrag_buff_size: usize,
+    link_rx_buff_size: usize,
     unicast: TransportManagerConfigUnicast,
     multicast: TransportManagerConfigMulticast,
     locator_property: HashMap<LocatorProtocol, LocatorProperty>,
@@ -144,6 +146,11 @@ impl TransportManagerConfigBuilder {
         self
     }
 
+    pub fn link_rx_buff_size(mut self, link_rx_buff_size: usize) -> Self {
+        self.link_rx_buff_size = link_rx_buff_size;
+        self
+    }
+
     pub fn locator_property(mut self, mut locator_property: Vec<LocatorProperty>) -> Self {
         let mut hm = HashMap::new();
         for lp in locator_property.drain(..) {
@@ -171,6 +178,7 @@ impl TransportManagerConfigBuilder {
             sn_resolution: self.sn_resolution,
             batch_size: self.batch_size,
             defrag_buff_size: self.defrag_buff_size,
+            link_rx_buff_size: self.link_rx_buff_size,
             unicast: self.unicast,
             multicast: self.multicast,
             locator_property: self.locator_property,
@@ -197,6 +205,12 @@ impl TransportManagerConfigBuilder {
         if let Some(v) = properties.get(&ZN_BATCH_SIZE_KEY) {
             self = self.batch_size(zparse!(v)?);
         }
+        if let Some(v) = properties.get(&ZN_DEFRAG_BUFF_SIZE_KEY) {
+            self = self.defrag_buff_size(zparse!(v)?);
+        }
+        if let Some(v) = properties.get(&ZN_LINK_RX_BUFF_SIZE_KEY) {
+            self = self.link_rx_buff_size(zparse!(v)?);
+        }
         self = self.locator_property(LocatorProperty::from_properties(properties).await?);
         self = self.unicast(
             TransportManagerConfigUnicast::builder()
@@ -218,6 +232,7 @@ impl Default for TransportManagerConfigBuilder {
             sn_resolution: SEQ_NUM_RES,
             batch_size: BATCH_SIZE,
             defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
+            link_rx_buff_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
             locator_property: HashMap::new(),
             unicast: TransportManagerConfigUnicast::default(),
             multicast: TransportManagerConfigMulticast::default(),

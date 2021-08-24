@@ -283,7 +283,7 @@ mod consts {
     pub const ZN_JOIN_INTERVAL_DEFAULT: &str = "2500";
 
     /// Configures the maximum size in bytes of the defragmentation
-    /// buffer at receiving sides. Messages that have been fragmented
+    /// buffer at receiving side. Messages that have been fragmented
     /// and that are larger than the configured size will be dropped.
     /// String key : `"defrag_buff_size"`.
     /// Accepted values : `<unsigned integer>`.
@@ -291,6 +291,14 @@ mod consts {
     pub const ZN_DEFRAG_BUFF_SIZE_KEY: u64 = 0x75;
     pub const ZN_DEFRAG_BUFF_SIZE_STR: &str = "defrag_buff_size";
     pub const ZN_DEFRAG_BUFF_SIZE_DEFAULT: &str = "1073741824";
+
+    /// Configures the buffer size in bytes at receiving side for each link.
+    /// String key : `"link_rx_buff_size"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `16777216` (16MiB).
+    pub const ZN_LINK_RX_BUFF_SIZE_KEY: u64 = 0x76;
+    pub const ZN_LINK_RX_BUFF_SIZE_STR: &str = "link_rx_buff_size";
+    pub const ZN_LINK_RX_BUFF_SIZE_DEFAULT: &str = "16777216";
 }
 
 pub use consts::*;
@@ -338,6 +346,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_QOS_STR => Some(ZN_QOS_KEY),
             ZN_JOIN_INTERVAL_STR => Some(ZN_JOIN_INTERVAL_KEY),
             ZN_DEFRAG_BUFF_SIZE_STR => Some(ZN_DEFRAG_BUFF_SIZE_KEY),
+            ZN_LINK_RX_BUFF_SIZE_STR => Some(ZN_LINK_RX_BUFF_SIZE_KEY),
             _ => None,
         }
     }
@@ -383,6 +392,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_QOS_KEY => Some(ZN_QOS_STR.to_string()),
             ZN_JOIN_INTERVAL_KEY => Some(ZN_JOIN_INTERVAL_STR.to_string()),
             ZN_DEFRAG_BUFF_SIZE_KEY => Some(ZN_DEFRAG_BUFF_SIZE_STR.to_string()),
+            ZN_LINK_RX_BUFF_SIZE_KEY => Some(ZN_LINK_RX_BUFF_SIZE_STR.to_string()),
             _ => None,
         }
     }

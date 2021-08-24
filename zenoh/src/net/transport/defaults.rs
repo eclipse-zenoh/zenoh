@@ -28,7 +28,4 @@ zconfigurable! {
 
     // The default backoff time in nanoseconds to allow the batching to potentially progress
     pub static ref ZN_QUEUE_PULL_BACKOFF: u64 = 100;
-
-    // The total size of buffers allocated at RX side per link. Default 16MB.
-    pub static ref ZN_RX_BUFF_SIZE: usize = 16_777_216;
 }

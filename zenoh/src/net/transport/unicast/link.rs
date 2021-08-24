@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::defaults::ZN_RX_BUFF_SIZE;
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::core::Priority;
 use super::protocol::io::{ZBuf, ZSlice};
@@ -114,6 +113,7 @@ impl TransportLinkUnicast {
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_active = self.active_rx.clone();
+            let c_rx_buff_size = self.transport.manager.config.link_rx_buff_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task
@@ -123,6 +123,7 @@ impl TransportLinkUnicast {
                     lease,
                     c_signal.clone(),
                     c_active.clone(),
+                    c_rx_buff_size,
                 )
                 .await;
                 c_active.store(false, Ordering::Release);
@@ -212,6 +213,7 @@ async fn rx_task_stream(
     lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,
+    rx_buff_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read(usize),
@@ -236,7 +238,7 @@ async fn rx_task_stream(
     let mut zbuf = ZBuf::new();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (*ZN_RX_BUFF_SIZE / mtu);
+    let n = 1 + (rx_buff_size / mtu);
     let pool = RecyclingObjectPool::new(n, || vec![0u8; mtu].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the ZBuf
@@ -280,6 +282,7 @@ async fn rx_task_dgram(
     lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,
+    rx_buff_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read(usize),
@@ -300,7 +303,7 @@ async fn rx_task_dgram(
     let mut zbuf = ZBuf::new();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (*ZN_RX_BUFF_SIZE / mtu);
+    let n = 1 + (rx_buff_size / mtu);
     let pool = RecyclingObjectPool::new(n, || vec![0u8; mtu].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the zbuf
@@ -351,10 +354,11 @@ async fn rx_task(
     lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,
+    rx_buff_size: usize,
 ) -> ZResult<()> {
     if link.is_streamed() {
-        rx_task_stream(link, transport, lease, signal, active).await
+        rx_task_stream(link, transport, lease, signal, active, rx_buff_size).await
     } else {
-        rx_task_dgram(link, transport, lease, signal, active).await
+        rx_task_dgram(link, transport, lease, signal, active, rx_buff_size).await
     }
 }

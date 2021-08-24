@@ -138,19 +138,6 @@ impl TransportManagerConfigBuilderUnicast {
         mut self,
         properties: &ConfigProperties,
     ) -> ZResult<TransportManagerConfigBuilderUnicast> {
-        macro_rules! zparse {
-            ($str:expr) => {
-                $str.parse().map_err(|_| {
-                    let e = format!(
-                        "Failed to read configuration: {} is not a valid value",
-                        $str
-                    );
-                    log::warn!("{}", e);
-                    zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
-                })
-            };
-        }
-
         if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
             self = self.lease(Duration::from_millis(zparse!(v)?));
         }
