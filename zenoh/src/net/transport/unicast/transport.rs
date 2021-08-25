@@ -112,6 +112,7 @@ impl TransportUnicastInner {
                     (c as u8).try_into().unwrap(),
                     config.sn_resolution,
                     conduit_sn_rx,
+                    config.manager.config.defrag_buff_size,
                 ));
             }
         } else {
@@ -125,6 +126,7 @@ impl TransportUnicastInner {
                 Priority::default(),
                 config.sn_resolution,
                 conduit_sn_rx,
+                config.manager.config.defrag_buff_size,
             ));
         }
 
@@ -226,7 +228,7 @@ impl TransportUnicastInner {
         &self,
         link: &LinkUnicast,
         keep_alive: Duration,
-        batch_size: usize,
+        batch_size: u16,
     ) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {

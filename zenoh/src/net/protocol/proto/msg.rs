@@ -494,7 +494,7 @@ impl Priority {
 /// -  1: Payload kind
 /// -  2: Payload encoding
 /// -  3: Payload timestamp
-/// -  4: QoS
+/// -  4: Reserved
 /// -  5: Reserved
 /// -  6: Reserved
 /// -  7: Payload source_id

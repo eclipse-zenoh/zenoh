@@ -47,7 +47,7 @@ pub struct LinkUnicast(Arc<dyn LinkUnicastTrait>);
 
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
-    fn get_mtu(&self) -> usize;
+    fn get_mtu(&self) -> u16;
     fn get_src(&self) -> Locator;
     fn get_dst(&self) -> Locator;
     fn is_reliable(&self) -> bool;
@@ -95,7 +95,7 @@ impl LinkUnicast {
             buffer
         } else {
             // Read the message
-            let mut buffer = vec![0u8; self.get_mtu()];
+            let mut buffer = vec![0u8; self.get_mtu() as usize];
             let n = self.read(&mut buffer).await?;
             buffer.truncate(n);
             buffer
@@ -172,7 +172,7 @@ pub struct LinkMulticast(Arc<dyn LinkMulticastTrait>);
 
 #[async_trait]
 pub trait LinkMulticastTrait: Send + Sync {
-    fn get_mtu(&self) -> usize;
+    fn get_mtu(&self) -> u16;
     fn get_src(&self) -> Locator;
     fn get_dst(&self) -> Locator;
     fn is_reliable(&self) -> bool;

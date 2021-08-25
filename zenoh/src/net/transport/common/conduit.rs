@@ -40,6 +40,7 @@ impl TransportChannelRx {
         reliability: Reliability,
         initial_sn: ZInt,
         sn_resolution: ZInt,
+        defrag_buff_size: usize,
     ) -> TransportChannelRx {
         // Set the sequence number in the state as it had received a message with initial_sn - 1
         let last_initial_sn = if initial_sn == 0 {
@@ -50,7 +51,7 @@ impl TransportChannelRx {
 
         TransportChannelRx {
             sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag: DefragBuffer::new(reliability, initial_sn, sn_resolution),
+            defrag: DefragBuffer::new(reliability, initial_sn, sn_resolution, defrag_buff_size),
         }
     }
 }
@@ -94,6 +95,7 @@ impl TransportConduitRx {
         priority: Priority,
         sn_resolution: ZInt,
         initial_sn: ConduitSn,
+        defrag_buff_size: usize,
     ) -> TransportConduitRx {
         TransportConduitRx {
             priority,
@@ -101,11 +103,13 @@ impl TransportConduitRx {
                 Reliability::Reliable,
                 initial_sn.reliable,
                 sn_resolution,
+                defrag_buff_size,
             ))),
             best_effort: Arc::new(Mutex::new(TransportChannelRx::new(
                 Reliability::BestEffort,
                 initial_sn.best_effort,
                 sn_resolution,
+                defrag_buff_size,
             ))),
         }
     }

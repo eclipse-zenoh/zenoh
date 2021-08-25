@@ -97,38 +97,31 @@ impl TransportUnicastEventHandler for MHPeer {
 }
 
 async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
-    // Common transport lease in milliseconds
-    let lease = Duration::from_millis(1_000);
-
     /* [Peers] */
     let peer_id01 = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
     let peer_id02 = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
 
-    // let router_handler = Arc::new(SHPeer::new(router_new_barrier.clone()));
-
     // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new());
+    let unicast = TransportManagerConfigUnicast::builder()
+        .max_links(locator01.len() + locator02.len())
+        .build();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
         .pid(peer_id01)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .lease(lease)
-                .build(),
-        )
+        .unicast(unicast)
         .build(peer_sh01.clone());
     let peer01_manager = TransportManager::new(config);
 
     // Create the peer01 transport manager
     let peer_sh02 = Arc::new(SHPeer::new());
+    let unicast = TransportManagerConfigUnicast::builder()
+        .max_links(locator01.len() + locator02.len())
+        .build();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
         .pid(peer_id02)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .lease(lease)
-                .build(),
-        )
+        .unicast(unicast)
         .build(peer_sh02.clone());
     let peer02_manager = TransportManager::new(config);
 

@@ -109,6 +109,7 @@ fn locator_tcp() {
     // Define the locators
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:9447".parse().unwrap(),
+        "tcp/[::1]:9447".parse().unwrap(),
         "tcp/localhost:9448".parse().unwrap(),
     ];
     let locator_property = None;
@@ -125,6 +126,7 @@ fn locator_udp() {
     // Define the locators
     let locators: Vec<Locator> = vec![
         "udp/127.0.0.1:9447".parse().unwrap(),
+        "udp/[::1]:9447".parse().unwrap(),
         "udp/localhost:9448".parse().unwrap(),
     ];
     let locator_property = None;
@@ -169,6 +171,8 @@ fn locator_tcp_udp() {
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:9449".parse().unwrap(),
         "udp/127.0.0.1:9449".parse().unwrap(),
+        "tcp/[::1]:9449".parse().unwrap(),
+        "udp/[::1]:9449".parse().unwrap(),
     ];
     let locator_property = None;
     task::block_on(run(&locators, locator_property));
@@ -192,6 +196,8 @@ fn locator_tcp_udp_unix() {
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:9450".parse().unwrap(),
         "udp/127.0.0.1:9450".parse().unwrap(),
+        "tcp/[::1]:9450".parse().unwrap(),
+        "udp/[::1]:9450".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-2.sock"
             .parse()
             .unwrap(),
@@ -218,6 +224,7 @@ fn locator_tcp_unix() {
     // Define the locators
     let locators: Vec<Locator> = vec![
         "tcp/127.0.0.1:9451".parse().unwrap(),
+        "tcp/[::1]:9451".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-3.sock"
             .parse()
             .unwrap(),
@@ -244,6 +251,7 @@ fn locator_udp_unix() {
     // Define the locators
     let locators: Vec<Locator> = vec![
         "udp/127.0.0.1:9451".parse().unwrap(),
+        "udp/[::1]:9451".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-4.sock"
             .parse()
             .unwrap(),

@@ -127,7 +127,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> u16 {
         *QUIC_DEFAULT_MTU
     }
 

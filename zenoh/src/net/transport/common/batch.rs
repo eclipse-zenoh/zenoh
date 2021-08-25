@@ -95,7 +95,11 @@ impl SerializationBatch {
     ///
     /// * `sn_best_effort` - The sequence number generator for the best effort channel.
     ///
-    pub(crate) fn new(size: usize, is_streamed: bool) -> SerializationBatch {
+    pub(crate) fn new(size: u16, is_streamed: bool) -> SerializationBatch {
+        let mut size: usize = size as usize;
+        if is_streamed {
+            size += 2;
+        }
         let mut batch = SerializationBatch {
             buffer: WBuf::new(size, true),
             is_streamed,
@@ -355,7 +359,7 @@ mod tests {
     };
     use std::convert::TryFrom;
 
-    fn serialize_no_fragmentation(batch_size: usize, payload_size: usize) {
+    fn serialize_no_fragmentation(batch_size: u16, payload_size: usize) {
         for is_streamed in [false, true].iter() {
             print!(
                 "Streamed: {}\t\tBatch: {}\t\tPload: {}",
@@ -463,7 +467,7 @@ mod tests {
         }
     }
 
-    fn serialize_fragmentation(batch_size: usize, payload_size: usize) {
+    fn serialize_fragmentation(batch_size: u16, payload_size: usize) {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
             let mut sn_gen = SeqNumGenerator::new(0, SEQ_NUM_RES);
@@ -493,7 +497,7 @@ mod tests {
                 );
 
                 // Serialize the message
-                let mut wbuf = WBuf::new(batch_size, false);
+                let mut wbuf = WBuf::new(batch_size as usize, false);
                 wbuf.write_zenoh_message(&msg_in);
 
                 print!(
@@ -560,7 +564,7 @@ mod tests {
 
     #[test]
     fn serialization_batch() {
-        let batch_size: Vec<usize> = vec![128, 512, 1_024, 4_096, 8_192, 16_384, 32_768, 65_535];
+        let batch_size: Vec<u16> = vec![128, 512, 1_024, 4_096, 8_192, 16_384, 32_768, 65_535];
         let mut payload_size: Vec<usize> = Vec::new();
         let mut size: usize = 8;
         for _ in 0..16 {
@@ -573,7 +577,7 @@ mod tests {
 
         for bs in batch_size.iter() {
             for ps in payload_size.iter() {
-                if ps < bs {
+                if *ps < *bs as usize {
                     serialize_no_fragmentation(*bs, *ps);
                 } else {
                     serialize_fragmentation(*bs, *ps);

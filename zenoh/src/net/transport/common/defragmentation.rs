@@ -22,6 +22,7 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 pub(crate) struct DefragBuffer {
     reliability: Reliability,
     sn: SeqNum,
+    capacity: usize,
     buffer: ZBuf,
 }
 
@@ -30,10 +31,12 @@ impl DefragBuffer {
         reliability: Reliability,
         initial_sn: ZInt,
         sn_resolution: ZInt,
+        capacity: usize,
     ) -> DefragBuffer {
         DefragBuffer {
             reliability,
             sn: SeqNum::new(initial_sn, sn_resolution),
+            capacity,
             buffer: ZBuf::new(),
         }
     }
@@ -58,6 +61,17 @@ impl DefragBuffer {
             self.clear();
             return zerror!(ZErrorKind::InvalidMessage {
                 descr: format!("Expected SN {}, received {}", self.sn.get(), sn)
+            });
+        }
+
+        let new_len = zslice.len() + self.buffer.len();
+        if new_len > self.capacity {
+            self.clear();
+            return zerror!(ZErrorKind::InvalidMessage {
+                descr: format!(
+                    "Defragmentation buffer full: {} bytes. Capacity: {}.",
+                    new_len, self.capacity
+                )
             });
         }
 

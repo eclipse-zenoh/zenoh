@@ -15,6 +15,7 @@
 mod shm;
 mod userpassword;
 
+#[cfg(feature = "zero-copy")]
 use super::protocol;
 use super::protocol::core::{PeerId, Property, ZInt};
 use super::protocol::io::{WBuf, ZBuf};

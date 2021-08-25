@@ -23,12 +23,12 @@ pub use unicast::*;
 //       no limit regarding the MTU. However, given the batching strategy
 //       adopted in Zenoh and the usage of 16 bits in Zenoh to encode the
 //       payload length in byte-streamed, the UNIXSOCKSTREAM MTU is constrained to
-//       2^16 + 1 bytes (i.e., 65537).
-const UNIXSOCKSTREAM_MAX_MTU: usize = 65_537;
+//       2^16 - 1 bytes (i.e., 65535).
+const UNIXSOCKSTREAM_MAX_MTU: u16 = u16::MAX;
 
 zconfigurable! {
     // Default MTU (UNIXSOCKSTREAM PDU) in bytes.
-    static ref UNIXSOCKSTREAM_DEFAULT_MTU: usize = UNIXSOCKSTREAM_MAX_MTU;
+    static ref UNIXSOCKSTREAM_DEFAULT_MTU: u16 = UNIXSOCKSTREAM_MAX_MTU;
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME: u64 = 100_000;

@@ -118,7 +118,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> u16 {
         *UDP_DEFAULT_MTU
     }
 

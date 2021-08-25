@@ -178,7 +178,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> usize {
+    fn get_mtu(&self) -> u16 {
         *TLS_DEFAULT_MTU
     }
 

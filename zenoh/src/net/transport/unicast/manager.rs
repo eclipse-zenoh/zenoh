@@ -13,7 +13,6 @@
 //
 use super::super::TransportManager;
 use super::authenticator::*;
-use super::defaults::*;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::transport::{TransportUnicastConfig, TransportUnicastInner};
 use super::*;
@@ -27,7 +26,7 @@ use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
-use zenoh_util::{zasynclock, zerror, zlock};
+use zenoh_util::{zasynclock, zerror, zlock, zparse};
 
 pub struct TransportManagerConfigUnicast {
     pub lease: Duration,
@@ -37,6 +36,7 @@ pub struct TransportManagerConfigUnicast {
     pub max_sessions: usize,
     pub max_links: usize,
     pub is_qos: bool,
+    #[cfg(feature = "zero-copy")]
     pub is_shm: bool,
     pub peer_authenticator: HashSet<PeerAuthenticator>,
     pub link_authenticator: HashSet<LinkAuthenticator>,
@@ -62,6 +62,7 @@ pub struct TransportManagerConfigBuilderUnicast {
     pub(super) max_sessions: usize,
     pub(super) max_links: usize,
     pub(super) is_qos: bool,
+    #[cfg(feature = "zero-copy")]
     pub(super) is_shm: bool,
     pub(super) peer_authenticator: HashSet<PeerAuthenticator>,
     pub(super) link_authenticator: HashSet<LinkAuthenticator>,
@@ -70,16 +71,17 @@ pub struct TransportManagerConfigBuilderUnicast {
 impl Default for TransportManagerConfigBuilderUnicast {
     fn default() -> TransportManagerConfigBuilderUnicast {
         TransportManagerConfigBuilderUnicast {
-            lease: Duration::from_millis(*ZN_LINK_LEASE),
-            keep_alive: Duration::from_millis(*ZN_LINK_KEEP_ALIVE),
-            open_timeout: Duration::from_millis(*ZN_OPEN_TIMEOUT),
-            open_pending: *ZN_OPEN_INCOMING_PENDING,
-            max_sessions: usize::MAX,
-            max_links: usize::MAX,
+            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
+            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
+            open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
+            open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_DEFAULT).unwrap(),
+            max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
+            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
+            #[cfg(feature = "zero-copy")]
+            is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
             peer_authenticator: HashSet::new(),
             link_authenticator: HashSet::new(),
-            is_qos: true,
-            is_shm: true,
         }
     }
 }
@@ -130,6 +132,7 @@ impl TransportManagerConfigBuilderUnicast {
         self
     }
 
+    #[cfg(feature = "zero-copy")]
     pub fn shm(mut self, is_shm: bool) -> Self {
         self.is_shm = is_shm;
         self
@@ -139,19 +142,6 @@ impl TransportManagerConfigBuilderUnicast {
         mut self,
         properties: &ConfigProperties,
     ) -> ZResult<TransportManagerConfigBuilderUnicast> {
-        macro_rules! zparse {
-            ($str:expr) => {
-                $str.parse().map_err(|_| {
-                    let e = format!(
-                        "Failed to read configuration: {} is not a valid value",
-                        $str
-                    );
-                    log::warn!("{}", e);
-                    zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
-                })
-            };
-        }
-
         if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
             self = self.lease(Duration::from_millis(zparse!(v)?));
         }
@@ -173,6 +163,7 @@ impl TransportManagerConfigBuilderUnicast {
         if let Some(v) = properties.get(&ZN_QOS_KEY) {
             self = self.qos(zparse!(v)?);
         }
+        #[cfg(feature = "zero-copy")]
         if let Some(v) = properties.get(&ZN_SHM_KEY) {
             self = self.shm(zparse!(v)?);
         }
@@ -183,7 +174,9 @@ impl TransportManagerConfigBuilderUnicast {
         Ok(self)
     }
 
+    #[allow(unused_mut)]
     pub fn build(mut self) -> TransportManagerConfigUnicast {
+        #[cfg(feature = "zero-copy")]
         if self.is_shm
             && !self
                 .peer_authenticator
@@ -203,6 +196,7 @@ impl TransportManagerConfigBuilderUnicast {
             peer_authenticator: self.peer_authenticator,
             link_authenticator: self.link_authenticator,
             is_qos: self.is_qos,
+            #[cfg(feature = "zero-copy")]
             is_shm: self.is_shm,
         }
     }
