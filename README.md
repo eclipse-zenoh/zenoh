@@ -81,3 +81,8 @@ See other examples of zenoh usage:
  - with the zenoh API in [zenoh/examples/zenoh](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples/zenoh)
  - with the zenoh-net API in [zenoh/examples/zenoh-net](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples/zenoh-net)
 
+-------------------------------
+## Troubleshooting
+
+In case of troubles, please first check on [this page]() if the trouble and cause are already known.  
+Otherwise, you can ask a question on the [zenoh Gitter channel](https://gitter.im/atolab/zenoh), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
