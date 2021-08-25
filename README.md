@@ -84,5 +84,5 @@ See other examples of zenoh usage:
 -------------------------------
 ## Troubleshooting
 
-In case of troubles, please first check on [this page]() if the trouble and cause are already known.  
+In case of troubles, please first check on [this page](https://zenoh.io/docs/getting-started/troubleshooting/) if the trouble and cause are already known.  
 Otherwise, you can ask a question on the [zenoh Gitter channel](https://gitter.im/atolab/zenoh), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
