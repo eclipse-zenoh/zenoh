@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::config::*;
 use super::*;
 use async_std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use async_trait::async_trait;
@@ -154,11 +155,7 @@ pub struct LinkManagerMulticastUdp;
 
 #[async_trait]
 impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
-    async fn new_link(
-        &self,
-        endpoint: &EndPoint,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<LinkMulticast> {
+    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkMulticast> {
         let mcast_addr = get_udp_addr(&endpoint.locator).await?;
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
@@ -174,37 +171,36 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         }
 
         // Defaults
+        #[cfg(windows)]
         let default_ipv4_iface = Ipv4Addr::new(0, 0, 0, 0);
         let default_ipv6_iface = 0;
         let default_ipv4_addr = Ipv4Addr::new(0, 0, 0, 0);
         let default_ipv6_addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
-        let mut local_addr: Option<IpAddr> = None;
-        // if let Some(opts) = multicast.options.as_ref() {
-        //     if let Some(mc) = opts.get(IFACE) {
-        //         local_addr = match &mc.iface {
-        //             LocatorPropertyUdpInterface::Address(addr) => Some(*addr),
-        //             LocatorPropertyUdpInterface::Name(name) => {
-        //                 zenoh_util::net::get_unicast_addresses_of_interface(&name)?
-        //                     .into_iter()
-        //                     .filter(|x| {
-        //                         !x.is_loopback()
-        //                             && match mcast_addr.ip() {
-        //                                 IpAddr::V4(_) => x.is_ipv4(),
-        //                                 IpAddr::V6(_) => x.is_ipv6(),
-        //                             }
-        //                     })
-        //                     .take(1)
-        //                     .collect::<Vec<IpAddr>>()
-        //                     .get(0)
-        //                     .copied()
-        //             }
-        //         };
-        //     }
-        // }
+        let mut iface_addr: Option<IpAddr> = None;
+        if let Some(config) = endpoint.config.as_ref() {
+            if let Some(iface) = config.get(UDP_MULTICAST_IFACE) {
+                iface_addr = match iface.parse() {
+                    Ok(addr) => Some(addr),
+                    Err(_) => zenoh_util::net::get_unicast_addresses_of_interface(iface)?
+                        .into_iter()
+                        .filter(|x| {
+                            !x.is_loopback()
+                                && match mcast_addr.ip() {
+                                    IpAddr::V4(_) => x.is_ipv4(),
+                                    IpAddr::V6(_) => x.is_ipv6(),
+                                }
+                        })
+                        .take(1)
+                        .collect::<Vec<IpAddr>>()
+                        .get(0)
+                        .copied(),
+                };
+            }
+        }
 
-        let local_addr = match local_addr {
-            Some(iface) => iface,
+        let local_addr = match iface_addr {
+            Some(iface_addr) => iface_addr,
             None => {
                 let iface = zenoh_util::net::get_unicast_addresses_of_multicast_interfaces()
                     .into_iter()

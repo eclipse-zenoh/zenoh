@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod locator;
+mod endpoint;
 mod unicast;
 
 use super::*;
-pub use locator::*;
+pub use endpoint::*;
 pub use unicast::*;
 
 // Default MTU (TCP PDU) in bytes.

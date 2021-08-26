@@ -189,7 +189,7 @@ async fn open_transport(
     for e in endpoints.iter() {
         println!("Add locator: {}", e);
         let _ = router_manager
-            .add_listener(e)
+            .add_listener(e.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -201,7 +201,7 @@ async fn open_transport(
     for e in endpoints.iter() {
         println!("Opening transport with {}", e);
         let _ = client_manager
-            .open_transport(e)
+            .open_transport(e.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()

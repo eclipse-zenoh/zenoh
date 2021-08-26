@@ -11,11 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::config::*;
 use super::*;
 use crate::net::transport::TransportManager;
+use async_rustls::rustls::internal::pemfile;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
+use async_std::fs;
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
@@ -26,6 +29,7 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
+use std::io::Cursor;
 use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -262,11 +266,7 @@ impl LinkManagerUnicastTls {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
-    async fn new_link(
-        &self,
-        endpoint: &EndPoint,
-        ps: Option<&LocatorProperty>,
-    ) -> ZResult<LinkUnicast> {
+    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkUnicast> {
         let domain = get_tls_dns(&endpoint.locator).await?;
         let addr = get_tls_addr(&endpoint.locator).await?;
         let host: &str = domain.as_ref().into();
@@ -288,16 +288,38 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         })?;
 
         // Initialize the TLS stream
-        let config = match ps {
-            Some(prop) => {
-                let tls_prop = get_tls_prop(prop)?;
-                match tls_prop.client.as_ref() {
-                    Some(conf) => conf.clone(),
-                    None => Arc::new(ClientConfig::new()),
-                }
-            }
-            None => Arc::new(ClientConfig::new()),
+        let bytes = match endpoint.config.as_ref() {
+            Some(config) => match config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+                Some(tls_ca_certificate) => tls_ca_certificate.as_bytes().to_vec(),
+                None => match config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+                    Some(tls_ca_certificate) => {
+                        fs::read(tls_ca_certificate).await.map_err(|e| {
+                            zerror2!(ZErrorKind::Other {
+                                descr: format!("Invalid TLS CA certificate file: {}", e)
+                            })
+                        })?
+                    }
+                    None => vec![],
+                },
+            },
+            None => vec![],
         };
+
+        let config = if bytes.is_empty() {
+            Arc::new(ClientConfig::new())
+        } else {
+            let mut cc = ClientConfig::new();
+            let _ = cc
+                .root_store
+                .add_pem_file(&mut Cursor::new(&bytes))
+                .map_err(|_| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: "Invalid TLS CA certificate file".to_string()
+                    })
+                })?;
+            Arc::new(cc)
+        };
+
         let connector = TlsConnector::from(config);
         let tls_stream = connector
             .connect(domain.as_ref(), tcp_stream)
@@ -313,29 +335,62 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(
-        &self,
-        endpoint: &EndPoint,
-        ps: Option<&LocatorProperty>,
-    ) -> ZResult<Locator> {
+    async fn new_listener(&self, endpoint: &EndPoint) -> ZResult<Locator> {
         let addr = get_tls_addr(&endpoint.locator).await?;
 
         // Verify there is a valid ServerConfig
-        let prop = ps.as_ref().ok_or_else(|| {
+        let config = endpoint.config.as_ref().ok_or_else(|| {
             let e = format!(
                 "Can not create a new TLS listener on {}: no ServerConfig provided",
                 addr
             );
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
-        let tls_prop = get_tls_prop(prop)?;
-        let config = tls_prop.server.as_ref().ok_or_else(|| {
-            let e = format!(
-                "Can not create a new TLS listener on {}: no ServerConfig provided",
-                addr
-            );
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+
+        // Configure the server private key
+        let bytes = match config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
+            Some(tls_server_private_key) => tls_server_private_key.as_bytes().to_vec(),
+            None => match config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
+                Some(tls_server_private_key) => {
+                    fs::read(tls_server_private_key).await.map_err(|e| {
+                        let e = format!("Invalid TLS private key file: {}", e);
+                        zerror2!(ZErrorKind::IoError { descr: e })
+                    })?
+                }
+                None => {
+                    let e = format!(
+                        "Can not create a new TLS listener on {}. ServerConfig not provided: {}.",
+                        addr, TLS_SERVER_PRIVATE_KEY_FILE
+                    );
+                    return zerror!(ZErrorKind::InvalidLink { descr: e });
+                }
+            },
+        };
+        let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(bytes.as_slice())).unwrap();
+
+        // Configure the server certificate
+        let bytes = match config.get(TLS_SERVER_CERTIFICATE_RAW) {
+            Some(tls_server_certificate) => tls_server_certificate.as_bytes().to_vec(),
+            None => match config.get(TLS_SERVER_CERTIFICATE_FILE) {
+                Some(tls_server_certificate) => {
+                    fs::read(tls_server_certificate).await.map_err(|e| {
+                        let e = format!("Invalid TLS server certificate file: {}", e);
+                        zerror2!(ZErrorKind::IoError { descr: e })
+                    })?
+                }
+                None => {
+                    let e = format!(
+                        "Can not create a new TLS listener on {}. ServerConfig not provided: {}.",
+                        addr, TLS_SERVER_CERTIFICATE_FILE
+                    );
+                    return zerror!(ZErrorKind::InvalidLink { descr: e });
+                }
+            },
+        };
+        let certs = pemfile::certs(&mut Cursor::new(bytes.as_slice())).unwrap();
+
+        let mut sc = ServerConfig::new(NoClientAuth::new());
+        sc.set_single_cert(certs, keys.remove(0)).unwrap();
 
         // Initialize the TcpListener
         let socket = TcpListener::bind(addr).await.map_err(|e| {
@@ -349,7 +404,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         })?;
 
         // Initialize the TlsAcceptor
-        let acceptor = TlsAcceptor::from(config.clone());
+        let acceptor = TlsAcceptor::from(Arc::new(sc));
         let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
 
@@ -501,9 +556,7 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial transport manager
-        manager
-            .handle_new_link_unicast(LinkUnicast(link), None)
-            .await;
+        manager.handle_new_link_unicast(LinkUnicast(link)).await;
     }
 
     Ok(())

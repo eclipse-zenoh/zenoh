@@ -19,7 +19,7 @@ mod userpassword;
 use super::protocol;
 use super::protocol::core::{PeerId, Property, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
-use crate::net::link::{LinkUnicast, Locator, LocatorProperty};
+use crate::net::link::{LinkUnicast, Locator};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "zero-copy")]
@@ -44,7 +44,7 @@ pub enum LinkAuthenticatorId {
 pub struct LinkAuthenticator(Arc<dyn LinkUnicastAuthenticatorTrait + Send + Sync>);
 
 impl LinkAuthenticator {
-    pub(crate) async fn from_properties(
+    pub(crate) async fn from_config(
         _config: &ConfigProperties,
     ) -> ZResult<HashSet<LinkAuthenticator>> {
         Ok(HashSet::new())
@@ -80,11 +80,7 @@ impl Hash for LinkAuthenticator {
 pub trait LinkUnicastAuthenticatorTrait {
     fn id(&self) -> LinkAuthenticatorId;
 
-    async fn handle_new_link(
-        &self,
-        link: &LinkUnicast,
-        properties: Option<&LocatorProperty>,
-    ) -> ZResult<Option<PeerId>>;
+    async fn handle_new_link(&self, link: &LinkUnicast) -> ZResult<Option<PeerId>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
     /// of the authenticator in such a way no unnecessary data is left around
@@ -109,11 +105,7 @@ impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
         LinkAuthenticatorId::Reserved
     }
 
-    async fn handle_new_link(
-        &self,
-        _link: &LinkUnicast,
-        _properties: Option<&LocatorProperty>,
-    ) -> ZResult<Option<PeerId>> {
+    async fn handle_new_link(&self, _link: &LinkUnicast) -> ZResult<Option<PeerId>> {
         Ok(None)
     }
 
@@ -135,19 +127,19 @@ pub enum PeerAuthenticatorId {
 pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait>);
 
 impl PeerAuthenticator {
-    pub(crate) async fn from_properties(
+    pub(crate) async fn from_config(
         config: &ConfigProperties,
     ) -> ZResult<HashSet<PeerAuthenticator>> {
         let mut pas = HashSet::new();
 
-        let mut res = UserPasswordAuthenticator::from_properties(config).await?;
+        let mut res = UserPasswordAuthenticator::from_config(config).await?;
         if let Some(pa) = res.take() {
             pas.insert(pa.into());
         }
 
         #[cfg(feature = "zero-copy")]
         {
-            let mut res = SharedMemoryAuthenticator::from_properties(config).await?;
+            let mut res = SharedMemoryAuthenticator::from_config(config).await?;
             if let Some(pa) = res.take() {
                 pas.insert(pa.into());
             }
@@ -185,7 +177,6 @@ pub struct AuthenticatedPeerLink {
     pub src: Locator,
     pub dst: Locator,
     pub peer_id: Option<PeerId>,
-    pub properties: Option<LocatorProperty>,
 }
 
 impl fmt::Display for AuthenticatedPeerLink {

@@ -139,12 +139,9 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let c_end02 = endpoint02.clone();
     let peer01_task = task::spawn(async move {
         // Add the endpoints on the first peer
-        for loc in c_end01.iter() {
-            let res = peer01_manager.add_listener(loc).await;
-            println!(
-                "[Transport Peer 01a] => Adding endpoint {:?}: {:?}",
-                loc, res
-            );
+        for e in c_end01.iter() {
+            let res = peer01_manager.add_listener(e.clone()).await;
+            println!("[Transport Peer 01a] => Adding endpoint {:?}: {:?}", e, res);
             assert!(res.is_ok());
         }
         let locs = peer01_manager.get_listeners();
@@ -155,17 +152,16 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         assert_eq!(c_end01.len(), locs.len());
 
         // Open the transport with the second peer
-        for loc in c_end02.iter() {
+        for e in c_end02.iter() {
             let cc_barow = c_barow.clone();
             let cc_barod = c_barod.clone();
             let c_p01m = peer01_manager.clone();
-            let c_end = loc.clone();
+            let c_end = e.clone();
             task::spawn(async move {
                 println!("[Transport Peer 01c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
-
-                let res = c_p01m.open_transport(&c_end).await;
+                let res = c_p01m.open_transport(c_end.clone()).await;
                 println!(
                     "[Transport Peer 01d] => Opening transport with {:?}: {:?}",
                     c_end, res
@@ -249,12 +245,9 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let c_end02 = endpoint02.clone();
     let peer02_task = task::spawn(async move {
         // Add the endpoints on the first peer
-        for loc in c_end02.iter() {
-            let res = peer02_manager.add_listener(loc).await;
-            println!(
-                "[Transport Peer 02a] => Adding endpoint {:?}: {:?}",
-                loc, res
-            );
+        for e in c_end02.iter() {
+            let res = peer02_manager.add_listener(e.clone()).await;
+            println!("[Transport Peer 02a] => Adding endpoint {:?}: {:?}", e, res);
             assert!(res.is_ok());
         }
         let locs = peer02_manager.get_listeners();
@@ -265,17 +258,17 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         assert_eq!(c_end02.len(), locs.len());
 
         // Open the transport with the first peer
-        for loc in c_end01.iter() {
+        for e in c_end01.iter() {
             let cc_barow = c_barow.clone();
             let cc_barod = c_barod.clone();
             let c_p02m = peer02_manager.clone();
-            let c_end = loc.clone();
+            let c_end = e.clone();
             task::spawn(async move {
                 println!("[Transport Peer 02c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let res = c_p02m.open_transport(&c_end).await;
+                let res = c_p02m.open_transport(c_end.clone()).await;
                 println!(
                     "[Transport Peer 02d] => Opening transport with {:?}: {:?}",
                     c_end, res

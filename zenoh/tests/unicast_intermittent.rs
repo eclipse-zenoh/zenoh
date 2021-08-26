@@ -19,7 +19,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
-use zenoh::net::link::{EndPoint, LinkUnicast, LocatorProperty};
+use zenoh::net::link::{EndPoint, LinkUnicast};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
@@ -133,10 +133,7 @@ impl TransportUnicastEventHandler for SCClient {
     }
 }
 
-async fn transport_intermittent(
-    endpoint: &EndPoint,
-    locator_property: Option<Vec<LocatorProperty>>,
-) {
+async fn transport_intermittent(endpoint: &EndPoint) {
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
@@ -145,7 +142,6 @@ async fn transport_intermittent(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .max_sessions(3)
@@ -165,7 +161,6 @@ async fn transport_intermittent(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client01_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -179,7 +174,6 @@ async fn transport_intermittent(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client02_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -193,7 +187,6 @@ async fn transport_intermittent(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client03_id)
-        .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -206,14 +199,17 @@ async fn transport_intermittent(
     /* [1] */
     // Add a listener to the router
     println!("\nTransport Intermittent [1a1]");
-    let _ = router_manager.add_listener(endpoint).await.unwrap();
+    let _ = router_manager.add_listener(endpoint.clone()).await.unwrap();
     let locators = router_manager.get_listeners();
     println!("Transport Intermittent [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     /* [2] */
     // Open a transport from client01 to the router
-    let c_ses1 = client01_manager.open_transport(endpoint).await.unwrap();
+    let c_ses1 = client01_manager
+        .open_transport(endpoint.clone())
+        .await
+        .unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
     assert_eq!(client01_manager.get_transports().len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
@@ -229,7 +225,7 @@ async fn transport_intermittent(
             std::io::stdout().flush().unwrap();
 
             let c_ses2 = c_client02_manager
-                .open_transport(&c_endpoint)
+                .open_transport(c_endpoint.clone())
                 .await
                 .unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
@@ -256,7 +252,7 @@ async fn transport_intermittent(
             std::io::stdout().flush().unwrap();
 
             let c_ses3 = c_client03_manager
-                .open_transport(&c_endpoint)
+                .open_transport(c_endpoint.clone())
                 .await
                 .unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
@@ -407,5 +403,5 @@ fn transport_tcp_intermittent() {
     });
 
     let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
-    task::block_on(transport_intermittent(&endpoint, None));
+    task::block_on(transport_intermittent(&endpoint));
 }

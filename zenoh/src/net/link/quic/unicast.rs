@@ -11,9 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::config::*;
 use super::EndPoint as ZEndPoint;
 use super::*;
 use crate::net::transport::TransportManager;
+use async_std::fs;
 use async_std::net::SocketAddr;
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
@@ -215,26 +217,46 @@ impl LinkManagerUnicastQuic {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
-    async fn new_link(
-        &self,
-        endpoint: &ZEndPoint,
-        ps: Option<&LocatorProperty>,
-    ) -> ZResult<LinkUnicast> {
-        let domain = get_quic_dns(&endpoint.locator).await?;
-        let addr = get_quic_addr(&endpoint.locator).await?;
+    async fn new_link(&self, endpoint: &ZEndPoint) -> ZResult<LinkUnicast> {
+        let domain = get_quic_dns(&endpoint.locator.address).await?;
+        let addr = get_quic_addr(&endpoint.locator.address).await?;
         let host: &str = domain.as_ref().into();
 
         // Initialize the QUIC connection
-        let mut config = match ps {
-            Some(prop) => {
-                let quic_prop = get_quic_prop(prop)?;
-                match quic_prop.client.as_ref() {
-                    Some(conf) => conf.clone(),
-                    None => ClientConfigBuilder::default(),
-                }
-            }
-            None => ClientConfigBuilder::default(),
+        let bytes = match endpoint.config.as_ref() {
+            Some(config) => match config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+                Some(tls_ca_certificate) => tls_ca_certificate.as_bytes().to_vec(),
+                None => match config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+                    Some(tls_ca_certificate) => {
+                        fs::read(tls_ca_certificate).await.map_err(|e| {
+                            let e = format!("Invalid QUIC CA certificate file: {}", e);
+                            zerror2!(ZErrorKind::IoError { descr: e })
+                        })?
+                    }
+                    None => vec![],
+                },
+            },
+            None => vec![],
         };
+
+        let mut config = if bytes.is_empty() {
+            ClientConfigBuilder::default()
+        } else {
+            let ca = Certificate::from_pem(&bytes).map_err(|e| {
+                let e = format!("Invalid QUIC CA certificate file: {}", e);
+                zerror2!(ZErrorKind::IoError { descr: e })
+            })?;
+
+            let mut cc = ClientConfigBuilder::default();
+            cc.protocols(ALPN_QUIC_HTTP);
+            cc.add_certificate_authority(ca).map_err(|e| {
+                let e = format!("Invalid QUIC CA certificate file: {}", e);
+                zerror2!(ZErrorKind::IoError { descr: e })
+            })?;
+
+            cc
+        };
+
         config.protocols(ALPN_QUIC_HTTP);
 
         let mut endpoint = Endpoint::builder();
@@ -277,33 +299,86 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(
-        &self,
-        endpoint: &EndPoint,
-        ps: Option<&LocatorProperty>,
-    ) -> ZResult<Locator> {
-        let addr = get_quic_addr(&endpoint.locator).await?;
+    async fn new_listener(&self, endpoint: &EndPoint) -> ZResult<Locator> {
+        let addr = get_quic_addr(&endpoint.locator.address).await?;
 
         // Verify there is a valid ServerConfig
-        let prop = ps.as_ref().ok_or_else(|| {
+        let config = endpoint.config.as_ref().ok_or_else(|| {
             let e = format!(
                 "Can not create a new QUIC listener on {}: no ServerConfig provided",
                 addr
             );
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
-        let quic_prop = get_quic_prop(prop)?;
-        let config = quic_prop.server.as_ref().ok_or_else(|| {
-            let e = format!(
-                "Can not create a new QUIC listener on {}: no ServerConfig provided",
-                addr
-            );
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+
+        // Configure the server private key
+        let bytes = match config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
+            Some(tls_server_private_key) => tls_server_private_key.as_bytes().to_vec(),
+            None => match config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
+                Some(tls_server_private_key) => {
+                    fs::read(tls_server_private_key).await.map_err(|e| {
+                        let e = format!("Invalid TLS private key file: {}", e);
+                        zerror2!(ZErrorKind::IoError { descr: e })
+                    })?
+                }
+                None => {
+                    let e = format!(
+                        "Can not create a new QUIC listener on {}. ServerConfig not provided: {}.",
+                        addr, TLS_SERVER_PRIVATE_KEY_FILE
+                    );
+                    return zerror!(ZErrorKind::InvalidLink { descr: e });
+                }
+            },
+        };
+        let keys = PrivateKey::from_pem(bytes.as_slice()).unwrap();
+
+        // Configure the server certificate
+        let bytes = match config.get(TLS_SERVER_CERTIFICATE_RAW) {
+            Some(tls_server_certificate) => tls_server_certificate.as_bytes().to_vec(),
+            None => match config.get(TLS_SERVER_CERTIFICATE_FILE) {
+                Some(tls_server_certificate) => {
+                    fs::read(tls_server_certificate).await.map_err(|e| {
+                        let e = format!("Invalid TLS server certificate file: {}", e);
+                        zerror2!(ZErrorKind::IoError { descr: e })
+                    })?
+                }
+                None => {
+                    let e = format!(
+                        "Can not create a new QUIC listener on {}. ServerConfig not provided: {}.",
+                        addr, TLS_SERVER_CERTIFICATE_FILE
+                    );
+                    return zerror!(ZErrorKind::InvalidLink { descr: e });
+                }
+            },
+        };
+        let certs = CertificateChain::from_pem(bytes.as_slice()).map_err(|e| {
+            let e = format!("Invalid TLS server certificate file: {}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })?;
+
+        let mut tc = TransportConfig::default();
+        // We do not accept unidireactional streams.
+        tc.max_concurrent_uni_streams(0).map_err(|e| {
+            let e = format!("Invalid QUIC server configuration: {}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })?;
+        // For the time being we only allow one bidirectional stream
+        tc.max_concurrent_bidi_streams(1).map_err(|e| {
+            let e = format!("Invalid QUIC server configuration: {}", e);
+            zerror2!(ZErrorKind::IoError { descr: e })
+        })?;
+        let mut sc = ServerConfig::default();
+        sc.transport = Arc::new(tc);
+        let mut sc = ServerConfigBuilder::new(sc);
+        sc.protocols(ALPN_QUIC_HTTP);
+        sc.certificate(certs, keys).map_err(|e| {
+            let e = format!("Invalid TLS server configuration: {}", e);
+            zerror2!(ZErrorKind::Other { descr: e })
         })?;
 
         // Initialize the Endpoint
         let mut endpoint = Endpoint::builder();
-        endpoint.listen(config.clone().build());
+        endpoint.listen(sc.build());
         let (endpoint, acceptor) = endpoint.bind(&addr).map_err(|e| {
             let e = format!("Can not create a new QUIC listener on {}: {}", addr, e);
             zerror2!(ZErrorKind::InvalidLink { descr: e })
@@ -343,7 +418,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_quic_addr(&endpoint.locator).await?;
+        let addr = get_quic_addr(&endpoint.locator.address).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -480,9 +555,7 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastQuic::new(quic_conn, src_addr, send, recv));
 
         // Communicate the new link to the initial transport manager
-        manager
-            .handle_new_link_unicast(LinkUnicast(link), None)
-            .await;
+        manager.handle_new_link_unicast(LinkUnicast(link)).await;
     }
 
     Ok(())

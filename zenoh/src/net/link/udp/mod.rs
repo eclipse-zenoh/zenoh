@@ -11,12 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod locator;
+mod endpoint;
 mod multicast;
 mod unicast;
 
 use super::*;
-pub use locator::*;
+pub use endpoint::*;
 pub use multicast::*;
 pub use unicast::*;
 
@@ -54,4 +54,8 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref UDP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
+}
+
+pub mod config {
+    pub const UDP_MULTICAST_IFACE: &str = "iface";
 }

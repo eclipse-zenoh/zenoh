@@ -212,11 +212,7 @@ impl LinkManagerUnicastTcp {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
-    async fn new_link(
-        &self,
-        endpoint: &EndPoint,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<LinkUnicast> {
+    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkUnicast> {
         let dst_addr = get_tcp_addr(&endpoint.locator).await?;
 
         let stream = TcpStream::connect(dst_addr).await.map_err(|e| {
@@ -239,11 +235,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(
-        &self,
-        endpoint: &EndPoint,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<Locator> {
+    async fn new_listener(&self, endpoint: &EndPoint) -> ZResult<Locator> {
         let addr = get_tcp_addr(&endpoint.locator).await?;
 
         // Bind the TCP socket
@@ -398,9 +390,7 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial transport manager
-        manager
-            .handle_new_link_unicast(LinkUnicast(link), None)
-            .await;
+        manager.handle_new_link_unicast(LinkUnicast(link)).await;
     }
 
     Ok(())

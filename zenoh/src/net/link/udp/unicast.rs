@@ -273,11 +273,7 @@ impl LinkManagerUnicastUdp {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
-    async fn new_link(
-        &self,
-        endpoint: &EndPoint,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<LinkUnicast> {
+    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkUnicast> {
         let dst_addr = get_udp_addr(&endpoint.locator).await?;
         // Establish a UDP socket
         let socket = if dst_addr.is_ipv4() {
@@ -325,11 +321,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(
-        &self,
-        endpoint: &EndPoint,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<Locator> {
+    async fn new_listener(&self, endpoint: &EndPoint) -> ZResult<Locator> {
         let addr = get_udp_addr(&endpoint.locator).await?;
 
         // Bind the UDP socket
@@ -506,9 +498,7 @@ async fn accept_read_task(
                         LinkUnicastUdpVariant::Unconnected(unconnected),
                     ));
                     // Add the new link to the set of connected peers
-                    manager
-                        .handle_new_link_unicast(LinkUnicast(link), None)
-                        .await;
+                    manager.handle_new_link_unicast(LinkUnicast(link)).await;
                 }
             }
         };

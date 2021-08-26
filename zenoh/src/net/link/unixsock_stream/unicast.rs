@@ -198,11 +198,7 @@ impl LinkManagerUnicastUnixSocketStream {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
-    async fn new_link(
-        &self,
-        endpoint: &EndPoint,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<LinkUnicast> {
+    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkUnicast> {
         let path = get_unix_path(&endpoint.locator)?;
 
         // Create the UnixSocketStream connection
@@ -279,11 +275,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(
-        &self,
-        endpoint: &EndPoint,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<Locator> {
+    async fn new_listener(&self, endpoint: &EndPoint) -> ZResult<Locator> {
         let path = get_unix_path_as_string(&endpoint.locator);
 
         // Because of the lack of SO_REUSEADDR we have to check if the
@@ -549,9 +541,7 @@ async fn accept_task(
         ));
 
         // Communicate the new link to the initial transport manager
-        manager
-            .handle_new_link_unicast(LinkUnicast(link), None)
-            .await;
+        manager.handle_new_link_unicast(LinkUnicast(link)).await;
     }
 
     Ok(())

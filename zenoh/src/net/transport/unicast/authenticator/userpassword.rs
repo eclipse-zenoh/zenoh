@@ -183,7 +183,7 @@ impl UserPasswordAuthenticator {
         Ok(())
     }
 
-    pub async fn from_properties(
+    pub async fn from_config(
         config: &ConfigProperties,
     ) -> ZResult<Option<UserPasswordAuthenticator>> {
         let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();

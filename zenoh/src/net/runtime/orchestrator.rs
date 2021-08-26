@@ -121,7 +121,7 @@ impl Runtime {
                         locator: locator.clone(),
                         config: None,
                     };
-                    match self.manager().open_transport(&endpoint).await {
+                    match self.manager().open_transport(endpoint).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -295,7 +295,7 @@ impl Runtime {
                 locator: listener.clone(),
                 config: None,
             };
-            match self.manager().add_listener(&endpoint).await {
+            match self.manager().add_listener(endpoint).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", listener, err);
@@ -489,7 +489,7 @@ impl Runtime {
                 locator: peer.clone(),
                 config: None,
             };
-            if let Ok(transport) = self.manager().open_transport(&endpoint).await {
+            if let Ok(transport) = self.manager().open_transport(endpoint).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
                 if let Some(orch_transport) = transport
                     .get_callback()
@@ -595,7 +595,7 @@ impl Runtime {
                 locator: locator.clone(),
                 config: None,
             };
-            let transport = self.manager().open_transport(&endpoint).await;
+            let transport = self.manager().open_transport(endpoint).await;
             if transport.is_ok() {
                 return transport;
             }

@@ -17,7 +17,7 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::time::Duration;
-use zenoh::net::link::{EndPoint, LinkUnicast, LocatorProperty};
+use zenoh::net::link::{EndPoint, LinkUnicast};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 #[cfg(feature = "zero-copy")]
@@ -29,6 +29,7 @@ use zenoh::net::transport::{
     TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::properties::Properties;
 use zenoh_util::zasync_executor_init;
 
 const SLEEP: Duration = Duration::from_millis(100);
@@ -100,10 +101,7 @@ impl TransportEventHandler for SHClientAuthenticator {
     }
 }
 
-async fn authenticator_user_password(
-    endpoint: &EndPoint,
-    locator_property: Option<Vec<LocatorProperty>>,
-) {
+async fn authenticator_user_password(endpoint: &EndPoint) {
     /* [CLIENT] */
     let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
     let user01 = "user01".to_string();
@@ -129,7 +127,6 @@ async fn authenticator_user_password(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_router
@@ -150,7 +147,6 @@ async fn authenticator_user_password(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client01_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client01.into()]))
@@ -168,7 +164,6 @@ async fn authenticator_user_password(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client02_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client02.into()]))
@@ -186,7 +181,6 @@ async fn authenticator_user_password(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client03_id)
-        .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client03.into()]))
@@ -198,7 +192,7 @@ async fn authenticator_user_password(
     /* [1] */
     println!("\nTransport Authenticator UserPassword [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(endpoint).await;
+    let res = router_manager.add_listener(endpoint.clone()).await;
     println!("Transport Authenticator UserPassword [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Authenticator UserPassword [1a2]");
@@ -210,7 +204,7 @@ async fn authenticator_user_password(
     // Open a first transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [2a1]");
-    let res = client01_manager.open_transport(endpoint).await;
+    let res = client01_manager.open_transport(endpoint.clone()).await;
     println!("Transport Authenticator UserPassword [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -225,7 +219,7 @@ async fn authenticator_user_password(
     // Open a second transport from the client to the router
     // -> This should be rejected
     println!("Transport Authenticator UserPassword [4a1]");
-    let res = client02_manager.open_transport(endpoint).await;
+    let res = client02_manager.open_transport(endpoint.clone()).await;
     println!("Transport Authenticator UserPassword [4a1]: {:?}", res);
     assert!(res.is_err());
 
@@ -233,7 +227,7 @@ async fn authenticator_user_password(
     // Open a third transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [5a1]");
-    let res = client01_manager.open_transport(endpoint).await;
+    let res = client01_manager.open_transport(endpoint.clone()).await;
     println!("Transport Authenticator UserPassword [5a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -247,7 +241,7 @@ async fn authenticator_user_password(
     // Open a fourth transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [6a1]");
-    let res = client02_manager.open_transport(endpoint).await;
+    let res = client02_manager.open_transport(endpoint.clone()).await;
     println!("Transport Authenticator UserPassword [6a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -256,7 +250,7 @@ async fn authenticator_user_password(
     // Open a fourth transport from the client to the router
     // -> This should be rejected
     println!("Transport Authenticator UserPassword [7a1]");
-    let res = client03_manager.open_transport(endpoint).await;
+    let res = client03_manager.open_transport(endpoint.clone()).await;
     println!("Transport Authenticator UserPassword [7a1]: {:?}", res);
     assert!(res.is_err());
 
@@ -283,10 +277,7 @@ async fn authenticator_user_password(
 }
 
 #[cfg(feature = "zero-copy")]
-async fn authenticator_shared_memory(
-    endpoint: &EndPoint,
-    locator_property: Option<Vec<LocatorProperty>>,
-) {
+async fn authenticator_shared_memory(endpoint: &EndPoint) {
     /* [CLIENT] */
     let client_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
@@ -298,7 +289,6 @@ async fn authenticator_shared_memory(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_router.into()]))
@@ -312,7 +302,6 @@ async fn authenticator_shared_memory(
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(client_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client.into()]))
@@ -324,7 +313,7 @@ async fn authenticator_shared_memory(
     /* [1] */
     println!("\nTransport Authenticator SharedMemory [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(endpoint).await;
+    let res = router_manager.add_listener(endpoint.clone()).await;
     println!("Transport Authenticator SharedMemory [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Authenticator SharedMemory [1a2]");
@@ -336,7 +325,7 @@ async fn authenticator_shared_memory(
     // Open a transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator SharedMemory [2a1]");
-    let res = client_manager.open_transport(endpoint).await;
+    let res = client_manager.open_transport(endpoint.clone()).await;
     println!("Transport Authenticator SharedMemory [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -369,9 +358,9 @@ fn authenticator_tcp() {
 
     let endpoint: EndPoint = "tcp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
-        authenticator_user_password(&endpoint, None).await;
+        authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint, None).await;
+        authenticator_shared_memory(&endpoint).await;
     });
 }
 
@@ -384,9 +373,9 @@ fn authenticator_udp() {
 
     let endpoint: EndPoint = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
-        authenticator_user_password(&endpoint, None).await;
+        authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint, None).await;
+        authenticator_shared_memory(&endpoint).await;
     });
 }
 
@@ -402,9 +391,9 @@ fn authenticator_unix() {
         .parse()
         .unwrap();
     task::block_on(async {
-        authenticator_user_password(&endpoint, None).await;
+        authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint, None).await;
+        authenticator_shared_memory(&endpoint).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");
@@ -413,12 +402,11 @@ fn authenticator_unix() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn authenticator_tls() {
+    use zenoh::net::link::tls::config::*;
+
     task::block_on(async {
         zasync_executor_init!();
     });
-
-    use std::io::Cursor;
-    use zenoh::net::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -451,7 +439,6 @@ JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
 LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
 ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
 -----END RSA PRIVATE KEY-----";
-    let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(key.as_bytes())).unwrap();
 
     let cert = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
@@ -472,13 +459,6 @@ QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
 F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
 AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
-    let certs = pemfile::certs(&mut Cursor::new(cert.as_bytes())).unwrap();
-
-    // Set this server to use one cert together with the loaded private key
-    let mut server_config = ServerConfig::new(NoClientAuth::new());
-    server_config
-        .set_single_cert(certs, keys.remove(0))
-        .unwrap();
 
     // Configure the client
     let ca = "-----BEGIN CERTIFICATE-----
@@ -502,34 +482,29 @@ pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
 tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
-    let mut client_config = ClientConfig::new();
-    client_config
-        .root_store
-        .add_pem_file(&mut Cursor::new(ca.as_bytes()))
-        .unwrap();
-
     // Define the locator
-    let endpoint: EndPoint = "tls/localhost:11448".parse().unwrap();
-    let locator_property = vec![(client_config, server_config).into()];
+    let mut endpoint: EndPoint = "tls/localhost:11448".parse().unwrap();
+    let mut config = Properties::default();
+    config.insert(TLS_ROOT_CA_CERTIFICATE_RAW.to_string(), ca.to_string());
+    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
+    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
+    endpoint.config = Some(Arc::new(config));
+
     task::block_on(async {
-        authenticator_user_password(&endpoint, Some(locator_property.clone())).await;
+        authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint, Some(locator_property)).await;
+        authenticator_shared_memory(&endpoint).await;
     });
 }
 
 #[cfg(feature = "transport_quic")]
 #[test]
 fn authenticator_quic() {
+    use zenoh::net::link::quic::config::*;
+
     task::block_on(async {
         zasync_executor_init!();
     });
-
-    use quinn::{
-        Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
-        ServerConfigBuilder, TransportConfig,
-    };
-    use zenoh::net::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -562,7 +537,6 @@ JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
 LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
 ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
 -----END RSA PRIVATE KEY-----";
-    let keys = PrivateKey::from_pem(key.as_bytes()).unwrap();
 
     let cert = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
@@ -583,19 +557,6 @@ QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
 F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
 AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
-    let certs = CertificateChain::from_pem(cert.as_bytes()).unwrap();
-
-    // Set this server to use one cert together with the loaded private key
-    let mut transport_config = TransportConfig::default();
-    // We do not accept unidireactional streams.
-    transport_config.max_concurrent_uni_streams(0).unwrap();
-    // For the time being we only allow one bidirectional stream
-    transport_config.max_concurrent_bidi_streams(1).unwrap();
-    let mut server_config = ServerConfig::default();
-    server_config.transport = Arc::new(transport_config);
-    let mut server_config = ServerConfigBuilder::new(server_config);
-    server_config.protocols(ALPN_QUIC_HTTP);
-    server_config.certificate(certs, keys).unwrap();
 
     // Configure the client
     let ca = "-----BEGIN CERTIFICATE-----
@@ -618,18 +579,18 @@ M0AufDKUhroksKKiCmjsFj1x55VcU45Ag8069lzBk7ntcGQpHUUkwZzvD4FXf8IR
 pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
 tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
-    let ca = Certificate::from_pem(ca.as_bytes()).unwrap();
-
-    let mut client_config = ClientConfigBuilder::default();
-    client_config.protocols(ALPN_QUIC_HTTP);
-    client_config.add_certificate_authority(ca).unwrap();
 
     // Define the locator
-    let endpoint: EndPoint = "quic/localhost:11448".parse().unwrap();
-    let locator_property = vec![(client_config, server_config).into()];
+    let mut endpoint: EndPoint = "quic/localhost:11448".parse().unwrap();
+    let mut config = Properties::default();
+    config.insert(TLS_ROOT_CA_CERTIFICATE_RAW.to_string(), ca.to_string());
+    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
+    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
+    endpoint.config = Some(Arc::new(config));
+
     task::block_on(async {
-        authenticator_user_password(&endpoint, Some(locator_property.clone())).await;
+        authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint, Some(locator_property)).await;
+        authenticator_shared_memory(&endpoint).await;
     });
 }

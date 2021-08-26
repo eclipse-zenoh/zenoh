@@ -22,7 +22,7 @@ mod tests {
     use std::any::Any;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
-    use zenoh::net::link::{EndPoint, LocatorProperty};
+    use zenoh::net::link::EndPoint;
     use zenoh::net::protocol::core::{
         whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
     };
@@ -112,10 +112,7 @@ mod tests {
         transport: TransportMulticast,
     }
 
-    async fn open_transport(
-        endpoint: &EndPoint,
-        locator_property: Option<LocatorProperty>,
-    ) -> (TransportPeer, TransportPeer) {
+    async fn open_transport(endpoint: &EndPoint) -> (TransportPeer, TransportPeer) {
         // Define peer01 and peer02 IDs
         let peer01_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
         let peer02_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -125,11 +122,6 @@ mod tests {
         let config = TransportManagerConfig::builder()
             .pid(peer01_id)
             .whatami(whatami::PEER)
-            .locator_property(
-                locator_property
-                    .clone()
-                    .map_or_else(Vec::new, |lp| vec![lp]),
-            )
             .build(peer01_handler.clone());
         let peer01_manager = TransportManager::new(config);
 
@@ -138,11 +130,6 @@ mod tests {
         let config = TransportManagerConfig::builder()
             .whatami(whatami::PEER)
             .pid(peer02_id)
-            .locator_property(
-                locator_property
-                    .clone()
-                    .map_or_else(Vec::new, |lp| vec![lp]),
-            )
             .build(peer02_handler.clone());
         let peer02_manager = TransportManager::new(config);
 
@@ -150,7 +137,7 @@ mod tests {
         // Open transport -> This should be accepted
         println!("Opening transport with {}", endpoint);
         let _ = peer01_manager
-            .open_transport_multicast(endpoint)
+            .open_transport_multicast(endpoint.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -162,7 +149,7 @@ mod tests {
 
         println!("Opening transport with {}", endpoint);
         let _ = peer02_manager
-            .open_transport_multicast(endpoint)
+            .open_transport_multicast(endpoint.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -290,16 +277,11 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
-    async fn run(
-        endpoints: &[EndPoint],
-        properties: Option<LocatorProperty>,
-        channel: &[Channel],
-        msg_size: &[usize],
-    ) {
+    async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
         for e in endpoints.iter() {
             for ch in channel.iter() {
                 for ms in msg_size.iter() {
-                    let (peer01, peer02) = open_transport(e, properties.clone()).await;
+                    let (peer01, peer02) = open_transport(e).await;
                     single_run(&peer01, &peer02, *ch, *ms).await;
                     close_transport(peer01, peer02, e).await;
                 }
@@ -327,7 +309,6 @@ mod tests {
             //     .parse()
             //     .unwrap(),
         ];
-        let properties = None;
         // Define the reliability and congestion control
         let channel = [
             Channel {
@@ -340,6 +321,6 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_NOFRAG));
+        task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
     }
 }

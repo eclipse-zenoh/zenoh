@@ -104,7 +104,7 @@ impl Runtime {
             runtime: std::sync::RwLock::new(None),
         });
         let sm_config = TransportManagerConfig::builder()
-            .from_properties(&config)
+            .from_config(&config)
             .await?
             .version(version)
             .whatami(whatami)

@@ -11,24 +11,25 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Locator, LocatorAddress};
+use super::*;
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::fmt;
 use std::str::FromStr;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::properties::config::ConfigProperties;
+use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
-pub(super) async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
+pub(super) async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
     match &locator.address {
-        LocatorAddress::Udp(addr) => match addr {
-            LocatorUdp::SocketAddr(addr) => Ok(*addr),
-            LocatorUdp::DnsName(addr) => match addr.to_socket_addrs().await {
+        LocatorAddress::Tcp(addr) => match addr {
+            LocatorTcp::SocketAddr(addr) => Ok(*addr),
+            LocatorTcp::DnsName(addr) => match addr.to_socket_addrs().await {
                 Ok(mut addr_iter) => {
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve UDP locator: {}", addr);
+                        let e = format!("Couldn't resolve TCP locator: {}", addr);
                         zerror!(ZErrorKind::InvalidLocator { descr: e })
                     }
                 }
@@ -39,50 +40,52 @@ pub(super) async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
             },
         },
         _ => {
-            let e = format!("Not a UDP locator: {}", locator);
+            let e = format!("Not a TCP locator: {}", locator);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum LocatorUdp {
+pub enum LocatorTcp {
     SocketAddr(SocketAddr),
     DnsName(String),
 }
 
-impl LocatorUdp {
+impl LocatorTcp {
     pub fn is_multicast(&self) -> bool {
-        match self {
-            LocatorUdp::SocketAddr(addr) => addr.ip().is_multicast(),
-            LocatorUdp::DnsName(_) => false,
-        }
+        false
     }
 }
 
-impl FromStr for LocatorUdp {
+impl FromStr for LocatorTcp {
     type Err = ZError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse() {
-            Ok(addr) => Ok(LocatorUdp::SocketAddr(addr)),
-            Err(_) => Ok(LocatorUdp::DnsName(s.to_string())),
+            Ok(addr) => Ok(LocatorTcp::SocketAddr(addr)),
+            Err(_) => Ok(LocatorTcp::DnsName(s.to_string())),
         }
     }
 }
 
-impl fmt::Display for LocatorUdp {
+impl fmt::Display for LocatorTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LocatorUdp::SocketAddr(addr) => write!(f, "{}", addr)?,
-            LocatorUdp::DnsName(addr) => write!(f, "{}", addr)?,
+            LocatorTcp::SocketAddr(addr) => write!(f, "{}", addr)?,
+            LocatorTcp::DnsName(addr) => write!(f, "{}", addr)?,
         }
         Ok(())
     }
 }
 
-pub type LocatorPropertyUdp = ();
+/*************************************/
+/*          LOCATOR CONFIG           */
+/*************************************/
+pub struct LocatorConfigTcp;
 
-pub mod options {
-    pub const IFACE: &str = "iface";
+impl LocatorConfigTcp {
+    pub fn from_config(_config: &ConfigProperties) -> ZResult<Option<Properties>> {
+        Ok(None)
+    }
 }

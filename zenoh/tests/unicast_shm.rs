@@ -173,7 +173,7 @@ mod tests {
         // Create the listener on the peer
         println!("\nTransport SHM [1a]");
         let _ = peer_shm01_manager
-            .add_listener(endpoint)
+            .add_listener(endpoint.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -182,7 +182,7 @@ mod tests {
         // Create a transport with the peer
         println!("Transport SHM [1b]");
         let _ = peer_shm02_manager
-            .open_transport(endpoint)
+            .open_transport(endpoint.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -191,7 +191,7 @@ mod tests {
         // Create a transport with the peer
         println!("Transport SHM [1c]");
         let _ = peer_net01_manager
-            .open_transport(endpoint)
+            .open_transport(endpoint.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
