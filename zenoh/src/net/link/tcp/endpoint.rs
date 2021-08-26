@@ -20,8 +20,8 @@ use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
-pub(super) async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match &locator.address {
+pub(super) async fn get_tcp_addr(address: &LocatorAddress) -> ZResult<SocketAddr> {
+    match address {
         LocatorAddress::Tcp(addr) => match addr {
             LocatorTcp::SocketAddr(addr) => Ok(*addr),
             LocatorTcp::DnsName(addr) => match addr.to_socket_addrs().await {
@@ -29,7 +29,7 @@ pub(super) async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve TCP locator: {}", addr);
+                        let e = format!("Couldn't resolve TCP locator address: {}", addr);
                         zerror!(ZErrorKind::InvalidLocator { descr: e })
                     }
                 }
@@ -40,7 +40,7 @@ pub(super) async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
             },
         },
         _ => {
-            let e = format!("Not a TCP locator: {}", locator);
+            let e = format!("Not a TCP locator address: {}", address);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }

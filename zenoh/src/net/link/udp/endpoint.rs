@@ -21,8 +21,8 @@ use zenoh_util::properties::Properties;
 use zenoh_util::zerror;
 
 #[allow(unreachable_patterns)]
-pub(super) async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match &locator.address {
+pub(super) async fn get_udp_addr(address: &LocatorAddress) -> ZResult<SocketAddr> {
+    match address {
         LocatorAddress::Udp(addr) => match addr {
             LocatorUdp::SocketAddr(addr) => Ok(*addr),
             LocatorUdp::DnsName(addr) => match addr.to_socket_addrs().await {
@@ -30,7 +30,7 @@ pub(super) async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve UDP locator: {}", addr);
+                        let e = format!("Couldn't resolve UDP locator address: {}", addr);
                         zerror!(ZErrorKind::InvalidLocator { descr: e })
                     }
                 }
@@ -41,7 +41,7 @@ pub(super) async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
             },
         },
         _ => {
-            let e = format!("Not a UDP locator: {}", locator);
+            let e = format!("Not a UDP locator address: {}", address);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }

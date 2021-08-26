@@ -304,7 +304,7 @@ impl TransportManager {
         }
     }
 
-    pub fn get_listeners(&self) -> Vec<Locator> {
+    pub fn get_listeners(&self) -> Vec<EndPoint> {
         self.get_listeners_unicast()
         // @TODO: multicast
     }

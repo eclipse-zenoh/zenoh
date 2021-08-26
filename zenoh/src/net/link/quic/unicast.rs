@@ -16,12 +16,13 @@ use super::EndPoint as ZEndPoint;
 use super::*;
 use crate::net::transport::TransportManager;
 use async_std::fs;
-use async_std::net::SocketAddr;
+use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use quinn::Endpoint as QuicEndPoint;
 use quinn::*;
 use std::collections::HashMap;
 use std::fmt;
@@ -182,6 +183,7 @@ impl fmt::Debug for LinkUnicastQuic {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerUnicastQuic {
+    endpoint: EndPoint,
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
@@ -189,11 +191,13 @@ struct ListenerUnicastQuic {
 
 impl ListenerUnicastQuic {
     fn new(
+        endpoint: EndPoint,
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
     ) -> ListenerUnicastQuic {
         ListenerUnicastQuic {
+            endpoint,
             active,
             signal,
             handle,
@@ -217,7 +221,7 @@ impl LinkManagerUnicastQuic {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
-    async fn new_link(&self, endpoint: &ZEndPoint) -> ZResult<LinkUnicast> {
+    async fn new_link(&self, endpoint: ZEndPoint) -> ZResult<LinkUnicast> {
         let domain = get_quic_dns(&endpoint.locator.address).await?;
         let addr = get_quic_addr(&endpoint.locator.address).await?;
         let host: &str = domain.as_ref().into();
@@ -299,7 +303,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(&self, endpoint: &EndPoint) -> ZResult<Locator> {
+    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addr = get_quic_addr(&endpoint.locator.address).await?;
 
         // Verify there is a valid ServerConfig
@@ -377,17 +381,20 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         })?;
 
         // Initialize the Endpoint
-        let mut endpoint = Endpoint::builder();
-        endpoint.listen(sc.build());
-        let (endpoint, acceptor) = endpoint.bind(&addr).map_err(|e| {
+        let mut quic_endpoint = QuicEndPoint::builder();
+        quic_endpoint.listen(sc.build());
+        let (quic_endpoint, acceptor) = quic_endpoint.bind(&addr).map_err(|e| {
             let e = format!("Can not create a new QUIC listener on {}: {}", addr, e);
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
 
-        let local_addr = endpoint.local_addr().map_err(|e| {
+        let local_addr = quic_endpoint.local_addr().map_err(|e| {
             let e = format!("Can not create a new QUIC listener on {}: {}", addr, e);
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
+
+        // Update the endpoint locator address
+        endpoint.locator.address = LocatorAddress::Quic(LocatorQuic::SocketAddr(local_addr));
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -400,20 +407,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let c_addr = local_addr;
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            let res = accept_task(endpoint, acceptor, c_active, c_signal, c_manager).await;
+            let res = accept_task(quic_endpoint, acceptor, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
             res
         });
 
         // Initialize the QuicAcceptor
-        let listener = ListenerUnicastQuic::new(active, signal, handle);
+        let locator = endpoint.locator.clone();
+        let listener = ListenerUnicastQuic::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
-        let locator = Locator {
-            address: LocatorAddress::Quic(LocatorQuic::SocketAddr(local_addr)),
-            metadata: None,
-        };
         Ok(locator)
     }
 
@@ -436,39 +440,57 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         listener.handle.await
     }
 
-    fn get_listeners(&self) -> Vec<Locator> {
+    fn get_listeners(&self) -> Vec<EndPoint> {
         zread!(self.listeners)
-            .keys()
-            .map(|x| Locator {
-                address: LocatorAddress::Quic(LocatorQuic::SocketAddr(*x)),
-                metadata: None,
-            })
+            .values()
+            .map(|x| x.endpoint.clone())
             .collect()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
-        for addr in zread!(self.listeners).keys() {
-            if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
+        let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
+        let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+
+        for (key, value) in zread!(self.listeners).iter() {
+            if key.ip() == default_ipv4 {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && ipaddr.is_ipv4() {
-                                locators.push(SocketAddr::new(ipaddr, addr.port()));
+                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
+                                locators.push((
+                                    SocketAddr::new(ipaddr, key.port()),
+                                    value.endpoint.locator.metadata.clone(),
+                                ));
+                            }
+                        }
+                    }
+                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                }
+            } else if key.ip() == default_ipv6 {
+                match zenoh_util::net::get_local_addresses() {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
+                                locators.push((
+                                    SocketAddr::new(ipaddr, key.port()),
+                                    value.endpoint.locator.metadata.clone(),
+                                ));
                             }
                         }
                     }
                     Err(err) => log::error!("Unable to get local addresses : {}", err),
                 }
             } else {
-                locators.push(*addr)
+                locators.push((*key, value.endpoint.locator.metadata.clone()));
             }
         }
+
         locators
             .into_iter()
-            .map(|x| Locator {
-                address: LocatorAddress::Quic(LocatorQuic::SocketAddr(x)),
-                metadata: None,
+            .map(|(addr, metadata)| Locator {
+                address: LocatorAddress::Quic(LocatorQuic::SocketAddr(addr)),
+                metadata,
             })
             .collect()
     }
