@@ -15,7 +15,7 @@ use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
 use std::time::Duration;
-use zenoh::net::link::{Locator, LocatorProperty};
+use zenoh::net::link::{EndPoint, LocatorProperty};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
@@ -31,7 +31,7 @@ const MSG_SIZE: usize = 131_072;
 const MSG_DEFRAG_BUF: usize = 128_000;
 
 async fn run(
-    locator: &Locator,
+    endpoint: &EndPoint,
     locator_property: Option<Vec<LocatorProperty>>,
     channel: Channel,
     msg_size: usize,
@@ -59,9 +59,9 @@ async fn run(
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
-    println!("Add locator: {}", locator);
+    println!("Add locator: {}", endpoint);
     let _ = router_manager
-        .add_listener(locator)
+        .add_listener(endpoint)
         .timeout(TIMEOUT)
         .await
         .unwrap()
@@ -69,9 +69,9 @@ async fn run(
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
-    println!("Opening transport with {}", locator);
+    println!("Opening transport with {}", endpoint);
     let _ = client_manager
-        .open_transport(locator)
+        .open_transport(endpoint)
         .timeout(TIMEOUT)
         .await
         .unwrap()
@@ -120,9 +120,9 @@ async fn run(
     let _ = closed.timeout(TIMEOUT).await.unwrap();
 
     // Stop the locators on the manager
-    println!("Del locator: {}", locator);
+    println!("Del locator: {}", endpoint);
     let _ = router_manager
-        .del_listener(locator)
+        .del_listener(endpoint)
         .timeout(TIMEOUT)
         .await
         .unwrap()
@@ -140,7 +140,7 @@ fn transport_unicast_defragmentation_tcp_only() {
     });
 
     // Define the locators
-    let locator: Locator = "tcp/127.0.0.1:14447".parse().unwrap();
+    let endpoint: EndPoint = "tcp/127.0.0.1:14447".parse().unwrap();
     let properties = None;
     // Define the reliability and congestion control
     let channel = [
@@ -164,7 +164,7 @@ fn transport_unicast_defragmentation_tcp_only() {
     // Run
     task::block_on(async {
         for ch in channel.iter() {
-            run(&locator, properties.clone(), *ch, MSG_SIZE).await;
+            run(&endpoint, properties.clone(), *ch, MSG_SIZE).await;
         }
     });
 }

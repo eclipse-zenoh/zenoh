@@ -17,7 +17,7 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::link::{LinkUnicast, Locator};
+use zenoh::net::link::{EndPoint, LinkUnicast};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
@@ -96,7 +96,7 @@ impl TransportUnicastEventHandler for MHPeer {
     }
 }
 
-async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
+async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
     /* [Peers] */
     let peer_id01 = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
     let peer_id02 = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
@@ -104,7 +104,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new());
     let unicast = TransportManagerConfigUnicast::builder()
-        .max_links(locator01.len() + locator02.len())
+        .max_links(endpoint01.len() + endpoint02.len())
         .build();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
@@ -116,7 +116,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     // Create the peer01 transport manager
     let peer_sh02 = Arc::new(SHPeer::new());
     let unicast = TransportManagerConfigUnicast::builder()
-        .max_links(locator01.len() + locator02.len())
+        .max_links(endpoint01.len() + endpoint02.len())
         .build();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::PEER)
@@ -127,48 +127,48 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
 
     // Barrier to synchronize the two tasks
     let barrier_peer = Arc::new(Barrier::new(2));
-    let barrier_open_wait = Arc::new(Barrier::new(locator01.len() + locator02.len()));
-    let barrier_open_done = Arc::new(Barrier::new(locator01.len() + locator02.len() + 2));
+    let barrier_open_wait = Arc::new(Barrier::new(endpoint01.len() + endpoint02.len()));
+    let barrier_open_done = Arc::new(Barrier::new(endpoint01.len() + endpoint02.len() + 2));
 
     // Peer01
     let c_barp = barrier_peer.clone();
     let c_barow = barrier_open_wait.clone();
     let c_barod = barrier_open_done.clone();
     let c_pid02 = peer_id02;
-    let c_loc01 = locator01.clone();
-    let c_loc02 = locator02.clone();
+    let c_end01 = endpoint01.clone();
+    let c_end02 = endpoint02.clone();
     let peer01_task = task::spawn(async move {
-        // Add the locators on the first peer
-        for loc in c_loc01.iter() {
+        // Add the endpoints on the first peer
+        for loc in c_end01.iter() {
             let res = peer01_manager.add_listener(loc).await;
             println!(
-                "[Transport Peer 01a] => Adding locator {:?}: {:?}",
+                "[Transport Peer 01a] => Adding endpoint {:?}: {:?}",
                 loc, res
             );
             assert!(res.is_ok());
         }
         let locs = peer01_manager.get_listeners();
         println!(
-            "[Transport Peer 01b] => Getting locators: {:?} {:?}",
-            c_loc01, locs
+            "[Transport Peer 01b] => Getting endpoints: {:?} {:?}",
+            c_end01, locs
         );
-        assert_eq!(c_loc01.len(), locs.len());
+        assert_eq!(c_end01.len(), locs.len());
 
         // Open the transport with the second peer
-        for loc in c_loc02.iter() {
+        for loc in c_end02.iter() {
             let cc_barow = c_barow.clone();
             let cc_barod = c_barod.clone();
             let c_p01m = peer01_manager.clone();
-            let c_loc = loc.clone();
+            let c_end = loc.clone();
             task::spawn(async move {
                 println!("[Transport Peer 01c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let res = c_p01m.open_transport(&c_loc).await;
+                let res = c_p01m.open_transport(&c_end).await;
                 println!(
                     "[Transport Peer 01d] => Opening transport with {:?}: {:?}",
-                    c_loc, res
+                    c_end, res
                 );
                 assert!(res.is_ok());
 
@@ -186,7 +186,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
         let s02 = peer01_manager.get_transport(&c_pid02).unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
-            c_loc01.len() + c_loc02.len()
+            c_end01.len() + c_end02.len()
         );
 
         // Create the message to send
@@ -245,40 +245,40 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
     let c_barow = barrier_open_wait.clone();
     let c_barod = barrier_open_done.clone();
     let c_pid01 = peer_id01;
-    let c_loc01 = locator01.clone();
-    let c_loc02 = locator02.clone();
+    let c_end01 = endpoint01.clone();
+    let c_end02 = endpoint02.clone();
     let peer02_task = task::spawn(async move {
-        // Add the locators on the first peer
-        for loc in c_loc02.iter() {
+        // Add the endpoints on the first peer
+        for loc in c_end02.iter() {
             let res = peer02_manager.add_listener(loc).await;
             println!(
-                "[Transport Peer 02a] => Adding locator {:?}: {:?}",
+                "[Transport Peer 02a] => Adding endpoint {:?}: {:?}",
                 loc, res
             );
             assert!(res.is_ok());
         }
         let locs = peer02_manager.get_listeners();
         println!(
-            "[Transport Peer 02b] => Getting locators: {:?} {:?}",
-            c_loc02, locs
+            "[Transport Peer 02b] => Getting endpoints: {:?} {:?}",
+            c_end02, locs
         );
-        assert_eq!(c_loc02.len(), locs.len());
+        assert_eq!(c_end02.len(), locs.len());
 
         // Open the transport with the first peer
-        for loc in c_loc01.iter() {
+        for loc in c_end01.iter() {
             let cc_barow = c_barow.clone();
             let cc_barod = c_barod.clone();
             let c_p02m = peer02_manager.clone();
-            let c_loc = loc.clone();
+            let c_end = loc.clone();
             task::spawn(async move {
                 println!("[Transport Peer 02c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 cc_barow.wait().timeout(TIMEOUT).await.unwrap();
 
-                let res = c_p02m.open_transport(&c_loc).await;
+                let res = c_p02m.open_transport(&c_end).await;
                 println!(
                     "[Transport Peer 02d] => Opening transport with {:?}: {:?}",
-                    c_loc, res
+                    c_end, res
                 );
                 assert!(res.is_ok());
 
@@ -299,7 +299,7 @@ async fn transport_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) 
         let s01 = peer02_manager.get_transport(&c_pid01).unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
-            c_loc01.len() + c_loc02.len()
+            c_end01.len() + c_end02.len()
         );
 
         // Create the message to send
@@ -368,7 +368,7 @@ fn transport_tcp_concurrent() {
         zasync_executor_init!();
     });
 
-    let locator01: Vec<Locator> = vec![
+    let endpoint01: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:7447".parse().unwrap(),
         "tcp/127.0.0.1:7448".parse().unwrap(),
         "tcp/127.0.0.1:7449".parse().unwrap(),
@@ -378,7 +378,7 @@ fn transport_tcp_concurrent() {
         "tcp/127.0.0.1:7453".parse().unwrap(),
         "tcp/127.0.0.1:7454".parse().unwrap(),
     ];
-    let locator02: Vec<Locator> = vec![
+    let endpoint02: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:7455".parse().unwrap(),
         "tcp/127.0.0.1:7456".parse().unwrap(),
         "tcp/127.0.0.1:7457".parse().unwrap(),
@@ -390,6 +390,6 @@ fn transport_tcp_concurrent() {
     ];
 
     task::block_on(async {
-        transport_concurrent(locator01, locator02).await;
+        transport_concurrent(endpoint01, endpoint02).await;
     });
 }

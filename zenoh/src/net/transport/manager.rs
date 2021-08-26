@@ -19,7 +19,7 @@ use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
-use crate::net::link::{Locator, LocatorProperty, LocatorProtocol};
+use crate::net::link::{EndPoint, Locator, LocatorProperty, LocatorProtocol};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
@@ -289,21 +289,21 @@ impl TransportManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
-        if locator.is_multicast() {
+    pub async fn add_listener(&self, endpoint: &EndPoint) -> ZResult<Locator> {
+        if endpoint.locator.address.is_multicast() {
             // @TODO: multicast
             unimplemented!();
         } else {
-            self.add_listener_unicast(locator).await
+            self.add_listener_unicast(endpoint).await
         }
     }
 
-    pub async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        if locator.is_multicast() {
+    pub async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        if endpoint.locator.address.is_multicast() {
             // @TODO: multicast
             unimplemented!();
         } else {
-            self.del_listener_unicast(locator).await
+            self.del_listener_unicast(endpoint).await
         }
     }
 
@@ -330,12 +330,12 @@ impl TransportManager {
         // @TODO: multicast
     }
 
-    pub async fn open_transport(&self, locator: &Locator) -> ZResult<TransportUnicast> {
-        if locator.is_multicast() {
+    pub async fn open_transport(&self, endpoint: &EndPoint) -> ZResult<TransportUnicast> {
+        if endpoint.locator.address.is_multicast() {
             // @TODO: multicast
             unimplemented!();
         } else {
-            self.open_transport_unicast(locator).await
+            self.open_transport_unicast(endpoint).await
         }
     }
 }

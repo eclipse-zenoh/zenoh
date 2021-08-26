@@ -17,7 +17,7 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
+use zenoh::net::link::{EndPoint, LinkUnicast, LocatorProperty};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
@@ -142,7 +142,7 @@ impl TransportUnicastEventHandler for SCClient {
 }
 
 async fn open_transport(
-    locators: &[Locator],
+    endpoints: &[EndPoint],
     locator_property: Option<Vec<LocatorProperty>>,
 ) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
     // Define client and router IDs
@@ -152,7 +152,7 @@ async fn open_transport(
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
     let unicast = TransportManagerConfigUnicast::builder()
-        .max_links(locators.len())
+        .max_links(endpoints.len())
         .build();
     let config = TransportManagerConfig::builder()
         .pid(router_id)
@@ -164,7 +164,7 @@ async fn open_transport(
 
     // Create the client transport manager
     let unicast = TransportManagerConfigUnicast::builder()
-        .max_links(locators.len())
+        .max_links(endpoints.len())
         .build();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
@@ -175,10 +175,10 @@ async fn open_transport(
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
-    for l in locators.iter() {
-        println!("Add locator: {}", l);
+    for e in endpoints.iter() {
+        println!("Add endpoint: {}", e);
         let _ = router_manager
-            .add_listener(l)
+            .add_listener(e)
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -187,10 +187,10 @@ async fn open_transport(
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
-    for l in locators.iter() {
-        println!("Opening transport with {}", l);
+    for e in endpoints.iter() {
+        println!("Opening transport with {}", e);
         let _ = client_manager
-            .open_transport(l)
+            .open_transport(e)
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -206,14 +206,14 @@ async fn open_transport(
 async fn close_transport(
     router_manager: TransportManager,
     client_transport: TransportUnicast,
-    locators: &[Locator],
+    endpoints: &[EndPoint],
 ) {
     // Close the client transport
-    let mut ll = "".to_string();
-    for l in locators.iter() {
-        ll.push_str(&format!("{} ", l));
+    let mut ee = "".to_string();
+    for e in endpoints.iter() {
+        ee.push_str(&format!("{} ", e));
     }
-    println!("Closing transport with {}", ll);
+    println!("Closing transport with {}", ee);
     let _ = client_transport
         .close()
         .timeout(TIMEOUT)
@@ -225,10 +225,10 @@ async fn close_transport(
     task::sleep(SLEEP).await;
 
     // Stop the locators on the manager
-    for l in locators.iter() {
-        println!("Del locator: {}", l);
+    for e in endpoints.iter() {
+        println!("Del locator: {}", e);
         let _ = router_manager
-            .del_listener(l)
+            .del_listener(e)
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -295,7 +295,7 @@ async fn single_run(
 }
 
 async fn run(
-    locators: &[Locator],
+    endpoints: &[EndPoint],
     properties: Option<Vec<LocatorProperty>>,
     channel: &[Channel],
     msg_size: &[usize],
@@ -303,9 +303,9 @@ async fn run(
     for ch in channel.iter() {
         for ms in msg_size.iter() {
             let (router_manager, router_handler, client_transport) =
-                open_transport(locators, properties.clone()).await;
+                open_transport(endpoints, properties.clone()).await;
             single_run(router_handler.clone(), client_transport.clone(), *ch, *ms).await;
-            close_transport(router_manager, client_transport, locators).await;
+            close_transport(router_manager, client_transport, endpoints).await;
         }
     }
 }
@@ -318,7 +318,7 @@ fn transport_unicast_tcp_only() {
     });
 
     // Define the locators
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10447".parse().unwrap(),
         "tcp/[::1]:10447".parse().unwrap(),
     ];
@@ -343,7 +343,7 @@ fn transport_unicast_tcp_only() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -354,7 +354,7 @@ fn transport_unicast_udp_only() {
     });
 
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "udp/127.0.0.1:10447".parse().unwrap(),
         "udp/[::1]:10447".parse().unwrap(),
     ];
@@ -371,7 +371,7 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -383,7 +383,7 @@ fn transport_unicast_unix_only() {
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
+    let endpoints: Vec<EndPoint> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
         .parse()
         .unwrap()];
     let properties = None;
@@ -399,7 +399,7 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
@@ -412,7 +412,7 @@ fn transport_unicast_tcp_udp() {
     });
 
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10448".parse().unwrap(),
         "udp/127.0.0.1:10448".parse().unwrap(),
         "tcp/[::1]:10448".parse().unwrap(),
@@ -431,7 +431,7 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(
@@ -447,7 +447,7 @@ fn transport_unicast_tcp_unix() {
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10449".parse().unwrap(),
         "tcp/[::1]:10449".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-6.sock"
@@ -467,7 +467,7 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
 }
@@ -485,7 +485,7 @@ fn transport_unicast_udp_unix() {
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "udp/127.0.0.1:10449".parse().unwrap(),
         "udp/[::1]:10449".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-7.sock"
@@ -505,7 +505,7 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
 }
@@ -524,7 +524,7 @@ fn transport_unicast_tcp_udp_unix() {
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10450".parse().unwrap(),
         "udp/127.0.0.1:10450".parse().unwrap(),
         "tcp/[::1]:10450".parse().unwrap(),
@@ -546,7 +546,7 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
 }
@@ -650,7 +650,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .unwrap();
 
     // Define the locator
-    let locators = vec!["tls/localhost:10451".parse().unwrap()];
+    let endpoints = vec!["tls/localhost:10451".parse().unwrap()];
     let properties = vec![(client_config, server_config).into()];
 
     // Define the reliability and congestion control
@@ -673,7 +673,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         },
     ];
     // Run
-    task::block_on(run(&locators, Some(properties), &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, Some(properties), &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -783,7 +783,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     client_config.add_certificate_authority(ca).unwrap();
 
     // Define the locator
-    let locators = vec!["quic/localhost:10452".parse().unwrap()];
+    let endpoints = vec!["quic/localhost:10452".parse().unwrap()];
     let properties = vec![(client_config, server_config).into()];
 
     // Define the reliability and congestion control
@@ -806,5 +806,5 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         },
     ];
     // Run
-    task::block_on(run(&locators, Some(properties), &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, Some(properties), &channel, &MSG_SIZE_ALL));
 }

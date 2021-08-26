@@ -99,16 +99,22 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
 
     #[inline(always)]
     fn get_src(&self) -> Locator {
-        Locator::UnixSocketStream(LocatorUnixSocketStream {
-            path: PathBuf::from(self.src_path.clone()),
-        })
+        Locator {
+            address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream {
+                path: PathBuf::from(self.src_path.clone()),
+            }),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
     fn get_dst(&self) -> Locator {
-        Locator::UnixSocketStream(LocatorUnixSocketStream {
-            path: PathBuf::from(self.dst_path.clone()),
-        })
+        Locator {
+            address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream {
+                path: PathBuf::from(self.dst_path.clone()),
+            }),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
@@ -194,10 +200,10 @@ impl LinkManagerUnicastUnixSocketStream {
 impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     async fn new_link(
         &self,
-        locator: &Locator,
+        endpoint: &EndPoint,
         _ps: Option<&LocatorProperty>,
     ) -> ZResult<LinkUnicast> {
-        let path = get_unix_path(locator)?;
+        let path = get_unix_path(&endpoint.locator)?;
 
         // Create the UnixSocketStream connection
         let stream = UnixStream::connect(&path).await.map_err(|e| {
@@ -275,10 +281,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
     async fn new_listener(
         &self,
-        locator: &Locator,
+        endpoint: &EndPoint,
         _ps: Option<&LocatorProperty>,
     ) -> ZResult<Locator> {
-        let path = get_unix_path_as_string(locator);
+        let path = get_unix_path_as_string(&endpoint.locator);
 
         // Because of the lack of SO_REUSEADDR we have to check if the
         // file is still there and if it is not used by another process.
@@ -385,13 +391,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let listener = ListenerUnixSocketStream::new(active, signal, handle, lock_fd);
         zwrite!(self.listeners).insert(local_path_str, listener);
 
-        Ok(Locator::UnixSocketStream(LocatorUnixSocketStream {
-            path: local_path,
-        }))
+        let locator = Locator {
+            address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream { path: local_path }),
+            metadata: None,
+        };
+        Ok(locator)
     }
 
-    async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let path = get_unix_path_as_string(locator);
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let path = get_unix_path_as_string(&endpoint.locator);
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
@@ -423,10 +431,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     fn get_listeners(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .keys()
-            .map(|x| {
-                Locator::UnixSocketStream(LocatorUnixSocketStream {
+            .map(|x| Locator {
+                address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream {
                     path: PathBuf::from(x),
-                })
+                }),
+                metadata: None,
             })
             .collect()
     }
@@ -443,7 +452,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         }
         locators
             .into_iter()
-            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream { path: x }))
+            .map(|x| Locator {
+                address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream { path: x }),
+                metadata: None,
+            })
             .collect()
     }
 }

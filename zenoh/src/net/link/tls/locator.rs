@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Locator, LocatorProperty};
+use super::{Locator, LocatorAddress, LocatorProperty};
 use async_rustls::rustls::internal::pemfile;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
@@ -27,8 +27,8 @@ use zenoh_util::{zerror, zerror2};
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_tls_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match locator {
-        Locator::Tls(addr) => match addr {
+    match &locator.address {
+        LocatorAddress::Tls(addr) => match addr {
             LocatorTls::SocketAddr(addr) => Ok(*addr),
             LocatorTls::DnsName(addr) => match addr.to_socket_addrs().await {
                 Ok(mut addr_iter) => {
@@ -54,8 +54,8 @@ pub(super) async fn get_tls_addr(locator: &Locator) -> ZResult<SocketAddr> {
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
-    match locator {
-        Locator::Tls(addr) => match addr {
+    match &locator.address {
+        LocatorAddress::Tls(addr) => match addr {
             LocatorTls::SocketAddr(addr) => {
                 let e = format!("Couldn't get domain from SocketAddr: {}", addr);
                 zerror!(ZErrorKind::InvalidLocator { descr: e })

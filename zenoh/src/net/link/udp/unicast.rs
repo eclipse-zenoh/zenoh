@@ -188,12 +188,18 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[inline(always)]
     fn get_src(&self) -> Locator {
-        Locator::Udp(LocatorUdp::SocketAddr(self.src_addr))
+        Locator {
+            address: LocatorAddress::Udp(LocatorUdp::SocketAddr(self.src_addr)),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
     fn get_dst(&self) -> Locator {
-        Locator::Udp(LocatorUdp::SocketAddr(self.dst_addr))
+        Locator {
+            address: LocatorAddress::Udp(LocatorUdp::SocketAddr(self.dst_addr)),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
@@ -267,8 +273,12 @@ impl LinkManagerUnicastUdp {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
-    async fn new_link(&self, dst: &Locator, _ps: Option<&LocatorProperty>) -> ZResult<LinkUnicast> {
-        let dst_addr = get_udp_addr(dst).await?;
+    async fn new_link(
+        &self,
+        endpoint: &EndPoint,
+        _ps: Option<&LocatorProperty>,
+    ) -> ZResult<LinkUnicast> {
+        let dst_addr = get_udp_addr(&endpoint.locator).await?;
         // Establish a UDP socket
         let socket = if dst_addr.is_ipv4() {
             // IPv4 format
@@ -317,10 +327,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
 
     async fn new_listener(
         &self,
-        locator: &Locator,
+        endpoint: &EndPoint,
         _ps: Option<&LocatorProperty>,
     ) -> ZResult<Locator> {
-        let addr = get_udp_addr(locator).await?;
+        let addr = get_udp_addr(&endpoint.locator).await?;
 
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
@@ -355,11 +365,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
-        Ok(Locator::Udp(LocatorUdp::SocketAddr(local_addr)))
+        let locator = Locator {
+            address: LocatorAddress::Udp(LocatorUdp::SocketAddr(local_addr)),
+            metadata: None,
+        };
+        Ok(locator)
     }
 
-    async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let addr = get_udp_addr(locator).await?;
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let addr = get_udp_addr(&endpoint.locator).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -380,7 +394,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     fn get_listeners(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .keys()
-            .map(|x| Locator::Udp(LocatorUdp::SocketAddr(*x)))
+            .map(|x| Locator {
+                address: LocatorAddress::Udp(LocatorUdp::SocketAddr(*x)),
+                metadata: None,
+            })
             .collect()
     }
 

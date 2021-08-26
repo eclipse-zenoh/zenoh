@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{Locator, LocatorProperty, ALPN_QUIC_HTTP};
+use super::{Locator, LocatorAddress, LocatorProperty, ALPN_QUIC_HTTP};
 use async_std::fs;
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use quinn::{
@@ -27,8 +27,8 @@ use zenoh_util::properties::config::*;
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_quic_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match locator {
-        Locator::Quic(addr) => match addr {
+    match &locator.address {
+        LocatorAddress::Quic(addr) => match addr {
             LocatorQuic::SocketAddr(addr) => Ok(*addr),
             LocatorQuic::DnsName(addr) => match addr.to_socket_addrs().await {
                 Ok(mut addr_iter) => {
@@ -54,8 +54,8 @@ pub(super) async fn get_quic_addr(locator: &Locator) -> ZResult<SocketAddr> {
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_quic_dns(locator: &Locator) -> ZResult<DnsName> {
-    match locator {
-        Locator::Quic(addr) => match addr {
+    match &locator.address {
+        LocatorAddress::Quic(addr) => match addr {
             LocatorQuic::SocketAddr(addr) => {
                 let e = format!("Couldn't get domain from SocketAddr: {}", addr);
                 zerror!(ZErrorKind::InvalidLocator { descr: e })

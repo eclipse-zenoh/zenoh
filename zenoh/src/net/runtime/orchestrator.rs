@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::link::Locator;
+use super::link::{EndPoint, Locator};
 use super::protocol::core::{whatami, PeerId, WhatAmI};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
@@ -72,7 +72,10 @@ impl Runtime {
             .to_lowercase()
             == ZN_TRUE;
         let addr = config
-            .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .get_or(
+                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
+                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+            )
             .parse()
             .unwrap();
         let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
@@ -114,7 +117,11 @@ impl Runtime {
             }
             _ => {
                 for locator in &peers {
-                    match self.manager().open_transport(locator).await {
+                    let endpoint = EndPoint {
+                        locator: locator.clone(),
+                        config: None,
+                    };
+                    match self.manager().open_transport(&endpoint).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -154,7 +161,10 @@ impl Runtime {
             .to_lowercase()
             == ZN_TRUE;
         let addr = config
-            .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .get_or(
+                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
+                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+            )
             .parse()
             .unwrap();
         let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
@@ -234,7 +244,10 @@ impl Runtime {
             .to_lowercase()
             == ZN_TRUE;
         let addr = config
-            .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+            .get_or(
+                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
+                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+            )
             .parse()
             .unwrap();
         let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
@@ -278,7 +291,11 @@ impl Runtime {
 
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
         for listener in listeners {
-            match self.manager().add_listener(listener).await {
+            let endpoint = EndPoint {
+                locator: listener.clone(),
+                config: None,
+            };
+            match self.manager().add_listener(&endpoint).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", listener, err);
@@ -468,7 +485,11 @@ impl Runtime {
         let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
-            if let Ok(transport) = self.manager().open_transport(&peer).await {
+            let endpoint = EndPoint {
+                locator: peer.clone(),
+                config: None,
+            };
+            if let Ok(transport) = self.manager().open_transport(&endpoint).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
                 if let Some(orch_transport) = transport
                     .get_callback()
@@ -570,7 +591,11 @@ impl Runtime {
 
     async fn connect(&self, locators: &[Locator]) -> ZResult<TransportUnicast> {
         for locator in locators {
-            let transport = self.manager().open_transport(locator).await;
+            let endpoint = EndPoint {
+                locator: locator.clone(),
+                config: None,
+            };
+            let transport = self.manager().open_transport(&endpoint).await;
             if transport.is_ok() {
                 return transport;
             }

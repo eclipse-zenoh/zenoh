@@ -17,7 +17,7 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::link::{LinkUnicast, Locator};
+use zenoh::net::link::{EndPoint, LinkUnicast};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
@@ -163,7 +163,7 @@ impl TransportUnicastEventHandler for SCClient {
 }
 
 async fn open_transport(
-    locators: &[Locator],
+    endpoints: &[EndPoint],
     priority: Priority,
 ) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
     // Define client and router IDs
@@ -186,10 +186,10 @@ async fn open_transport(
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
-    for l in locators.iter() {
-        println!("Add locator: {}", l);
+    for e in endpoints.iter() {
+        println!("Add locator: {}", e);
         let _ = router_manager
-            .add_listener(l)
+            .add_listener(e)
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -198,10 +198,10 @@ async fn open_transport(
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
-    for l in locators.iter() {
-        println!("Opening transport with {}", l);
+    for e in endpoints.iter() {
+        println!("Opening transport with {}", e);
         let _ = client_manager
-            .open_transport(l)
+            .open_transport(e)
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -217,14 +217,14 @@ async fn open_transport(
 async fn close_transport(
     router_manager: TransportManager,
     client_transport: TransportUnicast,
-    locators: &[Locator],
+    endpoints: &[EndPoint],
 ) {
     // Close the client transport
-    let mut ll = "".to_string();
-    for l in locators.iter() {
-        ll.push_str(&format!("{} ", l));
+    let mut ee = "".to_string();
+    for e in endpoints.iter() {
+        ee.push_str(&format!("{} ", e));
     }
-    println!("Closing transport with {}", ll);
+    println!("Closing transport with {}", ee);
     let _ = client_transport
         .close()
         .timeout(TIMEOUT)
@@ -236,10 +236,10 @@ async fn close_transport(
     task::sleep(SLEEP).await;
 
     // Stop the locators on the manager
-    for l in locators.iter() {
-        println!("Del locator: {}", l);
+    for e in endpoints.iter() {
+        println!("Del locator: {}", e);
         let _ = router_manager
-            .del_listener(l)
+            .del_listener(e)
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -294,13 +294,13 @@ async fn single_run(
     task::sleep(SLEEP).await;
 }
 
-async fn run(locators: &[Locator], channel: &[Channel], msg_size: &[usize]) {
+async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
             let (router_manager, router_handler, client_transport) =
-                open_transport(locators, ch.priority).await;
+                open_transport(endpoints, ch.priority).await;
             single_run(router_handler.clone(), client_transport.clone(), *ch, *ms).await;
-            close_transport(router_manager, client_transport, locators).await;
+            close_transport(router_manager, client_transport, endpoints).await;
         }
     }
 }
@@ -319,7 +319,7 @@ fn conduits_tcp_only() {
         });
     }
     // Define the locators
-    let locators: Vec<Locator> = vec!["tcp/127.0.0.1:13447".parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec!["tcp/127.0.0.1:13447".parse().unwrap()];
     // Run
-    task::block_on(run(&locators, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }

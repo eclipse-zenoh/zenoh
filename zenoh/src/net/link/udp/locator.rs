@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::Locator;
+use super::{Locator, LocatorAddress};
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::fmt;
 use std::str::FromStr;
@@ -20,8 +20,8 @@ use zenoh_util::zerror;
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match locator {
-        Locator::Udp(addr) => match addr {
+    match &locator.address {
+        LocatorAddress::Udp(addr) => match addr {
             LocatorUdp::SocketAddr(addr) => Ok(*addr),
             LocatorUdp::DnsName(addr) => match addr.to_socket_addrs().await {
                 Ok(mut addr_iter) => {
@@ -82,3 +82,7 @@ impl fmt::Display for LocatorUdp {
 }
 
 pub type LocatorPropertyUdp = ();
+
+pub mod options {
+    pub const IFACE: &str = "iface";
+}

@@ -150,7 +150,10 @@ pub fn scout(
 ) -> impl ZFuture<Output = ZResult<HelloReceiver>> {
     trace!("scout({}, {})", what, &config);
     let addr = config
-        .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
+        .get_or(
+            &ZN_MULTICAST_IPV4_ADDRESS_KEY,
+            ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+        )
         .parse()
         .unwrap();
     let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);

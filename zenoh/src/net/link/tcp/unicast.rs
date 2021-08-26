@@ -120,12 +120,18 @@ impl LinkUnicastTrait for LinkUnicastTcp {
 
     #[inline(always)]
     fn get_src(&self) -> Locator {
-        Locator::Tcp(LocatorTcp::SocketAddr(self.src_addr))
+        Locator {
+            address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(self.src_addr)),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
     fn get_dst(&self) -> Locator {
-        Locator::Tcp(LocatorTcp::SocketAddr(self.dst_addr))
+        Locator {
+            address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(self.dst_addr)),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
@@ -208,10 +214,10 @@ impl LinkManagerUnicastTcp {
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(
         &self,
-        locator: &Locator,
+        endpoint: &EndPoint,
         _ps: Option<&LocatorProperty>,
     ) -> ZResult<LinkUnicast> {
-        let dst_addr = get_tcp_addr(locator).await?;
+        let dst_addr = get_tcp_addr(&endpoint.locator).await?;
 
         let stream = TcpStream::connect(dst_addr).await.map_err(|e| {
             let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
@@ -235,10 +241,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
     async fn new_listener(
         &self,
-        locator: &Locator,
+        endpoint: &EndPoint,
         _ps: Option<&LocatorProperty>,
     ) -> ZResult<Locator> {
-        let addr = get_tcp_addr(locator).await?;
+        let addr = get_tcp_addr(&endpoint.locator).await?;
 
         // Bind the TCP socket
         let socket = TcpListener::bind(addr).await.map_err(|e| {
@@ -271,11 +277,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
-        Ok(Locator::Tcp(LocatorTcp::SocketAddr(local_addr)))
+        let locator = Locator {
+            address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(local_addr)),
+            metadata: None,
+        };
+        Ok(locator)
     }
 
-    async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let addr = get_tcp_addr(locator).await?;
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let addr = get_tcp_addr(&endpoint.locator).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -296,7 +306,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     fn get_listeners(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .keys()
-            .map(|x| Locator::Tcp(LocatorTcp::SocketAddr(*x)))
+            .map(|x| Locator {
+                address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(*x)),
+                metadata: None,
+            })
             .collect()
     }
 
@@ -320,7 +333,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         }
         locators
             .into_iter()
-            .map(|x| Locator::Tcp(LocatorTcp::SocketAddr(x)))
+            .map(|x| Locator {
+                address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(x)),
+                metadata: None,
+            })
             .collect()
     }
 }

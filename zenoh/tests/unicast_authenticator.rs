@@ -17,7 +17,7 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::time::Duration;
-use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
+use zenoh::net::link::{EndPoint, LinkUnicast, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 #[cfg(feature = "zero-copy")]
@@ -101,7 +101,7 @@ impl TransportEventHandler for SHClientAuthenticator {
 }
 
 async fn authenticator_user_password(
-    locator: Locator,
+    endpoint: &EndPoint,
     locator_property: Option<Vec<LocatorProperty>>,
 ) {
     /* [CLIENT] */
@@ -198,7 +198,7 @@ async fn authenticator_user_password(
     /* [1] */
     println!("\nTransport Authenticator UserPassword [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(&locator).await;
+    let res = router_manager.add_listener(endpoint).await;
     println!("Transport Authenticator UserPassword [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Authenticator UserPassword [1a2]");
@@ -210,7 +210,7 @@ async fn authenticator_user_password(
     // Open a first transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [2a1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint).await;
     println!("Transport Authenticator UserPassword [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -225,7 +225,7 @@ async fn authenticator_user_password(
     // Open a second transport from the client to the router
     // -> This should be rejected
     println!("Transport Authenticator UserPassword [4a1]");
-    let res = client02_manager.open_transport(&locator).await;
+    let res = client02_manager.open_transport(endpoint).await;
     println!("Transport Authenticator UserPassword [4a1]: {:?}", res);
     assert!(res.is_err());
 
@@ -233,7 +233,7 @@ async fn authenticator_user_password(
     // Open a third transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [5a1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint).await;
     println!("Transport Authenticator UserPassword [5a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -247,7 +247,7 @@ async fn authenticator_user_password(
     // Open a fourth transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [6a1]");
-    let res = client02_manager.open_transport(&locator).await;
+    let res = client02_manager.open_transport(endpoint).await;
     println!("Transport Authenticator UserPassword [6a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -256,7 +256,7 @@ async fn authenticator_user_password(
     // Open a fourth transport from the client to the router
     // -> This should be rejected
     println!("Transport Authenticator UserPassword [7a1]");
-    let res = client03_manager.open_transport(&locator).await;
+    let res = client03_manager.open_transport(endpoint).await;
     println!("Transport Authenticator UserPassword [7a1]: {:?}", res);
     assert!(res.is_err());
 
@@ -275,7 +275,7 @@ async fn authenticator_user_password(
     /* [9] */
     // Perform clean up of the open locators
     println!("Transport Authenticator UserPassword [9a1]");
-    let res = router_manager.del_listener(&locator).await;
+    let res = router_manager.del_listener(endpoint).await;
     println!("Transport Authenticator UserPassword [9a2]: {:?}", res);
     assert!(res.is_ok());
 
@@ -284,7 +284,7 @@ async fn authenticator_user_password(
 
 #[cfg(feature = "zero-copy")]
 async fn authenticator_shared_memory(
-    locator: Locator,
+    endpoint: &EndPoint,
     locator_property: Option<Vec<LocatorProperty>>,
 ) {
     /* [CLIENT] */
@@ -324,7 +324,7 @@ async fn authenticator_shared_memory(
     /* [1] */
     println!("\nTransport Authenticator SharedMemory [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(&locator).await;
+    let res = router_manager.add_listener(endpoint).await;
     println!("Transport Authenticator SharedMemory [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Authenticator SharedMemory [1a2]");
@@ -336,7 +336,7 @@ async fn authenticator_shared_memory(
     // Open a transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator SharedMemory [2a1]");
-    let res = client_manager.open_transport(&locator).await;
+    let res = client_manager.open_transport(endpoint).await;
     println!("Transport Authenticator SharedMemory [2a1]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -353,7 +353,7 @@ async fn authenticator_shared_memory(
     /* [4] */
     // Perform clean up of the open locators
     println!("Transport Authenticator SharedMemory [4a1]");
-    let res = router_manager.del_listener(&locator).await;
+    let res = router_manager.del_listener(endpoint).await;
     println!("Transport Authenticator SharedMemory [4a2]: {:?}", res);
     assert!(res.is_ok());
 
@@ -367,11 +367,11 @@ fn authenticator_tcp() {
         zasync_executor_init!();
     });
 
-    let locator: Locator = "tcp/127.0.0.1:11447".parse().unwrap();
+    let endpoint: EndPoint = "tcp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
-        authenticator_user_password(locator.clone(), None).await;
+        authenticator_user_password(&endpoint, None).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(locator, None).await;
+        authenticator_shared_memory(&endpoint, None).await;
     });
 }
 
@@ -382,11 +382,11 @@ fn authenticator_udp() {
         zasync_executor_init!();
     });
 
-    let locator: Locator = "udp/127.0.0.1:11447".parse().unwrap();
+    let endpoint: EndPoint = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
-        authenticator_user_password(locator.clone(), None).await;
+        authenticator_user_password(&endpoint, None).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(locator, None).await;
+        authenticator_shared_memory(&endpoint, None).await;
     });
 }
 
@@ -398,13 +398,13 @@ fn authenticator_unix() {
     });
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
-    let locator: Locator = "unixsock-stream/zenoh-test-unix-socket-10.sock"
+    let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-10.sock"
         .parse()
         .unwrap();
     task::block_on(async {
-        authenticator_user_password(locator.clone(), None).await;
+        authenticator_user_password(&endpoint, None).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(locator, None).await;
+        authenticator_shared_memory(&endpoint, None).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");
@@ -509,12 +509,12 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .unwrap();
 
     // Define the locator
-    let locator: Locator = "tls/localhost:11448".parse().unwrap();
+    let endpoint: EndPoint = "tls/localhost:11448".parse().unwrap();
     let locator_property = vec![(client_config, server_config).into()];
     task::block_on(async {
-        authenticator_user_password(locator.clone(), Some(locator_property.clone())).await;
+        authenticator_user_password(&endpoint, Some(locator_property.clone())).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(locator, Some(locator_property)).await;
+        authenticator_shared_memory(&endpoint, Some(locator_property)).await;
     });
 }
 
@@ -625,11 +625,11 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     client_config.add_certificate_authority(ca).unwrap();
 
     // Define the locator
-    let locator: Locator = "quic/localhost:11448".parse().unwrap();
+    let endpoint: EndPoint = "quic/localhost:11448".parse().unwrap();
     let locator_property = vec![(client_config, server_config).into()];
     task::block_on(async {
-        authenticator_user_password(locator.clone(), Some(locator_property.clone())).await;
+        authenticator_user_password(&endpoint, Some(locator_property.clone())).await;
         #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(locator, Some(locator_property)).await;
+        authenticator_shared_memory(&endpoint, Some(locator_property)).await;
     });
 }

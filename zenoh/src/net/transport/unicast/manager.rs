@@ -270,17 +270,20 @@ impl TransportManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_listener_unicast(&self, locator: &Locator) -> ZResult<Locator> {
-        let manager = self.new_link_manager_unicast(&locator.get_proto())?;
-        let ps = self.config.locator_property.get(&locator.get_proto());
-        manager.new_listener(locator, ps).await
+    pub async fn add_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<Locator> {
+        let manager = self.new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+        let ps = self
+            .config
+            .locator_property
+            .get(&endpoint.locator.address.get_proto());
+        manager.new_listener(endpoint, ps).await
     }
 
-    pub async fn del_listener_unicast(&self, locator: &Locator) -> ZResult<()> {
-        let lm = self.get_link_manager_unicast(&locator.get_proto())?;
-        lm.del_listener(locator).await?;
+    pub async fn del_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let lm = self.get_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+        lm.del_listener(endpoint).await?;
         if lm.get_listeners().is_empty() {
-            self.del_link_manager_unicast(&locator.get_proto())?;
+            self.del_link_manager_unicast(&endpoint.locator.address.get_proto())?;
         }
         Ok(())
     }
@@ -384,21 +387,24 @@ impl TransportManager {
         Ok(transport)
     }
 
-    pub async fn open_transport_unicast(&self, locator: &Locator) -> ZResult<TransportUnicast> {
-        if locator.is_multicast() {
+    pub async fn open_transport_unicast(&self, endpoint: &EndPoint) -> ZResult<TransportUnicast> {
+        if endpoint.locator.address.is_multicast() {
             return zerror!(ZErrorKind::InvalidLocator {
                 descr: format!(
-                    "Can not open a unicast transport with a multicast locator: {}.",
-                    locator
+                    "Can not open a unicast transport with a multicast endpoint: {}.",
+                    endpoint
                 )
             });
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.new_link_manager_unicast(&locator.get_proto())?;
-        let ps = self.config.locator_property.get(&locator.get_proto());
+        let manager = self.new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+        let ps = self
+            .config
+            .locator_property
+            .get(&endpoint.locator.address.get_proto());
         // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(locator, ps).await?;
+        let link = manager.new_link(endpoint, ps).await?;
         // Open the link
         super::establishment::open_link(self, &link).await
     }

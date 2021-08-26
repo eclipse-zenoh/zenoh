@@ -11,6 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+
+// Restricting to macos by default because of no IPv6 support
+// on GitHub CI actions on Linux and Windows.
 #[cfg(target_os = "macos")]
 mod tests {
     use async_std::prelude::*;
@@ -19,7 +22,7 @@ mod tests {
     use std::any::Any;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
-    use zenoh::net::link::{Locator, LocatorProperty};
+    use zenoh::net::link::{EndPoint, LocatorProperty};
     use zenoh::net::protocol::core::{
         whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
     };
@@ -30,6 +33,7 @@ mod tests {
         TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
     };
     use zenoh_util::core::ZResult;
+    use zenoh_util::properties::config::*;
     use zenoh_util::zasync_executor_init;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -109,7 +113,7 @@ mod tests {
     }
 
     async fn open_transport(
-        locator: &Locator,
+        endpoint: &EndPoint,
         locator_property: Option<LocatorProperty>,
     ) -> (TransportPeer, TransportPeer) {
         // Define peer01 and peer02 IDs
@@ -144,28 +148,50 @@ mod tests {
 
         // Create an empty transport with the peer01
         // Open transport -> This should be accepted
-        println!("Opening transport with {}", locator);
+        println!("Opening transport with {}", endpoint);
         let _ = peer01_manager
-            .open_transport_multicast(locator)
+            .open_transport_multicast(endpoint)
             .timeout(TIMEOUT)
             .await
             .unwrap()
             .unwrap();
-        assert!(peer01_manager.get_transport_multicast(locator).is_some());
+        assert!(peer01_manager
+            .get_transport_multicast(&endpoint.locator)
+            .is_some());
         println!("\t{:?}", peer01_manager.get_transports_multicast());
 
-        println!("Opening transport with {}", locator);
+        println!("Opening transport with {}", endpoint);
         let _ = peer02_manager
-            .open_transport_multicast(locator)
+            .open_transport_multicast(endpoint)
             .timeout(TIMEOUT)
             .await
             .unwrap()
             .unwrap();
-        assert!(peer02_manager.get_transport_multicast(locator).is_some());
+        assert!(peer02_manager
+            .get_transport_multicast(&endpoint.locator)
+            .is_some());
         println!("\t{:?}", peer02_manager.get_transports_multicast());
 
-        let peer01_transport = peer01_manager.get_transport_multicast(locator).unwrap();
-        let peer02_transport = peer02_manager.get_transport_multicast(locator).unwrap();
+        // Wait to for peer 01 and 02 to join each other
+        let peer01_transport = peer01_manager
+            .get_transport_multicast(&endpoint.locator)
+            .unwrap();
+        let count = async {
+            while peer01_transport.get_peers().unwrap().is_empty() {
+                task::sleep(SLEEP_COUNT).await;
+            }
+        };
+        let _ = count.timeout(TIMEOUT).await.unwrap();
+
+        let peer02_transport = peer02_manager
+            .get_transport_multicast(&endpoint.locator)
+            .unwrap();
+        let count = async {
+            while peer02_transport.get_peers().unwrap().is_empty() {
+                task::sleep(SLEEP_COUNT).await;
+            }
+        };
+        let _ = count.timeout(TIMEOUT).await.unwrap();
 
         (
             TransportPeer {
@@ -181,9 +207,9 @@ mod tests {
         )
     }
 
-    async fn close_transport(peer01: TransportPeer, peer02: TransportPeer, locator: &Locator) {
+    async fn close_transport(peer01: TransportPeer, peer02: TransportPeer, endpoint: &EndPoint) {
         // Close the peer01 transport
-        println!("Closing transport with {}", locator);
+        println!("Closing transport with {}", endpoint);
         let _ = peer01
             .transport
             .close()
@@ -195,7 +221,7 @@ mod tests {
         assert!(peer02.transport.get_peers().unwrap().is_empty());
 
         // Close the peer02 transport
-        println!("Closing transport with {}", locator);
+        println!("Closing transport with {}", endpoint);
         let _ = peer02
             .transport
             .close()
@@ -265,17 +291,17 @@ mod tests {
     }
 
     async fn run(
-        locators: &[Locator],
+        endpoints: &[EndPoint],
         properties: Option<LocatorProperty>,
         channel: &[Channel],
         msg_size: &[usize],
     ) {
-        for l in locators.iter() {
+        for e in endpoints.iter() {
             for ch in channel.iter() {
                 for ms in msg_size.iter() {
-                    let (peer01, peer02) = open_transport(l, properties.clone()).await;
+                    let (peer01, peer02) = open_transport(e, properties.clone()).await;
                     single_run(&peer01, &peer02, *ch, *ms).await;
-                    close_transport(peer01, peer02, l).await;
+                    close_transport(peer01, peer02, e).await;
                 }
             }
         }
@@ -284,14 +310,22 @@ mod tests {
     #[cfg(feature = "transport_udp")]
     #[test]
     fn transport_multicast_udp_only() {
+        env_logger::init();
+
         task::block_on(async {
             zasync_executor_init!();
         });
 
         // Define the locator
-        let locator: Vec<Locator> = vec![
-            "udp/224.0.0.224:7447".parse().unwrap(),
-            // "udp/[ff02::1]:7447".parse().unwrap(),
+        let endpoints: Vec<EndPoint> = vec![
+            format!("udp/{}", ZN_MULTICAST_IPV4_ADDRESS_DEFAULT)
+                .parse()
+                .unwrap(),
+            // Disabling by default because of no IPv6 support
+            // on GitHub CI actions.
+            // format!("udp/{}", ZN_MULTICAST_IPV6_ADDRESS_DEFAULT)
+            //     .parse()
+            //     .unwrap(),
         ];
         let properties = None;
         // Define the reliability and congestion control
@@ -306,6 +340,6 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run(&locator, properties, &channel, &MSG_SIZE_NOFRAG));
+        task::block_on(run(&endpoints, properties, &channel, &MSG_SIZE_NOFRAG));
     }
 }

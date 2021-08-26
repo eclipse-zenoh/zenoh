@@ -15,7 +15,7 @@ use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
 use std::time::Duration;
-use zenoh::net::link::{Locator, LocatorProperty};
+use zenoh::net::link::{EndPoint, LocatorProperty};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::transport::{
     DummyTransportUnicastEventHandler, TransportEventHandler, TransportManager,
@@ -73,7 +73,7 @@ impl TransportEventHandler for SHClientOpenClose {
     }
 }
 
-async fn openclose_transport(locator: Locator, locator_property: Option<Vec<LocatorProperty>>) {
+async fn openclose_transport(endpoint: &EndPoint, locator_property: Option<Vec<LocatorProperty>>) {
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
@@ -127,7 +127,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     /* [1] */
     println!("\nTransport Open Close [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(&locator).await;
+    let res = router_manager.add_listener(endpoint).await;
     println!("Transport Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Open Close [1a2]");
@@ -138,7 +138,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open a first transport from the client to the router
     // -> This should be accepted
     println!("Transport Open Close [1c1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint).await;
     println!("Transport Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -178,7 +178,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open a second transport from the client to the router
     // -> This should be accepted
     println!("\nTransport Open Close [2a1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint).await;
     println!("Transport Open Close [2a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -217,7 +217,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open transport -> This should be rejected because
     // of the maximum limit of links per transport
     println!("\nTransport Open Close [3a1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint).await;
     println!("Transport Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
     println!("Transport Open Close [3b1]");
@@ -278,7 +278,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open transport -> This should be accepted because
     // the number of links should be back to 0
     println!("\nTransport Open Close [5a1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint).await;
     println!("Transport Open Close [5a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
@@ -312,7 +312,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open transport -> This should be rejected because
     // of the maximum limit of transports
     println!("\nTransport Open Close [6a1]");
-    let res = client02_manager.open_transport(&locator).await;
+    let res = client02_manager.open_transport(endpoint).await;
     println!("Transport Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
     println!("Transport Open Close [6b1]");
@@ -365,7 +365,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open transport -> This should be accepted because
     // the number of transports should be back to 0
     println!("\nTransport Open Close [8a1]");
-    let res = client02_manager.open_transport(&locator).await;
+    let res = client02_manager.open_transport(endpoint).await;
     println!("Transport Open Close [8a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();
@@ -427,7 +427,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     /* [10] */
     // Perform clean up of the open locators
     println!("\nTransport Open Close [10a1]");
-    let res = router_manager.del_listener(&locator).await;
+    let res = router_manager.del_listener(endpoint).await;
     println!("Transport Open Close [10a2]: {:?}", res);
     assert!(res.is_ok());
 
@@ -441,8 +441,8 @@ fn openclose_tcp_only() {
         zasync_executor_init!();
     });
 
-    let locator = "tcp/127.0.0.1:8447".parse().unwrap();
-    task::block_on(openclose_transport(locator, None));
+    let endpoint: EndPoint = "tcp/127.0.0.1:8447".parse().unwrap();
+    task::block_on(openclose_transport(&endpoint, None));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -452,8 +452,8 @@ fn openclose_udp_only() {
         zasync_executor_init!();
     });
 
-    let locator = "udp/127.0.0.1:8447".parse().unwrap();
-    task::block_on(openclose_transport(locator, None));
+    let endpoint: EndPoint = "udp/127.0.0.1:8447".parse().unwrap();
+    task::block_on(openclose_transport(&endpoint, None));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -464,10 +464,10 @@ fn openclose_unix_only() {
     });
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
+    let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-9.sock"
         .parse()
         .unwrap();
-    task::block_on(openclose_transport(locator, None));
+    task::block_on(openclose_transport(&endpoint, None));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
 }
@@ -570,9 +570,9 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .add_pem_file(&mut Cursor::new(ca.as_bytes()))
         .unwrap();
 
-    let locator = "tls/localhost:8448".parse().unwrap();
+    let endpoint: EndPoint = "tls/localhost:8448".parse().unwrap();
     let property = vec![(client_config, server_config).into()];
-    task::block_on(openclose_transport(locator, Some(property)));
+    task::block_on(openclose_transport(&endpoint, Some(property)));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -682,7 +682,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     client_config.add_certificate_authority(ca).unwrap();
 
     // Define the locator
-    let locator = "quic/localhost:8449".parse().unwrap();
+    let endpoint: EndPoint = "quic/localhost:8449".parse().unwrap();
     let property = vec![(client_config, server_config).into()];
-    task::block_on(openclose_transport(locator, Some(property)));
+    task::block_on(openclose_transport(&endpoint, Some(property)));
 }

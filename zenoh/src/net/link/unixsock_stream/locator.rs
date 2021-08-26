@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::Locator;
+use super::{Locator, LocatorAddress};
 use async_std::path::PathBuf;
 use std::fmt;
 use std::str::FromStr;
@@ -19,8 +19,8 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 #[allow(unreachable_patterns)]
 pub(super) fn get_unix_path(locator: &Locator) -> ZResult<PathBuf> {
-    match locator {
-        Locator::UnixSocketStream(path) => Ok(path.path.clone()),
+    match &locator.address {
+        LocatorAddress::UnixSocketStream(path) => Ok(path.path.clone()),
         _ => {
             let e = format!("Not a UnixSocketStream locator: {:?}", locator);
             log::debug!("{}", e);
@@ -31,8 +31,8 @@ pub(super) fn get_unix_path(locator: &Locator) -> ZResult<PathBuf> {
 
 #[allow(unreachable_patterns)]
 pub(super) fn get_unix_path_as_string(locator: &Locator) -> String {
-    match locator {
-        Locator::UnixSocketStream(path) => match path.path.to_str() {
+    match &locator.address {
+        LocatorAddress::UnixSocketStream(path) => match path.path.to_str() {
             Some(path_str) => path_str.to_string(),
             None => {
                 let e = format!("Not a UnixSocketStream locator: {:?}", locator);

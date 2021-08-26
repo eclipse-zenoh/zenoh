@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::EndPoint as ZEndPoint;
 use super::*;
 use crate::net::transport::TransportManager;
 use async_std::net::SocketAddr;
@@ -116,14 +117,20 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn get_src(&self) -> Locator {
-        Locator::Quic(LocatorQuic::SocketAddr(self.src_addr))
+        Locator {
+            address: LocatorAddress::Quic(LocatorQuic::SocketAddr(self.src_addr)),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
     fn get_dst(&self) -> Locator {
-        Locator::Quic(LocatorQuic::SocketAddr(
-            self.connection.connection.remote_address(),
-        ))
+        Locator {
+            address: LocatorAddress::Quic(LocatorQuic::SocketAddr(
+                self.connection.connection.remote_address(),
+            )),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
@@ -210,11 +217,11 @@ impl LinkManagerUnicastQuic {
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(
         &self,
-        locator: &Locator,
+        endpoint: &ZEndPoint,
         ps: Option<&LocatorProperty>,
     ) -> ZResult<LinkUnicast> {
-        let domain = get_quic_dns(locator).await?;
-        let addr = get_quic_addr(locator).await?;
+        let domain = get_quic_dns(&endpoint.locator).await?;
+        let addr = get_quic_addr(&endpoint.locator).await?;
         let host: &str = domain.as_ref().into();
 
         // Initialize the QUIC connection
@@ -272,10 +279,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
     async fn new_listener(
         &self,
-        locator: &Locator,
+        endpoint: &EndPoint,
         ps: Option<&LocatorProperty>,
     ) -> ZResult<Locator> {
-        let addr = get_quic_addr(locator).await?;
+        let addr = get_quic_addr(&endpoint.locator).await?;
 
         // Verify there is a valid ServerConfig
         let prop = ps.as_ref().ok_or_else(|| {
@@ -328,11 +335,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
-        Ok(Locator::Quic(LocatorQuic::SocketAddr(local_addr)))
+        let locator = Locator {
+            address: LocatorAddress::Quic(LocatorQuic::SocketAddr(local_addr)),
+            metadata: None,
+        };
+        Ok(locator)
     }
 
-    async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let addr = get_quic_addr(locator).await?;
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let addr = get_quic_addr(&endpoint.locator).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -353,7 +364,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     fn get_listeners(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .keys()
-            .map(|x| Locator::Quic(LocatorQuic::SocketAddr(*x)))
+            .map(|x| Locator {
+                address: LocatorAddress::Quic(LocatorQuic::SocketAddr(*x)),
+                metadata: None,
+            })
             .collect()
     }
 
@@ -377,7 +391,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         }
         locators
             .into_iter()
-            .map(|x| Locator::Quic(LocatorQuic::SocketAddr(x)))
+            .map(|x| Locator {
+                address: LocatorAddress::Quic(LocatorQuic::SocketAddr(x)),
+                metadata: None,
+            })
             .collect()
     }
 }

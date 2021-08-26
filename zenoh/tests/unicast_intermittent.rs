@@ -19,7 +19,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
-use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
+use zenoh::net::link::{EndPoint, LinkUnicast, LocatorProperty};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
@@ -133,7 +133,10 @@ impl TransportUnicastEventHandler for SCClient {
     }
 }
 
-async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<LocatorProperty>>) {
+async fn transport_intermittent(
+    endpoint: &EndPoint,
+    locator_property: Option<Vec<LocatorProperty>>,
+) {
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
@@ -203,14 +206,14 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     /* [1] */
     // Add a listener to the router
     println!("\nTransport Intermittent [1a1]");
-    let _ = router_manager.add_listener(&locator).await.unwrap();
+    let _ = router_manager.add_listener(endpoint).await.unwrap();
     let locators = router_manager.get_listeners();
     println!("Transport Intermittent [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     /* [2] */
     // Open a transport from client01 to the router
-    let c_ses1 = client01_manager.open_transport(&locator).await.unwrap();
+    let c_ses1 = client01_manager.open_transport(endpoint).await.unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
     assert_eq!(client01_manager.get_transports().len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
@@ -218,14 +221,17 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     /* [3] */
     // Continously open and close transport from client02 and client03 to the router
     let c_client02_manager = client02_manager.clone();
-    let c_locator = locator.clone();
+    let c_endpoint = endpoint.clone();
     let c_router_id = router_id;
     let c2_handle = task::spawn(async move {
         loop {
             print!("+");
             std::io::stdout().flush().unwrap();
 
-            let c_ses2 = c_client02_manager.open_transport(&c_locator).await.unwrap();
+            let c_ses2 = c_client02_manager
+                .open_transport(&c_endpoint)
+                .await
+                .unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
             assert_eq!(c_client02_manager.get_transports().len(), 1);
             assert_eq!(c_ses2.get_pid().unwrap(), c_router_id);
@@ -242,14 +248,17 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     });
 
     let c_client03_manager = client03_manager.clone();
-    let c_locator = locator.clone();
+    let c_endpoint = endpoint.clone();
     let c_router_id = router_id;
     let c3_handle = task::spawn(async move {
         loop {
             print!("*");
             std::io::stdout().flush().unwrap();
 
-            let c_ses3 = c_client03_manager.open_transport(&c_locator).await.unwrap();
+            let c_ses3 = c_client03_manager
+                .open_transport(&c_endpoint)
+                .await
+                .unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
             assert_eq!(c_client03_manager.get_transports().len(), 1);
             assert_eq!(c_ses3.get_pid().unwrap(), c_router_id);
@@ -381,7 +390,7 @@ async fn transport_intermittent(locator: Locator, locator_property: Option<Vec<L
     /* [7] */
     // Perform clean up of the open locators
     println!("\nTransport Intermittent [7a1]");
-    let res = router_manager.del_listener(&locator).await;
+    let res = router_manager.del_listener(endpoint).await;
     println!("Transport Intermittent [7a2]: {:?}", res);
     assert!(res.is_ok());
 
@@ -397,6 +406,6 @@ fn transport_tcp_intermittent() {
         zasync_executor_init!();
     });
 
-    let locator = "tcp/127.0.0.1:12447".parse().unwrap();
-    task::block_on(transport_intermittent(locator, None));
+    let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
+    task::block_on(transport_intermittent(&endpoint, None));
 }

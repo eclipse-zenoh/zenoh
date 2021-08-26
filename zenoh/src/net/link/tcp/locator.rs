@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::Locator;
+use super::{Locator, LocatorAddress};
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::fmt;
 use std::str::FromStr;
@@ -19,8 +19,8 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_tcp_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match locator {
-        Locator::Tcp(addr) => match addr {
+    match &locator.address {
+        LocatorAddress::Tcp(addr) => match addr {
             LocatorTcp::SocketAddr(addr) => Ok(*addr),
             LocatorTcp::DnsName(addr) => match addr.to_socket_addrs().await {
                 Ok(mut addr_iter) => {
