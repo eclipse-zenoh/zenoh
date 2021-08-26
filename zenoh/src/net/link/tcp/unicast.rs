@@ -13,7 +13,7 @@
 //
 use super::*;
 use crate::net::transport::TransportManager;
-use async_std::net::{SocketAddr, TcpListener, TcpStream};
+use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -177,6 +177,7 @@ impl fmt::Debug for LinkUnicastTcp {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerUnicastTcp {
+    endpoint: EndPoint,
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
@@ -184,11 +185,13 @@ struct ListenerUnicastTcp {
 
 impl ListenerUnicastTcp {
     fn new(
+        endpoint: EndPoint,
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
     ) -> ListenerUnicastTcp {
         ListenerUnicastTcp {
+            endpoint,
             active,
             signal,
             handle,
@@ -212,8 +215,8 @@ impl LinkManagerUnicastTcp {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
-    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkUnicast> {
-        let dst_addr = get_tcp_addr(&endpoint.locator).await?;
+    async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
+        let dst_addr = get_tcp_addr(&endpoint.locator.address).await?;
 
         let stream = TcpStream::connect(dst_addr).await.map_err(|e| {
             let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
@@ -235,8 +238,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(&self, endpoint: &EndPoint) -> ZResult<Locator> {
-        let addr = get_tcp_addr(&endpoint.locator).await?;
+    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+        let addr = get_tcp_addr(&endpoint.locator.address).await?;
 
         // Bind the TCP socket
         let socket = TcpListener::bind(addr).await.map_err(|e| {
@@ -248,6 +251,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?;
+
+        // Update the endpoint locator address
+        endpoint.locator.address = LocatorAddress::Tcp(LocatorTcp::SocketAddr(local_addr));
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -265,19 +271,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             res
         });
 
-        let listener = ListenerUnicastTcp::new(active, signal, handle);
+        let locator = endpoint.locator.clone();
+        let listener = ListenerUnicastTcp::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
-        let locator = Locator {
-            address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(local_addr)),
-            metadata: None,
-        };
         Ok(locator)
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_tcp_addr(&endpoint.locator).await?;
+        let addr = get_tcp_addr(&endpoint.locator.address).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -295,39 +298,57 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         listener.handle.await
     }
 
-    fn get_listeners(&self) -> Vec<Locator> {
+    fn get_listeners(&self) -> Vec<EndPoint> {
         zread!(self.listeners)
-            .keys()
-            .map(|x| Locator {
-                address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(*x)),
-                metadata: None,
-            })
+            .values()
+            .map(|l| l.endpoint.clone())
             .collect()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
-        for addr in zread!(self.listeners).keys() {
-            if addr.ip() == std::net::Ipv4Addr::new(0, 0, 0, 0) {
+        let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
+        let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+
+        for (key, value) in zread!(self.listeners).iter() {
+            if key.ip() == default_ipv4 {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && ipaddr.is_ipv4() {
-                                locators.push(SocketAddr::new(ipaddr, addr.port()));
+                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
+                                locators.push((
+                                    SocketAddr::new(ipaddr, key.port()),
+                                    value.endpoint.locator.metadata.clone(),
+                                ));
+                            }
+                        }
+                    }
+                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                }
+            } else if key.ip() == default_ipv6 {
+                match zenoh_util::net::get_local_addresses() {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
+                                locators.push((
+                                    SocketAddr::new(ipaddr, key.port()),
+                                    value.endpoint.locator.metadata.clone(),
+                                ));
                             }
                         }
                     }
                     Err(err) => log::error!("Unable to get local addresses : {}", err),
                 }
             } else {
-                locators.push(*addr)
+                locators.push((*key, value.endpoint.locator.metadata.clone()));
             }
         }
+
         locators
             .into_iter()
-            .map(|x| Locator {
-                address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(x)),
-                metadata: None,
+            .map(|(addr, metadata)| Locator {
+                address: LocatorAddress::Tcp(LocatorTcp::SocketAddr(addr)),
+                metadata,
             })
             .collect()
     }

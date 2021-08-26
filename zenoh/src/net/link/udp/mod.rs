@@ -57,5 +57,5 @@ zconfigurable! {
 }
 
 pub mod config {
-    pub const UDP_MULTICAST_IFACE: &str = "iface";
+    pub const UDP_MULTICAST_SRC_IFACE: &str = "src_iface";
 }

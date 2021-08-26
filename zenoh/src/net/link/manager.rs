@@ -34,10 +34,10 @@ use zenoh_util::zerror;
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
 pub trait LinkManagerUnicastTrait: Send + Sync {
-    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkUnicast>;
-    async fn new_listener(&self, endpoint: &EndPoint) -> ZResult<Locator>;
+    async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast>;
+    async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator>;
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()>;
-    fn get_listeners(&self) -> Vec<Locator>;
+    fn get_listeners(&self) -> Vec<EndPoint>;
     fn get_locators(&self) -> Vec<Locator>;
 }
 

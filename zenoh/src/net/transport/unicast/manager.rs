@@ -290,7 +290,7 @@ impl TransportManager {
             };
             endpoint.config = Some(Arc::new(config));
         };
-        manager.new_listener(&endpoint).await
+        manager.new_listener(endpoint).await
     }
 
     pub async fn del_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
@@ -302,8 +302,8 @@ impl TransportManager {
         Ok(())
     }
 
-    pub fn get_listeners_unicast(&self) -> Vec<Locator> {
-        let mut vec: Vec<Locator> = vec![];
+    pub fn get_listeners_unicast(&self) -> Vec<EndPoint> {
+        let mut vec: Vec<EndPoint> = vec![];
         for p in zlock!(self.state.unicast.protocols).values() {
             vec.extend_from_slice(&p.get_listeners());
         }
@@ -436,7 +436,7 @@ impl TransportManager {
         };
 
         // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(&endpoint).await?;
+        let link = manager.new_link(endpoint).await?;
         // Open the link
         super::establishment::open_link(self, &link).await
     }

@@ -24,8 +24,8 @@ use zenoh_util::properties::Properties;
 use zenoh_util::{zerror, zerror2};
 
 #[allow(unreachable_patterns)]
-pub(super) async fn get_tls_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    match &locator.address {
+pub(super) async fn get_tls_addr(address: &LocatorAddress) -> ZResult<SocketAddr> {
+    match &address {
         LocatorAddress::Tls(addr) => match addr {
             LocatorTls::SocketAddr(addr) => Ok(*addr),
             LocatorTls::DnsName(addr) => match addr.to_socket_addrs().await {
@@ -33,7 +33,7 @@ pub(super) async fn get_tls_addr(locator: &Locator) -> ZResult<SocketAddr> {
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve TLS locator: {}", addr);
+                        let e = format!("Couldn't resolve TLS locator address: {}", addr);
                         zerror!(ZErrorKind::InvalidLocator { descr: e })
                     }
                 }
@@ -44,15 +44,15 @@ pub(super) async fn get_tls_addr(locator: &Locator) -> ZResult<SocketAddr> {
             },
         },
         _ => {
-            let e = format!("Not a TLS locator: {}", locator);
+            let e = format!("Not a TLS locator address: {}", address);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }
 }
 
 #[allow(unreachable_patterns)]
-pub(super) async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
-    match &locator.address {
+pub(super) async fn get_tls_dns(address: &LocatorAddress) -> ZResult<DNSName> {
+    match &address {
         LocatorAddress::Tls(addr) => match addr {
             LocatorTls::SocketAddr(addr) => {
                 let e = format!("Couldn't get domain from SocketAddr: {}", addr);
@@ -78,7 +78,7 @@ pub(super) async fn get_tls_dns(locator: &Locator) -> ZResult<DNSName> {
             }
         },
         _ => {
-            let e = format!("Not a TLS locator: {}", locator);
+            let e = format!("Not a TLS locator address: {}", address);
             return zerror!(ZErrorKind::InvalidLocator { descr: e });
         }
     }

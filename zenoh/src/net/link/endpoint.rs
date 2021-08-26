@@ -222,7 +222,7 @@ impl LocatorConfig {
                 ps.insert(LocatorProtocol::Quic, p);
             }
         }
-        #[cfg(feature = "transport_unixsock-stream")]
+        #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
         {
             let mut res = LocatorConfigUnixSocketStream::from_config(config)?;
             if let Some(p) = res.take() {
