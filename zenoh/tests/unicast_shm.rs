@@ -21,7 +21,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh::net::link::{LinkUnicast, Locator};
+    use zenoh::net::link::{EndPoint, LinkUnicast};
     use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
@@ -123,7 +123,7 @@ mod tests {
         }
     }
 
-    async fn run(locator: &Locator) {
+    async fn run(endpoint: &EndPoint) {
         // Define client and router IDs
         let peer_shm01 = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
         let peer_shm02 = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -173,7 +173,7 @@ mod tests {
         // Create the listener on the peer
         println!("\nTransport SHM [1a]");
         let _ = peer_shm01_manager
-            .add_listener(locator)
+            .add_listener(endpoint.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -182,7 +182,7 @@ mod tests {
         // Create a transport with the peer
         println!("Transport SHM [1b]");
         let _ = peer_shm02_manager
-            .open_transport(locator)
+            .open_transport(endpoint.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -191,7 +191,7 @@ mod tests {
         // Create a transport with the peer
         println!("Transport SHM [1c]");
         let _ = peer_net01_manager
-            .open_transport(locator)
+            .open_transport(endpoint.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -345,7 +345,7 @@ mod tests {
         // Delete the listener
         println!("Transport SHM [6a]");
         let _ = peer_shm01_manager
-            .del_listener(locator)
+            .del_listener(endpoint)
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -363,7 +363,7 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let locator: Locator = "tcp/127.0.0.1:12447".parse().unwrap();
-        task::block_on(run(&locator));
+        let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
+        task::block_on(run(&endpoint));
     }
 }

@@ -154,7 +154,7 @@ impl SharedMemoryAuthenticator {
         }
     }
 
-    pub async fn from_properties(
+    pub async fn from_config(
         config: &ConfigProperties,
     ) -> ZResult<Option<SharedMemoryAuthenticator>> {
         let is_shm: bool = zparse!(config.get_or(&ZN_SHM_KEY, ZN_SHM_DEFAULT))?;

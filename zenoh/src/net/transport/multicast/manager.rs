@@ -89,7 +89,7 @@ impl TransportManagerConfigBuilderMulticast {
         self
     }
 
-    pub async fn from_properties(
+    pub async fn from_config(
         mut self,
         properties: &ConfigProperties,
     ) -> ZResult<TransportManagerConfigBuilderMulticast> {
@@ -170,22 +170,42 @@ impl TransportManager {
     /*************************************/
     /*             TRANSPORT             */
     /*************************************/
-    pub async fn open_transport_multicast(&self, locator: &Locator) -> ZResult<TransportMulticast> {
-        if !locator.is_multicast() {
+    pub async fn open_transport_multicast(
+        &self,
+        mut endpoint: EndPoint,
+    ) -> ZResult<TransportMulticast> {
+        if !endpoint.locator.address.is_multicast() {
             return zerror!(ZErrorKind::InvalidLocator {
                 descr: format!(
-                    "Can not open a multicast transport with a unicast locator: {}.",
-                    locator
+                    "Can not open a multicast transport with a unicast unicast: {}.",
+                    endpoint
                 )
             });
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.new_link_manager_multicast(&locator.get_proto())?;
-        let ps = self.config.locator_property.get(&locator.get_proto());
-        // Open the multicast link throught the link manager
-        let link = manager.new_link(locator, ps).await?;
+        let manager = self.new_link_manager_multicast(&endpoint.locator.address.get_proto())?;
+        // Fill and merge the endpoint configuration
+        if let Some(config) = self
+            .config
+            .endpoint
+            .get(&endpoint.locator.address.get_proto())
+        {
+            let config = match endpoint.config.as_ref() {
+                Some(ec) => {
+                    let mut config = config.clone();
+                    for (k, v) in ec.iter() {
+                        config.insert(k.clone(), v.clone());
+                    }
+                    config
+                }
+                None => config.clone(),
+            };
+            endpoint.config = Some(Arc::new(config));
+        };
+
         // Open the link
+        let link = manager.new_link(&endpoint).await?;
         super::establishment::open_link(self, link).await
     }
 
@@ -206,8 +226,8 @@ impl TransportManager {
         let mut guard = zlock!(self.state.multicast.transports);
         let res = guard.remove(locator);
 
-        let proto = locator.get_proto();
-        if !guard.iter().any(|(l, _)| l.get_proto() == proto) {
+        let proto = locator.address.get_proto();
+        if !guard.iter().any(|(l, _)| l.address.get_proto() == proto) {
             let _ = self.del_link_manager_multicast(&proto);
         }
 

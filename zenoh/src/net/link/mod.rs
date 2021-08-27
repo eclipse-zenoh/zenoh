@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod locator;
+mod endpoint;
 mod manager;
 #[cfg(feature = "transport_quic")]
 pub mod quic;
@@ -28,7 +28,7 @@ use crate::net::protocol::io::{WBuf, ZBuf};
 use crate::net::protocol::proto::TransportMessage;
 use async_std::sync::Arc;
 use async_trait::async_trait;
-pub use locator::*;
+pub use endpoint::*;
 pub use manager::*;
 use std::cmp::PartialEq;
 use std::fmt;

@@ -73,13 +73,13 @@ mod consts {
     pub const ZN_MULTICAST_INTERFACE_STR: &str = "multicast_interface";
     pub const ZN_MULTICAST_INTERFACE_DEFAULT: &str = ZN_AUTO;
 
-    /// The multicast address and ports to use for multicast scouting.
-    /// String key : `"multicast_address"`.
-    /// Accepted values : `<ip address>:<port>`.
+    /// The multicast IPv4 address and ports to use for multicast scouting.
+    /// String key : `"multicast_ipv4_address"`.
+    /// Accepted values : `<ipv4 address>:<port>`.
     /// Default value : `"224.0.0.224:7447"`.
-    pub const ZN_MULTICAST_ADDRESS_KEY: u64 = 0x47;
-    pub const ZN_MULTICAST_ADDRESS_STR: &str = "multicast_address";
-    pub const ZN_MULTICAST_ADDRESS_DEFAULT: &str = "224.0.0.224:7447";
+    pub const ZN_MULTICAST_IPV4_ADDRESS_KEY: u64 = 0x47;
+    pub const ZN_MULTICAST_IPV4_ADDRESS_STR: &str = "multicast_ipv4_address";
+    pub const ZN_MULTICAST_IPV4_ADDRESS_DEFAULT: &str = "224.0.0.224:7447";
 
     /// In client mode, the period dedicated to scouting a router before failing.
     /// String key : `"scouting_timeout"`.
@@ -299,6 +299,14 @@ mod consts {
     pub const ZN_LINK_RX_BUFF_SIZE_KEY: u64 = 0x76;
     pub const ZN_LINK_RX_BUFF_SIZE_STR: &str = "link_rx_buff_size";
     pub const ZN_LINK_RX_BUFF_SIZE_DEFAULT: &str = "16777216";
+
+    /// The multicast IPv6 address and ports to use for multicast scouting.
+    /// String key : `"multicast_ipv6_address"`.
+    /// Accepted values : `<ipv6 address>:<port>`.
+    /// Default value : `"[ff24::224]:7447"`.
+    pub const ZN_MULTICAST_IPV6_ADDRESS_KEY: u64 = 0x77;
+    pub const ZN_MULTICAST_IPV6_ADDRESS_STR: &str = "multicast_ipv6_address";
+    pub const ZN_MULTICAST_IPV6_ADDRESS_DEFAULT: &str = "[ff24::224]:7447";
 }
 
 pub use consts::*;
@@ -317,7 +325,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_PASSWORD_STR => Some(ZN_PASSWORD_KEY),
             ZN_MULTICAST_SCOUTING_STR => Some(ZN_MULTICAST_SCOUTING_KEY),
             ZN_MULTICAST_INTERFACE_STR => Some(ZN_MULTICAST_INTERFACE_KEY),
-            ZN_MULTICAST_ADDRESS_STR => Some(ZN_MULTICAST_ADDRESS_KEY),
+            ZN_MULTICAST_IPV4_ADDRESS_STR => Some(ZN_MULTICAST_IPV4_ADDRESS_KEY),
             ZN_SCOUTING_TIMEOUT_STR => Some(ZN_SCOUTING_TIMEOUT_KEY),
             ZN_SCOUTING_DELAY_STR => Some(ZN_SCOUTING_DELAY_KEY),
             ZN_ADD_TIMESTAMP_STR => Some(ZN_ADD_TIMESTAMP_KEY),
@@ -347,6 +355,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_JOIN_INTERVAL_STR => Some(ZN_JOIN_INTERVAL_KEY),
             ZN_DEFRAG_BUFF_SIZE_STR => Some(ZN_DEFRAG_BUFF_SIZE_KEY),
             ZN_LINK_RX_BUFF_SIZE_STR => Some(ZN_LINK_RX_BUFF_SIZE_KEY),
+            ZN_MULTICAST_IPV6_ADDRESS_STR => Some(ZN_MULTICAST_IPV6_ADDRESS_KEY),
             _ => None,
         }
     }
@@ -360,7 +369,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_PASSWORD_KEY => Some(ZN_PASSWORD_STR.to_string()),
             ZN_MULTICAST_SCOUTING_KEY => Some(ZN_MULTICAST_SCOUTING_STR.to_string()),
             ZN_MULTICAST_INTERFACE_KEY => Some(ZN_MULTICAST_INTERFACE_STR.to_string()),
-            ZN_MULTICAST_ADDRESS_KEY => Some(ZN_MULTICAST_ADDRESS_STR.to_string()),
+            ZN_MULTICAST_IPV4_ADDRESS_KEY => Some(ZN_MULTICAST_IPV4_ADDRESS_STR.to_string()),
             ZN_SCOUTING_TIMEOUT_KEY => Some(ZN_SCOUTING_TIMEOUT_STR.to_string()),
             ZN_SCOUTING_DELAY_KEY => Some(ZN_SCOUTING_DELAY_STR.to_string()),
             ZN_ADD_TIMESTAMP_KEY => Some(ZN_ADD_TIMESTAMP_STR.to_string()),
@@ -393,6 +402,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_JOIN_INTERVAL_KEY => Some(ZN_JOIN_INTERVAL_STR.to_string()),
             ZN_DEFRAG_BUFF_SIZE_KEY => Some(ZN_DEFRAG_BUFF_SIZE_STR.to_string()),
             ZN_LINK_RX_BUFF_SIZE_KEY => Some(ZN_LINK_RX_BUFF_SIZE_STR.to_string()),
+            ZN_MULTICAST_IPV6_ADDRESS_KEY => Some(ZN_MULTICAST_IPV6_ADDRESS_STR.to_string()),
             _ => None,
         }
     }

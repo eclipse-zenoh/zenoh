@@ -138,7 +138,7 @@ impl TransportManagerConfigBuilderUnicast {
         self
     }
 
-    pub async fn from_properties(
+    pub async fn from_config(
         mut self,
         properties: &ConfigProperties,
     ) -> ZResult<TransportManagerConfigBuilderUnicast> {
@@ -168,8 +168,8 @@ impl TransportManagerConfigBuilderUnicast {
             self = self.shm(zparse!(v)?);
         }
 
-        self = self.peer_authenticator(PeerAuthenticator::from_properties(properties).await?);
-        self = self.link_authenticator(LinkAuthenticator::from_properties(properties).await?);
+        self = self.peer_authenticator(PeerAuthenticator::from_config(properties).await?);
+        self = self.link_authenticator(LinkAuthenticator::from_config(properties).await?);
 
         Ok(self)
     }
@@ -270,23 +270,40 @@ impl TransportManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_listener_unicast(&self, locator: &Locator) -> ZResult<Locator> {
-        let manager = self.new_link_manager_unicast(&locator.get_proto())?;
-        let ps = self.config.locator_property.get(&locator.get_proto());
-        manager.new_listener(locator, ps).await
+    pub async fn add_listener_unicast(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+        let manager = self.new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+        // Fill and merge the endpoint configuration
+        if let Some(config) = self
+            .config
+            .endpoint
+            .get(&endpoint.locator.address.get_proto())
+        {
+            let config = match endpoint.config.as_ref() {
+                Some(ec) => {
+                    let mut config = config.clone();
+                    for (k, v) in ec.iter() {
+                        config.insert(k.clone(), v.clone());
+                    }
+                    config
+                }
+                None => config.clone(),
+            };
+            endpoint.config = Some(Arc::new(config));
+        };
+        manager.new_listener(endpoint).await
     }
 
-    pub async fn del_listener_unicast(&self, locator: &Locator) -> ZResult<()> {
-        let lm = self.get_link_manager_unicast(&locator.get_proto())?;
-        lm.del_listener(locator).await?;
+    pub async fn del_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let lm = self.get_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+        lm.del_listener(endpoint).await?;
         if lm.get_listeners().is_empty() {
-            self.del_link_manager_unicast(&locator.get_proto())?;
+            self.del_link_manager_unicast(&endpoint.locator.address.get_proto())?;
         }
         Ok(())
     }
 
-    pub fn get_listeners_unicast(&self) -> Vec<Locator> {
-        let mut vec: Vec<Locator> = vec![];
+    pub fn get_listeners_unicast(&self) -> Vec<EndPoint> {
+        let mut vec: Vec<EndPoint> = vec![];
         for p in zlock!(self.state.unicast.protocols).values() {
             vec.extend_from_slice(&p.get_listeners());
         }
@@ -384,21 +401,42 @@ impl TransportManager {
         Ok(transport)
     }
 
-    pub async fn open_transport_unicast(&self, locator: &Locator) -> ZResult<TransportUnicast> {
-        if locator.is_multicast() {
+    pub async fn open_transport_unicast(
+        &self,
+        mut endpoint: EndPoint,
+    ) -> ZResult<TransportUnicast> {
+        if endpoint.locator.address.is_multicast() {
             return zerror!(ZErrorKind::InvalidLocator {
                 descr: format!(
-                    "Can not open a unicast transport with a multicast locator: {}.",
-                    locator
+                    "Can not open a unicast transport with a multicast endpoint: {}.",
+                    endpoint
                 )
             });
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.new_link_manager_unicast(&locator.get_proto())?;
-        let ps = self.config.locator_property.get(&locator.get_proto());
+        let manager = self.new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+        // Fill and merge the endpoint configuration
+        if let Some(config) = self
+            .config
+            .endpoint
+            .get(&endpoint.locator.address.get_proto())
+        {
+            let config = match endpoint.config.as_ref() {
+                Some(ec) => {
+                    let mut config = config.clone();
+                    for (k, v) in ec.iter() {
+                        config.insert(k.clone(), v.clone());
+                    }
+                    config
+                }
+                None => config.clone(),
+            };
+            endpoint.config = Some(Arc::new(config));
+        };
+
         // Create a new link associated by calling the Link Manager
-        let link = manager.new_link(locator, ps).await?;
+        let link = manager.new_link(endpoint).await?;
         // Open the link
         super::establishment::open_link(self, &link).await
     }
@@ -431,11 +469,7 @@ impl TransportManager {
         Ok(())
     }
 
-    pub(crate) async fn handle_new_link_unicast(
-        &self,
-        link: LinkUnicast,
-        properties: Option<LocatorProperty>,
-    ) {
+    pub(crate) async fn handle_new_link_unicast(&self, link: LinkUnicast) {
         let mut guard = zasynclock!(self.state.unicast.incoming);
         if guard.len() >= self.config.unicast.open_pending {
             // We reached the limit of concurrent incoming transport, this means two things:
@@ -455,7 +489,7 @@ impl TransportManager {
 
         let mut peer_id: Option<PeerId> = None;
         for la in self.config.unicast.link_authenticator.iter() {
-            let res = la.handle_new_link(&link, properties.as_ref()).await;
+            let res = la.handle_new_link(&link).await;
             match res {
                 Ok(pid) => {
                     // Check that all the peer authenticators, eventually return the same PeerId
@@ -487,7 +521,6 @@ impl TransportManager {
                 src: link.get_src(),
                 dst: link.get_dst(),
                 peer_id,
-                properties,
             };
 
             let res = super::establishment::accept_link(&c_manager, &link, &auth_link)

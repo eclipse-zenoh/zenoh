@@ -15,7 +15,7 @@ use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
 use std::time::Duration;
-use zenoh::net::link::{Locator, LocatorProperty};
+use zenoh::net::link::EndPoint;
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::transport::{
     DummyTransportUnicastEventHandler, TransportEventHandler, TransportManager,
@@ -23,6 +23,7 @@ use zenoh::net::transport::{
     TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::properties::Properties;
 use zenoh_util::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -73,7 +74,7 @@ impl TransportEventHandler for SHClientOpenClose {
     }
 }
 
-async fn openclose_transport(locator: Locator, locator_property: Option<Vec<LocatorProperty>>) {
+async fn openclose_transport(endpoint: &EndPoint) {
     /* [ROUTER] */
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
 
@@ -82,7 +83,6 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -100,7 +100,6 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client01_id)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -114,7 +113,6 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client02_id)
-        .locator_property(locator_property.unwrap_or_else(Vec::new))
         .unicast(
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
@@ -127,7 +125,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     /* [1] */
     println!("\nTransport Open Close [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(&locator).await;
+    let res = router_manager.add_listener(endpoint.clone()).await;
     println!("Transport Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Open Close [1a2]");
@@ -138,7 +136,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open a first transport from the client to the router
     // -> This should be accepted
     println!("Transport Open Close [1c1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -178,7 +176,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open a second transport from the client to the router
     // -> This should be accepted
     println!("\nTransport Open Close [2a1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [2a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -217,7 +215,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open transport -> This should be rejected because
     // of the maximum limit of links per transport
     println!("\nTransport Open Close [3a1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
     println!("Transport Open Close [3b1]");
@@ -278,7 +276,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open transport -> This should be accepted because
     // the number of links should be back to 0
     println!("\nTransport Open Close [5a1]");
-    let res = client01_manager.open_transport(&locator).await;
+    let res = client01_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [5a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
@@ -312,7 +310,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open transport -> This should be rejected because
     // of the maximum limit of transports
     println!("\nTransport Open Close [6a1]");
-    let res = client02_manager.open_transport(&locator).await;
+    let res = client02_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
     println!("Transport Open Close [6b1]");
@@ -365,7 +363,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     // Open transport -> This should be accepted because
     // the number of transports should be back to 0
     println!("\nTransport Open Close [8a1]");
-    let res = client02_manager.open_transport(&locator).await;
+    let res = client02_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [8a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();
@@ -427,7 +425,7 @@ async fn openclose_transport(locator: Locator, locator_property: Option<Vec<Loca
     /* [10] */
     // Perform clean up of the open locators
     println!("\nTransport Open Close [10a1]");
-    let res = router_manager.del_listener(&locator).await;
+    let res = router_manager.del_listener(endpoint).await;
     println!("Transport Open Close [10a2]: {:?}", res);
     assert!(res.is_ok());
 
@@ -441,8 +439,8 @@ fn openclose_tcp_only() {
         zasync_executor_init!();
     });
 
-    let locator = "tcp/127.0.0.1:8447".parse().unwrap();
-    task::block_on(openclose_transport(locator, None));
+    let endpoint: EndPoint = "tcp/127.0.0.1:8447".parse().unwrap();
+    task::block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -452,8 +450,8 @@ fn openclose_udp_only() {
         zasync_executor_init!();
     });
 
-    let locator = "udp/127.0.0.1:8447".parse().unwrap();
-    task::block_on(openclose_transport(locator, None));
+    let endpoint: EndPoint = "udp/127.0.0.1:8447".parse().unwrap();
+    task::block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -464,10 +462,10 @@ fn openclose_unix_only() {
     });
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let locator = "unixsock-stream/zenoh-test-unix-socket-9.sock"
+    let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-9.sock"
         .parse()
         .unwrap();
-    task::block_on(openclose_transport(locator, None));
+    task::block_on(openclose_transport(&endpoint));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
 }
@@ -475,12 +473,11 @@ fn openclose_unix_only() {
 #[cfg(feature = "transport_tls")]
 #[test]
 fn openclose_tls_only() {
+    use zenoh::net::link::tls::config::*;
+
     task::block_on(async {
         zasync_executor_init!();
     });
-
-    use std::io::Cursor;
-    use zenoh::net::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -513,7 +510,6 @@ JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
 LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
 ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
 -----END RSA PRIVATE KEY-----";
-    let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(key.as_bytes())).unwrap();
 
     let cert = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
@@ -534,13 +530,6 @@ QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
 F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
 AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
-    let certs = pemfile::certs(&mut Cursor::new(cert.as_bytes())).unwrap();
-
-    // Set this server to use one cert together with the loaded private key
-    let mut server_config = ServerConfig::new(NoClientAuth::new());
-    server_config
-        .set_single_cert(certs, keys.remove(0))
-        .unwrap();
 
     // Configure the client
     let ca = "-----BEGIN CERTIFICATE-----
@@ -564,29 +553,24 @@ pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
 tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
-    let mut client_config = ClientConfig::new();
-    client_config
-        .root_store
-        .add_pem_file(&mut Cursor::new(ca.as_bytes()))
-        .unwrap();
+    let mut endpoint: EndPoint = "tls/localhost:8448".parse().unwrap();
+    let mut config = Properties::default();
+    config.insert(TLS_ROOT_CA_CERTIFICATE_RAW.to_string(), ca.to_string());
+    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
+    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
+    endpoint.config = Some(Arc::new(config));
 
-    let locator = "tls/localhost:8448".parse().unwrap();
-    let property = vec![(client_config, server_config).into()];
-    task::block_on(openclose_transport(locator, Some(property)));
+    task::block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_quic")]
 #[test]
 fn openclose_quic_only() {
+    use zenoh::net::link::quic::config::*;
+
     task::block_on(async {
         zasync_executor_init!();
     });
-
-    use quinn::{
-        Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
-        ServerConfigBuilder, TransportConfig,
-    };
-    use zenoh::net::link::quic::ALPN_QUIC_HTTP;
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -619,7 +603,6 @@ JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
 LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
 ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
 -----END RSA PRIVATE KEY-----";
-    let keys = PrivateKey::from_pem(key.as_bytes()).unwrap();
 
     let cert = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
@@ -640,19 +623,6 @@ QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
 F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
 AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
-    let certs = CertificateChain::from_pem(cert.as_bytes()).unwrap();
-
-    // Set this server to use one cert together with the loaded private key
-    let mut transport_config = TransportConfig::default();
-    // We do not accept unidireactional streams.
-    transport_config.max_concurrent_uni_streams(0).unwrap();
-    // For the time being we only allow one bidirectional stream
-    transport_config.max_concurrent_bidi_streams(1).unwrap();
-    let mut server_config = ServerConfig::default();
-    server_config.transport = Arc::new(transport_config);
-    let mut server_config = ServerConfigBuilder::new(server_config);
-    server_config.protocols(ALPN_QUIC_HTTP);
-    server_config.certificate(certs, keys).unwrap();
 
     // Configure the client
     let ca = "-----BEGIN CERTIFICATE-----
@@ -675,14 +645,14 @@ M0AufDKUhroksKKiCmjsFj1x55VcU45Ag8069lzBk7ntcGQpHUUkwZzvD4FXf8IR
 pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
 tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
-    let ca = Certificate::from_pem(ca.as_bytes()).unwrap();
-
-    let mut client_config = ClientConfigBuilder::default();
-    client_config.protocols(ALPN_QUIC_HTTP);
-    client_config.add_certificate_authority(ca).unwrap();
 
     // Define the locator
-    let locator = "quic/localhost:8449".parse().unwrap();
-    let property = vec![(client_config, server_config).into()];
-    task::block_on(openclose_transport(locator, Some(property)));
+    let mut endpoint: EndPoint = "quic/localhost:8449".parse().unwrap();
+    let mut config = Properties::default();
+    config.insert(TLS_ROOT_CA_CERTIFICATE_RAW.to_string(), ca.to_string());
+    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
+    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
+    endpoint.config = Some(Arc::new(config));
+
+    task::block_on(openclose_transport(&endpoint));
 }

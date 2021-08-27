@@ -21,7 +21,7 @@ use super::tls::LinkManagerUnicastTls;
 use super::udp::{LinkManagerMulticastUdp, LinkManagerUnicastUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use super::unixsock_stream::LinkManagerUnicastUnixSocketStream;
-use super::{LinkMulticast, LinkUnicast, Locator, LocatorProperty, LocatorProtocol};
+use super::{EndPoint, LinkMulticast, LinkUnicast, Locator, LocatorProtocol};
 use crate::net::transport::TransportManager;
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -34,18 +34,10 @@ use zenoh_util::zerror;
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
 pub trait LinkManagerUnicastTrait: Send + Sync {
-    async fn new_link(
-        &self,
-        dst: &Locator,
-        property: Option<&LocatorProperty>,
-    ) -> ZResult<LinkUnicast>;
-    async fn new_listener(
-        &self,
-        locator: &Locator,
-        property: Option<&LocatorProperty>,
-    ) -> ZResult<Locator>;
-    async fn del_listener(&self, locator: &Locator) -> ZResult<()>;
-    fn get_listeners(&self) -> Vec<Locator>;
+    async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast>;
+    async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator>;
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()>;
+    fn get_listeners(&self) -> Vec<EndPoint>;
     fn get_locators(&self) -> Vec<Locator>;
 }
 
@@ -78,11 +70,7 @@ impl LinkManagerBuilderUnicast {
 /*************************************/
 #[async_trait]
 pub trait LinkManagerMulticastTrait: Send + Sync {
-    async fn new_link(
-        &self,
-        dst: &Locator,
-        property: Option<&LocatorProperty>,
-    ) -> ZResult<LinkMulticast>;
+    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkMulticast>;
 }
 
 pub type LinkManagerMulticast = Arc<dyn LinkManagerMulticastTrait>;

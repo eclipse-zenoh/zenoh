@@ -17,7 +17,7 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::link::{LinkUnicast, Locator, LocatorProperty};
+use zenoh::net::link::{EndPoint, LinkUnicast};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
@@ -29,6 +29,7 @@ use zenoh::net::transport::{
     TransportUnicastEventHandler,
 };
 use zenoh_util::core::ZResult;
+use zenoh_util::properties::Properties;
 use zenoh_util::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -142,8 +143,7 @@ impl TransportUnicastEventHandler for SCClient {
 }
 
 async fn open_transport(
-    locators: &[Locator],
-    locator_property: Option<Vec<LocatorProperty>>,
+    endpoints: &[EndPoint],
 ) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
@@ -152,33 +152,31 @@ async fn open_transport(
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
     let unicast = TransportManagerConfigUnicast::builder()
-        .max_links(locators.len())
+        .max_links(endpoints.len())
         .build();
     let config = TransportManagerConfig::builder()
         .pid(router_id)
         .whatami(whatami::ROUTER)
         .unicast(unicast)
-        .locator_property(locator_property.clone().unwrap_or_else(Vec::new))
         .build(router_handler.clone());
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
     let unicast = TransportManagerConfigUnicast::builder()
-        .max_links(locators.len())
+        .max_links(endpoints.len())
         .build();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::CLIENT)
         .pid(client_id)
         .unicast(unicast)
-        .locator_property(locator_property.unwrap_or_else(Vec::new))
         .build(Arc::new(SHClient::default()));
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
-    for l in locators.iter() {
-        println!("Add locator: {}", l);
+    for e in endpoints.iter() {
+        println!("Add endpoint: {}", e);
         let _ = router_manager
-            .add_listener(l)
+            .add_listener(e.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -187,10 +185,10 @@ async fn open_transport(
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
-    for l in locators.iter() {
-        println!("Opening transport with {}", l);
+    for e in endpoints.iter() {
+        println!("Opening transport with {}", e);
         let _ = client_manager
-            .open_transport(l)
+            .open_transport(e.clone())
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -206,14 +204,14 @@ async fn open_transport(
 async fn close_transport(
     router_manager: TransportManager,
     client_transport: TransportUnicast,
-    locators: &[Locator],
+    endpoints: &[EndPoint],
 ) {
     // Close the client transport
-    let mut ll = "".to_string();
-    for l in locators.iter() {
-        ll.push_str(&format!("{} ", l));
+    let mut ee = "".to_string();
+    for e in endpoints.iter() {
+        ee.push_str(&format!("{} ", e));
     }
-    println!("Closing transport with {}", ll);
+    println!("Closing transport with {}", ee);
     let _ = client_transport
         .close()
         .timeout(TIMEOUT)
@@ -225,10 +223,10 @@ async fn close_transport(
     task::sleep(SLEEP).await;
 
     // Stop the locators on the manager
-    for l in locators.iter() {
-        println!("Del locator: {}", l);
+    for e in endpoints.iter() {
+        println!("Del locator: {}", e);
         let _ = router_manager
-            .del_listener(l)
+            .del_listener(e)
             .timeout(TIMEOUT)
             .await
             .unwrap()
@@ -294,18 +292,13 @@ async fn single_run(
     task::sleep(SLEEP).await;
 }
 
-async fn run(
-    locators: &[Locator],
-    properties: Option<Vec<LocatorProperty>>,
-    channel: &[Channel],
-    msg_size: &[usize],
-) {
+async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
             let (router_manager, router_handler, client_transport) =
-                open_transport(locators, properties.clone()).await;
+                open_transport(endpoints).await;
             single_run(router_handler.clone(), client_transport.clone(), *ch, *ms).await;
-            close_transport(router_manager, client_transport, locators).await;
+            close_transport(router_manager, client_transport, endpoints).await;
         }
     }
 }
@@ -318,11 +311,10 @@ fn transport_unicast_tcp_only() {
     });
 
     // Define the locators
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10447".parse().unwrap(),
         "tcp/[::1]:10447".parse().unwrap(),
     ];
-    let properties = None;
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -343,7 +335,7 @@ fn transport_unicast_tcp_only() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -354,11 +346,10 @@ fn transport_unicast_udp_only() {
     });
 
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "udp/127.0.0.1:10447".parse().unwrap(),
         "udp/[::1]:10447".parse().unwrap(),
     ];
-    let properties = None;
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -371,7 +362,7 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -383,10 +374,9 @@ fn transport_unicast_unix_only() {
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
+    let endpoints: Vec<EndPoint> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
         .parse()
         .unwrap()];
-    let properties = None;
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -399,7 +389,7 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
@@ -412,13 +402,12 @@ fn transport_unicast_tcp_udp() {
     });
 
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10448".parse().unwrap(),
         "udp/127.0.0.1:10448".parse().unwrap(),
         "tcp/[::1]:10448".parse().unwrap(),
         "udp/[::1]:10448".parse().unwrap(),
     ];
-    let properties = None;
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -431,7 +420,7 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(
@@ -447,14 +436,13 @@ fn transport_unicast_tcp_unix() {
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10449".parse().unwrap(),
         "tcp/[::1]:10449".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-6.sock"
             .parse()
             .unwrap(),
     ];
-    let properties = None;
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -467,7 +455,7 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
 }
@@ -485,14 +473,13 @@ fn transport_unicast_udp_unix() {
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "udp/127.0.0.1:10449".parse().unwrap(),
         "udp/[::1]:10449".parse().unwrap(),
         "unixsock-stream/zenoh-test-unix-socket-7.sock"
             .parse()
             .unwrap(),
     ];
-    let properties = None;
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -505,7 +492,7 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
 }
@@ -524,7 +511,7 @@ fn transport_unicast_tcp_udp_unix() {
 
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     // Define the locator
-    let locators: Vec<Locator> = vec![
+    let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10450".parse().unwrap(),
         "udp/127.0.0.1:10450".parse().unwrap(),
         "tcp/[::1]:10450".parse().unwrap(),
@@ -533,7 +520,6 @@ fn transport_unicast_tcp_udp_unix() {
             .parse()
             .unwrap(),
     ];
-    let properties = None;
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -546,7 +532,7 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&locators, properties, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
 }
@@ -554,12 +540,11 @@ fn transport_unicast_tcp_udp_unix() {
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
 fn transport_unicast_tls_only() {
+    use zenoh::net::link::tls::config::*;
+
     task::block_on(async {
         zasync_executor_init!();
     });
-
-    use std::io::Cursor;
-    use zenoh::net::link::tls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig};
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -592,7 +577,6 @@ JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
 LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
 ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
 -----END RSA PRIVATE KEY-----";
-    let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(key.as_bytes())).unwrap();
 
     let cert = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
@@ -613,13 +597,6 @@ QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
 F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
 AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
-    let certs = pemfile::certs(&mut Cursor::new(cert.as_bytes())).unwrap();
-
-    // Set this server to use one cert together with the loaded private key
-    let mut server_config = ServerConfig::new(NoClientAuth::new());
-    server_config
-        .set_single_cert(certs, keys.remove(0))
-        .unwrap();
 
     // Configure the client
     let ca = "-----BEGIN CERTIFICATE-----
@@ -643,15 +620,13 @@ pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
 tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
-    let mut client_config = ClientConfig::new();
-    client_config
-        .root_store
-        .add_pem_file(&mut Cursor::new(ca.as_bytes()))
-        .unwrap();
-
     // Define the locator
-    let locators = vec!["tls/localhost:10451".parse().unwrap()];
-    let properties = vec![(client_config, server_config).into()];
+    let mut endpoint: EndPoint = "tls/localhost:10451".parse().unwrap();
+    let mut config = Properties::default();
+    config.insert(TLS_ROOT_CA_CERTIFICATE_RAW.to_string(), ca.to_string());
+    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
+    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
+    endpoint.config = Some(Arc::new(config));
 
     // Define the reliability and congestion control
     let channel = [
@@ -673,22 +648,18 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         },
     ];
     // Run
-    task::block_on(run(&locators, Some(properties), &channel, &MSG_SIZE_ALL));
+    let endpoints = vec![endpoint];
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_quic")]
 #[test]
 fn transport_unicast_quic_only() {
+    use zenoh::net::link::quic::config::*;
+
     task::block_on(async {
         zasync_executor_init!();
     });
-
-    use quinn::{
-        Certificate, CertificateChain, ClientConfigBuilder, PrivateKey, ServerConfig,
-        ServerConfigBuilder, TransportConfig,
-    };
-    use zenoh::net::link::quic::ALPN_QUIC_HTTP;
-
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
     //       mapping to any existing domain. The certificate and key
@@ -720,7 +691,6 @@ JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
 LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
 ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
 -----END RSA PRIVATE KEY-----";
-    let keys = PrivateKey::from_pem(key.as_bytes()).unwrap();
 
     let cert = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
@@ -741,19 +711,6 @@ QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
 F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
 AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
-    let certs = CertificateChain::from_pem(cert.as_bytes()).unwrap();
-
-    // Set this server to use one cert together with the loaded private key
-    let mut transport_config = TransportConfig::default();
-    // We do not accept unidireactional streams.
-    transport_config.max_concurrent_uni_streams(0).unwrap();
-    // For the time being we only allow one bidirectional stream
-    transport_config.max_concurrent_bidi_streams(1).unwrap();
-    let mut server_config = ServerConfig::default();
-    server_config.transport = Arc::new(transport_config);
-    let mut server_config = ServerConfigBuilder::new(server_config);
-    server_config.protocols(ALPN_QUIC_HTTP);
-    server_config.certificate(certs, keys).unwrap();
 
     // Configure the client
     let ca = "-----BEGIN CERTIFICATE-----
@@ -776,15 +733,14 @@ M0AufDKUhroksKKiCmjsFj1x55VcU45Ag8069lzBk7ntcGQpHUUkwZzvD4FXf8IR
 pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
 tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
-    let ca = Certificate::from_pem(ca.as_bytes()).unwrap();
-
-    let mut client_config = ClientConfigBuilder::default();
-    client_config.protocols(ALPN_QUIC_HTTP);
-    client_config.add_certificate_authority(ca).unwrap();
 
     // Define the locator
-    let locators = vec!["quic/localhost:10452".parse().unwrap()];
-    let properties = vec![(client_config, server_config).into()];
+    let mut endpoint: EndPoint = "quic/localhost:10452".parse().unwrap();
+    let mut config = Properties::default();
+    config.insert(TLS_ROOT_CA_CERTIFICATE_RAW.to_string(), ca.to_string());
+    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
+    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
+    endpoint.config = Some(Arc::new(config));
 
     // Define the reliability and congestion control
     let channel = [
@@ -806,5 +762,6 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         },
     ];
     // Run
-    task::block_on(run(&locators, Some(properties), &channel, &MSG_SIZE_ALL));
+    let endpoints = vec![endpoint];
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }

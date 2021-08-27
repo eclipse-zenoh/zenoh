@@ -592,7 +592,7 @@ fn codec_frame_batching() {
         // Contigous batch
         let mut wbuf = WBuf::new(64, true);
         // Written messages
-        let mut written: Vec<TransportMessage> = Vec::new();
+        let mut written: Vec<TransportMessage> = vec![];
 
         // Create empty frame message
         let channel = Channel::default();
@@ -641,7 +641,7 @@ fn codec_frame_batching() {
         assert!(wbuf.write_transport_message(&frame));
 
         // Write until we fill the batch
-        let mut messages: Vec<ZenohMessage> = Vec::new();
+        let mut messages: Vec<ZenohMessage> = vec![];
         loop {
             wbuf.mark();
             if wbuf.write_zenoh_message(&data) {
@@ -664,7 +664,7 @@ fn codec_frame_batching() {
         // Deserialize from the buffer
         let mut zbuf = ZBuf::from(&wbuf);
 
-        let mut read: Vec<TransportMessage> = Vec::new();
+        let mut read: Vec<TransportMessage> = vec![];
         while let Some(msg) = zbuf.read_transport_message() {
             read.push(msg);
         }

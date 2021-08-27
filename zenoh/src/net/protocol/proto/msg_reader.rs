@@ -584,7 +584,7 @@ impl ZBuf {
 
     fn read_declarations(&mut self) -> Option<Vec<Declaration>> {
         let len = self.read_zint()?;
-        let mut vec: Vec<Declaration> = Vec::new();
+        let mut vec: Vec<Declaration> = Vec::with_capacity(len as usize);
         for _ in 0..len {
             vec.push(self.read_declaration()?);
         }
@@ -680,7 +680,7 @@ impl ZBuf {
 
     fn read_link_state_list(&mut self, _header: u8) -> Option<ZenohBody> {
         let len = self.read_zint()?;
-        let mut link_states: Vec<LinkState> = Vec::new();
+        let mut link_states: Vec<LinkState> = Vec::with_capacity(len as usize);
         for _ in 0..len {
             link_states.push(self.read_link_state()?);
         }
@@ -707,7 +707,7 @@ impl ZBuf {
             None
         };
         let len = self.read_zint()?;
-        let mut links: Vec<ZInt> = Vec::new();
+        let mut links: Vec<ZInt> = Vec::with_capacity(len as usize);
         for _ in 0..len {
             links.push(self.read_zint()?);
         }

@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod locator;
+mod endpoint;
 mod unicast;
 
 use super::*;
-pub use locator::*;
+pub use endpoint::*;
 pub use unicast::*;
 
 // Default ALPN protocol
@@ -40,4 +40,17 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref QUIC_ACCEPT_THROTTLE_TIME: u64 = 100_000;
+}
+
+pub mod config {
+    use zenoh_util::properties::config::*;
+
+    pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = ZN_TLS_ROOT_CA_CERTIFICATE_STR;
+    pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "tls_root_ca_certificate_raw";
+
+    pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = ZN_TLS_SERVER_PRIVATE_KEY_STR;
+    pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "tls_server_private_key_raw";
+
+    pub const TLS_SERVER_CERTIFICATE_FILE: &str = ZN_TLS_SERVER_CERTIFICATE_STR;
+    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
 }

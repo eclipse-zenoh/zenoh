@@ -19,7 +19,7 @@ use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
-use crate::net::link::{Locator, LocatorProperty, LocatorProtocol};
+use crate::net::link::{EndPoint, Locator, LocatorConfig, LocatorProtocol};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
-use zenoh_util::properties::config::*;
+use zenoh_util::properties::{config::*, Properties};
 use zenoh_util::zparse;
 
 /// # Examples
@@ -92,7 +92,7 @@ pub struct TransportManagerConfig {
     pub link_rx_buff_size: usize,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
-    pub locator_property: HashMap<LocatorProtocol, LocatorProperty>,
+    pub endpoint: HashMap<LocatorProtocol, Properties>,
     pub handler: Arc<dyn TransportEventHandler>,
 }
 
@@ -112,7 +112,7 @@ pub struct TransportManagerConfigBuilder {
     link_rx_buff_size: usize,
     unicast: TransportManagerConfigUnicast,
     multicast: TransportManagerConfigMulticast,
-    locator_property: HashMap<LocatorProtocol, LocatorProperty>,
+    endpoint: HashMap<LocatorProtocol, Properties>,
 }
 
 impl TransportManagerConfigBuilder {
@@ -151,12 +151,8 @@ impl TransportManagerConfigBuilder {
         self
     }
 
-    pub fn locator_property(mut self, mut locator_property: Vec<LocatorProperty>) -> Self {
-        let mut hm = HashMap::new();
-        for lp in locator_property.drain(..) {
-            hm.insert(lp.get_proto(), lp);
-        }
-        self.locator_property = hm;
+    pub fn endpoint(mut self, endpoint: HashMap<LocatorProtocol, Properties>) -> Self {
+        self.endpoint = endpoint;
         self
     }
 
@@ -181,12 +177,12 @@ impl TransportManagerConfigBuilder {
             link_rx_buff_size: self.link_rx_buff_size,
             unicast: self.unicast,
             multicast: self.multicast,
-            locator_property: self.locator_property,
+            endpoint: self.endpoint,
             handler,
         }
     }
 
-    pub async fn from_properties(
+    pub async fn from_config(
         mut self,
         properties: &ConfigProperties,
     ) -> ZResult<TransportManagerConfigBuilder> {
@@ -211,10 +207,11 @@ impl TransportManagerConfigBuilder {
         if let Some(v) = properties.get(&ZN_LINK_RX_BUFF_SIZE_KEY) {
             self = self.link_rx_buff_size(zparse!(v)?);
         }
-        self = self.locator_property(LocatorProperty::from_properties(properties).await?);
+
+        self = self.endpoint(LocatorConfig::from_config(properties)?);
         self = self.unicast(
             TransportManagerConfigUnicast::builder()
-                .from_properties(properties)
+                .from_config(properties)
                 .await?
                 .build(),
         );
@@ -233,7 +230,7 @@ impl Default for TransportManagerConfigBuilder {
             batch_size: BATCH_SIZE,
             defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
             link_rx_buff_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
-            locator_property: HashMap::new(),
+            endpoint: HashMap::new(),
             unicast: TransportManagerConfigUnicast::default(),
             multicast: TransportManagerConfigMulticast::default(),
         }
@@ -289,25 +286,25 @@ impl TransportManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_listener(&self, locator: &Locator) -> ZResult<Locator> {
-        if locator.is_multicast() {
+    pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
+        if endpoint.locator.address.is_multicast() {
             // @TODO: multicast
             unimplemented!();
         } else {
-            self.add_listener_unicast(locator).await
+            self.add_listener_unicast(endpoint).await
         }
     }
 
-    pub async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        if locator.is_multicast() {
+    pub async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        if endpoint.locator.address.is_multicast() {
             // @TODO: multicast
             unimplemented!();
         } else {
-            self.del_listener_unicast(locator).await
+            self.del_listener_unicast(endpoint).await
         }
     }
 
-    pub fn get_listeners(&self) -> Vec<Locator> {
+    pub fn get_listeners(&self) -> Vec<EndPoint> {
         self.get_listeners_unicast()
         // @TODO: multicast
     }
@@ -330,12 +327,12 @@ impl TransportManager {
         // @TODO: multicast
     }
 
-    pub async fn open_transport(&self, locator: &Locator) -> ZResult<TransportUnicast> {
-        if locator.is_multicast() {
+    pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
+        if endpoint.locator.address.is_multicast() {
             // @TODO: multicast
             unimplemented!();
         } else {
-            self.open_transport_unicast(locator).await
+            self.open_transport_unicast(endpoint).await
         }
     }
 }

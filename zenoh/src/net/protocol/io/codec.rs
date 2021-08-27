@@ -163,7 +163,7 @@ impl ZBuf {
     #[inline(always)]
     pub fn read_locators(&mut self) -> Option<Vec<Locator>> {
         let len = self.read_zint()?;
-        let mut vec: Vec<Locator> = Vec::new();
+        let mut vec: Vec<Locator> = Vec::with_capacity(len as usize);
         for _ in 0..len {
             vec.push(self.read_locator()?);
         }
@@ -241,7 +241,7 @@ impl ZBuf {
 
     pub fn read_properties(&mut self) -> Option<Vec<Property>> {
         let len = self.read_zint()?;
-        let mut vec: Vec<Property> = Vec::new();
+        let mut vec: Vec<Property> = Vec::with_capacity(len as usize);
         for _ in 0..len {
             vec.push(self.read_property()?);
         }

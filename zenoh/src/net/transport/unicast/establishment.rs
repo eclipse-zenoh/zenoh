@@ -37,7 +37,7 @@ const WBUF_SIZE: usize = 64;
 /*************************************/
 /*              UTILS                */
 /*************************************/
-fn attachment_from_properties(ps: &[Property]) -> ZResult<Attachment> {
+fn attachment_from_config(ps: &[Property]) -> ZResult<Attachment> {
     if ps.is_empty() {
         let e = "Can not create an attachment with zero properties".to_string();
         zerror!(ZErrorKind::Other { descr: e })
@@ -148,7 +148,7 @@ async fn open_send_init_syn(
         manager.config.pid,
         manager.config.sn_resolution,
         manager.config.unicast.is_qos,
-        attachment_from_properties(&auth.properties).ok(),
+        attachment_from_config(&auth.properties).ok(),
     );
     let _ = link
         .write_transport_message(message)
@@ -294,7 +294,7 @@ async fn open_recv_init_ack(
         is_qos: init_ack.is_qos,
         initial_sn_tx,
         cookie: init_ack.cookie,
-        open_syn_attachment: attachment_from_properties(&auth.properties).ok(),
+        open_syn_attachment: attachment_from_config(&auth.properties).ok(),
         auth_transport: auth.transport,
     };
     Ok(output)
@@ -434,7 +434,6 @@ pub(crate) async fn open_link(
         src: link.get_src(),
         dst: link.get_src(),
         peer_id: None,
-        properties: None,
     };
 
     let res = open_stages(manager, link, &auth_link).await;
@@ -613,7 +612,7 @@ async fn accept_recv_init_syn(
         pid: init_syn.pid,
         sn_resolution: init_syn.sn_resolution,
         is_qos: init_syn.is_qos,
-        init_ack_attachment: attachment_from_properties(&auth.properties).ok(),
+        init_ack_attachment: attachment_from_config(&auth.properties).ok(),
         auth_transport: auth.transport,
     };
     Ok(output)
@@ -810,7 +809,7 @@ async fn accept_recv_open_syn(
         cookie,
         initial_sn: open_syn_initial_sn,
         lease: open_syn_lease,
-        open_ack_attachment: attachment_from_properties(&auth.properties).ok(),
+        open_ack_attachment: attachment_from_config(&auth.properties).ok(),
         auth_transport: auth.transport,
     };
     Ok(output)

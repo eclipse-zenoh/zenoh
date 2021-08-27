@@ -14,7 +14,7 @@
 use super::*;
 use crate::net::transport::TransportManager;
 use async_std::os::unix::net::{UnixListener, UnixStream};
-use async_std::path::{Path, PathBuf};
+use async_std::path::PathBuf;
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -99,16 +99,22 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
 
     #[inline(always)]
     fn get_src(&self) -> Locator {
-        Locator::UnixSocketStream(LocatorUnixSocketStream {
-            path: PathBuf::from(self.src_path.clone()),
-        })
+        Locator {
+            address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream {
+                path: PathBuf::from(self.src_path.clone()),
+            }),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
     fn get_dst(&self) -> Locator {
-        Locator::UnixSocketStream(LocatorUnixSocketStream {
-            path: PathBuf::from(self.dst_path.clone()),
-        })
+        Locator {
+            address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream {
+                path: PathBuf::from(self.dst_path.clone()),
+            }),
+            metadata: None,
+        }
     }
 
     #[inline(always)]
@@ -154,6 +160,7 @@ impl fmt::Debug for LinkUnicastUnixSocketStream {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerUnixSocketStream {
+    endpoint: EndPoint,
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
@@ -162,12 +169,14 @@ struct ListenerUnixSocketStream {
 
 impl ListenerUnixSocketStream {
     fn new(
+        endpoint: EndPoint,
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
         lock_fd: RawFd,
     ) -> ListenerUnixSocketStream {
         ListenerUnixSocketStream {
+            endpoint,
             active,
             signal,
             handle,
@@ -192,12 +201,8 @@ impl LinkManagerUnicastUnixSocketStream {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
-    async fn new_link(
-        &self,
-        locator: &Locator,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<LinkUnicast> {
-        let path = get_unix_path(locator)?;
+    async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
+        let path = get_unix_path(&endpoint.locator)?;
 
         // Create the UnixSocketStream connection
         let stream = UnixStream::connect(&path).await.map_err(|e| {
@@ -273,12 +278,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(
-        &self,
-        locator: &Locator,
-        _ps: Option<&LocatorProperty>,
-    ) -> ZResult<Locator> {
-        let path = get_unix_path_as_string(locator);
+    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+        let path = get_unix_path_as_string(&endpoint.locator);
 
         // Because of the lack of SO_REUSEADDR we have to check if the
         // file is still there and if it is not used by another process.
@@ -361,10 +362,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             zerror2!(ZErrorKind::InvalidLink { descr: e })
         })?);
 
-        let local_path_str = match local_path.to_str() {
-            Some(path_str) => path_str.to_string(),
-            None => "None".to_string(),
-        };
+        let local_path_str = local_path
+            .to_str()
+            .ok_or_else(|| {
+                let e = format!("Can not create a new UnixSocketStream listener on {}", path);
+                log::warn!("{}", e);
+                zerror2!(ZErrorKind::InvalidLink { descr: e })
+            })?
+            .to_string();
+
+        // Update the endpoint with the acutal local path
+        endpoint.locator.address =
+            LocatorAddress::UnixSocketStream(LocatorUnixSocketStream { path: local_path });
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -382,16 +391,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             res
         });
 
-        let listener = ListenerUnixSocketStream::new(active, signal, handle, lock_fd);
+        let locator = endpoint.locator.clone();
+        let listener = ListenerUnixSocketStream::new(endpoint, active, signal, handle, lock_fd);
         zwrite!(self.listeners).insert(local_path_str, listener);
 
-        Ok(Locator::UnixSocketStream(LocatorUnixSocketStream {
-            path: local_path,
-        }))
+        Ok(locator)
     }
 
-    async fn del_listener(&self, locator: &Locator) -> ZResult<()> {
-        let path = get_unix_path_as_string(locator);
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let path = get_unix_path_as_string(&endpoint.locator);
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
@@ -420,30 +428,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         res
     }
 
-    fn get_listeners(&self) -> Vec<Locator> {
+    fn get_listeners(&self) -> Vec<EndPoint> {
         zread!(self.listeners)
-            .keys()
-            .map(|x| {
-                Locator::UnixSocketStream(LocatorUnixSocketStream {
-                    path: PathBuf::from(x),
-                })
-            })
+            .values()
+            .map(|x| x.endpoint.clone())
             .collect()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
-        for addr in zread!(self.listeners).keys() {
-            let path = Path::new(&addr);
-            if !task::block_on(path.exists()) {
-                log::error!("Unable to get local addresses : {}", addr);
-            } else {
-                locators.push(PathBuf::from(addr));
-            }
-        }
-        locators
-            .into_iter()
-            .map(|x| Locator::UnixSocketStream(LocatorUnixSocketStream { path: x }))
+        zread!(self.listeners)
+            .values()
+            .map(|x| x.endpoint.locator.clone())
             .collect()
     }
 }
@@ -537,9 +532,7 @@ async fn accept_task(
         ));
 
         // Communicate the new link to the initial transport manager
-        manager
-            .handle_new_link_unicast(LinkUnicast(link), None)
-            .await;
+        manager.handle_new_link_unicast(LinkUnicast(link)).await;
     }
 
     Ok(())
