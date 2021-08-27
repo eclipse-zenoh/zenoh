@@ -11,27 +11,25 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, Weak};
-use async_std::task::JoinHandle;
-use std::collections::{HashMap, HashSet};
-use std::sync::{Mutex, RwLock};
-use uhlc::HLC;
-use zenoh_util::sync::get_mut_unchecked;
-
-use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
-use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::transport::{DeMux, Mux, Primitives, TransportUnicast, TransportUnicastEventHandler};
-use crate::net::link::LinkUnicast;
-
-use zenoh_util::core::ZResult;
-use zenoh_util::zconfigurable;
-
 use super::face::{Face, FaceState};
 use super::network::{shared_nodes, Network};
+use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
+use super::protocol::proto::{ZenohBody, ZenohMessage};
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
 use super::runtime::Runtime;
+use super::transport::{DeMux, Mux, Primitives, TransportUnicast, TransportUnicastEventHandler};
+use crate::net::link::LinkUnicast;
+use async_std::sync::{Arc, Weak};
+use async_std::task::JoinHandle;
+use std::any::Any;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, RwLock};
+use uhlc::HLC;
+use zenoh_util::core::ZResult;
+use zenoh_util::sync::get_mut_unchecked;
+use zenoh_util::zconfigurable;
 
 zconfigurable! {
     static ref LINK_CLOSURE_DELAY: u64 = 200;
@@ -294,7 +292,10 @@ impl Router {
         })
     }
 
-    pub fn new_transport(&self, transport: TransportUnicast) -> ZResult<Arc<LinkStateInterceptor>> {
+    pub fn new_transport_unicast(
+        &self,
+        transport: TransportUnicast,
+    ) -> ZResult<Arc<LinkStateInterceptor>> {
         let mut tables = zwrite!(self.tables);
         let whatami = transport.get_whatami()?;
 
@@ -369,8 +370,10 @@ impl LinkStateInterceptor {
             demux: DeMux::new(face),
         }
     }
+}
 
-    pub(crate) fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+impl TransportUnicastEventHandler for LinkStateInterceptor {
+    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         log::trace!("Recv {:?}", msg);
         match msg.body {
             ZenohBody::LinkStateList(list) => {
@@ -427,11 +430,11 @@ impl LinkStateInterceptor {
         }
     }
 
-    pub(crate) fn new_link(&self, _link: LinkUnicast) {}
+    fn new_link(&self, _link: LinkUnicast) {}
 
-    pub(crate) fn del_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: LinkUnicast) {}
 
-    pub(crate) fn closing(&self) {
+    fn closing(&self) {
         self.demux.closing();
         let tables_ref = self.tables.clone();
         let pid = self.transport.get_pid().unwrap();
@@ -482,5 +485,9 @@ impl LinkStateInterceptor {
         });
     }
 
-    pub(crate) fn closed(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }

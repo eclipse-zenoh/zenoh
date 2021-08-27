@@ -29,8 +29,9 @@ mod tests {
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::proto::ZenohMessage;
     use zenoh::net::transport::{
-        TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
-        TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
+        MulticastPeer, TransportEventHandler, TransportManager, TransportManagerConfig,
+        TransportMulticast, TransportMulticastEventHandler, TransportUnicast,
+        TransportUnicastEventHandler,
     };
     use zenoh_util::core::ZResult;
     use zenoh_util::properties::config::*;
@@ -96,8 +97,8 @@ mod tests {
             Ok(())
         }
 
-        fn new_peer(&self, _peer: PeerId) {}
-        fn del_peer(&self, _peer: PeerId) {}
+        fn new_peer(&self, _peer: MulticastPeer) {}
+        fn del_peer(&self, _peer: MulticastPeer) {}
         fn closing(&self) {}
         fn closed(&self) {}
 

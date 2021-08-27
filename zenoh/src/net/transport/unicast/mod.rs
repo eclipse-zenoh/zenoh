@@ -147,11 +147,6 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        self.schedule(message)
-    }
-
-    #[inline(always)]
     pub async fn close_link(&self, link: &LinkUnicast) -> ZResult<()> {
         let transport = zweak!(self.0)?;
         transport
@@ -167,6 +162,11 @@ impl TransportUnicast {
             Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
             Err(_) => Ok(()),
         }
+    }
+
+    #[inline(always)]
+    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+        self.schedule(message)
     }
 }
 

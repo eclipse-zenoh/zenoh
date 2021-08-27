@@ -16,7 +16,7 @@ use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
-use super::TransportMulticastEventHandler;
+use super::{MulticastPeer, TransportMulticastEventHandler};
 use crate::net::link::{LinkMulticast, Locator};
 use async_std::task;
 use async_trait::async_trait;
@@ -24,29 +24,34 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 
 /*************************************/
 /*             TRANSPORT             */
 /*************************************/
+#[derive(Clone)]
 pub(super) struct TransportMulticastPeer {
+    pub(super) locator: Locator,
     pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
-    pub(super) active: Arc<AtomicBool>,
+    pub(super) sn_resolution: ZInt,
+    pub(super) lease: Duration,
+    pub(super) whatchdog: Arc<AtomicBool>,
     pub(super) handle: TimedHandle,
     pub(super) conduit_rx: Box<[TransportConduitRx]>,
 }
 
 impl TransportMulticastPeer {
     pub(super) fn active(&self) {
-        self.active.store(true, Ordering::Release);
+        self.whatchdog.store(true, Ordering::Release);
     }
 }
 
 #[derive(Clone)]
 pub(super) struct TransportMulticastPeerLeaseTimer {
-    pub(super) active: Arc<AtomicBool>,
+    pub(super) whatchdog: Arc<AtomicBool>,
     locator: Locator,
     transport: TransportMulticastInner,
 }
@@ -54,7 +59,7 @@ pub(super) struct TransportMulticastPeerLeaseTimer {
 #[async_trait]
 impl Timed for TransportMulticastPeerLeaseTimer {
     async fn run(&mut self) {
-        let is_active = self.active.swap(false, Ordering::AcqRel);
+        let is_active = self.whatchdog.swap(false, Ordering::AcqRel);
         if !is_active {
             let _ = self
                 .transport
@@ -133,14 +138,6 @@ impl TransportMulticastInner {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_pid(&self) -> PeerId {
-        self.manager.config.pid
-    }
-
-    pub(crate) fn get_whatami(&self) -> WhatAmI {
-        self.manager.config.whatami
-    }
-
     pub(crate) fn get_sn_resolution(&self) -> ZInt {
         self.manager.config.sn_resolution
     }
@@ -231,15 +228,8 @@ impl TransportMulticastInner {
         self.schedule_first_fit(message);
     }
 
-    pub(crate) fn get_links(&self) -> Vec<LinkMulticast> {
-        match zread!(self.link).as_ref() {
-            Some(l) => vec![l.get_link().clone()],
-            None => vec![],
-        }
-    }
-
-    pub(crate) fn get_peers(&self) -> Vec<PeerId> {
-        zread!(self.peers).iter().map(|(_, x)| x.pid).collect()
+    pub(crate) fn get_link(&self) -> LinkMulticast {
+        zread!(self.link).as_ref().unwrap().get_link().clone()
     }
 
     /*************************************/
@@ -357,9 +347,9 @@ impl TransportMulticastInner {
         .into_boxed_slice();
 
         // Create lease event
-        let active = Arc::new(AtomicBool::new(false));
+        let whatchdog = Arc::new(AtomicBool::new(false));
         let event = TransportMulticastPeerLeaseTimer {
-            active: active.clone(),
+            whatchdog: whatchdog.clone(),
             locator: locator.clone(),
             transport: self.clone(),
         };
@@ -368,13 +358,16 @@ impl TransportMulticastInner {
 
         // Store the new peer
         let peer = TransportMulticastPeer {
+            locator: locator.clone(),
             pid: join.pid,
             whatami: join.whatami,
-            active,
+            sn_resolution: join.sn_resolution,
+            lease: join.lease,
+            whatchdog,
             handle,
             conduit_rx,
         };
-        zwrite!(self.peers).insert(locator.clone(), peer);
+        zwrite!(self.peers).insert(locator.clone(), peer.clone());
 
         // Add the event to the timer
         task::block_on(self.timer.add(event));
@@ -391,7 +384,7 @@ impl TransportMulticastInner {
             );
 
         if let Some(cb) = zread!(self.callback).as_ref() {
-            cb.new_peer(join.pid);
+            cb.new_peer(peer.into());
         }
 
         Ok(())
@@ -399,20 +392,24 @@ impl TransportMulticastInner {
 
     pub(super) fn del_peer(&self, locator: &Locator, reason: u8) -> ZResult<()> {
         let mut guard = zwrite!(self.peers);
-        if let Some(transport) = guard.remove(locator) {
+        if let Some(peer) = guard.remove(locator) {
             log::debug!(
                 "Peer {}/{}/{} has left multicast {} with reason: {}",
-                transport.pid,
-                transport.whatami,
+                peer.pid,
+                peer.whatami,
                 locator,
                 self.locator,
                 reason
             );
-            transport.handle.defuse();
+            peer.handle.clone().defuse();
             if let Some(cb) = zread!(self.callback).as_ref() {
-                cb.del_peer(transport.pid);
+                cb.del_peer(peer.into());
             }
         }
         Ok(())
+    }
+
+    pub(super) fn get_peers(&self) -> Vec<MulticastPeer> {
+        zread!(self.peers).values().map(|p| p.into()).collect()
     }
 }

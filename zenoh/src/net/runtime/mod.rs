@@ -184,11 +184,11 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         &self,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
-        match &*self.runtime.read().unwrap() {
+        match zread!(self.runtime).as_ref() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
                 locator: std::sync::RwLock::new(None),
-                sub_event_handler: runtime.router.new_transport(transport).unwrap(),
+                sub_event_handler: runtime.router.new_transport_unicast(transport).unwrap(),
             })),
             None => zerror!(ZErrorKind::Other {
                 descr: "Runtime not yet ready!".to_string()
