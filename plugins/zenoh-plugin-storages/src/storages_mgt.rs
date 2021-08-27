@@ -18,14 +18,15 @@ use futures::select;
 use futures::stream::StreamExt;
 use futures::FutureExt;
 use log::{debug, error, trace, warn};
-use zenoh::transcoding::{GetRequestStream, Path, PathExpr};
-use zenoh::{queryable, QueryConsolidation, QueryTarget, Session, Target, ZResult};
+use zenoh::{
+    queryable, QueryConsolidation, QueryTarget, Sample, Selector, Session, Target, ZResult,
+};
 use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
 
 pub(crate) async fn start_storage(
     mut storage: Box<dyn zenoh_backend_traits::Storage>,
-    admin_path: Path,
-    path_expr: PathExpr,
+    admin_path: String,
+    path_expr: String,
     in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
     out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
     zenoh: Arc<Session>,
@@ -50,8 +51,7 @@ pub(crate) async fn start_storage(
             target: Target::All,
         };
         let mut replies = match zenoh
-            .get(&path_expr.to_string().into())
-            .predicate("?(starttime=0)")
+            .get(&Selector::from(&path_expr).with_predicate("?(starttime=0)"))
             .target(query_target)
             .consolidation(QueryConsolidation::none())
             .await
@@ -81,14 +81,13 @@ pub(crate) async fn start_storage(
 
         // admin_path is "/@/.../storage/<stid>"
         // answer to GET on 'admin_path'
-        let mut storage_admin: GetRequestStream =
-            match zenoh.register_queryable(&(&admin_path).into()).await {
-                Ok(storages_admin) => storages_admin.into(),
-                Err(e) => {
-                    error!("Error starting storage {} : {}", admin_path, e);
-                    return;
-                }
-            };
+        let mut storage_admin = match zenoh.register_queryable(&admin_path.as_str().into()).await {
+            Ok(storages_admin) => storages_admin,
+            Err(e) => {
+                error!("Error starting storage {} : {}", admin_path, e);
+                return;
+            }
+        };
 
         // answer to queries on path_expr
         let mut storage_queryable = match zenoh
@@ -105,10 +104,10 @@ pub(crate) async fn start_storage(
 
         loop {
             select!(
-                // on get request on storage_admin
-                get = storage_admin.next().fuse() => {
-                    let get = get.unwrap();
-                    get.reply_async(admin_path.clone(), storage.get_admin_status().await).await;
+                // on query on storage_admin
+                query = storage_admin.receiver().next().fuse() => {
+                    let query = query.unwrap();
+                    query.reply_async(Sample::new(admin_path.to_string(), storage.get_admin_status().await)).await;
                 },
                 // on sample for path_expr
                 sample = storage_sub.receiver().next().fuse() => {

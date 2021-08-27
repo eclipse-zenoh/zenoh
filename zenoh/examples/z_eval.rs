@@ -41,11 +41,7 @@ async fn main() {
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
                 println!(">> [Query handler] Handling '{}{}'", query.res_name, query.predicate);
-                query.reply(Sample{
-                    res_name: path.clone(),
-                    payload: value.as_bytes().into(),
-                    data_info: None,
-                });
+                query.reply(Sample::new(path.clone(), value.as_bytes().into()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

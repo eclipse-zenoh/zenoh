@@ -93,13 +93,14 @@ mod types;
 use git_version::git_version;
 pub use types::*;
 
+mod selector;
+pub use selector::Selector;
+
 pub mod info;
 
 #[macro_use]
 mod session;
 pub use session::*;
-
-pub mod transcoding;
 
 pub use net::protocol::core::{Timestamp, TimestampId};
 pub use net::protocol::proto::{data_kind, encoding};

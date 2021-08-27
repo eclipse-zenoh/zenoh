@@ -11,7 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use crate::data_kind;
+use crate::encoding::*;
+use crate::net::protocol::proto::DataInfo;
 use crate::utils::new_reception_timestamp;
+use crate::Properties;
 use crate::Session;
 use async_std::sync::Arc;
 use flume::*;
@@ -92,22 +96,6 @@ pub use zenoh_util::sync::ZFuture;
 pub use zenoh_util::sync::ZPinBoxFuture;
 pub use zenoh_util::sync::ZReady;
 
-/// Some informations about the associated data.
-///
-/// # Examples
-/// ```
-/// # use zenoh::ZBuf;
-/// # use zenoh::DataInfo;
-/// # let sample = zenoh::Sample { res_name: "".to_string(), payload: ZBuf::new(), data_info: None };
-/// if let Some(info) = sample.data_info {
-///     match info.timestamp {
-///         Some(ts) => println!("Sample's timestamp: {}", ts),
-///         None => println!("Sample has no timestamp"),
-///     }
-/// }
-/// ```
-pub use super::net::protocol::proto::DataInfo;
-
 /// A zenoh error.
 pub use zenoh_util::core::ZError;
 
@@ -124,35 +112,295 @@ zreceiver! {
     }
 }
 
-/// A zenoh value.
+#[derive(Clone)]
+pub struct Value {
+    pub payload: ZBuf,
+    pub encoding: ZInt,
+}
+
+impl Value {
+    pub fn new(payload: ZBuf) -> Self {
+        Value {
+            payload,
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Value {
+            payload: ZBuf::new(),
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+
+    #[inline(always)]
+    pub fn encoding(mut self, encoding: ZInt) -> Self {
+        self.encoding = encoding;
+        self
+    }
+
+    /// Returns the encoding description of the Value.
+    pub fn encoding_descr(&self) -> String {
+        to_string(self.encoding)
+    }
+}
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Value{{ payload: {}, encoding: {} }}",
+            self.payload,
+            self.encoding_descr()
+        )
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            String::from_utf8(self.payload.to_vec())
+                .unwrap_or_else(|_| base64::encode(self.payload.to_vec()))
+        )
+    }
+}
+
+impl From<ZBuf> for Value {
+    fn from(buf: ZBuf) -> Self {
+        Value {
+            payload: buf,
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<Arc<SharedMemoryBuf>> for Value {
+    fn from(smb: Arc<SharedMemoryBuf>) -> Self {
+        Value {
+            payload: smb.into(),
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<Box<SharedMemoryBuf>> for Value {
+    fn from(smb: Box<SharedMemoryBuf>) -> Self {
+        Value {
+            payload: smb.into(),
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<SharedMemoryBuf> for Value {
+    fn from(smb: SharedMemoryBuf) -> Self {
+        Value {
+            payload: smb.into(),
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    fn from(buf: Vec<u8>) -> Self {
+        Value::from(ZBuf::from(buf))
+    }
+}
+
+impl From<&[u8]> for Value {
+    fn from(buf: &[u8]) -> Self {
+        Value::from(ZBuf::from(buf))
+    }
+}
+
+impl From<String> for Value {
+    fn from(s: String) -> Self {
+        Value {
+            payload: ZBuf::from(s.as_bytes()),
+            encoding: STRING,
+        }
+    }
+}
+
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Value::from(s.to_string())
+    }
+}
+
+impl From<Properties> for Value {
+    fn from(p: Properties) -> Self {
+        Value {
+            payload: ZBuf::from(p.to_string().as_bytes()),
+            encoding: APP_PROPERTIES,
+        }
+    }
+}
+
+impl From<&serde_json::Value> for Value {
+    fn from(json: &serde_json::Value) -> Self {
+        Value {
+            payload: ZBuf::from(json.to_string().as_bytes()),
+            encoding: APP_JSON,
+        }
+    }
+}
+
+impl From<serde_json::Value> for Value {
+    fn from(json: serde_json::Value) -> Self {
+        Value::from(&json)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(i: i64) -> Self {
+        Value {
+            payload: ZBuf::from(i.to_string().as_bytes()),
+            encoding: APP_INTEGER,
+        }
+    }
+}
+
+impl From<f64> for Value {
+    fn from(f: f64) -> Self {
+        Value {
+            payload: ZBuf::from(f.to_string().as_bytes()),
+            encoding: APP_FLOAT,
+        }
+    }
+}
+
+/// Informations on the source of a zenoh sample.
 #[derive(Debug, Clone)]
+pub struct SourceInfo {
+    pub source_id: Option<PeerId>,
+    pub source_sn: Option<ZInt>,
+    pub first_router_id: Option<PeerId>,
+    pub first_router_sn: Option<ZInt>,
+}
+
+impl SourceInfo {
+    pub(crate) fn empty() -> Self {
+        SourceInfo {
+            source_id: None,
+            source_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
+        }
+    }
+}
+
+impl From<DataInfo> for SourceInfo {
+    fn from(data_info: DataInfo) -> Self {
+        SourceInfo {
+            source_id: data_info.source_id,
+            source_sn: data_info.source_sn,
+            first_router_id: data_info.first_router_id,
+            first_router_sn: data_info.first_router_sn,
+        }
+    }
+}
+
+impl From<Option<DataInfo>> for SourceInfo {
+    fn from(data_info: Option<DataInfo>) -> Self {
+        match data_info {
+            Some(data_info) => data_info.into(),
+            None => SourceInfo::empty(),
+        }
+    }
+}
+
+/// A zenoh sample.
+#[derive(Clone, Debug)]
 pub struct Sample {
     pub res_name: String,
-    pub payload: ZBuf,
-    pub data_info: Option<DataInfo>,
+    pub value: Value,
+    pub kind: ZInt,
+    pub timestamp: Option<Timestamp>,
+    pub source_info: SourceInfo,
 }
 
 impl Sample {
-    /// Returns the associated Timestamp, if any.
-    pub fn get_timestamp(&self) -> Option<&Timestamp> {
-        self.data_info
-            .as_ref()
-            .and_then(|info| info.timestamp.as_ref())
+    #[inline]
+    pub fn new(res_name: String, value: Value) -> Self {
+        Sample {
+            res_name,
+            value,
+            kind: data_kind::DEFAULT,
+            timestamp: None,
+            source_info: SourceInfo::empty(),
+        }
     }
 
+    #[inline]
+    pub(crate) fn with_info(res_name: String, payload: ZBuf, data_info: Option<DataInfo>) -> Self {
+        let mut value: Value = payload.into();
+        if let Some(data_info) = data_info {
+            if let Some(encoding) = data_info.encoding {
+                value.encoding = encoding;
+            }
+            Sample {
+                res_name,
+                value,
+                kind: data_info.kind.unwrap_or(data_kind::DEFAULT),
+                timestamp: data_info.timestamp.clone(),
+                source_info: data_info.into(),
+            }
+        } else {
+            Sample {
+                res_name,
+                value,
+                kind: data_kind::DEFAULT,
+                timestamp: None,
+                source_info: SourceInfo::empty(),
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn split(self) -> (String, ZBuf, DataInfo) {
+        let info = DataInfo {
+            kind: None,
+            encoding: Some(self.value.encoding),
+            timestamp: self.timestamp,
+            #[cfg(feature = "zero-copy")]
+            sliced: false,
+            source_id: self.source_info.source_id,
+            source_sn: self.source_info.source_sn,
+            first_router_id: self.source_info.first_router_id,
+            first_router_sn: self.source_info.first_router_sn,
+        };
+        (self.res_name, self.value.payload, info)
+    }
+
+    #[inline]
+    pub fn get_timestamp(&self) -> Option<&Timestamp> {
+        self.timestamp.as_ref()
+    }
+
+    #[inline]
+    pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
+        self.timestamp = Some(timestamp);
+        self
+    }
+
+    #[inline]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.source_info = source_info;
+        self
+    }
+
+    #[inline]
     /// Ensure that an associated Timestamp is present in this Sample.
     /// If not, a new one is created with the current system time and 0x00 as id.
     pub fn ensure_timestamp(&mut self) {
-        if let Some(data_info) = &mut self.data_info {
-            if data_info.timestamp.is_none() {
-                data_info.timestamp = Some(new_reception_timestamp());
-            }
-        } else {
-            let data_info = DataInfo {
-                timestamp: Some(new_reception_timestamp()),
-                ..Default::default()
-            };
-            self.data_info = Some(data_info);
+        if self.timestamp.is_none() {
+            self.timestamp = Some(new_reception_timestamp());
         }
     }
 }
@@ -382,7 +630,7 @@ impl CallbackSubscriber<'_> {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// let subscriber = session.subscribe(&"/resource/name".into())
-    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.payload); })
+    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
     ///     .mode(SubMode::Pull).await.unwrap();
     /// subscriber.pull();
     /// # })

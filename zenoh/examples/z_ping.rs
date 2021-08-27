@@ -39,7 +39,7 @@ async fn main() {
 
     let mut sub = session.subscribe(&reskey_pong).await.unwrap();
 
-    let data: ZBuf = (0usize..size)
+    let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();
@@ -58,7 +58,7 @@ async fn main() {
         if let Some(sample) = sub.receiver().next().await {
             println!(
                 "{} bytes: seq={} time={:?}µs",
-                sample.payload.len(),
+                sample.value.payload.len(),
                 count,
                 write_time.elapsed().as_micros(),
             );

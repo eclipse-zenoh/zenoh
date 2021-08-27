@@ -28,7 +28,7 @@ async fn main() {
 
     let (config, selector) = parse_args();
 
-    let mut stored: HashMap<String, (ZBuf, Option<DataInfo>)> = HashMap::new();
+    let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Opening session...");
     let session = open(config.into()).await.unwrap();
@@ -50,20 +50,16 @@ async fn main() {
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.payload.contiguous()));
-                stored.insert(sample.res_name, (sample.payload, sample.data_info));
+                    sample.res_name, String::from_utf8_lossy(&sample.value.payload.contiguous()));
+                stored.insert(sample.res_name.clone(), sample);
             },
 
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
                 println!(">> [Query handler        ] Handling '{}{}'", query.res_name, query.predicate);
-                for (stored_name, (data, data_info)) in stored.iter() {
+                for (stored_name, sample) in stored.iter() {
                     if resource_name::intersect(&query.res_name, stored_name) {
-                        query.reply(Sample{
-                            res_name: stored_name.clone(),
-                            payload: data.clone(),
-                            data_info: data_info.clone(),
-                        });
+                        query.reply(sample.clone());
                     }
                 }
             },

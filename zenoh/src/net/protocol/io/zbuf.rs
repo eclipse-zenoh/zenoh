@@ -435,11 +435,11 @@ impl ZBuf {
         true
     }
 
-    // Read all the bytes from 'self' and add those to 'dest'
-    #[inline(always)]
-    pub(crate) fn drain_into_zbuf(&mut self, dest: &mut ZBuf) -> bool {
-        self.read_into_zbuf(dest, self.readable())
-    }
+    // // Read all the bytes from 'self' and add those to 'dest'
+    // #[inline(always)]
+    // pub(crate) fn drain_into_zbuf(&mut self, dest: &mut ZBuf) -> bool {
+    //     self.read_into_zbuf(dest, self.readable())
+    // }
 
     // Read a subslice of current slice
     pub(crate) fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
@@ -916,11 +916,11 @@ mod tests {
         assert_eq!(Some(&[20u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
 
         // test drain_into_zbuf
-        buf1.reset();
-        println!("[10] {:?}", buf1);
-        let mut dest = ZBuf::new();
-        assert!(buf1.drain_into_zbuf(&mut dest));
-        assert_eq!(buf1.readable(), 0);
-        assert_eq!(buf1.len(), dest.readable());
+        // buf1.reset();
+        // println!("[10] {:?}", buf1);
+        // let mut dest = ZBuf::new();
+        // assert!(buf1.drain_into_zbuf(&mut dest));
+        // assert_eq!(buf1.readable(), 0);
+        // assert_eq!(buf1.len(), dest.readable());
     }
 }

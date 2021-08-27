@@ -24,7 +24,7 @@ use net::protocol::{
         QueryableInfo, ResKey, ResourceId, ZInt,
     },
     io::ZBuf,
-    proto::{Options, RoutingContext},
+    proto::{DataInfo, Options, RoutingContext},
     session::Primitives,
 };
 use net::routing::face::Face;
@@ -382,7 +382,7 @@ derive_zfuture! {
     /// let session = open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .subscribe(&"/resource/name".into())
-    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.payload); })
+    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
     ///     .best_effort()
     ///     .pull_mode()
     ///     .await
@@ -627,9 +627,8 @@ derive_zfuture! {
     pub struct WriteBuilder<'a> {
         session: &'a Session,
         resource: &'a ResKey,
-        payload: Option<ZBuf>,
+        value: Option<Value>,
         kind: Option<ZInt>,
-        encoding: Option<ZInt>,
         congestion_control: CongestionControl,
     }
 }
@@ -652,7 +651,9 @@ impl<'a> WriteBuilder<'a> {
     /// Change the encoding of the written data.
     #[inline]
     pub fn encoding(mut self, encoding: ZInt) -> Self {
-        self.encoding = Some(encoding);
+        if let Some(mut payload) = self.value.as_mut() {
+            payload.encoding = encoding;
+        }
         self
     }
 }
@@ -667,15 +668,23 @@ impl Runnable for WriteBuilder<'_> {
         let local_routing = state.local_routing;
         drop(state);
 
+        let value = self.value.take().unwrap();
         let mut info = net::protocol::proto::DataInfo::new();
-        info.kind = self.kind;
-        info.encoding = self.encoding;
+        info.kind = match self.kind {
+            Some(data_kind::DEFAULT) => None,
+            kind => kind,
+        };
+        info.encoding = if value.encoding != encoding::DEFAULT {
+            Some(value.encoding)
+        } else {
+            None
+        };
         info.timestamp = self.session.runtime.new_timestamp();
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
             self.resource,
-            self.payload.as_ref().unwrap().clone(),
+            value.payload.clone(),
             Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             self.congestion_control,
             data_info.clone(),
@@ -683,7 +692,7 @@ impl Runnable for WriteBuilder<'_> {
         );
         if local_routing {
             self.session
-                .handle_data(true, self.resource, data_info, self.payload.take().unwrap());
+                .handle_data(true, self.resource, data_info, value.payload);
         }
         Ok(())
     }
@@ -700,8 +709,7 @@ derive_zfuture! {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// let mut replies = session
-    ///     .get(&"/resource/name".into())
-    ///     .predicate("?value>1")
+    ///     .get(&"/resource/name?value>1".into())
     ///     .target(QueryTarget{ kind: queryable::ALL_KINDS, target: Target::All })
     ///     .consolidation(QueryConsolidation::none())
     ///     .await
@@ -719,13 +727,6 @@ derive_zfuture! {
 }
 
 impl<'a> QueryBuilder<'a> {
-    /// Change the predicate of the query.
-    #[inline]
-    pub fn predicate(mut self, predicate: &'a str) -> Self {
-        self.predicate = predicate;
-        self
-    }
-
     /// Change the target of the query.
     #[inline]
     pub fn target(mut self, target: QueryTarget) -> Self {
@@ -1395,11 +1396,10 @@ impl Session {
     /// let session = open(config::peer()).await.unwrap();
     /// let mut queryable = session.register_queryable(&"/resource/name".into()).await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
-    ///     query.reply_async(Sample{
-    ///         res_name: "/resource/name".to_string(),
-    ///         payload: "value".as_bytes().into(),
-    ///         data_info: None,
-    ///     }).await;
+    ///     query.reply_async(Sample::new(
+    ///         "/resource/name".to_string(),
+    ///         "value".as_bytes().into(),
+    ///     )).await;
     /// }
     /// # })
     /// ```
@@ -1490,13 +1490,12 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a>(&'a self, resource: &'a ResKey, payload: ZBuf) -> WriteBuilder<'a> {
+    pub fn put<'a>(&'a self, resource: &'a ResKey, value: Value) -> WriteBuilder<'a> {
         WriteBuilder {
             session: self,
             resource,
-            payload: Some(payload),
+            value: Some(value),
             kind: None,
-            encoding: None,
             congestion_control: CongestionControl::default(),
         }
     }
@@ -1522,9 +1521,8 @@ impl Session {
         WriteBuilder {
             session: self,
             resource,
-            payload: None,
+            value: Some(Value::empty()),
             kind: Some(data_kind::DELETE),
-            encoding: None,
             congestion_control: CongestionControl::default(),
         }
     }
@@ -1539,18 +1537,10 @@ impl Session {
         match invoker {
             SubscriberInvoker::Handler(handler) => {
                 let handler = &mut *zwrite!(handler);
-                handler(Sample {
-                    res_name,
-                    payload,
-                    data_info,
-                });
+                handler(Sample::with_info(res_name, payload, data_info));
             }
             SubscriberInvoker::Sender(sender) => {
-                if let Err(e) = sender.send(Sample {
-                    res_name,
-                    payload,
-                    data_info,
-                }) {
+                if let Err(e) = sender.send(Sample::with_info(res_name, payload, data_info)) {
                     error!("SubscriberInvoker error: {}", e);
                 }
             }
@@ -1651,11 +1641,11 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a>(&'a self, resource: &'a ResKey) -> QueryBuilder<'a> {
+    pub fn get<'a>(&'a self, selector: &'a Selector) -> QueryBuilder<'a> {
         QueryBuilder {
             session: self,
-            resource,
-            predicate: "",
+            resource: selector.key(),
+            predicate: selector.predicate(),
             target: Some(QueryTarget::default()),
             consolidation: Some(QueryConsolidation::default()),
         }
@@ -1731,28 +1721,30 @@ impl Session {
         if local {
             let this = self.clone();
             task::spawn(async move {
-                while let Some((kind, sample)) = rep_receiver.stream().next().await {
+                while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
+                    let (res_name, payload, data_info) = sample.split();
                     this.send_reply_data(
                         qid,
-                        kind,
+                        replier_kind,
                         pid.clone(),
-                        ResKey::RName(sample.res_name),
-                        sample.data_info,
-                        sample.payload,
+                        ResKey::RName(res_name),
+                        Some(data_info),
+                        payload,
                     );
                 }
                 this.send_reply_final(qid);
             });
         } else {
             task::spawn(async move {
-                while let Some((kind, sample)) = rep_receiver.stream().next().await {
+                while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
+                    let (res_name, payload, data_info) = sample.split();
                     primitives.send_reply_data(
                         qid,
-                        kind,
+                        replier_kind,
                         pid.clone(),
-                        ResKey::RName(sample.res_name),
-                        sample.data_info,
-                        sample.payload,
+                        ResKey::RName(res_name),
+                        Some(data_info),
+                        payload,
                     );
                 }
                 primitives.send_reply_final(qid);
@@ -1897,11 +1889,7 @@ impl Primitives for Session {
         match state.queries.get_mut(&qid) {
             Some(query) => {
                 let new_reply = Reply {
-                    data: Sample {
-                        res_name,
-                        payload,
-                        data_info,
-                    },
+                    data: Sample::with_info(res_name, payload, data_info),
                     replier_kind,
                     replier_id,
                 };
@@ -1917,7 +1905,7 @@ impl Primitives for Session {
                             .get(&new_reply.data.res_name)
                         {
                             Some(reply) => {
-                                if new_reply.data.data_info > reply.data.data_info {
+                                if new_reply.data.timestamp > reply.data.timestamp {
                                     query
                                         .replies
                                         .as_mut()
@@ -1944,7 +1932,7 @@ impl Primitives for Session {
                             .get(&new_reply.data.res_name)
                         {
                             Some(reply) => {
-                                if new_reply.data.data_info > reply.data.data_info {
+                                if new_reply.data.timestamp > reply.data.timestamp {
                                     query
                                         .replies
                                         .as_mut()

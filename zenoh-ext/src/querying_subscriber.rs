@@ -229,8 +229,7 @@ impl QueryingSubscriber<'_> {
         match self
             .conf
             .session
-            .get(reskey)
-            .predicate(predicate)
+            .get(&Selector::from(reskey).with_predicate(predicate))
             .target(target)
             .consolidation(consolidation)
             .wait()

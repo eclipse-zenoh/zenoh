@@ -21,7 +21,7 @@ fn main() {
     env_logger::init();
     let (config, size) = parse_args();
 
-    let data: ZBuf = (0usize..size)
+    let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();

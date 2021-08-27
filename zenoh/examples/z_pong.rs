@@ -42,7 +42,7 @@ async fn main() {
 
     while let Some(sample) = sub.receiver().next().await {
         session
-            .put(&reskey_ping, sample.payload)
+            .put(&reskey_ping, sample.value)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .await

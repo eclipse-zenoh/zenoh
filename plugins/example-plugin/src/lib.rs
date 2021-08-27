@@ -41,7 +41,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     let session = Session::init(runtime, true, vec![], vec![]).await;
 
-    let mut stored: HashMap<String, (ZBuf, Option<DataInfo>)> = HashMap::new();
+    let mut stored: HashMap<String, Sample> = HashMap::new();
 
     let selector: ResKey = args.value_of("storage-selector").unwrap().into();
     debug!("Run example-plugin with storage-selector={}", selector);
@@ -60,20 +60,16 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         select!(
             sample = sub.receiver().next().fuse() => {
                 let sample = sample.unwrap();
-                info!("Received data ('{}': '{}')", sample.res_name, sample.payload);
-                stored.insert(sample.res_name, (sample.payload, sample.data_info));
+                info!("Received data ('{}': '{}')", sample.res_name, sample.value);
+                stored.insert(sample.res_name.clone(), sample);
             },
 
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
                 info!("Handling query '{}{}'", query.res_name, query.predicate);
-                for (rname, (data, data_info)) in stored.iter() {
+                for (rname, sample) in stored.iter() {
                     if resource_name::intersect(&query.res_name, rname) {
-                        query.reply_async(Sample{
-                            res_name: rname.clone(),
-                            payload: data.clone(),
-                            data_info: data_info.clone(),
-                        }).await;
+                        query.reply_async(sample.clone()).await;
                     }
                 }
             }

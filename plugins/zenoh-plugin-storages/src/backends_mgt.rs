@@ -19,9 +19,7 @@ use futures::prelude::*;
 use futures::select;
 use log::{debug, error, trace, warn};
 use std::collections::HashMap;
-use std::convert::TryFrom;
-use zenoh::transcoding::{ChangeKind, ChangeReceiver, GetRequestStream, Path, PathExpr, Value};
-use zenoh::{Session, ZError, ZErrorKind, ZResult};
+use zenoh::{data_kind, encoding, Sample, Session, Value, ZError, ZErrorKind, ZResult};
 use zenoh_backend_traits::{
     IncomingDataInterceptor, OutgoingDataInterceptor, PROP_STORAGE_PATH_EXPR,
 };
@@ -29,7 +27,7 @@ use zenoh_util::{zerror, zerror2};
 
 pub(crate) async fn start_backend(
     backend: Box<dyn zenoh_backend_traits::Backend>,
-    admin_path: Path,
+    admin_path: String,
     zenoh: Arc<Session>,
 ) -> ZResult<Sender<bool>> {
     let backend_name = admin_path.clone();
@@ -41,27 +39,24 @@ pub(crate) async fn start_backend(
     let (stop_tx, stop_rx) = bounded::<bool>(1);
 
     task::spawn(async move {
-        // let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
         // admin_path is "/@/.../backend/<beid>"
         // answer to GET on 'admin_path'
-        let mut backend_admin: GetRequestStream =
-            match zenoh.register_queryable(&(&admin_path).into()).await {
-                Ok(backend_admin) => backend_admin.into(),
-                Err(e) => {
-                    error!("Error starting backend {} : {}", admin_path, e);
-                    return;
-                }
-            };
+        let mut backend_admin = match zenoh.register_queryable(&admin_path.as_str().into()).await {
+            Ok(backend_admin) => backend_admin,
+            Err(e) => {
+                error!("Error starting backend {} : {}", admin_path, e);
+                return;
+            }
+        };
         // subscribe to PUT/DELETE on 'admin_path'/storage/*
-        let storages_admin_selector = "storage/*".to_string();
-        let mut storages_admin: ChangeReceiver =
-            match zenoh.subscribe(&storages_admin_selector.into()).await {
-                Ok(storages_admin) => storages_admin.into(),
-                Err(e) => {
-                    error!("Error starting backend {} : {}", admin_path, e);
-                    return;
-                }
-            };
+        let storages_admin_selector = format!("{}/storage/*", admin_path);
+        let mut storages_admin = match zenoh.subscribe(&storages_admin_selector.into()).await {
+            Ok(storages_admin) => storages_admin,
+            Err(e) => {
+                error!("Error starting backend {} : {}", admin_path, e);
+                return;
+            }
+        };
 
         // now that the backend is ready to receive GET/PUT/DELETE,
         // unblock the start_backend() operation below
@@ -84,42 +79,39 @@ pub(crate) async fn start_backend(
         let mut backend = backend;
         // Map owning handles on alive storages for this backend.
         // Once dropped, a handle will release/stop the backend.
-        let mut storages_handles: HashMap<Path, Sender<bool>> = HashMap::new();
+        let mut storages_handles: HashMap<String, Sender<bool>> = HashMap::new();
         loop {
             select!(
-                // on get request on backend_admin
-                get = backend_admin.next().fuse() => {
-                    let get = get.unwrap();
-                    get.reply_async(admin_path.clone(), backend.get_admin_status().await).await;
+                // on query on backend_admin
+                query = backend_admin.receiver().next().fuse() => {
+                    let query = query.unwrap();
+                    query.reply_async(Sample::new(admin_path.to_string(), backend.get_admin_status().await)).await;
                 },
 
-                // on change for storages_admin
-                change = storages_admin.next().fuse() => {
-                    let change = change.unwrap();
-                    trace!("{} received change for {}", admin_path, change.path);
-                    match change.kind {
-                        ChangeKind::Put => {
-                            if let Some(value) = change.value {
-                                #[allow(clippy::map_entry)]
-                                if !storages_handles.contains_key(&change.path) {
-                                    match create_and_start_storage(change.path.clone(), value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
-                                        Ok(handle) => {
-                                            let _ = storages_handles.insert(change.path, handle);
-                                        }
-                                        Err(e) => warn!("{}", e),
+                // on sample for storages_admin
+                sample = storages_admin.receiver().next().fuse() => {
+                    let sample = sample.unwrap();
+                    trace!("{} received change for {}", admin_path, sample.res_name);
+                    match sample.kind {
+                        data_kind::PUT => {
+                            #[allow(clippy::map_entry)]
+                            if !storages_handles.contains_key(&sample.res_name) {
+                                match create_and_start_storage(sample.res_name.clone(), sample.value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
+                                    Ok(handle) => {
+                                        let _ = storages_handles.insert(sample.res_name.clone(), handle);
                                     }
-                                } else {
-                                    warn!("Storage {} already exists", change.path);
+                                    Err(e) => warn!("{}", e),
                                 }
                             } else {
-                                warn!("Received a PUT on {} with invalid value: {:?}", change.path, change.value);
+                                warn!("Storage {} already exists", sample.res_name);
                             }
                         }
-                        ChangeKind::Delete =>  {
-                            debug!("Delete storage {}", change.path);
-                            let _ = storages_handles.remove(&change.path);
+                        data_kind::DELETE =>  {
+                            debug!("Delete storage {}", sample.res_name);
+                            let _ = storages_handles.remove(&sample.res_name);
                         }
-                        ChangeKind::Patch => warn!("PATCH not supported on {}", change.path),
+                        data_kind::PATCH => warn!("PATCH not supported on {}", sample.res_name),
+                        kind => warn!("Received data on {} with unknown kind: {}", sample.res_name, kind),
                     }
                 },
                 _ = stop_rx.recv().fuse() => {
@@ -138,38 +130,50 @@ pub(crate) async fn start_backend(
 }
 
 async fn create_and_start_storage(
-    admin_path: Path,
-    value: Value,
+    admin_path: String,
+    mut value: Value,
     backend: &mut Box<dyn zenoh_backend_traits::Backend>,
     in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
     out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
     zenoh: Arc<Session>,
 ) -> ZResult<Sender<bool>> {
     trace!("Create storage {}", admin_path);
-    if let Value::Properties(props) = value {
-        let path_expr_str = props.get(PROP_STORAGE_PATH_EXPR).ok_or_else(|| {
-            zerror2!(ZErrorKind::Other {
+    if value.encoding == encoding::APP_PROPERTIES {
+        if let Ok(props) = String::from_utf8(value.payload.read_vec()).map(crate::Properties::from)
+        {
+            let path_expr = props
+                .get(PROP_STORAGE_PATH_EXPR)
+                .ok_or_else(|| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: format!(
+                            "Can't create storage {}: no {} property",
+                            admin_path, PROP_STORAGE_PATH_EXPR
+                        )
+                    })
+                })?
+                .to_string();
+            let storage = backend.create_storage(props).await?;
+            start_storage(
+                storage,
+                admin_path.clone(),
+                path_expr,
+                in_interceptor,
+                out_interceptor,
+                zenoh,
+            )
+            .await
+        } else {
+            zerror!(ZErrorKind::Other {
                 descr: format!(
-                    "Can't create storage {}: no {} property",
-                    admin_path, PROP_STORAGE_PATH_EXPR
+                    "Received a PUT on {}, unable to decode properties from value: {:?}",
+                    admin_path, value
                 )
             })
-        })?;
-        let path_expr = PathExpr::try_from(path_expr_str.as_str())?;
-        let storage = backend.create_storage(props).await?;
-        start_storage(
-            storage,
-            admin_path.clone(),
-            path_expr,
-            in_interceptor,
-            out_interceptor,
-            zenoh,
-        )
-        .await
+        }
     } else {
         zerror!(ZErrorKind::Other {
             descr: format!(
-                "Received a PUT on {} with invalid value: {:?}",
+                "Received a PUT on {} with invalid value encoding: {:?}",
                 admin_path, value
             )
         })

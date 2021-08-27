@@ -106,8 +106,16 @@ name = "z_info"
 path = "examples/z_info.rs"
 
 [[example]]
-name = "z_write"
-path = "examples/z_write.rs"
+name = "z_put"
+path = "examples/z_put.rs"
+
+[[example]]
+name = "z_put_float"
+path = "examples/z_put_float.rs"
+
+[[example]]
+name = "z_delete"
+path = "examples/z_delete.rs"
 
 [[example]]
 name = "z_pub"
@@ -134,8 +142,8 @@ name = "z_storage"
 path = "examples/z_storage.rs"
 
 [[example]]
-name = "z_query"
-path = "examples/z_query.rs"
+name = "z_get"
+path = "examples/z_get.rs"
 
 [[example]]
 name = "z_pub_thr"
@@ -156,30 +164,6 @@ path = "examples/z_ping.rs"
 [[example]]
 name = "z_pong"
 path = "examples/z_pong.rs"
-
-[[example]]
-name = "zt_put"
-path = "examples/transcoding/zt_put.rs"
-
-[[example]]
-name = "zt_put_float"
-path = "examples/transcoding/zt_put_float.rs"
-
-[[example]]
-name = "zt_delete"
-path = "examples/transcoding/zt_delete.rs"
-
-[[example]]
-name = "zt_get"
-path = "examples/transcoding/zt_get.rs"
-
-[[example]]
-name = "zt_sub"
-path = "examples/transcoding/zt_sub.rs"
-
-[[example]]
-name = "zt_eval"
-path = "examples/transcoding/zt_eval.rs"
 
 [[bench]]
 name = "codec_bench"

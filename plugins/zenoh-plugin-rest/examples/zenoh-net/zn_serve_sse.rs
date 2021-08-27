@@ -55,11 +55,7 @@ async fn main() {
             .clone()
             .for_each(move |request| async move {
                 request
-                    .reply_async(Sample {
-                        res_name: path.to_string(),
-                        payload: HTML.as_bytes().into(),
-                        data_info: None,
-                    })
+                    .reply_async(Sample::new(path.to_string(), HTML.as_bytes().into()))
                     .await;
             }),
     );

@@ -17,10 +17,10 @@ use log::{debug, trace, warn};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use zenoh::transcoding::{ChangeKind, Value};
 use zenoh::utils::resource_name;
 use zenoh::Sample;
-use zenoh::{utils, Properties, Timestamp, ZResult};
+use zenoh::Value;
+use zenoh::{data_kind, utils, Properties, Timestamp, ZResult};
 use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
@@ -152,21 +152,12 @@ impl Storage for MemoryStorage {
         self.admin_status.clone()
     }
 
-    async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
+    async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
         trace!("on_sample for {}", sample.res_name);
-        let (kind, timestamp) = if let Some(ref info) = sample.data_info {
-            (
-                info.kind.map_or(ChangeKind::Put, ChangeKind::from),
-                match &info.timestamp {
-                    Some(ts) => ts.clone(),
-                    None => utils::new_reception_timestamp(),
-                },
-            )
-        } else {
-            (ChangeKind::Put, utils::new_reception_timestamp())
-        };
-        match kind {
-            ChangeKind::Put => match self.map.write().await.entry(sample.res_name.clone()) {
+        sample.ensure_timestamp();
+        let timestamp = sample.timestamp.take().unwrap();
+        match sample.kind {
+            data_kind::PUT => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
                     v.insert(Present {
                         sample,
@@ -193,7 +184,7 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            ChangeKind::Delete => match self.map.write().await.entry(sample.res_name.clone()) {
+            data_kind::DELETE => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
                     // NOTE: even if path is not known yet, we need to store the removal time:
                     // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
@@ -225,8 +216,14 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            ChangeKind::Patch => {
+            data_kind::PATCH => {
                 warn!("Received PATCH for {}: not yet supported", sample.res_name);
+            }
+            kind => {
+                warn!(
+                    "Received data on {} with unknown kind: {}",
+                    sample.res_name, kind
+                );
             }
         }
         Ok(())

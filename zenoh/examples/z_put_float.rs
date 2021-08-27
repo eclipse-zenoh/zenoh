@@ -12,10 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use futures::prelude::*;
-use futures::select;
-use std::convert::{TryFrom, TryInto};
-use zenoh::transcoding::ChangeReceiver;
+use std::convert::TryFrom;
 use zenoh::*;
 
 #[async_std::main]
@@ -23,45 +20,24 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, selector) = parse_args();
+    let (config, path, value) = parse_args();
 
     println!("New zenoh...");
     let session = open(config.into()).await.unwrap();
 
-    println!("Subscribe to {}'...\n", selector);
-    let mut change_stream: ChangeReceiver = session
-        .subscribe(&selector.try_into().unwrap())
-        .await
-        .unwrap()
-        .into();
+    println!("Put Float ('{}': '{}')...\n", path, value);
+    session.put(&path.into(), value.into()).await.unwrap();
 
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0u8];
-    loop {
-        select!(
-            change = change_stream.next().fuse() => {
-                let change = change.unwrap();
-                println!(
-                    ">> [Subscription listener] received {:?} for {} : {:?} with timestamp {}",
-                    change.kind,
-                    change.path,
-                    change.value,
-                    change.timestamp
-                )
-            }
-
-            _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' {break}
-            }
-        );
-    }
-
-    change_stream.close().await.unwrap();
     session.close().await.unwrap();
 }
 
-fn parse_args() -> (Properties, String) {
-    let args = App::new("zenoh subscriber example")
+//
+// Argument parsing -- look at the main for the zenoh-related code
+//
+fn parse_args() -> (Properties, String, f64) {
+    let default_value = std::f64::consts::PI.to_string();
+
+    let args = App::new("zenoh put float example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
                 .possible_values(&["peer", "client"]),
@@ -76,8 +52,12 @@ fn parse_args() -> (Properties, String) {
             "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[selector] 'The selection of resources to subscribe'")
-                .default_value("/demo/example/**"),
+            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
+                .default_value("/demo/example/zenoh-rs-put"),
+        )
+        .arg(
+            Arg::from_usage("-v, --value=[VALUE]      'The float value of the resource to put.'")
+                .default_value(&default_value),
         )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
@@ -98,7 +78,8 @@ fn parse_args() -> (Properties, String) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let selector = args.value_of("selector").unwrap().to_string();
+    let path = args.value_of("path").unwrap().to_string();
+    let value: f64 = args.value_of("value").unwrap().parse().unwrap();
 
-    (config, selector)
+    (config, path, value)
 }

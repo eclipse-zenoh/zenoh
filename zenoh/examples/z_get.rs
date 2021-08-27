@@ -26,12 +26,16 @@ async fn main() {
     let session = open(config.into()).await.unwrap();
 
     println!("Sending Query '{}'...", selector);
-    let mut replies = session.get(&selector.into()).target(target).await.unwrap();
+    let mut replies = session
+        .get(&selector.as_str().into())
+        .target(target)
+        .await
+        .unwrap();
     while let Some(reply) = replies.next().await {
         println!(
             ">> [Reply handler] received ('{}': '{}')",
             reply.data.res_name,
-            String::from_utf8_lossy(&reply.data.payload.contiguous())
+            String::from_utf8_lossy(&reply.data.value.payload.contiguous())
         )
     }
 }

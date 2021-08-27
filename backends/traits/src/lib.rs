@@ -23,7 +23,7 @@
 //! ```
 //! use async_trait::async_trait;
 //! use zenoh::{utils, Properties, Sample, ZResult};
-//! use zenoh::transcoding::{ChangeKind, Value};
+//! use zenoh::{data_kind, Value};
 //! use zenoh_backend_traits::*;
 //!
 //! #[no_mangle]
@@ -91,37 +91,31 @@
 //!     }
 //!
 //!     // When receiving a Sample (i.e. on PUT or DELETE operations)
-//!     async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
-//!         // extract ChangeKind and Timestamp from sample.data_info
-//!         let (kind, _timestamp) = if let Some(ref info) = sample.data_info {
-//!             (
-//!                 info.kind.map_or(ChangeKind::Put, ChangeKind::from),
-//!                 match &info.timestamp {
-//!                     Some(ts) => ts.clone(),
-//!                     None => zenoh::utils::new_reception_timestamp(),
-//!                 },
-//!             )
-//!         } else {
-//!             (ChangeKind::Put, zenoh::utils::new_reception_timestamp())
-//!         };
+//!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
+//!         // extract Timestamp from sample
+//!         sample.ensure_timestamp();
+//!         let timestamp = sample.timestamp.take().unwrap();
 //!         // Store or delete the sample depending the ChangeKind
-//!         match kind {
-//!             ChangeKind::Put => {
+//!         match sample.kind {
+//!             data_kind::PUT => {
 //!                 let _key = sample.res_name;
 //!                 // TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: store (key, sample)
 //!                 //  - if not: drop the sample
 //!             }
-//!             ChangeKind::Delete => {
+//!             data_kind::DELETE => {
 //!                 let _key = sample.res_name;
 //!                 // TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
 //!                 //  - if not: drop the sample
 //!             }
-//!             ChangeKind::Patch => {
+//!             data_kind::PATCH => {
 //!                 println!("Received PATCH for {}: not yet supported", sample.res_name);
+//!             }
+//!             kind => {
+//!                 println!("Received data on {} with unknown kind: {}", sample.res_name, kind);
 //!             }
 //!         }
 //!         Ok(())
@@ -143,8 +137,7 @@
 
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use zenoh::transcoding::Value;
-use zenoh::{Properties, Sample, ZResult};
+use zenoh::{Properties, Sample, Value, ZResult};
 
 pub mod utils;
 

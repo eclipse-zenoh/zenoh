@@ -178,11 +178,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 
     while let Some(query) = queryable.receiver().next().await {
         log::debug!("Serving query for: {}", &qres);
-        query.reply(Sample {
-            res_name: qres.clone(),
-            payload: buf.clone().into(),
-            data_info: None,
-        })
+        query.reply(Sample::new(qres.clone(), buf.clone().into()))
     }
 }
 
@@ -220,7 +216,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
     let stream = sub.receiver();
     while let Some(s) = stream.next().await {
         log::debug!("Handling Network Event...");
-        match bincode::deserialize::<GroupNetEvent>(&(s.payload.to_vec())) {
+        match bincode::deserialize::<GroupNetEvent>(&(s.value.payload.to_vec())) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
                     advertise_view(&z, &state).await;
@@ -273,12 +269,15 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                     reception: ConsolidationMode::None,
                                 };
                                 log::debug!("Issuing Query for {}", &qres);
-                                let mut receiver =
-                                    z.get(&qres.into()).consolidation(qc).await.unwrap();
+                                let mut receiver = z
+                                    .get(&qres.as_str().into())
+                                    .consolidation(qc)
+                                    .await
+                                    .unwrap();
 
                                 while let Some(sample) = receiver.next().await {
                                     match bincode::deserialize::<Member>(
-                                        &sample.data.payload.to_vec(),
+                                        &sample.data.value.payload.to_vec(),
                                     ) {
                                         Ok(m) => {
                                             let mut expiry = Instant::now();

@@ -16,13 +16,12 @@ use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use http_types::Method;
-use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
+use zenoh::encoding::*;
 use zenoh::net::runtime::Runtime;
-use zenoh::transcoding::*;
 use zenoh::*;
 
 const PORT_SEPARATOR: char = ':';
@@ -41,61 +40,38 @@ fn parse_http_port(arg: &str) -> String {
     }
 }
 
-fn get_kind_str(sample: &Sample) -> String {
-    let kind = match &sample.data_info {
-        Some(info) => info.kind.unwrap_or(data_kind::DEFAULT),
-        None => data_kind::DEFAULT,
-    };
-    data_kind::to_string(kind)
-}
-
 fn value_to_json(value: Value) -> String {
     // TODO: transcode to JSON when implemented in Value
-    use Value::*;
-
-    match value {
-        Raw(_, _)
-        | Custom {
-            encoding_descr: _,
-            data: _,
-        } => {
-            // encode value as a String, possibly encoding as base64
-            let (_, _, s) = value.encode_to_string();
-            format!(r#""{}""#, s)
-        }
-        StringUtf8(s) => {
+    match value.encoding {
+        STRING => {
             // convert to Json string for special characters escaping
-            let js = serde_json::json!(s);
-            js.to_string()
+            serde_json::json!(value.to_string()).to_string()
         }
-        Properties(p) => {
+        APP_PROPERTIES => {
             // convert to Json string for special characters escaping
-            let js = serde_json::json!(*p);
-            js.to_string()
+            serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
         }
-        Json(s) => s,
-        Integer(i) => format!(r#"{}"#, i),
-        Float(f) => format!(r#"{}"#, f),
+        APP_JSON => value.to_string(),
+        APP_INTEGER | APP_FLOAT => value.to_string(),
+        _ => {
+            format!(r#""{}""#, value.to_string())
+        }
     }
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let res_name = sample.res_name.clone();
-    if let Ok(change) = Change::from_sample(sample, true) {
-        let (encoding, value) = match change.value {
-            Some(v) => (v.encoding_descr(), value_to_json(v)),
-            None => ("None".to_string(), r#""""#.to_string()),
-        };
-        format!(
-            r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-            change.path, value, encoding, change.timestamp
-        )
-    } else {
-        format!(
-            r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-            res_name, "ERROR: Failed to decode Sample", "Unkown", "None"
-        )
-    }
+    let encoding = sample.value.encoding_descr();
+    format!(
+        r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
+        sample.res_name,
+        value_to_json(sample.value),
+        encoding,
+        if let Some(ts) = sample.timestamp {
+            ts.to_string()
+        } else {
+            "None".to_string()
+        }
+    )
 }
 
 async fn to_json(results: ReplyReceiver) -> String {
@@ -111,7 +87,7 @@ fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.res_name,
-        String::from_utf8_lossy(&sample.payload.contiguous())
+        String::from_utf8_lossy(&sample.value.payload.contiguous())
     )
 }
 
@@ -178,24 +154,6 @@ pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
     log::trace!("Incoming GET request: {:?}", req);
-    // Reconstruct Selector from req.url() (no easier way...)
-    let url = req.url();
-    let mut s = String::with_capacity(url.as_str().len());
-    s.push_str(url.path());
-    if let Some(q) = url.query() {
-        s.push('?');
-        s.push_str(q);
-    }
-    let selector = match Selector::try_from(s) {
-        Ok(sel) => sel,
-        Err(e) => {
-            return Ok(response(
-                StatusCode::BadRequest,
-                Mime::from_str("text/plain").unwrap(),
-                &e.to_string(),
-            ))
-        }
-    };
 
     let first_accept = match req.header("accept") {
         Some(accept) => accept[0]
@@ -226,7 +184,11 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         let sample = sub.receiver().next().await.unwrap();
                         let send = async {
                             if let Err(e) = sender
-                                .send(&get_kind_str(&sample), sample_to_json(sample), None)
+                                .send(
+                                    &data_kind::to_string(sample.kind),
+                                    sample_to_json(sample),
+                                    None,
+                                )
                                 .await
                             {
                                 log::warn!("Error sending data from the SSE stream: {}", e);
@@ -253,7 +215,13 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             },
         ))
     } else {
-        let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
+        let url = req.url();
+        let resource = path_to_resource(url.path(), &req.state().1);
+        let selector = if let Some(q) = url.query() {
+            Selector::from(resource).with_predicate(q)
+        } else {
+            resource.into()
+        };
         let consolidation = if selector.has_time_range() {
             QueryConsolidation::none()
         } else {
@@ -262,8 +230,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         match req
             .state()
             .0
-            .get(&resource)
-            .predicate(&selector.predicate)
+            .get(&selector)
             .consolidation(consolidation)
             .await
         {
