@@ -23,7 +23,7 @@ use zenoh::net::protocol::proto::ZenohMessage;
 fn criterion_benchmark(c: &mut Criterion) {
     let batch_size = BATCH_SIZE as usize;
     let mut current = 8;
-    let mut pld = Vec::new();
+    let mut pld = vec![];
     while current < batch_size {
         pld.push(current);
         current *= 2;

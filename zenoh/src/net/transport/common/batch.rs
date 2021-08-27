@@ -372,8 +372,8 @@ mod tests {
             let mut batch = SerializationBatch::new(batch_size, *is_streamed);
 
             // Serialize the messages until the batch is full
-            let mut tmsgs_in: Vec<TransportMessage> = Vec::new();
-            let mut zmsgs_in: Vec<ZenohMessage> = Vec::new();
+            let mut tmsgs_in: Vec<TransportMessage> = vec![];
+            let mut zmsgs_in: Vec<ZenohMessage> = vec![];
             let mut reliable = true;
             let mut dropping = true;
             loop {
@@ -439,7 +439,7 @@ mod tests {
             }
 
             // Verify that we deserialize the same messages we have serialized
-            let mut deserialized: Vec<TransportMessage> = Vec::new();
+            let mut deserialized: Vec<TransportMessage> = vec![];
             // Convert the buffer into an ZBuf
             let mut zbuf: ZBuf = batch.get_serialized_messages().into();
             // Deserialize the messages
@@ -448,8 +448,8 @@ mod tests {
             }
             assert!(!deserialized.is_empty());
 
-            let mut tmsgs_out: Vec<TransportMessage> = Vec::new();
-            let mut zmsgs_out: Vec<ZenohMessage> = Vec::new();
+            let mut tmsgs_out: Vec<TransportMessage> = vec![];
+            let mut zmsgs_out: Vec<ZenohMessage> = vec![];
             for msg in deserialized.drain(..) {
                 match msg.body {
                     TransportBody::Frame(Frame { payload, .. }) => match payload {
@@ -506,7 +506,7 @@ mod tests {
                 );
 
                 // Store all the batches
-                let mut batches: Vec<SerializationBatch> = Vec::new();
+                let mut batches: Vec<SerializationBatch> = vec![];
                 // Fragment the message
                 let mut to_write = wbuf.len();
                 while to_write > 0 {
@@ -565,7 +565,7 @@ mod tests {
     #[test]
     fn serialization_batch() {
         let batch_size: Vec<u16> = vec![128, 512, 1_024, 4_096, 8_192, 16_384, 32_768, 65_535];
-        let mut payload_size: Vec<usize> = Vec::new();
+        let mut payload_size: Vec<usize> = vec![];
         let mut size: usize = 8;
         for _ in 0..16 {
             if ZInt::try_from(size).is_err() {

@@ -335,7 +335,7 @@ impl SharedMemoryManager {
             size: real_size,
         };
         free_list.push(chunk);
-        let busy_list = std::vec::Vec::new();
+        let busy_list = vec![];
         let shm = SharedMemoryManager {
             segment_path: path,
             size,
