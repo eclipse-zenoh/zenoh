@@ -57,9 +57,9 @@ pub const FIELD_SEPARATOR: char = '=';
 // @TODO: port it as a Properties parsing
 fn str_to_properties(s: &str) -> Option<Properties> {
     let mut hm = Properties::default();
-    for opt in s.split(LIST_SEPARATOR) {
-        let field_index = opt.find(FIELD_SEPARATOR)?;
-        let (key, value) = s.split_at(field_index);
+    for p in s.split(LIST_SEPARATOR) {
+        let field_index = p.find(FIELD_SEPARATOR)?;
+        let (key, value) = p.split_at(field_index);
         hm.insert(key.to_string(), value[1..].to_string());
     }
     Some(hm)
@@ -97,7 +97,14 @@ impl FromStr for EndPoint {
         let locator: Locator = s[0..config_index].parse()?;
         // Parse the config if any
         let config = if config_index < s.len() {
-            let config = str_to_properties(&s[config_index..]).ok_or_else(|| {
+            let c = &s[config_index + 1..];
+            // If the metadata is after the configuration, it's an invalid locator
+            if c.find(METADATA_SEPARATOR).is_some() {
+                let e = format!("Invalid endpoint format: {}", s);
+                return zerror!(ZErrorKind::InvalidLocator { descr: e });
+            }
+
+            let config = str_to_properties(c).ok_or_else(|| {
                 let e = format!("Invalid endpoint configuration: {}", s);
                 zerror2!(ZErrorKind::InvalidLocator { descr: e })
             })?;
@@ -278,7 +285,7 @@ impl FromStr for Locator {
         let address: LocatorAddress = s[0..metadata_index].parse()?;
         // Parse the metadata if any
         let metadata = if metadata_index < s.len() {
-            let metadata = str_to_properties(&s[metadata_index..]).ok_or_else(|| {
+            let metadata = str_to_properties(&s[metadata_index + 1..]).ok_or_else(|| {
                 let e = format!("Invalid locator metadata: {}", s);
                 zerror2!(ZErrorKind::InvalidLocator { descr: e })
             })?;
