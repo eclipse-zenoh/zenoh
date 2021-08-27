@@ -176,6 +176,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         let default_ipv4_addr = Ipv4Addr::new(0, 0, 0, 0);
         let default_ipv6_addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
+        // Get default iface address to bind the socket on if provided
         let mut iface_addr: Option<IpAddr> = None;
         if let Some(config) = endpoint.config.as_ref() {
             if let Some(iface) = config.get(UDP_MULTICAST_SRC_IFACE) {
@@ -198,6 +199,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
             }
         }
 
+        // Get local unicast address to bind the socket on
         let local_addr = match iface_addr {
             Some(iface_addr) => iface_addr,
             None => {
@@ -226,16 +228,9 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         };
 
         // Establish a unicast UDP socket
-        let ucast_sock =
-            Socket::new(domain, Type::DGRAM, Some(Protocol::UDP)).map_err(|e| zerrmsg!(e))?;
-        ucast_sock
-            .set_reuse_address(true)
+        let ucast_sock = UdpSocket::bind(SocketAddr::new(local_addr, 0))
+            .await
             .map_err(|e| zerrmsg!(e))?;
-
-        let _ = ucast_sock
-            .bind(&SocketAddr::new(local_addr, 0).into())
-            .map_err(|e| zerrmsg!(e))?;
-        let ucast_sock: UdpSocket = std::net::UdpSocket::from(ucast_sock).into();
 
         // Establish a multicast UDP socket
         let mcast_sock =
@@ -283,7 +278,6 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
 
         let link = Arc::new(LinkMulticastUdp::new(
             ucast_addr, ucast_sock, mcast_addr, mcast_sock,
-            // local_addrs,
         ));
 
         Ok(LinkMulticast(link))

@@ -49,11 +49,12 @@ pub const STR_UNIXSOCK_STREAM: &str = "unixsock-stream";
 
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';
-pub const METADATA_SEPARATOR: char = '#';
-pub const CONFIG_SEPARATOR: char = '?';
+pub const METADATA_SEPARATOR: char = '?';
+pub const CONFIG_SEPARATOR: char = '#';
 pub const LIST_SEPARATOR: char = ';';
 pub const FIELD_SEPARATOR: char = '=';
 
+// @TODO: port it as a Properties parsing
 fn str_to_properties(s: &str) -> Option<Properties> {
     let mut hm = Properties::default();
     for opt in s.split(LIST_SEPARATOR) {
@@ -64,6 +65,7 @@ fn str_to_properties(s: &str) -> Option<Properties> {
     Some(hm)
 }
 
+// @TODO: port it as a Properties display
 fn properties_to_str(hm: &Properties) -> String {
     let mut s = "".to_string();
     let mut count = hm.len();
