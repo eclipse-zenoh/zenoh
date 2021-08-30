@@ -94,7 +94,7 @@ use git_version::git_version;
 pub use types::*;
 
 mod selector;
-pub use selector::Selector;
+pub use selector::*;
 
 pub mod info;
 

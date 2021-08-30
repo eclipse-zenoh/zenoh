@@ -12,10 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 // use super::{Path, PathExpr};
-use crate::{Properties, Query, ResKey};
+use crate::{Properties, Query, ResKey, ZErrorKind};
 use regex::Regex;
 use std::borrow::Cow;
+use std::convert::TryFrom;
 use std::fmt;
+use zenoh_util::core::ZError;
 
 /// The "starttime" property key for time-range selection
 pub const PROP_STARTTIME: &str = "starttime";
@@ -83,26 +85,9 @@ impl<'a> Selector<'a> {
     /// Returns true if the Selector specifies a time-range in its properties
     /// (i.e. using `"starttime"` or `"stoptime"`)
     pub fn has_time_range(&self) -> bool {
-        const REGEX_PROJECTION: &str = r"[^\[\]\(\)\[\]]+";
-        const REGEX_PROPERTIES: &str = ".*";
-        const REGEX_FRAGMENT: &str = ".*";
-
-        lazy_static! {
-            static ref RE: Regex = Regex::new(&format!(
-                "(?:\\?(?P<proj>{})?(?:\\((?P<prop>{})\\))?)?(?:\\[(?P<frag>{})\\])?",
-                REGEX_PROJECTION, REGEX_PROPERTIES, REGEX_FRAGMENT
-            ))
-            .unwrap();
-        }
-
-        if let Some(caps) = RE.captures(&self.predicate) {
-            let props: Properties = caps
-                .name("prop")
-                .map(|s| s.as_str().into())
-                .unwrap_or_default();
-            props.contains_key(PROP_STARTTIME) || props.contains_key(PROP_STOPTIME)
-        } else {
-            false
+        match Predicate::try_from(self.predicate) {
+            Ok(predicate) => predicate.has_time_range(),
+            _ => false,
         }
     }
 }
@@ -154,5 +139,157 @@ impl<'a> From<ResKey> for Selector<'a> {
             key: Cow::Owned(from),
             predicate: "",
         }
+    }
+}
+
+/// A struct that can be used to help decoding or encoding the predicate part of a query.
+///
+/// # Examples
+/// ```
+/// use std::convert::TryInto;
+/// use zenoh::*;
+///
+/// let predicate: Predicate = "?x>1&y<2&z=4(p1=v1;p2=v2;pn=vn)[a;b;x;y;z]".try_into().unwrap();
+/// assert_eq!(predicate.filter, "x>1&y<2&z=4");
+/// assert_eq!(predicate.properties.get("p2").unwrap().as_str(), "v2");
+/// assert_eq!(predicate.fragment, "a;b;x;y;z");
+/// ```
+///
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// # use zenoh::*;
+/// # use futures::prelude::*;
+/// # let session = open(config::peer()).await.unwrap();
+///
+/// use std::convert::TryInto;
+///
+/// let mut queryable = session.register_queryable(&"/resource/name".into()).await.unwrap();
+/// while let Some(query) = queryable.receiver().next().await {
+///     let predicate: Predicate = query.predicate.as_str().try_into().unwrap();
+///     println!("filter: {}", predicate.filter);
+///     println!("properties: {}", predicate.properties);
+///     println!("fragment: {}", predicate.fragment);
+/// }
+/// # })
+/// ```
+///
+/// ```
+/// # async_std::task::block_on(async {
+/// # use zenoh::*;
+/// # use futures::prelude::*;
+/// # let session = open(config::peer()).await.unwrap();
+/// # let mut properties = Properties::default();
+///
+/// let predicate = Predicate::empty()
+///     .with_filter("x>1&y<2")
+///     .with_properties(properties)
+///     .with_fragment("x;y");
+///
+/// let mut replies = session.get(
+///     &Selector::from("/resource/name").with_predicate(&predicate.to_string())
+/// ).await.unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct Predicate<'a> {
+    /// the filter part of this Predicate, if any (all characters after `?` and before `(` or `[`)
+    pub filter: &'a str,
+    /// the properties part of this Predicate (all characters between ``( )`` and after `?`)
+    pub properties: Properties,
+    /// the fragment part of this Predicate, if any (all characters between ``[ ]`` and after `?`)
+    pub fragment: &'a str,
+}
+
+impl<'a> Predicate<'a> {
+    pub fn new(filter: &'a str, properties: Properties, fragment: &'a str) -> Self {
+        Predicate {
+            filter,
+            properties,
+            fragment,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Predicate::new("", Properties::default(), "")
+    }
+
+    pub fn with_filter(mut self, filter: &'a str) -> Self {
+        self.filter = filter;
+        self
+    }
+
+    pub fn with_properties(mut self, properties: Properties) -> Self {
+        self.properties = properties;
+        self
+    }
+
+    pub fn with_fragment(mut self, fragment: &'a str) -> Self {
+        self.fragment = fragment;
+        self
+    }
+
+    /// Returns true if the Predicate specifies a time-range in its properties
+    /// (i.e. using `"starttime"` or `"stoptime"`)
+    pub fn has_time_range(&self) -> bool {
+        self.properties.contains_key(PROP_STARTTIME) || self.properties.contains_key(PROP_STOPTIME)
+    }
+}
+
+impl fmt::Display for Predicate<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut s = "?".to_string();
+        s.push_str(self.filter);
+        if !self.properties.is_empty() {
+            s.push('(');
+            s.push_str(self.properties.to_string().as_str());
+            s.push(')');
+        }
+        if !self.fragment.is_empty() {
+            s.push('[');
+            s.push_str(self.fragment);
+            s.push(']');
+        }
+        write!(f, "{}", s)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Predicate<'a> {
+    type Error = ZError;
+
+    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
+        const REGEX_PROJECTION: &str = r"[^\[\]\(\)\[\]]+";
+        const REGEX_PROPERTIES: &str = ".*";
+        const REGEX_FRAGMENT: &str = ".*";
+
+        lazy_static! {
+            static ref RE: Regex = Regex::new(&format!(
+                "(?:\\?(?P<proj>{})?(?:\\((?P<prop>{})\\))?)?(?:\\[(?P<frag>{})\\])?",
+                REGEX_PROJECTION, REGEX_PROPERTIES, REGEX_FRAGMENT
+            ))
+            .unwrap();
+        }
+
+        if let Some(caps) = RE.captures(s) {
+            Ok(Predicate {
+                filter: caps.name("proj").map(|s| s.as_str()).unwrap_or(""),
+                properties: caps
+                    .name("prop")
+                    .map(|s| s.as_str().into())
+                    .unwrap_or_default(),
+                fragment: caps.name("frag").map(|s| s.as_str()).unwrap_or(""),
+            })
+        } else {
+            zerror!(ZErrorKind::InvalidSelector {
+                selector: s.to_string(),
+            })
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a String> for Predicate<'a> {
+    type Error = ZError;
+
+    fn try_from(s: &'a String) -> Result<Self, Self::Error> {
+        Predicate::try_from(s.as_str())
     }
 }
