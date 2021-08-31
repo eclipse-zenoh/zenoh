@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 use zenoh::utils::resource_name;
 use zenoh::Sample;
 use zenoh::Value;
-use zenoh::{data_kind, utils, Properties, Timestamp, ZResult};
+use zenoh::{utils, Properties, SampleKind, Timestamp, ZResult};
 use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
@@ -157,7 +157,7 @@ impl Storage for MemoryStorage {
         sample.ensure_timestamp();
         let timestamp = sample.timestamp.take().unwrap();
         match sample.kind {
-            data_kind::PUT => match self.map.write().await.entry(sample.res_name.clone()) {
+            SampleKind::Put => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
                     v.insert(Present {
                         sample,
@@ -184,7 +184,7 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            data_kind::DELETE => match self.map.write().await.entry(sample.res_name.clone()) {
+            SampleKind::Delete => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
                     // NOTE: even if path is not known yet, we need to store the removal time:
                     // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
@@ -216,14 +216,8 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            data_kind::PATCH => {
+            SampleKind::Patch => {
                 warn!("Received PATCH for {}: not yet supported", sample.res_name);
-            }
-            kind => {
-                warn!(
-                    "Received data on {} with unknown kind: {}",
-                    sample.res_name, kind
-                );
             }
         }
         Ok(())

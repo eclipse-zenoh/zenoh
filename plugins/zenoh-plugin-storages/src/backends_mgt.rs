@@ -19,7 +19,7 @@ use futures::prelude::*;
 use futures::select;
 use log::{debug, error, trace, warn};
 use std::collections::HashMap;
-use zenoh::{data_kind, encoding, Sample, Session, Value, ZError, ZErrorKind, ZResult};
+use zenoh::{encoding, Sample, SampleKind, Session, Value, ZError, ZErrorKind, ZResult};
 use zenoh_backend_traits::{
     IncomingDataInterceptor, OutgoingDataInterceptor, PROP_STORAGE_PATH_EXPR,
 };
@@ -93,7 +93,7 @@ pub(crate) async fn start_backend(
                     let sample = sample.unwrap();
                     trace!("{} received change for {}", admin_path, sample.res_name);
                     match sample.kind {
-                        data_kind::PUT => {
+                        SampleKind::Put => {
                             #[allow(clippy::map_entry)]
                             if !storages_handles.contains_key(&sample.res_name) {
                                 match create_and_start_storage(sample.res_name.clone(), sample.value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
@@ -106,12 +106,11 @@ pub(crate) async fn start_backend(
                                 warn!("Storage {} already exists", sample.res_name);
                             }
                         }
-                        data_kind::DELETE =>  {
+                        SampleKind::Delete =>  {
                             debug!("Delete storage {}", sample.res_name);
                             let _ = storages_handles.remove(&sample.res_name);
                         }
-                        data_kind::PATCH => warn!("PATCH not supported on {}", sample.res_name),
-                        kind => warn!("Received data on {} with unknown kind: {}", sample.res_name, kind),
+                        SampleKind::Patch => warn!("PATCH not supported on {}", sample.res_name),
                     }
                 },
                 _ = stop_rx.recv().fuse() => {

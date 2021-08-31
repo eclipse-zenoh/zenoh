@@ -78,6 +78,7 @@ use flume::bounded;
 use futures::prelude::*;
 use log::{debug, trace};
 use net::protocol::core::WhatAmI;
+use net::protocol::proto::data_kind;
 use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
 use zenoh_util::properties::config::*;
@@ -103,7 +104,7 @@ mod session;
 pub use session::*;
 
 pub use net::protocol::core::{Timestamp, TimestampId};
-pub use net::protocol::proto::{data_kind, encoding};
+pub use net::protocol::proto::encoding;
 
 pub mod queryable {
     #[doc(inline)]

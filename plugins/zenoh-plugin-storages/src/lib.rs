@@ -21,7 +21,7 @@ use libloading::Symbol;
 use log::{debug, error, warn};
 use std::collections::HashMap;
 use zenoh::net::runtime::Runtime;
-use zenoh::{data_kind, encoding, Properties, Session, Value, ZError, ZErrorKind, ZResult};
+use zenoh::{encoding, Properties, SampleKind, Session, Value, ZError, ZErrorKind, ZResult};
 use zenoh_backend_traits::{Backend, PROP_STORAGE_PATH_EXPR};
 use zenoh_util::{zerror, LibLoader};
 
@@ -134,7 +134,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
             debug!("Received sample: {:?}", sample);
             let path = sample.res_name;
             match sample.kind {
-                data_kind::PUT => {
+                SampleKind::Put => {
                     #[allow(clippy::map_entry)]
                     // Disable clippy check because no way to log the warn using map.entry().or_insert()
                     if !backend_handles.contains_key(&path) {
@@ -155,12 +155,11 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                         warn!("Backend {} already exists", path);
                     }
                 }
-                data_kind::DELETE => {
+                SampleKind::Delete => {
                     debug!("Delete backend {}", path);
                     let _ = backend_handles.remove(&path);
                 }
-                data_kind::PATCH => warn!("PATCH not supported on {}", path),
-                kind => warn!("Received data on {} with unknown kind: {}", path, kind),
+                SampleKind::Patch => warn!("PATCH not supported on {}", path),
             }
         }
     } else {

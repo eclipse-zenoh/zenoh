@@ -114,12 +114,12 @@ fn enc_from_mime(mime: Option<Mime>) -> ZInt {
     }
 }
 
-fn method_to_kind(method: Method) -> ZInt {
+fn method_to_kind(method: Method) -> SampleKind {
     match method {
-        Method::Put => data_kind::PUT,
-        Method::Patch => data_kind::PATCH,
-        Method::Delete => data_kind::DELETE,
-        _ => data_kind::DEFAULT,
+        Method::Put => SampleKind::Put,
+        Method::Patch => SampleKind::Patch,
+        Method::Delete => SampleKind::Delete,
+        _ => SampleKind::default(),
     }
 }
 
@@ -184,11 +184,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         let sample = sub.receiver().next().await.unwrap();
                         let send = async {
                             if let Err(e) = sender
-                                .send(
-                                    &data_kind::to_string(sample.kind),
-                                    sample_to_json(sample),
-                                    None,
-                                )
+                                .send(&sample.kind.to_string(), sample_to_json(sample), None)
                                 .await
                             {
                                 log::warn!("Error sending data from the SSE stream: {}", e);

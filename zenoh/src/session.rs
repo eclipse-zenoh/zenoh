@@ -643,8 +643,8 @@ impl<'a> WriteBuilder<'a> {
 
     /// Change the kind of the written data.
     #[inline]
-    pub fn kind(mut self, kind: ZInt) -> Self {
-        self.kind = Some(kind);
+    pub fn kind(mut self, kind: SampleKind) -> Self {
+        self.kind = Some(kind as ZInt);
         self
     }
 

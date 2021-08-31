@@ -22,8 +22,7 @@
 //! # Example
 //! ```
 //! use async_trait::async_trait;
-//! use zenoh::{utils, Properties, Sample, ZResult};
-//! use zenoh::{data_kind, Value};
+//! use zenoh::{utils, Properties, Sample, SampleKind, Value, ZResult};
 //! use zenoh_backend_traits::*;
 //!
 //! #[no_mangle]
@@ -97,25 +96,22 @@
 //!         let timestamp = sample.timestamp.take().unwrap();
 //!         // Store or delete the sample depending the ChangeKind
 //!         match sample.kind {
-//!             data_kind::PUT => {
+//!             SampleKind::Put => {
 //!                 let _key = sample.res_name;
 //!                 // TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: store (key, sample)
 //!                 //  - if not: drop the sample
 //!             }
-//!             data_kind::DELETE => {
+//!             SampleKind::Delete => {
 //!                 let _key = sample.res_name;
 //!                 // TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
 //!                 //  - if not: drop the sample
 //!             }
-//!             data_kind::PATCH => {
+//!             SampleKind::Patch => {
 //!                 println!("Received PATCH for {}: not yet supported", sample.res_name);
-//!             }
-//!             kind => {
-//!                 println!("Received data on {} with unknown kind: {}", sample.res_name, kind);
 //!             }
 //!         }
 //!         Ok(())

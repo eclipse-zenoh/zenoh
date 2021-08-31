@@ -315,12 +315,57 @@ impl From<Option<DataInfo>> for SourceInfo {
     }
 }
 
+/// The kind of a [`Sample`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum SampleKind {
+    /// if the [`Sample`] was caused by a `put` operation.
+    Put = data_kind::PUT as isize,
+    /// if the [`Sample`] was caused by a `patch` operation.
+    Patch = data_kind::PATCH as isize,
+    /// if the [`Sample`] was caused by a `delete` operation.
+    Delete = data_kind::DELETE as isize,
+}
+
+impl Default for SampleKind {
+    fn default() -> Self {
+        SampleKind::Put
+    }
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Patch => write!(f, "PATCH"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl From<ZInt> for SampleKind {
+    fn from(kind: ZInt) -> Self {
+        match kind {
+            data_kind::PUT => SampleKind::Put,
+            data_kind::PATCH => SampleKind::Patch,
+            data_kind::DELETE => SampleKind::Delete,
+            _ => {
+                log::warn!(
+                    "Received DataInfo with kind={} which doesn't correspond to a SampleKind. \
+                       Assume a PUT with RAW encoding",
+                    kind
+                );
+                SampleKind::Put
+            }
+        }
+    }
+}
+
 /// A zenoh sample.
 #[derive(Clone, Debug)]
 pub struct Sample {
     pub res_name: String,
     pub value: Value,
-    pub kind: ZInt,
+    pub kind: SampleKind,
     pub timestamp: Option<Timestamp>,
     pub source_info: SourceInfo,
 }
@@ -331,7 +376,7 @@ impl Sample {
         Sample {
             res_name,
             value,
-            kind: data_kind::DEFAULT,
+            kind: SampleKind::default(),
             timestamp: None,
             source_info: SourceInfo::empty(),
         }
@@ -347,7 +392,7 @@ impl Sample {
             Sample {
                 res_name,
                 value,
-                kind: data_info.kind.unwrap_or(data_kind::DEFAULT),
+                kind: data_info.kind.unwrap_or(data_kind::DEFAULT).into(),
                 timestamp: data_info.timestamp.clone(),
                 source_info: data_info.into(),
             }
@@ -355,7 +400,7 @@ impl Sample {
             Sample {
                 res_name,
                 value,
-                kind: data_kind::DEFAULT,
+                kind: SampleKind::default(),
                 timestamp: None,
                 source_info: SourceInfo::empty(),
             }
