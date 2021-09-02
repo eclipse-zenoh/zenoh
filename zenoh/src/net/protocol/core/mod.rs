@@ -114,6 +114,13 @@ impl fmt::Display for ResKey<'_> {
     }
 }
 
+impl<'a> From<&ResKey<'a>> for ResKey<'a> {
+    #[inline]
+    fn from(key: &ResKey<'a>) -> ResKey<'a> {
+        key.clone()
+    }
+}
+
 impl From<ResourceId> for ResKey<'_> {
     #[inline]
     fn from(rid: ResourceId) -> ResKey<'static> {

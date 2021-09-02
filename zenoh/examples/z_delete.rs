@@ -23,10 +23,10 @@ async fn main() {
     let (config, path) = parse_args();
 
     println!("New zenoh...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Delete Path '{}'...\n", path);
-    session.delete(&path.into()).await.unwrap();
+    session.delete(&path).await.unwrap();
 
     session.close().await.unwrap();
 }

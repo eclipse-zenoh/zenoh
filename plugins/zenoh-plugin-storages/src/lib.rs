@@ -115,7 +115,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                         .to_string();
                 let props = Properties::from([(PROP_STORAGE_PATH_EXPR, path_expr)].as_ref());
                 zenoh
-                    .put(&storage_admin_path.into(), props.into())
+                    .put(&storage_admin_path, props)
                     .encoding(encoding::APP_PROPERTIES)
                     .await
                     .unwrap();
@@ -126,10 +126,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     // subscribe to PUT/DELETE on 'backends_prefix'/*
     let backends_admin_selector = format!("{}/*", backends_prefix).to_string();
-    if let Ok(mut backends_admin) = zenoh
-        .subscribe(&backends_admin_selector.clone().into())
-        .await
-    {
+    if let Ok(mut backends_admin) = zenoh.subscribe(&backends_admin_selector).await {
         while let Some(sample) = backends_admin.receiver().next().await {
             debug!("Received sample: {:?}", sample);
             let path = sample.res_name;

@@ -25,7 +25,7 @@ async fn main() {
     let (config, selector, query) = parse_args();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!(
         "Declaring a QueryingSubscriber on {} with an initial query on {}",

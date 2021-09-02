@@ -41,7 +41,7 @@ pub(crate) async fn start_backend(
     task::spawn(async move {
         // admin_path is "/@/.../backend/<beid>"
         // answer to GET on 'admin_path'
-        let mut backend_admin = match zenoh.register_queryable(&admin_path.as_str().into()).await {
+        let mut backend_admin = match zenoh.register_queryable(&admin_path).await {
             Ok(backend_admin) => backend_admin,
             Err(e) => {
                 error!("Error starting backend {} : {}", admin_path, e);
@@ -50,7 +50,7 @@ pub(crate) async fn start_backend(
         };
         // subscribe to PUT/DELETE on 'admin_path'/storage/*
         let storages_admin_selector = format!("{}/storage/*", admin_path);
-        let mut storages_admin = match zenoh.subscribe(&storages_admin_selector.into()).await {
+        let mut storages_admin = match zenoh.subscribe(&storages_admin_selector).await {
             Ok(storages_admin) => storages_admin,
             Err(e) => {
                 error!("Error starting backend {} : {}", admin_path, e);

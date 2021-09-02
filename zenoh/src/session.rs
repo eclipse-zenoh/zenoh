@@ -190,7 +190,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct PublisherBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: &'b ResKey<'b>,
+        reskey: ResKey<'b>,
     }
 }
 
@@ -201,7 +201,7 @@ impl<'a> Runnable for PublisherBuilder<'a, '_> {
         trace!("publishing({:?})", self.reskey);
         let mut state = zwrite!(self.session.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(self.reskey)?;
+        let resname = state.localkey_to_resname(&self.reskey)?;
         let pub_state = Arc::new(PublisherState {
             id,
             reskey: self.reskey.to_owned(),
@@ -252,7 +252,7 @@ derive_zfuture! {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// let subscriber = session
-    ///     .subscribe(&"/resource/name".into())
+    ///     .subscribe("/resource/name")
     ///     .best_effort()
     ///     .pull_mode()
     ///     .await
@@ -262,7 +262,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct SubscriberBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: &'b ResKey<'b>,
+        reskey: ResKey<'b>,
         info: SubInfo,
         local: bool,
     }
@@ -351,7 +351,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
 
         if self.local {
             self.session
-                .register_any_local_subscriber(self.reskey, SubscriberInvoker::Sender(sender))
+                .register_any_local_subscriber(&self.reskey, SubscriberInvoker::Sender(sender))
                 .map(|sub_state| Subscriber {
                     session: self.session,
                     state: sub_state,
@@ -360,7 +360,11 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
                 })
         } else {
             self.session
-                .register_any_subscriber(self.reskey, SubscriberInvoker::Sender(sender), &self.info)
+                .register_any_subscriber(
+                    &self.reskey,
+                    SubscriberInvoker::Sender(sender),
+                    &self.info,
+                )
                 .map(|sub_state| Subscriber {
                     session: self.session,
                     state: sub_state,
@@ -381,7 +385,7 @@ derive_zfuture! {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// let subscriber = session
-    ///     .subscribe(&"/resource/name".into())
+    ///     .subscribe("/resource/name")
     ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
     ///     .best_effort()
     ///     .pull_mode()
@@ -392,7 +396,7 @@ derive_zfuture! {
     #[derive(Clone)]
     pub struct CallbackSubscriberBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: &'b ResKey<'b>,
+        reskey: ResKey<'b>,
         info: SubInfo,
         local: bool,
         handler: Arc<RwLock<DataHandler>>,
@@ -403,7 +407,7 @@ impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CallbackSubscriberBuilder")
             .field("session", self.session)
-            .field("reskey", self.reskey)
+            .field("reskey", &self.reskey)
             .field("info", &self.info)
             .finish()
     }
@@ -477,7 +481,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
         if self.local {
             self.session
                 .register_any_local_subscriber(
-                    self.reskey,
+                    &self.reskey,
                     SubscriberInvoker::Handler(self.handler.clone()),
                 )
                 .map(|sub_state| CallbackSubscriber {
@@ -488,7 +492,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
         } else {
             self.session
                 .register_any_subscriber(
-                    self.reskey,
+                    &self.reskey,
                     SubscriberInvoker::Handler(self.handler.clone()),
                     &self.info,
                 )
@@ -512,7 +516,7 @@ derive_zfuture! {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// let mut queryable = session
-    ///     .register_queryable(&"/resource/name".into())
+    ///     .register_queryable("/resource/name")
     ///     .kind(queryable::EVAL)
     ///     .await
     ///     .unwrap();
@@ -521,7 +525,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct QueryableBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: &'b ResKey<'b>,
+        reskey: ResKey<'b>,
         kind: ZInt,
         complete: bool,
     }
@@ -564,20 +568,20 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
 
             if self.complete {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, self.reskey, self.kind);
+                let complete = Session::complete_twin_qabls(&state, &self.reskey, self.kind);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(self.reskey, self.kind, &qabl_info, None);
+                primitives.decl_queryable(&self.reskey, self.kind, &qabl_info, None);
             }
         }
         #[cfg(not(feature = "complete_n"))]
         {
-            let twin_qabl = Session::twin_qabl(&state, self.reskey, self.kind);
+            let twin_qabl = Session::twin_qabl(&state, &self.reskey, self.kind);
             let complete_twin_qabl =
-                twin_qabl && Session::complete_twin_qabl(&state, self.reskey, self.kind);
+                twin_qabl && Session::complete_twin_qabl(&state, &self.reskey, self.kind);
 
             state.queryables.insert(id, qable_state.clone());
 
@@ -593,7 +597,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(self.reskey, self.kind, &qabl_info, None);
+                primitives.decl_queryable(&self.reskey, self.kind, &qabl_info, None);
             }
         }
 
@@ -616,7 +620,7 @@ derive_zfuture! {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// session
-    ///     .put(&"/resource/name".into(), "value".as_bytes().into())
+    ///     .put("/resource/name", "value")
     ///     .encoding(encoding::TEXT_PLAIN)
     ///     .congestion_control(CongestionControl::Block)
     ///     .await
@@ -626,7 +630,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct WriteBuilder<'a> {
         session: &'a Session,
-        resource: &'a ResKey<'a>,
+        resource: ResKey<'a>,
         value: Option<Value>,
         kind: Option<ZInt>,
         congestion_control: CongestionControl,
@@ -683,7 +687,7 @@ impl Runnable for WriteBuilder<'_> {
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
-            self.resource,
+            &self.resource,
             value.payload.clone(),
             Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             self.congestion_control,
@@ -692,7 +696,7 @@ impl Runnable for WriteBuilder<'_> {
         );
         if local_routing {
             self.session
-                .handle_data(true, self.resource, data_info, value.payload);
+                .handle_data(true, &self.resource, data_info, value.payload);
         }
         Ok(())
     }
@@ -709,7 +713,7 @@ derive_zfuture! {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// let mut replies = session
-    ///     .get(&"/resource/name?value>1".into())
+    ///     .get("/resource/name?value>1")
     ///     .target(QueryTarget{ kind: queryable::ALL_KINDS, target: Target::All })
     ///     .consolidation(QueryConsolidation::none())
     ///     .await
@@ -719,8 +723,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct QueryBuilder<'a> {
         session: &'a Session,
-        resource: &'a ResKey<'a>,
-        predicate: &'a str,
+        selector: Selector<'a>,
         target: Option<QueryTarget>,
         consolidation: Option<QueryConsolidation>,
     }
@@ -747,9 +750,8 @@ impl Runnable for QueryBuilder<'_> {
 
     fn run(&mut self) -> Self::Output {
         trace!(
-            "query({:?}, {:?}, {:?}, {:?})",
-            self.resource,
-            self.predicate,
+            "get({}, {:?}, {:?})",
+            self.selector,
             self.target,
             self.consolidation
         );
@@ -776,8 +778,8 @@ impl Runnable for QueryBuilder<'_> {
         let local_routing = state.local_routing;
         drop(state);
         primitives.send_query(
-            self.resource,
-            self.predicate,
+            self.selector.key(),
+            self.selector.predicate(),
             qid,
             target.clone(),
             consolidation.clone(),
@@ -786,8 +788,8 @@ impl Runnable for QueryBuilder<'_> {
         if local_routing {
             self.session.handle_query(
                 true,
-                self.resource,
-                self.predicate,
+                self.selector.key(),
+                self.selector.predicate(),
                 qid,
                 target,
                 consolidation,
@@ -988,17 +990,21 @@ impl Session {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let rid = session.register_resource(&"/resource/name".into()).await.unwrap();
+    /// let rid = session.register_resource("/resource/name").await.unwrap();
     /// # })
     /// ```
-    pub fn register_resource(
+    pub fn register_resource<'a, IntoResKey>(
         &self,
-        resource: &ResKey,
-    ) -> impl ZFuture<Output = ZResult<ResourceId>> {
+        resource: IntoResKey,
+    ) -> impl ZFuture<Output = ZResult<ResourceId>>
+    where
+        IntoResKey: Into<ResKey<'a>>,
+    {
+        let resource = resource.into();
         trace!("register_resource({:?})", resource);
         let mut state = zwrite!(self.state);
 
-        zready(state.localkey_to_resname(resource).map(|resname| {
+        zready(state.localkey_to_resname(&resource).map(|resname| {
             match state
                 .local_resources
                 .iter()
@@ -1018,7 +1024,7 @@ impl Session {
 
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
-                    primitives.decl_resource(rid, resource);
+                    primitives.decl_resource(rid, &resource);
 
                     rid
                 }
@@ -1039,7 +1045,7 @@ impl Session {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let rid = session.register_resource(&"/resource/name".into()).await.unwrap();
+    /// let rid = session.register_resource("/resource/name").await.unwrap();
     /// session.unregister_resource(rid).await;
     /// # })
     /// ```
@@ -1070,14 +1076,17 @@ impl Session {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing(&"/resource/name".into()).await.unwrap();
-    /// session.put(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
+    /// let publisher = session.publishing("/resource/name").await.unwrap();
+    /// session.put("/resource/name", "value").await.unwrap();
     /// # })
     /// ```
-    pub fn publishing<'a, 'b>(&'a self, reskey: &'b ResKey<'b>) -> PublisherBuilder<'a, 'b> {
+    pub fn publishing<'a, 'b, IntoResKey>(&'a self, reskey: IntoResKey) -> PublisherBuilder<'a, 'b>
+    where
+        IntoResKey: Into<ResKey<'b>>,
+    {
         PublisherBuilder {
             session: self,
-            reskey,
+            reskey: reskey.into(),
         }
     }
 
@@ -1179,7 +1188,7 @@ impl Session {
             let reskey = match reskey {
                 ResKey::RName(name) => match name.find('*') {
                     Some(pos) => {
-                        let id = self.register_resource(&name[..pos].into()).wait()?;
+                        let id = self.register_resource(&name[..pos]).wait()?;
                         ResKey::RIdWithSuffix(id, name[pos..].to_string().into())
                     }
                     None => {
@@ -1240,16 +1249,19 @@ impl Session {
     /// use futures::prelude::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe(&"/resource/name".into()).await.unwrap();
+    /// let mut subscriber = session.subscribe("/resource/name").await.unwrap();
     /// while let Some(sample) = subscriber.receiver().next().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
     /// ```
-    pub fn subscribe<'a, 'b>(&'a self, reskey: &'b ResKey<'b>) -> SubscriberBuilder<'a, 'b> {
+    pub fn subscribe<'a, 'b, IntoResKey>(&'a self, reskey: IntoResKey) -> SubscriberBuilder<'a, 'b>
+    where
+        IntoResKey: Into<ResKey<'b>>,
+    {
         SubscriberBuilder {
             session: self,
-            reskey,
+            reskey: reskey.into(),
             info: SubInfo::default(),
             local: false,
         }
@@ -1268,7 +1280,7 @@ impl Session {
     // /// use zenoh::*;
     // ///
     // /// let session = open(config::peer()).await.unwrap();
-    // /// let subscriber = session.declare_callback_subscriber(&"/resource/name".into(),
+    // /// let subscriber = session.declare_callback_subscriber("/resource/name",
     // ///     |sample| { println!("Received : {} {}", sample.res_name, sample.payload); }
     // /// ).await.unwrap();
     // /// # })
@@ -1394,22 +1406,25 @@ impl Session {
     /// use futures::prelude::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let mut queryable = session.register_queryable(&"/resource/name".into()).await.unwrap();
+    /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///     query.reply_async(Sample::new(
     ///         "/resource/name".to_string(),
-    ///         "value".as_bytes().into(),
+    ///         "value",
     ///     )).await;
     /// }
     /// # })
     /// ```
-    pub fn register_queryable<'a, 'b>(
+    pub fn register_queryable<'a, 'b, IntoResKey>(
         &'a self,
-        reskey: &'b ResKey<'b>,
-    ) -> QueryableBuilder<'a, 'b> {
+        reskey: IntoResKey,
+    ) -> QueryableBuilder<'a, 'b>
+    where
+        IntoResKey: Into<ResKey<'b>>,
+    {
         QueryableBuilder {
             session: self,
-            reskey,
+            reskey: reskey.into(),
             kind: EVAL,
             complete: true,
         }
@@ -1488,16 +1503,24 @@ impl Session {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// session.put(&"/resource/name".into(), "value".as_bytes().into())
+    /// session.put("/resource/name", "value")
     ///        .encoding(encoding::TEXT_PLAIN).await.unwrap();
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a>(&'a self, resource: &'a ResKey<'a>, value: Value) -> WriteBuilder<'a> {
+    pub fn put<'a, IntoResKey, IntoValue>(
+        &'a self,
+        resource: IntoResKey,
+        value: IntoValue,
+    ) -> WriteBuilder<'a>
+    where
+        IntoResKey: Into<ResKey<'a>>,
+        IntoValue: Into<Value>,
+    {
         WriteBuilder {
             session: self,
-            resource,
-            value: Some(value),
+            resource: resource.into(),
+            value: Some(value.into()),
             kind: None,
             congestion_control: CongestionControl::default(),
         }
@@ -1516,14 +1539,17 @@ impl Session {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// session.delete(&"/resource/name".into());
+    /// session.delete("/resource/name");
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a>(&'a self, resource: &'a ResKey) -> WriteBuilder<'a> {
+    pub fn delete<'a, IntoResKey>(&'a self, resource: IntoResKey) -> WriteBuilder<'a>
+    where
+        IntoResKey: Into<ResKey<'a>>,
+    {
         WriteBuilder {
             session: self,
-            resource,
+            resource: resource.into(),
             value: Some(Value::empty()),
             kind: Some(data_kind::DELETE),
             congestion_control: CongestionControl::default(),
@@ -1638,17 +1664,19 @@ impl Session {
     /// use futures::prelude::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let mut replies = session.get(&"/resource/name".into()).await.unwrap();
+    /// let mut replies = session.get("/resource/name").await.unwrap();
     /// while let Some(reply) = replies.next().await {
     ///     println!(">> Received {:?}", reply.data);
     /// }
     /// # })
     /// ```
-    pub fn get<'a>(&'a self, selector: &'a Selector) -> QueryBuilder<'a> {
+    pub fn get<'a, IntoSelector>(&'a self, selector: IntoSelector) -> QueryBuilder<'a>
+    where
+        IntoSelector: Into<Selector<'a>>,
+    {
         QueryBuilder {
             session: self,
-            resource: selector.key(),
-            predicate: selector.predicate(),
+            selector: selector.into(),
             target: Some(QueryTarget::default()),
             consolidation: Some(QueryConsolidation::default()),
         }

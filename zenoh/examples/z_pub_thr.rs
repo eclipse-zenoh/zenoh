@@ -26,12 +26,9 @@ fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    let session = open(config.into()).wait().unwrap();
+    let session = open(config).wait().unwrap();
 
-    let reskey = RId(session
-        .register_resource(&"/test/thr".into())
-        .wait()
-        .unwrap());
+    let reskey = RId(session.register_resource("/test/thr").wait().unwrap());
     let _publ = session.publishing(&reskey).wait().unwrap();
 
     loop {

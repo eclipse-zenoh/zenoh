@@ -40,14 +40,10 @@ async fn main() {
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
-    let mut queryable = session
-        .register_queryable(&path.into())
-        .kind(EVAL)
-        .await
-        .unwrap();
+    let mut queryable = session.register_queryable(path).kind(EVAL).await.unwrap();
 
     async_std::task::spawn(
         queryable
@@ -55,7 +51,7 @@ async fn main() {
             .clone()
             .for_each(move |request| async move {
                 request
-                    .reply_async(Sample::new(path.to_string(), HTML.as_bytes().into()))
+                    .reply_async(Sample::new(path.to_string(), HTML))
                     .await;
             }),
     );
@@ -63,11 +59,11 @@ async fn main() {
     let event_path = [path, "/event"].concat();
 
     print!("Declaring Resource {}", event_path);
-    let rid = session.register_resource(&event_path.into()).await.unwrap();
+    let rid = session.register_resource(&event_path).await.unwrap();
     println!(" => RId {}", rid);
 
     println!("Declaring Publisher on {}", rid);
-    let _publ = session.publishing(&rid.into()).await.unwrap();
+    let _publ = session.publishing(rid).await.unwrap();
 
     println!("Writing Data periodically ('{}': '{}')...", rid, value);
 
@@ -77,7 +73,7 @@ async fn main() {
     );
     loop {
         session
-            .put(&rid.into(), value.as_bytes().into())
+            .put(rid, value)
             .encoding(encoding::TEXT_PLAIN)
             .congestion_control(CongestionControl::Block)
             .await

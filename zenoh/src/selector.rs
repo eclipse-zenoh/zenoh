@@ -94,6 +94,12 @@ impl fmt::Display for Selector<'_> {
     }
 }
 
+impl<'a> From<&'a Selector<'a>> for Selector<'a> {
+    fn from(s: &'a Selector<'a>) -> Self {
+        s.clone()
+    }
+}
+
 impl<'a> From<&'a str> for Selector<'a> {
     fn from(s: &'a str) -> Self {
         let (key, predicate) = if let Some(i) = s.find(|c| c == '?') {
@@ -156,7 +162,7 @@ impl<'a> From<ResKey<'a>> for Selector<'a> {
 ///
 /// use std::convert::TryInto;
 ///
-/// let mut queryable = session.register_queryable(&"/resource/name".into()).await.unwrap();
+/// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
 /// while let Some(query) = queryable.receiver().next().await {
 ///     let predicate: Predicate = query.predicate.as_str().try_into().unwrap();
 ///     println!("filter: {}", predicate.filter);

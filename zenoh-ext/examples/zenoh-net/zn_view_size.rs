@@ -10,7 +10,7 @@ async fn main() {
 
     let (config, group_name, id, size, timeout) = parse_args();
 
-    let z = Arc::new(open(config.into()).await.unwrap());
+    let z = Arc::new(open(config).await.unwrap());
     let member_id = id.unwrap_or(z.id().await);
     let member = Member::new(&member_id).lease(Duration::from_secs(3));
 

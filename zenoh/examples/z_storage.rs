@@ -31,14 +31,14 @@ async fn main() {
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Declaring Subscriber on {}", selector);
-    let mut subscriber = session.subscribe(&selector.clone().into()).await.unwrap();
+    let mut subscriber = session.subscribe(&selector).await.unwrap();
 
     println!("Declaring Queryable on {}", selector);
     let mut queryable = session
-        .register_queryable(&selector.into())
+        .register_queryable(&selector)
         .kind(STORAGE)
         .await
         .unwrap();

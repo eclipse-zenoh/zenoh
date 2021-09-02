@@ -23,7 +23,7 @@ async fn main() {
     let config: Properties = parse_args();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     let info: Properties = session.info().await.into();
     for (key, value) in info.iter() {

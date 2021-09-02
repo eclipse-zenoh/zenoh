@@ -25,7 +25,7 @@ async fn main() {
     env_logger::init();
     let (config, sm_size, size) = parse_args();
 
-    let z = open(config.into()).await.unwrap();
+    let z = open(config).await.unwrap();
     let id = z.id().await;
     let mut shm = SharedMemoryManager::new(id, sm_size).unwrap();
     let mut buf = shm.alloc(size).unwrap();
@@ -34,11 +34,11 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let reskey = RId(z.register_resource(&"/test/thr".into()).await.unwrap());
+    let reskey = RId(z.register_resource("/test/thr").await.unwrap());
     let _publ = z.publishing(&reskey).await.unwrap();
 
     loop {
-        z.put(&reskey, buf.clone().into())
+        z.put(&reskey, buf.clone())
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .await

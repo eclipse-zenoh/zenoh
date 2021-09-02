@@ -131,7 +131,7 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
     loop {
         async_std::task::sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
-        let _ = z.put(&state.event_resource, (buf.clone()).into()).await;
+        let _ = z.put(&state.event_resource, buf.clone()).await;
     }
 }
 
@@ -170,15 +170,11 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     );
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
-    let mut queryable = z
-        .register_queryable(&qres.clone().into())
-        .kind(EVAL)
-        .await
-        .unwrap();
+    let mut queryable = z.register_queryable(&qres).kind(EVAL).await.unwrap();
 
     while let Some(query) = queryable.receiver().next().await {
         log::debug!("Serving query for: {}", &qres);
-        query.reply(Sample::new(qres.clone(), buf.clone().into()))
+        query.reply(Sample::new(qres.clone(), buf.clone()))
     }
 }
 
@@ -207,7 +203,7 @@ async fn advertise_view(z: &Arc<Session>, state: &Arc<GroupState>) {
         log::debug!("Advertising NewGroupView: {:?}", &evt);
         let buf = bincode::serialize(&evt).unwrap();
         let res = format!("{}/{}/{}", GROUP_PREFIX, &state.gid, EVENT_POSTFIX);
-        let _ = z.put(&res.into(), buf.into()).wait();
+        let _ = z.put(&res, buf).wait();
     }
 }
 
@@ -269,11 +265,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                     reception: ConsolidationMode::None,
                                 };
                                 log::debug!("Issuing Query for {}", &qres);
-                                let mut receiver = z
-                                    .get(&qres.as_str().into())
-                                    .consolidation(qc)
-                                    .await
-                                    .unwrap();
+                                let mut receiver = z.get(&qres).consolidation(qc).await.unwrap();
 
                                 while let Some(sample) = receiver.next().await {
                                     match bincode::deserialize::<Member>(
@@ -318,10 +310,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
 impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_resource = format!("{}/{}", GROUP_PREFIX, group);
-        let rid = z
-            .register_resource(&(_group_resource.clone()).into())
-            .await
-            .unwrap();
+        let rid = z.register_resource(&_group_resource).await.unwrap();
         let event_resource = ResKey::RIdWithSuffix(rid, EVENT_POSTFIX.into());
         let state = Arc::new(GroupState {
             gid: String::from(group),
@@ -339,7 +328,7 @@ impl Group {
         log::debug!("Sending Join Message for local member:\n{:?}", &with);
         let join_evt = GroupNetEvent::Join(JoinEvent { member: with });
         let buf = bincode::serialize(&join_evt).unwrap();
-        let _ = z.put(&event_resource, buf.into()).await;
+        let _ = z.put(&event_resource, buf).await;
 
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {

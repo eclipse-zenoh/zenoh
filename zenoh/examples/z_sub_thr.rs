@@ -22,12 +22,9 @@ fn main() {
 
     let (config, m, n) = parse_args();
 
-    let session = open(config.into()).wait().unwrap();
+    let session = open(config).wait().unwrap();
 
-    let reskey = RId(session
-        .register_resource(&"/test/thr".into())
-        .wait()
-        .unwrap());
+    let reskey = RId(session.register_resource("/test/thr").wait().unwrap());
 
     let mut count = 0u128;
     let mut start = Instant::now();

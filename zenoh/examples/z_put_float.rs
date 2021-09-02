@@ -23,10 +23,10 @@ async fn main() {
     let (config, path, value) = parse_args();
 
     println!("New zenoh...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Put Float ('{}': '{}')...\n", path, value);
-    session.put(&path.into(), value.into()).await.unwrap();
+    session.put(&path, value).await.unwrap();
 
     session.close().await.unwrap();
 }

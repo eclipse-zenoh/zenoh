@@ -24,23 +24,20 @@ async fn main() {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     print!("Declaring Resource {}", path);
-    let rid = session.register_resource(&path.into()).await.unwrap();
+    let rid = session.register_resource(&path).await.unwrap();
     println!(" => RId {}", rid);
 
     println!("Declaring Publisher on {}", rid);
-    let _publisher = session.publishing(&rid.into()).await.unwrap();
+    let _publisher = session.publishing(rid).await.unwrap();
 
     for idx in 0..std::u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
         println!("Writing Data ('{}': '{}')...", rid, buf);
-        session
-            .put(&rid.into(), buf.as_bytes().into())
-            .await
-            .unwrap();
+        session.put(rid, buf).await.unwrap();
     }
 }
 

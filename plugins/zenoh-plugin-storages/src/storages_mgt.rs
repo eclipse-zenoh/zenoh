@@ -36,7 +36,7 @@ pub(crate) async fn start_storage(
     let (tx, rx) = bounded::<bool>(1);
     task::spawn(async move {
         // subscribe on path_expr
-        let mut storage_sub = match zenoh.subscribe(&path_expr.to_string().into()).await {
+        let mut storage_sub = match zenoh.subscribe(&path_expr).await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_path, e);
@@ -81,7 +81,7 @@ pub(crate) async fn start_storage(
 
         // admin_path is "/@/.../storage/<stid>"
         // answer to GET on 'admin_path'
-        let mut storage_admin = match zenoh.register_queryable(&admin_path.as_str().into()).await {
+        let mut storage_admin = match zenoh.register_queryable(&admin_path).await {
             Ok(storages_admin) => storages_admin,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_path, e);
@@ -91,7 +91,7 @@ pub(crate) async fn start_storage(
 
         // answer to queries on path_expr
         let mut storage_queryable = match zenoh
-            .register_queryable(&path_expr.into())
+            .register_queryable(&path_expr)
             .kind(queryable::STORAGE)
             .await
         {

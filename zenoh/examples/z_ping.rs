@@ -23,19 +23,13 @@ async fn main() {
     env_logger::init();
 
     let (config, size) = parse_args();
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     // The resource to publish data on
-    let reskey_ping = RId(session
-        .register_resource(&"/test/ping".into())
-        .await
-        .unwrap());
+    let reskey_ping = RId(session.register_resource("/test/ping").await.unwrap());
 
     // The resource to wait the response back
-    let reskey_pong = RId(session
-        .register_resource(&"/test/pong".into())
-        .await
-        .unwrap());
+    let reskey_pong = RId(session.register_resource("/test/pong").await.unwrap());
 
     let mut sub = session.subscribe(&reskey_pong).await.unwrap();
 

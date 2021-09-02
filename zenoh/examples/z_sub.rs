@@ -24,11 +24,11 @@ async fn main() {
     let (config, selector) = parse_args();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Declaring Subscriber on {}", selector);
 
-    let mut subscriber = session.subscribe(&selector.into()).await.unwrap();
+    let mut subscriber = session.subscribe(&selector).await.unwrap();
 
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];

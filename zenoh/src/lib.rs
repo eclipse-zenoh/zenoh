@@ -23,7 +23,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = open(config::default()).await.unwrap();
-//!     session.put(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
+//!     session.put("/resource/name", "value").await.unwrap();
 //!     session.close().await.unwrap();
 //! }
 //! ```
@@ -36,8 +36,10 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = open(config::default()).await.unwrap();
-//!     let mut subscriber = session.subscribe(&"/resource/name".into()).await.unwrap();
-//!     while let Some(sample) = subscriber.receiver().next().await { println!("Received : {:?}", sample); };
+//!     let mut subscriber = session.subscribe("/resource/name").await.unwrap();
+//!     while let Some(sample) = subscriber.receiver().next().await {
+//!         println!("Received : {:?}", sample);
+//!     };
 //! }
 //! ```
 //!
@@ -49,7 +51,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = open(config::default()).await.unwrap();
-//!     let mut replies = session.get(&"/resource/name".into()).await.unwrap();
+//!     let mut replies = session.get("/resource/name").await.unwrap();
 //!     while let Some(reply) = replies.next().await {
 //!         println!(">> Received {:?}", reply.data);
 //!     }
@@ -227,10 +229,16 @@ pub fn scout(
 /// config.insert("local_routing".to_string(), "false".to_string());
 /// config.insert("peer".to_string(), "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
 ///
-/// let session = open(config.into()).await.unwrap();
+/// let session = open(config).await.unwrap();
 /// # })
 /// ```
-pub fn open(config: ConfigProperties) -> impl ZFuture<Output = ZResult<Session>> {
+pub fn open<IntoConfigProperties>(
+    config: IntoConfigProperties,
+) -> impl ZFuture<Output = ZResult<Session>>
+where
+    IntoConfigProperties: Into<ConfigProperties>,
+{
+    let config = config.into();
     debug!("Zenoh Rust API {}", GIT_VERSION);
     debug!("Config: {:?}", &config);
     Session::new(config)

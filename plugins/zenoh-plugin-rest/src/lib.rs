@@ -263,7 +263,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             match req
                 .state()
                 .0
-                .put(&resource, bytes.into())
+                .put(&resource, bytes)
                 .encoding(enc_from_mime(req.content_type()))
                 .kind(method_to_kind(req.method()))
                 .await

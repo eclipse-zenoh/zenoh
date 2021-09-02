@@ -372,10 +372,13 @@ pub struct Sample {
 
 impl Sample {
     #[inline]
-    pub fn new(res_name: String, value: Value) -> Self {
+    pub fn new<IntoValue>(res_name: String, value: IntoValue) -> Self
+    where
+        IntoValue: Into<Value>,
+    {
         Sample {
             res_name,
-            value,
+            value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
             source_info: SourceInfo::empty(),
@@ -532,7 +535,7 @@ impl Publisher<'_> {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing(&"/resource/name".into()).await.unwrap();
+    /// let publisher = session.publishing("/resource/name").await.unwrap();
     /// publisher.unregister().await.unwrap();
     /// # })
     /// ```
@@ -608,7 +611,7 @@ impl Subscriber<'_> {
     /// use futures::prelude::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe(&"/resource/name".into())
+    /// let mut subscriber = session.subscribe("/resource/name")
     ///                             .mode(SubMode::Pull).await.unwrap();
     /// async_std::task::spawn(subscriber.receiver().clone().for_each(
     ///     move |sample| async move { println!("Received : {:?}", sample); }
@@ -631,7 +634,7 @@ impl Subscriber<'_> {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let subscriber = session.subscribe(&"/resource/name".into()).await.unwrap();
+    /// let subscriber = session.subscribe("/resource/name").await.unwrap();
     /// subscriber.unregister().await.unwrap();
     /// # })
     /// ```
@@ -674,7 +677,7 @@ impl CallbackSubscriber<'_> {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let subscriber = session.subscribe(&"/resource/name".into())
+    /// let subscriber = session.subscribe("/resource/name")
     ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
     ///     .mode(SubMode::Pull).await.unwrap();
     /// subscriber.pull();
@@ -696,7 +699,7 @@ impl CallbackSubscriber<'_> {
     ///
     /// let session = open(config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session.subscribe(&"/resource/name".into())
+    /// let subscriber = session.subscribe("/resource/name")
     ///     .callback(data_handler).await.unwrap();
     /// subscriber.unregister().await.unwrap();
     /// # })
@@ -772,7 +775,7 @@ impl Queryable<'_> {
     /// use zenoh::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let queryable = session.register_queryable(&"/resource/name".into()).await.unwrap();
+    /// let queryable = session.register_queryable("/resource/name").await.unwrap();
     /// queryable.unregister().await.unwrap();
     /// # })
     /// ```

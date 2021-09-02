@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Creating Shared Memory Manager...");
     let id = session.id().await;
@@ -85,9 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             path,
             String::from_utf8_lossy(&slice[0..slice_len])
         );
-        session
-            .put(&path.clone().into(), sbuf.clone().into())
-            .await?;
+        session.put(&path, sbuf.clone()).await?;
         if idx % K == 0 {
             let freed = shm.garbage_collect();
             println!("The Gargabe collector freed {} bytes", freed);

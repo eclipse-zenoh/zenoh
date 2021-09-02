@@ -23,14 +23,10 @@ async fn main() {
     let (config, selector, target) = parse_args();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Sending Query '{}'...", selector);
-    let mut replies = session
-        .get(&selector.as_str().into())
-        .target(target)
-        .await
-        .unwrap();
+    let mut replies = session.get(&selector).target(target).await.unwrap();
     while let Some(reply) = replies.next().await {
         println!(
             ">> [Reply handler] received ('{}': '{}')",

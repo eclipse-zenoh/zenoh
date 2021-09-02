@@ -22,13 +22,10 @@ async fn main() {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Writing Data ('{}': '{}')...", path, value);
-    session
-        .put(&path.into(), value.as_bytes().into())
-        .await
-        .unwrap();
+    session.put(&path, value).await.unwrap();
 }
 
 fn parse_args() -> (Properties, String, String) {

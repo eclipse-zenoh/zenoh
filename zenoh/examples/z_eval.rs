@@ -25,14 +25,10 @@ async fn main() {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = open(config.into()).await.unwrap();
+    let session = open(config).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
-    let mut queryable = session
-        .register_queryable(&path.clone().into())
-        .kind(EVAL)
-        .await
-        .unwrap();
+    let mut queryable = session.register_queryable(&path).kind(EVAL).await.unwrap();
 
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
@@ -41,7 +37,7 @@ async fn main() {
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
                 println!(">> [Query handler] Handling '{}{}'", query.res_name, query.predicate);
-                query.reply(Sample::new(path.clone(), value.as_bytes().into()));
+                query.reply(Sample::new(path.clone(), value.clone()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
