@@ -35,7 +35,7 @@ impl Primitives for Mux {
     fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let d = Declaration::Resource(Resource {
             rid,
-            key: reskey.clone(),
+            key: reskey.to_owned(),
         });
         let decls = vec![d];
         let _ = self
@@ -58,7 +58,7 @@ impl Primitives for Mux {
         routing_context: Option<RoutingContext>,
     ) {
         let d = Declaration::Subscriber(Subscriber {
-            key: reskey.clone(),
+            key: reskey.to_owned(),
             info: sub_info.clone(),
         });
         let decls = vec![d];
@@ -69,7 +69,7 @@ impl Primitives for Mux {
 
     fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let d = Declaration::ForgetSubscriber(ForgetSubscriber {
-            key: reskey.clone(),
+            key: reskey.to_owned(),
         });
         let decls = vec![d];
         let _ =
@@ -79,7 +79,7 @@ impl Primitives for Mux {
 
     fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let d = Declaration::Publisher(Publisher {
-            key: reskey.clone(),
+            key: reskey.to_owned(),
         });
         let decls = vec![d];
         let _ =
@@ -89,7 +89,7 @@ impl Primitives for Mux {
 
     fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
         let d = Declaration::ForgetPublisher(ForgetPublisher {
-            key: reskey.clone(),
+            key: reskey.to_owned(),
         });
         let decls = vec![d];
         let _ =
@@ -105,7 +105,7 @@ impl Primitives for Mux {
         routing_context: Option<RoutingContext>,
     ) {
         let d = Declaration::Queryable(Queryable {
-            key: reskey.clone(),
+            key: reskey.to_owned(),
             kind,
             info: qabl_info.clone(),
         });
@@ -122,7 +122,7 @@ impl Primitives for Mux {
         routing_context: Option<RoutingContext>,
     ) {
         let d = Declaration::ForgetQueryable(ForgetQueryable {
-            key: reskey.clone(),
+            key: reskey.to_owned(),
             kind,
         });
         let decls = vec![d];
@@ -141,7 +141,7 @@ impl Primitives for Mux {
         routing_context: Option<RoutingContext>,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
-            reskey.clone(),
+            reskey.to_owned(),
             payload,
             reliability,
             congestion_control,
@@ -167,7 +167,7 @@ impl Primitives for Mux {
             Some(target)
         };
         let _ = self.handler.handle_message(ZenohMessage::make_query(
-            reskey.clone(),
+            reskey.to_owned(),
             predicate.to_string(),
             qid,
             target_opt,
@@ -187,7 +187,7 @@ impl Primitives for Mux {
         payload: ZBuf,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
-            reskey,
+            reskey.to_owned(),
             payload,
             zmsg::default_reliability::REPLY,
             zmsg::default_congestion_control::REPLY,
@@ -222,7 +222,7 @@ impl Primitives for Mux {
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_pull(
             is_final,
-            reskey.clone(),
+            reskey.to_owned(),
             pull_id,
             *max_samples,
             None,

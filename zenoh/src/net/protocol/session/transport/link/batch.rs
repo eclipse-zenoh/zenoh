@@ -372,7 +372,7 @@ mod tests {
                     // Change dropping strategy every three messages
                     dropping = !dropping;
                 }
-                let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
+                let key = ResKey::RName(format!("test{}", zmsgs_in.len()).into());
                 let payload = ZBuf::from(vec![0u8; payload_size]);
                 let reliability = if reliable {
                     Reliability::Reliable
@@ -453,7 +453,7 @@ mod tests {
                 for congestion_control in [CongestionControl::Drop, CongestionControl::Block].iter()
                 {
                     // Create the ZenohMessage
-                    let key = ResKey::RName("test".to_string());
+                    let key = ResKey::RName("test".into());
                     let payload = ZBuf::from(vec![0u8; payload_size]);
                     let data_info = None;
                     let routing_context = None;

@@ -205,7 +205,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         );
 
         // Create the message to send
-        let key = ResKey::RName("/test02".to_string());
+        let key = ResKey::RName("/test02".into());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;
@@ -311,7 +311,7 @@ async fn session_concurrent(locator01: Vec<Locator>, locator02: Vec<Locator>) {
         );
 
         // Create the message to send
-        let key = ResKey::RName("/test02".to_string());
+        let key = ResKey::RName("/test02".into());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;

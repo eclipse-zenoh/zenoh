@@ -171,7 +171,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         Ok(tide::sse::upgrade(
             req,
             move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
-                let resource = path_to_resource(req.url().path(), &req.state().1);
+                let resource = path_to_resource(req.url().path(), &req.state().1).to_owned();
                 async_std::task::spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
@@ -324,7 +324,7 @@ pub async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     }
 }
 
-fn path_to_resource(path: &str, pid: &str) -> ResKey {
+fn path_to_resource<'a>(path: &'a str, pid: &str) -> ResKey<'a> {
     if path == "/@/router/local" {
         ResKey::from(format!("/@/router/{}", pid))
     } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {

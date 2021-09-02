@@ -187,7 +187,7 @@ fn gen_declarations() -> Vec<Declaration> {
     decls
 }
 
-fn gen_key() -> ResKey {
+fn gen_key() -> ResKey<'static> {
     let num: u8 = thread_rng().gen_range(0..3);
     match num {
         0 => ResKey::from(gen!(ZInt)),
@@ -560,7 +560,7 @@ fn codec_frame_batching() {
         assert!(wbuf.write_session_message(&frame));
 
         // Create data message
-        let key = ResKey::RName("test".to_string());
+        let key = ResKey::RName("test".into());
         let payload = ZBuf::from(vec![0u8; 1]);
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;

@@ -13,6 +13,7 @@
 //
 pub mod rname;
 
+use std::borrow::Cow;
 use std::convert::From;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -67,14 +68,14 @@ pub const NO_RESOURCE_ID: ResourceId = 0;
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub enum ResKey {
-    RName(String),
+pub enum ResKey<'a> {
+    RName(Cow<'a, str>),
     RId(ResourceId),
-    RIdWithSuffix(ResourceId, String),
+    RIdWithSuffix(ResourceId, Cow<'a, str>),
 }
 use ResKey::*;
 
-impl ResKey {
+impl ResKey<'_> {
     #[inline(always)]
     pub fn rid(&self) -> ResourceId {
         match self {
@@ -87,9 +88,17 @@ impl ResKey {
     pub fn is_numerical(&self) -> bool {
         matches!(self, RId(_))
     }
+
+    pub fn to_owned(&self) -> ResKey<'static> {
+        match self {
+            Self::RId(id) => ResKey::RId(*id),
+            Self::RName(s) => ResKey::RName(s.to_string().into()),
+            Self::RIdWithSuffix(id, s) => ResKey::RIdWithSuffix(*id, s.to_string().into()),
+        }
+    }
 }
 
-impl fmt::Debug for ResKey {
+impl fmt::Debug for ResKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             RName(name) => write!(f, "{}", name),
@@ -99,62 +108,69 @@ impl fmt::Debug for ResKey {
     }
 }
 
-impl fmt::Display for ResKey {
+impl fmt::Display for ResKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
 
-impl From<ResourceId> for ResKey {
+impl From<ResourceId> for ResKey<'_> {
     #[inline]
-    fn from(rid: ResourceId) -> ResKey {
+    fn from(rid: ResourceId) -> ResKey<'static> {
         RId(rid)
     }
 }
 
-impl From<&str> for ResKey {
+impl<'a> From<&'a str> for ResKey<'a> {
     #[inline]
-    fn from(name: &str) -> ResKey {
-        RName(name.to_string())
+    fn from(name: &'a str) -> ResKey<'a> {
+        RName(name.into())
     }
 }
 
-impl From<String> for ResKey {
+impl From<String> for ResKey<'_> {
     #[inline]
-    fn from(name: String) -> ResKey {
-        RName(name)
+    fn from(name: String) -> ResKey<'static> {
+        RName(name.into())
     }
 }
 
-impl From<(ResourceId, &str)> for ResKey {
+impl<'a> From<&'a String> for ResKey<'a> {
     #[inline]
-    fn from(tuple: (ResourceId, &str)) -> ResKey {
+    fn from(name: &'a String) -> ResKey<'a> {
+        RName(name.as_str().into())
+    }
+}
+
+impl<'a> From<(ResourceId, &'a str)> for ResKey<'a> {
+    #[inline]
+    fn from(tuple: (ResourceId, &'a str)) -> ResKey<'a> {
         if tuple.1.is_empty() {
             RId(tuple.0)
         } else if tuple.0 == NO_RESOURCE_ID {
-            RName(tuple.1.to_string())
+            RName(tuple.1.into())
         } else {
-            RIdWithSuffix(tuple.0, tuple.1.to_string())
+            RIdWithSuffix(tuple.0, tuple.1.into())
         }
     }
 }
 
-impl From<(ResourceId, String)> for ResKey {
+impl From<(ResourceId, String)> for ResKey<'_> {
     #[inline]
-    fn from(tuple: (ResourceId, String)) -> ResKey {
+    fn from(tuple: (ResourceId, String)) -> ResKey<'static> {
         if tuple.1.is_empty() {
             RId(tuple.0)
         } else if tuple.0 == NO_RESOURCE_ID {
-            RName(tuple.1)
+            RName(tuple.1.into())
         } else {
-            RIdWithSuffix(tuple.0, tuple.1)
+            RIdWithSuffix(tuple.0, tuple.1.into())
         }
     }
 }
 
-impl<'a> From<&'a ResKey> for (ResourceId, &'a str) {
+impl<'a> From<&'a ResKey<'a>> for (ResourceId, &'a str) {
     #[inline]
-    fn from(key: &'a ResKey) -> (ResourceId, &'a str) {
+    fn from(key: &'a ResKey<'a>) -> (ResourceId, &'a str) {
         match key {
             RId(rid) => (*rid, ""),
             RName(name) => (NO_RESOURCE_ID, &name[..]), //(&(0 as u64)

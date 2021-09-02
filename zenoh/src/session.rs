@@ -135,7 +135,7 @@ impl SessionState {
     pub fn remotekey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
         use super::ResKey::*;
         match reskey {
-            RName(name) => Ok(name.clone()),
+            RName(name) => Ok(name.to_string()),
             RId(rid) => self.rid_to_resname(&rid),
             RIdWithSuffix(rid, suffix) => Ok(self.rid_to_resname(&rid)? + suffix),
         }
@@ -144,7 +144,7 @@ impl SessionState {
     pub fn localkey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
         use super::ResKey::*;
         match reskey {
-            RName(name) => Ok(name.clone()),
+            RName(name) => Ok(name.to_string()),
             RId(rid) => self.localid_to_resname(&rid),
             RIdWithSuffix(rid, suffix) => Ok(self.localid_to_resname(&rid)? + suffix),
         }
@@ -190,7 +190,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct PublisherBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: &'b ResKey,
+        reskey: &'b ResKey<'b>,
     }
 }
 
@@ -204,7 +204,7 @@ impl<'a> Runnable for PublisherBuilder<'a, '_> {
         let resname = state.localkey_to_resname(self.reskey)?;
         let pub_state = Arc::new(PublisherState {
             id,
-            reskey: self.reskey.clone(),
+            reskey: self.reskey.to_owned(),
         });
         let declared_pub = match state
             .join_publications
@@ -262,7 +262,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct SubscriberBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: &'b ResKey,
+        reskey: &'b ResKey<'b>,
         info: SubInfo,
         local: bool,
     }
@@ -392,7 +392,7 @@ derive_zfuture! {
     #[derive(Clone)]
     pub struct CallbackSubscriberBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: &'b ResKey,
+        reskey: &'b ResKey<'b>,
         info: SubInfo,
         local: bool,
         handler: Arc<RwLock<DataHandler>>,
@@ -521,7 +521,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct QueryableBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: &'b ResKey,
+        reskey: &'b ResKey<'b>,
         kind: ZInt,
         complete: bool,
     }
@@ -553,7 +553,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
         let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {
             id,
-            reskey: self.reskey.clone(),
+            reskey: self.reskey.to_owned(),
             kind: self.kind,
             complete: self.complete,
             sender,
@@ -626,7 +626,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct WriteBuilder<'a> {
         session: &'a Session,
-        resource: &'a ResKey,
+        resource: &'a ResKey<'a>,
         value: Option<Value>,
         kind: Option<ZInt>,
         congestion_control: CongestionControl,
@@ -719,7 +719,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct QueryBuilder<'a> {
         session: &'a Session,
-        resource: &'a ResKey,
+        resource: &'a ResKey<'a>,
         predicate: &'a str,
         target: Option<QueryTarget>,
         consolidation: Option<QueryConsolidation>,
@@ -1074,7 +1074,7 @@ impl Session {
     /// session.put(&"/resource/name".into(), "value".as_bytes().into()).await.unwrap();
     /// # })
     /// ```
-    pub fn publishing<'a, 'b>(&'a self, reskey: &'b ResKey) -> PublisherBuilder<'a, 'b> {
+    pub fn publishing<'a, 'b>(&'a self, reskey: &'b ResKey<'b>) -> PublisherBuilder<'a, 'b> {
         PublisherBuilder {
             session: self,
             reskey,
@@ -1135,7 +1135,7 @@ impl Session {
         let resname = state.localkey_to_resname(reskey)?;
         let sub_state = Arc::new(SubscriberState {
             id,
-            reskey: reskey.clone(),
+            reskey: reskey.to_owned(),
             resname,
             invoker,
         });
@@ -1180,10 +1180,10 @@ impl Session {
                 ResKey::RName(name) => match name.find('*') {
                     Some(pos) => {
                         let id = self.register_resource(&name[..pos].into()).wait()?;
-                        ResKey::RIdWithSuffix(id, name[pos..].into())
+                        ResKey::RIdWithSuffix(id, name[pos..].to_string().into())
                     }
                     None => {
-                        let id = self.register_resource(&name.into()).wait()?;
+                        let id = self.register_resource(&ResKey::RName(name)).wait()?;
                         ResKey::RId(id)
                     }
                 },
@@ -1206,7 +1206,7 @@ impl Session {
         let resname = state.localkey_to_resname(reskey)?;
         let sub_state = Arc::new(SubscriberState {
             id,
-            reskey: reskey.clone(),
+            reskey: reskey.to_owned(),
             resname,
             invoker,
         });
@@ -1246,7 +1246,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn subscribe<'a, 'b>(&'a self, reskey: &'b ResKey) -> SubscriberBuilder<'a, 'b> {
+    pub fn subscribe<'a, 'b>(&'a self, reskey: &'b ResKey<'b>) -> SubscriberBuilder<'a, 'b> {
         SubscriberBuilder {
             session: self,
             reskey,
@@ -1403,7 +1403,10 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn register_queryable<'a, 'b>(&'a self, reskey: &'b ResKey) -> QueryableBuilder<'a, 'b> {
+    pub fn register_queryable<'a, 'b>(
+        &'a self,
+        reskey: &'b ResKey<'b>,
+    ) -> QueryableBuilder<'a, 'b> {
         QueryableBuilder {
             session: self,
             reskey,
@@ -1490,7 +1493,7 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a>(&'a self, resource: &'a ResKey, value: Value) -> WriteBuilder<'a> {
+    pub fn put<'a>(&'a self, resource: &'a ResKey<'a>, value: Value) -> WriteBuilder<'a> {
         WriteBuilder {
             session: self,
             resource,
@@ -1727,7 +1730,7 @@ impl Session {
                         qid,
                         replier_kind,
                         pid.clone(),
-                        ResKey::RName(res_name),
+                        res_name.into(),
                         Some(data_info),
                         payload,
                     );
@@ -1742,7 +1745,7 @@ impl Session {
                         qid,
                         replier_kind,
                         pid.clone(),
-                        ResKey::RName(res_name),
+                        res_name.into(),
                         Some(data_info),
                         payload,
                     );

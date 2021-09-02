@@ -37,7 +37,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let reliability = Reliability::Reliable;
                 let congestion_control = CongestionControl::Block;
 
-                let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+                let res_key = ResKey::RIdWithSuffix(18, "/com/acme/sensors/temp".into());
                 let info = Some(DataInfo {
                     source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
                     source_sn: Some(12345),
@@ -73,7 +73,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let reliability = Reliability::Reliable;
                 let congestion_control = CongestionControl::Block;
 
-                let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+                let res_key = ResKey::RIdWithSuffix(18, "/com/acme/sensors/temp".into());
                 let info = None;
                 let payload = ZBuf::from(vec![0; *s]);
 
@@ -94,7 +94,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let reliability = Reliability::Reliable;
     let congestion_control = CongestionControl::Block;
-    let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+    let res_key = ResKey::RIdWithSuffix(18, "/com/acme/sensors/temp".into());
     let info = Some(DataInfo {
         source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
         source_sn: Some(12345),

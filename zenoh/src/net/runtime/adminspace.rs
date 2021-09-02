@@ -100,7 +100,7 @@ impl AdminSpace {
             ResKey::RIdWithSuffix(id, suffix) => zlock!(self.mappings)
                 .get(&id)
                 .map(|prefix| format!("{}{}", prefix, suffix)),
-            ResKey::RName(name) => Some(name.clone()),
+            ResKey::RName(name) => Some(name.to_string()),
         }
     }
 }
@@ -222,7 +222,7 @@ impl Primitives for AdminSpace {
                     qid,
                     EVAL,
                     pid.clone(),
-                    ResKey::RName(path),
+                    path.into(),
                     Some(data_info),
                     payload,
                 );

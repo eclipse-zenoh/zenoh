@@ -114,7 +114,7 @@ struct GroupState {
     members: Mutex<HashMap<String, (Member, Instant)>>,
     _group_resource: String,
     _group_resource_id: u64,
-    event_resource: ResKey,
+    event_resource: ResKey<'static>,
     user_events_tx: Mutex<Option<Sender<GroupEvent>>>,
     cond: Condition,
 }

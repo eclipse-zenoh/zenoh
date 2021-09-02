@@ -232,7 +232,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".to_string());
+            let key = ResKey::RName("/test".into());
             let payload: ZBuf = sbuf.into();
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
@@ -288,7 +288,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".to_string());
+            let key = ResKey::RName("/test".into());
             let payload: ZBuf = sbuf.into();
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;

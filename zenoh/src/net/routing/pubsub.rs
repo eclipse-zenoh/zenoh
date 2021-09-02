@@ -737,7 +737,7 @@ fn insert_faces_for_subs(
                                     let reskey = Resource::get_best_key(prefix, suffix, face.id);
                                     (
                                         face.clone(),
-                                        reskey,
+                                        reskey.to_owned(),
                                         if source != 0 {
                                             Some(RoutingContext::make(source as ZInt))
                                         } else {
@@ -837,7 +837,7 @@ fn compute_data_route(
                     if subinfo.mode == SubMode::Push {
                         route.entry(*sid).or_insert_with(|| {
                             let reskey = Resource::get_best_key(prefix, suffix, *sid);
-                            (context.face.clone(), reskey, None)
+                            (context.face.clone(), reskey.to_owned(), None)
                         });
                     }
                 }

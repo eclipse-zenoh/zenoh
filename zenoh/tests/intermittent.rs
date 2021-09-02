@@ -288,7 +288,7 @@ async fn session_intermittent(locator: Locator, locator_property: Option<Vec<Loc
     let c_router_manager = router_manager.clone();
     let res = task::spawn_blocking(move || {
         // Create the message to send
-        let key = ResKey::RName("/test".to_string());
+        let key = ResKey::RName("/test".into());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
         let reliability = Reliability::Reliable;
         let congestion_control = CongestionControl::Block;

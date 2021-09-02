@@ -31,9 +31,9 @@ const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 #[derive(Clone)]
 pub struct QueryingSubscriberBuilder<'a> {
     session: &'a Session,
-    sub_reskey: ResKey,
+    sub_reskey: ResKey<'static>,
     info: SubInfo,
-    query_reskey: ResKey,
+    query_reskey: ResKey<'static>,
     query_predicate: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
@@ -58,9 +58,9 @@ impl QueryingSubscriberBuilder<'_> {
 
         QueryingSubscriberBuilder {
             session,
-            sub_reskey: sub_reskey.clone(),
+            sub_reskey: sub_reskey.to_owned(),
             info,
-            query_reskey: sub_reskey.clone(),
+            query_reskey: sub_reskey.to_owned(),
             query_predicate: "".to_string(),
             query_target,
             query_consolidation,
@@ -120,7 +120,7 @@ impl QueryingSubscriberBuilder<'_> {
     /// Change the resource key to be used for queries.
     #[inline]
     pub fn query_reskey(mut self, query_reskey: ResKey) -> Self {
-        self.query_reskey = query_reskey;
+        self.query_reskey = query_reskey.to_owned();
         self
     }
 

@@ -27,13 +27,13 @@ async fn main() {
 
     // The resource to read the data from
     let reskey_ping = RId(session
-        .register_resource(&RName("/test/ping".to_string()))
+        .register_resource(&"/test/ping".into())
         .await
         .unwrap());
 
     // The resource to echo the data back
     let reskey_pong = RId(session
-        .register_resource(&RName("/test/pong".to_string()))
+        .register_resource(&"/test/pong".into())
         .await
         .unwrap());
     let _publ = session.publishing(&reskey_pong).await.unwrap();

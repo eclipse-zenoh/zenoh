@@ -508,7 +508,7 @@ pub(crate) type Id = usize;
 #[derive(Debug)]
 pub(crate) struct PublisherState {
     pub(crate) id: Id,
-    pub(crate) reskey: ResKey,
+    pub(crate) reskey: ResKey<'static>,
 }
 
 /// A publisher.
@@ -564,7 +564,7 @@ pub(crate) enum SubscriberInvoker {
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
-    pub(crate) reskey: ResKey,
+    pub(crate) reskey: ResKey<'static>,
     pub(crate) resname: String,
     pub(crate) invoker: SubscriberInvoker,
 }
@@ -729,7 +729,7 @@ zreceiver! {
 
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
-    pub(crate) reskey: ResKey,
+    pub(crate) reskey: ResKey<'static>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) sender: Sender<Query>,

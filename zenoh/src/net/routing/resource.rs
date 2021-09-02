@@ -23,7 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use zenoh_util::sync::get_mut_unchecked;
 
-pub(super) type Direction = (Arc<FaceState>, ResKey, Option<RoutingContext>);
+pub(super) type Direction = (Arc<FaceState>, ResKey<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
 pub(super) type QueryRoute = HashMap<usize, (Direction, super::protocol::core::Target)>;
@@ -359,7 +359,7 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey {
+    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -397,13 +397,13 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key(prefix: &Arc<Resource>, suffix: &str, sid: usize) -> ResKey {
-        fn get_best_key_(
+    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> ResKey<'a> {
+        fn get_best_key_<'a>(
             prefix: &Arc<Resource>,
-            suffix: &str,
+            suffix: &'a str,
             sid: usize,
             checkchilds: bool,
-        ) -> ResKey {
+        ) -> ResKey<'a> {
             if checkchilds && !suffix.is_empty() {
                 let (chunk, rest) = Resource::fst_chunk(suffix);
                 if let Some(child) = prefix.childs.get(chunk) {
@@ -420,6 +420,7 @@ impl Resource {
             match &prefix.parent {
                 Some(parent) => {
                     get_best_key_(&parent, &[&prefix.suffix, suffix].concat(), sid, false)
+                        .to_owned()
                 }
                 None => (0, suffix).into(),
             }

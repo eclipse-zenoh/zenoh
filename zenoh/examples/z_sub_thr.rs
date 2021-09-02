@@ -25,7 +25,7 @@ fn main() {
     let session = open(config.into()).wait().unwrap();
 
     let reskey = RId(session
-        .register_resource(&RName("/test/thr".to_string()))
+        .register_resource(&"/test/thr".into())
         .wait()
         .unwrap());
 

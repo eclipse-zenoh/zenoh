@@ -14,7 +14,6 @@
 // use super::{Path, PathExpr};
 use crate::{Properties, Query, ResKey, ZErrorKind};
 use regex::Regex;
-use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
 use zenoh_util::core::ZError;
@@ -49,7 +48,7 @@ pub const PROP_STOPTIME: &str = "stoptime";
 /// _**NOTE**_: _the filters and fragments are not yet supported in current zenoh version._
 pub struct Selector<'a> {
     /// the path expression part of this Selector (before `?` character).
-    key: Cow<'a, ResKey>,
+    key: ResKey<'a>,
     /// the predicate part of this Selector, as used in zenoh-net.
     /// I.e. all characters starting from `?`.
     predicate: &'a str,
@@ -59,11 +58,8 @@ impl<'a> Selector<'a> {
     /// Creates a new Selector from a String, checking its validity.
     /// Returns `Err(`[`ZError`]`)` if not valid.
     #[inline(always)]
-    pub(crate) fn new(key: &'a ResKey, predicate: &'a str) -> Self {
-        Selector {
-            key: Cow::Borrowed(key),
-            predicate,
-        }
+    pub(crate) fn new(key: ResKey<'a>, predicate: &'a str) -> Self {
+        Selector { key, predicate }
     }
 
     #[inline(always)]
@@ -106,7 +102,7 @@ impl<'a> From<&'a str> for Selector<'a> {
             (s, "")
         };
         Selector {
-            key: Cow::Owned(key.into()),
+            key: key.into(),
             predicate,
         }
     }
@@ -121,24 +117,21 @@ impl<'a> From<&'a String> for Selector<'a> {
 impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
-            key: Cow::Owned(q.res_name.as_str().into()),
+            key: q.res_name.as_str().into(),
             predicate: &q.predicate,
         }
     }
 }
 
-impl<'a> From<&'a ResKey> for Selector<'a> {
-    fn from(from: &'a ResKey) -> Self {
-        Self::new(from, "")
+impl<'a> From<&'a ResKey<'a>> for Selector<'a> {
+    fn from(from: &'a ResKey<'a>) -> Self {
+        Self::new(from.clone(), "")
     }
 }
 
-impl<'a> From<ResKey> for Selector<'a> {
-    fn from(from: ResKey) -> Self {
-        Self {
-            key: Cow::Owned(from),
-            predicate: "",
-        }
+impl<'a> From<ResKey<'a>> for Selector<'a> {
+    fn from(key: ResKey<'a>) -> Self {
+        Self { key, predicate: "" }
     }
 }
 

@@ -30,7 +30,7 @@ pub(crate) const PUBLISHER_CACHE_QUERYABLE_KIND: ZInt = 0x08;
 #[derive(Clone)]
 pub struct PublicationCacheBuilder<'a> {
     session: &'a Session,
-    pub_reskey: ResKey,
+    pub_reskey: ResKey<'static>,
     queryable_prefix: Option<String>,
     history: usize,
     resources_limit: Option<usize>,
@@ -43,7 +43,7 @@ impl PublicationCacheBuilder<'_> {
     ) -> PublicationCacheBuilder<'a> {
         PublicationCacheBuilder {
             session,
-            pub_reskey: pub_reskey.clone(),
+            pub_reskey: pub_reskey.to_owned(),
             queryable_prefix: None,
             history: 1,
             resources_limit: None,

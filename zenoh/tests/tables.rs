@@ -334,7 +334,7 @@ fn clean_test() {
 }
 
 pub struct ClientPrimitives {
-    data: std::sync::Mutex<Option<ResKey>>,
+    data: std::sync::Mutex<Option<ResKey<'static>>>,
     mapping: std::sync::Mutex<std::collections::HashMap<ZInt, String>>,
 }
 
@@ -361,7 +361,7 @@ impl ClientPrimitives {
     fn get_name(&self, reskey: &ResKey) -> String {
         let mapping = self.mapping.lock().unwrap();
         match reskey {
-            ResKey::RName(name) => name.clone(),
+            ResKey::RName(name) => name.to_string(),
             ResKey::RId(id) => mapping.get(id).unwrap().clone(),
             ResKey::RIdWithSuffix(id, suffix) => {
                 [&mapping.get(id).unwrap()[..], &suffix[..]].concat()
@@ -430,7 +430,7 @@ impl Primitives for ClientPrimitives {
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
-        *zlock!(self.data) = Some(reskey.clone());
+        *zlock!(self.data) = Some(reskey.to_owned());
     }
 
     fn send_query(
@@ -494,7 +494,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives0.decl_resource(11, &ResKey::RName("/test/client".to_string()));
+    primitives0.decl_resource(11, &ResKey::RName("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -509,7 +509,7 @@ fn client_test() {
         11,
         "/z1_pub1",
     );
-    primitives0.decl_resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".to_string()));
+    primitives0.decl_resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".into()));
 
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = tables.open_face(
@@ -524,7 +524,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives1.decl_resource(21, &ResKey::RName("/test/client".to_string()));
+    primitives1.decl_resource(21, &ResKey::RName("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face1.upgrade().unwrap(),
@@ -539,7 +539,7 @@ fn client_test() {
         21,
         "/z2_pub1",
     );
-    primitives1.decl_resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".to_string()));
+    primitives1.decl_resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".into()));
 
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = tables.open_face(
@@ -554,7 +554,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives2.decl_resource(31, &ResKey::RName("/test/client".to_string()));
+    primitives2.decl_resource(31, &ResKey::RName("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face2.upgrade().unwrap(),

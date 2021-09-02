@@ -631,7 +631,7 @@ mod tests {
     fn tx_pipeline_flow() {
         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
+            let key = ResKey::RName("test".into());
             let payload = ZBuf::from(vec![0u8; payload_size]);
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
@@ -760,7 +760,7 @@ mod tests {
             let payload_size: usize = ZN_DEFAULT_BATCH_SIZE / 2;
 
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
+            let key = ResKey::RName("test".into());
             let payload = ZBuf::from(vec![0u8; payload_size]);
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
@@ -871,7 +871,7 @@ mod tests {
             let payload_size: usize = ZN_DEFAULT_BATCH_SIZE / 2;
 
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
+            let key = ResKey::RName("test".into());
             let payload = ZBuf::from(vec![0u8; payload_size]);
             let reliability = Reliability::Reliable;
             let congestion_control = CongestionControl::Block;
@@ -1006,7 +1006,7 @@ mod tests {
                     c_size.store(*size, Ordering::Release);
 
                     // Send reliable messages
-                    let key = ResKey::RName("/pipeline/thr".to_string());
+                    let key = ResKey::RName("/pipeline/thr".into());
                     let payload = ZBuf::from(vec![0u8; *size]);
                     let reliability = Reliability::Reliable;
                     let congestion_control = CongestionControl::Block;

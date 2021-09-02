@@ -1051,7 +1051,7 @@ fn insert_target_for_qabls(
                                     route.push(TargetQabl {
                                         direction: (
                                             face.clone(),
-                                            reskey,
+                                            reskey.to_owned(),
                                             if source != 0 {
                                                 Some(RoutingContext::make(source as ZInt))
                                             } else {
@@ -1158,7 +1158,7 @@ fn compute_query_route(
                 let reskey = Resource::get_best_key(prefix, suffix, *sid);
                 for (qabl_kind, qabl_info) in &context.qabl {
                     route.push(TargetQabl {
-                        direction: (context.face.clone(), reskey.clone(), None),
+                        direction: (context.face.clone(), reskey.to_owned(), None),
                         complete: if complete { qabl_info.complete } else { 0 },
                         kind: *qabl_kind,
                         distance: 0.5,

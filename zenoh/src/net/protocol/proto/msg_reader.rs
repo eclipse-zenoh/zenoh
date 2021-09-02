@@ -404,16 +404,16 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_reskey(&mut self, is_numeric: bool) -> Option<ResKey> {
+    fn read_reskey(&mut self, is_numeric: bool) -> Option<ResKey<'static>> {
         let id = self.read_zint()?;
         if is_numeric {
             Some(ResKey::RId(id))
         } else {
             let s = self.read_string()?;
             if id == NO_RESOURCE_ID {
-                Some(ResKey::RName(s))
+                Some(ResKey::RName(s.into()))
             } else {
-                Some(ResKey::RIdWithSuffix(id, s))
+                Some(ResKey::RIdWithSuffix(id, s.into()))
             }
         }
     }

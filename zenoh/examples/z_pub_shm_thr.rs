@@ -34,10 +34,7 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let reskey = RId(z
-        .register_resource(&RName("/test/thr".to_string()))
-        .await
-        .unwrap());
+    let reskey = RId(z.register_resource(&"/test/thr".into()).await.unwrap());
     let _publ = z.publishing(&reskey).await.unwrap();
 
     loop {
