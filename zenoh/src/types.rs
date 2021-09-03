@@ -16,6 +16,7 @@ use crate::encoding::*;
 use crate::net::protocol::proto::DataInfo;
 use crate::utils::new_reception_timestamp;
 use crate::Properties;
+use crate::Selector;
 use crate::Session;
 use async_std::sync::Arc;
 use flume::*;
@@ -458,12 +459,20 @@ pub type DataHandler = dyn FnMut(Sample) + Send + Sync + 'static;
 
 /// Structs received b y a [Queryable](Queryable).
 pub struct Query {
-    pub res_name: String,
-    pub predicate: String,
+    pub(crate) res_name: String,
+    pub(crate) predicate: String,
     pub replies_sender: RepliesSender,
 }
 
 impl Query {
+    #[inline(always)]
+    pub fn selector(&self) -> Selector<'_> {
+        Selector {
+            res_name: &self.res_name,
+            predicate: &self.predicate,
+        }
+    }
+
     #[inline(always)]
     pub fn reply(&'_ self, msg: Sample) {
         self.replies_sender.send(msg)

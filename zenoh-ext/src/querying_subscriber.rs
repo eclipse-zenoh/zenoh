@@ -119,9 +119,9 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
 
     /// Change the resource key to be used for queries.
     #[inline]
-    pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
+    pub fn query_selector<IntoKeySelector>(mut self, query_selector: IntoKeySelector) -> Self
     where
-        IntoSelector: Into<Selector<'b>>,
+        IntoKeySelector: Into<KeySelector<'b>>,
     {
         let selector = query_selector.into();
         self.query_reskey = selector.key().to_owned();
@@ -241,7 +241,7 @@ impl<'a> QueryingSubscriber<'a> {
         match self
             .conf
             .session
-            .get(&Selector::from(reskey).with_predicate(predicate))
+            .get(&KeySelector::from(reskey).with_predicate(predicate))
             .target(target)
             .consolidation(consolidation)
             .wait()

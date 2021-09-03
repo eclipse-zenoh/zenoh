@@ -216,13 +216,13 @@ impl Query {
     /// Returns the resource name of this Query
     #[inline(always)]
     pub fn res_name(&self) -> &str {
-        &self.q.res_name
+        &self.q.selector().res_name
     }
 
     /// Returns the predicate of this Query
     #[inline(always)]
     pub fn predicate(&self) -> &str {
-        &self.q.predicate
+        &self.q.selector().predicate
     }
 
     /// Sends a Sample as a reply to this Query

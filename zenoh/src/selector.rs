@@ -48,18 +48,89 @@ pub const PROP_STOPTIME: &str = "stoptime";
 /// _**NOTE**_: _the filters and fragments are not yet supported in current zenoh version._
 pub struct Selector<'a> {
     /// the path expression part of this Selector (before `?` character).
-    key: ResKey<'a>,
+    pub res_name: &'a str,
     /// the predicate part of this Selector, as used in zenoh-net.
+    /// I.e. all characters starting from `?`.
+    pub predicate: &'a str,
+}
+
+impl<'a> Selector<'a> {
+    #[inline(always)]
+    pub fn with_predicate(mut self, predicate: &'a str) -> Self {
+        self.predicate = predicate;
+        self
+    }
+
+    pub fn parse_predicate(&self) -> Result<Predicate<'a>, ZError> {
+        Predicate::try_from(self.predicate)
+    }
+
+    /// Returns true if the Selector specifies a time-range in its properties
+    /// (i.e. using `"starttime"` or `"stoptime"`)
+    pub fn has_time_range(&self) -> bool {
+        match Predicate::try_from(self.predicate) {
+            Ok(predicate) => predicate.has_time_range(),
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Display for Selector<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{}", self.res_name, self.predicate)
+    }
+}
+
+impl<'a> From<&Selector<'a>> for Selector<'a> {
+    fn from(s: &Selector<'a>) -> Self {
+        s.clone()
+    }
+}
+
+impl<'a> From<&'a str> for Selector<'a> {
+    fn from(s: &'a str) -> Self {
+        let (res_name, predicate) = if let Some(i) = s.find(|c| c == '?') {
+            s.split_at(i)
+        } else {
+            (s, "")
+        };
+        Selector {
+            res_name,
+            predicate,
+        }
+    }
+}
+
+impl<'a> From<&'a String> for Selector<'a> {
+    fn from(s: &'a String) -> Self {
+        Self::from(s.as_str())
+    }
+}
+
+impl<'a> From<&'a Query> for Selector<'a> {
+    fn from(q: &'a Query) -> Self {
+        Selector {
+            res_name: &q.res_name,
+            predicate: &q.predicate,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeySelector<'a> {
+    /// the path expression part of this KeySelector (before `?` character).
+    key: ResKey<'a>,
+    /// the predicate part of this KeySelector, as used in zenoh-net.
     /// I.e. all characters starting from `?`.
     predicate: &'a str,
 }
 
-impl<'a> Selector<'a> {
-    /// Creates a new Selector from a String, checking its validity.
+impl<'a> KeySelector<'a> {
+    /// Creates a new KeySelector from a String, checking its validity.
     /// Returns `Err(`[`ZError`]`)` if not valid.
     #[inline(always)]
     pub(crate) fn new(key: ResKey<'a>, predicate: &'a str) -> Self {
-        Selector { key, predicate }
+        KeySelector { key, predicate }
     }
 
     #[inline(always)]
@@ -78,7 +149,11 @@ impl<'a> Selector<'a> {
         self
     }
 
-    /// Returns true if the Selector specifies a time-range in its properties
+    pub fn parse_predicate(&self) -> Result<Predicate<'a>, ZError> {
+        Predicate::try_from(self.predicate)
+    }
+
+    /// Returns true if the KeySelector specifies a time-range in its properties
     /// (i.e. using `"starttime"` or `"stoptime"`)
     pub fn has_time_range(&self) -> bool {
         match Predicate::try_from(self.predicate) {
@@ -88,56 +163,71 @@ impl<'a> Selector<'a> {
     }
 }
 
-impl fmt::Display for Selector<'_> {
+impl fmt::Display for KeySelector<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}{}", self.key, self.predicate)
     }
 }
 
-impl<'a> From<&'a Selector<'a>> for Selector<'a> {
-    fn from(s: &'a Selector<'a>) -> Self {
+impl<'a> From<&KeySelector<'a>> for KeySelector<'a> {
+    fn from(s: &KeySelector<'a>) -> Self {
         s.clone()
     }
 }
 
-impl<'a> From<&'a str> for Selector<'a> {
+impl<'a> From<&'a str> for KeySelector<'a> {
     fn from(s: &'a str) -> Self {
         let (key, predicate) = if let Some(i) = s.find(|c| c == '?') {
             s.split_at(i)
         } else {
             (s, "")
         };
-        Selector {
+        KeySelector {
             key: key.into(),
             predicate,
         }
     }
 }
 
-impl<'a> From<&'a String> for Selector<'a> {
+impl<'a> From<&'a String> for KeySelector<'a> {
     fn from(s: &'a String) -> Self {
         Self::from(s.as_str())
     }
 }
 
-impl<'a> From<&'a Query> for Selector<'a> {
+impl<'a> From<&'a Query> for KeySelector<'a> {
     fn from(q: &'a Query) -> Self {
-        Selector {
+        KeySelector {
             key: q.res_name.as_str().into(),
             predicate: &q.predicate,
         }
     }
 }
 
-impl<'a> From<&'a ResKey<'a>> for Selector<'a> {
-    fn from(from: &'a ResKey<'a>) -> Self {
+impl<'a> From<&ResKey<'a>> for KeySelector<'a> {
+    fn from(from: &ResKey<'a>) -> Self {
         Self::new(from.clone(), "")
     }
 }
 
-impl<'a> From<ResKey<'a>> for Selector<'a> {
+impl<'a> From<ResKey<'a>> for KeySelector<'a> {
     fn from(key: ResKey<'a>) -> Self {
         Self { key, predicate: "" }
+    }
+}
+
+impl<'a> From<&Selector<'a>> for KeySelector<'a> {
+    fn from(s: &Selector<'a>) -> Self {
+        Self {
+            key: s.res_name.into(),
+            predicate: s.predicate,
+        }
+    }
+}
+
+impl<'a> From<Selector<'a>> for KeySelector<'a> {
+    fn from(s: Selector<'a>) -> Self {
+        Self::from(&s)
     }
 }
 
@@ -164,7 +254,7 @@ impl<'a> From<ResKey<'a>> for Selector<'a> {
 ///
 /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
 /// while let Some(query) = queryable.receiver().next().await {
-///     let predicate: Predicate = query.predicate.as_str().try_into().unwrap();
+///     let predicate = query.selector().parse_predicate().unwrap();
 ///     println!("filter: {}", predicate.filter);
 ///     println!("properties: {}", predicate.properties);
 ///     println!("fragment: {}", predicate.fragment);

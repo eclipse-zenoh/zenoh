@@ -723,7 +723,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct QueryBuilder<'a> {
         session: &'a Session,
-        selector: Selector<'a>,
+        selector: KeySelector<'a>,
         target: Option<QueryTarget>,
         consolidation: Option<QueryConsolidation>,
     }
@@ -1670,9 +1670,9 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, IntoSelector>(&'a self, selector: IntoSelector) -> QueryBuilder<'a>
+    pub fn get<'a, IntoKeySelector>(&'a self, selector: IntoKeySelector) -> QueryBuilder<'a>
     where
-        IntoSelector: Into<Selector<'a>>,
+        IntoKeySelector: Into<KeySelector<'a>>,
     {
         QueryBuilder {
             session: self,

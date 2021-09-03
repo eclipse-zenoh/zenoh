@@ -66,9 +66,9 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
-                info!("Handling query '{}{}'", query.res_name, query.predicate);
+                info!("Handling query '{}'", query.selector());
                 for (rname, sample) in stored.iter() {
-                    if resource_name::intersect(&query.res_name, rname) {
+                    if resource_name::intersect(&query.selector().res_name, rname) {
                         query.reply_async(sample.clone()).await;
                     }
                 }

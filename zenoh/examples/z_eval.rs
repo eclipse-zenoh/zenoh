@@ -36,7 +36,7 @@ async fn main() {
         select!(
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
-                println!(">> [Query handler] Handling '{}{}'", query.res_name, query.predicate);
+                println!(">> [Query handler] Handling '{}'", query.selector());
                 query.reply(Sample::new(path.clone(), value.clone()));
             },
 

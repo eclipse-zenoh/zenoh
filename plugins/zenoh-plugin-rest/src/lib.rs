@@ -214,7 +214,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         let url = req.url();
         let resource = path_to_resource(url.path(), &req.state().1);
         let selector = if let Some(q) = url.query() {
-            Selector::from(resource).with_predicate(q)
+            KeySelector::from(resource).with_predicate(q)
         } else {
             resource.into()
         };
