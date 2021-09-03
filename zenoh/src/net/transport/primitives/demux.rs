@@ -11,12 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::TransportUnicastEventHandler;
 use super::protocol::proto::{
     Data, Declaration, Declare, LinkStateList, Pull, Query, Unit, ZenohBody, ZenohMessage,
 };
 use super::Primitives;
-use crate::net::link::LinkUnicast;
+use crate::net::link::Link;
+use crate::net::transport::TransportPeerEventHandler;
 use std::any::Any;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
@@ -31,7 +31,7 @@ impl<P: Primitives> DeMux<P> {
     }
 }
 
-impl<P: 'static + Primitives> TransportUnicastEventHandler for DeMux<P> {
+impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
     fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         match msg.body {
             ZenohBody::Declare(Declare { declarations, .. }) => {
@@ -148,9 +148,9 @@ impl<P: 'static + Primitives> TransportUnicastEventHandler for DeMux<P> {
         Ok(())
     }
 
-    fn new_link(&self, _link: LinkUnicast) {}
+    fn new_link(&self, _link: Link) {}
 
-    fn del_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: Link) {}
 
     fn closing(&self) {
         self.primitives.send_close();

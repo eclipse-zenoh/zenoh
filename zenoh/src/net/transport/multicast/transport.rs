@@ -11,13 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::TransportManager;
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
 use super::{MulticastPeer, TransportMulticastEventHandler};
 use crate::net::link::{LinkMulticast, Locator};
+use crate::net::transport::{TransportManager, TransportPeerEventHandler};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -41,6 +41,7 @@ pub(super) struct TransportMulticastPeer {
     pub(super) whatchdog: Arc<AtomicBool>,
     pub(super) handle: TimedHandle,
     pub(super) conduit_rx: Box<[TransportConduitRx]>,
+    pub(super) handler: Arc<dyn TransportPeerEventHandler>,
 }
 
 impl TransportMulticastPeer {
@@ -322,6 +323,24 @@ impl TransportMulticastInner {
     /*               PEER                */
     /*************************************/
     pub(super) fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
+        let peer = MulticastPeer {
+            locator: locator.clone(),
+            pid: join.pid,
+            whatami: join.whatami,
+            sn_resolution: join.sn_resolution,
+            lease: join.lease,
+            is_qos: join.is_qos(),
+        };
+
+        let handler = match zread!(self.callback).as_ref() {
+            Some(cb) => cb.new_peer(peer.clone())?,
+            None => return Ok(()),
+        };
+
+        if let Some(link) = zread!(self.link).as_ref() {
+            handler.new_link(link.get_link().clone().into());
+        }
+
         let conduit_rx = match join.initial_sns {
             ConduitSnList::Plain(sn) => {
                 vec![TransportConduitRx::new(
@@ -358,16 +377,17 @@ impl TransportMulticastInner {
 
         // Store the new peer
         let peer = TransportMulticastPeer {
-            locator: locator.clone(),
-            pid: join.pid,
-            whatami: join.whatami,
-            sn_resolution: join.sn_resolution,
-            lease: join.lease,
+            locator: peer.locator,
+            pid: peer.pid,
+            whatami: peer.whatami,
+            sn_resolution: peer.sn_resolution,
+            lease: peer.lease,
             whatchdog,
             handle,
             conduit_rx,
+            handler,
         };
-        zwrite!(self.peers).insert(locator.clone(), peer.clone());
+        zwrite!(self.peers).insert(locator.clone(), peer);
 
         // Add the event to the timer
         task::block_on(self.timer.add(event));
@@ -382,10 +402,6 @@ impl TransportMulticastInner {
                 join.is_qos(),
                 join.initial_sns,
             );
-
-        if let Some(cb) = zread!(self.callback).as_ref() {
-            cb.new_peer(peer.into());
-        }
 
         Ok(())
     }
@@ -402,9 +418,13 @@ impl TransportMulticastInner {
                 reason
             );
             peer.handle.clone().defuse();
-            if let Some(cb) = zread!(self.callback).as_ref() {
-                cb.del_peer(peer.into());
+
+            if let Some(link) = zread!(self.link).as_ref() {
+                peer.handler.del_link(link.get_link().clone().into());
             }
+            peer.handler.closing();
+            drop(guard);
+            peer.handler.closed();
         }
         Ok(())
     }

@@ -15,12 +15,12 @@ use async_std::sync::Arc;
 use async_std::task;
 use std::any::Any;
 use std::time::Duration;
-use zenoh::net::link::{EndPoint, LinkUnicast};
+use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
-    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
+    TransportMulticastEventHandler, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::properties::Properties;
@@ -37,7 +37,7 @@ impl TransportEventHandler for SH {
     fn new_unicast(
         &self,
         _transport: TransportUnicast,
-    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         let arc = Arc::new(SC::default());
         Ok(arc)
     }
@@ -54,12 +54,12 @@ impl TransportEventHandler for SH {
 #[derive(Default)]
 pub struct SC;
 
-impl TransportUnicastEventHandler for SC {
+impl TransportPeerEventHandler for SC {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
-    fn new_link(&self, _link: LinkUnicast) {}
-    fn del_link(&self, _link: LinkUnicast) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
 

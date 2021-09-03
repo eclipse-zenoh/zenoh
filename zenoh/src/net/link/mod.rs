@@ -39,6 +39,27 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 const WBUF_SIZE: usize = 64;
 
 /*************************************/
+/*            GENERAL                */
+/*************************************/
+#[derive(Clone)]
+pub enum Link {
+    Unicast(LinkUnicast),
+    Multicast(LinkMulticast),
+}
+
+impl From<LinkUnicast> for Link {
+    fn from(link: LinkUnicast) -> Link {
+        Link::Unicast(link)
+    }
+}
+
+impl From<LinkMulticast> for Link {
+    fn from(link: LinkMulticast) -> Link {
+        Link::Multicast(link)
+    }
+}
+
+/*************************************/
 /*            UNICAST                */
 /*************************************/
 

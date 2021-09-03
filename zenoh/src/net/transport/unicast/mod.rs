@@ -23,45 +23,14 @@ use super::common;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, ZenohMessage};
+use super::TransportPeerEventHandler;
 use crate::net::link::LinkUnicast;
 pub use manager::*;
-use std::any::Any;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror2;
-
-/*************************************/
-/*             CALLBACK              */
-/*************************************/
-pub trait TransportUnicastEventHandler: Send + Sync {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
-    fn new_link(&self, link: LinkUnicast);
-    fn del_link(&self, link: LinkUnicast);
-    fn closing(&self);
-    fn closed(&self);
-    fn as_any(&self) -> &dyn Any;
-}
-
-// Define an empty TransportCallback for the listener transport
-#[derive(Default)]
-pub struct DummyTransportUnicastEventHandler;
-
-impl TransportUnicastEventHandler for DummyTransportUnicastEventHandler {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
-        Ok(())
-    }
-
-    fn new_link(&self, _link: LinkUnicast) {}
-    fn del_link(&self, _link: LinkUnicast) {}
-    fn closing(&self) {}
-    fn closed(&self) {}
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 /*************************************/
 /*        TRANSPORT UNICAST          */
@@ -128,7 +97,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportUnicastEventHandler>>> {
+    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportPeerEventHandler>>> {
         let transport = zweak!(self.0)?;
         Ok(transport.get_callback())
     }

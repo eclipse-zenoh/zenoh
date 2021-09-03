@@ -23,6 +23,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
     use zenoh::net::link::EndPoint;
+    use zenoh::net::link::Link;
     use zenoh::net::protocol::core::{
         whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
     };
@@ -30,8 +31,8 @@ mod tests {
     use zenoh::net::protocol::proto::ZenohMessage;
     use zenoh::net::transport::{
         MulticastPeer, TransportEventHandler, TransportManager, TransportManagerConfig,
-        TransportMulticast, TransportMulticastEventHandler, TransportUnicast,
-        TransportUnicastEventHandler,
+        TransportMulticast, TransportMulticastEventHandler, TransportPeerEventHandler,
+        TransportUnicast,
     };
     use zenoh_util::core::ZResult;
     use zenoh_util::properties::config::*;
@@ -67,7 +68,7 @@ mod tests {
         fn new_unicast(
             &self,
             _transport: TransportUnicast,
-        ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+        ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             panic!();
         }
 
@@ -92,13 +93,27 @@ mod tests {
     }
 
     impl TransportMulticastEventHandler for SCPeer {
-        fn handle_message(&self, _msg: ZenohMessage, _peer: &PeerId) -> ZResult<()> {
+        fn new_peer(&self, _peer: MulticastPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+            Ok(Arc::new(SCPeer {
+                count: self.count.clone(),
+            }))
+        }
+        fn closing(&self) {}
+        fn closed(&self) {}
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    impl TransportPeerEventHandler for SCPeer {
+        fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        fn new_peer(&self, _peer: MulticastPeer) {}
-        fn del_peer(&self, _peer: MulticastPeer) {}
+        fn new_link(&self, _link: Link) {}
+        fn del_link(&self, _link: Link) {}
         fn closing(&self) {}
         fn closed(&self) {}
 

@@ -12,11 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{PeerId, Priority, Reliability, ZInt};
+use super::protocol::core::{Priority, Reliability, ZInt};
 use super::protocol::proto::{
     Close, Frame, FramePayload, Join, TransportBody, TransportMessage, ZenohMessage,
 };
-use super::transport::TransportMulticastInner;
+use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
 use std::sync::MutexGuard;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -27,24 +27,14 @@ use zenoh_util::zerror2;
 /*************************************/
 impl TransportMulticastInner {
     #[allow(unused_mut)]
-    fn trigger_callback(&self, mut msg: ZenohMessage, peer: &PeerId) -> ZResult<()> {
-        let callback = zread!(self.callback).clone();
-        match callback.as_ref() {
-            Some(callback) => {
-                #[cfg(feature = "zero-copy")]
-                let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
-                callback.handle_message(msg, peer)
-            }
-            None => {
-                log::debug!(
-                    "Transport {}: {}. No callback available, dropping message: {}",
-                    self.manager.config.pid,
-                    self.locator,
-                    msg
-                );
-                Ok(())
-            }
-        }
+    fn trigger_callback(
+        &self,
+        mut msg: ZenohMessage,
+        peer: &TransportMulticastPeer,
+    ) -> ZResult<()> {
+        #[cfg(feature = "zero-copy")]
+        let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
+        peer.handler.handle_message(msg)
     }
 
     fn handle_frame(
@@ -52,7 +42,7 @@ impl TransportMulticastInner {
         sn: ZInt,
         payload: FramePayload,
         mut guard: MutexGuard<'_, TransportChannelRx>,
-        peer: &PeerId,
+        peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
@@ -178,7 +168,7 @@ impl TransportMulticastInner {
                             Reliability::Reliable => zlock!(c.reliable),
                             Reliability::BestEffort => zlock!(c.best_effort),
                         };
-                        self.handle_frame(sn, payload, guard, &peer.pid)
+                        self.handle_frame(sn, payload, guard, peer)
                     }
                     TransportBody::Close(close) => {
                         drop(guard);

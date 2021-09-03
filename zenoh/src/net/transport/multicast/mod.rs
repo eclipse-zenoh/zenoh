@@ -23,6 +23,7 @@ use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, ZenohMessage};
 use crate::net::link::{LinkMulticast, Locator};
+use crate::net::transport::{DummyTransportPeerEventHandler, TransportPeerEventHandler};
 pub use manager::*;
 use std::any::Any;
 use std::fmt;
@@ -36,9 +37,7 @@ use zenoh_util::zerror2;
 /*             CALLBACK              */
 /*************************************/
 pub trait TransportMulticastEventHandler: Send + Sync {
-    fn handle_message(&self, msg: ZenohMessage, peer: &PeerId) -> ZResult<()>;
-    fn new_peer(&self, peer: MulticastPeer);
-    fn del_peer(&self, peer: MulticastPeer);
+    fn new_peer(&self, peer: MulticastPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>>;
     fn closing(&self);
     fn closed(&self);
     fn as_any(&self) -> &dyn Any;
@@ -49,12 +48,10 @@ pub trait TransportMulticastEventHandler: Send + Sync {
 pub struct DummyTransportMulticastEventHandler;
 
 impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
-    fn handle_message(&self, _msg: ZenohMessage, _peer: &PeerId) -> ZResult<()> {
-        Ok(())
+    fn new_peer(&self, _peer: MulticastPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
     }
 
-    fn new_peer(&self, _peer: MulticastPeer) {}
-    fn del_peer(&self, _peer: MulticastPeer) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -76,6 +73,7 @@ macro_rules! zweak {
     };
 }
 
+#[derive(Clone)]
 pub struct MulticastPeer {
     pub locator: Locator,
     pub pid: PeerId,

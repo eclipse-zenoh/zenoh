@@ -18,9 +18,9 @@ use std::time::Duration;
 use zenoh::net::link::EndPoint;
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::transport::{
-    DummyTransportUnicastEventHandler, TransportEventHandler, TransportManager,
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
-    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
+    TransportMulticastEventHandler, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::properties::Properties;
@@ -37,8 +37,8 @@ impl TransportEventHandler for SHRouterOpenClose {
     fn new_unicast(
         &self,
         _transport: TransportUnicast,
-    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
-        Ok(Arc::new(DummyTransportUnicastEventHandler::default()))
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
     }
 
     fn new_multicast(
@@ -62,8 +62,8 @@ impl TransportEventHandler for SHClientOpenClose {
     fn new_unicast(
         &self,
         _transport: TransportUnicast,
-    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
-        Ok(Arc::new(DummyTransportUnicastEventHandler::default()))
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
     }
 
     fn new_multicast(

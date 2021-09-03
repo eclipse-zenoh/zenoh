@@ -487,7 +487,7 @@ pub(crate) async fn open_link(
             match t.get_callback() {
                 Some(callback) => {
                     // Notify the transport handler there is a new link on this transport
-                    callback.new_link(link.clone());
+                    callback.new_link(link.clone().into());
                     break;
                 }
                 None => {
@@ -965,7 +965,7 @@ async fn accept_finalize_transport(
             match transport.get_callback() {
                 Some(callback) => {
                     // Notify the transport handler there is a new link on this transport
-                    callback.new_link(link.clone());
+                    callback.new_link(link.clone().into());
                     break;
                 }
                 None => {
