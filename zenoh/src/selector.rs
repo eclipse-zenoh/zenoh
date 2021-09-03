@@ -119,10 +119,10 @@ impl<'a> From<&'a Query> for Selector<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct KeySelector<'a> {
     /// the path expression part of this KeySelector (before `?` character).
-    key: ResKey<'a>,
+    pub key: ResKey<'a>,
     /// the predicate part of this KeySelector, as used in zenoh-net.
     /// I.e. all characters starting from `?`.
-    predicate: &'a str,
+    pub predicate: &'a str,
 }
 
 impl<'a> KeySelector<'a> {
@@ -131,16 +131,6 @@ impl<'a> KeySelector<'a> {
     #[inline(always)]
     pub(crate) fn new(key: ResKey<'a>, predicate: &'a str) -> Self {
         KeySelector { key, predicate }
-    }
-
-    #[inline(always)]
-    pub fn key(&'a self) -> &'a ResKey {
-        &self.key
-    }
-
-    #[inline(always)]
-    pub fn predicate(&'a self) -> &'a str {
-        self.predicate
     }
 
     #[inline(always)]

@@ -124,8 +124,8 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         IntoKeySelector: Into<KeySelector<'b>>,
     {
         let selector = query_selector.into();
-        self.query_reskey = selector.key().to_owned();
-        self.query_predicate = selector.predicate().to_owned();
+        self.query_reskey = selector.key.to_owned();
+        self.query_predicate = selector.predicate.to_owned();
         self
     }
 

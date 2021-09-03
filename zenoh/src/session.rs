@@ -778,8 +778,8 @@ impl Runnable for QueryBuilder<'_> {
         let local_routing = state.local_routing;
         drop(state);
         primitives.send_query(
-            self.selector.key(),
-            self.selector.predicate(),
+            &self.selector.key,
+            self.selector.predicate,
             qid,
             target.clone(),
             consolidation.clone(),
@@ -788,8 +788,8 @@ impl Runnable for QueryBuilder<'_> {
         if local_routing {
             self.session.handle_query(
                 true,
-                self.selector.key(),
-                self.selector.predicate(),
+                &self.selector.key,
+                self.selector.predicate,
                 qid,
                 target,
                 consolidation,
