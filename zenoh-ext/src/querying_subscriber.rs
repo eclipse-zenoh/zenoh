@@ -29,21 +29,21 @@ const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
-pub struct QueryingSubscriberBuilder<'a> {
+pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: &'a Session,
-    sub_reskey: ResKey<'static>,
+    sub_reskey: ResKey<'b>,
     info: SubInfo,
-    query_reskey: ResKey<'static>,
+    query_reskey: ResKey<'b>,
     query_predicate: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
 }
 
-impl QueryingSubscriberBuilder<'_> {
-    pub(crate) fn new<'a>(
+impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
+    pub(crate) fn new(
         session: &'a Session,
-        sub_reskey: &ResKey,
-    ) -> QueryingSubscriberBuilder<'a> {
+        sub_reskey: ResKey<'b>,
+    ) -> QueryingSubscriberBuilder<'a, 'b> {
         let info = SubInfo::default();
 
         // By default query all matching publication caches and storages
@@ -58,10 +58,10 @@ impl QueryingSubscriberBuilder<'_> {
 
         QueryingSubscriberBuilder {
             session,
-            sub_reskey: sub_reskey.to_owned(),
+            sub_reskey: sub_reskey.clone(),
             info,
-            query_reskey: sub_reskey.to_owned(),
-            query_predicate: "".to_string(),
+            query_reskey: sub_reskey,
+            query_predicate: "".into(),
             query_target,
             query_consolidation,
         }
@@ -119,15 +119,13 @@ impl QueryingSubscriberBuilder<'_> {
 
     /// Change the resource key to be used for queries.
     #[inline]
-    pub fn query_reskey(mut self, query_reskey: ResKey) -> Self {
-        self.query_reskey = query_reskey.to_owned();
-        self
-    }
-
-    /// Change the predicate to be used for queries.
-    #[inline]
-    pub fn query_predicate(mut self, query_predicate: String) -> Self {
-        self.query_predicate = query_predicate;
+    pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
+    where
+        IntoSelector: Into<Selector<'b>>,
+    {
+        let selector = query_selector.into();
+        self.query_reskey = selector.key().to_owned();
+        self.query_predicate = selector.predicate().to_owned();
         self
     }
 
@@ -144,32 +142,46 @@ impl QueryingSubscriberBuilder<'_> {
         self.query_consolidation = query_consolidation;
         self
     }
+
+    fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
+        QueryingSubscriberBuilder {
+            session: self.session,
+            sub_reskey: self.sub_reskey.to_owned(),
+            info: self.info,
+            query_reskey: self.query_reskey.to_owned(),
+            query_predicate: "".to_string(),
+            query_target: self.query_target,
+            query_consolidation: self.query_consolidation,
+        }
+    }
 }
 
-impl<'a> Future for QueryingSubscriberBuilder<'a> {
+impl<'a, 'b> Future for QueryingSubscriberBuilder<'a, 'b> {
     type Output = ZResult<QueryingSubscriber<'a>>;
 
     #[inline]
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(QueryingSubscriber::new(Pin::into_inner(self).clone()))
+        Poll::Ready(QueryingSubscriber::new(
+            Pin::into_inner(self).clone().with_static_keys(),
+        ))
     }
 }
 
-impl<'a> ZFuture for QueryingSubscriberBuilder<'a> {
+impl<'a, 'b> ZFuture for QueryingSubscriberBuilder<'a, 'b> {
     #[inline]
     fn wait(self) -> ZResult<QueryingSubscriber<'a>> {
-        QueryingSubscriber::new(self)
+        QueryingSubscriber::new(self.with_static_keys())
     }
 }
 
 pub struct QueryingSubscriber<'a> {
-    conf: QueryingSubscriberBuilder<'a>,
+    conf: QueryingSubscriberBuilder<'a, 'a>,
     subscriber: Subscriber<'a>,
     receiver: QueryingSubscriberReceiver,
 }
 
-impl QueryingSubscriber<'_> {
-    fn new(conf: QueryingSubscriberBuilder<'_>) -> ZResult<QueryingSubscriber<'_>> {
+impl<'a> QueryingSubscriber<'a> {
+    fn new(conf: QueryingSubscriberBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
         // declare subscriber at first
         let mut subscriber = conf
             .session

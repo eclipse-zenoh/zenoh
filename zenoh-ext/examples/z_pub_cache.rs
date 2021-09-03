@@ -32,7 +32,7 @@ async fn main() {
     println!(" => RId {}", rid);
 
     println!("Declaring Publisher on {}", rid);
-    let mut publisher_builder = session.publishing_with_cache(&rid.into()).history(history);
+    let mut publisher_builder = session.publishing_with_cache(rid).history(history);
     if let Some(prefix) = prefix {
         publisher_builder = publisher_builder.queryable_prefix(prefix);
     }

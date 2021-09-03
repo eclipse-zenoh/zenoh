@@ -28,22 +28,22 @@ pub(crate) const PUBLISHER_CACHE_QUERYABLE_KIND: ZInt = 0x08;
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
-pub struct PublicationCacheBuilder<'a> {
+pub struct PublicationCacheBuilder<'a, 'b> {
     session: &'a Session,
-    pub_reskey: ResKey<'static>,
+    pub_reskey: ResKey<'b>,
     queryable_prefix: Option<String>,
     history: usize,
     resources_limit: Option<usize>,
 }
 
-impl PublicationCacheBuilder<'_> {
-    pub(crate) fn new<'a>(
+impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
+    pub(crate) fn new(
         session: &'a Session,
-        pub_reskey: &ResKey,
-    ) -> PublicationCacheBuilder<'a> {
+        pub_reskey: ResKey<'b>,
+    ) -> PublicationCacheBuilder<'a, 'b> {
         PublicationCacheBuilder {
             session,
-            pub_reskey: pub_reskey.to_owned(),
+            pub_reskey,
             queryable_prefix: None,
             history: 1,
             resources_limit: None,
@@ -69,7 +69,7 @@ impl PublicationCacheBuilder<'_> {
     }
 }
 
-impl<'a> Future for PublicationCacheBuilder<'a> {
+impl<'a, 'b> Future for PublicationCacheBuilder<'a, '_> {
     type Output = ZResult<PublicationCache<'a>>;
 
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -77,7 +77,7 @@ impl<'a> Future for PublicationCacheBuilder<'a> {
     }
 }
 
-impl<'a> ZFuture for PublicationCacheBuilder<'a> {
+impl<'a> ZFuture for PublicationCacheBuilder<'a, '_> {
     fn wait(self) -> ZResult<PublicationCache<'a>> {
         PublicationCache::new(self)
     }
@@ -90,8 +90,8 @@ pub struct PublicationCache<'a> {
     _stoptx: Sender<bool>,
 }
 
-impl PublicationCache<'_> {
-    fn new(conf: PublicationCacheBuilder<'_>) -> ZResult<PublicationCache<'_>> {
+impl<'a> PublicationCache<'a> {
+    fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
         log::debug!("Declare PublicationCache on {}", conf.pub_reskey);
 
         if conf.session.hlc().is_none() {
@@ -129,7 +129,7 @@ impl PublicationCache<'_> {
         // take local ownership of stuff to be moved into task
         let mut sub_recv = local_sub.receiver().clone();
         let mut quer_recv = queryable.receiver().clone();
-        let pub_reskey = conf.pub_reskey;
+        let pub_reskey = conf.pub_reskey.to_owned();
         let resources_limit = conf.resources_limit;
         let queryable_prefix = conf.queryable_prefix;
         let history = conf.history;

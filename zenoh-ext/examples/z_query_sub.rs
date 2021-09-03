@@ -32,11 +32,15 @@ async fn main() {
         selector,
         query.as_ref().unwrap_or(&selector)
     );
-    let mut sub_builder = session.subscribe_with_query(&selector.into());
-    if let Some(reskey) = query {
-        sub_builder = sub_builder.query_reskey(reskey.into());
-    }
-    let mut subscriber = sub_builder.await.unwrap();
+    let mut subscriber = if let Some(reskey) = query {
+        session
+            .subscribe_with_query(selector)
+            .query_selector(&reskey)
+            .await
+            .unwrap()
+    } else {
+        session.subscribe_with_query(selector).await.unwrap()
+    };
 
     println!("Enter 'd' to issue the query again, or 'q' to quit.");
     let mut stdin = async_std::io::stdin();

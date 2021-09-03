@@ -38,23 +38,45 @@ pub trait SessionExt {
     /// use futures::prelude::*;
     ///
     /// let session = open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe_with_query(&"/resource/name".into()).await.unwrap();
+    /// let mut subscriber = session.subscribe_with_query("/resource/name").await.unwrap();
     /// while let Some(sample) = subscriber.receiver().next().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
     /// ```
-    fn subscribe_with_query(&self, sub_reskey: &ResKey) -> QueryingSubscriberBuilder<'_>;
+    fn subscribe_with_query<'a, 'b, IntoResKey>(
+        &'a self,
+        sub_reskey: IntoResKey,
+    ) -> QueryingSubscriberBuilder<'a, 'b>
+    where
+        IntoResKey: Into<ResKey<'b>>;
 
-    fn publishing_with_cache(&self, pub_reskey: &ResKey) -> PublicationCacheBuilder;
+    fn publishing_with_cache<'a, 'b, IntoResKey>(
+        &'a self,
+        pub_reskey: IntoResKey,
+    ) -> PublicationCacheBuilder<'a, 'b>
+    where
+        IntoResKey: Into<ResKey<'b>>;
 }
 
 impl SessionExt for Session {
-    fn subscribe_with_query(&self, sub_reskey: &ResKey) -> QueryingSubscriberBuilder<'_> {
-        QueryingSubscriberBuilder::new(self, sub_reskey)
+    fn subscribe_with_query<'a, 'b, IntoResKey>(
+        &'a self,
+        sub_reskey: IntoResKey,
+    ) -> QueryingSubscriberBuilder<'a, 'b>
+    where
+        IntoResKey: Into<ResKey<'b>>,
+    {
+        QueryingSubscriberBuilder::new(self, sub_reskey.into())
     }
 
-    fn publishing_with_cache(&self, pub_reskey: &ResKey) -> PublicationCacheBuilder {
-        PublicationCacheBuilder::new(self, pub_reskey)
+    fn publishing_with_cache<'a, 'b, IntoResKey>(
+        &'a self,
+        pub_reskey: IntoResKey,
+    ) -> PublicationCacheBuilder<'a, 'b>
+    where
+        IntoResKey: Into<ResKey<'b>>,
+    {
+        PublicationCacheBuilder::new(self, pub_reskey.into())
     }
 }
