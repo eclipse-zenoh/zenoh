@@ -1267,41 +1267,6 @@ impl Session {
         }
     }
 
-    // /// Declare a [CallbackSubscriber](CallbackSubscriber) for the given resource key.
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `resource` - The resource key to subscribe
-    // /// * `data_handler` - The callback that will be called on each data reception
-    // ///
-    // /// # Examples
-    // /// ```
-    // /// # async_std::task::block_on(async {
-    // /// use zenoh::*;
-    // ///
-    // /// let session = open(config::peer()).await.unwrap();
-    // /// let subscriber = session.declare_callback_subscriber("/resource/name",
-    // ///     |sample| { println!("Received : {} {}", sample.res_name, sample.payload); }
-    // /// ).await.unwrap();
-    // /// # })
-    // /// ```
-    // pub fn declare_callback_subscriber<'a, 'b, DataHandler>(
-    //     &'a self,
-    //     reskey: &'b ResKey,
-    //     data_handler: DataHandler,
-    // ) -> CallbackSubscriberBuilder<'a, 'b>
-    // where
-    //     DataHandler: FnMut(Sample) + Send + Sync + 'static,
-    // {
-    //     CallbackSubscriberBuilder {
-    //         session: self,
-    //         reskey,
-    //         info: SubInfo::default(),
-    //         local: false,
-    //         handler: Arc::new(RwLock::new(data_handler)),
-    //     }
-    // }
-
     pub(crate) fn unsubscribe(&self, sid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(sub_state) = state.subscribers.remove(&sid) {

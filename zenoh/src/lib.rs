@@ -64,14 +64,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate zenoh_util;
 
-// #[doc(hidden)]
-// pub mod plugins;
-// #[doc(hidden)]
-// pub mod protocol;
-// #[doc(hidden)]
-// pub mod routing;
-// #[doc(hidden)]
-// pub mod runtime;
 #[doc(hidden)]
 pub mod net;
 
