@@ -295,7 +295,7 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
             "peer": transport.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
             "links": transport.get_links().map_or_else(
                 |_| Vec::new(),
-                |links| links.iter().map(|link| link.get_dst().to_string()).collect()
+                |links| links.iter().map(|link| link.dst.to_string()).collect()
             )
         })
     }))

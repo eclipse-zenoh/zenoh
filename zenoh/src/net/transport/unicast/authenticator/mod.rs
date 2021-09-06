@@ -19,7 +19,7 @@ mod userpassword;
 use super::protocol;
 use super::protocol::core::{PeerId, Property, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
-use crate::net::link::{LinkUnicast, Locator};
+use crate::net::link::{Link, Locator};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "zero-copy")]
@@ -80,7 +80,7 @@ impl Hash for LinkAuthenticator {
 pub trait LinkUnicastAuthenticatorTrait {
     fn id(&self) -> LinkAuthenticatorId;
 
-    async fn handle_new_link(&self, link: &LinkUnicast) -> ZResult<Option<PeerId>>;
+    async fn handle_new_link(&self, link: &Link) -> ZResult<Option<PeerId>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
     /// of the authenticator in such a way no unnecessary data is left around
@@ -88,7 +88,7 @@ pub trait LinkUnicastAuthenticatorTrait {
     /// # Arguments
     /// * `link` - The [`Link`][Link] generating the error
     ///
-    async fn handle_link_err(&self, link: &LinkUnicast);
+    async fn handle_link_err(&self, link: &Link);
 }
 
 pub struct DummyLinkUnicastAuthenticator;
@@ -105,11 +105,11 @@ impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
         LinkAuthenticatorId::Reserved
     }
 
-    async fn handle_new_link(&self, _link: &LinkUnicast) -> ZResult<Option<PeerId>> {
+    async fn handle_new_link(&self, _link: &Link) -> ZResult<Option<PeerId>> {
         Ok(None)
     }
 
-    async fn handle_link_err(&self, _link: &LinkUnicast) {}
+    async fn handle_link_err(&self, _link: &Link) {}
 }
 
 /*************************************/

@@ -17,7 +17,7 @@ use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use zenoh::net::link::{EndPoint, LinkUnicast};
+use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
     whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
 };
@@ -25,8 +25,8 @@ use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
-    TransportMulticast, TransportMulticastEventHandler, TransportUnicast,
-    TransportUnicastEventHandler,
+    TransportMulticast, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+    TransportUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::properties::Properties;
@@ -62,8 +62,9 @@ impl SHRouter {
 impl TransportEventHandler for SHRouter {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
-    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         let arc = Arc::new(SCRouter::new(self.count.clone()));
         Ok(arc)
     }
@@ -87,14 +88,14 @@ impl SCRouter {
     }
 }
 
-impl TransportUnicastEventHandler for SCRouter {
+impl TransportPeerEventHandler for SCRouter {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
-    fn new_link(&self, _link: LinkUnicast) {}
-    fn del_link(&self, _link: LinkUnicast) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -110,8 +111,9 @@ struct SHClient;
 impl TransportEventHandler for SHClient {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
-    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(SCClient::default()))
     }
 
@@ -127,13 +129,13 @@ impl TransportEventHandler for SHClient {
 #[derive(Default)]
 pub struct SCClient;
 
-impl TransportUnicastEventHandler for SCClient {
+impl TransportPeerEventHandler for SCClient {
     fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
 
-    fn new_link(&self, _link: LinkUnicast) {}
-    fn del_link(&self, _link: LinkUnicast) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
 

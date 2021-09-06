@@ -23,9 +23,9 @@ use super::common;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, ZenohMessage};
-use crate::net::link::LinkUnicast;
+use super::{TransportPeer, TransportPeerEventHandler};
+use crate::net::link::Link;
 pub use manager::*;
-use std::any::Any;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
@@ -33,49 +33,9 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror2;
 
 /*************************************/
-/*             CALLBACK              */
-/*************************************/
-pub trait TransportUnicastEventHandler: Send + Sync {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
-    fn new_link(&self, link: LinkUnicast);
-    fn del_link(&self, link: LinkUnicast);
-    fn closing(&self);
-    fn closed(&self);
-    fn as_any(&self) -> &dyn Any;
-}
-
-// Define an empty TransportCallback for the listener transport
-#[derive(Default)]
-pub struct DummyTransportUnicastEventHandler;
-
-impl TransportUnicastEventHandler for DummyTransportUnicastEventHandler {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
-        Ok(())
-    }
-
-    fn new_link(&self, _link: LinkUnicast) {}
-    fn del_link(&self, _link: LinkUnicast) {}
-    fn closing(&self) {}
-    fn closed(&self) {}
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-/*************************************/
 /*        TRANSPORT UNICAST          */
 /*************************************/
-macro_rules! zweak {
-    ($var:expr) => {
-        $var.upgrade().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidReference {
-                descr: "Transport unicast closed".to_string()
-            })
-        })
-    };
-}
-
+#[derive(Clone, Copy)]
 pub(crate) struct TransportConfigUnicast {
     pub(crate) peer: PeerId,
     pub(crate) whatami: WhatAmI,
@@ -94,63 +54,96 @@ pub struct TransportUnicast(Weak<TransportUnicastInner>);
 impl TransportUnicast {
     #[inline(always)]
     pub(super) fn get_transport(&self) -> ZResult<Arc<TransportUnicastInner>> {
-        zweak!(self.0)
+        self.0.upgrade().ok_or_else(|| {
+            zerror2!(ZErrorKind::InvalidReference {
+                descr: "Transport unicast closed".to_string()
+            })
+        })
     }
 
     #[inline(always)]
     pub fn get_pid(&self) -> ZResult<PeerId> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.get_pid())
     }
 
     #[inline(always)]
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.get_whatami())
     }
 
     #[inline(always)]
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.get_sn_resolution())
     }
 
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.is_shm())
     }
 
     #[inline(always)]
     pub fn is_qos(&self) -> ZResult<bool> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.is_qos())
     }
 
     #[inline(always)]
-    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportUnicastEventHandler>>> {
-        let transport = zweak!(self.0)?;
+    pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportPeerEventHandler>>> {
+        let transport = self.get_transport()?;
         Ok(transport.get_callback())
     }
 
+    pub fn get_peer(&self) -> ZResult<TransportPeer> {
+        let transport = self.get_transport()?;
+        let tp = TransportPeer {
+            pid: transport.get_pid(),
+            whatami: transport.get_whatami(),
+            is_qos: transport.is_qos(),
+            is_shm: transport.is_shm(),
+            links: transport
+                .get_links()
+                .into_iter()
+                .map(|l| l.into())
+                .collect(),
+        };
+        Ok(tp)
+    }
+
     #[inline(always)]
-    pub fn get_links(&self) -> ZResult<Vec<LinkUnicast>> {
-        let transport = zweak!(self.0)?;
-        Ok(transport.get_links())
+    pub fn get_links(&self) -> ZResult<Vec<Link>> {
+        let transport = self.get_transport()?;
+        Ok(transport
+            .get_links()
+            .into_iter()
+            .map(|l| l.into())
+            .collect())
     }
 
     #[inline(always)]
     pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         transport.schedule(message);
         Ok(())
     }
 
     #[inline(always)]
-    pub async fn close_link(&self, link: &LinkUnicast) -> ZResult<()> {
-        let transport = zweak!(self.0)?;
+    pub async fn close_link(&self, link: &Link) -> ZResult<()> {
+        let transport = self.get_transport()?;
+        let link = transport
+            .get_links()
+            .into_iter()
+            .find(|l| l.get_src() == link.src && l.get_dst() == link.dst)
+            .ok_or_else(|| {
+                zerror2!(ZErrorKind::InvalidLink {
+                    descr: "Invalid link".to_string()
+                })
+            })?;
         transport
-            .close_link(link, tmsg::close_reason::GENERIC)
+            .close_link(&link, tmsg::close_reason::GENERIC)
             .await?;
         Ok(())
     }
@@ -158,7 +151,7 @@ impl TransportUnicast {
     #[inline(always)]
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
-        match zweak!(self.0) {
+        match self.get_transport() {
             Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
             Err(_) => Ok(()),
         }
@@ -186,7 +179,7 @@ impl PartialEq for TransportUnicast {
 
 impl fmt::Debug for TransportUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match zweak!(self.0) {
+        match self.get_transport() {
             Ok(transport) => f
                 .debug_struct("Transport Unicast")
                 .field("pid", &transport.get_pid())

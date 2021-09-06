@@ -31,9 +31,9 @@ use zenoh_util::zerror;
 /*************************************/
 /*             UNICAST               */
 /*************************************/
-pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
+pub(crate) type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
-pub trait LinkManagerUnicastTrait: Send + Sync {
+pub(crate) trait LinkManagerUnicastTrait: Send + Sync {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast>;
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator>;
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()>;
@@ -41,7 +41,7 @@ pub trait LinkManagerUnicastTrait: Send + Sync {
     fn get_locators(&self) -> Vec<Locator>;
 }
 
-pub struct LinkManagerBuilderUnicast;
+pub(crate) struct LinkManagerBuilderUnicast;
 
 impl LinkManagerBuilderUnicast {
     pub(crate) fn make(
@@ -69,13 +69,13 @@ impl LinkManagerBuilderUnicast {
 /*            MULTICAST              */
 /*************************************/
 #[async_trait]
-pub trait LinkManagerMulticastTrait: Send + Sync {
+pub(crate) trait LinkManagerMulticastTrait: Send + Sync {
     async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkMulticast>;
 }
 
-pub type LinkManagerMulticast = Arc<dyn LinkManagerMulticastTrait>;
+pub(crate) type LinkManagerMulticast = Arc<dyn LinkManagerMulticastTrait>;
 
-pub struct LinkManagerBuilderMulticast;
+pub(crate) struct LinkManagerBuilderMulticast;
 
 impl LinkManagerBuilderMulticast {
     pub(crate) fn make(protocol: &LocatorProtocol) -> ZResult<LinkManagerMulticast> {

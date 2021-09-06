@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::{TransportManager, TransportUnicastEventHandler};
+use super::super::{TransportManager, TransportPeerEventHandler};
 use super::common::{
     conduit::{TransportConduitRx, TransportConduitTx},
     pipeline::TransmissionPipeline,
@@ -19,7 +19,7 @@ use super::common::{
 use super::link::TransportLinkUnicast;
 use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
-use crate::net::link::LinkUnicast;
+use crate::net::link::{Link, LinkUnicast};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
@@ -65,7 +65,7 @@ pub(crate) struct TransportUnicastInner {
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicast]>>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportUnicastEventHandler>>>>,
+    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The transport can do shm
@@ -144,7 +144,7 @@ impl TransportUnicastInner {
         }
     }
 
-    pub(super) fn set_callback(&self, callback: Arc<dyn TransportUnicastEventHandler>) {
+    pub(super) fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>) {
         let mut guard = zwrite!(self.callback);
         *guard = Some(callback);
     }
@@ -313,7 +313,7 @@ impl TransportUnicastInner {
                     drop(guard);
                     // Notify the callback
                     if let Some(callback) = zread!(self.callback).as_ref() {
-                        callback.del_link(link.clone());
+                        callback.del_link(Link::from(link));
                     }
                     Target::Link(stl.into())
                 }
@@ -355,7 +355,7 @@ impl TransportUnicastInner {
         self.conduit_tx.len() > 1
     }
 
-    pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportUnicastEventHandler>> {
+    pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
         zread!(self.callback).clone()
     }
 

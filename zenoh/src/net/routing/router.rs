@@ -19,8 +19,8 @@ pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
 use super::runtime::Runtime;
-use super::transport::{DeMux, Mux, Primitives, TransportUnicast, TransportUnicastEventHandler};
-use crate::net::link::LinkUnicast;
+use super::transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
+use crate::net::link::Link;
 use async_std::sync::{Arc, Weak};
 use async_std::task::JoinHandle;
 use std::any::Any;
@@ -372,7 +372,7 @@ impl LinkStateInterceptor {
     }
 }
 
-impl TransportUnicastEventHandler for LinkStateInterceptor {
+impl TransportPeerEventHandler for LinkStateInterceptor {
     fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         log::trace!("Recv {:?}", msg);
         match msg.body {
@@ -430,9 +430,9 @@ impl TransportUnicastEventHandler for LinkStateInterceptor {
         }
     }
 
-    fn new_link(&self, _link: LinkUnicast) {}
+    fn new_link(&self, _link: Link) {}
 
-    fn del_link(&self, _link: LinkUnicast) {}
+    fn del_link(&self, _link: Link) {}
 
     fn closing(&self) {
         self.demux.closing();

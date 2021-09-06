@@ -29,7 +29,7 @@ use crate::net::protocol::proto::TransportMessage;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 pub use endpoint::*;
-pub use manager::*;
+pub(crate) use manager::*;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -39,14 +39,71 @@ use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 const WBUF_SIZE: usize = 64;
 
 /*************************************/
+/*            GENERAL                */
+/*************************************/
+#[derive(Clone, Debug)]
+pub struct Link {
+    pub src: Locator,
+    pub dst: Locator,
+    pub group: Option<Locator>,
+    pub mtu: u16,
+    pub is_reliable: bool,
+    pub is_streamed: bool,
+}
+
+impl fmt::Display for Link {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} => {}", self.src, self.dst)
+    }
+}
+
+impl From<&LinkUnicast> for Link {
+    fn from(link: &LinkUnicast) -> Link {
+        Link {
+            src: link.get_src(),
+            dst: link.get_dst(),
+            group: None,
+            mtu: link.get_mtu(),
+            is_reliable: link.is_reliable(),
+            is_streamed: link.is_streamed(),
+        }
+    }
+}
+
+impl From<LinkUnicast> for Link {
+    fn from(link: LinkUnicast) -> Link {
+        Link::from(&link)
+    }
+}
+
+impl From<&LinkMulticast> for Link {
+    fn from(link: &LinkMulticast) -> Link {
+        Link {
+            src: link.get_src(),
+            dst: link.get_dst(),
+            group: Some(link.get_dst()),
+            mtu: link.get_mtu(),
+            is_reliable: link.is_reliable(),
+            is_streamed: false,
+        }
+    }
+}
+
+impl From<LinkMulticast> for Link {
+    fn from(link: LinkMulticast) -> Link {
+        Link::from(&link)
+    }
+}
+
+/*************************************/
 /*            UNICAST                */
 /*************************************/
 
 #[derive(Clone)]
-pub struct LinkUnicast(Arc<dyn LinkUnicastTrait>);
+pub(crate) struct LinkUnicast(Arc<dyn LinkUnicastTrait>);
 
 #[async_trait]
-pub trait LinkUnicastTrait: Send + Sync {
+pub(crate) trait LinkUnicastTrait: Send + Sync {
     fn get_mtu(&self) -> u16;
     fn get_src(&self) -> Locator;
     fn get_dst(&self) -> Locator;
@@ -119,6 +176,7 @@ impl LinkUnicast {
 
 impl Deref for LinkUnicast {
     type Target = Arc<dyn LinkUnicastTrait>;
+
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -168,10 +226,10 @@ impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
 /*            MULTICAST              */
 /*************************************/
 #[derive(Clone)]
-pub struct LinkMulticast(Arc<dyn LinkMulticastTrait>);
+pub(crate) struct LinkMulticast(Arc<dyn LinkMulticastTrait>);
 
 #[async_trait]
-pub trait LinkMulticastTrait: Send + Sync {
+pub(crate) trait LinkMulticastTrait: Send + Sync {
     fn get_mtu(&self) -> u16;
     fn get_src(&self) -> Locator;
     fn get_dst(&self) -> Locator;

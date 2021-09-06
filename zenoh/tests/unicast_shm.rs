@@ -21,7 +21,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh::net::link::{EndPoint, LinkUnicast};
+    use zenoh::net::link::{EndPoint, Link};
     use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
@@ -29,7 +29,7 @@ mod tests {
     use zenoh::net::transport::{
         TransportEventHandler, TransportManager, TransportManagerConfig,
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
-        TransportUnicast, TransportUnicastEventHandler,
+        TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh::net::CongestionControl;
     use zenoh_util::core::ZResult;
@@ -64,8 +64,9 @@ mod tests {
     impl TransportEventHandler for SHPeer {
         fn new_unicast(
             &self,
+            _peer: TransportPeer,
             _transport: TransportUnicast,
-        ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+        ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
         }
@@ -90,7 +91,7 @@ mod tests {
         }
     }
 
-    impl TransportUnicastEventHandler for SCPeer {
+    impl TransportPeerEventHandler for SCPeer {
         fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
             if self.is_shm {
                 print!("s");
@@ -113,8 +114,8 @@ mod tests {
             Ok(())
         }
 
-        fn new_link(&self, _link: LinkUnicast) {}
-        fn del_link(&self, _link: LinkUnicast) {}
+        fn new_link(&self, _link: Link) {}
+        fn del_link(&self, _link: Link) {}
         fn closing(&self) {}
         fn closed(&self) {}
 

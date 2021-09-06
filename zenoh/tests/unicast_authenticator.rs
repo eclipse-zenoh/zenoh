@@ -17,16 +17,16 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::time::Duration;
-use zenoh::net::link::{EndPoint, LinkUnicast};
+use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 #[cfg(feature = "zero-copy")]
 use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
 use zenoh::net::transport::unicast::authenticator::UserPasswordAuthenticator;
 use zenoh::net::transport::{
-    DummyTransportUnicastEventHandler, TransportEventHandler, TransportManager,
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
-    TransportMulticastEventHandler, TransportUnicast, TransportUnicastEventHandler,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::properties::Properties;
@@ -46,8 +46,9 @@ impl SHRouterAuthenticator {
 impl TransportEventHandler for SHRouterAuthenticator {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
-    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(MHRouterAuthenticator::new()))
     }
 
@@ -67,12 +68,12 @@ impl MHRouterAuthenticator {
     }
 }
 
-impl TransportUnicastEventHandler for MHRouterAuthenticator {
+impl TransportPeerEventHandler for MHRouterAuthenticator {
     fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
-    fn new_link(&self, _link: LinkUnicast) {}
-    fn del_link(&self, _link: LinkUnicast) {}
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
     fn closing(&self) {}
     fn closed(&self) {}
 
@@ -88,9 +89,10 @@ struct SHClientAuthenticator;
 impl TransportEventHandler for SHClientAuthenticator {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
-    ) -> ZResult<Arc<dyn TransportUnicastEventHandler>> {
-        Ok(Arc::new(DummyTransportUnicastEventHandler::default()))
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
     }
 
     fn new_multicast(
