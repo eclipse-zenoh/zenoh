@@ -1,4 +1,4 @@
-# Zenoh-net Rust extra examples
+# Zenoh Rust extra examples
 
 ## Start instructions
 
@@ -22,41 +22,41 @@
 
    Typical usage:
    ```bash
-      zn_pub_cache
+      z_pub_cache
    ```
    or
    ```bash
-      zn_pub_cache --history 10
+      z_pub_cache --history 10
    ```
 
-### zn_query_sub
+### z_query_sub
 
    Registers a querying subscriber with a selector.  
    At startup, the subscriber issuez a query (by default on the same selector than the subscription) and merge/sort/de-duplicate the query results with the publications received in parallel.
 
    Typical usage:
    ```bash
-      zn_query_sub
+      z_query_sub
    ```
 
 
-### zn_member
+### z_member
 
    Group Management example: join a group and display the received group events (Join, Leave, LeaseExpired), as well as an updated group view.
 
    Typical usage:
    ```bash
-      zn_member
+      z_member
    ```
    (start/stop several in parallel)
 
-### zn_view_size
+### z_view_size
 
    Group Management example: join a group and wait for the group view to reach a configurable size (default: 3 members).
 
    Typical usage:
    ```bash
-      zn_view_size
+      z_view_size
    ```
    (start/stop several in parallel)
 

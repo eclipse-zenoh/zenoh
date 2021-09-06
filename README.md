@@ -77,7 +77,5 @@ The zenoh router is built as `target/release/zenohd`. All the examples are built
       `curl 'http://localhost:8000/@/router/local/**/storage/*'`
 
 
-See other examples of zenoh usage:
- - with the zenoh API in [zenoh/examples/zenoh](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples/zenoh)
- - with the zenoh-net API in [zenoh/examples/zenoh-net](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples/zenoh-net)
+See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples/zenoh)
 

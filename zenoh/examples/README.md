@@ -1,4 +1,4 @@
-# Zenoh-net Rust examples
+# Zenoh Rust examples
 
 ## Start instructions
 
@@ -15,116 +15,117 @@
 
 ## Examples description
 
-### zn_scout
+### z_scout
 
    Scouts for zenoh peers and routers available on the network.
 
    Typical usage:
    ```bash
-      zn_scout
+      z_scout
    ```
 
-### zn_info
+### z_info
 
-   Gets information about the zenoh-net session.
+   Gets information about the zenoh session.
 
    Typical usage:
    ```bash
-      zn_info
+      z_info
    ```
 
 
-### zn_write
+### z_put
 
-   Writes a path/value into Zenoh.  
-   The path/value will be received by all matching subscribers, for instance the [zn_sub](#zn_sub)
-   and [zn_storage](#zn_storage) examples.
+   Puts a path/value into Zenoh.  
+   The path/value will be received by all matching subscribers, for instance the [z_sub](#z_sub)
+   and [z_storage](#z_storage) examples.
 
    Typical usage:
    ```bash
-      zn_write
+      z_put
    ```
    or
    ```bash
-      zn_write -p /demo/example/test -v 'Hello World'
+      z_put -p /demo/example/test -v 'Hello World'
    ```
 
-### zn_pub
+### z_pub
 
-   Declares a resource with a path and a publisher on this resource. Then writes a value using the numerical resource id.
-   The path/value will be received by all matching subscribers, for instance the [zn_sub](#zn_sub)
-   and [zn_storage](#zn_storage) examples.
+   Registers a resource with a path and a publisher on this resource. Then writes values periodically 
+   sing the numerical resource id.
+   The path/value will be received by all matching subscribers, for instance the [z_sub](#z_sub)
+   and [z_storage](#z_storage) examples.
 
    Typical usage:
    ```bash
-      zn_pub
+      z_pub
    ```
    or
    ```bash
-      zn_pub -p /demo/example/test -v 'Hello World'
+      z_pub -p /demo/example/test -v 'Hello World'
    ```
 
-### zn_sub
+### z_sub
 
    Registers a subscriber with a selector.  
-   The subscriber will be notified of each write made on any path matching the selector,
+   The subscriber will be notified of each `put` or `delete` made on any path matching the selector,
    and will print this notification.
 
    Typical usage:
    ```bash
-      zn_sub
+      z_sub
    ```
    or
    ```bash
-      zn_sub -s /demo/**
+      z_sub -s /demo/**
    ```
 
-### zn_pull
+### z_pull
 
    Registers a pull subscriber with a selector.  
-   The pull subscriber will receive each write made on any path matching the selector,
+   The pull subscriber will receive each `put` or `delete` made on any path matching the selector,
    and will pull on demand and print the received path/value.
 
    Typical usage:
    ```bash
-      zn_pull
+      z_pull
    ```
    or
    ```bash
-      zn_pull -s /demo/**
+      z_pull -s /demo/**
    ```
 
-### zn_query
+### z_get
 
    Sends a query message for a selector.  
-   The queryables with a matching path or selector (for instance [zn_eval](#zn_eval) and [zn_storage](#zn_storage))
-   will receive this query and reply with paths/values that will be received by the query callback.
+   The queryables with a matching path or selector (for instance [z_eval](#z_eval) and [z_storage](#z_storage))
+   will receive this query and reply with paths/values that will be received by the receiver stream.
 
    Typical usage:
    ```bash
-      zn_query
+      z_get
    ```
    or
    ```bash
-      zn_query -s /demo/**
+      z_get -s /demo/**
    ```
 
-### zn_eval
+### z_eval
 
    Registers a queryable function with a path.  
-   This queryable function will be triggered by each call to a query operation on zenoh-net
+   This queryable function will be triggered by each call to get
    with a selector that matches the path, and will return a value to the querier.
 
    Typical usage:
    ```bash
-      zn_eval
+      z_eval
    ```
    or
    ```bash
-      zn_eval -p /demo/example/eval -v 'This is the result'
+      z_eval -p /demo/example/eval -v 'This is the result'
    ```
 
-### zn_storage
+### z_storage
 
    Trivial implementation of a storage in memory.  
    This examples registers a subscriber and a queryable on the same selector.
@@ -134,20 +135,20 @@
 
    Typical usage:
    ```bash
-      zn_storage
+      z_storage
    ```
    or
    ```bash
-      zn_storage -s /demo/**
+      z_storage -s /demo/**
    ```
 
-### zn_pub_shm & zn_sub_shm
+### z_pub_shm & z_sub_shm
 
    A pub/sub example involving the zero-copy feature based on shared memory.
 
    Typical Subscriber usage:
    ```bash
-      zn_sub_shm
+      z_sub_shm
    ```
 
    Typical Publisher usage:
@@ -155,54 +156,54 @@
       z_pub_shm
    ```
 
-### zn_pub_thr & zn_sub_thr
+### z_pub_thr & z_sub_thr
 
    Pub/Sub throughput test.
    This example allows to perform throughput measurements between a pubisher performing
-   write operations and a subscriber receiving notifications of those writes.
+   put operations and a subscriber receiving notifications of those puts.
 
    Typical Subscriber usage:
    ```bash
-      zn_sub_thr
+      z_sub_thr
    ```
 
    Typical Publisher usage:
    ```bash
-      zn_pub_thr 1024
+      z_pub_thr 1024
    ```
 
-### zn_ping & zn_pong
+### z_ping & z_pong
 
    Pub/Sub roundtrip time test.
-   This example allows to perform roundtrip time measurements. The zn_ping example 
-   performs a write operation on a first resource, waits for a reply from the pong 
+   This example allows to perform roundtrip time measurements. The z_ping example 
+   performs a put operation on a first resource, waits for a reply from the pong 
    example on a second resource and measures the time between the two.
    The pong application waits for samples on the first resource and replies by
    writing back the received data on the second resource.
 
    Typical Pong usage:
    ```bash
-      zn_pong
+      z_pong
    ```
 
    Typical Ping usage:
    ```bash
-      zn_ping 1024
+      z_ping 1024
    ```
 
-### zn_pub_shm_thr & zn_sub_shm_thr
+### z_pub_shm_thr & z_sub_shm_thr
 
    Pub/Sub throughput test involving the zero-copy feature based on shared memory.
    This example allows to perform throughput measurements between a pubisher performing
-   write operations with the zero-copy feature and a subscriber receiving notifications
-   of those writes.
+   put operations with the zero-copy feature and a subscriber receiving notifications
+   of those puts.
 
    Typical Subscriber usage:
    ```bash
-      zn_sub_shm_thr
+      z_sub_shm_thr
    ```
 
    Typical Publisher usage:
    ```bash
-      zn_pub_shm_thr
+      z_pub_shm_thr
    ```
