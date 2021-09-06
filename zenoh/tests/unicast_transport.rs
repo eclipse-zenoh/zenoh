@@ -25,7 +25,7 @@ use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
-    TransportMulticast, TransportMulticastEventHandler, TransportPeerEventHandler,
+    TransportMulticast, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
     TransportUnicast,
 };
 use zenoh_util::core::ZResult;
@@ -62,6 +62,7 @@ impl SHRouter {
 impl TransportEventHandler for SHRouter {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         let arc = Arc::new(SCRouter::new(self.count.clone()));
@@ -110,6 +111,7 @@ struct SHClient;
 impl TransportEventHandler for SHClient {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(SCClient::default()))

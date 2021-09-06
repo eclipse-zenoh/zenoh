@@ -20,7 +20,7 @@ use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeerEventHandler, TransportUnicast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::properties::Properties;
@@ -36,6 +36,7 @@ struct SH;
 impl TransportEventHandler for SH {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         let arc = Arc::new(SC::default());

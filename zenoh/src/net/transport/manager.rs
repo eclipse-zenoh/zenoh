@@ -45,6 +45,7 @@ use zenoh_util::zparse;
 ///
 /// impl TransportEventHandler for MySH {
 ///     fn new_unicast(&self,
+///         _peer: TransportPeer,
 ///         _transport: TransportUnicast
 ///     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
 ///         Ok(Arc::new(DummyTransportPeerEventHandler::default()))

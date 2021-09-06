@@ -45,10 +45,10 @@ const WBUF_SIZE: usize = 64;
 pub struct Link {
     pub src: Locator,
     pub dst: Locator,
+    pub group: Option<Locator>,
     pub mtu: u16,
     pub is_reliable: bool,
     pub is_streamed: bool,
-    pub is_multicast: bool,
 }
 
 impl fmt::Display for Link {
@@ -62,10 +62,10 @@ impl From<&LinkUnicast> for Link {
         Link {
             src: link.get_src(),
             dst: link.get_dst(),
+            group: None,
             mtu: link.get_mtu(),
             is_reliable: link.is_reliable(),
             is_streamed: link.is_streamed(),
-            is_multicast: false,
         }
     }
 }
@@ -81,10 +81,10 @@ impl From<&LinkMulticast> for Link {
         Link {
             src: link.get_src(),
             dst: link.get_dst(),
+            group: Some(link.get_dst()),
             mtu: link.get_mtu(),
             is_reliable: link.is_reliable(),
             is_streamed: false,
-            is_multicast: true,
         }
     }
 }

@@ -20,7 +20,7 @@ use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeerEventHandler, TransportUnicast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::properties::Properties;
@@ -36,6 +36,7 @@ struct SHRouterOpenClose;
 impl TransportEventHandler for SHRouterOpenClose {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
@@ -61,6 +62,7 @@ impl SHClientOpenClose {
 impl TransportEventHandler for SHClientOpenClose {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))

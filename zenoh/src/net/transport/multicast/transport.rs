@@ -15,9 +15,10 @@ use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
-use super::{MulticastPeer, TransportMulticastEventHandler};
 use crate::net::link::{Link, LinkMulticast, Locator};
-use crate::net::transport::{TransportManager, TransportPeerEventHandler};
+use crate::net::transport::{
+    TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+};
 use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -47,6 +48,10 @@ pub(super) struct TransportMulticastPeer {
 impl TransportMulticastPeer {
     pub(super) fn active(&self) {
         self.whatchdog.store(true, Ordering::Release);
+    }
+
+    fn is_qos(&self) -> bool {
+        self.conduit_rx.len() > 1
     }
 }
 
@@ -155,6 +160,10 @@ impl TransportMulticastInner {
         zread!(self.callback).clone()
     }
 
+    pub(crate) fn get_link(&self) -> LinkMulticast {
+        zread!(self.link).as_ref().unwrap().get_link().clone()
+    }
+
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
@@ -227,10 +236,6 @@ impl TransportMulticastInner {
     #[cfg(not(feature = "zero-copy"))]
     pub(crate) fn schedule(&self, message: ZenohMessage) {
         self.schedule_first_fit(message);
-    }
-
-    pub(crate) fn get_link(&self) -> LinkMulticast {
-        zread!(self.link).as_ref().unwrap().get_link().clone()
     }
 
     /*************************************/
@@ -323,23 +328,21 @@ impl TransportMulticastInner {
     /*               PEER                */
     /*************************************/
     pub(super) fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
-        let peer = MulticastPeer {
-            locator: locator.clone(),
+        let mut link = Link::from(self.get_link());
+        link.dst = locator.clone();
+
+        let peer = TransportPeer {
             pid: join.pid,
             whatami: join.whatami,
-            sn_resolution: join.sn_resolution,
-            lease: join.lease,
             is_qos: join.is_qos(),
+            is_shm: self.is_shm(),
+            links: vec![link],
         };
 
         let handler = match zread!(self.callback).as_ref() {
             Some(cb) => cb.new_peer(peer.clone())?,
             None => return Ok(()),
         };
-
-        if let Some(link) = zread!(self.link).as_ref() {
-            handler.new_link(Link::from(link.get_link()));
-        }
 
         let conduit_rx = match join.initial_sns {
             ConduitSnList::Plain(sn) => {
@@ -377,11 +380,11 @@ impl TransportMulticastInner {
 
         // Store the new peer
         let peer = TransportMulticastPeer {
-            locator: peer.locator,
+            locator: locator.clone(),
             pid: peer.pid,
             whatami: peer.whatami,
-            sn_resolution: peer.sn_resolution,
-            lease: peer.lease,
+            sn_resolution: join.sn_resolution,
+            lease: join.lease,
             whatchdog,
             handle,
             conduit_rx,
@@ -419,9 +422,6 @@ impl TransportMulticastInner {
             );
             peer.handle.clone().defuse();
 
-            if let Some(link) = zread!(self.link).as_ref() {
-                peer.handler.del_link(link.get_link().clone().into());
-            }
             peer.handler.closing();
             drop(guard);
             peer.handler.closed();
@@ -429,7 +429,21 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(super) fn get_peers(&self) -> Vec<MulticastPeer> {
-        zread!(self.peers).values().map(|p| p.into()).collect()
+    pub(super) fn get_peers(&self) -> Vec<TransportPeer> {
+        zread!(self.peers)
+            .values()
+            .map(|p| {
+                let mut link = Link::from(self.get_link());
+                link.dst = p.locator.clone();
+
+                TransportPeer {
+                    pid: p.pid,
+                    whatami: p.whatami,
+                    is_qos: p.is_qos(),
+                    is_shm: self.is_shm(),
+                    links: vec![link],
+                }
+            })
+            .collect()
     }
 }

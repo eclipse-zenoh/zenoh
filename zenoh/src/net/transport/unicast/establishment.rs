@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::TransportManager;
+use super::super::{TransportManager, TransportPeer};
 use super::authenticator::{
     AuthenticatedPeerLink, AuthenticatedPeerTransport, PeerAuthenticatorOutput,
 };
@@ -491,11 +491,21 @@ pub(crate) async fn open_link(
                     break;
                 }
                 None => {
+                    let peer = TransportPeer {
+                        pid: info.pid,
+                        whatami: info.whatami,
+                        is_qos: info.is_qos,
+                        is_shm: info.auth_transport.is_shm,
+                        links: vec![Link::from(link)],
+                    };
                     // Notify the transport handler that there is a new transport and get back a callback
                     // NOTE: the read loop of the link the open message was sent on remains blocked
                     //       until the new_transport() returns. The read_loop in the various links
                     //       waits for any eventual transport to associate to.
-                    let callback = manager.config.handler.new_unicast(transport.clone())?;
+                    let callback = manager
+                        .config
+                        .handler
+                        .new_unicast(peer, transport.clone())?;
                     // Set the callback on the transport
                     let _ = t.set_callback(callback);
                 }
@@ -969,6 +979,13 @@ async fn accept_finalize_transport(
                     break;
                 }
                 None => {
+                    let peer = TransportPeer {
+                        pid: transport.get_pid(),
+                        whatami: transport.get_whatami(),
+                        is_qos: transport.is_qos(),
+                        is_shm: transport.is_shm(),
+                        links: vec![Link::from(link)],
+                    };
                     // Notify the transport handler that there is a new transport and get back a callback
                     // NOTE: the read loop of the link the open message was sent on remains blocked
                     //       until the new_transport() returns. The read_loop in the various links
@@ -976,7 +993,7 @@ async fn accept_finalize_transport(
                     let callback = manager
                         .config
                         .handler
-                        .new_unicast(input.transport.clone())
+                        .new_unicast(peer, input.transport.clone())
                         .map_err(|e| {
                             let e = format!(
                                 "Rejecting OpenSyn on: {}. New transport error: {:?}",

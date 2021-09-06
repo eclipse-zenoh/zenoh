@@ -30,9 +30,8 @@ mod tests {
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::proto::ZenohMessage;
     use zenoh::net::transport::{
-        MulticastPeer, TransportEventHandler, TransportManager, TransportManagerConfig,
-        TransportMulticast, TransportMulticastEventHandler, TransportPeerEventHandler,
-        TransportUnicast,
+        TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh_util::core::ZResult;
     use zenoh_util::properties::config::*;
@@ -67,6 +66,7 @@ mod tests {
     impl TransportEventHandler for SHPeer {
         fn new_unicast(
             &self,
+            _peer: TransportPeer,
             _transport: TransportUnicast,
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             panic!();
@@ -93,7 +93,7 @@ mod tests {
     }
 
     impl TransportMulticastEventHandler for SCPeer {
-        fn new_peer(&self, _peer: MulticastPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        fn new_peer(&self, _peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             Ok(Arc::new(SCPeer {
                 count: self.count.clone(),
             }))
@@ -122,13 +122,15 @@ mod tests {
         }
     }
 
-    struct TransportPeer {
+    struct TransportMulticastPeer {
         manager: TransportManager,
         handler: Arc<SHPeer>,
         transport: TransportMulticast,
     }
 
-    async fn open_transport(endpoint: &EndPoint) -> (TransportPeer, TransportPeer) {
+    async fn open_transport(
+        endpoint: &EndPoint,
+    ) -> (TransportMulticastPeer, TransportMulticastPeer) {
         // Define peer01 and peer02 IDs
         let peer01_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
         let peer02_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -197,12 +199,12 @@ mod tests {
         let _ = count.timeout(TIMEOUT).await.unwrap();
 
         (
-            TransportPeer {
+            TransportMulticastPeer {
                 manager: peer01_manager,
                 handler: peer01_handler,
                 transport: peer01_transport,
             },
-            TransportPeer {
+            TransportMulticastPeer {
                 manager: peer02_manager,
                 handler: peer02_handler,
                 transport: peer02_transport,
@@ -210,7 +212,11 @@ mod tests {
         )
     }
 
-    async fn close_transport(peer01: TransportPeer, peer02: TransportPeer, endpoint: &EndPoint) {
+    async fn close_transport(
+        peer01: TransportMulticastPeer,
+        peer02: TransportMulticastPeer,
+        endpoint: &EndPoint,
+    ) {
         // Close the peer01 transport
         println!("Closing transport with {}", endpoint);
         let _ = peer01
@@ -239,8 +245,8 @@ mod tests {
     }
 
     async fn single_run(
-        peer01: &TransportPeer,
-        peer02: &TransportPeer,
+        peer01: &TransportMulticastPeer,
+        peer02: &TransportMulticastPeer,
         channel: Channel,
         msg_size: usize,
     ) {

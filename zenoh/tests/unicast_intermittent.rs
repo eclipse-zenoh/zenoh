@@ -28,7 +28,7 @@ use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeerEventHandler, TransportUnicast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::zasync_executor_init;
@@ -46,6 +46,7 @@ struct SHRouterIntermittent;
 impl TransportEventHandler for SHRouterIntermittent {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
@@ -66,6 +67,7 @@ struct SHClientIntermittent;
 impl TransportEventHandler for SHClientIntermittent {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
@@ -93,6 +95,7 @@ impl SHClientStable {
 impl TransportEventHandler for SHClientStable {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(SCClient::new(self.counter.clone())))

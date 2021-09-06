@@ -29,7 +29,7 @@ mod tests {
     use zenoh::net::transport::{
         TransportEventHandler, TransportManager, TransportManagerConfig,
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
-        TransportPeerEventHandler, TransportUnicast,
+        TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh::net::CongestionControl;
     use zenoh_util::core::ZResult;
@@ -64,6 +64,7 @@ mod tests {
     impl TransportEventHandler for SHPeer {
         fn new_unicast(
             &self,
+            _peer: TransportPeer,
             _transport: TransportUnicast,
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));

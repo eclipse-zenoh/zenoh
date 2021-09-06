@@ -20,142 +20,83 @@ pub(crate) mod tx;
 
 use super::common;
 use super::protocol;
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
+use super::protocol::core::ZInt;
 use super::protocol::proto::{tmsg, ZenohMessage};
-use crate::net::link::{Link, Locator};
-use crate::net::transport::{DummyTransportPeerEventHandler, TransportPeerEventHandler};
+use crate::net::link::Link;
+use crate::net::transport::{TransportMulticastEventHandler, TransportPeer};
 pub use manager::*;
-use std::any::Any;
 use std::fmt;
 use std::sync::{Arc, Weak};
-use std::time::Duration;
-use transport::{TransportMulticastConfig, TransportMulticastInner, TransportMulticastPeer};
+use transport::{TransportMulticastConfig, TransportMulticastInner};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror2;
 
 /*************************************/
-/*             CALLBACK              */
-/*************************************/
-pub trait TransportMulticastEventHandler: Send + Sync {
-    fn new_peer(&self, peer: MulticastPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>>;
-    fn closing(&self);
-    fn closed(&self);
-    fn as_any(&self) -> &dyn Any;
-}
-
-// Define an empty TransportCallback for the listener transport
-#[derive(Default)]
-pub struct DummyTransportMulticastEventHandler;
-
-impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
-    fn new_peer(&self, _peer: MulticastPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
-    }
-
-    fn closing(&self) {}
-    fn closed(&self) {}
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-/*************************************/
 /*       TRANSPORT MULTICAST         */
 /*************************************/
-macro_rules! zweak {
-    ($var:expr) => {
-        $var.upgrade().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidReference {
-                descr: "Transport multicast closed".to_string()
-            })
-        })
-    };
-}
-
-#[derive(Clone)]
-pub struct MulticastPeer {
-    pub locator: Locator,
-    pub pid: PeerId,
-    pub whatami: WhatAmI,
-    pub sn_resolution: ZInt,
-    pub lease: Duration,
-    pub is_qos: bool,
-}
-
-impl From<TransportMulticastPeer> for MulticastPeer {
-    fn from(tmp: TransportMulticastPeer) -> MulticastPeer {
-        Self::from(&tmp)
-    }
-}
-
-impl From<&TransportMulticastPeer> for MulticastPeer {
-    fn from(tmp: &TransportMulticastPeer) -> MulticastPeer {
-        MulticastPeer {
-            locator: tmp.locator.clone(),
-            pid: tmp.pid,
-            whatami: tmp.whatami,
-            sn_resolution: tmp.sn_resolution,
-            lease: tmp.lease,
-            is_qos: tmp.conduit_rx.len() > 1,
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct TransportMulticast(Weak<TransportMulticastInner>);
 
 impl TransportMulticast {
     #[inline(always)]
+    fn get_transport(&self) -> ZResult<Arc<TransportMulticastInner>> {
+        self.0.upgrade().ok_or_else(|| {
+            zerror2!(ZErrorKind::InvalidReference {
+                descr: "Transport multicast closed".to_string()
+            })
+        })
+    }
+
+    #[inline(always)]
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.get_sn_resolution())
     }
 
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.is_shm())
     }
 
     #[inline(always)]
     pub fn is_qos(&self) -> ZResult<bool> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.is_qos())
     }
 
     #[inline(always)]
     pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportMulticastEventHandler>>> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.get_callback())
     }
 
     #[inline(always)]
     pub fn get_link(&self) -> ZResult<Link> {
-        let transport = zweak!(self.0)?;
+        let transport = self.get_transport()?;
         Ok(transport.get_link().into())
     }
 
     #[inline(always)]
-    pub fn get_peers(&self) -> ZResult<Vec<MulticastPeer>> {
-        let transport = zweak!(self.0)?;
+    pub fn get_peers(&self) -> ZResult<Vec<TransportPeer>> {
+        let transport = self.get_transport()?;
         Ok(transport.get_peers())
-    }
-
-    #[inline(always)]
-    pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
-        let transport = zweak!(self.0)?;
-        transport.schedule(message);
-        Ok(())
     }
 
     #[inline(always)]
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
-        match zweak!(self.0) {
+        match self.get_transport() {
             Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
             Err(_) => Ok(()),
         }
+    }
+
+    #[inline(always)]
+    pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
+        let transport = self.get_transport()?;
+        transport.schedule(message);
+        Ok(())
     }
 
     #[inline(always)]
@@ -180,7 +121,7 @@ impl PartialEq for TransportMulticast {
 
 impl fmt::Debug for TransportMulticast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match zweak!(self.0) {
+        match self.get_transport() {
             Ok(transport) => {
                 let peers: String = zread!(transport.peers)
                     .iter()

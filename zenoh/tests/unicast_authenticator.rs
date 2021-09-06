@@ -26,7 +26,7 @@ use zenoh::net::transport::unicast::authenticator::UserPasswordAuthenticator;
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeerEventHandler, TransportUnicast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::ZResult;
 use zenoh_util::properties::Properties;
@@ -46,6 +46,7 @@ impl SHRouterAuthenticator {
 impl TransportEventHandler for SHRouterAuthenticator {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(MHRouterAuthenticator::new()))
@@ -88,6 +89,7 @@ struct SHClientAuthenticator;
 impl TransportEventHandler for SHClientAuthenticator {
     fn new_unicast(
         &self,
+        _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
