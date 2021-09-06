@@ -16,7 +16,7 @@ use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
 use super::{MulticastPeer, TransportMulticastEventHandler};
-use crate::net::link::{LinkMulticast, Locator};
+use crate::net::link::{Link, LinkMulticast, Locator};
 use crate::net::transport::{TransportManager, TransportPeerEventHandler};
 use async_std::task;
 use async_trait::async_trait;
@@ -338,7 +338,7 @@ impl TransportMulticastInner {
         };
 
         if let Some(link) = zread!(self.link).as_ref() {
-            handler.new_link(link.get_link().clone().into());
+            handler.new_link(Link::from(link.get_link()));
         }
 
         let conduit_rx = match join.initial_sns {

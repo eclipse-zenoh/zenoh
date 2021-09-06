@@ -19,7 +19,7 @@ use super::common::{
 use super::link::TransportLinkUnicast;
 use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
-use crate::net::link::LinkUnicast;
+use crate::net::link::{Link, LinkUnicast};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
@@ -313,7 +313,7 @@ impl TransportUnicastInner {
                     drop(guard);
                     // Notify the callback
                     if let Some(callback) = zread!(self.callback).as_ref() {
-                        callback.del_link(link.clone().into());
+                        callback.del_link(Link::from(link));
                     }
                     Target::Link(stl.into())
                 }

@@ -22,7 +22,7 @@ use super::protocol::proto::{
     tmsg, Attachment, Close, OpenAck, OpenSyn, TransportBody, TransportMessage,
 };
 use super::{TransportConfigUnicast, TransportUnicast};
-use crate::net::link::LinkUnicast;
+use crate::net::link::{Link, LinkUnicast};
 use rand::Rng;
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -487,7 +487,7 @@ pub(crate) async fn open_link(
             match t.get_callback() {
                 Some(callback) => {
                     // Notify the transport handler there is a new link on this transport
-                    callback.new_link(link.clone().into());
+                    callback.new_link(Link::from(link));
                     break;
                 }
                 None => {
@@ -965,7 +965,7 @@ async fn accept_finalize_transport(
             match transport.get_callback() {
                 Some(callback) => {
                     // Notify the transport handler there is a new link on this transport
-                    callback.new_link(link.clone().into());
+                    callback.new_link(Link::from(link));
                     break;
                 }
                 None => {

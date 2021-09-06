@@ -488,8 +488,9 @@ impl TransportManager {
         drop(guard);
 
         let mut peer_id: Option<PeerId> = None;
+        let peer_link = Link::from(&link);
         for la in self.config.unicast.link_authenticator.iter() {
-            let res = la.handle_new_link(&link).await;
+            let res = la.handle_new_link(&peer_link).await;
             match res {
                 Ok(pid) => {
                     // Check that all the peer authenticators, eventually return the same PeerId

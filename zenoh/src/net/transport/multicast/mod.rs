@@ -22,7 +22,7 @@ use super::common;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, ZenohMessage};
-use crate::net::link::{LinkMulticast, Locator};
+use crate::net::link::{Link, Locator};
 use crate::net::transport::{DummyTransportPeerEventHandler, TransportPeerEventHandler};
 pub use manager::*;
 use std::any::Any;
@@ -131,9 +131,9 @@ impl TransportMulticast {
     }
 
     #[inline(always)]
-    pub fn get_link(&self) -> ZResult<LinkMulticast> {
+    pub fn get_link(&self) -> ZResult<Link> {
         let transport = zweak!(self.0)?;
-        Ok(transport.get_link())
+        Ok(transport.get_link().into())
     }
 
     #[inline(always)]

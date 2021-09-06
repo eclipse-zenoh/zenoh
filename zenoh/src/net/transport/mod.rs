@@ -30,23 +30,6 @@ pub use unicast::*;
 use zenoh_util::core::ZResult;
 
 /*************************************/
-/*             GENERAL               */
-/*************************************/
-pub enum Transport {
-    Unicast(TransportUnicast),
-    Multicast(TransportMulticast),
-}
-
-// impl Transport {
-//     fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-//         match self {
-//             Transport::Unicast(tu) => tu.handle_message(message),
-//             Transport::Multicast(tm) => tm.handle_message(message),
-//         }
-//     }
-// }
-
-/*************************************/
 /*             HANDLER               */
 /*************************************/
 pub trait TransportEventHandler: Send + Sync {
@@ -85,7 +68,7 @@ impl TransportEventHandler for DummyTransportEventHandler {
 /*************************************/
 pub trait TransportPeerEventHandler: Send + Sync {
     fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
-    fn new_link(&self, link: Link);
+    fn new_link(&self, src: Link);
     fn del_link(&self, link: Link);
     fn closing(&self);
     fn closed(&self);

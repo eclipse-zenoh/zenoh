@@ -24,7 +24,7 @@ use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, ZenohMessage};
 use super::TransportPeerEventHandler;
-use crate::net::link::LinkUnicast;
+use crate::net::link::Link;
 pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
@@ -103,9 +103,13 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_links(&self) -> ZResult<Vec<LinkUnicast>> {
+    pub fn get_links(&self) -> ZResult<Vec<Link>> {
         let transport = zweak!(self.0)?;
-        Ok(transport.get_links())
+        Ok(transport
+            .get_links()
+            .into_iter()
+            .map(|l| l.into())
+            .collect())
     }
 
     #[inline(always)]
@@ -116,10 +120,19 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub async fn close_link(&self, link: &LinkUnicast) -> ZResult<()> {
+    pub async fn close_link(&self, link: &Link) -> ZResult<()> {
         let transport = zweak!(self.0)?;
+        let link = transport
+            .get_links()
+            .into_iter()
+            .find(|l| l.get_src() == link.src && l.get_dst() == link.dst)
+            .ok_or_else(|| {
+                zerror2!(ZErrorKind::InvalidLink {
+                    descr: "Invalid link".to_string()
+                })
+            })?;
         transport
-            .close_link(link, tmsg::close_reason::GENERIC)
+            .close_link(&link, tmsg::close_reason::GENERIC)
             .await?;
         Ok(())
     }
