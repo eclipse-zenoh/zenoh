@@ -44,9 +44,6 @@ pub use super::net::protocol::io::SharedMemoryManager;
 /// A numerical Id mapped to a resource name with [register_resource](Session::register_resource).
 pub use super::net::protocol::core::ResourceId;
 
-/// Informations to configure a subscription.
-pub use super::net::protocol::core::SubInfo;
-
 /// The global unique id of a zenoh peer.
 pub use super::net::protocol::core::PeerId;
 

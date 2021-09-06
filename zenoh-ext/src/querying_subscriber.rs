@@ -32,7 +32,9 @@ const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: &'a Session,
     sub_reskey: ResKey<'b>,
-    info: SubInfo,
+    reliability: Reliability,
+    mode: SubMode,
+    period: Option<Period>,
     query_reskey: ResKey<'b>,
     query_predicate: String,
     query_target: QueryTarget,
@@ -44,8 +46,6 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         session: &'a Session,
         sub_reskey: ResKey<'b>,
     ) -> QueryingSubscriberBuilder<'a, 'b> {
-        let info = SubInfo::default();
-
         // By default query all matching publication caches and storages
         let query_target = QueryTarget {
             kind: PUBLISHER_CACHE_QUERYABLE_KIND | STORAGE,
@@ -59,7 +59,9 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         QueryingSubscriberBuilder {
             session,
             sub_reskey: sub_reskey.clone(),
-            info,
+            reliability: Reliability::default(),
+            mode: SubMode::default(),
+            period: None,
             query_reskey: sub_reskey,
             query_predicate: "".into(),
             query_target,
@@ -70,50 +72,50 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.info.reliability = reliability;
+        self.reliability = reliability;
         self
     }
 
     /// Change the subscription reliability to Reliable.
     #[inline]
     pub fn reliable(mut self) -> Self {
-        self.info.reliability = Reliability::Reliable;
+        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
     #[inline]
     pub fn best_effort(mut self) -> Self {
-        self.info.reliability = Reliability::BestEffort;
+        self.reliability = Reliability::BestEffort;
         self
     }
 
     /// Change the subscription mode.
     #[inline]
     pub fn mode(mut self, mode: SubMode) -> Self {
-        self.info.mode = mode;
+        self.mode = mode;
         self
     }
 
     /// Change the subscription mode to Push.
     #[inline]
     pub fn push_mode(mut self) -> Self {
-        self.info.mode = SubMode::Push;
-        self.info.period = None;
+        self.mode = SubMode::Push;
+        self.period = None;
         self
     }
 
     /// Change the subscription mode to Pull.
     #[inline]
     pub fn pull_mode(mut self) -> Self {
-        self.info.mode = SubMode::Pull;
+        self.mode = SubMode::Pull;
         self
     }
 
     /// Change the subscription period.
     #[inline]
     pub fn period(mut self, period: Option<Period>) -> Self {
-        self.info.period = period;
+        self.period = period;
         self
     }
 
@@ -147,7 +149,9 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         QueryingSubscriberBuilder {
             session: self.session,
             sub_reskey: self.sub_reskey.to_owned(),
-            info: self.info,
+            reliability: self.reliability,
+            mode: self.mode,
+            period: self.period,
             query_reskey: self.query_reskey.to_owned(),
             query_predicate: "".to_string(),
             query_target: self.query_target,
@@ -186,9 +190,9 @@ impl<'a> QueryingSubscriber<'a> {
         let mut subscriber = conf
             .session
             .subscribe(&conf.sub_reskey)
-            .reliability(conf.info.reliability)
-            .mode(conf.info.mode)
-            .period(conf.info.period)
+            .reliability(conf.reliability)
+            .mode(conf.mode)
+            .period(conf.period)
             .wait()?;
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());

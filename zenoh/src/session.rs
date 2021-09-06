@@ -21,7 +21,7 @@ use log::{error, trace, warn};
 use net::protocol::{
     core::{
         queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget,
-        QueryableInfo, ResKey, ResourceId, ZInt,
+        QueryableInfo, ResKey, ResourceId, SubInfo, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, Options, RoutingContext},
@@ -263,7 +263,9 @@ derive_zfuture! {
     pub struct SubscriberBuilder<'a, 'b> {
         session: &'a Session,
         reskey: ResKey<'b>,
-        info: SubInfo,
+        reliability: Reliability,
+        mode: SubMode,
+        period: Option<Period>,
         local: bool,
     }
 }
@@ -278,7 +280,9 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
         CallbackSubscriberBuilder {
             session: self.session,
             reskey: self.reskey,
-            info: self.info,
+            reliability: self.reliability,
+            mode: self.mode,
+            period: self.period,
             local: self.local,
             handler: Arc::new(RwLock::new(handler)),
         }
@@ -287,50 +291,50 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.info.reliability = reliability;
+        self.reliability = reliability;
         self
     }
 
     /// Change the subscription reliability to Reliable.
     #[inline]
     pub fn reliable(mut self) -> Self {
-        self.info.reliability = Reliability::Reliable;
+        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
     #[inline]
     pub fn best_effort(mut self) -> Self {
-        self.info.reliability = Reliability::BestEffort;
+        self.reliability = Reliability::BestEffort;
         self
     }
 
     /// Change the subscription mode.
     #[inline]
     pub fn mode(mut self, mode: SubMode) -> Self {
-        self.info.mode = mode;
+        self.mode = mode;
         self
     }
 
     /// Change the subscription mode to Push.
     #[inline]
     pub fn push_mode(mut self) -> Self {
-        self.info.mode = SubMode::Push;
-        self.info.period = None;
+        self.mode = SubMode::Push;
+        self.period = None;
         self
     }
 
     /// Change the subscription mode to Pull.
     #[inline]
     pub fn pull_mode(mut self) -> Self {
-        self.info.mode = SubMode::Pull;
+        self.mode = SubMode::Pull;
         self
     }
 
     /// Change the subscription period.
     #[inline]
     pub fn period(mut self, period: Option<Period>) -> Self {
-        self.info.period = period;
+        self.period = period;
         self
     }
 
@@ -363,7 +367,11 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
                 .register_any_subscriber(
                     &self.reskey,
                     SubscriberInvoker::Sender(sender),
-                    &self.info,
+                    &SubInfo {
+                        reliability: self.reliability,
+                        mode: self.mode,
+                        period: self.period,
+                    },
                 )
                 .map(|sub_state| Subscriber {
                     session: self.session,
@@ -397,7 +405,9 @@ derive_zfuture! {
     pub struct CallbackSubscriberBuilder<'a, 'b> {
         session: &'a Session,
         reskey: ResKey<'b>,
-        info: SubInfo,
+        reliability: Reliability,
+        mode: SubMode,
+        period: Option<Period>,
         local: bool,
         handler: Arc<RwLock<DataHandler>>,
     }
@@ -408,7 +418,9 @@ impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
         f.debug_struct("CallbackSubscriberBuilder")
             .field("session", self.session)
             .field("reskey", &self.reskey)
-            .field("info", &self.info)
+            .field("reliability", &self.reliability)
+            .field("mode", &self.mode)
+            .field("period", &self.period)
             .finish()
     }
 }
@@ -417,50 +429,50 @@ impl<'a, 'b> CallbackSubscriberBuilder<'a, 'b> {
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.info.reliability = reliability;
+        self.reliability = reliability;
         self
     }
 
     /// Change the subscription reliability to Reliable.
     #[inline]
     pub fn reliable(mut self) -> Self {
-        self.info.reliability = Reliability::Reliable;
+        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
     #[inline]
     pub fn best_effort(mut self) -> Self {
-        self.info.reliability = Reliability::BestEffort;
+        self.reliability = Reliability::BestEffort;
         self
     }
 
     /// Change the subscription mode.
     #[inline]
     pub fn mode(mut self, mode: SubMode) -> Self {
-        self.info.mode = mode;
+        self.mode = mode;
         self
     }
 
     /// Change the subscription mode to Push.
     #[inline]
     pub fn push_mode(mut self) -> Self {
-        self.info.mode = SubMode::Push;
-        self.info.period = None;
+        self.mode = SubMode::Push;
+        self.period = None;
         self
     }
 
     /// Change the subscription mode to Pull.
     #[inline]
     pub fn pull_mode(mut self) -> Self {
-        self.info.mode = SubMode::Pull;
+        self.mode = SubMode::Pull;
         self
     }
 
     /// Change the subscription period.
     #[inline]
     pub fn period(mut self, period: Option<Period>) -> Self {
-        self.info.period = period;
+        self.period = period;
         self
     }
 
@@ -494,7 +506,11 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
                 .register_any_subscriber(
                     &self.reskey,
                     SubscriberInvoker::Handler(self.handler.clone()),
-                    &self.info,
+                    &&SubInfo {
+                        reliability: self.reliability,
+                        mode: self.mode,
+                        period: self.period,
+                    },
                 )
                 .map(|sub_state| CallbackSubscriber {
                     session: self.session,
@@ -1262,7 +1278,9 @@ impl Session {
         SubscriberBuilder {
             session: self,
             reskey: reskey.into(),
-            info: SubInfo::default(),
+            reliability: Reliability::default(),
+            mode: SubMode::default(),
+            period: None,
             local: false,
         }
     }

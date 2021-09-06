@@ -302,10 +302,24 @@ pub enum Reliability {
     Reliable,
 }
 
+impl Default for Reliability {
+    #[inline]
+    fn default() -> Self {
+        Reliability::Reliable
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SubMode {
     Push,
     Pull,
+}
+
+impl Default for SubMode {
+    #[inline]
+    fn default() -> Self {
+        SubMode::Push
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -325,8 +339,8 @@ pub struct SubInfo {
 impl Default for SubInfo {
     fn default() -> SubInfo {
         SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
+            reliability: Reliability::default(),
+            mode: SubMode::default(),
             period: None,
         }
     }
