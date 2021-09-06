@@ -56,7 +56,7 @@ fn main() {
 
 #[cfg(feature = "zero-copy")]
 fn parse_args() -> (Properties, usize, usize) {
-    let args = App::new("zenoh-net zero-copy throughput pub example")
+    let args = App::new("zenoh zero-copy throughput pub example")
         .arg(
             Arg::from_usage("-s, --shared-memory=[MB]  'shared memory size in MBytes'")
                 .default_value("32"),

@@ -29,7 +29,7 @@ async fn main() {
 }
 
 fn parse_args() -> (Properties, String, String) {
-    let args = App::new("zenoh-net write example")
+    let args = App::new("zenoh put example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
                 .possible_values(&["peer", "client"]),

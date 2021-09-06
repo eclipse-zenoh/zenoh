@@ -63,7 +63,7 @@ async fn main() {
 }
 
 fn parse_args() -> (Properties, usize) {
-    let args = App::new("zenoh-net throughput sub example")
+    let args = App::new("zenoh roundtrip ping example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
                 .possible_values(&["peer", "client"]),
