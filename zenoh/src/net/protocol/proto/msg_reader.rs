@@ -232,7 +232,7 @@ impl ZBuf {
 
     fn read_open_syn(&mut self, header: u8) -> Option<TransportBody> {
         let lease = self.read_zint()?;
-        let lease = if imsg::has_flag(header, tmsg::flag::T) {
+        let lease = if imsg::has_flag(header, tmsg::flag::T2) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
@@ -249,7 +249,7 @@ impl ZBuf {
 
     fn read_open_ack(&mut self, header: u8) -> Option<TransportBody> {
         let lease = self.read_zint()?;
-        let lease = if imsg::has_flag(header, tmsg::flag::T) {
+        let lease = if imsg::has_flag(header, tmsg::flag::T2) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
@@ -269,7 +269,7 @@ impl ZBuf {
         let whatami = self.read_zint()?;
         let pid = self.read_peerid()?;
         let lease = self.read_zint()?;
-        let lease = if imsg::has_flag(header, tmsg::flag::U) {
+        let lease = if imsg::has_flag(header, tmsg::flag::T1) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
@@ -280,7 +280,7 @@ impl ZBuf {
             SEQ_NUM_RES
         };
         let is_qos = imsg::has_option(options, tmsg::join_options::QOS);
-        let initial_sns = if is_qos {
+        let next_sns = if is_qos {
             let mut sns = Box::new([ConduitSn::default(); Priority::NUM]);
             for i in 0..Priority::NUM {
                 sns[i].reliable = self.read_zint()?;
@@ -300,7 +300,7 @@ impl ZBuf {
             pid,
             lease,
             sn_resolution,
-            initial_sns,
+            next_sns,
         }))
     }
 

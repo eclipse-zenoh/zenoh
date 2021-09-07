@@ -114,8 +114,8 @@ pub mod tmsg {
         pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
-        pub const T: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
-        pub const U: u8 = 1 << 5; // 0x20 TimeRes       if T==1 then the time resolution is in seconds // @TODO: harmonize flags
+        pub const T1: u8 = 1 << 5; // 0x20 TimeRes       if U==1 then the time resolution is in seconds
+        pub const T2: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
         pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
         pub const Z: u8 = 1 << 5; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
@@ -1550,7 +1550,7 @@ impl Header for OpenSyn {
     fn header(&self) -> u8 {
         let mut header = tmsg::id::OPEN;
         if self.lease.as_millis() % 1_000 == 0 {
-            header |= tmsg::flag::T;
+            header |= tmsg::flag::T2;
         }
         header
     }
@@ -1568,7 +1568,7 @@ impl Header for OpenAck {
         let mut header = tmsg::id::OPEN;
         header |= tmsg::flag::A;
         if self.lease.as_millis() % 1_000 == 0 {
-            header |= tmsg::flag::T;
+            header |= tmsg::flag::T2;
         }
         header
     }
@@ -1587,11 +1587,11 @@ impl Header for OpenAck {
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |O|S|U|   JOIN  |
+/// |O|S|T|   JOIN  |
 /// +-+-+-+-+-------+
 /// ~             |Q~ if O==1
 /// +---------------+
-/// | v_maj | v_min | if A==0 -- Protocol Version VMaj.VMin
+/// | v_maj | v_min | -- Protocol Version VMaj.VMin
 /// +-------+-------+
 /// ~    whatami    ~ -- Router, Peer or a combination of them
 /// +---------------+
@@ -1601,7 +1601,7 @@ impl Header for OpenAck {
 /// +---------------+
 /// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
 /// +---------------+
-/// ~  [initial_sn] ~
+/// ~   [next_sn]   ~
 /// +---------------+
 ///
 /// (*)  if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
@@ -1616,12 +1616,12 @@ pub struct Join {
     pub pid: PeerId,
     pub lease: Duration,
     pub sn_resolution: ZInt,
-    pub initial_sns: ConduitSnList,
+    pub next_sns: ConduitSnList,
 }
 
 impl Join {
     pub fn is_qos(&self) -> bool {
-        match self.initial_sns {
+        match self.next_sns {
             ConduitSnList::QoS(_) => true,
             ConduitSnList::Plain(_) => false,
         }
@@ -1633,7 +1633,7 @@ impl Header for Join {
     fn header(&self) -> u8 {
         let mut header = tmsg::id::JOIN;
         if self.lease.as_millis() % 1_000 == 0 {
-            header |= tmsg::flag::U;
+            header |= tmsg::flag::T1;
         }
         if self.sn_resolution != SEQ_NUM_RES {
             header |= tmsg::flag::S;
@@ -2097,7 +2097,7 @@ impl TransportMessage {
         pid: PeerId,
         lease: Duration,
         sn_resolution: ZInt,
-        initial_sns: ConduitSnList,
+        next_sns: ConduitSnList,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
@@ -2107,7 +2107,7 @@ impl TransportMessage {
                 pid,
                 lease,
                 sn_resolution,
-                initial_sns,
+                next_sns,
             }),
             attachment,
         }

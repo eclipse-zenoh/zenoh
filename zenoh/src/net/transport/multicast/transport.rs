@@ -344,7 +344,7 @@ impl TransportMulticastInner {
             None => return Ok(()),
         };
 
-        let conduit_rx = match join.initial_sns {
+        let conduit_rx = match join.next_sns {
             ConduitSnList::Plain(sn) => {
                 vec![TransportConduitRx::new(
                     Priority::default(),
@@ -403,7 +403,7 @@ impl TransportMulticastInner {
                 join.sn_resolution,
                 locator,
                 join.is_qos(),
-                join.initial_sns,
+                join.next_sns,
             );
 
         Ok(())

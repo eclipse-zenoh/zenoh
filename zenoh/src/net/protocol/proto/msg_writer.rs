@@ -172,7 +172,7 @@ impl WBuf {
     fn write_open_syn(&mut self, open_syn: &OpenSyn) -> bool {
         let header = open_syn.header();
         zcheck!(self.write(header));
-        if imsg::has_flag(header, tmsg::flag::T) {
+        if imsg::has_flag(header, tmsg::flag::T2) {
             zcheck!(self.write_zint(open_syn.lease.as_secs() as ZInt));
         } else {
             zcheck!(self.write_zint(open_syn.lease.as_millis() as ZInt));
@@ -184,7 +184,7 @@ impl WBuf {
     fn write_open_ack(&mut self, open_ack: &OpenAck) -> bool {
         let header = open_ack.header();
         zcheck!(self.write(header));
-        if imsg::has_flag(header, tmsg::flag::T) {
+        if imsg::has_flag(header, tmsg::flag::T2) {
             zcheck!(self.write_zint(open_ack.lease.as_secs() as ZInt));
         } else {
             zcheck!(self.write_zint(open_ack.lease.as_millis() as ZInt));
@@ -201,7 +201,7 @@ impl WBuf {
         zcheck!(self.write(join.version));
         zcheck!(self.write_zint(join.whatami));
         zcheck!(self.write_peerid(&join.pid));
-        if imsg::has_flag(header, tmsg::flag::U) {
+        if imsg::has_flag(header, tmsg::flag::T1) {
             zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
         } else {
             zcheck!(self.write_zint(join.lease.as_millis() as ZInt));
@@ -209,7 +209,7 @@ impl WBuf {
         if imsg::has_flag(header, tmsg::flag::S) {
             zcheck!(self.write_zint(join.sn_resolution));
         }
-        match &join.initial_sns {
+        match &join.next_sns {
             ConduitSnList::Plain(sn) => {
                 zcheck!(self.write_zint(sn.reliable));
                 zcheck!(self.write_zint(sn.best_effort));
