@@ -125,7 +125,7 @@ pub(crate) async fn start_storage(
                 // on query on path_expr
                 query = storage_queryable.receiver().next().fuse() => {
                     let q = query.unwrap();
-                    // wrap zenoh::net::Query in zenoh_backend_traits::Query
+                    // wrap zenoh::Query in zenoh_backend_traits::Query
                     // with outgoing interceptor
                     let query = Query::new(q, out_interceptor.clone());
                     if let Err(e) = storage.on_query(query).await {

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-//! Properties returned by the [info](super::Session::info) function and associated constants.
+//! Properties returned by the [`info`](super::Session::info) function and associated constants.
 use zenoh_util::properties::{IntKeyProperties, KeyTranscoder};
 
 // Properties returned by info()
@@ -20,7 +20,7 @@ pub const ZN_INFO_PID_KEY: u64 = 0x00;
 pub const ZN_INFO_PEER_PID_KEY: u64 = 0x01;
 pub const ZN_INFO_ROUTER_PID_KEY: u64 = 0x02;
 
-/// A transcoder for [InfoProperties](InfoProperties)
+/// A transcoder for [`InfoProperties`](InfoProperties)
 /// able to convert string keys to int keys and reverse.
 pub struct InfoTranscoder();
 impl KeyTranscoder for InfoTranscoder {
@@ -43,10 +43,10 @@ impl KeyTranscoder for InfoTranscoder {
     }
 }
 
-/// A set of Key/Value (`u64`/`String`) pairs returned by [info](super::Session::info).
+/// A set of Key/Value (`u64`/`String`) pairs returned by [`info`](super::Session::info).
 ///
 /// Multiple values are coma separated.
 ///
-/// The [IntKeyProperties](IntKeyProperties) can be converted to (`String`/`String`)
-/// [Properties](super::super::Properties) and reverse.
+/// The [`IntKeyProperties`](IntKeyProperties) can be converted to (`String`/`String`)
+/// [`Properties`](crate::Properties) and reverse.
 pub type InfoProperties = IntKeyProperties<InfoTranscoder>;

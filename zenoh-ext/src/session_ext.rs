@@ -14,7 +14,7 @@
 use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
 use zenoh::{ResKey, Session};
 
-/// Some extensions to the [zenoh::net::Session](zenoh::net::Session)
+/// Some extensions to the [zenoh::Session](zenoh::Session)
 pub trait SessionExt {
     /// Declare a [QueryingSubscriber](super::QueryingSubscriber) for the given resource key.
     ///

@@ -1333,38 +1333,39 @@ impl Header for Scout {
     }
 }
 
-/// # Hello message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
-///
-/// The HELLO message is sent in any of the following three cases:
-///     1) in response to a SCOUT message;
-///     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
-///     3) in a already established session to update the corresponding peer on the new capabilities
-///        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
-/// Locators are expressed as:
-/// <code>
-///  udp/192.168.0.2:1234
-///  tcp/192.168.0.2:1234
-///  udp/239.255.255.123:5555
-/// <code>
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |L|W|I|  HELLO  |
-/// +-+-+-+-+-------+
-/// ~    peer-id    ~ if I==1
-/// +---------------+
-/// ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
-/// +---------------+
-/// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
-/// +---------------+
-/// ```
+/// A zenoh Hello message.
+// # Hello message
+//
+// ```text
+// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+//       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
+//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+//       the boundary of the serialized messages. The length is encoded as little-endian.
+//       In any case, the length of a message must not exceed 65_535 bytes.
+//
+// The HELLO message is sent in any of the following three cases:
+//     1) in response to a SCOUT message;
+//     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
+//     3) in a already established session to update the corresponding peer on the new capabilities
+//        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
+// Locators are expressed as:
+// <code>
+//  udp/192.168.0.2:1234
+//  tcp/192.168.0.2:1234
+//  udp/239.255.255.123:5555
+// <code>
+//
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// |L|W|I|  HELLO  |
+// +-+-+-+-+-------+
+// ~    peer-id    ~ if I==1
+// +---------------+
+// ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
+// +---------------+
+// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
+// +---------------+
+// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hello {
     pub pid: Option<PeerId>,

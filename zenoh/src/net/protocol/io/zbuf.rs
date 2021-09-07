@@ -96,6 +96,8 @@ impl Default for ZBufInner {
 /*************************************/
 /*              ZBUF                 */
 /*************************************/
+/// A zenoh buffer.
+///
 /// [`ZBuf`][ZBuf] is a buffer that contains one or more [`ZSlice`][ZSlice]s. It is used
 /// to efficiently send and receive data in zenoh. It provides transparent usage for
 /// both network and shared memory operations through a simple API.

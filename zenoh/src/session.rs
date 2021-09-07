@@ -186,7 +186,17 @@ impl Resource {
 }
 
 derive_zfuture! {
-    /// `PublisherBuilder` is a builder for initializing a [Publisher](Publisher).
+    /// A builder for initializing a [`Publisher`](Publisher).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::*;
+    ///
+    /// let session = open(config::peer()).await.unwrap();
+    /// let publisher = session.publishing("/resource/name").await.unwrap();
+    /// # })
+    /// ```
     #[derive(Debug, Clone)]
     pub struct PublisherBuilder<'a, 'b> {
         session: &'a Session,
@@ -243,7 +253,7 @@ impl<'a> Runnable for PublisherBuilder<'a, '_> {
 }
 
 derive_zfuture! {
-    /// `SubscriberBuilder` is a builder for initializing a [Subscriber](Subscriber).
+    /// A builder for initializing a [`Subscriber`](Subscriber).
     ///
     /// # Examples
     /// ```
@@ -271,7 +281,7 @@ derive_zfuture! {
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b> {
-    /// Make the built Subscruber a CallbackSubscriber.
+    /// Make the built Subscriber a [`CallbackSubscriber`](CallbackSubscriber).
     #[inline]
     pub fn callback<DataHandler>(self, handler: DataHandler) -> CallbackSubscriberBuilder<'a, 'b>
     where
@@ -384,7 +394,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
 }
 
 derive_zfuture! {
-    /// `CallbackSubscriberBuilder` is a builder for initializing a [CallbackSubscriber](CallbackSubscriber).
+    /// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
     ///
     /// # Examples
     /// ```
@@ -522,7 +532,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
 }
 
 derive_zfuture! {
-    /// `QueryableBuilder` is a builder for initializing a [Queryable](Queryable).
+    /// A builder for initializing a [`Queryable`](Queryable).
     ///
     /// # Examples
     /// ```
@@ -627,7 +637,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
 }
 
 derive_zfuture! {
-    /// `WriteBuilder` is a builder for initializing a `write`.
+    /// A builder for initializing a `write` operation ([`put`](crate::Session::put) or [`delete`](crate::Session::delete)).
     ///
     /// # Examples
     /// ```
@@ -646,7 +656,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct WriteBuilder<'a> {
         session: &'a Session,
-        resource: ResKey<'a>,
+        reskey: ResKey<'a>,
         value: Option<Value>,
         kind: Option<ZInt>,
         congestion_control: CongestionControl,
@@ -682,7 +692,7 @@ impl Runnable for WriteBuilder<'_> {
     type Output = ZResult<()>;
 
     fn run(&mut self) -> Self::Output {
-        trace!("write({:?}, [...])", self.resource);
+        trace!("write({:?}, [...])", self.reskey);
         let state = zread!(self.session.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         let local_routing = state.local_routing;
@@ -703,7 +713,7 @@ impl Runnable for WriteBuilder<'_> {
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
-            &self.resource,
+            &self.reskey,
             value.payload.clone(),
             Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             self.congestion_control,
@@ -712,14 +722,15 @@ impl Runnable for WriteBuilder<'_> {
         );
         if local_routing {
             self.session
-                .handle_data(true, &self.resource, data_info, value.payload);
+                .handle_data(true, &self.reskey, data_info, value.payload);
         }
         Ok(())
     }
 }
 
 derive_zfuture! {
-    /// `QueryBuilder` is a builder for initializing a `query`.
+    /// A builder for initializing a `query`.
+    /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver).
     ///
     /// # Examples
     /// ```
@@ -816,7 +827,7 @@ impl Runnable for QueryBuilder<'_> {
     }
 }
 
-/// A zenoh-net session.
+/// A zenoh session.
 ///
 pub struct Session {
     pub(crate) runtime: Runtime,
@@ -911,7 +922,7 @@ impl Session {
         })
     }
 
-    /// Close the zenoh-net [Session](Session).
+    /// Close the zenoh [`Session`](Session).
     ///
     /// Sessions are automatically closed when dropped, but you may want to use this function to handle errors or
     /// close the Session asynchronously.
@@ -930,7 +941,7 @@ impl Session {
         self.close_alive()
     }
 
-    /// Get informations about the zenoh-net [Session](Session).
+    /// Get informations about the zenoh [`Session`](Session).
     ///
     /// # Examples
     /// ```
@@ -1049,7 +1060,7 @@ impl Session {
     }
 
     /// Undeclare the *numerical Id/resource key* association previously declared
-    /// with [register_resource](Session::register_resource).
+    /// with [`register_resource`](Session::register_resource).
     ///
     /// # Arguments
     ///
@@ -1077,14 +1088,14 @@ impl Session {
         zready(Ok(()))
     }
 
-    /// Declare a [Publisher](Publisher) for the given resource key.
+    /// Declare a [`Publisher`](Publisher) for the given resource key.
     ///
     /// Written resources that match the given key will only be sent on the network
     /// if matching subscribers exist in the system.
     ///
     /// # Arguments
     ///
-    /// * `resource` - The resource key to publish
+    /// * `reskey` - The resource key to publish
     ///
     /// # Examples
     /// ```
@@ -1252,11 +1263,11 @@ impl Session {
         Ok(sub_state)
     }
 
-    /// Declare a [Subscriber](Subscriber) for the given resource key.
+    /// Declare a [`Subscriber`](Subscriber) for the given resource key.
     ///
     /// # Arguments
     ///
-    /// * `resource` - The resource key to subscribe
+    /// * `reskey` - The resource key to subscribe
     ///
     /// # Examples
     /// ```no_run
@@ -1376,11 +1387,11 @@ impl Session {
             .count() as ZInt
     }
 
-    /// Declare a [Queryable](Queryable) for the given resource key.
+    /// Declare a [`Queryable`](Queryable) for the given resource key.
     ///
     /// # Arguments
     ///
-    /// * `resource` - The resource key the [Queryable](Queryable) will reply to
+    /// * `reskey` - The resource key the [`Queryable`](Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -1477,7 +1488,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `resource` - The resource key to write
+    /// * `reskey` - The resource key to write
     /// * `payload` - The value to write
     ///
     /// # Examples
@@ -1493,7 +1504,7 @@ impl Session {
     #[inline]
     pub fn put<'a, IntoResKey, IntoValue>(
         &'a self,
-        resource: IntoResKey,
+        reskey: IntoResKey,
         value: IntoValue,
     ) -> WriteBuilder<'a>
     where
@@ -1502,7 +1513,7 @@ impl Session {
     {
         WriteBuilder {
             session: self,
-            resource: resource.into(),
+            reskey: reskey.into(),
             value: Some(value.into()),
             kind: None,
             congestion_control: CongestionControl::default(),
@@ -1513,8 +1524,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `resource` - The resource key to write
-    /// * `payload` - The value to write
+    /// * `reskey` - The resource key to delete
     ///
     /// # Examples
     /// ```
@@ -1526,13 +1536,13 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a, IntoResKey>(&'a self, resource: IntoResKey) -> WriteBuilder<'a>
+    pub fn delete<'a, IntoResKey>(&'a self, reskey: IntoResKey) -> WriteBuilder<'a>
     where
         IntoResKey: Into<ResKey<'a>>,
     {
         WriteBuilder {
             session: self,
-            resource: resource.into(),
+            reskey: reskey.into(),
             value: Some(Value::empty()),
             kind: Some(data_kind::DELETE),
             congestion_control: CongestionControl::default(),
@@ -1635,10 +1645,11 @@ impl Session {
     }
 
     /// Query data from the matching queryables in the system.
+    /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver).
     ///
     /// # Arguments
     ///
-    /// * `resource` - The resource key to query
+    /// * `selector` - The selection of resources to query
     ///
     /// # Examples
     /// ```

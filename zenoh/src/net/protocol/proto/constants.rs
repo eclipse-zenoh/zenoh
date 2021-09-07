@@ -32,6 +32,7 @@ pub mod data_kind {
     }
 }
 
+/// Constants and helper for the zenoh [`Value`](crate::Value) encoding flag.
 pub mod encoding {
     use super::ZInt;
     use http_types::Mime;
@@ -64,6 +65,7 @@ pub mod encoding {
     ];
     }
 
+    /// Converts the given encoding flag to mime.
     pub fn to_mime(i: ZInt) -> ZResult<Mime> {
         if i < MIMES.len() as ZInt {
             Ok(MIMES[i as usize].clone())
@@ -74,6 +76,7 @@ pub mod encoding {
         }
     }
 
+    /// Converts the given encoding flag to String.
     pub fn to_string(i: ZInt) -> String {
         match to_mime(i) {
             Ok(mime) => mime.essence().to_string(),
@@ -81,6 +84,7 @@ pub mod encoding {
         }
     }
 
+    /// Gets the encoding flag corresponding to the given mime type as String if any.
     pub fn from_str(string: &str) -> ZResult<ZInt> {
         let string = string.split(';').next().unwrap();
         match string {

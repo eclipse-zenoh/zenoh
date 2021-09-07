@@ -65,6 +65,7 @@ struct WBufMark {
     buf_idx: usize,
 }
 
+/// A writable zenoh buffer.
 #[derive(Clone)]
 pub struct WBuf {
     slices: Vec<Slice>,

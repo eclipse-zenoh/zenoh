@@ -38,7 +38,7 @@
 //!     let session = open(config::default()).await.unwrap();
 //!     let mut subscriber = session.subscribe("/resource/name").await.unwrap();
 //!     while let Some(sample) = subscriber.receiver().next().await {
-//!         println!("Received : {:?}", sample);
+//!         println!("Received : {}", sample);
 //!     };
 //! }
 //! ```
@@ -53,7 +53,7 @@
 //!     let session = open(config::default()).await.unwrap();
 //!     let mut replies = session.get("/resource/name").await.unwrap();
 //!     while let Some(reply) = replies.next().await {
-//!         println!(">> Received {:?}", reply.data);
+//!         println!(">> Received {}", reply.data);
 //!     }
 //! }
 //! ```
@@ -100,6 +100,7 @@ pub use session::*;
 pub use net::protocol::core::{Timestamp, TimestampId};
 pub use net::protocol::proto::encoding;
 
+/// Constants for [`Queryable`] kinds.
 pub mod queryable {
     #[doc(inline)]
     pub use super::net::protocol::core::queryable::*;
@@ -113,15 +114,15 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
 /// Scout for routers and/or peers.
 ///
-/// [scout](scout) spawns a task that periodically sends scout messages and returns
-/// a [HelloReceiver](HelloReceiver) : a stream of received [Hello](Hello) messages.
+/// [`scout`] spawns a task that periodically sends scout messages and returns
+/// a [`HelloReceiver`] : a stream of received [`Hello`]) messages.
 ///
-/// Drop the returned [HelloReceiver](HelloReceiver) to stop the scouting task.
+/// Drop the returned [`HelloReceiver`] to stop the scouting task.
 ///
 /// # Arguments
 ///
 /// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [Properties](super::Properties) to use for scouting
+/// * `config` - The configuration [`Properties`] to use for scouting
 ///
 /// # Examples
 /// ```no_run
@@ -175,11 +176,11 @@ pub fn scout(
     zready(Ok(HelloReceiver::new(stop_sender, hello_receiver)))
 }
 
-/// Open a zenoh-net [Session](Session).
+/// Open a zenoh [`Session`].
 ///
 /// # Arguments
 ///
-/// * `config` - The [ConfigProperties](ConfigProperties) for the zenoh-net session
+/// * `config` - The [`ConfigProperties`] for the zenoh session
 ///
 /// # Examples
 /// ```
@@ -192,8 +193,8 @@ pub fn scout(
 ///
 /// # Configuration Properties
 ///
-/// [ConfigProperties](ConfigProperties) are a set of key/value (`u64`/`String`) pairs.
-/// Constants for the accepted keys can be found in the [config](config) module.
+/// [`ConfigProperties`] are a set of key/value (`u64`/`String`) pairs.
+/// Constants for the accepted keys can be found in the [`config`] module.
 /// Multiple values are coma separated.
 ///
 /// # Examples
@@ -209,8 +210,8 @@ pub fn scout(
 /// # })
 /// ```
 ///
-/// [ConfigProperties](ConfigProperties) can be built set of key/value (`String`/`String`) set
-/// of [Properties](super::Properties).
+/// [`ConfigProperties`] can be built set of key/value (`String`/`String`) set
+/// of [`Properties`].
 ///
 /// # Examples
 /// ```

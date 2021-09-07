@@ -12,17 +12,17 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-//! Properties to pass to [open](super::open) and [scout](super::scout) functions as configuration
+//! Properties to pass to [`open`](super::open) and [`scout`](super::scout) functions as configuration
 //! and associated constants.
 pub use zenoh_util::properties::config::*;
 
-/// A set of Key/Value (`u64`/`String`) pairs to pass to [open](super::open)  
-/// to configure the zenoh-net [Session](super::super::Session).
+/// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
+/// to configure the zenoh [`Session`](crate::Session).
 ///
 /// Multiple values are coma separated.
 ///
-/// The [IntKeyProperties](zenoh_util::properties::IntKeyProperties) can be built from (`String`/`String`)
-/// [Properties](super::super::Properties) and reverse.
+/// The [`IntKeyProperties`](zenoh_util::properties::IntKeyProperties) can be built from (`String`/`String`)
+/// [`Properties`](crate::Properties) and reverse.
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> ConfigProperties {

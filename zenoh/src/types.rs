@@ -41,7 +41,7 @@ pub use super::net::protocol::io::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
 pub use super::net::protocol::io::SharedMemoryManager;
 
-/// A numerical Id mapped to a resource name with [register_resource](Session::register_resource).
+/// A numerical Id mapped to a resource name with [`register_resource`](Session::register_resource).
 pub use super::net::protocol::core::ResourceId;
 
 /// The global unique id of a zenoh peer.
@@ -50,16 +50,16 @@ pub use super::net::protocol::core::PeerId;
 /// A time period.
 pub use super::net::protocol::core::Period;
 
-/// The [Queryable](Queryable)s that should be target of a [query](Session::query).
+/// The [`Queryable`](Queryable)s that should be target of a [`get`](Session::get).
 pub use super::net::protocol::core::Target;
 
-/// The [Queryable](Queryable)s that should be target of a [query](Session::query).
+/// The [`Queryable`](Queryable)s that should be target of a [`get`](Session::get).
 pub use super::net::protocol::core::QueryTarget;
 
 /// The kind of consolidation.
 pub use super::net::protocol::core::ConsolidationMode;
 
-/// The kind of consolidation that should be applied on replies to a [query](Session::query)
+/// The kind of consolidation that should be applied on replies to a [`get`](Session::get)
 /// at different stages of the reply process.
 pub use super::net::protocol::core::QueryConsolidation;
 
@@ -78,6 +78,7 @@ pub use super::net::protocol::core::SubMode;
 /// A zenoh integer.
 pub use super::net::protocol::core::ZInt;
 
+/// Constants and helpers for zenoh `whatami`falgs.
 pub use super::net::protocol::core::whatami;
 
 /// A zenoh Hello message.
@@ -90,6 +91,7 @@ pub use zenoh_util::sync::channel::RecvTimeoutError;
 pub use zenoh_util::sync::channel::TryIter;
 pub use zenoh_util::sync::channel::TryRecvError;
 pub use zenoh_util::sync::zready;
+// A future which output can be accessed synchronously or asynchronously.
 pub use zenoh_util::sync::ZFuture;
 pub use zenoh_util::sync::ZPinBoxFuture;
 pub use zenoh_util::sync::ZReady;
@@ -104,19 +106,25 @@ pub use zenoh_util::core::ZErrorKind;
 pub use zenoh_util::core::ZResult;
 
 zreceiver! {
+    /// A [`Receiver`] of [`Hello`] messages returned by the [`scout`](crate::scout) operation.
     #[derive(Clone)]
     pub struct HelloReceiver : Receiver<Hello> {
         pub(crate) stop_sender: Sender<()>,
     }
 }
 
+/// A zenoh Value.
 #[derive(Clone)]
 pub struct Value {
+    /// The payload of this Value.
     pub payload: ZBuf,
+
+    /// An encoding flag indicating how the associated payload is encoded.
     pub encoding: ZInt,
 }
 
 impl Value {
+    /// Creates a new zenoh Value.
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
@@ -124,6 +132,7 @@ impl Value {
         }
     }
 
+    /// Creates an empty Value.
     pub fn empty() -> Self {
         Value {
             payload: ZBuf::new(),
@@ -131,6 +140,7 @@ impl Value {
         }
     }
 
+    /// Sets the encoding of this zenoh Value.
     #[inline(always)]
     pub fn encoding(mut self, encoding: ZInt) -> Self {
         self.encoding = encoding;
@@ -273,12 +283,16 @@ impl From<f64> for Value {
     }
 }
 
-/// Informations on the source of a zenoh sample.
+/// Informations on the source of a zenoh [`Sample`].
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
+    /// The [`PeerId`] of the zenoh instance that published the concerned [`Sample`].
     pub source_id: Option<PeerId>,
+    /// The sequence number of the [`Sample`] from the source.
     pub source_sn: Option<ZInt>,
+    /// The [`PeerId`] of the first zenoh router that routed this [`Sample`].
     pub first_router_id: Option<PeerId>,
+    /// The sequence number of the [`Sample`] from the first zenoh router that routed it.
     pub first_router_sn: Option<ZInt>,
 }
 
@@ -361,14 +375,20 @@ impl From<ZInt> for SampleKind {
 /// A zenoh sample.
 #[derive(Clone, Debug)]
 pub struct Sample {
+    // The name of the resource on which this Sample was published.
     pub res_name: String,
+    /// The value of this Sample.
     pub value: Value,
+    // The kind of this Sample.
     pub kind: SampleKind,
+    // The [`Timestamp`] of this Sample.
     pub timestamp: Option<Timestamp>,
+    // Infos on the source of this Sample.
     pub source_info: SourceInfo,
 }
 
 impl Sample {
+    /// Creates a new Sample.
     #[inline]
     pub fn new<IntoValue>(res_name: String, value: IntoValue) -> Self
     where
@@ -424,17 +444,20 @@ impl Sample {
         (self.res_name, self.value.payload, info)
     }
 
+    /// Gets the timestamp of this Sample.
     #[inline]
     pub fn get_timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
+    /// Sets the timestamp of this Sample.
     #[inline]
     pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
         self.timestamp = Some(timestamp);
         self
     }
 
+    /// Sets the source info of this Sample.
     #[inline]
     pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
         self.source_info = source_info;
@@ -451,17 +474,31 @@ impl Sample {
     }
 }
 
-/// The callback that will be called on each data for a [CallbackSubscriber](CallbackSubscriber).
+impl fmt::Display for Sample {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            SampleKind::Delete => write!(f, "{}({})", self.kind, self.res_name),
+            _ => write!(f, "{}({}: {})", self.kind, self.res_name, self.value),
+        }
+    }
+}
+
+/// The callback that will be called on each data for a [`CallbackSubscriber`](CallbackSubscriber).
 pub type DataHandler = dyn FnMut(Sample) + Send + Sync + 'static;
 
-/// Structs received b y a [Queryable](Queryable).
+/// Structs received b y a [`Queryable`](Queryable).
 pub struct Query {
+    /// The resource name of this Query.
     pub(crate) res_name: String,
+    /// The predicate of this Query.
     pub(crate) predicate: String,
+    /// The sender to use to send replies to this query.
+    /// When this sender is dropped, the reply is finalized.
     pub replies_sender: RepliesSender,
 }
 
 impl Query {
+    /// The [`Selector`] of this Query.
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
@@ -470,16 +507,19 @@ impl Query {
         }
     }
 
+    /// Sends a reply to this Query.
     #[inline(always)]
     pub fn reply(&'_ self, msg: Sample) {
         self.replies_sender.send(msg)
     }
 
+    /// Tries sending a reply to this Query.
     #[inline(always)]
     pub fn try_reply(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
         self.replies_sender.try_send(msg)
     }
 
+    /// Sends a reply to this Query asynchronously.
     #[inline(always)]
     pub async fn reply_async(&'_ self, msg: Sample) {
         self.replies_sender.send_async(msg).await
@@ -496,11 +536,14 @@ impl fmt::Debug for Query {
     }
 }
 
-/// Structs returned by a [query](Session::query).
+/// Structs returned by a [`get`](Session::get).
 #[derive(Clone, Debug)]
 pub struct Reply {
+    /// The [`Sample`] for this Reply.
     pub data: Sample,
+    /// The kind of [`Queryable`] that answered this Reply.
     pub replier_kind: ZInt,
+    /// The id of the zenoh instance that answered this Reply.
     pub replier_id: PeerId,
 }
 
@@ -530,7 +573,7 @@ pub struct Publisher<'a> {
 }
 
 impl Publisher<'_> {
-    /// Undeclare a [Publisher](Publisher) previously declared with [publishing](Session::publishing).
+    /// Undeclare a [`Publisher`](Publisher) previously declared with [`publishing`](Session::publishing).
     ///
     /// Publishers are automatically unregistered when dropped, but you may want to use this function to handle errors or
     /// unregister the Publisher asynchronously.
@@ -589,6 +632,41 @@ impl fmt::Debug for SubscriberState {
 }
 
 zreceiver! {
+    /// A [`Receiver`] of [`Sample`].
+    ///
+    /// Returned by [`Subscriber`](crate::Subscriber).[`receiver`](crate::Subscriber::receiver)(), it must be used
+    /// to wait for queries mathing the [`Subscriber`](crate::Subscriber).
+    ///
+    /// The samples of this receiver can be accessed:
+    ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
+    ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
+    ///
+    /// # Examples
+    ///
+    /// ### sync
+    /// ```no_run
+    /// # use zenoh::*;
+    /// # let session = open(config::peer()).wait().unwrap();
+    ///
+    /// let mut subscriber = session.subscribe("/resource/name").wait().unwrap();
+    /// while let Ok(sample) = subscriber.receiver().recv() {
+    ///      println!(">> Received sample '{}'", sample);
+    /// }
+    /// ```
+    ///
+    /// ### async
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// # use futures::prelude::*;
+    /// # use zenoh::*;
+    /// # let session = open(config::peer()).await.unwrap();
+    ///
+    /// let mut subscriber = session.subscribe("/resource/name").await.unwrap();
+    /// while let Some(sample) = subscriber.receiver().next().await {
+    ///      println!(">> Received sample '{}'", sample);
+    /// }
+    /// # })
+    /// ```
     #[derive(Clone)]
     pub struct SampleReceiver : Receiver<Sample> {}
 }
@@ -608,7 +686,7 @@ impl Subscriber<'_> {
         &mut self.receiver
     }
 
-    /// Pull available data for a pull-mode [Subscriber](Subscriber).
+    /// Pull available data for a pull-mode [`Subscriber`](Subscriber).
     ///
     /// # Examples
     /// ```
@@ -629,7 +707,7 @@ impl Subscriber<'_> {
         self.session.pull(&self.state.reskey)
     }
 
-    /// Undeclare a [Subscriber](Subscriber) previously declared with [subscribe](Session::subscribe).
+    /// Undeclare a [`Subscriber`](Subscriber) previously declared with [`subscribe`](Session::subscribe).
     ///
     /// Subscribers are automatically unregistered when dropped, but you may want to use this function to handle errors or
     /// unregister the Subscriber asynchronously.
@@ -675,7 +753,7 @@ pub struct CallbackSubscriber<'a> {
 }
 
 impl CallbackSubscriber<'_> {
-    /// Pull available data for a pull-mode [CallbackSubscriber](CallbackSubscriber).
+    /// Pull available data for a pull-mode [`CallbackSubscriber`](CallbackSubscriber).
     ///
     /// # Examples
     /// ```
@@ -693,7 +771,7 @@ impl CallbackSubscriber<'_> {
         self.session.pull(&self.state.reskey)
     }
 
-    /// Undeclare a [CallbackSubscriber](CallbackSubscriber) previously declared with [declare_callback_subscriber](Session::declare_callback_subscriber).
+    /// Undeclare a [`CallbackSubscriber`](CallbackSubscriber).
     ///
     /// CallbackSubscribers are automatically unregistered when dropped, but you may want to use this function to handle errors or
     /// unregister the CallbackSubscriber asynchronously.
@@ -732,6 +810,39 @@ impl fmt::Debug for CallbackSubscriber<'_> {
 }
 
 zreceiver! {
+    /// A [`Receiver`] of [`Reply`], result of a [`get`](crate::Session::get) operation.
+    ///
+    /// The replies of this receiver can be accessed:
+    ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
+    ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
+    ///
+    /// # Examples
+    ///
+    /// ### sync
+    /// ```
+    /// # use zenoh::*;
+    /// # use futures::prelude::*;
+    /// # let session = open(config::peer()).wait().unwrap();
+    ///
+    /// let mut replies = session.get("/resource/name").wait().unwrap();
+    /// while let Ok(reply) = replies.recv() {
+    ///     println!(">> Received {:?}", reply.data);
+    /// }
+    /// ```
+    ///
+    /// ### async
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// # use zenoh::*;
+    /// # use futures::prelude::*;
+    /// # let session = open(config::peer()).await.unwrap();
+    ///
+    /// let mut replies = session.get("/resource/name").await.unwrap();
+    /// while let Some(reply) = replies.next().await {
+    ///     println!(">> Received {:?}", reply.data);
+    /// }
+    /// # })
+    /// ```
     #[derive(Clone)]
     pub struct ReplyReceiver : Receiver<Reply> {}
 }
@@ -751,6 +862,41 @@ impl fmt::Debug for QueryableState {
 }
 
 zreceiver! {
+    /// A [`Receiver`] of [`Query`].
+    ///
+    /// Returned by [`Queryable`](crate::Queryable).[`receiver`](crate::Queryable::receiver)(), it must be used
+    /// to wait for queries mathing the [`Queryable`](crate::Queryable).
+    ///
+    /// The queries of this receiver can be accessed:
+    ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
+    ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
+    ///
+    /// # Examples
+    ///
+    /// ### sync
+    /// ```no_run
+    /// # use zenoh::*;
+    /// # let session = open(config::peer()).wait().unwrap();
+    ///
+    /// let mut queryable = session.register_queryable("/resource/name").wait().unwrap();
+    /// while let Ok(query) = queryable.receiver().recv() {
+    ///      println!(">> Handling query '{}'", query.selector());
+    /// }
+    /// ```
+    ///
+    /// ### async
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// # use futures::prelude::*;
+    /// # use zenoh::*;
+    /// # let session = open(config::peer()).await.unwrap();
+    ///
+    /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+    /// while let Some(query) = queryable.receiver().next().await {
+    ///      println!(">> Handling query '{}'", query.selector());
+    /// }
+    /// # })
+    /// ```
     #[derive(Clone)]
     pub struct QueryReceiver : Receiver<Query> {}
 }
@@ -766,11 +912,29 @@ pub struct Queryable<'a> {
 }
 
 impl Queryable<'_> {
+    /// Gets the [`QueryReceiver`](crate::QueryReceiver) of this `Queryable`.
+    ///
+    /// This receiver must be used to listen for incomming queries.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::*;
+    ///
+    /// let session = open(config::peer()).await.unwrap();
+    /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+    /// while let Some(query) = queryable.receiver().next().await {
+    ///      println!(">> Handling query '{}'", query.selector());
+    ///      query.reply(Sample::new("/resource/name".to_string(), "some value"));
+    /// }
+    /// # })
+    /// ```
     pub fn receiver(&mut self) -> &mut QueryReceiver {
         &mut self.receiver
     }
 
-    /// Undeclare a [Queryable](Queryable) previously declared with [register_queryable](Session::register_queryable).
+    /// Undeclare a [`Queryable`](Queryable) previously declared with [`register_queryable`](Session::register_queryable).
     ///
     /// Queryables are automatically unregistered when dropped, but you may want to use this function to handle errors or
     /// unregister the Queryable asynchronously.
@@ -806,7 +970,7 @@ impl fmt::Debug for Queryable<'_> {
     }
 }
 
-/// Struct used by a [Queryable](Queryable) to send replies to queries.
+/// Struct used by a [`Queryable`](Queryable) to send replies to queries.
 #[derive(Clone)]
 pub struct RepliesSender {
     pub(crate) kind: ZInt,

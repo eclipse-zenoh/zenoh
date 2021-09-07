@@ -23,8 +23,10 @@ pub use uhlc::Timestamp;
 use zenoh_util::core::{ZError, ZErrorKind};
 use zenoh_util::zerror;
 
+/// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
 
+/// A zenoh integer.
 pub type ZInt = u64;
 pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
@@ -36,6 +38,7 @@ zconfigurable! {
 
 // WhatAmI values
 pub type WhatAmI = whatami::Type;
+/// Constants and helpers for zenoh `whatami`falgs.
 pub mod whatami {
     use super::ZInt;
 
@@ -56,10 +59,12 @@ pub mod whatami {
     }
 }
 
+/// A numerical Id mapped to a resource name with [`register_resource`](crate::Session::register_resource).
 pub type ResourceId = ZInt;
 
 pub const NO_RESOURCE_ID: ResourceId = 0;
 
+/// A resource key.
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
 // ~      id       — if ResName{name} : id=0
@@ -192,6 +197,7 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
+/// The global unique id of a zenoh peer.
 #[derive(Clone, Eq)]
 pub struct PeerId {
     size: usize,
@@ -264,6 +270,7 @@ pub enum Channel {
     Reliable,
 }
 
+/// The kind of congestion control.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum CongestionControl {
     Block,
@@ -296,6 +303,7 @@ impl FromStr for CongestionControl {
     }
 }
 
+/// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Reliability {
     BestEffort,
@@ -309,6 +317,7 @@ impl Default for Reliability {
     }
 }
 
+/// The subscription mode.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SubMode {
     Push,
@@ -322,6 +331,7 @@ impl Default for SubMode {
     }
 }
 
+/// A time period.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Period {
     pub origin: ZInt,
@@ -367,6 +377,7 @@ pub mod queryable {
     pub const EVAL: super::ZInt = 0x04;
 }
 
+/// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ConsolidationMode {
     None,
@@ -374,6 +385,8 @@ pub enum ConsolidationMode {
     Full,
 }
 
+/// The kind of consolidation that should be applied on replies to a [`get`](crate::Session::get)
+/// at different stages of the reply process.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryConsolidation {
     pub first_routers: ConsolidationMode,
@@ -401,6 +414,7 @@ impl Default for QueryConsolidation {
     }
 }
 
+/// The [`Queryable`](crate::Queryable)s that should be target of a [`get`](crate::Session::get).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,
@@ -417,6 +431,7 @@ impl Default for Target {
     }
 }
 
+/// The [`Queryable`](crate::Queryable)s that should be target of a [`get`](crate::Session::get).
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryTarget {
     pub kind: ZInt,

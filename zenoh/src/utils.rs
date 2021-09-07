@@ -17,7 +17,7 @@
 use crate::{Properties, Timestamp, TimestampId, Value};
 
 /// Generates a reception [`Timestamp`] with id=0x00.  
-/// This operation should be called if a timestamp is required for an incoming [`zenoh::net::Sample`](crate::net::Sample)
+/// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
 /// that doesn't contain any data_info or timestamp within its data_info.
 pub fn new_reception_timestamp() -> Timestamp {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,7 +29,7 @@ pub fn new_reception_timestamp() -> Timestamp {
     )
 }
 
-/// Convert a set of [`Properties`] into a [`Value::Json`].  
+/// Convert a set of [`Properties`] into a [`Value`].  
 /// For instance such Properties: `[("k1", "v1"), ("k2, v2")]`  
 /// are converted into such Json: `{ "k1": "v1", "k2": "v2" }`
 pub fn properties_to_json_value(props: &Properties) -> Value {

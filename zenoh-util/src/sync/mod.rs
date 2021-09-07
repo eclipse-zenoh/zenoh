@@ -30,13 +30,15 @@ pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
     unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }
 }
 
+/// A future which output can be accessed synchronously or asynchronously.
 pub trait ZFuture: Future + Send {
+    /// Synchronously waits for the output of this future.
     fn wait(self) -> Self::Output;
 }
 
 /// Creates a ZFuture that is immediately ready with a value.
 ///
-/// This `struct` is created by [`ready()`]. See its
+/// This `struct` is created by [`zready()`]. See its
 /// documentation for more.
 #[derive(Debug, Clone)]
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
@@ -94,6 +96,7 @@ macro_rules! zready_try {
     };
 }
 
+/// An alias for `Pin<Box<dyn Future<Output = T> + Send>>`.
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct ZPinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
 

@@ -25,6 +25,7 @@ pub trait KeyTranscoder {
     fn decode(key: u64) -> Option<String>;
 }
 
+/// A set of Key/Value (`u64`/`String`) pairs.
 #[derive(PartialEq)]
 pub struct IntKeyProperties<T>(pub HashMap<u64, String>, PhantomData<T>)
 where

@@ -198,7 +198,7 @@ pub trait OutgoingDataInterceptor: Send + Sync {
     async fn on_reply(&self, sample: Sample) -> Sample;
 }
 
-/// A wrapper around the [`zenoh::net::Query`] allowing to call the
+/// A wrapper around the [`zenoh::Query`] allowing to call the
 /// OutgoingDataInterceptor (if any) before to send the reply
 pub struct Query {
     q: zenoh::Query,
