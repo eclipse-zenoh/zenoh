@@ -40,6 +40,7 @@ pub fn properties_to_json_value(props: &Properties) -> Value {
     serde_json::Value::Object(json_map).into()
 }
 
+/// Helpers to manipulate and compare resource names.
 pub mod resource_name {
     pub use super::super::net::protocol::core::rname::include;
     pub use super::super::net::protocol::core::rname::intersect;
