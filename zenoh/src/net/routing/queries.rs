@@ -1351,7 +1351,7 @@ pub fn route_query(
     face: &Arc<FaceState>,
     rid: ZInt,
     suffix: &str,
-    predicate: &str,
+    value_selector: &str,
     qid: ZInt,
     target: QueryTarget,
     consolidation: QueryConsolidation,
@@ -1466,7 +1466,7 @@ pub fn route_query(
 
                     outface.primitives.send_query(
                         &reskey,
-                        predicate,
+                        value_selector,
                         qid,
                         QueryTarget {
                             kind: target.kind,
@@ -1489,7 +1489,7 @@ pub fn route_query(
 
                     outface.primitives.send_query(
                         &reskey,
-                        predicate,
+                        value_selector,
                         qid,
                         target.clone(),
                         consolidation.clone(),

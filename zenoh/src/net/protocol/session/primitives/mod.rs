@@ -71,7 +71,7 @@ pub trait Primitives {
     fn send_query(
         &self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
@@ -149,7 +149,7 @@ impl Primitives for DummyPrimitives {
     fn send_query(
         &self,
         _reskey: &ResKey,
-        _predicate: &str,
+        _value_selector: &str,
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: QueryConsolidation,

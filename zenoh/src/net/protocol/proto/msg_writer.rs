@@ -395,7 +395,7 @@ impl WBuf {
     fn write_query(&mut self, query: &Query) -> bool {
         zcheck!(self.write(query.header()));
         zcheck!(self.write_reskey(&query.key));
-        zcheck!(self.write_string(&query.predicate));
+        zcheck!(self.write_string(&query.value_selector));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {
             zcheck!(self.write_query_target(t));

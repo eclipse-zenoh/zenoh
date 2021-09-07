@@ -125,7 +125,7 @@
 //!         //  - if not: just get the sample with key==path_expr and call: query.reply(sample.clone()).await;
 //!         //  - if yes: get all the samples with key matching path_expr and call for each: query.reply(sample.clone()).await;
 //!         //
-//!         // NOTE: in case query.predicate() is not empty something smarter should be done with returned samples...
+//!         // NOTE: in case query.value_selector() is not empty something smarter should be done with returned samples...
 //!         Ok(())
 //!     }
 //! }
@@ -216,13 +216,13 @@ impl Query {
     /// Returns the resource name of this Query
     #[inline(always)]
     pub fn res_name(&self) -> &str {
-        &self.q.selector().res_name
+        &self.q.selector().key_selector
     }
 
-    /// Returns the predicate of this Query
+    /// Returns the value_selector of this Query
     #[inline(always)]
-    pub fn predicate(&self) -> &str {
-        &self.q.selector().predicate
+    pub fn value_selector(&self) -> &str {
+        &self.q.selector().value_selector
     }
 
     /// Sends a Sample as a reply to this Query

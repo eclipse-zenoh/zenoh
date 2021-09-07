@@ -745,14 +745,14 @@ fn codec_pull() {
 #[test]
 fn codec_query() {
     for _ in 0..NUM_ITER {
-        let predicate = [String::default(), "my_predicate".to_string()];
+        let value_selector = [String::default(), "my_value_selector".to_string()];
         let target = [None, Some(gen_query_target())];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
         let reliability = [Reliability::BestEffort, Reliability::Reliable];
 
         for rl in reliability.iter() {
-            for p in predicate.iter() {
+            for p in value_selector.iter() {
                 for t in target.iter() {
                     for roc in routing_context.iter() {
                         for a in attachment.iter() {

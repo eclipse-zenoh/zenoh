@@ -170,15 +170,15 @@ impl<'a> PublicationCache<'a> {
                     // on query, reply with cach content
                     query = quer_recv.next().fuse() => {
                         if let Some(query) = query {
-                            if !query.selector().res_name.contains('*') {
-                                if let Some(queue) = cache.get(query.selector().res_name) {
+                            if !query.selector().key_selector.contains('*') {
+                                if let Some(queue) = cache.get(query.selector().key_selector) {
                                     for sample in queue {
                                         query.reply(sample.clone());
                                     }
                                 }
                             } else {
                                 for (resname, queue) in cache.iter() {
-                                    if resource_name::intersect(query.selector().res_name, &resname) {
+                                    if resource_name::intersect(query.selector().key_selector, &resname) {
                                         for sample in queue {
                                             query.reply(sample.clone());
                                         }

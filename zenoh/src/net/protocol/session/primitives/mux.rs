@@ -155,7 +155,7 @@ impl Primitives for Mux {
     fn send_query(
         &self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
@@ -168,7 +168,7 @@ impl Primitives for Mux {
         };
         let _ = self.handler.handle_message(ZenohMessage::make_query(
             reskey.to_owned(),
-            predicate.to_string(),
+            value_selector.to_string(),
             qid,
             target_opt,
             consolidation,

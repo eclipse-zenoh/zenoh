@@ -182,7 +182,7 @@ impl Primitives for AdminSpace {
     fn send_query(
         &self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         _consolidation: QueryConsolidation,
@@ -191,7 +191,7 @@ impl Primitives for AdminSpace {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             reskey,
-            predicate,
+            value_selector,
             target,
             _consolidation
         );

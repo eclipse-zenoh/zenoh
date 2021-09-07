@@ -949,7 +949,7 @@ impl Control for Pull {
 /// +-+-+-+---------+
 /// ~    ResKey     ~ if K==1 then only numerical id
 /// +---------------+
-/// ~   predicate   ~
+/// ~   value_selector   ~
 /// +---------------+
 /// ~      qid      ~
 /// +---------------+
@@ -961,7 +961,7 @@ impl Control for Pull {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Query {
     pub key: ResKey<'static>,
-    pub predicate: String,
+    pub value_selector: String,
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
     pub consolidation: QueryConsolidation,
@@ -1205,7 +1205,7 @@ impl ZenohMessage {
     #[inline(always)]
     pub fn make_query(
         key: ResKey<'static>,
-        predicate: String,
+        value_selector: String,
         qid: ZInt,
         target: Option<QueryTarget>,
         consolidation: QueryConsolidation,
@@ -1215,7 +1215,7 @@ impl ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Query(Query {
                 key,
-                predicate,
+                value_selector,
                 qid,
                 target,
                 consolidation,

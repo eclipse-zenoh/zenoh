@@ -120,7 +120,7 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
 
             ZenohBody::Query(Query {
                 key,
-                predicate,
+                value_selector,
                 qid,
                 target,
                 consolidation,
@@ -128,7 +128,7 @@ impl<P: 'static + Primitives + Send + Sync> SessionEventHandler for DeMux<P> {
             }) => {
                 self.primitives.send_query(
                     &key,
-                    &predicate,
+                    &value_selector,
                     qid,
                     target.unwrap_or_default(),
                     consolidation,

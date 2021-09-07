@@ -91,7 +91,6 @@ pub use zenoh_util::sync::channel::RecvTimeoutError;
 pub use zenoh_util::sync::channel::TryIter;
 pub use zenoh_util::sync::channel::TryRecvError;
 pub use zenoh_util::sync::zready;
-// A future which output can be accessed synchronously or asynchronously.
 pub use zenoh_util::sync::ZFuture;
 pub use zenoh_util::sync::ZPinBoxFuture;
 pub use zenoh_util::sync::ZReady;
@@ -488,10 +487,10 @@ pub type DataHandler = dyn FnMut(Sample) + Send + Sync + 'static;
 
 /// Structs received b y a [`Queryable`](Queryable).
 pub struct Query {
-    /// The resource name of this Query.
-    pub(crate) res_name: String,
-    /// The predicate of this Query.
-    pub(crate) predicate: String,
+    /// The key_selector of this Query.
+    pub(crate) key_selector: String,
+    /// The value_selector of this Query.
+    pub(crate) value_selector: String,
     /// The sender to use to send replies to this query.
     /// When this sender is dropped, the reply is finalized.
     pub replies_sender: RepliesSender,
@@ -502,8 +501,8 @@ impl Query {
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
-            res_name: &self.res_name,
-            predicate: &self.predicate,
+            key_selector: &self.key_selector,
+            value_selector: &self.value_selector,
         }
     }
 
@@ -530,8 +529,18 @@ impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Query{{ res_name: '{}', predicate: '{}' }}",
-            self.res_name, self.predicate
+            "Query{{ key_selector: '{}', value_selector: '{}' }}",
+            self.key_selector, self.value_selector
+        )
+    }
+}
+
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Query{{ '{}{}' }}",
+            self.key_selector, self.value_selector
         )
     }
 }

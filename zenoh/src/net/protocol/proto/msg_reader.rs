@@ -574,7 +574,7 @@ impl ZBuf {
 
     fn read_query(&mut self, header: u8, _reliability: Reliability) -> Option<ZenohBody> {
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-        let predicate = self.read_string()?;
+        let value_selector = self.read_string()?;
         let qid = self.read_zint()?;
         let target = if imsg::has_flag(header, zmsg::flag::T) {
             Some(self.read_query_target()?)
@@ -585,7 +585,7 @@ impl ZBuf {
 
         Some(ZenohBody::Query(Query {
             key,
-            predicate,
+            value_selector,
             qid,
             target,
             consolidation,

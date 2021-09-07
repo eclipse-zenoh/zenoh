@@ -750,7 +750,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct QueryBuilder<'a> {
         session: &'a Session,
-        selector: KeySelector<'a>,
+        selector: KeyedSelector<'a>,
         target: Option<QueryTarget>,
         consolidation: Option<QueryConsolidation>,
     }
@@ -805,8 +805,8 @@ impl Runnable for QueryBuilder<'_> {
         let local_routing = state.local_routing;
         drop(state);
         primitives.send_query(
-            &self.selector.key,
-            self.selector.predicate,
+            &self.selector.key_selector,
+            self.selector.value_selector,
             qid,
             target.clone(),
             consolidation.clone(),
@@ -815,8 +815,8 @@ impl Runnable for QueryBuilder<'_> {
         if local_routing {
             self.session.handle_query(
                 true,
-                &self.selector.key,
-                self.selector.predicate,
+                &self.selector.key_selector,
+                self.selector.value_selector,
                 qid,
                 target,
                 consolidation,
@@ -1664,9 +1664,9 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, IntoKeySelector>(&'a self, selector: IntoKeySelector) -> QueryBuilder<'a>
+    pub fn get<'a, IntoKeyedSelector>(&'a self, selector: IntoKeyedSelector) -> QueryBuilder<'a>
     where
-        IntoKeySelector: Into<KeySelector<'a>>,
+        IntoKeyedSelector: Into<KeyedSelector<'a>>,
     {
         QueryBuilder {
             session: self,
@@ -1680,7 +1680,7 @@ impl Session {
         &self,
         local: bool,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         _consolidation: QueryConsolidation,
@@ -1724,15 +1724,15 @@ impl Session {
             }
         };
 
-        let predicate = predicate.to_string();
+        let value_selector = value_selector.to_string();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
         let pid = self.runtime.pid.clone(); // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
             let _ = req_sender.send(Query {
-                res_name: resname.clone(),
-                predicate: predicate.clone(),
+                key_selector: resname.clone(),
+                value_selector: value_selector.clone(),
                 replies_sender: RepliesSender {
                     kind,
                     sender: rep_sender.clone(),
@@ -1869,7 +1869,7 @@ impl Primitives for Session {
     fn send_query(
         &self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
@@ -1878,11 +1878,11 @@ impl Primitives for Session {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             reskey,
-            predicate,
+            value_selector,
             target,
             consolidation
         );
-        self.handle_query(false, reskey, predicate, qid, target, consolidation)
+        self.handle_query(false, reskey, value_selector, qid, target, consolidation)
     }
 
     fn send_reply_data(

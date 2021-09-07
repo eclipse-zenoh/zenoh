@@ -36,7 +36,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
     mode: SubMode,
     period: Option<Period>,
     query_reskey: ResKey<'b>,
-    query_predicate: String,
+    query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
 }
@@ -63,7 +63,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             mode: SubMode::default(),
             period: None,
             query_reskey: sub_reskey,
-            query_predicate: "".into(),
+            query_value_selector: "".into(),
             query_target,
             query_consolidation,
         }
@@ -121,13 +121,13 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
 
     /// Change the resource key to be used for queries.
     #[inline]
-    pub fn query_selector<IntoKeySelector>(mut self, query_selector: IntoKeySelector) -> Self
+    pub fn query_selector<IntoKeyedSelector>(mut self, query_selector: IntoKeyedSelector) -> Self
     where
-        IntoKeySelector: Into<KeySelector<'b>>,
+        IntoKeyedSelector: Into<KeyedSelector<'b>>,
     {
         let selector = query_selector.into();
-        self.query_reskey = selector.key.to_owned();
-        self.query_predicate = selector.predicate.to_owned();
+        self.query_reskey = selector.key_selector.to_owned();
+        self.query_value_selector = selector.value_selector.to_owned();
         self
     }
 
@@ -153,7 +153,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             mode: self.mode,
             period: self.period,
             query_reskey: self.query_reskey.to_owned(),
-            query_predicate: "".to_string(),
+            query_value_selector: "".to_string(),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
         }
@@ -221,31 +221,31 @@ impl<'a> QueryingSubscriber<'a> {
         &mut self.receiver
     }
 
-    /// Issue a new query using the configured resource key and predicate.
+    /// Issue a new query using the configured resource key and value_selector.
     #[inline]
     pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.query_on(
             &self.conf.query_reskey.clone(),
-            &self.conf.query_predicate.clone(),
+            &self.conf.query_value_selector.clone(),
             self.conf.query_target.clone(),
             self.conf.query_consolidation.clone(),
         )
     }
 
-    /// Issue a new query on the specified resource key and predicate.
+    /// Issue a new query on the specified resource key and value_selector.
     pub fn query_on(
         &mut self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.receiver.state);
-        log::debug!("Start query on {}?{}", reskey, predicate);
+        log::debug!("Start query on {}?{}", reskey, value_selector);
         match self
             .conf
             .session
-            .get(&KeySelector::from(reskey).with_predicate(predicate))
+            .get(&KeyedSelector::from(reskey).with_value_selector(value_selector))
             .target(target)
             .consolidation(consolidation)
             .wait()

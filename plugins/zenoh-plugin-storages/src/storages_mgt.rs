@@ -51,7 +51,7 @@ pub(crate) async fn start_storage(
             target: Target::All,
         };
         let mut replies = match zenoh
-            .get(&Selector::from(&path_expr).with_predicate("?(starttime=0)"))
+            .get(&Selector::from(&path_expr).with_value_selector("?(starttime=0)"))
             .target(query_target)
             .consolidation(QueryConsolidation::none())
             .await

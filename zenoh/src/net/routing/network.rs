@@ -229,13 +229,13 @@ impl Network {
         }
     }
 
-    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut predicate: P)
+    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut value_selector: P)
     where
         P: FnMut(&Link) -> bool,
     {
         let msg = self.make_msg(idxs);
         for link in self.links.values() {
-            if predicate(link) {
+            if value_selector(link) {
                 log::trace!("{} Send to {} {:?}", self.name, link.pid, msg);
                 if let Err(e) = link.session.handle_message(msg.clone()) {
                     log::debug!("{} Error sending LinkStateList: {}", self.name, e);

@@ -58,7 +58,7 @@ async fn main() {
                 let query = query.unwrap();
                 println!(">> [Query handler        ] Handling '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
-                    if resource_name::intersect(query.selector().res_name, stored_name) {
+                    if resource_name::intersect(query.selector().key_selector, stored_name) {
                         query.reply(sample.clone());
                     }
                 }

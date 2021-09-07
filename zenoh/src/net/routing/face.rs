@@ -475,7 +475,7 @@ impl Primitives for Face {
     fn send_query(
         &self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
@@ -488,7 +488,7 @@ impl Primitives for Face {
             &self.state,
             prefixid,
             suffix,
-            predicate,
+            value_selector,
             qid,
             target,
             consolidation,

@@ -42,8 +42,9 @@ pub fn get_keys_prefix(path_expr: &str) -> &str {
 /// this operation returns a list of Path Expr allowing to match all the keys corresponding to the full paths that would have match
 /// the given Path Expr.
 ///
-/// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received [`Query::res_name`](zenoh::Query::res_name) in a list of path
-/// expressions that will match all the relevant stored keys (that correspond to paths stripped from the prefix).
+/// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received
+/// [`Query::selector()`](zenoh::Query::selector)`.`[`key_selector`](zenoh::Selector::key_selector) in a list of path expressions
+/// that will match all the relevant stored keys (that correspond to paths stripped from the prefix).
 ///
 /// # See also
 /// [`get_keys_prefix()`]

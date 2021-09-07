@@ -436,7 +436,7 @@ impl Primitives for ClientPrimitives {
     fn send_query(
         &self,
         _reskey: &ResKey,
-        _predicate: &str,
+        _value_selector: &str,
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: QueryConsolidation,
