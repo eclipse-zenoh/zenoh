@@ -1601,13 +1601,16 @@ impl Header for OpenAck {
 /// +---------------+
 /// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
 /// +---------------+
-/// ~   [next_sn]   ~
+/// ~   [next_sn]   ~ (***)
 /// +---------------+
 ///
-/// (*)  if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
-/// (**) if S==0 then 2^28 is assumed.
+/// - if Q==1 then the sender supports QoS.
 ///
-/// - if Q==1 then the sender support QoS.
+/// (*)   if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
+/// (**)  if S==0 then 2^28 is assumed.
+/// (***) if Q==1 then 8 sequence numbers are present: one for each priority.
+///       if Q==0 then only one sequence number is present.
+///
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Join {
