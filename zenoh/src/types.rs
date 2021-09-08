@@ -44,6 +44,12 @@ pub use super::net::protocol::io::SharedMemoryManager;
 /// A numerical Id mapped to a resource name with [`register_resource`](Session::register_resource).
 pub use super::net::protocol::core::ResourceId;
 
+/// A zenoh [`Value`] encoding.
+pub use super::net::protocol::core::Encoding;
+
+/// [`Encoding`] constants and helpers.
+pub use super::net::protocol::core::encoding;
+
 /// The global unique id of a zenoh peer.
 pub use super::net::protocol::core::PeerId;
 
@@ -118,8 +124,8 @@ pub struct Value {
     /// The payload of this Value.
     pub payload: ZBuf,
 
-    /// An encoding flag indicating how the associated payload is encoded.
-    pub encoding: ZInt,
+    /// An encoding description indicating how the associated payload is encoded.
+    pub encoding: Encoding,
 }
 
 impl Value {
@@ -141,14 +147,9 @@ impl Value {
 
     /// Sets the encoding of this zenoh Value.
     #[inline(always)]
-    pub fn encoding(mut self, encoding: ZInt) -> Self {
+    pub fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self
-    }
-
-    /// Returns the encoding description of the Value.
-    pub fn encoding_descr(&self) -> String {
-        to_string(self.encoding)
     }
 }
 
@@ -157,8 +158,7 @@ impl fmt::Debug for Value {
         write!(
             f,
             "Value{{ payload: {}, encoding: {} }}",
-            self.payload,
-            self.encoding_descr()
+            self.payload, self.encoding
         )
     }
 }
@@ -406,8 +406,8 @@ impl Sample {
     pub(crate) fn with_info(res_name: String, payload: ZBuf, data_info: Option<DataInfo>) -> Self {
         let mut value: Value = payload.into();
         if let Some(data_info) = data_info {
-            if let Some(encoding) = data_info.encoding {
-                value.encoding = encoding;
+            if let Some(encoding) = &data_info.encoding {
+                value.encoding = encoding.clone();
             }
             Sample {
                 res_name,

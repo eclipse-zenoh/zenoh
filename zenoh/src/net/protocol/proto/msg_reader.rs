@@ -427,7 +427,10 @@ impl ZBuf {
             info.kind = Some(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::ENC) {
-            info.encoding = Some(self.read_zint()?);
+            info.encoding = Some(Encoding {
+                prefix: self.read_zint()?,
+                suffix: self.read_string()?.into(),
+            });
         }
         if imsg::has_option(options, zmsg::data::info::TS) {
             info.timestamp = Some(self.read_timestamp()?);

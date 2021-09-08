@@ -17,7 +17,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::{CongestionControl, PeerId, Reliability, ResKey};
+use zenoh::net::protocol::core::{CongestionControl, Encoding, PeerId, Reliability, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
@@ -48,7 +48,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
                     )),
                     kind: Some(0),
-                    encoding: Some(0),
+                    encoding: Some(Encoding::default()),
                     #[cfg(feature = "zero-copy")]
                     sliced: false,
                 });
@@ -105,7 +105,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             uhlc::ID::new(16, [0u8; uhlc::ID::MAX_SIZE]),
         )),
         kind: Some(0),
-        encoding: Some(0),
+        encoding: Some(Encoding::default()),
         #[cfg(feature = "zero-copy")]
         sliced: false,
     });

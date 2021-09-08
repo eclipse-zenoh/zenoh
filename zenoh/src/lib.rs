@@ -98,7 +98,6 @@ mod session;
 pub use session::*;
 
 pub use net::protocol::core::{Timestamp, TimestampId};
-pub use net::protocol::proto::encoding;
 
 /// Constants for [`Queryable`] kinds.
 pub mod queryable {

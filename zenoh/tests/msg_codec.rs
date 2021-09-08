@@ -243,7 +243,10 @@ fn gen_data_info() -> DataInfo {
         first_router_sn: option_gen!(gen!(ZInt)),
         timestamp: option_gen!(gen_timestamp()),
         kind: option_gen!(gen!(ZInt)),
-        encoding: option_gen!(gen!(ZInt)),
+        encoding: option_gen!(Encoding {
+            prefix: gen!(ZInt),
+            suffix: "".into()
+        }),
         #[cfg(feature = "zero-copy")]
         sliced: false,
     }

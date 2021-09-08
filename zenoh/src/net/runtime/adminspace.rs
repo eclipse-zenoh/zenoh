@@ -13,11 +13,11 @@
 use super::plugins::PluginsMgr;
 use super::protocol::{
     core::{
-        queryable::EVAL, rname, CongestionControl, PeerId, QueryConsolidation, QueryTarget,
-        QueryableInfo, Reliability, ResKey, SubInfo, ZInt,
+        encoding, queryable::EVAL, rname, CongestionControl, Encoding, PeerId, QueryConsolidation,
+        QueryTarget, QueryableInfo, Reliability, ResKey, SubInfo, ZInt,
     },
     io::ZBuf,
-    proto::{encoding, DataInfo, RoutingContext},
+    proto::{DataInfo, RoutingContext},
     session::Primitives,
 };
 use super::routing::face::Face;
@@ -38,7 +38,7 @@ pub struct AdminContext {
     version: String,
 }
 
-type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (ZBuf, ZInt)> + Send + Sync>;
+type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (ZBuf, Encoding)> + Send + Sync>;
 
 pub struct AdminSpace {
     pid: PeerId,
@@ -277,7 +277,7 @@ impl Primitives for AdminSpace {
     }
 }
 
-pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
     let session_mgr = context.runtime.manager().clone();
 
     // plugins info
@@ -323,7 +323,7 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
     (ZBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
 }
 
-pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, Encoding) {
     let tables = zread!(context.runtime.router.tables);
 
     let res = (
@@ -333,7 +333,7 @@ pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, ZInt) {
     res
 }
 
-pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, Encoding) {
     (
         ZBuf::from(
             context

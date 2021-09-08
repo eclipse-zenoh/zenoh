@@ -439,7 +439,7 @@ impl RoutingContext {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
     pub kind: Option<ZInt>,
-    pub encoding: Option<ZInt>,
+    pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     #[cfg(feature = "zero-copy")]
     pub sliced: bool,

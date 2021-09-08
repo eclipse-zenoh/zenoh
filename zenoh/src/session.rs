@@ -680,9 +680,14 @@ impl<'a> WriteBuilder<'a> {
 
     /// Change the encoding of the written data.
     #[inline]
-    pub fn encoding(mut self, encoding: ZInt) -> Self {
+    pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
+    where
+        IntoEncoding: Into<Encoding>,
+    {
         if let Some(mut payload) = self.value.as_mut() {
-            payload.encoding = encoding;
+            payload.encoding = encoding.into();
+        } else {
+            self.value = Some(Value::empty().encoding(encoding.into()))
         }
         self
     }
@@ -704,7 +709,7 @@ impl Runnable for WriteBuilder<'_> {
             Some(data_kind::DEFAULT) => None,
             kind => kind,
         };
-        info.encoding = if value.encoding != encoding::DEFAULT {
+        info.encoding = if value.encoding != Encoding::default() {
             Some(value.encoding)
         } else {
             None

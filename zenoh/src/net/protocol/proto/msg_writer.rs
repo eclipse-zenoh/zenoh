@@ -285,7 +285,8 @@ impl WBuf {
             zcheck!(self.write_zint(*kind));
         }
         if let Some(enc) = &info.encoding {
-            zcheck!(self.write_zint(*enc));
+            zcheck!(self.write_zint(enc.prefix));
+            zcheck!(self.write_string(enc.suffix.as_ref()));
         }
         if let Some(ts) = &info.timestamp {
             zcheck!(self.write_timestamp(&ts));

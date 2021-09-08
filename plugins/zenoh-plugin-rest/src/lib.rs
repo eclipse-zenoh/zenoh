@@ -42,17 +42,17 @@ fn parse_http_port(arg: &str) -> String {
 
 fn value_to_json(value: Value) -> String {
     // TODO: transcode to JSON when implemented in Value
-    match value.encoding {
-        STRING => {
+    match &value.encoding {
+        p if p.starts_with(&STRING) => {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
-        APP_PROPERTIES => {
+        p if p.starts_with(&APP_PROPERTIES) => {
             // convert to Json string for special characters escaping
             serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
         }
-        APP_JSON => value.to_string(),
-        APP_INTEGER | APP_FLOAT => value.to_string(),
+        p if p.starts_with(&APP_JSON) => value.to_string(),
+        p if p.starts_with(&APP_INTEGER) || p.starts_with(&APP_FLOAT) => value.to_string(),
         _ => {
             format!(r#""{}""#, value.to_string())
         }
@@ -60,7 +60,7 @@ fn value_to_json(value: Value) -> String {
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let encoding = sample.value.encoding_descr();
+    let encoding = sample.value.encoding.to_string();
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
         sample.res_name,
@@ -98,20 +98,6 @@ async fn to_html(results: ReplyReceiver) -> String {
         .await
         .join("\n");
     format!("<dl>\n{}\n</dl>\n", values)
-}
-
-fn enc_from_mime(mime: Option<Mime>) -> ZInt {
-    use zenoh::encoding::*;
-    match mime {
-        Some(mime) => match from_str(mime.essence()) {
-            Ok(encoding) => encoding,
-            _ => match mime.basetype() {
-                "text" => TEXT_PLAIN,
-                &_ => APP_OCTET_STREAM,
-            },
-        },
-        None => APP_OCTET_STREAM,
-    }
 }
 
 fn method_to_kind(method: Method) -> SampleKind {
@@ -259,12 +245,14 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     match req.body_bytes().await {
         Ok(bytes) => {
             let resource = path_to_resource(req.url().path(), &req.state().1);
+            let encoding: Encoding = req.content_type().map(|m| m.into()).unwrap_or_default();
+
             // TODO: Define the right congestion control value
             match req
                 .state()
                 .0
                 .put(&resource, bytes)
-                .encoding(enc_from_mime(req.content_type()))
+                .encoding(encoding)
                 .kind(method_to_kind(req.method()))
                 .await
             {
