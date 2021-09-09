@@ -93,12 +93,7 @@ fn main() {
     }
 
     for i in 0..n {
-        println!(
-            "{} bytes: seq={} time={:?}µs",
-            size,
-            i,
-            samples[i],
-        );
+        println!("{} bytes: seq={} time={:?}µs", size, i, samples[i],);
     }
 }
 
@@ -114,9 +109,9 @@ fn parse_args() -> (Properties, usize, usize) {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
-        .arg(Arg::from_usage(
-            "-n, --samples=[N]          'The number of round-trips to measure'")
-            .default_value("100")
+        .arg(
+            Arg::from_usage("-n, --samples=[N]          'The number of round-trips to measure'")
+                .default_value("100"),
         )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
