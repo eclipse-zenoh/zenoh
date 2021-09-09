@@ -12,30 +12,28 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use futures::prelude::*;
 use std::time::Instant;
 use zenoh::net::ResKey::*;
 use zenoh::net::*;
 use zenoh::Properties;
 
-#[async_std::main]
-async fn main() {
+fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, size) = parse_args();
-    let session = open(config.into()).await.unwrap();
+    let (config, size, n) = parse_args();
+    let session: Session = open(config.into()).wait().unwrap();
 
     // The resource to publish data on
     let reskey_ping = RId(session
         .declare_resource(&RName("/test/ping".to_string()))
-        .await
+        .wait()
         .unwrap());
 
     // The resource to wait the response back
     let reskey_pong = RId(session
         .declare_resource(&RName("/test/pong".to_string()))
-        .await
+        .wait()
         .unwrap());
 
     let sub_info = SubInfo {
@@ -43,9 +41,10 @@ async fn main() {
         mode: SubMode::Push,
         period: None,
     };
-    let mut sub = session
+
+    let mut sub: Subscriber = session
         .declare_subscriber(&reskey_pong, &sub_info)
-        .await
+        .wait()
         .unwrap();
 
     let data: ZBuf = (0usize..size)
@@ -53,8 +52,28 @@ async fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    let mut count: u64 = 0;
-    loop {
+    let mut samples = Vec::with_capacity(n);
+
+    // -- warmup --
+    let wun = 1000;
+    let stream = sub.receiver();
+    for _ in 0..wun {
+        let data = data.clone();
+        session
+            .write_ext(
+                &reskey_ping,
+                data,
+                encoding::DEFAULT,
+                data_kind::DEFAULT,
+                CongestionControl::Block, // Make sure to not drop messages because of congestion control
+            )
+            .wait()
+            .unwrap();
+
+        let _ = stream.recv();
+    }
+
+    for _ in 0..n {
         let data = data.clone();
         let write_time = Instant::now();
         session
@@ -65,23 +84,25 @@ async fn main() {
                 data_kind::DEFAULT,
                 CongestionControl::Block, // Make sure to not drop messages because of congestion control
             )
-            .await
+            .wait()
             .unwrap();
 
-        if let Some(sample) = sub.receiver().next().await {
-            println!(
-                "{} bytes: seq={} time={:?}µs",
-                sample.payload.len(),
-                count,
-                write_time.elapsed().as_micros(),
-            );
-        }
+        let _ = stream.recv();
+        let ts = write_time.elapsed().as_micros();
+        samples.push(ts);
+    }
 
-        count += 1;
+    for i in 0..n {
+        println!(
+            "{} bytes: seq={} time={:?}µs",
+            size,
+            i,
+            samples[i],
+        );
     }
 }
 
-fn parse_args() -> (Properties, usize) {
+fn parse_args() -> (Properties, usize, usize) {
     let args = App::new("zenoh-net throughput sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -93,6 +114,10 @@ fn parse_args() -> (Properties, usize) {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
+        .arg(Arg::from_usage(
+            "-n, --samples=[N]          'The number of round-trips to measure'")
+            .default_value("100")
+        )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
@@ -110,8 +135,8 @@ fn parse_args() -> (Properties, usize) {
     if args.is_present("no-multicast-scouting") {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
-
+    let n: usize = args.value_of("samples").unwrap().parse().unwrap();
     let size: usize = args.value_of("PAYLOAD_SIZE").unwrap().parse().unwrap();
 
-    (config, size)
+    (config, size, n)
 }

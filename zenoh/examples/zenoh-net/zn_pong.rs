@@ -11,33 +11,31 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::stream::StreamExt;
 use clap::{App, Arg};
 use zenoh::net::ResKey::*;
 use zenoh::net::*;
 use zenoh::Properties;
 
-#[async_std::main]
-async fn main() {
+fn main() {
     // initiate logging
     env_logger::init();
 
     let config = parse_args();
 
-    let session = open(config.into()).await.unwrap();
+    let session = open(config.into()).wait().unwrap();
 
     // The resource to read the data from
     let reskey_ping = RId(session
         .declare_resource(&RName("/test/ping".to_string()))
-        .await
+        .wait()
         .unwrap());
 
     // The resource to echo the data back
     let reskey_pong = RId(session
         .declare_resource(&RName("/test/pong".to_string()))
-        .await
+        .wait()
         .unwrap());
-    let _publ = session.declare_publisher(&reskey_pong).await.unwrap();
+    let _publ = session.declare_publisher(&reskey_pong).wait().unwrap();
 
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
@@ -46,10 +44,10 @@ async fn main() {
     };
     let mut sub = session
         .declare_subscriber(&reskey_ping, &sub_info)
-        .await
+        .wait()
         .unwrap();
 
-    while let Some(sample) = sub.receiver().next().await {
+    while let Ok(sample) = sub.receiver().recv() {
         session
             .write_ext(
                 &reskey_pong,
@@ -58,7 +56,7 @@ async fn main() {
                 data_kind::DEFAULT,
                 CongestionControl::Block, // Make sure to not drop messages because of congestion control
             )
-            .await
+            .wait()
             .unwrap();
     }
 }
