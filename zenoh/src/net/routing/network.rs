@@ -277,6 +277,7 @@ impl Network {
         };
 
         // register psid<->pid mappings & apply mapping to nodes
+        #[allow(clippy::needless_collect)] // need to release borrow on self
         let link_states = link_states
             .into_iter()
             .filter_map(|link_state| {
