@@ -21,10 +21,10 @@ async fn main() {
 
     let (config, path, value) = parse_args();
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Writing Data ('{}': '{}')...", path, value);
+    println!("Put Data ('{}': '{}')", path, value);
     session.put(&path, value).await.unwrap();
 }
 
@@ -42,11 +42,11 @@ fn parse_args() -> (Properties, String, String) {
         ))
         .arg(
             Arg::from_usage("-p, --path=[PATH]        'The name of the resource to write.'")
-                .default_value("/demo/example/zenoh-rs-write"),
+                .default_value("/demo/example/zenoh-rs-put"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to write.'")
-                .default_value("Write from Rust!"),
+                .default_value("Put from Rust!"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

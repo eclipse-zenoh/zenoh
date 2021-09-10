@@ -30,13 +30,13 @@ async fn main() {
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring Subscriber on {}", selector);
+    println!("Register Subscriber on {}", selector);
     let mut subscriber = session.subscribe(&selector).await.unwrap();
 
-    println!("Declaring Queryable on {}", selector);
+    println!("Register Queryable on {}", selector);
     let mut queryable = session
         .register_queryable(&selector)
         .kind(STORAGE)
@@ -49,14 +49,14 @@ async fn main() {
         select!(
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.value.payload.contiguous()));
+                println!(">> [Subscriber] Received {} ('{}': '{}')",
+                    sample.kind, sample.res_name, String::from_utf8_lossy(&sample.value.payload.contiguous()));
                 stored.insert(sample.res_name.clone(), sample);
             },
 
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
-                println!(">> [Query handler        ] Handling '{}'", query.selector());
+                println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
                     if resource_name::intersect(query.selector().key_selector, stored_name) {
                         query.reply(sample.clone());

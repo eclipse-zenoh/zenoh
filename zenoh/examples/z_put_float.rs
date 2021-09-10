@@ -22,10 +22,10 @@ async fn main() {
 
     let (config, path, value) = parse_args();
 
-    println!("New zenoh...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Put Float ('{}': '{}')...\n", path, value);
+    println!("Put Float ('{}': '{}')", path, value);
     session.put(&path, value).await.unwrap();
 
     session.close().await.unwrap();

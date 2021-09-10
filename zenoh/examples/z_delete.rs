@@ -22,10 +22,10 @@ async fn main() {
 
     let (config, path) = parse_args();
 
-    println!("New zenoh...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Delete Path '{}'...\n", path);
+    println!("Delete resource '{}'...\n", path);
     session.delete(&path).await.unwrap();
 
     session.close().await.unwrap();

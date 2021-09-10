@@ -24,11 +24,11 @@ async fn main() {
 
     let (config, selector, query) = parse_args();
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
     println!(
-        "Declaring a QueryingSubscriber on {} with an initial query on {}",
+        "Register a QueryingSubscriber on {} with an initial query on {}",
         selector,
         query.as_ref().unwrap_or(&selector)
     );
@@ -42,21 +42,21 @@ async fn main() {
         session.subscribe_with_query(selector).await.unwrap()
     };
 
-    println!("Enter 'd' to issue the query again, or 'q' to quit.");
+    println!("Enter 'd' to issue the query again, or 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
     loop {
         select!(
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.value.payload.to_vec()));
+                println!(">> [Subscriber] Received {} ('{}': '{}')",
+                    sample.kind, sample.res_name, String::from_utf8_lossy(&sample.value.payload.to_vec()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
                 if input[0] == b'q' { break }
                 else if input[0] == b'd' {
-                    println!("Do query again...");
+                    println!("Do query again");
                     subscriber.query().await.unwrap()
                 }
             }

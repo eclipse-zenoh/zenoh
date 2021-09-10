@@ -41,10 +41,10 @@ async fn main() {
     let path = "/demo/sse";
     let value = "Pub from sse server!";
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring Queryable on {}", path);
+    println!("Register Queryable on {}", path);
     let mut queryable = session.register_queryable(path).kind(EVAL).await.unwrap();
 
     async_std::task::spawn(
@@ -60,14 +60,14 @@ async fn main() {
 
     let event_path = [path, "/event"].concat();
 
-    print!("Declaring Resource {}", event_path);
+    print!("Register Resource {}", event_path);
     let rid = session.register_resource(&event_path).await.unwrap();
     println!(" => RId {}", rid);
 
-    println!("Declaring Publisher on {}", rid);
+    println!("Register Publisher on {}", rid);
     let _publ = session.publishing(rid).await.unwrap();
 
-    println!("Writing Data periodically ('{}': '{}')...", rid, value);
+    println!("Put Data periodically ('{}': '{}')...", rid, value);
 
     println!(
         "Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}",

@@ -24,14 +24,14 @@ async fn main() {
 
     let (config, selector, target) = parse_args();
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Sending Query '{}'...", selector);
+    println!("Send Query '{}'", selector);
     let mut replies = session.get(&selector).target(target).await.unwrap();
     while let Some(reply) = replies.next().await {
         println!(
-            ">> [Reply handler] received ('{}': '{}')",
+            ">> Received ('{}': '{}')",
             reply.data.res_name,
             String::from_utf8_lossy(&reply.data.value.payload.contiguous())
         )

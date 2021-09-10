@@ -23,10 +23,10 @@ async fn main() {
 
     let (config, selector) = parse_args();
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring Subscriber on {}", selector);
+    println!("Register Subscriber on {}", selector);
 
     let mut subscriber = session.subscribe(&selector).await.unwrap();
 
@@ -36,8 +36,8 @@ async fn main() {
         select!(
             sample = subscriber.receiver().next().fuse() => {
                 let sample = sample.unwrap();
-                println!(">> [Subscription listener] Received ('{}': '{}')",
-                    sample.res_name, String::from_utf8_lossy(&sample.value.payload.contiguous()));
+                println!(">> [Subscriber] Received {} ('{}': '{}')",
+                    sample.kind, sample.res_name, String::from_utf8_lossy(&sample.value.payload.contiguous()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

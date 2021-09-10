@@ -24,10 +24,10 @@ async fn main() {
 
     let (config, path, value) = parse_args();
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring Queryable on {}", path);
+    println!("Register Queryable on {}", path);
     let mut queryable = session.register_queryable(&path).kind(EVAL).await.unwrap();
 
     let mut stdin = async_std::io::stdin();
@@ -36,7 +36,7 @@ async fn main() {
         select!(
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
-                println!(">> [Query handler] Handling '{}'", query.selector());
+                println!(">> [Queryable ] Received Query '{}'", query.selector());
                 query.reply(Sample::new(path.clone(), value.clone()));
             },
 

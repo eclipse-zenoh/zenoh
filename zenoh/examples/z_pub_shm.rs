@@ -35,14 +35,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (config, path, value) = parse_args();
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Creating Shared Memory Manager...");
+    println!("Create Shared Memory Manager");
     let id = session.id().await;
     let mut shm = SharedMemoryManager::new(id, N * 1024).unwrap();
 
-    println!("Allocating a Shared Memory Buffer...");
+    println!("Allocate Shared Memory Buffer");
 
     for idx in 0..(K * N as u32) {
         let mut sbuf = match shm.alloc(1024) {
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Write the data
         println!(
-            "=================== Writing SHM Data ('{}': '{}')...",
+            "Put SHM Data ('{}': '{}')",
             path,
             String::from_utf8_lossy(&slice[0..slice_len])
         );

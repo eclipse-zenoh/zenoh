@@ -23,20 +23,20 @@ async fn main() {
 
     let (config, path, value) = parse_args();
 
-    println!("Opening session...");
+    println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    print!("Declaring Resource {}", path);
+    print!("Register Resource {}", path);
     let rid = session.register_resource(&path).await.unwrap();
     println!(" => RId {}", rid);
 
-    println!("Declaring Publisher on {}", rid);
+    println!("Register Publisher on {}", rid);
     let _publisher = session.publishing(rid).await.unwrap();
 
     for idx in 0..std::u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
-        println!("Writing Data ('{}': '{}')...", rid, buf);
+        println!("Put Data ('{}': '{}')", rid, buf);
         session.put(rid, buf).await.unwrap();
     }
 }

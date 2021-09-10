@@ -46,10 +46,10 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     let selector: ResKey = args.value_of("storage-selector").unwrap().into();
     debug!("Run example-plugin with storage-selector={}", selector);
 
-    debug!("Declaring Subscriber on {}", selector);
+    debug!("Register Subscriber on {}", selector);
     let mut sub = session.subscribe(&selector).await.unwrap();
 
-    debug!("Declaring Queryable on {}", selector);
+    debug!("Register Queryable on {}", selector);
     let mut queryable = session
         .register_queryable(&selector)
         .kind(STORAGE)
