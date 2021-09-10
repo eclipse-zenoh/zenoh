@@ -58,38 +58,30 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let config = &self.config;
-        let peers = config
-            .get_or(&ZN_PEER_KEY, "")
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let scouting = config
-            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let addr = config
-            .get_or(
-                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+        let (peers, scouting, addr, ifaces, timeout) = {
+            let guard = self.config.lock();
+            (
+                guard.peers().clone(),
+                guard.multicast().scouting().unwrap_or(true),
+                guard
+                    .multicast()
+                    .address()
+                    .unwrap_or_else(|| "224.0.0.224:7447".parse().unwrap()),
+                guard
+                    .multicast()
+                    .interface()
+                    .as_ref()
+                    .map(AsRef::as_ref)
+                    .unwrap_or("auto")
+                    .to_owned(),
+                std::time::Duration::from_secs_f64(guard.scouting().timeout().unwrap_or(3.)),
             )
-            .parse()
-            .unwrap();
-        let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
-        let timeout = std::time::Duration::from_secs_f64(
-            config
-                .get_or(&ZN_SCOUTING_TIMEOUT_KEY, ZN_SCOUTING_TIMEOUT_DEFAULT)
-                .parse()
-                .unwrap(),
-        );
+        };
         match peers.len() {
             0 => {
                 if scouting {
                     log::info!("Scouting for router ...");
-                    let ifaces = Runtime::get_interfaces(ifaces);
+                    let ifaces = Runtime::get_interfaces(&ifaces);
                     if ifaces.is_empty() {
                         zerror!(ZErrorKind::IoError {
                             descr: "Unable to find multicast interface!".to_string()
@@ -135,45 +127,32 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let config = &self.config;
-        let listeners = config
-            .get_or(&ZN_LISTENER_KEY, PEER_DEFAULT_LISTENER)
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let peers = config
-            .get_or(&ZN_PEER_KEY, "")
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let scouting = config
-            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let peers_autoconnect = config
-            .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let addr = config
-            .get_or(
-                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+        let (listeners, peers, scouting, peers_autoconnect, addr, ifaces, delay) = {
+            let guard = &self.config.lock();
+            let listeners = if guard.listeners().is_empty() {
+                vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
+            } else {
+                guard.listeners().clone()
+            };
+            (
+                listeners,
+                guard.peers().clone(),
+                guard.multicast().scouting().unwrap_or(true),
+                guard.peers_autoconnect().unwrap_or(true),
+                guard
+                    .multicast()
+                    .address()
+                    .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap()),
+                guard
+                    .multicast()
+                    .interface()
+                    .as_ref()
+                    .map(AsRef::as_ref)
+                    .unwrap_or_else(|| ZN_MULTICAST_INTERFACE_DEFAULT)
+                    .to_string(),
+                std::time::Duration::from_secs_f64(guard.scouting().delay().unwrap_or(0.2)),
             )
-            .parse()
-            .unwrap();
-        let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
-        let delay = std::time::Duration::from_secs_f64(
-            config
-                .get_or(&ZN_SCOUTING_DELAY_KEY, ZN_SCOUTING_DELAY_DEFAULT)
-                .parse()
-                .unwrap(),
-        );
+        };
 
         self.bind_listeners(&listeners).await?;
 
@@ -183,7 +162,7 @@ impl Runtime {
         }
 
         if scouting {
-            let ifaces = Runtime::get_interfaces(ifaces);
+            let ifaces = Runtime::get_interfaces(&ifaces);
             let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
             if !ifaces.is_empty() {
                 let sockets: Vec<UdpSocket> = ifaces
@@ -215,42 +194,31 @@ impl Runtime {
     }
 
     async fn start_router(&self) -> ZResult<()> {
-        let config = &self.config;
-        let listeners = config
-            .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let peers = config
-            .get_or(&ZN_PEER_KEY, "")
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let scouting = config
-            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let routers_autoconnect_multicast = config
-            .get_or(
-                &ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY,
-                ZN_ROUTERS_AUTOCONNECT_MULTICAST_DEFAULT,
+        let (listeners, peers, scouting, routers_autoconnect_multicast, addr, ifaces) = {
+            let guard = self.config.lock();
+            let listeners = if guard.listeners().is_empty() {
+                vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
+            } else {
+                guard.listeners().clone()
+            };
+            (
+                listeners,
+                guard.peers().clone(),
+                guard.multicast().scouting().unwrap_or(true),
+                guard.routers_autoconnect().multicast().unwrap_or(false),
+                guard
+                    .multicast()
+                    .address()
+                    .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap()),
+                guard
+                    .multicast()
+                    .interface()
+                    .as_ref()
+                    .map(AsRef::as_ref)
+                    .unwrap_or(ZN_MULTICAST_INTERFACE_DEFAULT)
+                    .to_string(),
             )
-            .to_lowercase()
-            == ZN_TRUE;
-        let addr = config
-            .get_or(
-                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
-            )
-            .parse()
-            .unwrap();
-        let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+        };
 
         self.bind_listeners(&listeners).await?;
 
@@ -260,7 +228,7 @@ impl Runtime {
         }
 
         if scouting {
-            let ifaces = Runtime::get_interfaces(ifaces);
+            let ifaces = Runtime::get_interfaces(&ifaces);
             let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
             if !ifaces.is_empty() {
                 let sockets: Vec<UdpSocket> = ifaces

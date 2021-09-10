@@ -18,7 +18,6 @@ use std::fmt;
 use std::str::FromStr;
 use webpki::{DnsName, DnsNameRef};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::*;
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
@@ -124,22 +123,22 @@ impl fmt::Display for LocatorQuic {
 pub struct LocatorConfigQuic;
 
 impl LocatorConfigQuic {
-    pub fn from_config(config: &ConfigProperties) -> ZResult<Option<Properties>> {
+    pub fn from_config(config: &crate::net::config::Config) -> ZResult<Option<Properties>> {
         let mut properties = Properties::default();
 
-        if let Some(tls_ca_certificate) = config.get(&ZN_TLS_ROOT_CA_CERTIFICATE_KEY) {
+        if let Some(tls_ca_certificate) = config.tls().root_ca_certificate() {
             properties.insert(
                 TLS_ROOT_CA_CERTIFICATE_FILE.into(),
                 tls_ca_certificate.into(),
             );
         }
-        if let Some(tls_server_private_key) = config.get(&ZN_TLS_SERVER_PRIVATE_KEY_KEY) {
+        if let Some(tls_server_private_key) = config.tls().server_private_key() {
             properties.insert(
                 TLS_SERVER_PRIVATE_KEY_FILE.into(),
                 tls_server_private_key.into(),
             );
         }
-        if let Some(tls_server_certificate) = config.get(&ZN_TLS_SERVER_CERTIFICATE_KEY) {
+        if let Some(tls_server_certificate) = config.tls().server_certificate() {
             properties.insert(
                 TLS_SERVER_CERTIFICATE_FILE.into(),
                 tls_server_certificate.into(),

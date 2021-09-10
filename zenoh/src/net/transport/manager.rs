@@ -19,6 +19,7 @@ use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
+use crate::net::config::Config;
 use crate::net::link::{EndPoint, Locator, LocatorConfig, LocatorProtocol};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
@@ -185,30 +186,29 @@ impl TransportManagerConfigBuilder {
 
     pub async fn from_config(
         mut self,
-        properties: &ConfigProperties,
+        properties: &Config,
     ) -> ZResult<TransportManagerConfigBuilder> {
-        if let Some(v) = properties.get(&ZN_VERSION_KEY) {
-            self = self.version(zparse!(v)?);
+        if let Some(v) = properties.version() {
+            self = self.version(*v);
         }
-        if let Some(v) = properties.get(&ZN_PEER_ID_KEY) {
+        if let Some(v) = properties.peer_id() {
             self = self.pid(zparse!(v)?);
         }
-        if let Some(v) = properties.get(&ZN_MODE_KEY) {
-            self = self.whatami(whatami::parse(v)?);
+        if let Some(v) = properties.mode() {
+            self = self.whatami(*v);
         }
-        if let Some(v) = properties.get(&ZN_SEQ_NUM_RESOLUTION_KEY) {
-            self = self.sn_resolution(zparse!(v)?);
+        if let Some(v) = properties.sequence_number_resolution() {
+            self = self.sn_resolution(*v);
         }
-        if let Some(v) = properties.get(&ZN_BATCH_SIZE_KEY) {
-            self = self.batch_size(zparse!(v)?);
+        if let Some(v) = properties.batch_size() {
+            self = self.batch_size(*v);
         }
-        if let Some(v) = properties.get(&ZN_DEFRAG_BUFF_SIZE_KEY) {
-            self = self.defrag_buff_size(zparse!(v)?);
+        if let Some(v) = properties.defrag_buffer_size() {
+            self = self.defrag_buff_size(*v);
         }
-        if let Some(v) = properties.get(&ZN_LINK_RX_BUFF_SIZE_KEY) {
-            self = self.link_rx_buff_size(zparse!(v)?);
+        if let Some(v) = properties.link().rx_buff_size() {
+            self = self.link_rx_buff_size(*v);
         }
-
         self = self.endpoint(LocatorConfig::from_config(properties)?);
         self = self.unicast(
             TransportManagerConfigUnicast::builder()

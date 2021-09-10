@@ -14,6 +14,7 @@
 use super::info::*;
 use super::routing::face::Face;
 use super::*;
+use crate::net::config::Config;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::{bounded, Sender};
@@ -199,21 +200,25 @@ impl Session {
         }
     }
 
-    pub(super) fn new(config: ConfigProperties) -> impl ZFuture<Output = ZResult<Session>> {
+    pub(super) fn new<C: std::convert::TryInto<Config, Error = Config> + Send + 'static>(
+        config: C,
+    ) -> impl ZFuture<Output = ZResult<Session>> {
         zpinbox(async {
-            let local_routing = config
-                .get_or(&ZN_LOCAL_ROUTING_KEY, ZN_LOCAL_ROUTING_DEFAULT)
-                .to_lowercase()
-                == ZN_TRUE;
-            let join_subscriptions = match config.get(&ZN_JOIN_SUBSCRIPTIONS_KEY) {
-                Some(s) => s.split(',').map(|s| s.to_string()).collect(),
-                None => vec![],
+            let config: Config = match config.try_into() {
+                Ok(c) => c,
+                Err(e) => {
+                    return zerror!(ZErrorKind::Other {
+                        descr: format!(
+                            "invalid configuration {}",
+                            serde_json::to_string(&e).unwrap()
+                        )
+                    })
+                }
             };
-            let join_publications = match config.get(&ZN_JOIN_PUBLICATIONS_KEY) {
-                Some(s) => s.split(',').map(|s| s.to_string()).collect(),
-                None => vec![],
-            };
-            match Runtime::new(0, config.0.into(), None).await {
+            let local_routing = config.local_routing().unwrap_or(true);
+            let join_subscriptions = config.join_on_startup().subscriptions().clone();
+            let join_publications = config.join_on_startup().publications().clone();
+            match Runtime::new(0, config, None).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,

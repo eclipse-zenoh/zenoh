@@ -13,12 +13,12 @@
 //
 use async_std::future;
 use async_std::task;
-use clap::{App, Arg, Values};
+use clap::{App, Arg};
 use git_version::git_version;
+use validated_struct::ValidatedMap;
+use zenoh::net::config::Config;
 use zenoh::net::plugins::*;
 use zenoh::net::runtime::{AdminSpace, Runtime};
-use zenoh_util::properties::config::*;
-use zenoh_util::properties::Properties;
 use zenoh_util::LibLoader;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -142,57 +142,56 @@ fn main() {
         let args = app.args(&expected_args).get_matches();
 
         let mut config = if let Some(conf_file) = args.value_of("config") {
-            Properties::from(std::fs::read_to_string(conf_file).unwrap()).into()
+            Config::from_file(conf_file).unwrap()
         } else {
-            ConfigProperties::default()
+            Config::default()
         };
 
-        config.insert(ZN_MODE_KEY, "router".to_string());
+        config.set_mode(Some(zenoh::net::whatami::ROUTER)).unwrap();
 
-        let mut peer = args
-            .values_of("peer")
-            .or_else(|| Some(Values::default()))
-            .unwrap()
-            .collect::<Vec<&str>>()
-            .join(",");
-        if let Some(val) = config.get(&ZN_PEER_KEY) {
-            peer.push(',');
-            peer.push_str(val);
-        }
-        config.insert(ZN_PEER_KEY, peer);
+        config
+            .peers
+            .extend(
+                args.values_of("peer")
+                    .unwrap_or_default()
+                    .filter_map(|v| match v.parse() {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            log::warn!("Couldn't parse {} into Locator: {}", v, e);
+                            None
+                        }
+                    }),
+            );
 
-        let mut listener = args
-            .values_of("listener")
-            .or_else(|| Some(Values::default()))
-            .unwrap()
-            .collect::<Vec<&str>>()
-            .join(",");
-        if let Some(val) = config.get(&ZN_LISTENER_KEY) {
-            if listener == DEFAULT_LISTENER {
-                listener.clear();
+        config
+            .listeners
+            .extend(
+                args.values_of("peer")
+                    .unwrap_or_default()
+                    .filter_map(|v| match v.parse() {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            log::warn!("Couldn't parse {} into Locator: {}", v, e);
+                            None
+                        }
+                    }),
+            );
+
+        config
+            .set_add_timestamp(Some(!args.is_present("no-timestamp")))
+            .unwrap();
+        config
+            .multicast
+            .set_scouting(Some(!args.is_present("no-multicast-scouting")))
+            .unwrap();
+
+        for json in args.values_of("json").unwrap_or_default() {
+            if let Some((key, value)) = json.split_once(':') {
+                if let Err(e) = config.insert(key, &mut serde_json::Deserializer::from_str(value)) {
+                    log::warn!("Couldn't perform configuration {}: {}", json, e)
+                }
             }
-            listener.push(',');
-            listener.push_str(val);
         }
-        config.insert(ZN_LISTENER_KEY, listener);
-
-        config.insert(
-            ZN_ADD_TIMESTAMP_KEY,
-            if args.is_present("no-timestamp") {
-                ZN_FALSE.to_string()
-            } else {
-                ZN_TRUE.to_string()
-            },
-        );
-
-        config.insert(
-            ZN_MULTICAST_SCOUTING_KEY,
-            if args.is_present("no-multicast-scouting") {
-                ZN_FALSE.to_string()
-            } else {
-                ZN_TRUE.to_string()
-            },
-        );
 
         log::debug!("Config: {:?}", &config);
 

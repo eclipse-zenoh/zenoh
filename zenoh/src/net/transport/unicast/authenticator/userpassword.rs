@@ -23,7 +23,6 @@ use rand::{Rng, SeedableRng};
 use std::collections::{HashMap, HashSet};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{hmac, PseudoRng};
-use zenoh_util::properties::config::*;
 use zenoh_util::properties::Properties;
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite};
 
@@ -184,10 +183,10 @@ impl UserPasswordAuthenticator {
     }
 
     pub async fn from_config(
-        config: &ConfigProperties,
+        config: &crate::net::config::Config,
     ) -> ZResult<Option<UserPasswordAuthenticator>> {
         let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-        if let Some(dict) = config.get(&ZN_USER_PASSWORD_DICTIONARY_KEY) {
+        if let Some(dict) = config.user_password_dictionary() {
             let content = fs::read_to_string(dict).await.map_err(|e| {
                 zerror2!(ZErrorKind::Other {
                     descr: format!("Invalid user-password dictionary file: {}", e)
@@ -202,8 +201,8 @@ impl UserPasswordAuthenticator {
         }
 
         let mut credentials: Option<(Vec<u8>, Vec<u8>)> = None;
-        if let Some(user) = config.get(&ZN_USER_KEY) {
-            if let Some(password) = config.get(&ZN_PASSWORD_KEY) {
+        if let Some(user) = config.user().name() {
+            if let Some(password) = config.user().password() {
                 log::debug!("User and password have been configured");
                 credentials = Some((user.to_string().into(), password.to_string().into()));
             }

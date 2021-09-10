@@ -16,7 +16,6 @@ use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::fmt;
 use std::str::FromStr;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
@@ -85,7 +84,7 @@ impl fmt::Display for LocatorTcp {
 pub struct LocatorConfigTcp;
 
 impl LocatorConfigTcp {
-    pub fn from_config(_config: &ConfigProperties) -> ZResult<Option<Properties>> {
+    pub fn from_config(_config: &crate::net::config::Config) -> ZResult<Option<Properties>> {
         Ok(None)
     }
 }
