@@ -116,9 +116,13 @@ fn main() {
              This option disables this feature.'",
             )).arg(Arg::from_usage(
                 "--no-multicast-scouting \
-             'By default zenohd replies to multicast scouting messages for being discovered by peers and clients. 
-              This option disables this feature.'",
-        ));
+                'By default zenohd replies to multicast scouting messages for being discovered by peers and clients. 
+                This option disables this feature.'",
+            )).arg(Arg::from_usage(
+                "--json=[<key>:<value>]\
+                'Allows changing arbitrary parts of the configuration by passing a slash-separated path to the 
+                property as the key, and a JSON deserializable value (don't forget the quotes on strings).'"
+            ));
 
         // Get plugins search directories from the command line, and create LibLoader
         let plugin_search_dirs = get_plugin_search_dirs_from_args();
