@@ -13,8 +13,9 @@
 //
 use async_std::stream::StreamExt;
 use clap::{App, Arg};
-use zenoh::ResKey::*;
-use zenoh::*;
+use zenoh::prelude::ResKey::*;
+use zenoh::prelude::*;
+use zenoh::publisher::CongestionControl;
 
 #[async_std::main]
 async fn main() {
@@ -23,7 +24,7 @@ async fn main() {
 
     let config = parse_args();
 
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     // The resource to read the data from
     let reskey_ping = RId(session.register_resource("/test/ping").await.unwrap());

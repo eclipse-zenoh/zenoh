@@ -13,7 +13,6 @@
 //
 pub mod rname;
 
-use http_types::Mime;
 use std::borrow::Cow;
 use std::convert::From;
 use std::fmt;
@@ -21,7 +20,7 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::Timestamp;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::{ZError, ZErrorKind};
 use zenoh_util::zerror;
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
@@ -39,7 +38,7 @@ zconfigurable! {
 
 // WhatAmI values
 pub type WhatAmI = whatami::Type;
-/// Constants and helpers for zenoh `whatami`falgs.
+/// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami {
     use super::ZInt;
 
@@ -192,149 +191,148 @@ impl<'a> From<&'a ResKey<'a>> for (ResourceId, &'a str) {
     }
 }
 
-/// A zenoh [`Value`](crate::Value) encoding.
-///
-/// A zenoh encoding is a [`Mime`](http_types::Mime) type represented, for wire efficeincy,
-/// as an integer prefix (that maps to a string) and a string suffix.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Encoding {
-    pub prefix: ZInt,
-    pub suffix: Cow<'static, str>,
-}
-
-impl Encoding {
-    /// Converts the given encoding to [`Mime`](http_types::Mime).
-    pub fn to_mime(&self) -> ZResult<Mime> {
-        if self.prefix == 0 {
-            Mime::from_str(self.suffix.as_ref()).map_err(|e| {
-                ZError::new(
-                    ZErrorKind::Other {
-                        descr: e.to_string(),
-                    },
-                    file!(),
-                    line!(),
-                    None,
-                )
-            })
-        } else if self.prefix <= encoding::MIMES.len() as ZInt {
-            Mime::from_str(&format!(
-                "{}{}",
-                &encoding::MIMES[self.prefix as usize],
-                self.suffix
-            ))
-            .map_err(|e| {
-                ZError::new(
-                    ZErrorKind::Other {
-                        descr: e.to_string(),
-                    },
-                    file!(),
-                    line!(),
-                    None,
-                )
-            })
-        } else {
-            zerror!(ZErrorKind::Other {
-                descr: format!("Unknown encoding prefix {}", self.prefix)
-            })
-        }
-    }
-
-    /// Sets the suffix of this encoding.
-    pub fn with_suffix<IntoCowStr>(mut self, suffix: IntoCowStr) -> Self
-    where
-        IntoCowStr: Into<Cow<'static, str>>,
-    {
-        self.suffix = suffix.into();
-        self
-    }
-
-    /// Returns `true`if the string representation of this encoding starts with
-    /// the string representation of ther given encoding.
-    pub fn starts_with(&self, encoding: &Encoding) -> bool {
-        (self.prefix == encoding.prefix && self.suffix.starts_with(encoding.suffix.as_ref()))
-            || self.to_string().starts_with(&encoding.to_string())
-    }
-}
-
-impl fmt::Display for Encoding {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.prefix > 0 && self.prefix < encoding::MIMES.len() as ZInt {
-            write!(
-                f,
-                "{}{}",
-                &encoding::MIMES[self.prefix as usize],
-                self.suffix
-            )
-        } else {
-            write!(f, "{}", self.suffix)
-        }
-    }
-}
-
-impl From<&'static str> for Encoding {
-    fn from(s: &'static str) -> Self {
-        for (i, v) in encoding::MIMES.iter().enumerate() {
-            if i != 0 && s.starts_with(v) {
-                return Encoding {
-                    prefix: i as u64,
-                    suffix: s.split_at(v.len()).1.into(),
-                };
-            }
-        }
-        Encoding {
-            prefix: 0,
-            suffix: s.into(),
-        }
-    }
-}
-
-impl<'a> From<String> for Encoding {
-    fn from(s: String) -> Self {
-        for (i, v) in encoding::MIMES.iter().enumerate() {
-            if i != 0 && s.starts_with(v) {
-                return Encoding {
-                    prefix: i as u64,
-                    suffix: s.split_at(v.len()).1.to_string().into(),
-                };
-            }
-        }
-        Encoding {
-            prefix: 0,
-            suffix: s.into(),
-        }
-    }
-}
-
-impl<'a> From<Mime> for Encoding {
-    fn from(m: Mime) -> Self {
-        Encoding::from(&m)
-    }
-}
-
-impl<'a> From<&Mime> for Encoding {
-    fn from(m: &Mime) -> Self {
-        Encoding::from(m.essence().to_string())
-    }
-}
-
-impl From<u64> for Encoding {
-    fn from(i: u64) -> Self {
-        Encoding {
-            prefix: i,
-            suffix: "".into(),
-        }
-    }
-}
-
-impl Default for Encoding {
-    fn default() -> Self {
-        encoding::EMPTY
-    }
-}
-
-/// Constants and helpers for zenoh [`Encoding`].
+/// The encoding of a zenoh [`Value`](crate::Value).
 pub mod encoding {
-    use super::Encoding;
+    use super::ZInt;
+    use http_types::Mime;
+    use std::borrow::Cow;
+    use std::convert::From;
+    use std::fmt;
+    use std::str::FromStr;
+    use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+    use zenoh_util::zerror;
+
+    /// The encoding of a zenoh [`Value`](crate::Value).
+    ///
+    /// A zenoh encoding is a [`Mime`](http_types::Mime) type represented, for wire efficiency,
+    /// as an integer prefix (that maps to a string) and a string suffix.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct Encoding {
+        pub prefix: ZInt,
+        pub suffix: Cow<'static, str>,
+    }
+
+    impl Encoding {
+        /// Converts the given encoding to [`Mime`](http_types::Mime).
+        pub fn to_mime(&self) -> ZResult<Mime> {
+            if self.prefix == 0 {
+                Mime::from_str(self.suffix.as_ref()).map_err(|e| {
+                    ZError::new(
+                        ZErrorKind::Other {
+                            descr: e.to_string(),
+                        },
+                        file!(),
+                        line!(),
+                        None,
+                    )
+                })
+            } else if self.prefix <= MIMES.len() as ZInt {
+                Mime::from_str(&format!("{}{}", &MIMES[self.prefix as usize], self.suffix)).map_err(
+                    |e| {
+                        ZError::new(
+                            ZErrorKind::Other {
+                                descr: e.to_string(),
+                            },
+                            file!(),
+                            line!(),
+                            None,
+                        )
+                    },
+                )
+            } else {
+                zerror!(ZErrorKind::Other {
+                    descr: format!("Unknown encoding prefix {}", self.prefix)
+                })
+            }
+        }
+
+        /// Sets the suffix of this encoding.
+        pub fn with_suffix<IntoCowStr>(mut self, suffix: IntoCowStr) -> Self
+        where
+            IntoCowStr: Into<Cow<'static, str>>,
+        {
+            self.suffix = suffix.into();
+            self
+        }
+
+        /// Returns `true`if the string representation of this encoding starts with
+        /// the string representation of ther given encoding.
+        pub fn starts_with(&self, encoding: &Encoding) -> bool {
+            (self.prefix == encoding.prefix && self.suffix.starts_with(encoding.suffix.as_ref()))
+                || self.to_string().starts_with(&encoding.to_string())
+        }
+    }
+
+    impl fmt::Display for Encoding {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            if self.prefix > 0 && self.prefix < MIMES.len() as ZInt {
+                write!(f, "{}{}", &MIMES[self.prefix as usize], self.suffix)
+            } else {
+                write!(f, "{}", self.suffix)
+            }
+        }
+    }
+
+    impl From<&'static str> for Encoding {
+        fn from(s: &'static str) -> Self {
+            for (i, v) in MIMES.iter().enumerate() {
+                if i != 0 && s.starts_with(v) {
+                    return Encoding {
+                        prefix: i as u64,
+                        suffix: s.split_at(v.len()).1.into(),
+                    };
+                }
+            }
+            Encoding {
+                prefix: 0,
+                suffix: s.into(),
+            }
+        }
+    }
+
+    impl<'a> From<String> for Encoding {
+        fn from(s: String) -> Self {
+            for (i, v) in MIMES.iter().enumerate() {
+                if i != 0 && s.starts_with(v) {
+                    return Encoding {
+                        prefix: i as u64,
+                        suffix: s.split_at(v.len()).1.to_string().into(),
+                    };
+                }
+            }
+            Encoding {
+                prefix: 0,
+                suffix: s.into(),
+            }
+        }
+    }
+
+    impl<'a> From<Mime> for Encoding {
+        fn from(m: Mime) -> Self {
+            Encoding::from(&m)
+        }
+    }
+
+    impl<'a> From<&Mime> for Encoding {
+        fn from(m: &Mime) -> Self {
+            Encoding::from(m.essence().to_string())
+        }
+    }
+
+    impl From<u64> for Encoding {
+        fn from(i: u64) -> Self {
+            Encoding {
+                prefix: i,
+                suffix: "".into(),
+            }
+        }
+    }
+
+    impl Default for Encoding {
+        fn default() -> Self {
+            EMPTY
+        }
+    }
 
     lazy_static! {
         pub(super) static ref MIMES: [&'static str; 21] = [
@@ -672,7 +670,7 @@ impl Default for QueryConsolidation {
     }
 }
 
-/// The [`Queryable`](crate::Queryable)s that should be target of a [`get`](crate::Session::get).
+/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](crate::Session::get).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,
@@ -689,7 +687,7 @@ impl Default for Target {
     }
 }
 
-/// The [`Queryable`](crate::Queryable)s that should be target of a [`get`](crate::Session::get).
+/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](crate::Session::get).
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryTarget {
     pub kind: ZInt,

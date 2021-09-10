@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::core::encoding::Encoding;
 use super::core::*;
 use super::io::{ZBuf, ZSlice};
 use super::link::Locator;

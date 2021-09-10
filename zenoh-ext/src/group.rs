@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Duration, Instant};
+use zenoh::prelude::*;
+use zenoh::query::{ConsolidationMode, QueryConsolidation};
 use zenoh::queryable::EVAL;
-use zenoh::{ConsolidationMode, QueryConsolidation, ResKey, Sample, Session, ZFuture};
+use zenoh::Session;
 use zenoh_util::sync::Condition;
 
 const GROUP_PREFIX: &str = "/zenoh/ext/net/group";

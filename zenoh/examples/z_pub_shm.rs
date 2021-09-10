@@ -18,7 +18,9 @@ use clap::{App, Arg};
 #[cfg(feature = "zero-copy")]
 use std::time::Duration;
 #[cfg(feature = "zero-copy")]
-use zenoh::*;
+use zenoh::buf::SharedMemoryManager;
+#[cfg(feature = "zero-copy")]
+use zenoh::prelude::*;
 
 #[cfg(feature = "zero-copy")]
 const N: usize = 10;
@@ -34,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Shared Memory Manager...");
     let id = session.id().await;

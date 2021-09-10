@@ -18,9 +18,10 @@ use futures::select;
 use futures::stream::StreamExt;
 use futures::FutureExt;
 use log::{debug, error, trace, warn};
-use zenoh::{
-    queryable, QueryConsolidation, QueryTarget, Sample, Selector, Session, Target, ZResult,
-};
+use zenoh::prelude::*;
+use zenoh::query::{QueryConsolidation, QueryTarget, Target};
+use zenoh::queryable;
+use zenoh::Session;
 use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
 
 pub(crate) async fn start_storage(

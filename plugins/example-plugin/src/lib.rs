@@ -19,9 +19,9 @@ use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
 use zenoh::net::runtime::Runtime;
+use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::resource_name;
-use zenoh::*;
 
 #[no_mangle]
 pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
@@ -39,7 +39,7 @@ pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
 async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     env_logger::init();
 
-    let session = Session::init(runtime, true, vec![], vec![]).await;
+    let session = zenoh::Session::init(runtime, true, vec![], vec![]).await;
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 

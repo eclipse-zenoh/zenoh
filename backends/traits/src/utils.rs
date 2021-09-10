@@ -20,7 +20,7 @@ use zenoh::utils::resource_name::*;
 /// This would be the common prefix of all keys stored in a storage using this Path expression.
 ///
 /// Use this operation at creation of a Storage to get the keys prefix, and in [`Storage::on_sample()`](crate::Storage::on_sample())
-/// strip this prefix from all received [`Sample::res_name`](zenoh::Sample::res_name) to retrieve the corrsponding key.
+/// strip this prefix from all received [`Sample::res_name`](zenoh::prelude::Sample::res_name) to retrieve the corrsponding key.
 ///
 /// # Examples:
 /// ```
@@ -43,7 +43,7 @@ pub fn get_keys_prefix(path_expr: &str) -> &str {
 /// the given Path Expr.
 ///
 /// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received
-/// [`Query::selector()`](zenoh::Query::selector)`.`[`key_selector`](zenoh::Selector::key_selector) in a list of path expressions
+/// [`Query::selector()`](zenoh::queryable::Query::selector)`.`[`key_selector`](zenoh::prelude::Selector::key_selector) in a list of path expressions
 /// that will match all the relevant stored keys (that correspond to paths stripped from the prefix).
 ///
 /// # See also

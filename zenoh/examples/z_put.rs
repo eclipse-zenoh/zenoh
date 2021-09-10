@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use zenoh::*;
+use zenoh::prelude::*;
 
 #[async_std::main]
 async fn main() {
@@ -22,7 +22,7 @@ async fn main() {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Writing Data ('{}': '{}')...", path, value);
     session.put(&path, value).await.unwrap();

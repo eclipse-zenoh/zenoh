@@ -17,9 +17,9 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
 use std::collections::HashMap;
+use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::resource_name;
-use zenoh::*;
 
 #[async_std::main]
 async fn main() {
@@ -31,7 +31,7 @@ async fn main() {
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Subscriber on {}", selector);
     let mut subscriber = session.subscribe(&selector).await.unwrap();

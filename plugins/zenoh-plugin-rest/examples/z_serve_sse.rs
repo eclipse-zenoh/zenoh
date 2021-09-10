@@ -14,8 +14,10 @@
 
 use clap::{App, Arg};
 use futures::prelude::*;
+use zenoh::encoding;
+use zenoh::prelude::*;
+use zenoh::publisher::CongestionControl;
 use zenoh::queryable::EVAL;
-use zenoh::*;
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -40,7 +42,7 @@ async fn main() {
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Queryable on {}", path);
     let mut queryable = session.register_queryable(path).kind(EVAL).await.unwrap();

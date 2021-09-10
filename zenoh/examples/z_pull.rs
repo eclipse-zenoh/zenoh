@@ -14,7 +14,8 @@
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
-use zenoh::*;
+use zenoh::prelude::*;
+use zenoh::subscriber::SubMode;
 
 #[async_std::main]
 async fn main() {
@@ -24,7 +25,7 @@ async fn main() {
     let (config, selector) = parse_args();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Declaring Subscriber on {}", selector);
 

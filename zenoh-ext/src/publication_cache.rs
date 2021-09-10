@@ -20,8 +20,13 @@ use futures::FutureExt;
 use futures_lite::StreamExt;
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
+use zenoh::prelude::*;
+use zenoh::publisher::Publisher;
+use zenoh::queryable::Queryable;
+use zenoh::subscriber::Subscriber;
+use zenoh::sync::zready;
 use zenoh::utils::resource_name;
-use zenoh::*;
+use zenoh::Session;
 use zenoh_util::zerror;
 
 pub(crate) const PUBLISHER_CACHE_QUERYABLE_KIND: ZInt = 0x08;

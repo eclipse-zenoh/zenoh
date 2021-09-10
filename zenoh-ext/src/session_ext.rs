@@ -12,7 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
-use zenoh::{ResKey, Session};
+use zenoh::prelude::ResKey;
+use zenoh::Session;
 
 /// Some extensions to the [zenoh::Session](zenoh::Session)
 pub trait SessionExt {
@@ -33,11 +34,11 @@ pub trait SessionExt {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
-    /// use zenoh_ext::*;
     /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    /// use zenoh_ext::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut subscriber = session.subscribe_with_query("/resource/name").await.unwrap();
     /// while let Some(sample) = subscriber.receiver().next().await {
     ///     println!("Received : {:?}", sample);

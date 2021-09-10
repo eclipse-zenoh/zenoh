@@ -19,7 +19,9 @@ use futures::prelude::*;
 use futures::select;
 use log::{debug, error, trace, warn};
 use std::collections::HashMap;
-use zenoh::{encoding, Sample, SampleKind, Session, Value, ZError, ZErrorKind, ZResult};
+use zenoh::encoding;
+use zenoh::prelude::*;
+use zenoh::Session;
 use zenoh_backend_traits::{
     IncomingDataInterceptor, OutgoingDataInterceptor, PROP_STORAGE_PATH_EXPR,
 };
@@ -138,8 +140,7 @@ async fn create_and_start_storage(
 ) -> ZResult<Sender<bool>> {
     trace!("Create storage {}", admin_path);
     if value.encoding == encoding::APP_PROPERTIES {
-        if let Ok(props) = String::from_utf8(value.payload.read_vec()).map(crate::Properties::from)
-        {
+        if let Ok(props) = String::from_utf8(value.payload.read_vec()).map(Properties::from) {
             let path_expr = props
                 .get(PROP_STORAGE_PATH_EXPR)
                 .ok_or_else(|| {

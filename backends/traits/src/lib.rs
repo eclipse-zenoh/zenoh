@@ -22,7 +22,8 @@
 //! # Example
 //! ```
 //! use async_trait::async_trait;
-//! use zenoh::{utils, Properties, Sample, SampleKind, Value, ZResult};
+//! use zenoh::prelude::*;
+//! use zenoh::properties::properties_to_json_value;
 //! use zenoh_backend_traits::*;
 //!
 //! #[no_mangle]
@@ -31,7 +32,7 @@
 //!     // Here we re-expose them in the admin space for GET operations, adding the PROP_BACKEND_TYPE entry.
 //!     let mut p = properties.clone();
 //!     p.insert(PROP_BACKEND_TYPE.into(), "my_backend_type".into());
-//!     let admin_status = utils::properties_to_json_value(&p);
+//!     let admin_status = properties_to_json_value(&p);
 //!     Ok(Box::new(MyBackend { admin_status }))
 //! }
 //!
@@ -75,7 +76,7 @@
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         // They contain at least a PROP_STORAGE_PATH_EXPR entry (i.e. "path_expr").
 //!         // Here we choose to re-expose them as they are in the admin space for GET operations.
-//!         let admin_status = utils::properties_to_json_value(&properties);
+//!         let admin_status = properties_to_json_value(&properties);
 //!         Ok(MyStorage { admin_status })
 //!     }
 //! }
@@ -133,7 +134,7 @@
 
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use zenoh::{Properties, Sample, Value, ZResult};
+use zenoh::prelude::*;
 
 pub mod utils;
 
@@ -198,16 +199,16 @@ pub trait OutgoingDataInterceptor: Send + Sync {
     async fn on_reply(&self, sample: Sample) -> Sample;
 }
 
-/// A wrapper around the [`zenoh::Query`] allowing to call the
+/// A wrapper around the [`zenoh::queryable::Query`] allowing to call the
 /// OutgoingDataInterceptor (if any) before to send the reply
 pub struct Query {
-    q: zenoh::Query,
+    q: zenoh::queryable::Query,
     interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
 }
 
 impl Query {
     pub fn new(
-        q: zenoh::Query,
+        q: zenoh::queryable::Query,
         interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
     ) -> Query {
         Query { q, interceptor }

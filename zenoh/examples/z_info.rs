@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use std::convert::TryFrom;
-use zenoh::*;
+use zenoh::prelude::*;
 
 #[async_std::main]
 async fn main() {
@@ -23,7 +23,7 @@ async fn main() {
     let config: Properties = parse_args();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     let info: Properties = session.info().await.into();
     for (key, value) in info.iter() {

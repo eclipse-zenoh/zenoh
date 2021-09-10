@@ -12,8 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 use super::plugins::PluginsMgr;
 use super::protocol::{
+    core::encoding::Encoding,
     core::{
-        encoding, queryable::EVAL, rname, CongestionControl, Encoding, PeerId, QueryConsolidation,
+        encoding, queryable::EVAL, rname, CongestionControl, PeerId, QueryConsolidation,
         QueryTarget, QueryableInfo, Reliability, ResKey, SubInfo, ZInt,
     },
     io::ZBuf,

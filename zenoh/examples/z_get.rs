@@ -13,7 +13,9 @@
 //
 use clap::{App, Arg};
 use futures::prelude::*;
-use zenoh::*;
+use zenoh::prelude::*;
+use zenoh::query::*;
+use zenoh::queryable;
 
 #[async_std::main]
 async fn main() {
@@ -23,7 +25,7 @@ async fn main() {
     let (config, selector, target) = parse_args();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Sending Query '{}'...", selector);
     let mut replies = session.get(&selector).target(target).await.unwrap();

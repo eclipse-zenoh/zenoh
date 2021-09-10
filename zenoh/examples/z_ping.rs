@@ -14,8 +14,9 @@
 use clap::{App, Arg};
 use futures::prelude::*;
 use std::time::Instant;
-use zenoh::ResKey::*;
-use zenoh::*;
+use zenoh::prelude::ResKey::*;
+use zenoh::prelude::*;
+use zenoh::publisher::CongestionControl;
 
 #[async_std::main]
 async fn main() {
@@ -23,7 +24,7 @@ async fn main() {
     env_logger::init();
 
     let (config, size) = parse_args();
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     // The resource to publish data on
     let reskey_ping = RId(session.register_resource("/test/ping").await.unwrap());

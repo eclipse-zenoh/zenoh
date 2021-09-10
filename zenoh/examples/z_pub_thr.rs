@@ -12,9 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use zenoh::Properties;
-use zenoh::ResKey::*;
-use zenoh::*;
+use zenoh::prelude::ResKey::*;
+use zenoh::prelude::*;
+use zenoh::publisher::CongestionControl;
 
 fn main() {
     // initiate logging
@@ -26,7 +26,7 @@ fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    let session = open(config).wait().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     let reskey = RId(session.register_resource("/test/thr").wait().unwrap());
     let _publ = session.publishing(&reskey).wait().unwrap();

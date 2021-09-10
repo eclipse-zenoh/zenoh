@@ -22,7 +22,7 @@ pub use zenoh_util::properties::config::*;
 /// Multiple values are coma separated.
 ///
 /// The [`IntKeyProperties`](zenoh_util::properties::IntKeyProperties) can be built from (`String`/`String`)
-/// [`Properties`](crate::Properties) and reverse.
+/// [`Properties`](crate::properties::Properties) and reverse.
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> ConfigProperties {

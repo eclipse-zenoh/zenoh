@@ -18,11 +18,11 @@
 //!
 //! ### Publish
 //! ```
-//! use zenoh::*;
+//! use zenoh::prelude::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = open(config::default()).await.unwrap();
+//!     let session = zenoh::open(config::default()).await.unwrap();
 //!     session.put("/resource/name", "value").await.unwrap();
 //!     session.close().await.unwrap();
 //! }
@@ -30,12 +30,12 @@
 //!
 //! ### Subscribe
 //! ```no_run
-//! use zenoh::*;
 //! use futures::prelude::*;
+//! use zenoh::prelude::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = open(config::default()).await.unwrap();
+//!     let session = zenoh::open(config::default()).await.unwrap();
 //!     let mut subscriber = session.subscribe("/resource/name").await.unwrap();
 //!     while let Some(sample) = subscriber.receiver().next().await {
 //!         println!("Received : {}", sample);
@@ -45,12 +45,12 @@
 //!
 //! ### Query
 //! ```
-//! use zenoh::*;
 //! use futures::prelude::*;
+//! use zenoh::prelude::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = open(config::default()).await.unwrap();
+//!     let session = zenoh::open(config::default()).await.unwrap();
 //!     let mut replies = session.get("/resource/name").await.unwrap();
 //!     while let Some(reply) = replies.next().await {
 //!         println!(">> Received {}", reply.data);
@@ -64,72 +64,170 @@ extern crate lazy_static;
 #[macro_use]
 extern crate zenoh_util;
 
-#[doc(hidden)]
-pub mod net;
-
 use async_std::net::UdpSocket;
 use flume::bounded;
 use futures::prelude::*;
+use git_version::git_version;
 use log::{debug, trace};
 use net::protocol::core::WhatAmI;
 use net::protocol::proto::data_kind;
 use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
+use prelude::*;
+use sync::{zready, ZFuture};
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::zpinbox;
-// Shared memory and zero-copy
-#[cfg(feature = "zero-copy")]
-pub use net::protocol::io::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryManager};
 
-pub mod utils;
-
-#[macro_use]
-mod types;
-use git_version::git_version;
-pub use types::*;
-
-mod selector;
-pub use selector::*;
-
-pub mod info;
+const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
 #[macro_use]
 mod session;
 pub use session::*;
 
-pub use net::protocol::core::{Timestamp, TimestampId};
+/// The encoding of a zenoh [`Value`].
+pub use net::protocol::core::encoding;
 
-/// Constants for [`Queryable`] kinds.
-pub mod queryable {
-    #[doc(inline)]
-    pub use super::net::protocol::core::queryable::*;
-}
+#[doc(hidden)]
+pub mod net;
 
 pub mod config;
-pub use zenoh_util::properties::config::ConfigProperties;
-pub use zenoh_util::properties::Properties;
+pub mod info;
+pub mod prelude;
+pub mod publisher;
+pub mod query;
+pub mod queryable;
+pub mod subscriber;
+pub mod utils;
 
-const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
+/// Some zenoh buffers.
+pub mod buf {
+    /// A read-only bytes buffer.
+    pub use super::net::protocol::io::ZBuf;
+
+    /// A [`ZBuf`] slice.
+    pub use super::net::protocol::io::ZSlice;
+
+    /// A writable bytes buffer.
+    pub use super::net::protocol::io::WBuf;
+
+    #[cfg(feature = "zero-copy")]
+    pub use super::net::protocol::io::SharedMemoryBuf;
+    #[cfg(feature = "zero-copy")]
+    pub use super::net::protocol::io::SharedMemoryBufInfo;
+    #[cfg(feature = "zero-copy")]
+    pub use super::net::protocol::io::SharedMemoryManager;
+}
+
+/// Time related types and functions.
+pub mod time {
+    pub use super::net::protocol::core::{Timestamp, TimestampId};
+
+    /// A time period.
+    pub use super::net::protocol::core::Period;
+
+    /// Generates a reception [`Timestamp`] with id=0x00.  
+    /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
+    /// that doesn't contain any data_info or timestamp within its data_info.
+    pub fn new_reception_timestamp() -> Timestamp {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        Timestamp::new(
+            now.into(),
+            TimestampId::new(1, [0u8; TimestampId::MAX_SIZE]),
+        )
+    }
+}
+
+/// A map of key/value (String,String) properties.
+pub mod properties {
+    use super::prelude::Value;
+    pub use zenoh_util::properties::Properties;
+
+    /// Convert a set of [`Properties`] into a [`Value`].  
+    /// For instance such Properties: `[("k1", "v1"), ("k2, v2")]`  
+    /// are converted into such Json: `{ "k1": "v1", "k2": "v2" }`
+    pub fn properties_to_json_value(props: &Properties) -> Value {
+        let json_map = props
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+            .collect::<serde_json::map::Map<String, serde_json::Value>>();
+        serde_json::Value::Object(json_map).into()
+    }
+}
+
+/// Synchronisation primitives.
+///
+/// This module provides some traits that provide some syncronous accessors to some outputs :
+/// [`ZFuture`] for a single output and [`channel::Receiver`](crate::sync::channel::Receiver) for multiple outputs.
+///
+/// Most zenoh types that provide a single output both implment [`ZFuture`] and [`futures::Future`]
+/// and allow users to access their output synchronously via [`ZFuture::wait()`] or asynchronously
+/// via `.await`.
+///
+/// Most zenoh types that provide multiple outputs both implment [`channel::Receiver`](crate::sync::channel::Receiver) and
+/// [`futures::Stream`] and allow users to access their output synchronously via [`channel::Receiver::recv()`](crate::sync::channel::Receiver::recv)
+/// or asynchronously via `.next().await`.
+pub mod sync {
+    pub use zenoh_util::sync::zready;
+    pub use zenoh_util::sync::ZFuture;
+    pub use zenoh_util::sync::ZPinBoxFuture;
+    pub use zenoh_util::sync::ZReady;
+
+    pub mod channel {
+        pub use zenoh_util::sync::channel::Iter;
+        pub use zenoh_util::sync::channel::Receiver;
+        pub use zenoh_util::sync::channel::RecvError;
+        pub use zenoh_util::sync::channel::RecvTimeoutError;
+        pub use zenoh_util::sync::channel::TryIter;
+        pub use zenoh_util::sync::channel::TryRecvError;
+    }
+}
+
+/// Scouting primitives.
+pub mod scouting {
+    use crate::sync::channel::{
+        Iter, Receiver, RecvError, RecvTimeoutError, TryIter, TryRecvError,
+    };
+    use flume::Sender;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    /// Constants and helpers for zenoh `whatami` flags.
+    pub use super::net::protocol::core::whatami;
+
+    /// A zenoh Hello message.
+    pub use super::net::protocol::proto::Hello;
+
+    zreceiver! {
+        /// A [`Receiver`] of [`Hello`] messages returned by the [`scout`](crate::scout) operation.
+        #[derive(Clone)]
+        pub struct HelloReceiver : Receiver<Hello> {
+            pub(crate) stop_sender: Sender<()>,
+        }
+    }
+}
 
 /// Scout for routers and/or peers.
 ///
-/// [`scout`] spawns a task that periodically sends scout messages and returns
-/// a [`HelloReceiver`] : a stream of received [`Hello`]) messages.
+/// [`scout`] spawns a task that periodically sends scout messages and returns a
+/// [`HelloReceiver`](crate::scouting::HelloReceiver) : a stream of received [`Hello`](crate::scouting::Hello) messages.
 ///
-/// Drop the returned [`HelloReceiver`] to stop the scouting task.
+/// Drop the returned [`HelloReceiver`](crate::scouting::HelloReceiver) to stop the scouting task.
 ///
 /// # Arguments
 ///
 /// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [`Properties`] to use for scouting
+/// * `config` - The configuration [`Properties`](crate::properties::Properties) to use for scouting
 ///
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh::*;
 /// use futures::prelude::*;
+/// use zenoh::prelude::*;
+/// use zenoh::scouting::whatami;
 ///
-/// let mut receiver = scout(whatami::PEER | whatami::ROUTER, config::default()).await.unwrap();
+/// let mut receiver = zenoh::scout(whatami::PEER | whatami::ROUTER, config::default()).await.unwrap();
 /// while let Some(hello) = receiver.next().await {
 ///     println!("{}", hello);
 /// }
@@ -138,7 +236,7 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 pub fn scout(
     what: WhatAmI,
     config: ConfigProperties,
-) -> impl ZFuture<Output = ZResult<HelloReceiver>> {
+) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>> {
     trace!("scout({}, {})", what, &config);
     let addr = config
         .get_or(&ZN_MULTICAST_ADDRESS_KEY, ZN_MULTICAST_ADDRESS_DEFAULT)
@@ -146,7 +244,7 @@ pub fn scout(
         .unwrap();
     let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
 
-    let (hello_sender, hello_receiver) = bounded::<Hello>(1);
+    let (hello_sender, hello_receiver) = bounded::<scouting::Hello>(1);
     let (stop_sender, stop_receiver) = bounded::<()>(1);
 
     let ifaces = Runtime::get_interfaces(ifaces);
@@ -172,7 +270,10 @@ pub fn scout(
         }
     }
 
-    zready(Ok(HelloReceiver::new(stop_sender, hello_receiver)))
+    zready(Ok(scouting::HelloReceiver::new(
+        stop_sender,
+        hello_receiver,
+    )))
 }
 
 /// Open a zenoh [`Session`].
@@ -184,9 +285,9 @@ pub fn scout(
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::*;
+/// use zenoh::prelude::*;
 ///
-/// let session = open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// # })
 /// ```
 ///
@@ -199,29 +300,29 @@ pub fn scout(
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::*;
+/// use zenoh::prelude::*;
 ///
 /// let mut config = config::peer();
 /// config.insert(config::ZN_LOCAL_ROUTING_KEY, "false".to_string());
 /// config.insert(config::ZN_PEER_KEY, "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
 ///
-/// let session = open(config).await.unwrap();
+/// let session = zenoh::open(config).await.unwrap();
 /// # })
 /// ```
 ///
 /// [`ConfigProperties`] can be built set of key/value (`String`/`String`) set
-/// of [`Properties`].
+/// of [`Properties`](crate::properties::Properties).
 ///
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::*;
+/// use zenoh::prelude::*;
 ///
 /// let mut config = Properties::default();
 /// config.insert("local_routing".to_string(), "false".to_string());
 /// config.insert("peer".to_string(), "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
 ///
-/// let session = open(config).await.unwrap();
+/// let session = zenoh::open(config).await.unwrap();
 /// # })
 /// ```
 pub fn open<IntoConfigProperties>(

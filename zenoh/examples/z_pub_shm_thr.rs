@@ -14,9 +14,13 @@
 #[cfg(feature = "zero-copy")]
 use clap::{App, Arg};
 #[cfg(feature = "zero-copy")]
-use zenoh::ResKey::*;
+use zenoh::buf::SharedMemoryManager;
 #[cfg(feature = "zero-copy")]
-use zenoh::*;
+use zenoh::prelude::ResKey::*;
+#[cfg(feature = "zero-copy")]
+use zenoh::prelude::*;
+#[cfg(feature = "zero-copy")]
+use zenoh::publisher::CongestionControl;
 
 #[cfg(feature = "zero-copy")]
 #[async_std::main]
@@ -25,7 +29,7 @@ async fn main() {
     env_logger::init();
     let (config, sm_size, size) = parse_args();
 
-    let z = open(config).await.unwrap();
+    let z = zenoh::open(config).await.unwrap();
     let id = z.id().await;
     let mut shm = SharedMemoryManager::new(id, sm_size).unwrap();
     let mut buf = shm.alloc(size).unwrap();

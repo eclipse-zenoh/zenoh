@@ -13,8 +13,8 @@
 //
 use clap::{App, Arg};
 use std::time::Instant;
-use zenoh::ResKey::*;
-use zenoh::*;
+use zenoh::prelude::ResKey::*;
+use zenoh::prelude::*;
 
 fn main() {
     // initiate logging
@@ -22,7 +22,7 @@ fn main() {
 
     let (config, m, n) = parse_args();
 
-    let session = open(config).wait().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     let reskey = RId(session.register_resource("/test/thr").wait().unwrap());
 

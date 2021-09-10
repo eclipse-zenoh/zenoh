@@ -22,7 +22,9 @@ use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::encoding::*;
 use zenoh::net::runtime::Runtime;
-use zenoh::*;
+use zenoh::prelude::*;
+use zenoh::query::{QueryConsolidation, ReplyReceiver};
+use zenoh::Session;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";

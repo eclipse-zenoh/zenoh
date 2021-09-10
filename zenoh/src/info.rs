@@ -48,5 +48,5 @@ impl KeyTranscoder for InfoTranscoder {
 /// Multiple values are coma separated.
 ///
 /// The [`IntKeyProperties`](IntKeyProperties) can be converted to (`String`/`String`)
-/// [`Properties`](crate::Properties) and reverse.
+/// [`Properties`](crate::properties::Properties) and reverse.
 pub type InfoProperties = IntKeyProperties<InfoTranscoder>;

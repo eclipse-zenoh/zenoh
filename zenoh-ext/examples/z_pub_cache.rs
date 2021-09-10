@@ -14,7 +14,7 @@
 use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
-use zenoh::*;
+use zenoh::prelude::*;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -25,7 +25,7 @@ async fn main() {
     let (config, path, value, history, prefix) = parse_args();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     print!("Declaring Resource {}", path);
     let rid = session.register_resource(&path).await.unwrap();

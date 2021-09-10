@@ -11,12 +11,419 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-// use super::{Path, PathExpr};
-use crate::{Properties, Query, ResKey, ZErrorKind};
+
+//! A "prelude" for crates using the `zenoh` crate.
+//!
+//! This prelude is similar to the standard library's prelude in that you'll
+//! almost always want to import its entire contents, but unlike the standard
+//! library's prelude you'll have to do so manually. An example of using this is:
+//!
+//! ```
+//! use zenoh::prelude::*;
+//! ```
+
+use crate::buf::{SharedMemoryBuf, ZBuf};
+use crate::data_kind;
+use crate::encoding::*;
+use crate::net::protocol::proto::DataInfo;
+use crate::queryable::Query;
+use crate::time::{new_reception_timestamp, Timestamp};
+use async_std::sync::Arc;
 use regex::Regex;
 use std::convert::TryFrom;
 use std::fmt;
-use zenoh_util::core::ZError;
+
+pub(crate) type Id = usize;
+
+pub use crate::config;
+pub use crate::properties::Properties;
+pub use crate::sync::channel::Receiver;
+pub use crate::sync::ZFuture;
+
+/// The global unique id of a zenoh peer.
+pub use super::net::protocol::core::PeerId;
+
+/// A numerical Id mapped to a resource name with [`register_resource`](Session::register_resource).
+pub use super::net::protocol::core::ResourceId;
+
+/// A resource key.
+pub use super::net::protocol::core::ResKey;
+
+/// A zenoh error.
+pub use zenoh_util::core::ZError;
+
+/// The kind of zenoh error.
+pub use zenoh_util::core::ZErrorKind;
+
+/// A zenoh integer.
+pub use super::net::protocol::core::ZInt;
+
+/// A zenoh result.
+pub use zenoh_util::core::ZResult;
+
+/// A zenoh Value.
+#[derive(Clone)]
+pub struct Value {
+    /// The payload of this Value.
+    pub payload: ZBuf,
+
+    /// An encoding description indicating how the associated payload is encoded.
+    pub encoding: Encoding,
+}
+
+impl Value {
+    /// Creates a new zenoh Value.
+    pub fn new(payload: ZBuf) -> Self {
+        Value {
+            payload,
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+
+    /// Creates an empty Value.
+    pub fn empty() -> Self {
+        Value {
+            payload: ZBuf::new(),
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+
+    /// Sets the encoding of this zenoh Value.
+    #[inline(always)]
+    pub fn encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
+    }
+}
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Value{{ payload: {}, encoding: {} }}",
+            self.payload, self.encoding
+        )
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            String::from_utf8(self.payload.to_vec())
+                .unwrap_or_else(|_| base64::encode(self.payload.to_vec()))
+        )
+    }
+}
+
+impl From<ZBuf> for Value {
+    fn from(buf: ZBuf) -> Self {
+        Value {
+            payload: buf,
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<Arc<SharedMemoryBuf>> for Value {
+    fn from(smb: Arc<SharedMemoryBuf>) -> Self {
+        Value {
+            payload: smb.into(),
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<Box<SharedMemoryBuf>> for Value {
+    fn from(smb: Box<SharedMemoryBuf>) -> Self {
+        Value {
+            payload: smb.into(),
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+}
+
+#[cfg(feature = "zero-copy")]
+impl From<SharedMemoryBuf> for Value {
+    fn from(smb: SharedMemoryBuf) -> Self {
+        Value {
+            payload: smb.into(),
+            encoding: APP_OCTET_STREAM,
+        }
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    fn from(buf: Vec<u8>) -> Self {
+        Value::from(ZBuf::from(buf))
+    }
+}
+
+impl From<&[u8]> for Value {
+    fn from(buf: &[u8]) -> Self {
+        Value::from(ZBuf::from(buf))
+    }
+}
+
+impl From<String> for Value {
+    fn from(s: String) -> Self {
+        Value {
+            payload: ZBuf::from(s.as_bytes()),
+            encoding: STRING,
+        }
+    }
+}
+
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Value::from(s.to_string())
+    }
+}
+
+impl From<Properties> for Value {
+    fn from(p: Properties) -> Self {
+        Value {
+            payload: ZBuf::from(p.to_string().as_bytes()),
+            encoding: APP_PROPERTIES,
+        }
+    }
+}
+
+impl From<&serde_json::Value> for Value {
+    fn from(json: &serde_json::Value) -> Self {
+        Value {
+            payload: ZBuf::from(json.to_string().as_bytes()),
+            encoding: APP_JSON,
+        }
+    }
+}
+
+impl From<serde_json::Value> for Value {
+    fn from(json: serde_json::Value) -> Self {
+        Value::from(&json)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(i: i64) -> Self {
+        Value {
+            payload: ZBuf::from(i.to_string().as_bytes()),
+            encoding: APP_INTEGER,
+        }
+    }
+}
+
+impl From<f64> for Value {
+    fn from(f: f64) -> Self {
+        Value {
+            payload: ZBuf::from(f.to_string().as_bytes()),
+            encoding: APP_FLOAT,
+        }
+    }
+}
+
+/// Informations on the source of a zenoh [`Sample`].
+#[derive(Debug, Clone)]
+pub struct SourceInfo {
+    /// The [`PeerId`] of the zenoh instance that published the concerned [`Sample`].
+    pub source_id: Option<PeerId>,
+    /// The sequence number of the [`Sample`] from the source.
+    pub source_sn: Option<ZInt>,
+    /// The [`PeerId`] of the first zenoh router that routed this [`Sample`].
+    pub first_router_id: Option<PeerId>,
+    /// The sequence number of the [`Sample`] from the first zenoh router that routed it.
+    pub first_router_sn: Option<ZInt>,
+}
+
+impl SourceInfo {
+    pub(crate) fn empty() -> Self {
+        SourceInfo {
+            source_id: None,
+            source_sn: None,
+            first_router_id: None,
+            first_router_sn: None,
+        }
+    }
+}
+
+impl From<DataInfo> for SourceInfo {
+    fn from(data_info: DataInfo) -> Self {
+        SourceInfo {
+            source_id: data_info.source_id,
+            source_sn: data_info.source_sn,
+            first_router_id: data_info.first_router_id,
+            first_router_sn: data_info.first_router_sn,
+        }
+    }
+}
+
+impl From<Option<DataInfo>> for SourceInfo {
+    fn from(data_info: Option<DataInfo>) -> Self {
+        match data_info {
+            Some(data_info) => data_info.into(),
+            None => SourceInfo::empty(),
+        }
+    }
+}
+
+/// The kind of a [`Sample`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum SampleKind {
+    /// if the [`Sample`] was caused by a `put` operation.
+    Put = data_kind::PUT as isize,
+    /// if the [`Sample`] was caused by a `patch` operation.
+    Patch = data_kind::PATCH as isize,
+    /// if the [`Sample`] was caused by a `delete` operation.
+    Delete = data_kind::DELETE as isize,
+}
+
+impl Default for SampleKind {
+    fn default() -> Self {
+        SampleKind::Put
+    }
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Patch => write!(f, "PATCH"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl From<ZInt> for SampleKind {
+    fn from(kind: ZInt) -> Self {
+        match kind {
+            data_kind::PUT => SampleKind::Put,
+            data_kind::PATCH => SampleKind::Patch,
+            data_kind::DELETE => SampleKind::Delete,
+            _ => {
+                log::warn!(
+                    "Received DataInfo with kind={} which doesn't correspond to a SampleKind. \
+                       Assume a PUT with RAW encoding",
+                    kind
+                );
+                SampleKind::Put
+            }
+        }
+    }
+}
+
+/// A zenoh sample.
+#[derive(Clone, Debug)]
+pub struct Sample {
+    // The name of the resource on which this Sample was published.
+    pub res_name: String,
+    /// The value of this Sample.
+    pub value: Value,
+    // The kind of this Sample.
+    pub kind: SampleKind,
+    // The [`Timestamp`] of this Sample.
+    pub timestamp: Option<Timestamp>,
+    // Infos on the source of this Sample.
+    pub source_info: SourceInfo,
+}
+
+impl Sample {
+    /// Creates a new Sample.
+    #[inline]
+    pub fn new<IntoValue>(res_name: String, value: IntoValue) -> Self
+    where
+        IntoValue: Into<Value>,
+    {
+        Sample {
+            res_name,
+            value: value.into(),
+            kind: SampleKind::default(),
+            timestamp: None,
+            source_info: SourceInfo::empty(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn with_info(res_name: String, payload: ZBuf, data_info: Option<DataInfo>) -> Self {
+        let mut value: Value = payload.into();
+        if let Some(data_info) = data_info {
+            if let Some(encoding) = &data_info.encoding {
+                value.encoding = encoding.clone();
+            }
+            Sample {
+                res_name,
+                value,
+                kind: data_info.kind.unwrap_or(data_kind::DEFAULT).into(),
+                timestamp: data_info.timestamp.clone(),
+                source_info: data_info.into(),
+            }
+        } else {
+            Sample {
+                res_name,
+                value,
+                kind: SampleKind::default(),
+                timestamp: None,
+                source_info: SourceInfo::empty(),
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn split(self) -> (String, ZBuf, DataInfo) {
+        let info = DataInfo {
+            kind: None,
+            encoding: Some(self.value.encoding),
+            timestamp: self.timestamp,
+            #[cfg(feature = "zero-copy")]
+            sliced: false,
+            source_id: self.source_info.source_id,
+            source_sn: self.source_info.source_sn,
+            first_router_id: self.source_info.first_router_id,
+            first_router_sn: self.source_info.first_router_sn,
+        };
+        (self.res_name, self.value.payload, info)
+    }
+
+    /// Gets the timestamp of this Sample.
+    #[inline]
+    pub fn get_timestamp(&self) -> Option<&Timestamp> {
+        self.timestamp.as_ref()
+    }
+
+    /// Sets the timestamp of this Sample.
+    #[inline]
+    pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
+        self.timestamp = Some(timestamp);
+        self
+    }
+
+    /// Sets the source info of this Sample.
+    #[inline]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.source_info = source_info;
+        self
+    }
+
+    #[inline]
+    /// Ensure that an associated Timestamp is present in this Sample.
+    /// If not, a new one is created with the current system time and 0x00 as id.
+    pub fn ensure_timestamp(&mut self) {
+        if self.timestamp.is_none() {
+            self.timestamp = Some(new_reception_timestamp());
+        }
+    }
+}
+
+impl fmt::Display for Sample {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            SampleKind::Delete => write!(f, "{}({})", self.kind, self.res_name),
+            _ => write!(f, "{}({}: {})", self.kind, self.res_name, self.value),
+        }
+    }
+}
 
 /// The "starttime" property key for time-range selection
 pub const PROP_STARTTIME: &str = "starttime";
@@ -238,12 +645,12 @@ impl<'a> From<Selector<'a>> for KeyedSelector<'a> {
     }
 }
 
-/// A struct that can be used to help decoding or encoding the value_selector part of a [`Query`](crate::Query).
+/// A struct that can be used to help decoding or encoding the value_selector part of a [`Query`](crate::queryable::Query).
 ///
 /// # Examples
 /// ```
 /// use std::convert::TryInto;
-/// use zenoh::*;
+/// use zenoh::prelude::*;
 ///
 /// let value_selector: ValueSelector = "?x>1&y<2&z=4(p1=v1;p2=v2;pn=vn)[a;b;x;y;z]".try_into().unwrap();
 /// assert_eq!(value_selector.filter, "x>1&y<2&z=4");
@@ -253,9 +660,9 @@ impl<'a> From<Selector<'a>> for KeyedSelector<'a> {
 ///
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// # use zenoh::*;
 /// # use futures::prelude::*;
-/// # let session = open(config::peer()).await.unwrap();
+/// # use zenoh::prelude::*;
+/// # let session = zenoh::open(config::peer()).await.unwrap();
 ///
 /// use std::convert::TryInto;
 ///
@@ -271,9 +678,9 @@ impl<'a> From<Selector<'a>> for KeyedSelector<'a> {
 ///
 /// ```
 /// # async_std::task::block_on(async {
-/// # use zenoh::*;
 /// # use futures::prelude::*;
-/// # let session = open(config::peer()).await.unwrap();
+/// # use zenoh::prelude::*;
+/// # let session = zenoh::open(config::peer()).await.unwrap();
 /// # let mut properties = Properties::default();
 ///
 /// let value_selector = ValueSelector::empty()

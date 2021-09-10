@@ -147,16 +147,16 @@ macro_rules! derive_zfuture{
             )*
         }
 
-        impl$(<$( $lt ),+>)? Future for $struct_name$(<$( $lt ),+>)? {
+        impl$(<$( $lt ),+>)? futures_lite::Future for $struct_name$(<$( $lt ),+>)? {
             type Output = <Self as Runnable>::Output;
 
             #[inline]
-            fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<<Self as Future>::Output> {
-                Poll::Ready(self.run())
+            fn poll(mut self: std::pin::Pin<&mut Self>, _cx: &mut async_std::task::Context<'_>) -> std::task::Poll<<Self as futures_lite::Future>::Output> {
+                std::task::Poll::Ready(self.run())
             }
         }
 
-        impl$(<$( $lt ),+>)? ZFuture for $struct_name$(<$( $lt ),+>)? {
+        impl$(<$( $lt ),+>)? zenoh_util::sync::ZFuture for $struct_name$(<$( $lt ),+>)? {
             #[inline]
             fn wait(mut self) -> Self::Output {
                 self.run()

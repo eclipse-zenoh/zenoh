@@ -12,7 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::info::*;
-use super::queryable::EVAL;
+use super::publisher::*;
+use super::query::*;
+use super::queryable::*;
+use super::scouting::*;
+use super::subscriber::*;
 use super::*;
 use async_std::sync::Arc;
 use async_std::task;
@@ -24,46 +28,43 @@ use net::protocol::{
         QueryableInfo, ResKey, ResourceId, SubInfo, ZInt,
     },
     io::ZBuf,
-    proto::{DataInfo, Options, RoutingContext},
+    proto::{DataInfo, RoutingContext},
     session::Primitives,
 };
 use net::routing::face::Face;
 use net::runtime::Runtime;
 use std::collections::HashMap;
 use std::fmt;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
-use std::task::{Context, Poll};
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::sync::{zpinbox, Runnable};
+use zenoh_util::sync::zpinbox;
 
 zconfigurable! {
-    static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
-    static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
-    static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
-    static ref API_OPEN_SESSION_DELAY: u64 = 500;
+    pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub(crate) static ref API_QUERY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub(crate) static ref API_REPLY_EMISSION_CHANNEL_SIZE: usize = 256;
+    pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
+    pub(crate) static ref API_OPEN_SESSION_DELAY: u64 = 500;
 }
 
 pub(crate) struct SessionState {
-    primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
-    rid_counter: AtomicUsize,      // @TODO: manage rollover and uniqueness
-    qid_counter: AtomicZInt,
-    decl_id_counter: AtomicUsize,
-    local_resources: HashMap<ResourceId, Resource>,
-    remote_resources: HashMap<ResourceId, Resource>,
-    publishers: HashMap<Id, Arc<PublisherState>>,
-    subscribers: HashMap<Id, Arc<SubscriberState>>,
-    local_subscribers: HashMap<Id, Arc<SubscriberState>>,
-    queryables: HashMap<Id, Arc<QueryableState>>,
-    queries: HashMap<ZInt, QueryState>,
-    local_routing: bool,
-    join_subscriptions: Vec<String>,
-    join_publications: Vec<String>,
+    pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
+    pub(crate) rid_counter: AtomicUsize,      // @TODO: manage rollover and uniqueness
+    pub(crate) qid_counter: AtomicZInt,
+    pub(crate) decl_id_counter: AtomicUsize,
+    pub(crate) local_resources: HashMap<ResourceId, Resource>,
+    pub(crate) remote_resources: HashMap<ResourceId, Resource>,
+    pub(crate) publishers: HashMap<Id, Arc<PublisherState>>,
+    pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
+    pub(crate) local_subscribers: HashMap<Id, Arc<SubscriberState>>,
+    pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
+    pub(crate) queries: HashMap<ZInt, QueryState>,
+    pub(crate) local_routing: bool,
+    pub(crate) join_subscriptions: Vec<String>,
+    pub(crate) join_publications: Vec<String>,
 }
 
 impl SessionState {
@@ -169,7 +170,7 @@ impl fmt::Debug for SessionState {
     }
 }
 
-struct Resource {
+pub(crate) struct Resource {
     pub(crate) name: String,
     pub(crate) subscribers: Vec<Arc<SubscriberState>>,
     pub(crate) local_subscribers: Vec<Arc<SubscriberState>>,
@@ -182,653 +183,6 @@ impl Resource {
             subscribers: vec![],
             local_subscribers: vec![],
         }
-    }
-}
-
-derive_zfuture! {
-    /// A builder for initializing a [`Publisher`](Publisher).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::*;
-    ///
-    /// let session = open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing("/resource/name").await.unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct PublisherBuilder<'a, 'b> {
-        session: &'a Session,
-        reskey: ResKey<'b>,
-    }
-}
-
-impl<'a> Runnable for PublisherBuilder<'a, '_> {
-    type Output = ZResult<Publisher<'a>>;
-
-    fn run(&mut self) -> Self::Output {
-        trace!("publishing({:?})", self.reskey);
-        let mut state = zwrite!(self.session.state);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(&self.reskey)?;
-        let pub_state = Arc::new(PublisherState {
-            id,
-            reskey: self.reskey.to_owned(),
-        });
-        let declared_pub = match state
-            .join_publications
-            .iter()
-            .find(|s| rname::include(s, &resname))
-        {
-            Some(join_pub) => {
-                let joined_pub = state.publishers.values().any(|p| {
-                    rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
-                });
-                (!joined_pub).then(|| join_pub.clone().into())
-            }
-            None => {
-                let twin_pub = state.publishers.values().any(|p| {
-                    state.localkey_to_resname(&p.reskey).unwrap()
-                        == state.localkey_to_resname(&pub_state.reskey).unwrap()
-                });
-                (!twin_pub).then(|| self.reskey.clone())
-            }
-        };
-
-        state.publishers.insert(id, pub_state.clone());
-
-        if let Some(res) = declared_pub {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.decl_publisher(&res, None);
-        }
-
-        Ok(Publisher {
-            session: self.session,
-            state: pub_state,
-            alive: true,
-        })
-    }
-}
-
-derive_zfuture! {
-    /// A builder for initializing a [`Subscriber`](Subscriber).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::*;
-    ///
-    /// let session = open(config::peer()).await.unwrap();
-    /// let subscriber = session
-    ///     .subscribe("/resource/name")
-    ///     .best_effort()
-    ///     .pull_mode()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct SubscriberBuilder<'a, 'b> {
-        session: &'a Session,
-        reskey: ResKey<'b>,
-        reliability: Reliability,
-        mode: SubMode,
-        period: Option<Period>,
-        local: bool,
-    }
-}
-
-impl<'a, 'b> SubscriberBuilder<'a, 'b> {
-    /// Make the built Subscriber a [`CallbackSubscriber`](CallbackSubscriber).
-    #[inline]
-    pub fn callback<DataHandler>(self, handler: DataHandler) -> CallbackSubscriberBuilder<'a, 'b>
-    where
-        DataHandler: FnMut(Sample) + Send + Sync + 'static,
-    {
-        CallbackSubscriberBuilder {
-            session: self.session,
-            reskey: self.reskey,
-            reliability: self.reliability,
-            mode: self.mode,
-            period: self.period,
-            local: self.local,
-            handler: Arc::new(RwLock::new(handler)),
-        }
-    }
-
-    /// Change the subscription reliability.
-    #[inline]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
-        self
-    }
-
-    /// Change the subscription reliability to Reliable.
-    #[inline]
-    pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
-        self
-    }
-
-    /// Change the subscription reliability to BestEffort.
-    #[inline]
-    pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
-        self
-    }
-
-    /// Change the subscription mode.
-    #[inline]
-    pub fn mode(mut self, mode: SubMode) -> Self {
-        self.mode = mode;
-        self
-    }
-
-    /// Change the subscription mode to Push.
-    #[inline]
-    pub fn push_mode(mut self) -> Self {
-        self.mode = SubMode::Push;
-        self.period = None;
-        self
-    }
-
-    /// Change the subscription mode to Pull.
-    #[inline]
-    pub fn pull_mode(mut self) -> Self {
-        self.mode = SubMode::Pull;
-        self
-    }
-
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.period = period;
-        self
-    }
-
-    /// Make the subscription local only.
-    #[inline]
-    pub fn local(mut self) -> Self {
-        self.local = true;
-        self
-    }
-}
-
-impl<'a> Runnable for SubscriberBuilder<'a, '_> {
-    type Output = ZResult<Subscriber<'a>>;
-
-    fn run(&mut self) -> Self::Output {
-        trace!("subscribe({:?})", self.reskey);
-        let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
-
-        if self.local {
-            self.session
-                .register_any_local_subscriber(&self.reskey, SubscriberInvoker::Sender(sender))
-                .map(|sub_state| Subscriber {
-                    session: self.session,
-                    state: sub_state,
-                    alive: true,
-                    receiver: SampleReceiver::new(receiver),
-                })
-        } else {
-            self.session
-                .register_any_subscriber(
-                    &self.reskey,
-                    SubscriberInvoker::Sender(sender),
-                    &SubInfo {
-                        reliability: self.reliability,
-                        mode: self.mode,
-                        period: self.period,
-                    },
-                )
-                .map(|sub_state| Subscriber {
-                    session: self.session,
-                    state: sub_state,
-                    alive: true,
-                    receiver: SampleReceiver::new(receiver),
-                })
-        }
-    }
-}
-
-derive_zfuture! {
-    /// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::*;
-    ///
-    /// let session = open(config::peer()).await.unwrap();
-    /// let subscriber = session
-    ///     .subscribe("/resource/name")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
-    ///     .best_effort()
-    ///     .pull_mode()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Clone)]
-    pub struct CallbackSubscriberBuilder<'a, 'b> {
-        session: &'a Session,
-        reskey: ResKey<'b>,
-        reliability: Reliability,
-        mode: SubMode,
-        period: Option<Period>,
-        local: bool,
-        handler: Arc<RwLock<DataHandler>>,
-    }
-}
-
-impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CallbackSubscriberBuilder")
-            .field("session", self.session)
-            .field("reskey", &self.reskey)
-            .field("reliability", &self.reliability)
-            .field("mode", &self.mode)
-            .field("period", &self.period)
-            .finish()
-    }
-}
-
-impl<'a, 'b> CallbackSubscriberBuilder<'a, 'b> {
-    /// Change the subscription reliability.
-    #[inline]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
-        self
-    }
-
-    /// Change the subscription reliability to Reliable.
-    #[inline]
-    pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
-        self
-    }
-
-    /// Change the subscription reliability to BestEffort.
-    #[inline]
-    pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
-        self
-    }
-
-    /// Change the subscription mode.
-    #[inline]
-    pub fn mode(mut self, mode: SubMode) -> Self {
-        self.mode = mode;
-        self
-    }
-
-    /// Change the subscription mode to Push.
-    #[inline]
-    pub fn push_mode(mut self) -> Self {
-        self.mode = SubMode::Push;
-        self.period = None;
-        self
-    }
-
-    /// Change the subscription mode to Pull.
-    #[inline]
-    pub fn pull_mode(mut self) -> Self {
-        self.mode = SubMode::Pull;
-        self
-    }
-
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.period = period;
-        self
-    }
-
-    /// Make the subscription local onlyu.
-    #[inline]
-    pub fn local(mut self) -> Self {
-        self.local = true;
-        self
-    }
-}
-
-impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
-    type Output = ZResult<CallbackSubscriber<'a>>;
-
-    fn run(&mut self) -> Self::Output {
-        trace!("declare_callback_subscriber({:?})", self.reskey);
-
-        if self.local {
-            self.session
-                .register_any_local_subscriber(
-                    &self.reskey,
-                    SubscriberInvoker::Handler(self.handler.clone()),
-                )
-                .map(|sub_state| CallbackSubscriber {
-                    session: self.session,
-                    state: sub_state,
-                    alive: true,
-                })
-        } else {
-            self.session
-                .register_any_subscriber(
-                    &self.reskey,
-                    SubscriberInvoker::Handler(self.handler.clone()),
-                    &&SubInfo {
-                        reliability: self.reliability,
-                        mode: self.mode,
-                        period: self.period,
-                    },
-                )
-                .map(|sub_state| CallbackSubscriber {
-                    session: self.session,
-                    state: sub_state,
-                    alive: true,
-                })
-        }
-    }
-}
-
-derive_zfuture! {
-    /// A builder for initializing a [`Queryable`](Queryable).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::*;
-    /// use futures::prelude::*;
-    ///
-    /// let session = open(config::peer()).await.unwrap();
-    /// let mut queryable = session
-    ///     .register_queryable("/resource/name")
-    ///     .kind(queryable::EVAL)
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct QueryableBuilder<'a, 'b> {
-        session: &'a Session,
-        reskey: ResKey<'b>,
-        kind: ZInt,
-        complete: bool,
-    }
-}
-
-impl<'a, 'b> QueryableBuilder<'a, 'b> {
-    /// Change the queryable kind.
-    #[inline]
-    pub fn kind(mut self, kind: ZInt) -> Self {
-        self.kind = kind;
-        self
-    }
-
-    /// Change queryable completeness.
-    #[inline]
-    pub fn complete(mut self, complete: bool) -> Self {
-        self.complete = complete;
-        self
-    }
-}
-
-impl<'a> Runnable for QueryableBuilder<'a, '_> {
-    type Output = ZResult<Queryable<'a>>;
-
-    fn run(&mut self) -> Self::Output {
-        trace!("register_queryable({:?}, {:?})", self.reskey, self.kind);
-        let mut state = zwrite!(self.session.state);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
-        let qable_state = Arc::new(QueryableState {
-            id,
-            reskey: self.reskey.to_owned(),
-            kind: self.kind,
-            complete: self.complete,
-            sender,
-        });
-        #[cfg(feature = "complete_n")]
-        {
-            state.queryables.insert(id, qable_state.clone());
-
-            if self.complete {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, &self.reskey, self.kind);
-                drop(state);
-                let qabl_info = QueryableInfo {
-                    complete,
-                    distance: 0,
-                };
-                primitives.decl_queryable(&self.reskey, self.kind, &qabl_info, None);
-            }
-        }
-        #[cfg(not(feature = "complete_n"))]
-        {
-            let twin_qabl = Session::twin_qabl(&state, &self.reskey, self.kind);
-            let complete_twin_qabl =
-                twin_qabl && Session::complete_twin_qabl(&state, &self.reskey, self.kind);
-
-            state.queryables.insert(id, qable_state.clone());
-
-            if !twin_qabl || (!complete_twin_qabl && self.complete) {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = if !complete_twin_qabl && self.complete {
-                    1
-                } else {
-                    0
-                };
-                drop(state);
-                let qabl_info = QueryableInfo {
-                    complete,
-                    distance: 0,
-                };
-                primitives.decl_queryable(&self.reskey, self.kind, &qabl_info, None);
-            }
-        }
-
-        Ok(Queryable {
-            session: self.session,
-            state: qable_state,
-            alive: true,
-            receiver: QueryReceiver::new(receiver),
-        })
-    }
-}
-
-derive_zfuture! {
-    /// A builder for initializing a `write` operation ([`put`](crate::Session::put) or [`delete`](crate::Session::delete)).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::*;
-    ///
-    /// let session = open(config::peer()).await.unwrap();
-    /// session
-    ///     .put("/resource/name", "value")
-    ///     .encoding(encoding::TEXT_PLAIN)
-    ///     .congestion_control(CongestionControl::Block)
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct WriteBuilder<'a> {
-        session: &'a Session,
-        reskey: ResKey<'a>,
-        value: Option<Value>,
-        kind: Option<ZInt>,
-        congestion_control: CongestionControl,
-    }
-}
-
-impl<'a> WriteBuilder<'a> {
-    /// Change the congestion_control to apply when routing the data.
-    #[inline]
-    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> WriteBuilder<'a> {
-        self.congestion_control = congestion_control;
-        self
-    }
-
-    /// Change the kind of the written data.
-    #[inline]
-    pub fn kind(mut self, kind: SampleKind) -> Self {
-        self.kind = Some(kind as ZInt);
-        self
-    }
-
-    /// Change the encoding of the written data.
-    #[inline]
-    pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
-    where
-        IntoEncoding: Into<Encoding>,
-    {
-        if let Some(mut payload) = self.value.as_mut() {
-            payload.encoding = encoding.into();
-        } else {
-            self.value = Some(Value::empty().encoding(encoding.into()))
-        }
-        self
-    }
-}
-
-impl Runnable for WriteBuilder<'_> {
-    type Output = ZResult<()>;
-
-    fn run(&mut self) -> Self::Output {
-        trace!("write({:?}, [...])", self.reskey);
-        let state = zread!(self.session.state);
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        let local_routing = state.local_routing;
-        drop(state);
-
-        let value = self.value.take().unwrap();
-        let mut info = net::protocol::proto::DataInfo::new();
-        info.kind = match self.kind {
-            Some(data_kind::DEFAULT) => None,
-            kind => kind,
-        };
-        info.encoding = if value.encoding != Encoding::default() {
-            Some(value.encoding)
-        } else {
-            None
-        };
-        info.timestamp = self.session.runtime.new_timestamp();
-        let data_info = if info.has_options() { Some(info) } else { None };
-
-        primitives.send_data(
-            &self.reskey,
-            value.payload.clone(),
-            Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
-            self.congestion_control,
-            data_info.clone(),
-            None,
-        );
-        if local_routing {
-            self.session
-                .handle_data(true, &self.reskey, data_info, value.payload);
-        }
-        Ok(())
-    }
-}
-
-derive_zfuture! {
-    /// A builder for initializing a `query`.
-    /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::*;
-    /// use futures::prelude::*;
-    ///
-    /// let session = open(config::peer()).await.unwrap();
-    /// let mut replies = session
-    ///     .get("/resource/name?value>1")
-    ///     .target(QueryTarget{ kind: queryable::ALL_KINDS, target: Target::All })
-    ///     .consolidation(QueryConsolidation::none())
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct QueryBuilder<'a> {
-        session: &'a Session,
-        selector: KeyedSelector<'a>,
-        target: Option<QueryTarget>,
-        consolidation: Option<QueryConsolidation>,
-    }
-}
-
-impl<'a> QueryBuilder<'a> {
-    /// Change the target of the query.
-    #[inline]
-    pub fn target(mut self, target: QueryTarget) -> Self {
-        self.target = Some(target);
-        self
-    }
-
-    /// Change the consolidation mode of the query.
-    #[inline]
-    pub fn consolidation(mut self, consolidation: QueryConsolidation) -> Self {
-        self.consolidation = Some(consolidation);
-        self
-    }
-}
-
-impl Runnable for QueryBuilder<'_> {
-    type Output = ZResult<ReplyReceiver>;
-
-    fn run(&mut self) -> Self::Output {
-        trace!(
-            "get({}, {:?}, {:?})",
-            self.selector,
-            self.target,
-            self.consolidation
-        );
-        let mut state = zwrite!(self.session.state);
-        let target = self.target.take().unwrap();
-        let consolidation = self.consolidation.take().unwrap();
-        let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
-        let (rep_sender, rep_receiver) = bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE);
-        state.queries.insert(
-            qid,
-            QueryState {
-                nb_final: 2,
-                reception_mode: consolidation.reception,
-                replies: if consolidation.reception != ConsolidationMode::None {
-                    Some(HashMap::new())
-                } else {
-                    None
-                },
-                rep_sender,
-            },
-        );
-
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        let local_routing = state.local_routing;
-        drop(state);
-        primitives.send_query(
-            &self.selector.key_selector,
-            self.selector.value_selector,
-            qid,
-            target.clone(),
-            consolidation.clone(),
-            None,
-        );
-        if local_routing {
-            self.session.handle_query(
-                true,
-                &self.selector.key_selector,
-                self.selector.value_selector,
-                qid,
-                target,
-                consolidation,
-            );
-        }
-
-        Ok(ReplyReceiver::new(rep_receiver))
     }
 }
 
@@ -935,9 +289,9 @@ impl Session {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session.close().await.unwrap();
     /// # })
     /// ```
@@ -951,9 +305,9 @@ impl Session {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let info = session.info();
     /// # })
     /// ```
@@ -1019,9 +373,9 @@ impl Session {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let rid = session.register_resource("/resource/name").await.unwrap();
     /// # })
     /// ```
@@ -1074,9 +428,9 @@ impl Session {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let rid = session.register_resource("/resource/name").await.unwrap();
     /// session.unregister_resource(rid).await;
     /// # })
@@ -1105,9 +459,9 @@ impl Session {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let publisher = session.publishing("/resource/name").await.unwrap();
     /// session.put("/resource/name", "value").await.unwrap();
     /// # })
@@ -1165,7 +519,7 @@ impl Session {
         })
     }
 
-    fn register_any_subscriber(
+    pub(crate) fn register_any_subscriber(
         &self,
         reskey: &ResKey,
         invoker: SubscriberInvoker,
@@ -1237,7 +591,7 @@ impl Session {
         Ok(sub_state)
     }
 
-    fn register_any_local_subscriber(
+    pub(crate) fn register_any_local_subscriber(
         &self,
         reskey: &ResKey,
         invoker: SubscriberInvoker,
@@ -1277,10 +631,10 @@ impl Session {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
     /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut subscriber = session.subscribe("/resource/name").await.unwrap();
     /// while let Some(sample) = subscriber.receiver().next().await {
     ///     println!("Received : {:?}", sample);
@@ -1360,7 +714,7 @@ impl Session {
         })
     }
 
-    fn twin_qabl(state: &SessionState, key: &ResKey, kind: ZInt) -> bool {
+    pub(crate) fn twin_qabl(state: &SessionState, key: &ResKey, kind: ZInt) -> bool {
         state.queryables.values().any(|q| {
             q.kind == kind
                 && state.localkey_to_resname(&q.reskey).unwrap()
@@ -1369,7 +723,7 @@ impl Session {
     }
 
     #[cfg(not(feature = "complete_n"))]
-    fn complete_twin_qabl(state: &SessionState, key: &ResKey, kind: ZInt) -> bool {
+    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &ResKey, kind: ZInt) -> bool {
         state.queryables.values().any(|q| {
             q.complete
                 && q.kind == kind
@@ -1379,7 +733,7 @@ impl Session {
     }
 
     #[cfg(feature = "complete_n")]
-    fn complete_twin_qabls(state: &SessionState, key: &ResKey, kind: ZInt) -> ZInt {
+    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &ResKey, kind: ZInt) -> ZInt {
         state
             .queryables
             .values()
@@ -1401,10 +755,10 @@ impl Session {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
     /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///     query.reply_async(Sample::new(
@@ -1499,9 +853,10 @@ impl Session {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
+    /// use zenoh::prelude::*;
+    /// use zenoh::encoding;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session.put("/resource/name", "value")
     ///        .encoding(encoding::TEXT_PLAIN).await.unwrap();
     /// # })
@@ -1534,9 +889,9 @@ impl Session {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session.delete("/resource/name");
     /// # })
     /// ```
@@ -1574,7 +929,13 @@ impl Session {
         }
     }
 
-    fn handle_data(&self, local: bool, reskey: &ResKey, info: Option<DataInfo>, payload: ZBuf) {
+    pub(crate) fn handle_data(
+        &self,
+        local: bool,
+        reskey: &ResKey,
+        info: Option<DataInfo>,
+        payload: ZBuf,
+    ) {
         let state = zread!(self.state);
         if let ResKey::RId(rid) = reskey {
             match state.get_res(rid, local) {
@@ -1659,10 +1020,10 @@ impl Session {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::*;
     /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
     ///
-    /// let session = open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut replies = session.get("/resource/name").await.unwrap();
     /// while let Some(reply) = replies.next().await {
     ///     println!(">> Received {:?}", reply.data);
@@ -1681,7 +1042,7 @@ impl Session {
         }
     }
 
-    fn handle_query(
+    pub(crate) fn handle_query(
         &self,
         local: bool,
         reskey: &ResKey,

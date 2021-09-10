@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
-use zenoh::*;
+use zenoh::prelude::*;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -25,7 +25,7 @@ async fn main() {
     let (config, selector, query) = parse_args();
 
     println!("Opening session...");
-    let session = open(config).await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!(
         "Declaring a QueryingSubscriber on {} with an initial query on {}",

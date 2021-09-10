@@ -17,17 +17,17 @@ use log::{debug, trace, warn};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+use zenoh::prelude::*;
+use zenoh::properties::properties_to_json_value;
+use zenoh::time::Timestamp;
 use zenoh::utils::resource_name;
-use zenoh::Sample;
-use zenoh::Value;
-use zenoh::{utils, Properties, SampleKind, Timestamp, ZResult};
 use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
 pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
     // For now admin status is static and only contains a PROP_BACKEND_TYPE entry
     let properties = Properties::from(&[(PROP_BACKEND_TYPE, "memory")][..]);
-    let admin_status = utils::properties_to_json_value(&properties);
+    let admin_status = properties_to_json_value(&properties);
     Ok(Box::new(MemoryBackend { admin_status }))
 }
 
@@ -121,7 +121,7 @@ struct MemoryStorage {
 
 impl MemoryStorage {
     async fn new(properties: Properties) -> ZResult<MemoryStorage> {
-        let admin_status = utils::properties_to_json_value(&properties);
+        let admin_status = properties_to_json_value(&properties);
 
         Ok(MemoryStorage {
             admin_status,
