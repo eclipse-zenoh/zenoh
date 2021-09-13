@@ -35,6 +35,7 @@ readme = "README.md"
 maintenance = { status = "actively-developed" }
 
 [features]
+complete_n = []
 stats = []
 transport_tcp = []
 transport_tls = ["async-rustls"]
@@ -76,6 +77,7 @@ lazy_static = "1.4.0"
 libloading = "0.7.0"
 log = "0.4"
 nix = { version = "0.22.0", optional = true }
+ordered-float = "2.5.1"
 petgraph = "0.5.1"
 quinn = { version = "0.7.2", optional = true }
 rand = "0.8.3"
@@ -110,104 +112,72 @@ section = "net"
 license-file = ["../LICENSE", "0"]
 
 [[example]]
+name = "z_scout"
+path = "examples/z_scout.rs"
+
+[[example]]
+name = "z_info"
+path = "examples/z_info.rs"
+
+[[example]]
 name = "z_put"
-path = "examples/zenoh/z_put.rs"
+path = "examples/z_put.rs"
 
 [[example]]
 name = "z_put_float"
-path = "examples/zenoh/z_put_float.rs"
+path = "examples/z_put_float.rs"
 
 [[example]]
 name = "z_delete"
-path = "examples/zenoh/z_delete.rs"
+path = "examples/z_delete.rs"
 
 [[example]]
-name = "z_get"
-path = "examples/zenoh/z_get.rs"
+name = "z_pub"
+path = "examples/z_pub.rs"
+
+[[example]]
+name = "z_pub_shm"
+path = "examples/z_pub_shm.rs"
 
 [[example]]
 name = "z_sub"
-path = "examples/zenoh/z_sub.rs"
+path = "examples/z_sub.rs"
+
+[[example]]
+name = "z_pull"
+path = "examples/z_pull.rs"
 
 [[example]]
 name = "z_eval"
-path = "examples/zenoh/z_eval.rs"
+path = "examples/z_eval.rs"
 
 [[example]]
-name = "z_put_thr"
-path = "examples/zenoh/z_put_thr.rs"
+name = "z_storage"
+path = "examples/z_storage.rs"
+
+[[example]]
+name = "z_get"
+path = "examples/z_get.rs"
+
+[[example]]
+name = "z_pub_thr"
+path = "examples/z_pub_thr.rs"
 
 [[example]]
 name = "z_sub_thr"
-path = "examples/zenoh/z_sub_thr.rs"
+path = "examples/z_sub_thr.rs"
+
+[[example]]
+name = "z_pub_shm_thr"
+path = "examples/z_pub_shm_thr.rs"
 
 [[example]]
 name = "z_ping"
-path = "examples/zenoh/z_ping.rs"
+path = "examples/z_ping.rs"
 
 [[example]]
 name = "z_pong"
-path = "examples/zenoh/z_pong.rs"
-
-[[example]]
-name = "zn_scout"
-path = "examples/zenoh-net/zn_scout.rs"
-
-[[example]]
-name = "zn_info"
-path = "examples/zenoh-net/zn_info.rs"
-
-[[example]]
-name = "zn_write"
-path = "examples/zenoh-net/zn_write.rs"
-
-[[example]]
-name = "zn_pub"
-path = "examples/zenoh-net/zn_pub.rs"
-
-[[example]]
-name = "zn_pub_shm"
-path = "examples/zenoh-net/zn_pub_shm.rs"
-
-[[example]]
-name = "zn_sub"
-path = "examples/zenoh-net/zn_sub.rs"
-
-[[example]]
-name = "zn_pull"
-path = "examples/zenoh-net/zn_pull.rs"
-
-[[example]]
-name = "zn_eval"
-path = "examples/zenoh-net/zn_eval.rs"
-
-[[example]]
-name = "zn_storage"
-path = "examples/zenoh-net/zn_storage.rs"
-
-[[example]]
-name = "zn_query"
-path = "examples/zenoh-net/zn_query.rs"
-
-[[example]]
-name = "zn_pub_thr"
-path = "examples/zenoh-net/zn_pub_thr.rs"
-
-[[example]]
-name = "zn_sub_thr"
-path = "examples/zenoh-net/zn_sub_thr.rs"
-
-[[example]]
-name = "zn_pub_shm_thr"
-path = "examples/zenoh-net/zn_pub_shm_thr.rs"
-
-[[example]]
-name = "zn_ping"
-path = "examples/zenoh-net/zn_ping.rs"
-
-[[example]]
-name = "zn_pong"
-path = "examples/zenoh-net/zn_pong.rs"
+path = "examples/z_pong.rs"
 
 [[bench]]
 name = "codec_bench"

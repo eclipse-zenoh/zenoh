@@ -30,13 +30,15 @@ pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
     unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }
 }
 
+/// A future which output can be accessed synchronously or asynchronously.
 pub trait ZFuture: Future + Send {
+    /// Synchronously waits for the output of this future.
     fn wait(self) -> Self::Output;
 }
 
 /// Creates a ZFuture that is immediately ready with a value.
 ///
-/// This `struct` is created by [`ready()`]. See its
+/// This `struct` is created by [`zready()`]. See its
 /// documentation for more.
 #[derive(Debug, Clone)]
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
@@ -94,6 +96,7 @@ macro_rules! zready_try {
     };
 }
 
+/// An alias for `Pin<Box<dyn Future<Output = T> + Send>>`.
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct ZPinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
 
@@ -116,4 +119,48 @@ impl<T> ZFuture for ZPinBoxFuture<T> {
 #[inline]
 pub fn zpinbox<T>(fut: impl Future<Output = T> + Send + 'static) -> ZPinBoxFuture<T> {
     ZPinBoxFuture(Box::pin(fut))
+}
+
+pub trait Runnable {
+    type Output;
+
+    fn run(&mut self) -> Self::Output;
+}
+
+#[macro_export]
+macro_rules! derive_zfuture{
+    (
+     $(#[$meta:meta])*
+     $vis:vis struct $struct_name:ident$(<$( $lt:lifetime ),+>)? {
+        $(
+        $(#[$field_meta:meta])*
+        $field_vis:vis $field_name:ident : $field_type:ty,
+        )*
+    }
+    ) => {
+        $(#[$meta])*
+        #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+        $vis struct $struct_name$(<$( $lt ),+>)? {
+            $(
+            $(#[$field_meta:meta])*
+            $field_vis $field_name : $field_type,
+            )*
+        }
+
+        impl$(<$( $lt ),+>)? futures_lite::Future for $struct_name$(<$( $lt ),+>)? {
+            type Output = <Self as Runnable>::Output;
+
+            #[inline]
+            fn poll(mut self: std::pin::Pin<&mut Self>, _cx: &mut async_std::task::Context<'_>) -> std::task::Poll<<Self as futures_lite::Future>::Output> {
+                std::task::Poll::Ready(self.run())
+            }
+        }
+
+        impl$(<$( $lt ),+>)? zenoh_util::sync::ZFuture for $struct_name$(<$( $lt ),+>)? {
+            #[inline]
+            fn wait(mut self) -> Self::Output {
+                self.run()
+            }
+        }
+    }
 }

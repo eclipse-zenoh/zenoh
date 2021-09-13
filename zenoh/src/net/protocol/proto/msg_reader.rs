@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::core::encoding::Encoding;
 use super::core::*;
 use super::defaults::SEQ_NUM_RES;
 use super::io::ZBuf;
@@ -499,14 +500,14 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_reskey(&mut self, is_string: bool) -> Option<ResKey> {
+    fn read_reskey(&mut self, is_string: bool) -> Option<ResKey<'static>> {
         let id = self.read_zint()?;
         if is_string {
             let s = self.read_string()?;
             if id == NO_RESOURCE_ID {
-                Some(ResKey::RName(s))
+                Some(ResKey::RName(s.into()))
             } else {
-                Some(ResKey::RIdWithSuffix(id, s))
+                Some(ResKey::RIdWithSuffix(id, s.into()))
             }
         } else {
             Some(ResKey::RId(id))
@@ -526,7 +527,10 @@ impl ZBuf {
             info.kind = Some(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::ENCODING) {
-            info.encoding = Some(self.read_zint()?);
+            info.encoding = Some(Encoding {
+                prefix: self.read_zint()?,
+                suffix: self.read_string()?.into(),
+            });
         }
         if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
             info.timestamp = Some(self.read_timestamp()?);
@@ -545,6 +549,13 @@ impl ZBuf {
         }
 
         Some(info)
+    }
+
+    #[inline(always)]
+    fn read_queryable_info(&mut self) -> Option<QueryableInfo> {
+        let complete = self.read_zint()?;
+        let distance = self.read_zint()?;
+        Some(QueryableInfo { complete, distance })
     }
 
     fn read_unit(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
@@ -640,16 +651,18 @@ impl ZBuf {
             }
             QUERYABLE => {
                 let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-                let kind = if imsg::has_flag(header, zmsg::flag::Q) {
-                    self.read_zint()?
+                let kind = self.read_zint()?;
+                let info = if imsg::has_flag(header, zmsg::flag::Q) {
+                    self.read_queryable_info()?
                 } else {
-                    queryable::STORAGE
+                    QueryableInfo::default()
                 };
-                Some(Declaration::Queryable(Queryable { key, kind }))
+                Some(Declaration::Queryable(Queryable { key, kind, info }))
             }
             FORGET_QUERYABLE => {
                 let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-                Some(Declaration::ForgetQueryable(ForgetQueryable { key }))
+                let kind = self.read_zint()?;
+                Some(Declaration::ForgetQueryable(ForgetQueryable { key, kind }))
             }
             unknown => {
                 log::trace!("Invalid ID for Declaration: {}", unknown);
@@ -660,7 +673,7 @@ impl ZBuf {
 
     fn read_query(&mut self, header: u8) -> Option<ZenohBody> {
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-        let predicate = self.read_string()?;
+        let value_selector = self.read_string()?;
         let qid = self.read_zint()?;
         let target = if imsg::has_flag(header, zmsg::flag::T) {
             Some(self.read_query_target()?)
@@ -671,7 +684,7 @@ impl ZBuf {
 
         Some(ZenohBody::Query(Query {
             key,
-            predicate,
+            value_selector,
             qid,
             target,
             consolidation,
@@ -757,12 +770,14 @@ impl ZBuf {
         let t = self.read_zint()?;
         match t {
             0 => Some(Target::BestMatching),
-            1 => {
-                let n = self.read_zint()?;
-                Some(Target::Complete { n })
-            }
-            2 => Some(Target::All),
+            1 => Some(Target::All),
+            2 => Some(Target::AllComplete),
             3 => Some(Target::None),
+            #[cfg(feature = "complete_n")]
+            4 => {
+                let n = self.read_zint()?;
+                Some(Target::Complete(n))
+            }
             id => {
                 log::trace!("UNEXPECTED ID FOR Target: {}", id);
                 None

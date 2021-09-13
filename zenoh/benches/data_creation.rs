@@ -17,6 +17,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
+use zenoh::net::protocol::core::encoding::Encoding;
 use zenoh::net::protocol::core::{Channel, CongestionControl, PeerId, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
@@ -34,7 +35,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     for s in size.iter() {
         c.bench_function(format!("{} msg_creation_yes_info", s).as_str(), |b| {
             b.iter(|| {
-                let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+                let res_key = ResKey::RIdWithSuffix(18, "/com/acme/sensors/temp".into());
                 let payload = ZBuf::from(vec![0; *s]);
                 let channel = Channel::default();
                 let congestion_control = CongestionControl::default();
@@ -42,7 +43,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     #[cfg(feature = "zero-copy")]
                     sliced: false,
                     kind: Some(0),
-                    encoding: Some(0),
+                    encoding: Some(Encoding::default()),
                     timestamp: Some(uhlc::Timestamp::new(
                         Default::default(),
                         uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
@@ -69,7 +70,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         c.bench_function(format!("{} msg_creation_no_info", s).as_str(), |b| {
             b.iter(|| {
-                let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+                let res_key = ResKey::RIdWithSuffix(18, "/com/acme/sensors/temp".into());
                 let payload = ZBuf::from(vec![0; *s]);
                 let channel = Channel::default();
                 let congestion_control = CongestionControl::default();
@@ -90,12 +91,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     }
 
-    let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+    let res_key = ResKey::RIdWithSuffix(18, "/com/acme/sensors/temp".into());
     let info = Some(DataInfo {
         #[cfg(feature = "zero-copy")]
         sliced: false,
         kind: Some(0),
-        encoding: Some(0),
+        encoding: Some(Encoding::default()),
         timestamp: Some(uhlc::Timestamp::new(
             Default::default(),
             uhlc::ID::new(16, [0u8; uhlc::ID::MAX_SIZE]),

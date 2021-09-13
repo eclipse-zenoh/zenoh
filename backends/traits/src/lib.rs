@@ -22,8 +22,8 @@
 //! # Example
 //! ```
 //! use async_trait::async_trait;
-//! use zenoh::net::Sample;
-//! use zenoh::{utils, ChangeKind, Properties, Value, ZResult};
+//! use zenoh::prelude::*;
+//! use zenoh::properties::properties_to_json_value;
 //! use zenoh_backend_traits::*;
 //!
 //! #[no_mangle]
@@ -32,7 +32,7 @@
 //!     // Here we re-expose them in the admin space for GET operations, adding the PROP_BACKEND_TYPE entry.
 //!     let mut p = properties.clone();
 //!     p.insert(PROP_BACKEND_TYPE.into(), "my_backend_type".into());
-//!     let admin_status = utils::properties_to_json_value(&p);
+//!     let admin_status = properties_to_json_value(&p);
 //!     Ok(Box::new(MyBackend { admin_status }))
 //! }
 //!
@@ -76,7 +76,7 @@
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         // They contain at least a PROP_STORAGE_PATH_EXPR entry (i.e. "path_expr").
 //!         // Here we choose to re-expose them as they are in the admin space for GET operations.
-//!         let admin_status = utils::properties_to_json_value(&properties);
+//!         let admin_status = properties_to_json_value(&properties);
 //!         Ok(MyStorage { admin_status })
 //!     }
 //! }
@@ -91,36 +91,27 @@
 //!     }
 //!
 //!     // When receiving a Sample (i.e. on PUT or DELETE operations)
-//!     async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
-//!         // extract ChangeKind and Timestamp from sample.data_info
-//!         let (kind, _timestamp) = if let Some(ref info) = sample.data_info {
-//!             (
-//!                 info.kind.map_or(ChangeKind::Put, ChangeKind::from),
-//!                 match &info.timestamp {
-//!                     Some(ts) => ts.clone(),
-//!                     None => zenoh::utils::new_reception_timestamp(),
-//!                 },
-//!             )
-//!         } else {
-//!             (ChangeKind::Put, zenoh::utils::new_reception_timestamp())
-//!         };
+//!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
+//!         // extract Timestamp from sample
+//!         sample.ensure_timestamp();
+//!         let timestamp = sample.timestamp.take().unwrap();
 //!         // Store or delete the sample depending the ChangeKind
-//!         match kind {
-//!             ChangeKind::Put => {
+//!         match sample.kind {
+//!             SampleKind::Put => {
 //!                 let _key = sample.res_name;
 //!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: store (key, sample)
 //!                 //  - if not: drop the sample
 //!             }
-//!             ChangeKind::Delete => {
+//!             SampleKind::Delete => {
 //!                 let _key = sample.res_name;
 //!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
 //!                 //  - if not: drop the sample
 //!             }
-//!             ChangeKind::Patch => {
+//!             SampleKind::Patch => {
 //!                 println!("Received PATCH for {}: not yet supported", sample.res_name);
 //!             }
 //!         }
@@ -135,7 +126,7 @@
 //!         //  - if not: just get the sample with key==path_expr and call: query.reply(sample.clone()).await;
 //!         //  - if yes: get all the samples with key matching path_expr and call for each: query.reply(sample.clone()).await;
 //!         //
-//!         // NOTE: in case query.predicate() is not empty something smarter should be done with returned samples...
+//!         // NOTE: in case query.value_selector() is not empty something smarter should be done with returned samples...
 //!         Ok(())
 //!     }
 //! }
@@ -143,9 +134,7 @@
 
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use std::convert::TryFrom;
-use zenoh::net::Sample;
-use zenoh::{Properties, Selector, Value, ZError, ZResult};
+use zenoh::prelude::*;
 
 pub mod utils;
 
@@ -210,16 +199,16 @@ pub trait OutgoingDataInterceptor: Send + Sync {
     async fn on_reply(&self, sample: Sample) -> Sample;
 }
 
-/// A wrapper around the [`zenoh::net::Query`] allowing to call the
+/// A wrapper around the [`zenoh::queryable::Query`] allowing to call the
 /// OutgoingDataInterceptor (if any) before to send the reply
 pub struct Query {
-    q: zenoh::net::Query,
+    q: zenoh::queryable::Query,
     interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
 }
 
 impl Query {
     pub fn new(
-        q: zenoh::net::Query,
+        q: zenoh::queryable::Query,
         interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
     ) -> Query {
         Query { q, interceptor }
@@ -228,13 +217,13 @@ impl Query {
     /// Returns the resource name of this Query
     #[inline(always)]
     pub fn res_name(&self) -> &str {
-        &self.q.res_name
+        self.q.selector().key_selector
     }
 
-    /// Returns the predicate of this Query
+    /// Returns the value_selector of this Query
     #[inline(always)]
-    pub fn predicate(&self) -> &str {
-        &self.q.predicate
+    pub fn value_selector(&self) -> &str {
+        self.q.selector().value_selector
     }
 
     /// Sends a Sample as a reply to this Query
@@ -247,12 +236,5 @@ impl Query {
         };
         // Send reply
         self.q.reply_async(sample).await
-    }
-}
-
-impl TryFrom<&Query> for Selector {
-    type Error = ZError;
-    fn try_from(q: &Query) -> Result<Self, Self::Error> {
-        Selector::try_from(&q.q)
     }
 }

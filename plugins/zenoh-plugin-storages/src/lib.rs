@@ -20,9 +20,10 @@ use futures::prelude::*;
 use libloading::Symbol;
 use log::{debug, error, warn};
 use std::collections::HashMap;
-use std::convert::TryFrom;
+use zenoh::encoding;
 use zenoh::net::runtime::Runtime;
-use zenoh::{ChangeKind, Path, Properties, Selector, Value, ZError, ZErrorKind, ZResult, Zenoh};
+use zenoh::prelude::*;
+use zenoh::Session;
 use zenoh_backend_traits::{Backend, PROP_STORAGE_PATH_EXPR};
 use zenoh_plugin_trait::prelude::*;
 use zenoh_util::{zerror, LibLoader};
@@ -105,21 +106,20 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
         runtime.get_pid_str()
     );
 
-    let zenoh = Arc::new(Zenoh::init(runtime).await);
-    let workspace = zenoh
-        .workspace(Some(Path::try_from(backends_prefix.clone()).unwrap()))
-        .await
-        .unwrap();
+    let zenoh = Arc::new(zenoh::init(runtime).await.unwrap());
+    // let workspace = zenoh
+    //     .workspace(Some(Path::try_from(backends_prefix.clone()).unwrap()))
+    //     .await
+    //     .unwrap();
 
     // Map owning handles on alive backends. Once dropped, a handle will release/stop the backend.
-    let mut backend_handles: HashMap<Path, Sender<bool>> = HashMap::new();
+    let mut backend_handles: HashMap<String, Sender<bool>> = HashMap::new();
 
     // Start Memory Backend and storages if configured via args
     if !args.is_present("no-backend") {
         debug!("Memory backend enabled");
         let mem_backend = memory_backend::create_backend(Properties::default()).unwrap();
-        let mem_backend_path =
-            Path::try_from(format!("{}/{}", backends_prefix, MEMORY_BACKEND_NAME)).unwrap();
+        let mem_backend_path = format!("{}/{}", backends_prefix, MEMORY_BACKEND_NAME);
         let handle = start_backend(mem_backend, mem_backend_path.clone(), zenoh.clone())
             .await
             .unwrap();
@@ -132,14 +132,13 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
                     "Add memory storage {}-{} on {}",
                     MEMORY_STORAGE_NAME, i, path_expr
                 );
-                let storage_admin_path = Path::try_from(format!(
-                    "{}/storage/{}-{}",
-                    mem_backend_path, MEMORY_STORAGE_NAME, i
-                ))
-                .unwrap();
+                let storage_admin_path =
+                    format!("{}/storage/{}-{}", mem_backend_path, MEMORY_STORAGE_NAME, i)
+                        .to_string();
                 let props = Properties::from([(PROP_STORAGE_PATH_EXPR, path_expr)].as_ref());
-                workspace
-                    .put(&storage_admin_path, Value::Properties(props))
+                zenoh
+                    .put(&storage_admin_path, props)
+                    .encoding(encoding::APP_PROPERTIES)
                     .await
                     .unwrap();
                 i += 1
@@ -148,41 +147,38 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     }
 
     // subscribe to PUT/DELETE on 'backends_prefix'/*
-    let backends_admin_selector = Selector::try_from(format!("{}/*", backends_prefix)).unwrap();
-    if let Ok(mut backends_admin) = workspace.subscribe(&backends_admin_selector).await {
-        while let Some(change) = backends_admin.next().await {
-            debug!("Received change: {:?}", change);
-            match change.kind {
-                ChangeKind::Put => {
+    let backends_admin_selector = format!("{}/*", backends_prefix).to_string();
+    if let Ok(mut backends_admin) = zenoh.subscribe(&backends_admin_selector).await {
+        while let Some(sample) = backends_admin.receiver().next().await {
+            debug!("Received sample: {:?}", sample);
+            let path = sample.res_name;
+            match sample.kind {
+                SampleKind::Put => {
                     #[allow(clippy::map_entry)]
                     // Disable clippy check because no way to log the warn using map.entry().or_insert()
-                    if !backend_handles.contains_key(&change.path) {
-                        if let Some(value) = change.value {
-                            match load_and_start_backend(
-                                &change.path,
-                                value,
-                                zenoh.clone(),
-                                &lib_loader,
-                            )
-                            .await
-                            {
-                                Ok(handle) => {
-                                    let _ = backend_handles.insert(change.path, handle);
-                                }
-                                Err(e) => warn!("{}", e),
+                    if !backend_handles.contains_key(&path) {
+                        match load_and_start_backend(
+                            &path,
+                            sample.value,
+                            zenoh.clone(),
+                            &lib_loader,
+                        )
+                        .await
+                        {
+                            Ok(handle) => {
+                                let _ = backend_handles.insert(path, handle);
                             }
-                        } else {
-                            warn!("Received a PUT on {} without value", change.path);
+                            Err(e) => warn!("{}", e),
                         }
                     } else {
-                        warn!("Backend {} already exists", change.path);
+                        warn!("Backend {} already exists", path);
                     }
                 }
-                ChangeKind::Delete => {
-                    debug!("Delete backend {}", change.path);
-                    let _ = backend_handles.remove(&change.path);
+                SampleKind::Delete => {
+                    debug!("Delete backend {}", path);
+                    let _ = backend_handles.remove(&path);
                 }
-                ChangeKind::Patch => warn!("PATCH not supported on {}", change.path),
+                SampleKind::Patch => warn!("PATCH not supported on {}", path),
             }
         }
     } else {
@@ -196,47 +192,59 @@ type CreateBackend<'lib> =
     Symbol<'lib, unsafe extern "C" fn(&Properties) -> ZResult<Box<dyn Backend>>>;
 
 async fn load_and_start_backend(
-    path: &Path,
-    value: Value,
-    zenoh: Arc<Zenoh>,
+    path: &str,
+    mut value: Value,
+    zenoh: Arc<Session>,
     lib_loader: &LibLoader,
 ) -> ZResult<Sender<bool>> {
-    if let Value::Properties(props) = value {
-        let name = path.last_segment();
-        let (lib, lib_path) = unsafe {
-            if let Some(filename) = props.get("lib") {
-                LibLoader::load_file(filename)?
-            } else {
-                lib_loader.search_and_load(&format!("{}{}", BACKEND_LIB_PREFIX, name))?
-            }
-        };
+    if value.encoding == encoding::APP_PROPERTIES {
+        if let Ok(props) = String::from_utf8(value.payload.read_vec()).map(Properties::from) {
+            let name = match path.rfind('/') {
+                Some(i) => &path[i + 1..],
+                None => path,
+            };
+            let (lib, lib_path) = unsafe {
+                if let Some(filename) = props.get("lib") {
+                    LibLoader::load_file(filename)?
+                } else {
+                    lib_loader.search_and_load(&format!("{}{}", BACKEND_LIB_PREFIX, name))?
+                }
+            };
 
-        debug!("Create backend {} using {}", name, lib_path.display());
-        unsafe {
-            match lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME) {
-                Ok(create_backend) => match create_backend(&props) {
-                    Ok(backend) => start_backend(backend, path.clone(), zenoh).await,
-                    Err(err) => zerror!(
-                        ZErrorKind::Other {
-                            descr: format!(
-                                "Failed to create Backend {} from {}: {}",
-                                name,
-                                lib_path.display(),
-                                err
-                            ),
-                        },
-                        err
-                    ),
-                },
-                Err(err) => zerror!(ZErrorKind::Other {
-                    descr: format!(
-                        "Failed to create Backend {} from {}: {}",
-                        name,
-                        lib_path.display(),
-                        err
-                    )
-                }),
+            debug!("Create backend {} using {}", name, lib_path.display());
+            unsafe {
+                match lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME) {
+                    Ok(create_backend) => match create_backend(&props) {
+                        Ok(backend) => start_backend(backend, path.to_string(), zenoh).await,
+                        Err(err) => zerror!(
+                            ZErrorKind::Other {
+                                descr: format!(
+                                    "Failed to create Backend {} from {}: {}",
+                                    name,
+                                    lib_path.display(),
+                                    err
+                                ),
+                            },
+                            err
+                        ),
+                    },
+                    Err(err) => zerror!(ZErrorKind::Other {
+                        descr: format!(
+                            "Failed to create Backend {} from {}: {}",
+                            name,
+                            lib_path.display(),
+                            err
+                        )
+                    }),
+                }
             }
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "Received a PUT on {}, unable to decode properties from value: {:?}",
+                    path, value
+                )
+            })
         }
     } else {
         zerror!(ZErrorKind::Other {

@@ -19,9 +19,11 @@ use criterion::Criterion;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,
-    Complete { n: u64 },
     All,
+    AllComplete,
     None,
+    #[cfg(feature = "complete_n")]
+    Complete(u64),
 }
 
 impl Default for Target {
@@ -52,9 +54,11 @@ pub fn pass_by_ref_option(arg: &Option<QueryTarget>, sum: &mut u64) {
     let v = arg.as_ref().unwrap_or_default();
     match v.eval {
         Target::BestMatching => *sum *= 3,
-        Target::Complete { n: _ } => *sum *= 2,
+        Target::AllComplete => *sum *= 2,
         Target::All => (),
         Target::None => *sum *= 5,
+        #[cfg(feature = "complete_n")]
+        Target::Complete(_) => *sum *= 4,
     }
 }
 
@@ -62,27 +66,33 @@ pub fn pass_by_option(arg: Option<QueryTarget>, sum: &mut u64) {
     let v = arg.unwrap_or_default();
     match v.eval {
         Target::BestMatching => *sum *= 3,
-        Target::Complete { n: _ } => *sum *= 2,
+        Target::AllComplete => *sum *= 2,
         Target::All => (),
         Target::None => *sum *= 5,
+        #[cfg(feature = "complete_n")]
+        Target::Complete(_) => *sum *= 4,
     }
 }
 
 pub fn pass_by_ref(arg: &QueryTarget, sum: &mut u64) {
     match arg.eval {
         Target::BestMatching => *sum *= 3,
-        Target::Complete { n: _ } => *sum *= 2,
+        Target::AllComplete => *sum *= 2,
         Target::All => (),
         Target::None => *sum *= 5,
+        #[cfg(feature = "complete_n")]
+        Target::Complete(_) => *sum *= 4,
     }
 }
 
 pub fn pass_by_val(arg: QueryTarget, sum: &mut u64) {
     match arg.eval {
         Target::BestMatching => *sum *= 3,
-        Target::Complete { n: _ } => *sum *= 2,
+        Target::AllComplete => *sum *= 2,
         Target::All => (),
         Target::None => *sum *= 5,
+        #[cfg(feature = "complete_n")]
+        Target::Complete(_) => *sum *= 4,
     }
 }
 

@@ -31,7 +31,7 @@ mod tests {
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
         TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
-    use zenoh::net::CongestionControl;
+    use zenoh::publisher::CongestionControl;
     use zenoh_util::core::ZResult;
     use zenoh_util::zasync_executor_init;
 
@@ -225,7 +225,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".to_string());
+            let key = ResKey::RName("/test".into());
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),
@@ -282,7 +282,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".to_string());
+            let key = ResKey::RName("/test".into());
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),

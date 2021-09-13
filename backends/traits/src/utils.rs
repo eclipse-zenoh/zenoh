@@ -14,13 +14,13 @@
 
 //! Some useful functions for Backend/Storage implementations.
 
-use zenoh::net::utils::resource_name::*;
+use zenoh::utils::resource_name::*;
 
 /// Returns the longest prefix in a Path expressions that doesn't contain any '*' character.  
 /// This would be the common prefix of all keys stored in a storage using this Path expression.
 ///
 /// Use this operation at creation of a Storage to get the keys prefix, and in [`Storage::on_sample()`](crate::Storage::on_sample())
-/// strip this prefix from all received [`Sample::res_name`](zenoh::net::Sample::res_name) to retrieve the corrsponding key.
+/// strip this prefix from all received [`Sample::res_name`](zenoh::prelude::Sample::res_name) to retrieve the corrsponding key.
 ///
 /// # Examples:
 /// ```
@@ -42,8 +42,9 @@ pub fn get_keys_prefix(path_expr: &str) -> &str {
 /// this operation returns a list of Path Expr allowing to match all the keys corresponding to the full paths that would have match
 /// the given Path Expr.
 ///
-/// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received [`Query::res_name`](zenoh::net::Query::res_name) in a list of path
-/// expressions that will match all the relevant stored keys (that correspond to paths stripped from the prefix).
+/// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received
+/// [`Query::selector()`](zenoh::queryable::Query::selector)`.`[`key_selector`](zenoh::prelude::Selector::key_selector) in a list of path expressions
+/// that will match all the relevant stored keys (that correspond to paths stripped from the prefix).
 ///
 /// # See also
 /// [`get_keys_prefix()`]

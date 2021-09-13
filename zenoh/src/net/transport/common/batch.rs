@@ -1,5 +1,3 @@
-use crate::net::ZInt;
-
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -13,7 +11,7 @@ use crate::net::ZInt;
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::protocol::core::{Priority, Reliability};
+use super::protocol::core::{Priority, Reliability, ZInt};
 use super::protocol::io::WBuf;
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
@@ -402,7 +400,7 @@ mod tests {
                     // Change dropping strategy every three messages
                     dropping = !dropping;
                 }
-                let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
+                let key = ResKey::RName(format!("test{}", zmsgs_in.len()).into());
                 let payload = ZBuf::from(vec![0u8; payload_size]);
                 let channel = Channel {
                     priority,
@@ -479,7 +477,7 @@ mod tests {
                 };
                 let congestion_control = CongestionControl::default();
                 // Create the ZenohMessage
-                let key = ResKey::RName("test".to_string());
+                let key = ResKey::RName("test".into());
                 let payload = ZBuf::from(vec![0u8; payload_size]);
                 let data_info = None;
                 let routing_context = None;

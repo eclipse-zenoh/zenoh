@@ -146,20 +146,43 @@ fn gen_declarations() -> Vec<Declaration> {
         Declaration::Queryable(Queryable {
             key: gen_key(),
             kind: queryable::ALL_KINDS,
+            info: QueryableInfo {
+                complete: 1,
+                distance: 0,
+            },
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
             kind: queryable::STORAGE,
+            info: QueryableInfo {
+                complete: 0,
+                distance: 10,
+            },
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
             kind: queryable::EVAL,
+            info: QueryableInfo {
+                complete: 10,
+                distance: 0,
+            },
         }),
-        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::ALL_KINDS,
+        }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::STORAGE,
+        }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::EVAL,
+        }),
     ]
 }
 
-fn gen_key() -> ResKey {
+fn gen_key() -> ResKey<'static> {
     let num: u8 = thread_rng().gen_range(0..3);
     match num {
         0 => ResKey::from(gen!(ZInt)),
@@ -178,8 +201,10 @@ fn gen_target() -> Target {
     let num: u8 = thread_rng().gen_range(0..4);
     match num {
         0 => Target::BestMatching,
-        1 => Target::Complete { n: 3 },
-        2 => Target::All,
+        1 => Target::All,
+        2 => Target::AllComplete,
+        #[cfg(feature = "complete_n")]
+        4 => Target::Complete(3),
         _ => Target::None,
     }
 }
@@ -208,7 +233,10 @@ fn gen_timestamp() -> Timestamp {
 fn gen_data_info() -> DataInfo {
     DataInfo {
         kind: option_gen!(gen!(ZInt)),
-        encoding: option_gen!(gen!(ZInt)),
+        encoding: option_gen!(encoding::Encoding {
+            prefix: gen!(ZInt),
+            suffix: "".into()
+        }),
         timestamp: option_gen!(gen_timestamp()),
         #[cfg(feature = "zero-copy")]
         sliced: false,
@@ -606,7 +634,7 @@ fn codec_frame_batching() {
         assert!(wbuf.write_transport_message(&frame));
 
         // Create data message
-        let key = ResKey::RName("test".to_string());
+        let key = ResKey::RName("test".into());
         let payload = ZBuf::from(vec![0u8; 1]);
         let data_info = None;
         let routing_context = None;
@@ -812,12 +840,12 @@ fn codec_pull() {
 #[test]
 fn codec_query() {
     for _ in 0..NUM_ITER {
-        let predicate = [String::default(), "my_predicate".to_string()];
+        let value_selector = [String::default(), "my_value_selector".to_string()];
         let target = [None, Some(gen_query_target())];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in predicate.iter() {
+        for p in value_selector.iter() {
             for t in target.iter() {
                 for roc in routing_context.iter() {
                     for a in attachment.iter() {

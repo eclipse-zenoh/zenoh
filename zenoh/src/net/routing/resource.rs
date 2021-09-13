@@ -13,7 +13,7 @@
 //
 use super::face::FaceState;
 use super::protocol::core::rname;
-use super::protocol::core::{PeerId, ResKey, SubInfo, ZInt};
+use super::protocol::core::{PeerId, QueryableInfo, ResKey, SubInfo, ZInt};
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 use super::router::Tables;
@@ -23,7 +23,19 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use zenoh_util::sync::get_mut_unchecked;
 
-pub(super) type Route = HashMap<usize, (Arc<FaceState>, ResKey, Option<RoutingContext>)>;
+pub(super) type Direction = (Arc<FaceState>, ResKey<'static>, Option<RoutingContext>);
+pub(super) type Route = HashMap<usize, Direction>;
+#[cfg(feature = "complete_n")]
+pub(super) type QueryRoute = HashMap<usize, (Direction, super::protocol::core::Target)>;
+#[cfg(not(feature = "complete_n"))]
+pub(super) type QueryRoute = Route;
+pub(super) struct TargetQabl {
+    pub(super) direction: Direction,
+    pub(super) kind: ZInt,
+    pub(super) complete: ZInt,
+    pub(super) distance: f64,
+}
+pub(super) type TargetQablSet = Vec<TargetQabl>;
 pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(super) struct SessionContext {
@@ -31,23 +43,23 @@ pub(super) struct SessionContext {
     pub(super) local_rid: Option<ZInt>,
     pub(super) remote_rid: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
-    pub(super) qabl: Option<ZInt>,
+    pub(super) qabl: HashMap<ZInt, QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
 }
 
 pub(super) struct ResourceContext {
     pub(super) router_subs: HashSet<PeerId>,
     pub(super) peer_subs: HashSet<PeerId>,
-    pub(super) router_qabls: HashMap<PeerId, ZInt>,
-    pub(super) peer_qabls: HashMap<PeerId, ZInt>,
+    pub(super) router_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
+    pub(super) peer_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
     pub(super) peers_data_routes: Vec<Arc<Route>>,
     pub(super) client_data_route: Option<Arc<Route>>,
-    pub(super) routers_query_routes: Vec<Arc<Route>>,
-    pub(super) peers_query_routes: Vec<Arc<Route>>,
-    pub(super) client_query_route: Option<Arc<Route>>,
+    pub(super) routers_query_routes: Vec<Arc<TargetQablSet>>,
+    pub(super) peers_query_routes: Vec<Arc<TargetQablSet>>,
+    pub(super) client_query_route: Option<Arc<TargetQablSet>>,
 }
 
 impl ResourceContext {
@@ -171,7 +183,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn routers_query_route(&self, context: usize) -> Option<Arc<Route>> {
+    pub(super) fn routers_query_route(&self, context: usize) -> Option<Arc<TargetQablSet>> {
         match &self.context {
             Some(ctx) => (ctx.routers_query_routes.len() > context)
                 .then(|| ctx.routers_query_routes[context].clone()),
@@ -180,7 +192,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn peers_query_route(&self, context: usize) -> Option<Arc<Route>> {
+    pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<TargetQablSet>> {
         match &self.context {
             Some(ctx) => (ctx.peers_query_routes.len() > context)
                 .then(|| ctx.peers_query_routes[context].clone()),
@@ -189,7 +201,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn client_query_route(&self) -> Option<Arc<Route>> {
+    pub(super) fn client_query_route(&self) -> Option<Arc<TargetQablSet>> {
         match &self.context {
             Some(ctx) => ctx.client_query_route.clone(),
             None => None,
@@ -347,7 +359,7 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey {
+    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -360,7 +372,7 @@ impl Resource {
                             local_rid: None,
                             remote_rid: None,
                             subs: None,
-                            qabl: None,
+                            qabl: HashMap::new(),
                             last_values: HashMap::new(),
                         })
                     });
@@ -385,13 +397,13 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key(prefix: &Arc<Resource>, suffix: &str, sid: usize) -> ResKey {
-        fn get_best_key_(
+    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> ResKey<'a> {
+        fn get_best_key_<'a>(
             prefix: &Arc<Resource>,
-            suffix: &str,
+            suffix: &'a str,
             sid: usize,
             checkchilds: bool,
-        ) -> ResKey {
+        ) -> ResKey<'a> {
             if checkchilds && !suffix.is_empty() {
                 let (chunk, rest) = Resource::fst_chunk(suffix);
                 if let Some(child) = prefix.childs.get(chunk) {
@@ -407,7 +419,7 @@ impl Resource {
             }
             match &prefix.parent {
                 Some(parent) => {
-                    get_best_key_(parent, &[&prefix.suffix, suffix].concat(), sid, false)
+                    get_best_key_(parent, &[&prefix.suffix, suffix].concat(), sid, false).to_owned()
                 }
                 None => (0, suffix).into(),
             }
@@ -503,7 +515,7 @@ impl Resource {
     }
 }
 
-pub fn declare_resource(
+pub fn register_resource(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     rid: ZInt,
@@ -529,7 +541,7 @@ pub fn declare_resource(
                             local_rid: None,
                             remote_rid: Some(rid),
                             subs: None,
-                            qabl: None,
+                            qabl: HashMap::new(),
                             last_values: HashMap::new(),
                         })
                     })
@@ -556,7 +568,7 @@ pub fn declare_resource(
     }
 }
 
-pub fn undeclare_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
+pub fn unregister_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
     match get_mut_unchecked(face).remote_mappings.remove(&rid) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),
