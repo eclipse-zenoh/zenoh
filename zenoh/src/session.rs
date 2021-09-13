@@ -854,11 +854,10 @@ impl Session {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
-    /// use zenoh::encoding;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session.put("/resource/name", "value")
-    ///        .encoding(encoding::TEXT_PLAIN).await.unwrap();
+    ///        .encoding(Encoding::TEXT_PLAIN).await.unwrap();
     /// # })
     /// ```
     #[inline]

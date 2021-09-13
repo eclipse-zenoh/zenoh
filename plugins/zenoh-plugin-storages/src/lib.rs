@@ -20,7 +20,6 @@ use futures::prelude::*;
 use libloading::Symbol;
 use log::{debug, error, warn};
 use std::collections::HashMap;
-use zenoh::encoding;
 use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::Session;
@@ -138,7 +137,7 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
                 let props = Properties::from([(PROP_STORAGE_PATH_EXPR, path_expr)].as_ref());
                 zenoh
                     .put(&storage_admin_path, props)
-                    .encoding(encoding::APP_PROPERTIES)
+                    .encoding(Encoding::APP_PROPERTIES)
                     .await
                     .unwrap();
                 i += 1
@@ -197,7 +196,7 @@ async fn load_and_start_backend(
     zenoh: Arc<Session>,
     lib_loader: &LibLoader,
 ) -> ZResult<Sender<bool>> {
-    if value.encoding == encoding::APP_PROPERTIES {
+    if value.encoding == Encoding::APP_PROPERTIES {
         if let Ok(props) = String::from_utf8(value.payload.read_vec()).map(Properties::from) {
             let name = match path.rfind('/') {
                 Some(i) => &path[i + 1..],

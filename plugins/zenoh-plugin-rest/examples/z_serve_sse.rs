@@ -14,7 +14,6 @@
 
 use clap::{App, Arg};
 use futures::prelude::*;
-use zenoh::encoding;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 use zenoh::queryable::EVAL;
@@ -76,7 +75,7 @@ async fn main() {
     loop {
         session
             .put(rid, value)
-            .encoding(encoding::TEXT_PLAIN)
+            .encoding(Encoding::TEXT_PLAIN)
             .congestion_control(CongestionControl::Block)
             .await
             .unwrap();

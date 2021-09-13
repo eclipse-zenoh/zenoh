@@ -20,7 +20,6 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::encoding::*;
 use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
@@ -46,16 +45,18 @@ fn parse_http_port(arg: &str) -> String {
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
-        p if p.starts_with(&STRING) => {
+        p if p.starts_with(&Encoding::STRING) => {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
-        p if p.starts_with(&APP_PROPERTIES) => {
+        p if p.starts_with(&Encoding::APP_PROPERTIES) => {
             // convert to Json string for special characters escaping
             serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
         }
-        p if p.starts_with(&APP_JSON) => value.to_string(),
-        p if p.starts_with(&APP_INTEGER) || p.starts_with(&APP_FLOAT) => value.to_string(),
+        p if p.starts_with(&Encoding::APP_JSON) => value.to_string(),
+        p if p.starts_with(&Encoding::APP_INTEGER) || p.starts_with(&Encoding::APP_FLOAT) => {
+            value.to_string()
+        }
         _ => {
             format!(r#""{}""#, value.to_string())
         }

@@ -84,9 +84,6 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 mod session;
 pub use session::*;
 
-/// The encoding of a zenoh [`Value`].
-pub use net::protocol::core::encoding;
-
 #[doc(hidden)]
 pub mod net;
 
@@ -156,6 +153,7 @@ pub mod properties {
     }
 }
 
+#[allow(clippy::needless_doctest_main)]
 /// Synchronisation primitives.
 ///
 /// This module provides some traits that provide some syncronous accessors to some outputs :

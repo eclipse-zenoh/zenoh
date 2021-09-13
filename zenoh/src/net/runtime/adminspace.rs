@@ -11,9 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 use super::protocol::{
-    core::encoding::Encoding,
     core::{
-        encoding, queryable::EVAL, rname, Channel, CongestionControl, PeerId, QueryConsolidation,
+        queryable::EVAL, rname, Channel, CongestionControl, Encoding, PeerId, QueryConsolidation,
         QueryTarget, QueryableInfo, ResKey, SubInfo, ZInt,
     },
     io::ZBuf,
@@ -317,7 +316,7 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
         "plugins": plugins,
     });
     log::trace!("AdminSpace router_data: {:?}", json);
-    (ZBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
+    (ZBuf::from(json.to_string().as_bytes()), Encoding::APP_JSON)
 }
 
 pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, Encoding) {
@@ -325,7 +324,7 @@ pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, Encoding) 
 
     let res = (
         ZBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
-        encoding::TEXT_PLAIN,
+        Encoding::TEXT_PLAIN,
     );
     res
 }
@@ -345,6 +344,6 @@ pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, Encoding) {
                 .dot()
                 .as_bytes(),
         ),
-        encoding::TEXT_PLAIN,
+        Encoding::TEXT_PLAIN,
     )
 }

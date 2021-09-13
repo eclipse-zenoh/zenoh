@@ -233,7 +233,7 @@ fn gen_timestamp() -> Timestamp {
 fn gen_data_info() -> DataInfo {
     DataInfo {
         kind: option_gen!(gen!(ZInt)),
-        encoding: option_gen!(encoding::Encoding {
+        encoding: option_gen!(Encoding {
             prefix: gen!(ZInt),
             suffix: "".into()
         }),

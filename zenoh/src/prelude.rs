@@ -24,7 +24,6 @@
 
 use crate::buf::{SharedMemoryBuf, ZBuf};
 use crate::data_kind;
-use crate::encoding::*;
 use crate::net::protocol::proto::DataInfo;
 use crate::queryable::Query;
 use crate::time::{new_reception_timestamp, Timestamp};
@@ -39,6 +38,9 @@ pub use crate::config;
 pub use crate::properties::Properties;
 pub use crate::sync::channel::Receiver;
 pub use crate::sync::ZFuture;
+
+/// The encoding of a zenoh [`Value`].
+pub use super::net::protocol::core::Encoding;
 
 /// The global unique id of a zenoh peer.
 pub use super::net::protocol::core::PeerId;
@@ -76,7 +78,7 @@ impl Value {
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
-            encoding: APP_OCTET_STREAM,
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 
@@ -84,7 +86,7 @@ impl Value {
     pub fn empty() -> Self {
         Value {
             payload: ZBuf::new(),
-            encoding: APP_OCTET_STREAM,
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 
@@ -121,7 +123,7 @@ impl From<ZBuf> for Value {
     fn from(buf: ZBuf) -> Self {
         Value {
             payload: buf,
-            encoding: APP_OCTET_STREAM,
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 }
@@ -131,7 +133,7 @@ impl From<Arc<SharedMemoryBuf>> for Value {
     fn from(smb: Arc<SharedMemoryBuf>) -> Self {
         Value {
             payload: smb.into(),
-            encoding: APP_OCTET_STREAM,
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 }
@@ -141,7 +143,7 @@ impl From<Box<SharedMemoryBuf>> for Value {
     fn from(smb: Box<SharedMemoryBuf>) -> Self {
         Value {
             payload: smb.into(),
-            encoding: APP_OCTET_STREAM,
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 }
@@ -151,7 +153,7 @@ impl From<SharedMemoryBuf> for Value {
     fn from(smb: SharedMemoryBuf) -> Self {
         Value {
             payload: smb.into(),
-            encoding: APP_OCTET_STREAM,
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 }
@@ -172,7 +174,7 @@ impl From<String> for Value {
     fn from(s: String) -> Self {
         Value {
             payload: ZBuf::from(s.as_bytes()),
-            encoding: STRING,
+            encoding: Encoding::STRING,
         }
     }
 }
@@ -187,7 +189,7 @@ impl From<Properties> for Value {
     fn from(p: Properties) -> Self {
         Value {
             payload: ZBuf::from(p.to_string().as_bytes()),
-            encoding: APP_PROPERTIES,
+            encoding: Encoding::APP_PROPERTIES,
         }
     }
 }
@@ -196,7 +198,7 @@ impl From<&serde_json::Value> for Value {
     fn from(json: &serde_json::Value) -> Self {
         Value {
             payload: ZBuf::from(json.to_string().as_bytes()),
-            encoding: APP_JSON,
+            encoding: Encoding::APP_JSON,
         }
     }
 }
@@ -211,7 +213,7 @@ impl From<i64> for Value {
     fn from(i: i64) -> Self {
         Value {
             payload: ZBuf::from(i.to_string().as_bytes()),
-            encoding: APP_INTEGER,
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -220,7 +222,7 @@ impl From<f64> for Value {
     fn from(f: f64) -> Self {
         Value {
             payload: ZBuf::from(f.to_string().as_bytes()),
-            encoding: APP_FLOAT,
+            encoding: Encoding::APP_FLOAT,
         }
     }
 }

@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::encoding::Encoding;
+use super::core::Encoding;
 use super::core::*;
 use super::defaults::SEQ_NUM_RES;
 use super::io::{ZBuf, ZSlice};

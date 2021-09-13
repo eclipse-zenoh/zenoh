@@ -17,7 +17,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::encoding::Encoding;
+use zenoh::net::protocol::core::Encoding;
 use zenoh::net::protocol::core::{Channel, CongestionControl, PeerId, ResKey};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};

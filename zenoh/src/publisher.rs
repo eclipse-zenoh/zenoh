@@ -17,10 +17,10 @@
 use super::net::protocol::core::{rname, Channel, Priority};
 use super::net::protocol::proto::{data_kind, DataInfo, Options};
 use super::net::transport::Primitives;
-use crate::encoding::Encoding;
 use crate::prelude::*;
 use crate::subscriber::Reliability;
 use crate::sync::ZFuture;
+use crate::Encoding;
 use crate::Session;
 use async_std::sync::Arc;
 use std::fmt;
@@ -161,13 +161,12 @@ derive_zfuture! {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
-    /// use zenoh::encoding;
     /// use zenoh::publisher::CongestionControl;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session
     ///     .put("/resource/name", "value")
-    ///     .encoding(encoding::TEXT_PLAIN)
+    ///     .encoding(Encoding::TEXT_PLAIN)
     ///     .congestion_control(CongestionControl::Block)
     ///     .await
     ///     .unwrap();
