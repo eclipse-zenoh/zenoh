@@ -118,7 +118,7 @@ derive_zfuture! {
     /// # })
     /// ```
     #[derive(Debug, Clone)]
-    pub struct QueryBuilder<'a> {
+    pub struct Getter<'a> {
         pub(crate) session: &'a Session,
         pub(crate) selector: KeyedSelector<'a>,
         pub(crate) target: Option<QueryTarget>,
@@ -126,7 +126,7 @@ derive_zfuture! {
     }
 }
 
-impl<'a> QueryBuilder<'a> {
+impl<'a> Getter<'a> {
     /// Change the target of the query.
     #[inline]
     pub fn target(mut self, target: QueryTarget) -> Self {
@@ -142,7 +142,7 @@ impl<'a> QueryBuilder<'a> {
     }
 }
 
-impl Runnable for QueryBuilder<'_> {
+impl Runnable for Getter<'_> {
     type Output = ZResult<ReplyReceiver>;
 
     fn run(&mut self) -> Self::Output {

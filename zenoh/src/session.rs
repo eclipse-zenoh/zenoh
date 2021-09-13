@@ -866,12 +866,12 @@ impl Session {
         &'a self,
         reskey: IntoResKey,
         value: IntoValue,
-    ) -> WriteBuilder<'a>
+    ) -> Writer<'a>
     where
         IntoResKey: Into<ResKey<'a>>,
         IntoValue: Into<Value>,
     {
-        WriteBuilder {
+        Writer {
             session: self,
             reskey: reskey.into(),
             value: Some(value.into()),
@@ -896,11 +896,11 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a, IntoResKey>(&'a self, reskey: IntoResKey) -> WriteBuilder<'a>
+    pub fn delete<'a, IntoResKey>(&'a self, reskey: IntoResKey) -> Writer<'a>
     where
         IntoResKey: Into<ResKey<'a>>,
     {
-        WriteBuilder {
+        Writer {
             session: self,
             reskey: reskey.into(),
             value: Some(Value::empty()),
@@ -1034,11 +1034,11 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, IntoKeyedSelector>(&'a self, selector: IntoKeyedSelector) -> QueryBuilder<'a>
+    pub fn get<'a, IntoKeyedSelector>(&'a self, selector: IntoKeyedSelector) -> Getter<'a>
     where
         IntoKeyedSelector: Into<KeyedSelector<'a>>,
     {
-        QueryBuilder {
+        Getter {
             session: self,
             selector: selector.into(),
             target: Some(QueryTarget::default()),

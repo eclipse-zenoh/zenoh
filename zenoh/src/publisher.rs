@@ -169,7 +169,7 @@ derive_zfuture! {
     /// # })
     /// ```
     #[derive(Debug, Clone)]
-    pub struct WriteBuilder<'a> {
+    pub struct Writer<'a> {
         pub(crate) session: &'a Session,
         pub(crate) reskey: ResKey<'a>,
         pub(crate) value: Option<Value>,
@@ -178,10 +178,10 @@ derive_zfuture! {
     }
 }
 
-impl<'a> WriteBuilder<'a> {
+impl<'a> Writer<'a> {
     /// Change the congestion_control to apply when routing the data.
     #[inline]
-    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> WriteBuilder<'a> {
+    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Writer<'a> {
         self.congestion_control = congestion_control;
         self
     }
@@ -208,7 +208,7 @@ impl<'a> WriteBuilder<'a> {
     }
 }
 
-impl Runnable for WriteBuilder<'_> {
+impl Runnable for Writer<'_> {
     type Output = ZResult<()>;
 
     fn run(&mut self) -> Self::Output {
