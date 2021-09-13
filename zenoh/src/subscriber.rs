@@ -243,6 +243,9 @@ impl fmt::Debug for CallbackSubscriber<'_> {
 derive_zfuture! {
     /// A builder for initializing a [`Subscriber`](Subscriber).
     ///
+    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+    /// or asynchronously via `.await`.
+    ///
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
@@ -383,6 +386,9 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
 
 derive_zfuture! {
     /// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
+    ///
+    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+    /// or asynchronously via `.await`.
     ///
     /// # Examples
     /// ```

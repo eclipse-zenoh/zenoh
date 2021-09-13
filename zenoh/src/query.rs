@@ -98,7 +98,9 @@ zreceiver! {
 
 derive_zfuture! {
     /// A builder for initializing a `query`.
-    /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver).
+    ///
+    /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver) and can be
+    /// accessed synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
     ///
     /// # Examples
     /// ```

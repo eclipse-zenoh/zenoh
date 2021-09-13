@@ -277,6 +277,9 @@ impl RepliesSender {
 derive_zfuture! {
     /// A builder for initializing a [`Queryable`](Queryable).
     ///
+    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+    /// or asynchronously via `.await`.
+    ///
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {

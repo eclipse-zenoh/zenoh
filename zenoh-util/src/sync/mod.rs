@@ -36,7 +36,7 @@ pub trait ZFuture: Future + Send {
     fn wait(self) -> Self::Output;
 }
 
-/// Creates a ZFuture that is immediately ready with a value.
+/// Creates a [`ZFuture`] that is immediately ready with a value.
 ///
 /// This `struct` is created by [`zready()`]. See its
 /// documentation for more.
@@ -65,7 +65,7 @@ where
     }
 }
 
-/// Creates a ZFuture that is immediately ready with a value.
+/// Creates a [`ZFuture`] that is immediately ready with a value.
 ///
 /// ZFutures created through this function are functionally similar to those
 /// created through `async {}`. The main difference is that futures created

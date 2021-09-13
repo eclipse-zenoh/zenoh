@@ -168,12 +168,43 @@ pub mod properties {
 /// Most zenoh types that provide multiple outputs both implment [`channel::Receiver`](crate::sync::channel::Receiver) and
 /// [`futures::Stream`] and allow users to access their output synchronously via [`channel::Receiver::recv()`](crate::sync::channel::Receiver::recv)
 /// or asynchronously via `.next().await`.
+///
+/// # Examples
+///
+/// ### Sync
+/// ```no_run
+/// use zenoh::prelude::*;
+/// use zenoh::scouting::whatami;
+///
+/// fn main() {
+///     let mut receiver = zenoh::scout(whatami::ROUTER, config::default()).wait().unwrap();
+///     while let Ok(hello) = receiver.recv() {
+///         println!("{}", hello);
+///     }
+/// }
+/// ```
+///
+/// ### Async
+/// ```no_run
+/// use futures::prelude::*;
+/// use zenoh::prelude::*;
+/// use zenoh::scouting::whatami;
+///
+/// #[async_std::main]
+/// async fn main() {
+///     let mut receiver = zenoh::scout(whatami::ROUTER, config::default()).await.unwrap();
+///     while let Some(hello) = receiver.next().await {
+///         println!("{}", hello);
+///     }
+/// }
+/// ```
 pub mod sync {
     pub use zenoh_util::sync::zready;
     pub use zenoh_util::sync::ZFuture;
     pub use zenoh_util::sync::ZPinBoxFuture;
     pub use zenoh_util::sync::ZReady;
 
+    /// A multi-producer, multi-consumer channel that can be accessed synchronously or asynchronously.
     pub mod channel {
         pub use zenoh_util::sync::channel::Iter;
         pub use zenoh_util::sync::channel::Receiver;
