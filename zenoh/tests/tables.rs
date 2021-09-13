@@ -189,8 +189,7 @@ fn clean_test() {
     assert!(res2.upgrade().is_some());
 
     register_resource(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/**");
-    let optres3 =
-        Resource::get_resource(&tables._get_root(), "/**").map(|res| Arc::downgrade(&res));
+    let optres3 = Resource::get_resource(tables._get_root(), "/**").map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     assert!(res3.upgrade().is_some());

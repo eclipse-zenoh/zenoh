@@ -94,98 +94,92 @@ fn gen_attachment() -> Attachment {
 }
 
 fn gen_declarations() -> Vec<Declaration> {
-    let mut decls = Vec::new();
-    decls.push(Declaration::Resource(Resource {
-        rid: gen!(ZInt),
-        key: gen_key(),
-    }));
-    decls.push(Declaration::ForgetResource(ForgetResource {
-        rid: gen!(ZInt),
-    }));
-    decls.push(Declaration::Publisher(Publisher { key: gen_key() }));
-    decls.push(Declaration::ForgetPublisher(ForgetPublisher {
-        key: gen_key(),
-    }));
-    decls.push(Declaration::Subscriber(Subscriber {
-        key: gen_key(),
-        info: SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        },
-    }));
-    decls.push(Declaration::Subscriber(Subscriber {
-        key: gen_key(),
-        info: SubInfo {
-            reliability: Reliability::BestEffort,
-            mode: SubMode::Pull,
-            period: None,
-        },
-    }));
-    decls.push(Declaration::Subscriber(Subscriber {
-        key: gen_key(),
-        info: SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Pull,
-            period: Some(Period {
-                origin: gen!(ZInt),
-                period: gen!(ZInt),
-                duration: gen!(ZInt),
-            }),
-        },
-    }));
-    decls.push(Declaration::Subscriber(Subscriber {
-        key: gen_key(),
-        info: SubInfo {
-            reliability: Reliability::BestEffort,
-            mode: SubMode::Push,
-            period: Some(Period {
-                origin: gen!(ZInt),
-                period: gen!(ZInt),
-                duration: gen!(ZInt),
-            }),
-        },
-    }));
-    decls.push(Declaration::ForgetSubscriber(ForgetSubscriber {
-        key: gen_key(),
-    }));
-    decls.push(Declaration::Queryable(Queryable {
-        key: gen_key(),
-        kind: queryable::ALL_KINDS,
-        info: QueryableInfo {
-            complete: 1,
-            distance: 0,
-        },
-    }));
-    decls.push(Declaration::Queryable(Queryable {
-        key: gen_key(),
-        kind: queryable::STORAGE,
-        info: QueryableInfo {
-            complete: 0,
-            distance: 10,
-        },
-    }));
-    decls.push(Declaration::Queryable(Queryable {
-        key: gen_key(),
-        kind: queryable::EVAL,
-        info: QueryableInfo {
-            complete: 10,
-            distance: 0,
-        },
-    }));
-    decls.push(Declaration::ForgetQueryable(ForgetQueryable {
-        key: gen_key(),
-        kind: queryable::ALL_KINDS,
-    }));
-    decls.push(Declaration::ForgetQueryable(ForgetQueryable {
-        key: gen_key(),
-        kind: queryable::STORAGE,
-    }));
-    decls.push(Declaration::ForgetQueryable(ForgetQueryable {
-        key: gen_key(),
-        kind: queryable::EVAL,
-    }));
-    decls
+    vec![
+        Declaration::Resource(Resource {
+            rid: gen!(ZInt),
+            key: gen_key(),
+        }),
+        Declaration::ForgetResource(ForgetResource { rid: gen!(ZInt) }),
+        Declaration::Publisher(Publisher { key: gen_key() }),
+        Declaration::ForgetPublisher(ForgetPublisher { key: gen_key() }),
+        Declaration::Subscriber(Subscriber {
+            key: gen_key(),
+            info: SubInfo {
+                reliability: Reliability::Reliable,
+                mode: SubMode::Push,
+                period: None,
+            },
+        }),
+        Declaration::Subscriber(Subscriber {
+            key: gen_key(),
+            info: SubInfo {
+                reliability: Reliability::BestEffort,
+                mode: SubMode::Pull,
+                period: None,
+            },
+        }),
+        Declaration::Subscriber(Subscriber {
+            key: gen_key(),
+            info: SubInfo {
+                reliability: Reliability::Reliable,
+                mode: SubMode::Pull,
+                period: Some(Period {
+                    origin: gen!(ZInt),
+                    period: gen!(ZInt),
+                    duration: gen!(ZInt),
+                }),
+            },
+        }),
+        Declaration::Subscriber(Subscriber {
+            key: gen_key(),
+            info: SubInfo {
+                reliability: Reliability::BestEffort,
+                mode: SubMode::Push,
+                period: Some(Period {
+                    origin: gen!(ZInt),
+                    period: gen!(ZInt),
+                    duration: gen!(ZInt),
+                }),
+            },
+        }),
+        Declaration::ForgetSubscriber(ForgetSubscriber { key: gen_key() }),
+        Declaration::Queryable(Queryable {
+            key: gen_key(),
+            kind: queryable::ALL_KINDS,
+            info: QueryableInfo {
+                complete: 1,
+                distance: 0,
+            },
+        }),
+        Declaration::Queryable(Queryable {
+            key: gen_key(),
+            kind: queryable::STORAGE,
+            info: QueryableInfo {
+                complete: 0,
+                distance: 10,
+            },
+        }),
+        Declaration::Queryable(Queryable {
+            key: gen_key(),
+            kind: queryable::EVAL,
+            info: QueryableInfo {
+                complete: 10,
+                distance: 0,
+            },
+        }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::ALL_KINDS,
+        }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::STORAGE,
+        }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::EVAL,
+        }),
+    ]
 }
 
 fn gen_key() -> ResKey<'static> {
@@ -861,7 +855,7 @@ fn codec_query() {
                             gen!(ZInt),
                             t.clone(),
                             gen_consolidation(),
-                            roc.clone(),
+                            *roc,
                             a.clone(),
                         );
                         test_write_read_zenoh_message(msg);
