@@ -13,9 +13,11 @@
 //
 use super::core::encoding::Encoding;
 use super::core::*;
+use super::defaults::SEQ_NUM_RES;
 use super::io::{ZBuf, ZSlice};
-use super::link::Locator;
+use crate::net::link::Locator;
 use std::fmt;
+use std::time::Duration;
 
 /*************************************/
 /*               IDS                 */
@@ -25,11 +27,12 @@ pub(crate) mod imsg {
     use super::ZInt;
 
     pub(crate) mod id {
-        // Session Messages
+        // Transport Messages
+        pub(crate) const JOIN: u8 = 0x00; // For multicast communications only
         pub(crate) const SCOUT: u8 = 0x01;
         pub(crate) const HELLO: u8 = 0x02;
-        pub(crate) const INIT: u8 = 0x03;
-        pub(crate) const OPEN: u8 = 0x04;
+        pub(crate) const INIT: u8 = 0x03; // For unicast communications only
+        pub(crate) const OPEN: u8 = 0x04; // For unicast communications only
         pub(crate) const CLOSE: u8 = 0x05;
         pub(crate) const SYNC: u8 = 0x06;
         pub(crate) const ACK_NACK: u8 = 0x07;
@@ -46,16 +49,22 @@ pub(crate) mod imsg {
         pub(crate) const LINK_STATE_LIST: u8 = 0x10;
 
         // Message decorators
+        pub(crate) const PRIORITY: u8 = 0x1c;
         pub(crate) const ROUTING_CONTEXT: u8 = 0x1d;
         pub(crate) const REPLY_CONTEXT: u8 = 0x1e;
         pub(crate) const ATTACHMENT: u8 = 0x1f;
     }
 
     // Header mask
-    pub const HEADER_MASK: u8 = 0x1f;
+    pub const HEADER_BITS: u8 = 5;
+    pub const HEADER_MASK: u8 = !(0xff << HEADER_BITS);
 
     pub fn mid(header: u8) -> u8 {
         header & HEADER_MASK
+    }
+
+    pub fn flags(header: u8) -> u8 {
+        header & !HEADER_MASK
     }
 
     pub fn has_flag(byte: u8, flag: u8) -> bool {
@@ -67,10 +76,10 @@ pub(crate) mod imsg {
     }
 }
 
-pub mod smsg {
-    use super::imsg;
+pub mod tmsg {
+    use super::{imsg, Priority, ZInt};
 
-    // Session message IDs -- Re-export of some of the Inner Message IDs
+    // Transport message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
         use super::imsg;
 
@@ -85,29 +94,45 @@ pub mod smsg {
         pub const KEEP_ALIVE: u8 = imsg::id::KEEP_ALIVE;
         pub const PING_PONG: u8 = imsg::id::PING_PONG;
         pub const FRAME: u8 = imsg::id::FRAME;
+        pub const JOIN: u8 = imsg::id::JOIN;
 
         // Message decorators
+        pub const PRIORITY: u8 = imsg::id::PRIORITY;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
     }
 
-    // Session message flags
+    // Transport message flags
     pub mod flag {
         pub const A: u8 = 1 << 5; // 0x20 Ack           if A==1 then the message is an acknowledgment
         pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
         pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
         pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
-        pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is present
+        pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is requested or present
         pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
         pub const L: u8 = 1 << 7; // 0x80 Locators      if L==1 then Locators are present
         pub const M: u8 = 1 << 5; // 0x20 Mask          if M==1 then a Mask is present
+        pub const O: u8 = 1 << 7; // 0x80 Options       if O==1 then Options are present
         pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
-        pub const T: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
+        pub const T1: u8 = 1 << 5; // 0x20 TimeRes       if U==1 then the time resolution is in seconds
+        pub const T2: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
         pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
         pub const Z: u8 = 1 << 5; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
         pub const X: u8 = 0; // Unused flags are set to zero
+    }
+
+    pub mod init_options {
+        use super::ZInt;
+
+        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
+    }
+
+    pub mod join_options {
+        use super::ZInt;
+
+        pub const QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
     }
 
     // Reason for the Close message
@@ -119,11 +144,23 @@ pub mod smsg {
         pub const MAX_LINKS: u8 = 0x04;
         pub const EXPIRED: u8 = 0x05;
     }
+
+    pub mod conduit {
+        use super::{imsg, Priority};
+
+        pub const CONTROL: u8 = (Priority::Control as u8) << imsg::HEADER_BITS;
+        pub const REAL_TIME: u8 = (Priority::RealTime as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
+        pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
+        pub const DATA: u8 = (Priority::Data as u8) << imsg::HEADER_BITS;
+        pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
+        pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
+    }
 }
 
 pub mod zmsg {
-    use super::imsg;
-    use super::{CongestionControl, Reliability, ZInt};
+    use super::{imsg, Channel, CongestionControl, Priority, Reliability, ZInt};
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {
@@ -138,6 +175,7 @@ pub mod zmsg {
         pub const LINK_STATE_LIST: u8 = imsg::id::LINK_STATE_LIST;
 
         // Message decorators
+        pub const PRIORITY: u8 = imsg::id::PRIORITY;
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
         pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
         pub const ROUTING_CONTEXT: u8 = imsg::id::ROUTING_CONTEXT;
@@ -145,10 +183,10 @@ pub mod zmsg {
 
     // Zenoh message flags
     pub mod flag {
-        pub const D: u8 = 1 << 5; // 0x20 Dropping      if D==1 then the message can be dropped
+        pub const D: u8 = 1 << 5; // 0x20 Drop          if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final         if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
-        pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then only numerical ID
+        pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then resource key has name
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
         pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
         pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
@@ -166,11 +204,14 @@ pub mod zmsg {
         pub mod info {
             use super::ZInt;
 
-            pub const KIND: ZInt = 1 << 0; // 0x01
-            pub const ENC: ZInt = 1 << 1; // 0x02
-            pub const TS: ZInt = 1 << 2; // 0x04
             #[cfg(feature = "zero-copy")]
-            pub const SLICED: ZInt = 1 << 5; // 0x20
+            pub const SLICED: ZInt = 1 << 0; // 0x01
+            pub const KIND: ZInt = 1 << 1; // 0x02
+            pub const ENCODING: ZInt = 1 << 2; // 0x04
+            pub const TIMESTAMP: ZInt = 1 << 3; // 0x08
+                                                // 0x10: Reserved
+                                                // 0x20: Reserved
+                                                // 0x40: Reserved
             pub const SRCID: ZInt = 1 << 7; // 0x80
             pub const SRCSN: ZInt = 1 << 8; // 0x100
             pub const RTRID: ZInt = 1 << 9; // 0x200
@@ -210,17 +251,51 @@ pub mod zmsg {
         pub const LOC: ZInt = 1 << 2; // 0x04
     }
 
-    // Default reliability for each Zenoh Message
-    pub mod default_reliability {
-        use super::Reliability;
+    pub mod conduit {
+        use super::{imsg, Priority};
 
-        pub const DECLARE: Reliability = Reliability::Reliable;
-        pub const DATA: Reliability = Reliability::BestEffort;
-        pub const QUERY: Reliability = Reliability::Reliable;
-        pub const PULL: Reliability = Reliability::Reliable;
-        pub const REPLY: Reliability = Reliability::Reliable;
-        pub const UNIT: Reliability = Reliability::BestEffort;
-        pub const LINK_STATE_LIST: Reliability = Reliability::Reliable;
+        pub const CONTROL: u8 = (Priority::Control as u8) << imsg::HEADER_BITS;
+        pub const REAL_TIME: u8 = (Priority::RealTime as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
+        pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
+        pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
+        pub const DATA: u8 = (Priority::Data as u8) << imsg::HEADER_BITS;
+        pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
+        pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
+    }
+
+    // Default reliability for each Zenoh Message
+    pub mod default_channel {
+        use super::{Channel, Priority, Reliability};
+
+        pub const DECLARE: Channel = Channel {
+            priority: Priority::Data,
+            reliability: Reliability::Reliable,
+        };
+        pub const DATA: Channel = Channel {
+            priority: Priority::Data,
+            reliability: Reliability::BestEffort,
+        };
+        pub const QUERY: Channel = Channel {
+            priority: Priority::Data,
+            reliability: Reliability::Reliable,
+        };
+        pub const PULL: Channel = Channel {
+            priority: Priority::Data,
+            reliability: Reliability::Reliable,
+        };
+        pub const REPLY: Channel = Channel {
+            priority: Priority::Data,
+            reliability: Reliability::Reliable,
+        };
+        pub const UNIT: Channel = Channel {
+            priority: Priority::Data,
+            reliability: Reliability::BestEffort,
+        };
+        pub const LINK_STATE_LIST: Channel = Channel {
+            priority: Priority::Control,
+            reliability: Reliability::Reliable,
+        };
     }
 
     // Default congestion control for each Zenoh Message
@@ -249,11 +324,6 @@ pub(crate) trait Options {
     fn has_options(&self) -> bool;
 }
 
-pub(crate) trait Control {
-    fn reliability(&self) -> Reliability;
-    fn congestion(&self) -> CongestionControl;
-}
-
 /*************************************/
 /*            DECORATORS             */
 /*************************************/
@@ -266,9 +336,9 @@ pub(crate) trait Control {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
-/// The Attachment can decorate any message (i.e., SessionMessage and ZenohMessage) and it allows to
+/// The Attachment can decorate any message (i.e., TransportMessage and ZenohMessage) and it allows to
 /// append to the message any additional information. Since the information contained in the
-/// Attachement is relevant only to the layer that provided them (e.g., Session, Zenoh, User) it
+/// Attachement is relevant only to the layer that provided them (e.g., Transport, Zenoh, User) it
 /// is the duty of that layer to serialize and de-serialize the attachment whenever deemed necessary.
 /// The attachement always contains serialized properties.
 ///
@@ -288,10 +358,10 @@ impl Header for Attachment {
     #[inline(always)]
     fn header(&self) -> u8 {
         #[allow(unused_mut)]
-        let mut header = smsg::id::ATTACHMENT;
+        let mut header = tmsg::id::ATTACHMENT;
         #[cfg(feature = "zero-copy")]
         if self.buffer.has_shminfo() {
-            header |= smsg::flag::Z;
+            header |= tmsg::flag::Z;
         }
         header
     }
@@ -299,7 +369,7 @@ impl Header for Attachment {
 
 impl Attachment {
     #[inline(always)]
-    pub fn make(buffer: ZBuf) -> Attachment {
+    pub fn new(buffer: ZBuf) -> Attachment {
         Attachment { buffer }
     }
 }
@@ -351,7 +421,7 @@ impl Header for ReplyContext {
 impl ReplyContext {
     // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
     #[inline(always)]
-    pub fn make(qid: ZInt, replier: Option<ReplierInfo>) -> ReplyContext {
+    pub fn new(qid: ZInt, replier: Option<ReplierInfo>) -> ReplyContext {
         ReplyContext { qid, replier }
     }
 
@@ -388,8 +458,26 @@ impl Header for RoutingContext {
 
 impl RoutingContext {
     #[inline(always)]
-    pub fn make(tree_id: ZInt) -> RoutingContext {
+    pub fn new(tree_id: ZInt) -> RoutingContext {
         RoutingContext { tree_id }
+    }
+}
+
+/// -- Priority decorator
+///
+/// ```text
+/// The **Priority** is a message decorator containing
+/// informations related to the priority of the frame/zenoh message.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// | ID  |  Prio   |
+/// +-+-+-+---------+
+///
+/// ```
+impl Priority {
+    pub fn header(self) -> u8 {
+        tmsg::id::PRIORITY | ((self as u8) << imsg::HEADER_BITS)
     }
 }
 
@@ -403,17 +491,18 @@ impl RoutingContext {
 /// ```text
 ///
 /// Options bits
-/// -  0: Payload kind
-/// -  1: Payload encoding
-/// -  2: Payload timestamp
-/// -  3: Payload source_id
-/// -  4: Payload source_sn
-/// -  5: Payload is sliced
+/// -  0: Payload is sliced
+/// -  1: Payload kind
+/// -  2: Payload encoding
+/// -  3: Payload timestamp
+/// -  4: Reserved
+/// -  5: Reserved
 /// -  6: Reserved
-/// -  7: Reserved
-/// -  8: First router_id
-/// -  9: First router_sn
-/// - 10-63: Reserved
+/// -  7: Payload source_id
+/// -  8: Payload source_sn
+/// -  9: First router_id
+/// - 10: First router_sn
+/// - 11-63: Reserved
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+---------+
@@ -439,11 +528,11 @@ impl RoutingContext {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
+    #[cfg(feature = "zero-copy")]
+    pub sliced: bool,
     pub kind: Option<ZInt>,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    #[cfg(feature = "zero-copy")]
-    pub sliced: bool,
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
     pub first_router_id: Option<PeerId>,
@@ -459,11 +548,11 @@ impl DataInfo {
 impl Default for DataInfo {
     fn default() -> DataInfo {
         DataInfo {
+            #[cfg(feature = "zero-copy")]
+            sliced: false,
             kind: None,
             encoding: None,
             timestamp: None,
-            #[cfg(feature = "zero-copy")]
-            sliced: false,
             source_id: None,
             source_sn: None,
             first_router_id: None,
@@ -475,18 +564,18 @@ impl Default for DataInfo {
 impl Options for DataInfo {
     fn options(&self) -> ZInt {
         let mut options = 0;
+        #[cfg(feature = "zero-copy")]
+        if self.sliced {
+            options |= zmsg::data::info::SLICED;
+        }
         if self.kind.is_some() {
             options |= zmsg::data::info::KIND;
         }
         if self.encoding.is_some() {
-            options |= zmsg::data::info::ENC;
+            options |= zmsg::data::info::ENCODING;
         }
         if self.timestamp.is_some() {
-            options |= zmsg::data::info::TS;
-        }
-        #[cfg(feature = "zero-copy")]
-        if self.sliced {
-            options |= zmsg::data::info::SLICED;
+            options |= zmsg::data::info::TIMESTAMP;
         }
         if self.source_id.is_some() {
             options |= zmsg::data::info::SRCID;
@@ -517,10 +606,10 @@ impl Options for DataInfo {
             }};
         }
 
-        self.kind.is_some()
+        sliced!(self)
+            || self.kind.is_some()
             || self.encoding.is_some()
             || self.timestamp.is_some()
-            || sliced!(self)
             || self.source_id.is_some()
             || self.source_sn.is_some()
             || self.first_router_id.is_some()
@@ -548,43 +637,30 @@ impl PartialOrd for DataInfo {
 /// ~    Payload    ~
 /// +---------------+
 ///
-/// - if D==1 then the message can be dropped for congestion control reasons.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
     pub key: ResKey<'static>,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
-    pub reliability: Reliability,
     pub congestion_control: CongestionControl,
+    pub reply_context: Option<ReplyContext>,
 }
 
 impl Header for Data {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::id::DATA;
-        if let CongestionControl::Drop = self.congestion_control {
-            header |= zmsg::flag::D;
-        }
         if self.data_info.is_some() {
             header |= zmsg::flag::I;
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K;
         }
+        if self.congestion_control == CongestionControl::Drop {
+            header |= zmsg::flag::D;
+        }
         header
-    }
-}
-
-impl Control for Data {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        self.reliability
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        self.congestion_control
     }
 }
 
@@ -596,34 +672,21 @@ impl Control for Data {
 /// |X|X|D|  UNIT   |
 /// +-+-+-+---------+
 ///
-/// - if D==1 then the message can be dropped for congestion control reasons.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
-    pub reliability: Reliability,
     pub congestion_control: CongestionControl,
+    pub reply_context: Option<ReplyContext>,
 }
 
 impl Header for Unit {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::id::UNIT;
-        if let CongestionControl::Drop = self.congestion_control {
+        if self.congestion_control == CongestionControl::Drop {
             header |= zmsg::flag::D;
         }
         header
-    }
-}
-
-impl Control for Unit {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        self.reliability
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        self.congestion_control
     }
 }
 
@@ -646,7 +709,7 @@ pub enum Declaration {
 /// +---------------+
 /// ~      RID      ~
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -659,8 +722,8 @@ impl Header for Resource {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::RESOURCE;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -691,7 +754,7 @@ impl Header for ForgetResource {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|   PUB   |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -703,8 +766,8 @@ impl Header for Publisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::PUBLISHER;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -715,7 +778,7 @@ impl Header for Publisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_PUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -727,8 +790,8 @@ impl Header for ForgetPublisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_PUBLISHER;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -739,7 +802,7 @@ impl Header for ForgetPublisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|S|R|   SUB   |  R for Reliable
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// |P|  SubMode    | if S==1. Otherwise: SubMode=Push
 /// +---------------+
@@ -762,7 +825,7 @@ impl Header for Subscriber {
         if !(self.info.mode == SubMode::Push && self.info.period.is_none()) {
             header |= zmsg::flag::S;
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K;
         }
         header
@@ -774,7 +837,7 @@ impl Header for Subscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_SUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -786,8 +849,8 @@ impl Header for ForgetSubscriber {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_SUBSCRIBER;
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -798,7 +861,7 @@ impl Header for ForgetSubscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|Q|X|  QABLE  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~     Kind      ~
 /// +---------------+
@@ -819,8 +882,8 @@ impl Header for Queryable {
         if self.info != QueryableInfo::default() {
             header |= zmsg::flag::Q;
         }
-        if self.key.is_numerical() {
-            header |= zmsg::flag::K
+        if self.key.is_string() {
+            header |= zmsg::flag::K;
         }
         header
     }
@@ -831,7 +894,7 @@ impl Header for Queryable {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X| F_QABLE |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~     Kind      ~
 /// +---------------+
@@ -849,7 +912,7 @@ impl Header for ForgetQueryable {
         if self.kind != queryable::EVAL {
             header |= zmsg::flag::Q
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K
         }
         header
@@ -878,18 +941,6 @@ impl Header for Declare {
     }
 }
 
-impl Control for Declare {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        zmsg::default_reliability::DECLARE
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        zmsg::default_congestion_control::DECLARE
-    }
-}
-
 /// # Pull message
 ///
 /// ```text
@@ -897,7 +948,7 @@ impl Control for Declare {
 /// +-+-+-+-+-+-+-+-+
 /// |K|N|F|  PULL   |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~    pullid     ~
 /// +---------------+
@@ -922,22 +973,10 @@ impl Header for Pull {
         if self.max_samples.is_some() {
             header |= zmsg::flag::N;
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K;
         }
         header
-    }
-}
-
-impl Control for Pull {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        zmsg::default_reliability::PULL
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        zmsg::default_congestion_control::PULL
     }
 }
 
@@ -948,7 +987,7 @@ impl Control for Pull {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|T|  QUERY  |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then only numerical id
+/// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~   value_selector   ~
 /// +---------------+
@@ -975,22 +1014,10 @@ impl Header for Query {
         if self.target.is_some() {
             header |= zmsg::flag::T;
         }
-        if self.key.is_numerical() {
+        if self.key.is_string() {
             header |= zmsg::flag::K;
         }
         header
-    }
-}
-
-impl Control for Query {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        zmsg::default_reliability::QUERY
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        zmsg::default_congestion_control::QUERY
     }
 }
 
@@ -1058,18 +1085,6 @@ impl Header for LinkStateList {
     }
 }
 
-impl Control for LinkStateList {
-    #[inline(always)]
-    fn reliability(&self) -> Reliability {
-        zmsg::default_reliability::LINK_STATE_LIST
-    }
-
-    #[inline(always)]
-    fn congestion(&self) -> CongestionControl {
-        zmsg::default_congestion_control::LINK_STATE_LIST
-    }
-}
-
 // Zenoh messages at zenoh level
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
@@ -1085,8 +1100,8 @@ pub enum ZenohBody {
 #[derive(Clone, PartialEq)]
 pub struct ZenohMessage {
     pub body: ZenohBody,
+    pub channel: Channel,
     pub routing_context: Option<RoutingContext>,
-    pub reply_context: Option<ReplyContext>,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
     pub size: Option<std::num::NonZeroUsize>,
@@ -1098,7 +1113,7 @@ impl fmt::Debug for ZenohMessage {
         write!(
             f,
             "{:?} {:?} {:?} {:?} {:?}",
-            self.body, self.routing_context, self.reply_context, self.attachment, self.size
+            self.body, self.channel, self.routing_context, self.attachment, self.size
         )
     }
 
@@ -1107,7 +1122,7 @@ impl fmt::Debug for ZenohMessage {
         write!(
             f,
             "{:?} {:?} {:?} {:?}",
-            self.body, self.routing_context, self.reply_context, self.attachment
+            self.body, self.channel, self.routing_context, self.attachment,
         )
     }
 }
@@ -1126,8 +1141,8 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Declare(Declare { declarations }),
+            channel: zmsg::default_channel::DECLARE,
             routing_context,
-            reply_context: None,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1139,7 +1154,7 @@ impl ZenohMessage {
     pub fn make_data(
         key: ResKey<'static>,
         payload: ZBuf,
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
@@ -1151,11 +1166,11 @@ impl ZenohMessage {
                 key,
                 data_info,
                 payload,
-                reliability,
                 congestion_control,
+                reply_context,
             }),
+            channel,
             routing_context,
-            reply_context,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1163,18 +1178,18 @@ impl ZenohMessage {
     }
 
     pub fn make_unit(
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         reply_context: Option<ReplyContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Unit(Unit {
-                reliability,
                 congestion_control,
+                reply_context,
             }),
+            channel,
             routing_context: None,
-            reply_context,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1195,8 +1210,8 @@ impl ZenohMessage {
                 max_samples,
                 is_final,
             }),
+            channel: zmsg::default_channel::PULL,
             routing_context: None,
-            reply_context: None,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1221,8 +1236,8 @@ impl ZenohMessage {
                 target,
                 consolidation,
             }),
+            channel: zmsg::default_channel::QUERY,
             routing_context,
-            reply_context: None,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1235,8 +1250,8 @@ impl ZenohMessage {
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::LinkStateList(LinkStateList { link_states }),
+            channel: zmsg::default_channel::LINK_STATE_LIST,
             routing_context: None,
-            reply_context: None,
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1246,49 +1261,33 @@ impl ZenohMessage {
     // -- Message Predicates
     #[inline]
     pub fn is_reliable(&self) -> bool {
-        let reliability = match &self.body {
-            ZenohBody::Data(data) => data.reliability(),
-            ZenohBody::Unit(unit) => unit.reliability(),
-            ZenohBody::Declare(declare) => declare.reliability(),
-            ZenohBody::Pull(pull) => pull.reliability(),
-            ZenohBody::Query(query) => query.reliability(),
-            ZenohBody::LinkStateList(lsl) => lsl.reliability(),
-        };
-
-        match reliability {
-            Reliability::Reliable => true,
-            Reliability::BestEffort => false,
-        }
+        self.channel.reliability == Reliability::Reliable
     }
 
     #[inline]
     pub fn is_droppable(&self) -> bool {
-        let congestion = match &self.body {
-            ZenohBody::Data(data) => data.congestion(),
-            ZenohBody::Unit(unit) => unit.congestion(),
-            ZenohBody::Declare(declare) => declare.congestion(),
-            ZenohBody::Pull(pull) => pull.congestion(),
-            ZenohBody::Query(query) => query.congestion(),
-            ZenohBody::LinkStateList(lsl) => lsl.congestion(),
+        if !self.is_reliable() {
+            return true;
+        }
+
+        let cc = match &self.body {
+            ZenohBody::Data(data) => data.congestion_control,
+            ZenohBody::Unit(unit) => unit.congestion_control,
+            ZenohBody::Declare(_) => zmsg::default_congestion_control::DECLARE,
+            ZenohBody::Pull(_) => zmsg::default_congestion_control::PULL,
+            ZenohBody::Query(_) => zmsg::default_congestion_control::QUERY,
+            ZenohBody::LinkStateList(_) => zmsg::default_congestion_control::LINK_STATE_LIST,
         };
 
-        match congestion {
-            CongestionControl::Drop => true,
-            CongestionControl::Block => false,
-        }
-    }
-
-    #[inline]
-    pub fn is_reply(&self) -> bool {
-        self.reply_context.is_some()
+        cc == CongestionControl::Drop
     }
 }
 
 /*************************************/
-/*        SESSION MESSAGES           */
+/*       TRANSPORT MESSAGES          */
 /*************************************/
 #[derive(Debug, Clone)]
-pub enum SessionMode {
+pub enum TransportMode {
     Push,
     Pull,
     PeriodicPush(u32),
@@ -1323,12 +1322,12 @@ pub struct Scout {
 impl Header for Scout {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::SCOUT;
+        let mut header = tmsg::id::SCOUT;
         if self.pid_request {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         if self.what.is_some() {
-            header |= smsg::flag::W;
+            header |= tmsg::flag::W;
         }
         header
     }
@@ -1347,7 +1346,7 @@ impl Header for Scout {
 // The HELLO message is sent in any of the following three cases:
 //     1) in response to a SCOUT message;
 //     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
-//     3) in a already established session to update the corresponding peer on the new capabilities
+//     3) in a already established transport to update the corresponding peer on the new capabilities
 //        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
 // Locators are expressed as:
 // <code>
@@ -1364,7 +1363,7 @@ impl Header for Scout {
 // +---------------+
 // ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
 // +---------------+
-// ~    Locators   ~ if L==1 -- Otherwise src-address is the locator
+// ~   [Locators]  ~ if L==1 -- Otherwise src-address is the locator
 // +---------------+
 // ```
 #[derive(Debug, Clone, PartialEq)]
@@ -1377,15 +1376,15 @@ pub struct Hello {
 impl Header for Hello {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::HELLO;
+        let mut header = tmsg::id::HELLO;
         if self.pid.is_some() {
-            header |= smsg::flag::I
+            header |= tmsg::flag::I
         }
         if self.whatami.is_some() && self.whatami.unwrap() != whatami::ROUTER {
-            header |= smsg::flag::W;
+            header |= tmsg::flag::W;
         }
         if self.locators.is_some() {
-            header |= smsg::flag::L;
+            header |= tmsg::flag::L;
         }
         header
     }
@@ -1421,45 +1420,67 @@ impl fmt::Display for Hello {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
-/// The INIT message is sent on a specific Locator to initiate a session with the peer associated
+/// The INIT message is sent on a specific Locator to initiate a transport with the peer associated
 /// with that Locator. The initiator MUST send an INIT message with the A flag set to 0.  If the
-/// corresponding peer deems appropriate to initialize a session with the initiator, the corresponding
+/// corresponding peer deems appropriate to initialize a transport with the initiator, the corresponding
 /// peer MUST reply with an INIT message with the A flag set to 1.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |X|S|A|   INIT  |
+/// |O|S|A|   INIT  |
 /// +-+-+-+-+-------+
+/// ~             |Q~ if O==1
+/// +---------------+
 /// | v_maj | v_min | if A==0 -- Protocol Version VMaj.VMin
 /// +-------+-------+
 /// ~    whatami    ~ -- Client, Router, Peer or a combination of them
 /// +---------------+
 /// ~    peer_id    ~ -- PID of the sender of the INIT message
 /// +---------------+
-/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
+/// ~ sn_resolution ~ if S==1 -- the sequence number resolution(*)
 /// +---------------+
 /// ~     cookie    ~ if A==1
 /// +---------------+
 ///
 /// (*) if A==0 and S==0 then 2^28 is assumed.
 ///     if A==1 and S==0 then the agreed resolution is the one communicated by the initiator.
+///
+/// - if Q==1 then the initiator/responder support QoS.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
     pub pid: PeerId,
-    pub sn_resolution: Option<ZInt>,
+    pub sn_resolution: ZInt,
+    pub is_qos: bool,
 }
 
 impl Header for InitSyn {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::INIT;
-        if self.sn_resolution.is_some() {
-            header |= smsg::flag::S;
+        let mut header = tmsg::id::INIT;
+        if self.sn_resolution != SEQ_NUM_RES {
+            header |= tmsg::flag::S;
+        }
+        if self.has_options() {
+            header |= tmsg::flag::O;
         }
         header
+    }
+}
+
+impl Options for InitSyn {
+    fn options(&self) -> ZInt {
+        let mut options = 0;
+        if self.is_qos {
+            options |= tmsg::init_options::QOS;
+        }
+        options
+    }
+
+    fn has_options(&self) -> bool {
+        self.is_qos
     }
 }
 
@@ -1468,18 +1489,36 @@ pub struct InitAck {
     pub whatami: WhatAmI,
     pub pid: PeerId,
     pub sn_resolution: Option<ZInt>,
+    pub is_qos: bool,
     pub cookie: ZSlice,
 }
 
 impl Header for InitAck {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::INIT;
-        header |= smsg::flag::A;
+        let mut header = tmsg::id::INIT;
+        header |= tmsg::flag::A;
         if self.sn_resolution.is_some() {
-            header |= smsg::flag::S;
+            header |= tmsg::flag::S;
+        }
+        if self.has_options() {
+            header |= tmsg::flag::O;
         }
         header
+    }
+}
+
+impl Options for InitAck {
+    fn options(&self) -> ZInt {
+        let mut options = 0;
+        if self.is_qos {
+            options |= tmsg::init_options::QOS;
+        }
+        options
+    }
+
+    fn has_options(&self) -> bool {
+        self.is_qos
     }
 }
 
@@ -1492,25 +1531,27 @@ impl Header for InitAck {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
-/// The OPEN message is sent on a link to finally open an initialized session with the peer.
+/// The OPEN message is sent on a link to finally open an initialized transport with the peer.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// |X|T|A|   OPEN  |
 /// +-+-+-+-+-------+
-/// ~ lease_period  ~ -- Lease period of the sender of the OPEN message(*)
+/// ~    lease      ~ -- Lease period of the sender of the OPEN message(*)
 /// +---------------+
 /// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(**)
 /// +---------------+
-/// ~    cookie     ~ if A==0(*)
+/// ~    cookie     ~ if A==0(***)
 /// +---------------+
 ///
-/// (*) if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
-/// (**) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
+/// (*)   if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
+/// (**)  the initial sequence number MUST be compatible with the sequence number resolution agreed in the
+///       InitSyn/InitAck message exchange
+/// (***) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenSyn {
-    pub lease: ZInt,
+    pub lease: Duration,
     pub initial_sn: ZInt,
     pub cookie: ZSlice,
 }
@@ -1518,9 +1559,9 @@ pub struct OpenSyn {
 impl Header for OpenSyn {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::OPEN;
-        if self.lease % 1_000 == 0 {
-            header |= smsg::flag::T;
+        let mut header = tmsg::id::OPEN;
+        if self.lease.as_millis() % 1_000 == 0 {
+            header |= tmsg::flag::T2;
         }
         header
     }
@@ -1528,19 +1569,107 @@ impl Header for OpenSyn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenAck {
-    pub lease: ZInt,
+    pub lease: Duration,
     pub initial_sn: ZInt,
 }
 
 impl Header for OpenAck {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::OPEN;
-        header |= smsg::flag::A;
-        if self.lease % 1_000 == 0 {
-            header |= smsg::flag::T;
+        let mut header = tmsg::id::OPEN;
+        header |= tmsg::flag::A;
+        if self.lease.as_millis() % 1_000 == 0 {
+            header |= tmsg::flag::T2;
         }
         header
+    }
+}
+
+/// # Join message
+///
+/// ```text
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65_535 bytes.
+///
+/// The JOIN message is sent on a multicast Locator to advertise the transport parameters.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|S|T|   JOIN  |
+/// +-+-+-+-+-------+
+/// ~             |Q~ if O==1
+/// +---------------+
+/// | v_maj | v_min | -- Protocol Version VMaj.VMin
+/// +-------+-------+
+/// ~    whatami    ~ -- Router, Peer or a combination of them
+/// +---------------+
+/// ~    peer_id    ~ -- PID of the sender of the JOIN message
+/// +---------------+
+/// ~     lease     ~ -- Lease period of the sender of the JOIN message(*)
+/// +---------------+
+/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
+/// +---------------+
+/// ~   [next_sn]   ~ (***)
+/// +---------------+
+///
+/// - if Q==1 then the sender supports QoS.
+///
+/// (*)   if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
+/// (**)  if S==0 then 2^28 is assumed.
+/// (***) if Q==1 then 8 sequence numbers are present: one for each priority.
+///       if Q==0 then only one sequence number is present.
+///
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct Join {
+    pub version: u8,
+    pub whatami: WhatAmI,
+    pub pid: PeerId,
+    pub lease: Duration,
+    pub sn_resolution: ZInt,
+    pub next_sns: ConduitSnList,
+}
+
+impl Join {
+    pub fn is_qos(&self) -> bool {
+        match self.next_sns {
+            ConduitSnList::QoS(_) => true,
+            ConduitSnList::Plain(_) => false,
+        }
+    }
+}
+
+impl Header for Join {
+    #[inline(always)]
+    fn header(&self) -> u8 {
+        let mut header = tmsg::id::JOIN;
+        if self.lease.as_millis() % 1_000 == 0 {
+            header |= tmsg::flag::T1;
+        }
+        if self.sn_resolution != SEQ_NUM_RES {
+            header |= tmsg::flag::S;
+        }
+        if self.has_options() {
+            header |= tmsg::flag::O;
+        }
+        header
+    }
+}
+
+impl Options for Join {
+    fn options(&self) -> ZInt {
+        let mut options = 0;
+        if self.is_qos() {
+            options |= tmsg::join_options::QOS;
+        }
+        options
+    }
+
+    fn has_options(&self) -> bool {
+        self.options() > 0
     }
 }
 
@@ -1555,7 +1684,7 @@ impl Header for OpenAck {
 ///
 /// The CLOSE message is sent in any of the following two cases:
 ///     1) in response to an OPEN message which is not accepted;
-///     2) at any time to arbitrarly close the session with the corresponding peer.
+///     2) at any time to arbitrarly close the transport with the corresponding peer.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -1566,10 +1695,10 @@ impl Header for OpenAck {
 /// |     reason    |
 /// +---------------+
 ///
-/// - if K==0 then close the whole zenoh session.
+/// - if K==0 then close the whole zenoh transport.
 /// - if K==1 then close the transport link the CLOSE message was sent on (e.g., TCP socket) but
-///           keep the whole session open. NOTE: the session will be automatically closed when
-///           the session's lease period expires.
+///           keep the whole transport open. NOTE: the transport will be automatically closed when
+///           the transport's lease period expires.
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Close {
@@ -1581,12 +1710,12 @@ pub struct Close {
 impl Header for Close {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::CLOSE;
+        let mut header = tmsg::id::CLOSE;
         if self.pid.is_some() {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         if self.link_only {
-            header |= smsg::flag::K;
+            header |= tmsg::flag::K;
         }
         header
     }
@@ -1619,7 +1748,7 @@ impl Header for Close {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sync {
-    pub ch: Channel,
+    pub reliability: Reliability,
     pub sn: ZInt,
     pub count: Option<ZInt>,
 }
@@ -1627,12 +1756,12 @@ pub struct Sync {
 impl Header for Sync {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::SYNC;
-        if let Channel::Reliable = self.ch {
-            header |= smsg::flag::R;
+        let mut header = tmsg::id::SYNC;
+        if let Reliability::Reliable = self.reliability {
+            header |= tmsg::flag::R;
         }
         if self.count.is_some() {
-            header |= smsg::flag::C;
+            header |= tmsg::flag::C;
         }
         header
     }
@@ -1668,9 +1797,9 @@ pub struct AckNack {
 impl Header for AckNack {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::ACK_NACK;
+        let mut header = tmsg::id::ACK_NACK;
         if self.mask.is_some() {
-            header |= smsg::flag::M;
+            header |= tmsg::flag::M;
         }
         header
     }
@@ -1685,7 +1814,7 @@ impl Header for AckNack {
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 ///
-/// The KEEP_ALIVE message can be sent periodically to avoid the expiration of the session lease
+/// The KEEP_ALIVE message can be sent periodically to avoid the expiration of the transport lease
 /// period in case there are no messages to be sent.
 ///
 ///  7 6 5 4 3 2 1 0
@@ -1703,9 +1832,9 @@ pub struct KeepAlive {
 impl Header for KeepAlive {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::KEEP_ALIVE;
+        let mut header = tmsg::id::KEEP_ALIVE;
         if self.pid.is_some() {
-            header |= smsg::flag::I;
+            header |= tmsg::flag::I;
         }
         header
     }
@@ -1737,8 +1866,8 @@ pub struct Ping {
 impl Header for Ping {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::PING_PONG;
-        header |= smsg::flag::P;
+        let mut header = tmsg::id::PING_PONG;
+        header |= tmsg::flag::P;
         header
     }
 }
@@ -1751,7 +1880,7 @@ pub struct Pong {
 impl Header for Pong {
     #[inline(always)]
     fn header(&self) -> u8 {
-        smsg::id::PING_PONG
+        tmsg::id::PING_PONG
     }
 }
 
@@ -1790,7 +1919,7 @@ impl Header for Pong {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Frame {
-    pub ch: Channel,
+    pub channel: Channel,
     pub sn: ZInt,
     pub payload: FramePayload,
 }
@@ -1798,14 +1927,14 @@ pub struct Frame {
 impl Header for Frame {
     #[inline(always)]
     fn header(&self) -> u8 {
-        let mut header = smsg::id::FRAME;
-        if let Channel::Reliable = self.ch {
-            header |= smsg::flag::R;
+        let mut header = tmsg::id::FRAME;
+        if let Reliability::Reliable = self.channel.reliability {
+            header |= tmsg::flag::R;
         }
         if let FramePayload::Fragment { is_final, .. } = self.payload {
-            header |= smsg::flag::F;
+            header |= tmsg::flag::F;
             if is_final {
-                header |= smsg::flag::E;
+                header |= tmsg::flag::E;
             }
         }
         header
@@ -1813,15 +1942,15 @@ impl Header for Frame {
 }
 
 impl Frame {
-    pub fn make_header(ch: Channel, is_fragment: Option<bool>) -> u8 {
-        let mut header = smsg::id::FRAME;
-        if let Channel::Reliable = ch {
-            header |= smsg::flag::R;
+    pub fn make_header(reliability: Reliability, is_fragment: Option<bool>) -> u8 {
+        let mut header = tmsg::id::FRAME;
+        if let Reliability::Reliable = reliability {
+            header |= tmsg::flag::R;
         }
         if let Some(is_final) = is_fragment {
-            header |= smsg::flag::F;
+            header |= tmsg::flag::F;
             if is_final {
-                header |= smsg::flag::E;
+                header |= tmsg::flag::E;
             }
         }
         header
@@ -1856,15 +1985,16 @@ pub enum FramePayload {
     Messages { messages: Vec<ZenohMessage> },
 }
 
-// Zenoh messages at zenoh-session level
+// Zenoh messages at zenoh-transport level
 #[derive(Debug, Clone, PartialEq)]
-pub enum SessionBody {
+pub enum TransportBody {
     Scout(Scout),
     Hello(Hello),
     InitSyn(InitSyn),
     InitAck(InitAck),
     OpenSyn(OpenSyn),
     OpenAck(OpenAck),
+    Join(Join),
     Close(Close),
     Sync(Sync),
     AckNack(AckNack),
@@ -1875,19 +2005,19 @@ pub enum SessionBody {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SessionMessage {
-    pub body: SessionBody,
+pub struct TransportMessage {
+    pub body: TransportBody,
     pub attachment: Option<Attachment>,
 }
 
-impl SessionMessage {
+impl TransportMessage {
     pub fn make_scout(
         what: Option<WhatAmI>,
         pid_request: bool,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Scout(Scout { what, pid_request }),
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Scout(Scout { what, pid_request }),
             attachment,
         }
     }
@@ -1897,9 +2027,9 @@ impl SessionMessage {
         whatami: Option<WhatAmI>,
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Hello(Hello {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Hello(Hello {
                 pid,
                 whatami,
                 locators,
@@ -1912,15 +2042,17 @@ impl SessionMessage {
         version: u8,
         whatami: WhatAmI,
         pid: PeerId,
-        sn_resolution: Option<ZInt>,
+        sn_resolution: ZInt,
+        is_qos: bool,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::InitSyn(InitSyn {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::InitSyn(InitSyn {
                 version,
                 whatami,
                 pid,
                 sn_resolution,
+                is_qos,
             }),
             attachment,
         }
@@ -1930,14 +2062,16 @@ impl SessionMessage {
         whatami: WhatAmI,
         pid: PeerId,
         sn_resolution: Option<ZInt>,
+        is_qos: bool,
         cookie: ZSlice,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::InitAck(InitAck {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::InitAck(InitAck {
                 whatami,
                 pid,
                 sn_resolution,
+                is_qos,
                 cookie,
             }),
             attachment,
@@ -1945,13 +2079,13 @@ impl SessionMessage {
     }
 
     pub fn make_open_syn(
-        lease: ZInt,
+        lease: Duration,
         initial_sn: ZInt,
         cookie: ZSlice,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::OpenSyn(OpenSyn {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::OpenSyn(OpenSyn {
                 lease,
                 initial_sn,
                 cookie,
@@ -1961,12 +2095,34 @@ impl SessionMessage {
     }
 
     pub fn make_open_ack(
-        lease: ZInt,
+        lease: Duration,
         initial_sn: ZInt,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::OpenAck(OpenAck { lease, initial_sn }),
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::OpenAck(OpenAck { lease, initial_sn }),
+            attachment,
+        }
+    }
+
+    pub fn make_join(
+        version: u8,
+        whatami: WhatAmI,
+        pid: PeerId,
+        lease: Duration,
+        sn_resolution: ZInt,
+        next_sns: ConduitSnList,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Join(Join {
+                version,
+                whatami,
+                pid,
+                lease,
+                sn_resolution,
+                next_sns,
+            }),
             attachment,
         }
     }
@@ -1976,9 +2132,9 @@ impl SessionMessage {
         reason: u8,
         link_only: bool,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Close(Close {
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Close(Close {
                 pid,
                 reason,
                 link_only,
@@ -1988,13 +2144,17 @@ impl SessionMessage {
     }
 
     pub fn make_sync(
-        ch: Channel,
+        reliability: Reliability,
         sn: ZInt,
         count: Option<ZInt>,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Sync(Sync { ch, sn, count }),
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Sync(Sync {
+                reliability,
+                sn,
+                count,
+            }),
             attachment,
         }
     }
@@ -2003,42 +2163,49 @@ impl SessionMessage {
         sn: ZInt,
         mask: Option<ZInt>,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::AckNack(AckNack { sn, mask }),
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::AckNack(AckNack { sn, mask }),
             attachment,
         }
     }
 
-    pub fn make_keep_alive(pid: Option<PeerId>, attachment: Option<Attachment>) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::KeepAlive(KeepAlive { pid }),
+    pub fn make_keep_alive(
+        pid: Option<PeerId>,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::KeepAlive(KeepAlive { pid }),
             attachment,
         }
     }
 
-    pub fn make_ping(hash: ZInt, attachment: Option<Attachment>) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Ping(Ping { hash }),
+    pub fn make_ping(hash: ZInt, attachment: Option<Attachment>) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Ping(Ping { hash }),
             attachment,
         }
     }
 
-    pub fn make_pong(hash: ZInt, attachment: Option<Attachment>) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Pong(Pong { hash }),
+    pub fn make_pong(hash: ZInt, attachment: Option<Attachment>) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Pong(Pong { hash }),
             attachment,
         }
     }
 
     pub fn make_frame(
-        ch: Channel,
+        channel: Channel,
         sn: ZInt,
         payload: FramePayload,
         attachment: Option<Attachment>,
-    ) -> SessionMessage {
-        SessionMessage {
-            body: SessionBody::Frame(Frame { ch, sn, payload }),
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Frame(Frame {
+                channel,
+                sn,
+                payload,
+            }),
             attachment,
         }
     }

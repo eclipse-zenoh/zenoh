@@ -79,3 +79,8 @@ The zenoh router is built as `target/release/zenohd`. All the examples are built
 
 See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples/zenoh)
 
+-------------------------------
+## Troubleshooting
+
+In case of troubles, please first check on [this page](https://zenoh.io/docs/getting-started/troubleshooting/) if the trouble and cause are already known.  
+Otherwise, you can ask a question on the [zenoh Gitter channel](https://gitter.im/atolab/zenoh), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).

@@ -25,6 +25,7 @@ use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::Session;
 use zenoh_backend_traits::{Backend, PROP_STORAGE_PATH_EXPR};
+use zenoh_plugin_trait::prelude::*;
 use zenoh_util::{zerror, LibLoader};
 
 mod backends_mgt;
@@ -32,7 +33,6 @@ use backends_mgt::*;
 mod memory_backend;
 mod storages_mgt;
 
-#[no_mangle]
 pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
     lazy_static::lazy_static! {
         static ref BACKEND_SEARCH_DIR_USAGE: String = format!(
@@ -60,16 +60,36 @@ pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
     ]
 }
 
-#[no_mangle]
-pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    async_std::task::spawn(run(runtime, args));
+zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
+pub struct StoragesPlugin {}
+impl Plugin for StoragesPlugin {
+    fn compatibility() -> zenoh_plugin_trait::PluginId {
+        zenoh_plugin_trait::PluginId {
+            uid: "zenoh-plugin-storages",
+        }
+    }
+
+    type Requirements = Vec<Arg<'static, 'static>>;
+
+    type StartArgs = (Runtime, ArgMatches<'static>);
+
+    fn get_requirements() -> Self::Requirements {
+        get_expected_args()
+    }
+
+    fn start(
+        (runtime, args): &Self::StartArgs,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
+        async_std::task::spawn(run(runtime.clone(), args.to_owned()));
+        Ok(Box::new(()))
+    }
 }
 
 const BACKEND_LIB_PREFIX: &str = "zbackend_";
 const MEMORY_BACKEND_NAME: &str = "memory";
 const MEMORY_STORAGE_NAME: &str = "mem-storage";
 
-async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
+async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.

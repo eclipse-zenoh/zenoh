@@ -12,13 +12,13 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::{
-    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
-    Reliability, ResKey, SubInfo, WhatAmI, ZInt,
+    whatami, Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    ResKey, SubInfo, WhatAmI, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
-use super::protocol::session::Primitives;
 use super::router::*;
+use super::transport::Primitives;
 use async_std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -125,7 +125,7 @@ impl Primitives for Face {
                         .get_link(self.state.link_id)
                         .get_pid(&routing_context.tree_id)
                     {
-                        Some(router) => router.clone(),
+                        Some(router) => *router,
                         None => {
                             log::error!(
                                 "Received router subscription with unknown routing context id {}",
@@ -160,7 +160,7 @@ impl Primitives for Face {
                         .get_link(self.state.link_id)
                         .get_pid(&routing_context.tree_id)
                     {
-                        Some(peer) => peer.clone(),
+                        Some(peer) => *peer,
                         None => {
                             log::error!(
                                 "Received peer subscription with unknown routing context id {}",
@@ -207,7 +207,7 @@ impl Primitives for Face {
                         .get_link(self.state.link_id)
                         .get_pid(&routing_context.tree_id)
                     {
-                        Some(router) => router.clone(),
+                        Some(router) => *router,
                         None => {
                             log::error!(
                                 "Received router forget subscription with unknown routing context id {}",
@@ -241,7 +241,7 @@ impl Primitives for Face {
                         .get_link(self.state.link_id)
                         .get_pid(&routing_context.tree_id)
                     {
-                        Some(peer) => peer.clone(),
+                        Some(peer) => *peer,
                         None => {
                             log::error!(
                                 "Received peer forget subscription with unknown routing context id {}",
@@ -291,7 +291,7 @@ impl Primitives for Face {
                         .get_link(self.state.link_id)
                         .get_pid(&routing_context.tree_id)
                     {
-                        Some(router) => router.clone(),
+                        Some(router) => *router,
                         None => {
                             log::error!(
                                 "Received router queryable with unknown routing context id {}",
@@ -327,7 +327,7 @@ impl Primitives for Face {
                         .get_link(self.state.link_id)
                         .get_pid(&routing_context.tree_id)
                     {
-                        Some(peer) => peer.clone(),
+                        Some(peer) => *peer,
                         None => {
                             log::error!(
                                 "Received peer queryable with unknown routing context id {}",
@@ -381,7 +381,7 @@ impl Primitives for Face {
                         .get_link(self.state.link_id)
                         .get_pid(&routing_context.tree_id)
                     {
-                        Some(router) => router.clone(),
+                        Some(router) => *router,
                         None => {
                             log::error!(
                                 "Received router forget queryable with unknown routing context id {}",
@@ -416,7 +416,7 @@ impl Primitives for Face {
                         .get_link(self.state.link_id)
                         .get_pid(&routing_context.tree_id)
                     {
-                        Some(peer) => peer.clone(),
+                        Some(peer) => *peer,
                         None => {
                             log::error!(
                                 "Received peer forget queryable with unknown routing context id {}",
@@ -454,7 +454,7 @@ impl Primitives for Face {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        _reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
@@ -465,6 +465,7 @@ impl Primitives for Face {
             &self.state,
             prefixid,
             suffix,
+            channel,
             congestion_control,
             data_info,
             payload,

@@ -16,13 +16,13 @@ use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh::net::protocol::core::rname::intersect;
 use zenoh::net::protocol::core::{
-    whatami, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    whatami, Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
     Reliability, ResKey, SubInfo, SubMode, ZInt,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
-use zenoh::net::protocol::session::{DummyPrimitives, Primitives};
 use zenoh::net::routing::router::*;
+use zenoh::net::transport::{DummyPrimitives, Primitives};
 use zenoh_util::zlock;
 
 #[test]
@@ -141,12 +141,12 @@ fn match_test() {
 
     for rname1 in rnames.iter() {
         let res_matches = Resource::get_matches(&tables, rname1);
-        let matches: Vec<String> = res_matches
-            .iter()
-            .map(|m| m.upgrade().unwrap().name())
-            .collect();
         for rname2 in rnames.iter() {
-            if matches.contains(&String::from(*rname2)) {
+            if res_matches
+                .iter()
+                .map(|m| m.upgrade().unwrap().name())
+                .any(|x| x == **rname2)
+            {
                 assert!(intersect(rname1, rname2));
             } else {
                 assert!(!intersect(rname1, rname2));
@@ -164,13 +164,13 @@ fn clean_test() {
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone());
+    let face0 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
     assert!(face0.upgrade().is_some());
 
     // --------------
     register_resource(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1");
     let optres1 =
-        Resource::get_resource(&tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -182,7 +182,7 @@ fn clean_test() {
         0,
         "/todrop1/todrop11",
     );
-    let optres2 = Resource::get_resource(&tables._get_root(), "/todrop1/todrop11")
+    let optres2 = Resource::get_resource(tables._get_root(), "/todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
@@ -213,7 +213,7 @@ fn clean_test() {
     // --------------
     register_resource(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1");
     let optres1 =
-        Resource::get_resource(&tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -231,7 +231,7 @@ fn clean_test() {
         "/todrop1/todrop11",
         &sub_info,
     );
-    let optres2 = Resource::get_resource(&tables._get_root(), "/todrop1/todrop11")
+    let optres2 = Resource::get_resource(tables._get_root(), "/todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
@@ -244,7 +244,7 @@ fn clean_test() {
         "/todrop12",
         &sub_info,
     );
-    let optres3 = Resource::get_resource(&tables._get_root(), "/todrop1/todrop12")
+    let optres3 = Resource::get_resource(tables._get_root(), "/todrop1/todrop12")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
@@ -280,7 +280,7 @@ fn clean_test() {
         &sub_info,
     );
     let optres1 =
-        Resource::get_resource(&tables._get_root(), "/todrop3").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "/todrop3").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -310,15 +310,15 @@ fn clean_test() {
     );
 
     let optres1 =
-        Resource::get_resource(&tables._get_root(), "/todrop4").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "/todrop4").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     let optres2 =
-        Resource::get_resource(&tables._get_root(), "/todrop5").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "/todrop5").map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     let optres3 =
-        Resource::get_resource(&tables._get_root(), "/todrop6").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "/todrop6").map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
 
@@ -374,12 +374,12 @@ impl ClientPrimitives {
             .lock()
             .unwrap()
             .as_ref()
-            .map(|data| self.get_name(&data))
+            .map(|data| self.get_name(data))
     }
 
     #[allow(dead_code)]
     fn get_last_key(&self) -> Option<ResKey> {
-        self.data.lock().unwrap().as_ref().map(|data| data.clone())
+        self.data.lock().unwrap().as_ref().cloned()
     }
 }
 
@@ -425,7 +425,7 @@ impl Primitives for ClientPrimitives {
         &self,
         reskey: &ResKey,
         _payload: ZBuf,
-        _reliability: Reliability,
+        _channel: Channel,
         _congestion_control: CongestionControl,
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
@@ -571,7 +571,8 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         0,
         "/test/client/z1_wr1",
-        CongestionControl::Block,
+        Channel::default(),
+        CongestionControl::default(),
         None,
         ZBuf::new(),
         None,
@@ -597,7 +598,8 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         11,
         "/z1_wr2",
-        CongestionControl::Block,
+        Channel::default(),
+        CongestionControl::default(),
         None,
         ZBuf::new(),
         None,
@@ -623,7 +625,8 @@ fn client_test() {
         &face1.upgrade().unwrap(),
         0,
         "/test/client/**",
-        CongestionControl::Block,
+        Channel::default(),
+        CongestionControl::default(),
         None,
         ZBuf::new(),
         None,
@@ -649,7 +652,8 @@ fn client_test() {
         &face0.upgrade().unwrap(),
         12,
         "",
-        CongestionControl::Block,
+        Channel::default(),
+        CongestionControl::default(),
         None,
         ZBuf::new(),
         None,
@@ -675,7 +679,8 @@ fn client_test() {
         &face1.upgrade().unwrap(),
         22,
         "",
-        CongestionControl::Block,
+        Channel::default(),
+        CongestionControl::default(),
         None,
         ZBuf::new(),
         None,

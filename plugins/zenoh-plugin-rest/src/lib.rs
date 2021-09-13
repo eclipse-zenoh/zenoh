@@ -25,6 +25,7 @@ use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
+use zenoh_plugin_trait::prelude::*;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -43,7 +44,7 @@ fn parse_http_port(arg: &str) -> String {
 }
 
 fn value_to_json(value: Value) -> String {
-    // TODO: transcode to JSON when implemented in Value
+    // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
         p if p.starts_with(&STRING) => {
             // convert to Json string for special characters escaping
@@ -120,24 +121,49 @@ fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
         .build()
 }
 
-#[no_mangle]
-pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    get_expected_args2()
+zenoh_plugin_trait::declare_plugin!(RestPlugin);
+pub struct RestPlugin {}
+#[derive(Clone, Copy, Debug)]
+struct StrError {
+    err: &'static str,
+}
+impl std::error::Error for StrError {}
+impl std::fmt::Display for StrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.err)
+    }
 }
 
-// NOTE: temporary hack for static link of REST plugin in zenoh-bridge-dds, thus it can call this function
-// instead of relying on #[no_mangle] functions that will conflicts with those defined in DDS plugin.
-// TODO: remove once eclipse-zenoh/zenoh#89 is implemented
-pub fn get_expected_args2<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    vec![
-        Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
-            .default_value(DEFAULT_HTTP_PORT),
-    ]
-}
+impl Plugin for RestPlugin {
+    fn compatibility() -> zenoh_plugin_trait::PluginId {
+        zenoh_plugin_trait::PluginId {
+            uid: "zenoh-plugin-rest",
+        }
+    }
 
-#[no_mangle]
-pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    async_std::task::spawn(run(runtime, args.clone()));
+    type Requirements = Vec<Arg<'static, 'static>>;
+    type StartArgs = (Runtime, ArgMatches<'static>);
+
+    fn get_requirements() -> Self::Requirements {
+        vec![
+            Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
+                .default_value(DEFAULT_HTTP_PORT),
+        ]
+    }
+
+    fn start(
+        (runtime, args): &Self::StartArgs,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
+        match args.value_of("rest-http-port") {
+            None => Err(Box::new(StrError {
+                err: "No --rest-http-port argument found",
+            })),
+            Some(port) => {
+                async_std::task::spawn(run(runtime.clone(), port.to_owned()));
+                Ok(Box::new(()))
+            }
+        }
+    }
 }
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
@@ -249,7 +275,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             let resource = path_to_resource(req.url().path(), &req.state().1);
             let encoding: Encoding = req.content_type().map(|m| m.into()).unwrap_or_default();
 
-            // TODO: Define the right congestion control value
+            // @TODO: Define the right congestion control value
             match req
                 .state()
                 .0
@@ -274,13 +300,13 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     }
 }
 
-pub async fn run(runtime: Runtime, args: ArgMatches<'_>) {
+pub async fn run(runtime: Runtime, port: String) {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
 
-    let http_port = parse_http_port(args.value_of("rest-http-port").unwrap());
+    let http_port = parse_http_port(&port);
 
     let pid = runtime.get_pid_str();
     let session = Session::init(runtime, true, vec![], vec![]).await;

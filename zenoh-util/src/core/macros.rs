@@ -122,21 +122,6 @@ macro_rules! zasyncrecv {
     };
 }
 
-// This macro performs an upgrade on a weak pointer returning
-// a ZError with custom description in case of error
-#[macro_export]
-macro_rules! zweak {
-    ($var:expr, $descr:expr) => {
-        if let Some(inner) = $var.upgrade() {
-            inner
-        } else {
-            return zerror!(ZErrorKind::InvalidReference {
-                descr: $descr.to_string()
-            });
-        }
-    };
-}
-
 // This macro checks the boolean results of an operation and returns in case
 // the result is false. Basically, it implements the ? operator for booleans
 #[macro_export]
@@ -175,7 +160,7 @@ macro_rules! zconfigurable {
     () => ()
 }
 
-// TODO: re-design ZError and macros
+// @TODO: re-design ZError and macros
 // This macro is a shorthand for the creation of a ZError
 #[macro_export]
 macro_rules! zerror {
@@ -260,5 +245,20 @@ macro_rules! zasync_executor_init {
             "Spawned {} additional threads in the async global executor",
             count
         );
+    };
+}
+
+// This macro allows to parse a string to the target type
+#[macro_export]
+macro_rules! zparse {
+    ($str:expr) => {
+        $str.parse().map_err(|_| {
+            let e = format!(
+                "Failed to read configuration: {} is not a valid value",
+                $str
+            );
+            log::warn!("{}", e);
+            zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
+        })
     };
 }

@@ -14,18 +14,20 @@
 mod adminspace;
 pub mod orchestrator;
 
+use super::link;
+use super::link::{Link, Locator};
 use super::plugins;
 use super::protocol;
 use super::protocol::core::{whatami, PeerId, WhatAmI};
-use super::protocol::link::{Link, Locator};
-use super::protocol::proto::{Data, ZenohBody, ZenohMessage};
-use super::protocol::session::{
-    Session, SessionEventHandler, SessionHandler, SessionManager, SessionManagerConfig,
-    SessionManagerOptionalConfig,
-};
+use super::protocol::proto::{ZenohBody, ZenohMessage};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
+use super::transport;
+use super::transport::{
+    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+};
 pub use adminspace::AdminSpace;
 use async_std::sync::Arc;
 use std::any::Any;
@@ -40,17 +42,8 @@ pub struct RuntimeState {
     pub whatami: WhatAmI,
     pub router: Arc<Router>,
     pub config: ConfigProperties,
-    pub manager: SessionManager,
+    pub manager: TransportManager,
     pub hlc: Option<Arc<HLC>>,
-}
-
-pub(crate) fn parse_mode(m: &str) -> Result<whatami::Type, ()> {
-    match m {
-        "peer" => Ok(whatami::PEER),
-        "client" => Ok(whatami::CLIENT),
-        "router" => Ok(whatami::ROUTER),
-        _ => Err(()),
-    }
 }
 
 #[derive(Clone)]
@@ -94,7 +87,7 @@ impl Runtime {
 
         log::info!("Using PID: {}", pid);
 
-        let whatami = parse_mode(config.get_or(&ZN_MODE_KEY, ZN_MODE_DEFAULT)).unwrap();
+        let whatami = whatami::parse(config.get_or(&ZN_MODE_KEY, ZN_MODE_DEFAULT)).unwrap();
         let hlc = if config
             .get_or(&ZN_ADD_TIMESTAMP_KEY, ZN_ADD_TIMESTAMP_DEFAULT)
             .to_lowercase()
@@ -105,27 +98,27 @@ impl Runtime {
             None
         };
 
-        let router = Arc::new(Router::new(pid.clone(), whatami, hlc.clone()));
+        let router = Arc::new(Router::new(pid, whatami, hlc.clone()));
 
-        let handler = Arc::new(RuntimeSessionHandler {
+        let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),
         });
-        let sm_config = SessionManagerConfig {
-            version,
-            whatami,
-            id: pid.clone(),
-            handler: handler.clone(),
-        };
-        let sm_opt_config = SessionManagerOptionalConfig::from_properties(&config).await?;
+        let sm_config = TransportManagerConfig::builder()
+            .from_config(&config)
+            .await?
+            .version(version)
+            .whatami(whatami)
+            .pid(pid)
+            .build(handler.clone());
 
-        let session_manager = SessionManager::new(sm_config, sm_opt_config);
+        let transport_manager = TransportManager::new(sm_config);
         let mut runtime = Runtime {
             state: Arc::new(RuntimeState {
                 pid,
                 whatami,
                 router,
                 config: config.clone(),
-                manager: session_manager,
+                manager: transport_manager,
                 hlc,
             }),
         };
@@ -161,13 +154,13 @@ impl Runtime {
     }
 
     #[inline(always)]
-    pub fn manager(&self) -> &SessionManager {
+    pub fn manager(&self) -> &TransportManager {
         &self.manager
     }
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        for session in &mut self.manager().get_sessions() {
+        for session in &mut self.manager().get_transports() {
             session.close().await?;
         }
         Ok(())
@@ -182,22 +175,34 @@ impl Runtime {
     }
 }
 
-struct RuntimeSessionHandler {
+struct RuntimeTransportEventHandler {
     runtime: std::sync::RwLock<Option<Runtime>>,
 }
 
-impl SessionHandler for RuntimeSessionHandler {
-    fn new_session(&self, session: Session) -> ZResult<Arc<dyn SessionEventHandler + Send + Sync>> {
-        match &*self.runtime.read().unwrap() {
+impl TransportEventHandler for RuntimeTransportEventHandler {
+    fn new_unicast(
+        &self,
+        _peer: TransportPeer,
+        transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        match zread!(self.runtime).as_ref() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
                 locator: std::sync::RwLock::new(None),
-                sub_event_handler: runtime.router.new_session(session).unwrap(),
+                sub_event_handler: runtime.router.new_transport_unicast(transport).unwrap(),
             })),
             None => zerror!(ZErrorKind::Other {
                 descr: "Runtime not yet ready!".to_string()
             }),
         }
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        // @TODO
+        unimplemented!();
     }
 }
 
@@ -207,37 +212,31 @@ pub(super) struct RuntimeSession {
     pub(super) sub_event_handler: Arc<LinkStateInterceptor>,
 }
 
-impl SessionEventHandler for RuntimeSession {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+impl TransportPeerEventHandler for RuntimeSession {
+    fn handle_message(&self, mut msg: ZenohMessage) -> ZResult<()> {
         // critical path shortcut
-        if msg.reply_context.is_none() {
-            if let ZenohBody::Data(Data {
-                key,
-                data_info,
-                payload,
-                congestion_control,
-                ..
-            }) = msg.body
-            {
-                let (rid, suffix) = (&key).into();
+        if let ZenohBody::Data(data) = msg.body {
+            if data.reply_context.is_none() {
+                let (rid, suffix) = (&data.key).into();
                 let face = &self.sub_event_handler.face.state;
                 full_reentrant_route_data(
                     &self.sub_event_handler.tables,
                     face,
                     rid,
                     suffix,
-                    congestion_control,
-                    data_info,
-                    payload,
+                    msg.channel,
+                    data.congestion_control,
+                    data.data_info,
+                    data.payload,
                     msg.routing_context,
                 );
-                Ok(())
+                return Ok(());
             } else {
-                self.sub_event_handler.handle_message(msg)
+                msg.body = ZenohBody::Data(data);
             }
-        } else {
-            self.sub_event_handler.handle_message(msg)
         }
+
+        self.sub_event_handler.handle_message(msg)
     }
 
     fn new_link(&self, link: Link) {

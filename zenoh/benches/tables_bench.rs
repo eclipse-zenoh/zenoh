@@ -16,13 +16,13 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::{BenchmarkId, Criterion};
 use zenoh::net::protocol::core::{
-    whatami, CongestionControl, PeerId, Reliability, SubInfo, SubMode,
+    whatami, Channel, CongestionControl, PeerId, Reliability, SubInfo, SubMode,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::session::DummyPrimitives;
 use zenoh::net::routing::pubsub::*;
 use zenoh::net::routing::resource::*;
 use zenoh::net::routing::router::Tables;
+use zenoh::net::transport::DummyPrimitives;
 
 fn tables_bench(c: &mut Criterion) {
     let mut tables = Tables::new(PeerId::new(0, [0; 16]), whatami::ROUTER, None);
@@ -44,7 +44,7 @@ fn tables_bench(c: &mut Criterion) {
         "/bench/tables/*",
     );
 
-    let face1 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone());
+    let face1 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
 
     let mut tables_bench = c.benchmark_group("tables_bench");
     let sub_info = SubInfo {
@@ -79,9 +79,10 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    2 as u64,
+                    2,
                     "",
-                    CongestionControl::Drop,
+                    Channel::default(),
+                    CongestionControl::default(),
                     None,
                     payload.clone(),
                     None,
@@ -94,9 +95,10 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    0 as u64,
+                    0,
                     "/bench/tables/*",
-                    CongestionControl::Drop,
+                    Channel::default(),
+                    CongestionControl::default(),
                     None,
                     payload.clone(),
                     None,
@@ -109,9 +111,10 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    0 as u64,
+                    0,
                     "/bench/tables/A*",
-                    CongestionControl::Drop,
+                    Channel::default(),
+                    CongestionControl::default(),
                     None,
                     payload.clone(),
                     None,

@@ -20,32 +20,32 @@ const DEFAULT_LEASE: Duration = Duration::from_secs(18);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JoinEvent {
-    member: Member,
+    pub member: Member,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LeaseExpiredEvent {
-    mid: String,
+    pub mid: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LeaveEvent {
-    mid: String,
+    pub mid: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewGroupViewEvent {
-    source: String,
-    members: Vec<Member>,
+    pub source: String,
+    pub members: Vec<Member>,
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewLeaderEvent {
-    mid: String,
+    pub mid: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct KeepAliveEvent {
-    mid: String,
+    pub mid: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -199,7 +199,7 @@ async fn advertise_view(z: &Arc<Session>, state: &Arc<GroupState>) {
     members.push(state.local_member.clone());
     if min == *sid {
         let evt = GroupNetEvent::NewGroupView(NewGroupViewEvent {
-            source: sid.clone(),
+            source: sid.to_string(),
             members,
         });
         log::debug!("Advertising NewGroupView: {:?}", &evt);

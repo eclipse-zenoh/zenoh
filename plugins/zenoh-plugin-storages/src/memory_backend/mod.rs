@@ -103,11 +103,11 @@ enum StoredValue {
 impl StoredValue {
     fn ts(&self) -> &Timestamp {
         match self {
-            Present { ts, sample: _ } => &ts,
+            Present { ts, sample: _ } => ts,
             Removed {
                 ts,
                 cleanup_handle: _,
-            } => &ts,
+            } => ts,
         }
     }
 }
@@ -155,7 +155,7 @@ impl Storage for MemoryStorage {
     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
         trace!("on_sample for {}", sample.res_name);
         sample.ensure_timestamp();
-        let timestamp = sample.timestamp.take().unwrap();
+        let timestamp = sample.timestamp.unwrap();
         match sample.kind {
             SampleKind::Put => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {

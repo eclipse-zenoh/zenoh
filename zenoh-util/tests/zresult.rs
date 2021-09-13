@@ -23,16 +23,12 @@ fn error_simple() {
         let s = e.to_string();
         println!("{}", e);
         println!("{:?}", e);
-        assert!(if let ZErrorKind::Other { descr: _ } = e.get_kind() {
-            true
-        } else {
-            false
-        });
+        assert!(matches!(e.get_kind(), ZErrorKind::Other { descr: _ }));
         assert!(s.contains("TEST"));
         assert!(s.contains(file!()));
     // assert!(e.source().is_none());
     } else {
-        assert!(false);
+        panic!();
     }
 
     let err: ZResult<()> = zerror!(ZErrorKind::BufferOverflow { missing: 3 });
@@ -42,12 +38,12 @@ fn error_simple() {
         println!("{:?}", e);
         match e.get_kind() {
             ZErrorKind::BufferOverflow { missing: x } => assert_eq!(3usize, *x),
-            _ => assert!(false),
+            _ => panic!(),
         }
         assert!(s.contains(file!()));
     // assert!(e.source().is_none());
     } else {
-        assert!(false);
+        panic!();
     }
 }
 
@@ -68,20 +64,16 @@ fn error_with_source() {
             println!("{}", e);
             println!("{:?}", e);
 
-            assert!(if let ZErrorKind::Other { descr: _ } = e.get_kind() {
-                true
-            } else {
-                false
-            });
+            assert!(matches!(e.get_kind(), ZErrorKind::Other { descr: _ }));
             assert!(s.contains(file!()));
             // assert!(e.source().is_some());
-            assert_eq!(true, s.contains("ERR1"));
-            assert_eq!(true, s.contains("ERR2"));
+            assert!(s.contains("ERR1"));
+            assert!(s.contains("ERR2"));
         } else {
-            assert!(false);
+            panic!();
         }
     } else {
-        assert!(false);
+        panic!();
     }
 
     let ioerr = std::io::Error::new(std::io::ErrorKind::Other, "IOERR");
@@ -96,16 +88,12 @@ fn error_with_source() {
         println!("{}", e);
         println!("{:?}", e);
 
-        assert!(if let ZErrorKind::Other { descr: _ } = e.get_kind() {
-            true
-        } else {
-            false
-        });
+        assert!(matches!(e.get_kind(), ZErrorKind::Other { descr: _ }));
         assert!(s.contains(file!()));
         // assert!(e.source().is_some());
-        assert_eq!(true, s.contains("IOERR"));
-        assert_eq!(true, s.contains("ERR2"));
+        assert!(s.contains("IOERR"));
+        assert!(s.contains("ERR2"));
     } else {
-        assert!(false);
+        panic!();
     }
 }

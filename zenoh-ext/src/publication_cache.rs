@@ -29,7 +29,7 @@ use zenoh::utils::resource_name;
 use zenoh::Session;
 use zenoh_util::zerror;
 
-pub(crate) const PUBLISHER_CACHE_QUERYABLE_KIND: ZInt = 0x08;
+pub const PUBLICATION_CACHE_QUERYABLE_KIND: ZInt = 0x08;
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
@@ -97,7 +97,12 @@ pub struct PublicationCache<'a> {
 
 impl<'a> PublicationCache<'a> {
     fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
-        log::debug!("Declare PublicationCache on {}", conf.pub_reskey);
+        log::debug!(
+            "Declare PublicationCache on {} with history={} resource_limit={:?}",
+            conf.pub_reskey,
+            conf.history,
+            conf.resources_limit
+        );
 
         if conf.session.hlc().is_none() {
             return zerror!(ZErrorKind::Other {
@@ -128,7 +133,7 @@ impl<'a> PublicationCache<'a> {
         let mut queryable = conf
             .session
             .register_queryable(&queryable_reskey)
-            .kind(PUBLISHER_CACHE_QUERYABLE_KIND)
+            .kind(PUBLICATION_CACHE_QUERYABLE_KIND)
             .wait()?;
 
         // take local ownership of stuff to be moved into task
@@ -139,7 +144,7 @@ impl<'a> PublicationCache<'a> {
         let queryable_prefix = conf.queryable_prefix;
         let history = conf.history;
 
-        let (stoptx, stoprx) = bounded::<bool>(1);
+        let (stoptx, mut stoprx) = bounded::<bool>(1);
         task::spawn(async move {
             let mut cache: HashMap<String, VecDeque<Sample>> =
                 HashMap::with_capacity(resources_limit.unwrap_or(32));
@@ -165,7 +170,7 @@ impl<'a> PublicationCache<'a> {
                                 log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
                                 pub_reskey);
                             } else {
-                                let mut queue: VecDeque<Sample> = VecDeque::with_capacity(history);
+                                let mut queue: VecDeque<Sample> = VecDeque::new();
                                 queue.push_back(sample);
                                 cache.insert(queryable_resname, queue);
                             }
@@ -183,7 +188,7 @@ impl<'a> PublicationCache<'a> {
                                 }
                             } else {
                                 for (resname, queue) in cache.iter() {
-                                    if resource_name::intersect(query.selector().key_selector, &resname) {
+                                    if resource_name::intersect(query.selector().key_selector, resname) {
                                         for sample in queue {
                                             query.reply(sample.clone());
                                         }
@@ -194,7 +199,7 @@ impl<'a> PublicationCache<'a> {
                     },
 
                     // When stoptx is dropped, stop the task
-                    _ = stoprx.recv().fuse() => {
+                    _ = stoprx.next().fuse() => {
                         return
                     }
                 );

@@ -112,10 +112,9 @@ mod tests {
             }
         });
 
-        let c_mvar = mvar.clone();
         let ph = task::spawn(async move {
             for i in 0..count {
-                c_mvar.put(i).await;
+                mvar.put(i).await;
                 print!("+{} ", i);
             }
         });

@@ -12,12 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{PeerId, Property, ZInt, ZINT_MAX_BYTES};
-use super::link::Locator;
 #[cfg(feature = "zero-copy")]
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
 use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
+use crate::net::link::Locator;
 #[cfg(feature = "zero-copy")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 #[cfg(feature = "zero-copy")]
@@ -64,7 +64,7 @@ impl SharedMemoryBufInfo {
     }
 
     pub fn deserialize(bs: &[u8]) -> ZResult<SharedMemoryBufInfo> {
-        match bincode::deserialize::<SharedMemoryBufInfo>(&bs) {
+        match bincode::deserialize::<SharedMemoryBufInfo>(bs) {
             Ok(info) => Ok(info),
             Err(e) => zerror!(ZErrorKind::ValueDecodingFailed {
                 descr: format!("Unable to deserialize SharedMemoryBufInfo: {}", e)
@@ -163,7 +163,7 @@ impl ZBuf {
     #[inline(always)]
     pub fn read_locators(&mut self) -> Option<Vec<Locator>> {
         let len = self.read_zint()?;
-        let mut vec: Vec<Locator> = Vec::new();
+        let mut vec: Vec<Locator> = Vec::with_capacity(len as usize);
         for _ in 0..len {
             vec.push(self.read_locator()?);
         }
@@ -241,7 +241,7 @@ impl ZBuf {
 
     pub fn read_properties(&mut self) -> Option<Vec<Property>> {
         let len = self.read_zint()?;
-        let mut vec: Vec<Property> = Vec::new();
+        let mut vec: Vec<Property> = Vec::with_capacity(len as usize);
         for _ in 0..len {
             vec.push(self.read_property()?);
         }
@@ -310,7 +310,7 @@ impl WBuf {
     pub fn write_locators(&mut self, locators: &[Locator]) -> bool {
         zcheck!(self.write_usize_as_zint(locators.len()));
         for l in locators {
-            zcheck!(self.write_locator(&l));
+            zcheck!(self.write_locator(l));
         }
         true
     }

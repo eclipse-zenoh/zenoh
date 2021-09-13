@@ -14,13 +14,14 @@
 pub mod rname;
 
 use std::borrow::Cow;
-use std::convert::From;
+use std::convert::{From, TryFrom, TryInto};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::Timestamp;
-use zenoh_util::core::{ZError, ZErrorKind};
+use uuid::Uuid;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
@@ -32,15 +33,12 @@ pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
 pub const ZINT_MAX_BYTES: usize = 10;
 
-zconfigurable! {
-    static ref CONGESTION_CONTROL_DEFAULT: CongestionControl = CongestionControl::Drop;
-}
-
 // WhatAmI values
 pub type WhatAmI = whatami::Type;
+
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami {
-    use super::ZInt;
+    use super::{ZError, ZErrorKind, ZInt, ZResult};
 
     pub type Type = ZInt;
 
@@ -57,6 +55,17 @@ pub mod whatami {
             i => i.to_string(),
         }
     }
+
+    pub fn parse(m: &str) -> ZResult<Type> {
+        match m {
+            "peer" => Ok(PEER),
+            "client" => Ok(CLIENT),
+            "router" => Ok(ROUTER),
+            unknown => zerror!(ZErrorKind::ValueDecodingFailed {
+                descr: format!("{} is not a valid WhatAmI value", unknown)
+            }),
+        }
+    }
 }
 
 /// A numerical Id mapped to a resource name with [`register_resource`](crate::Session::register_resource).
@@ -69,7 +78,7 @@ pub const NO_RESOURCE_ID: ResourceId = 0;
 // +-+-+-+-+-+-+-+-+
 // ~      id       — if ResName{name} : id=0
 // +-+-+-+-+-+-+-+-+
-// ~  name/suffix  ~ if flag C!=1 in Message's header
+// ~  name/suffix  ~ if flag K==1 in Message's header
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
@@ -90,8 +99,19 @@ impl ResKey<'_> {
     }
 
     #[inline(always)]
-    pub fn is_numerical(&self) -> bool {
-        matches!(self, RId(_))
+    pub fn is_string(&self) -> bool {
+        match self {
+            RName(_) | RIdWithSuffix(_, _) => true,
+            RId(_) => false,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_numeric(&self) -> bool {
+        match self {
+            RId(_) => true,
+            RName(_) | RIdWithSuffix(_, _) => false,
+        }
     }
 
     pub fn to_owned(&self) -> ResKey<'static> {
@@ -454,7 +474,7 @@ pub struct Property {
 }
 
 /// The global unique id of a zenoh peer.
-#[derive(Clone, Eq)]
+#[derive(Clone, Copy, Eq)]
 pub struct PeerId {
     size: usize,
     id: [u8; PeerId::MAX_SIZE],
@@ -476,6 +496,10 @@ impl PeerId {
     pub fn as_slice(&self) -> &[u8] {
         &self.id[..self.size]
     }
+
+    pub fn rand() -> PeerId {
+        PeerId::from(Uuid::new_v4())
+    }
 }
 
 impl From<uuid::Uuid> for PeerId {
@@ -485,6 +509,23 @@ impl From<uuid::Uuid> for PeerId {
             size: 16,
             id: *uuid.as_bytes(),
         }
+    }
+}
+
+impl FromStr for PeerId {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let id = s.parse::<Uuid>().map_err(|e| {
+            zerror2!(ZErrorKind::ValueDecodingFailed {
+                descr: e.to_string()
+            })
+        })?;
+        let pid = PeerId {
+            size: 16,
+            id: *id.as_bytes(),
+        };
+        Ok(pid)
     }
 }
 
@@ -521,60 +562,149 @@ impl From<&PeerId> for uhlc::ID {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Channel {
-    BestEffort,
-    Reliable,
+#[repr(u8)]
+pub enum Priority {
+    Control = 0,
+    RealTime = 1,
+    InteractiveHigh = 2,
+    InteractiveLow = 3,
+    DataHigh = 4,
+    Data = 5,
+    DataLow = 6,
+    Background = 7,
 }
 
-/// The kind of congestion control.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum CongestionControl {
-    Block,
-    Drop,
+impl Priority {
+    pub const NUM: usize = 8;
 }
 
-impl Default for CongestionControl {
-    #[inline]
-    fn default() -> CongestionControl {
-        *CONGESTION_CONTROL_DEFAULT
+impl Default for Priority {
+    fn default() -> Priority {
+        Priority::Data
     }
 }
 
-impl FromStr for CongestionControl {
-    type Err = ZError;
+impl TryFrom<u8> for Priority {
+    type Error = ZError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "block" => Ok(CongestionControl::Block),
-            "drop" => Ok(CongestionControl::Drop),
-            _ => {
-                let e = format!(
-                    "Invalid CongestionControl: {}. Valid values are: 'block' | 'drop'",
-                    s
-                );
-                log::warn!("{}", e);
-                zerror!(ZErrorKind::Other { descr: e })
-            }
+    fn try_from(conduit: u8) -> Result<Self, Self::Error> {
+        match conduit {
+            0 => Ok(Priority::Control),
+            1 => Ok(Priority::RealTime),
+            2 => Ok(Priority::InteractiveHigh),
+            3 => Ok(Priority::InteractiveLow),
+            4 => Ok(Priority::DataHigh),
+            5 => Ok(Priority::Data),
+            6 => Ok(Priority::DataLow),
+            7 => Ok(Priority::Background),
+            unknown => zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "{} is not a valid conduit value. Admitted values are [0-7].",
+                    unknown
+                )
+            }),
         }
     }
 }
 
-/// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum Reliability {
     BestEffort,
     Reliable,
 }
 
 impl Default for Reliability {
-    #[inline]
-    fn default() -> Self {
-        Reliability::Reliable
+    fn default() -> Reliability {
+        Reliability::BestEffort
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Channel {
+    pub priority: Priority,
+    pub reliability: Reliability,
+}
+
+impl Default for Channel {
+    fn default() -> Channel {
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConduitSnList {
+    Plain(ConduitSn),
+    QoS(Box<[ConduitSn; Priority::NUM]>),
+}
+
+impl fmt::Display for ConduitSnList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[ ")?;
+        match self {
+            ConduitSnList::Plain(sn) => {
+                write!(
+                    f,
+                    "{:?} {{ reliable: {}, best effort: {} }}",
+                    Priority::default(),
+                    sn.reliable,
+                    sn.best_effort
+                )?;
+            }
+            ConduitSnList::QoS(ref sns) => {
+                for (prio, sn) in sns.iter().enumerate() {
+                    let p: Priority = (prio as u8).try_into().unwrap();
+                    write!(
+                        f,
+                        "{:?} {{ reliable: {}, best effort: {} }}",
+                        p, sn.reliable, sn.best_effort
+                    )?;
+                    if p != Priority::Background {
+                        write!(f, ", ")?;
+                    }
+                }
+            }
+        }
+        write!(f, " ]")
+    }
+}
+
+/// The kind of reliability.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct ConduitSn {
+    pub reliable: ZInt,
+    pub best_effort: ZInt,
+}
+
+impl Default for ConduitSn {
+    fn default() -> ConduitSn {
+        ConduitSn {
+            reliable: 0,
+            best_effort: 0,
+        }
+    }
+}
+
+/// The kind of congestion control.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
+pub enum CongestionControl {
+    Block,
+    Drop,
+}
+
+impl Default for CongestionControl {
+    fn default() -> CongestionControl {
+        CongestionControl::Drop
     }
 }
 
 /// The subscription mode.
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum SubMode {
     Push,
     Pull,
@@ -635,6 +765,7 @@ pub mod queryable {
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[repr(u8)]
 pub enum ConsolidationMode {
     None,
     Lazy,

@@ -504,7 +504,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
                 .register_any_subscriber(
                     &self.reskey,
                     SubscriberInvoker::Handler(self.handler.clone()),
-                    &&SubInfo {
+                    &SubInfo {
                         reliability: self.reliability,
                         mode: self.mode,
                         period: self.period,

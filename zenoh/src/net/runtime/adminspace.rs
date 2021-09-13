@@ -10,18 +10,17 @@
 //
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
-use super::plugins::PluginsMgr;
 use super::protocol::{
     core::encoding::Encoding,
     core::{
-        encoding, queryable::EVAL, rname, CongestionControl, PeerId, QueryConsolidation,
-        QueryTarget, QueryableInfo, Reliability, ResKey, SubInfo, ZInt,
+        encoding, queryable::EVAL, rname, Channel, CongestionControl, PeerId, QueryConsolidation,
+        QueryTarget, QueryableInfo, ResKey, SubInfo, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
-    session::Primitives,
 };
 use super::routing::face::Face;
+use super::transport::Primitives;
 use super::Runtime;
 use async_std::sync::Arc;
 use async_std::task;
@@ -31,10 +30,14 @@ use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
+type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<
+    super::plugins::Requirements,
+    super::plugins::StartArgs,
+>;
 
 pub struct AdminContext {
     runtime: Runtime,
-    plugins_mgr: PluginsMgr,
+    plugins_mgr: PluginsHandles,
     pid_str: String,
     version: String,
 }
@@ -50,7 +53,7 @@ pub struct AdminSpace {
 }
 
 impl AdminSpace {
-    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsMgr, version: String) {
+    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsHandles, version: String) {
         let pid_str = runtime.get_pid_str();
         let root_path = format!("/@/router/{}", pid_str);
 
@@ -74,7 +77,7 @@ impl AdminSpace {
             version,
         });
         let admin = Arc::new(AdminSpace {
-            pid: runtime.pid.clone(),
+            pid: runtime.pid,
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
@@ -97,9 +100,9 @@ impl AdminSpace {
 
     pub fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
         match key {
-            ResKey::RId(id) => zlock!(self.mappings).get(&id).cloned(),
+            ResKey::RId(id) => zlock!(self.mappings).get(id).cloned(),
             ResKey::RIdWithSuffix(id, suffix) => zlock!(self.mappings)
-                .get(&id)
+                .get(id)
                 .map(|prefix| format!("{}{}", prefix, suffix)),
             ResKey::RName(name) => Some(name.to_string()),
         }
@@ -165,7 +168,7 @@ impl Primitives for AdminSpace {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
@@ -174,7 +177,7 @@ impl Primitives for AdminSpace {
             "recv Data {:?} {:?} {:?} {:?} {:?}",
             reskey,
             payload,
-            reliability,
+            channel,
             congestion_control,
             data_info,
         );
@@ -196,7 +199,7 @@ impl Primitives for AdminSpace {
             target,
             _consolidation
         );
-        let pid = self.pid.clone();
+        let pid = self.pid;
         let context = self.context.clone();
         let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
@@ -219,14 +222,7 @@ impl Primitives for AdminSpace {
                 let mut data_info = DataInfo::new();
                 data_info.encoding = Some(encoding);
 
-                primitives.send_reply_data(
-                    qid,
-                    EVAL,
-                    pid.clone(),
-                    path.into(),
-                    Some(data_info),
-                    payload,
-                );
+                primitives.send_reply_data(qid, EVAL, pid, path.into(), Some(data_info), payload);
             }
 
             primitives.send_reply_final(qid);
@@ -279,12 +275,12 @@ impl Primitives for AdminSpace {
 }
 
 pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
-    let session_mgr = context.runtime.manager().clone();
+    let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
     let plugins: Vec<serde_json::Value> = context
         .plugins_mgr
-        .plugins
+        .plugins()
         .iter()
         .map(|plugin| {
             json!({
@@ -295,19 +291,19 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
         .collect();
 
     // locators info
-    let locators: Vec<serde_json::Value> = session_mgr
+    let locators: Vec<serde_json::Value> = transport_mgr
         .get_locators()
         .iter()
         .map(|locator| json!(locator.to_string()))
         .collect();
 
-    // sessions info
-    let sessions = future::join_all(session_mgr.get_sessions().iter().map(move |session| async move {
+    // transports info
+    let transports = future::join_all(transport_mgr.get_transports().iter().map(move |transport| async move {
         json!({
-            "peer": session.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
-            "links": session.get_links().map_or_else(
+            "peer": transport.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
+            "links": transport.get_links().map_or_else(
                 |_| Vec::new(),
-                |links| links.iter().map(|link| link.get_dst().to_string()).collect()
+                |links| links.iter().map(|link| link.dst.to_string()).collect()
             )
         })
     }))
@@ -317,7 +313,7 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
         "pid": context.pid_str,
         "version": context.version,
         "locators": locators,
-        "sessions": sessions,
+        "sessions": transports,
         "plugins": plugins,
     });
     log::trace!("AdminSpace router_data: {:?}", json);

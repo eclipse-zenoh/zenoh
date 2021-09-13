@@ -28,7 +28,7 @@ use zenoh::time::Period;
 use zenoh::Session;
 use zenoh_util::zwrite;
 
-use super::publication_cache::PUBLISHER_CACHE_QUERYABLE_KIND;
+use super::publication_cache::PUBLICATION_CACHE_QUERYABLE_KIND;
 
 const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
@@ -54,7 +54,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
         let query_target = QueryTarget {
-            kind: PUBLISHER_CACHE_QUERYABLE_KIND | STORAGE,
+            kind: PUBLICATION_CACHE_QUERYABLE_KIND | STORAGE,
             target: Target::All,
         };
 
@@ -368,10 +368,10 @@ impl Stream for InnerState {
             // sort and remove duplicates from merge_queue
             mself
                 .merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             mself
                 .merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             mself.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -420,9 +420,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -486,9 +486,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -557,9 +557,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",

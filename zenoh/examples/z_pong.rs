@@ -11,36 +11,34 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::stream::StreamExt;
 use clap::{App, Arg};
 use zenoh::prelude::ResKey::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
-#[async_std::main]
-async fn main() {
+fn main() {
     // initiate logging
     env_logger::init();
 
     let config = parse_args();
 
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     // The resource to read the data from
-    let reskey_ping = RId(session.register_resource("/test/ping").await.unwrap());
+    let reskey_ping = RId(session.register_resource("/test/ping").wait().unwrap());
 
     // The resource to echo the data back
-    let reskey_pong = RId(session.register_resource("/test/pong").await.unwrap());
-    let _publ = session.publishing(&reskey_pong).await.unwrap();
+    let reskey_pong = RId(session.register_resource("/test/pong").wait().unwrap());
+    let _publ = session.publishing(&reskey_pong).wait().unwrap();
 
-    let mut sub = session.subscribe(&reskey_ping).await.unwrap();
+    let mut sub = session.subscribe(&reskey_ping).wait().unwrap();
 
-    while let Some(sample) = sub.receiver().next().await {
+    while let Ok(sample) = sub.receiver().recv() {
         session
             .put(&reskey_ping, sample.value)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .await
+            .wait()
             .unwrap();
     }
 }

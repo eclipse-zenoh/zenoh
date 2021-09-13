@@ -11,17 +11,15 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::link::Locator;
+use super::protocol::core::{whatami, PeerId, ZInt};
+use super::protocol::proto::{LinkState, ZenohMessage};
+use super::runtime::Runtime;
+use super::transport::TransportUnicast;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
-
-use super::protocol::core::{whatami, PeerId, ZInt};
-use super::protocol::link::Locator;
-use super::protocol::proto::{LinkState, ZenohMessage};
-use super::protocol::session::Session;
-
-use super::runtime::Runtime;
 
 pub(crate) struct Node {
     pub(crate) pid: PeerId,
@@ -38,17 +36,17 @@ impl std::fmt::Debug for Node {
 }
 
 pub(crate) struct Link {
-    pub(crate) session: Session,
+    pub(crate) transport: TransportUnicast,
     pid: PeerId,
     mappings: VecMap<PeerId>,
     local_mappings: VecMap<ZInt>,
 }
 
 impl Link {
-    fn new(session: Session) -> Self {
-        let pid = session.get_pid().unwrap();
+    fn new(transport: TransportUnicast) -> Self {
+        let pid = transport.get_pid().unwrap();
         Link {
-            session,
+            transport,
             pid,
             mappings: VecMap::new(),
             local_mappings: VecMap::new(),
@@ -168,7 +166,7 @@ impl Network {
     }
 
     fn add_node(&mut self, node: Node) -> NodeIndex {
-        let pid = node.pid.clone();
+        let pid = node.pid;
         let idx = self.graph.add_node(node);
         for link in self.links.values_mut() {
             if let Some((psid, _)) = link.mappings.iter().find(|(_, p)| **p == pid) {
@@ -199,7 +197,7 @@ impl Network {
             psid: idx.index().try_into().unwrap(),
             sn: self.graph[idx].sn,
             pid: if details {
-                Some(self.graph[idx].pid.clone())
+                Some(self.graph[idx].pid)
             } else {
                 None
             },
@@ -221,10 +219,10 @@ impl Network {
         ZenohMessage::make_link_state_list(list, None)
     }
 
-    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, session: &Session) {
+    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, transport: &TransportUnicast) {
         let msg = self.make_msg(idxs);
-        log::trace!("{} Send to {:?} {:?}", self.name, session.get_pid(), msg);
-        if let Err(e) = session.handle_message(msg) {
+        log::trace!("{} Send to {:?} {:?}", self.name, transport.get_pid(), msg);
+        if let Err(e) = transport.handle_message(msg) {
             log::debug!("{} Error sending LinkStateList: {}", self.name, e);
         }
     }
@@ -237,7 +235,7 @@ impl Network {
         for link in self.links.values() {
             if value_selector(link) {
                 log::trace!("{} Send to {} {:?}", self.name, link.pid, msg);
-                if let Err(e) = link.session.handle_message(msg.clone()) {
+                if let Err(e) = link.transport.handle_message(msg.clone()) {
                     log::debug!("{} Error sending LinkStateList: {}", self.name, e);
                 }
             }
@@ -281,11 +279,12 @@ impl Network {
         };
 
         // register psid<->pid mappings & apply mapping to nodes
+        #[allow(clippy::needless_collect)] // need to release borrow on self
         let link_states = link_states
             .into_iter()
             .filter_map(|link_state| {
                 if let Some(pid) = link_state.pid {
-                    src_link.set_pid_mapping(link_state.psid, pid.clone());
+                    src_link.set_pid_mapping(link_state.psid, pid);
                     if let Some(idx) = graph.node_indices().find(|idx| graph[*idx].pid == pid) {
                         src_link.set_local_psid_mapping(link_state.psid, idx.index() as u64);
                     }
@@ -299,7 +298,7 @@ impl Network {
                 } else {
                     match src_link.get_pid(&link_state.psid) {
                         Some(pid) => Some((
-                            pid.clone(),
+                            *pid,
                             link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
                             link_state.locators,
                             link_state.sn,
@@ -326,8 +325,8 @@ impl Network {
                 let links: Vec<PeerId> = links
                     .iter()
                     .filter_map(|l| {
-                        if let Some(pid) = src_link.get_pid(&l) {
-                            Some(pid.clone())
+                        if let Some(pid) = src_link.get_pid(l) {
+                            Some(*pid)
                         } else {
                             log::error!(
                                 "{} Received LinkState from {} with unknown link mapping {}",
@@ -389,7 +388,7 @@ impl Network {
                     }
                     None => {
                         let node = Node {
-                            pid: pid.clone(),
+                            pid,
                             whatami,
                             locators,
                             sn,
@@ -407,7 +406,7 @@ impl Network {
         let mut reintroduced_nodes = vec![];
         for (links, idx1, _) in &link_states {
             for link in links {
-                if let Some(idx2) = self.get_idx(&link) {
+                if let Some(idx2) = self.get_idx(link) {
                     if self.graph[idx2].links.contains(&self.graph[*idx1].pid) {
                         log::trace!(
                             "{} Update edge (state) {} {}",
@@ -419,7 +418,7 @@ impl Network {
                     }
                 } else {
                     let node = Node {
-                        pid: link.clone(),
+                        pid: *link,
                         whatami: 0,
                         locators: None,
                         sn: 0,
@@ -463,7 +462,7 @@ impl Network {
                 {
                     if let Some(locators) = &node.locators {
                         let runtime = self.runtime.clone();
-                        let pid = node.pid.clone();
+                        let pid = node.pid;
                         let locators = locators.clone();
                         async_std::task::spawn(async move {
                             // random backoff
@@ -507,18 +506,18 @@ impl Network {
                     if !new_idxs.is_empty() || !updated_idxs.is_empty() {
                         self.send_on_link(
                             [&new_idxs[..], &updated_idxs[..]].concat(),
-                            &link.session,
+                            &link.transport,
                         );
                     }
                 } else if !new_idxs.is_empty() {
-                    self.send_on_link(new_idxs.clone(), &link.session);
+                    self.send_on_link(new_idxs.clone(), &link.transport);
                 }
             }
         }
         removed
     }
 
-    pub(crate) fn add_link(&mut self, session: Session) -> usize {
+    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -526,17 +525,17 @@ impl Network {
             }
             i
         };
-        self.links.insert(free_index, Link::new(session.clone()));
+        self.links.insert(free_index, Link::new(transport.clone()));
 
-        let pid = session.get_pid().unwrap();
-        let whatami = session.get_whatami().unwrap();
+        let pid = transport.get_pid().unwrap();
+        let whatami = transport.get_whatami().unwrap();
         let (idx, new) = match self.get_idx(&pid) {
             Some(idx) => (idx, false),
             None => {
                 log::debug!("{} Add node (link) {}", self.name, pid);
                 (
                     self.add_node(Node {
-                        pid: pid.clone(),
+                        pid,
                         whatami,
                         locators: None,
                         sn: 0,
@@ -550,7 +549,7 @@ impl Network {
             log::trace!("Update edge (link) {} {}", self.graph[self.idx].pid, pid);
             self.update_edge(self.idx, idx);
         }
-        self.graph[self.idx].links.push(pid.clone());
+        self.graph[self.idx].links.push(pid);
         self.graph[self.idx].sn += 1;
 
         if new {
@@ -560,7 +559,7 @@ impl Network {
         }
 
         let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
-        self.send_on_link(idxs, &session);
+        self.send_on_link(idxs, &transport);
         free_index
     }
 
@@ -570,7 +569,7 @@ impl Network {
         self.graph[self.idx].links.retain(|link| *link != *pid);
 
         if let Some((edge, _)) = self
-            .get_idx(&pid)
+            .get_idx(pid)
             .map(|idx| self.graph.find_edge_undirected(self.idx, idx))
             .flatten()
         {
@@ -599,7 +598,7 @@ impl Network {
         );
 
         for link in self.links.values() {
-            if let Err(e) = link.session.handle_message(msg.clone()) {
+            if let Err(e) = link.transport.handle_message(msg.clone()) {
                 log::debug!("{} Error sending LinkStateList: {}", self.name, e);
             }
         }
@@ -661,8 +660,8 @@ impl Network {
                         o.map(|ip| {
                             format!(
                                 "{} <- {}",
-                                self.graph[ip].pid.clone(),
-                                self.graph[NodeIndex::new(is)].pid.clone()
+                                self.graph[ip].pid,
+                                self.graph[NodeIndex::new(is)].pid
                             )
                         })
                     })
@@ -741,7 +740,7 @@ pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<PeerId> {
             net2.graph
                 .node_references()
                 .any(|(_, node2)| node1.pid == node2.pid)
-                .then(|| node1.pid.clone())
+                .then(|| node1.pid)
         })
         .collect()
 }

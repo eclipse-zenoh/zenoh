@@ -24,15 +24,15 @@ use flume::{bounded, Sender};
 use log::{error, trace, warn};
 use net::protocol::{
     core::{
-        queryable, rname, AtomicZInt, CongestionControl, QueryConsolidation, QueryTarget,
+        queryable, rname, AtomicZInt, Channel, CongestionControl, QueryConsolidation, QueryTarget,
         QueryableInfo, ResKey, ResourceId, SubInfo, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
-    session::Primitives,
 };
 use net::routing::face::Face;
 use net::runtime::Runtime;
+use net::transport::Primitives;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -117,7 +117,7 @@ impl SessionState {
 
     #[inline]
     fn localid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
-        match self.local_resources.get(&rid) {
+        match self.local_resources.get(rid) {
             Some(res) => Ok(res.name.clone()),
             None => zerror!(ZErrorKind::UnkownResourceId {
                 rid: format!("{}", rid)
@@ -127,7 +127,7 @@ impl SessionState {
 
     #[inline]
     fn rid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
-        match self.remote_resources.get(&rid) {
+        match self.remote_resources.get(rid) {
             Some(res) => Ok(res.name.clone()),
             None => self.localid_to_resname(rid),
         }
@@ -137,8 +137,8 @@ impl SessionState {
         use super::ResKey::*;
         match reskey {
             RName(name) => Ok(name.to_string()),
-            RId(rid) => self.rid_to_resname(&rid),
-            RIdWithSuffix(rid, suffix) => Ok(self.rid_to_resname(&rid)? + suffix),
+            RId(rid) => self.rid_to_resname(rid),
+            RIdWithSuffix(rid, suffix) => Ok(self.rid_to_resname(rid)? + suffix),
         }
     }
 
@@ -146,8 +146,8 @@ impl SessionState {
         use super::ResKey::*;
         match reskey {
             RName(name) => Ok(name.to_string()),
-            RId(rid) => self.localid_to_resname(&rid),
-            RIdWithSuffix(rid, suffix) => Ok(self.localid_to_resname(&rid)? + suffix),
+            RId(rid) => self.localid_to_resname(rid),
+            RIdWithSuffix(rid, suffix) => Ok(self.localid_to_resname(rid)? + suffix),
         }
     }
 
@@ -313,7 +313,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> impl ZFuture<Output = InfoProperties> {
         trace!("info()");
-        let sessions = self.runtime.manager().get_sessions();
+        let sessions = self.runtime.manager().get_transports();
         let peer_pids = sessions
             .iter()
             .filter(|s| {
@@ -944,13 +944,15 @@ impl Session {
                         let sub = res.subscribers.get(0).unwrap();
                         Session::invoke_subscriber(&sub.invoker, res.name.clone(), payload, info);
                     } else {
-                        for sub in &res.subscribers {
-                            Session::invoke_subscriber(
-                                &sub.invoker,
-                                res.name.clone(),
-                                payload.clone(),
-                                info.clone(),
-                            );
+                        if !local || state.local_routing {
+                            for sub in &res.subscribers {
+                                Session::invoke_subscriber(
+                                    &sub.invoker,
+                                    res.name.clone(),
+                                    payload.clone(),
+                                    info.clone(),
+                                );
+                            }
                         }
                         if local {
                             for sub in &res.local_subscribers {
@@ -971,14 +973,16 @@ impl Session {
         } else {
             match state.reskey_to_resname(reskey, local) {
                 Ok(resname) => {
-                    for sub in state.subscribers.values() {
-                        if rname::matches(&sub.resname, &resname) {
-                            Session::invoke_subscriber(
-                                &sub.invoker,
-                                resname.clone(),
-                                payload.clone(),
-                                info.clone(),
-                            );
+                    if !local || state.local_routing {
+                        for sub in state.subscribers.values() {
+                            if rname::matches(&sub.resname, &resname) {
+                                Session::invoke_subscriber(
+                                    &sub.invoker,
+                                    resname.clone(),
+                                    payload.clone(),
+                                    info.clone(),
+                                );
+                            }
                         }
                     }
                     if local {
@@ -1093,7 +1097,7 @@ impl Session {
         let value_selector = value_selector.to_string();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
-        let pid = self.runtime.pid.clone(); // @TODO build/use prebuilt specific pid
+        let pid = self.runtime.pid; // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
             let _ = req_sender.send(Query {
@@ -1117,7 +1121,7 @@ impl Session {
                     this.send_reply_data(
                         qid,
                         replier_kind,
-                        pid.clone(),
+                        pid,
                         res_name.into(),
                         Some(data_info),
                         payload,
@@ -1132,7 +1136,7 @@ impl Session {
                     primitives.send_reply_data(
                         qid,
                         replier_kind,
-                        pid.clone(),
+                        pid,
                         res_name.into(),
                         Some(data_info),
                         payload,
@@ -1216,7 +1220,7 @@ impl Primitives for Session {
         &self,
         reskey: &ResKey,
         payload: ZBuf,
-        reliability: Reliability,
+        channel: Channel,
         congestion_control: CongestionControl,
         info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
@@ -1225,7 +1229,7 @@ impl Primitives for Session {
             "recv Data {:?} {:?} {:?} {:?} {:?}",
             reskey,
             payload,
-            reliability,
+            channel,
             congestion_control,
             info,
         );
@@ -1361,6 +1365,7 @@ impl Primitives for Session {
                             let _ = query.rep_sender.send(reply);
                         }
                     }
+                    trace!("Close query {}", qid);
                 }
             }
             None => {

@@ -356,7 +356,7 @@ impl Sample {
                 res_name,
                 value,
                 kind: data_info.kind.unwrap_or(data_kind::DEFAULT).into(),
-                timestamp: data_info.timestamp.clone(),
+                timestamp: data_info.timestamp,
                 source_info: data_info.into(),
             }
         } else {

@@ -15,7 +15,7 @@
 //! Queryable primitives.
 
 use super::net::protocol::core::QueryableInfo;
-use super::net::protocol::session::Primitives;
+use super::net::transport::Primitives;
 use crate::prelude::*;
 use crate::sync::channel::Receiver;
 use crate::sync::ZFuture;

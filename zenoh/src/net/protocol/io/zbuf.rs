@@ -797,7 +797,7 @@ mod tests {
             buf1.as_ioslices()[1].get(0..10)
         );
 
-        buf1.add_zslice(v3.clone());
+        buf1.add_zslice(v3);
         println!("[03] {:?}", buf1);
         assert!(!buf1.is_empty());
         assert!(buf1.can_read());
@@ -875,7 +875,7 @@ mod tests {
 
         // test other buffers sharing the same vecs
         let mut buf2 = ZBuf::from(v1.clone());
-        buf2.add_zslice(v2.clone());
+        buf2.add_zslice(v2);
         println!("[07] {:?}", buf1);
         assert!(!buf2.is_empty());
         assert!(buf2.can_read());
@@ -887,7 +887,7 @@ mod tests {
             assert_eq!(i as u8, buf2.read().unwrap());
         }
 
-        let mut buf3 = ZBuf::from(v1.clone());
+        let mut buf3 = ZBuf::from(v1);
         println!("[08] {:?}", buf1);
         assert!(!buf3.is_empty());
         assert!(buf3.can_read());

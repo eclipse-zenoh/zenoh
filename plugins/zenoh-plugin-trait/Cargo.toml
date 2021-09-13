@@ -1,0 +1,37 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh-plugin-trait"
+version = "0.1.0-dev"
+authors = [
+    "kydos <angelo@icorsaro.net>",
+    "Julien Enoch <julien@enoch.fr>",
+    "Olivier Hécart <olivier.hecart@adlinktech.com>",
+    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+    "Pierre Avital <pierre.avital@adlinktech.com>",
+]
+edition = "2018"
+
+[lib]
+name = "zenoh_plugin_trait"
+
+[features]
+no_mangle = []
+default = ["no_mangle"]
+
+[dependencies]
+clap = "2.33.3"
+libloading = "0.7.0"
+log = "0.4"
+zenoh-util = { path = "../../zenoh-util" }

@@ -12,6 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #[doc(hidden)]
+pub mod link;
+#[doc(hidden)]
 pub mod plugins;
 #[doc(hidden)]
 pub mod protocol;
@@ -19,3 +21,6 @@ pub mod protocol;
 pub mod routing;
 #[doc(hidden)]
 pub mod runtime;
+#[doc(hidden)]
+#[macro_use]
+pub mod transport;

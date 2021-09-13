@@ -11,27 +11,25 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::sync::{Arc, Weak};
-use async_std::task::JoinHandle;
-use std::collections::{HashMap, HashSet};
-use std::sync::{Mutex, RwLock};
-use uhlc::HLC;
-use zenoh_util::sync::get_mut_unchecked;
-
-use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
-use super::protocol::link::Link;
-use super::protocol::proto::{ZenohBody, ZenohMessage};
-use super::protocol::session::{DeMux, Mux, Primitives, Session, SessionEventHandler};
-
-use zenoh_util::core::ZResult;
-use zenoh_util::zconfigurable;
-
 use super::face::{Face, FaceState};
 use super::network::{shared_nodes, Network};
+use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
+use super::protocol::proto::{ZenohBody, ZenohMessage};
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
 use super::runtime::Runtime;
+use super::transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
+use crate::net::link::Link;
+use async_std::sync::{Arc, Weak};
+use async_std::task::JoinHandle;
+use std::any::Any;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, RwLock};
+use uhlc::HLC;
+use zenoh_util::core::ZResult;
+use zenoh_util::sync::get_mut_unchecked;
+use zenoh_util::zconfigurable;
 
 zconfigurable! {
     static ref LINK_CLOSURE_DELAY: u64 = 200;
@@ -132,10 +130,9 @@ impl Tables {
             .clone();
         log::debug!("New {}", newface);
 
-        if whatami == whatami::CLIENT {
-            pubsub_new_face(self, &mut newface);
-            queries_new_face(self, &mut newface);
-        }
+        pubsub_new_face(self, &mut newface);
+        queries_new_face(self, &mut newface);
+
         Arc::downgrade(&newface)
     }
 
@@ -261,7 +258,7 @@ impl Router {
         let mut tables = zwrite!(self.tables);
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
-            tables.pid.clone(),
+            tables.pid,
             runtime.clone(),
             peers_autoconnect,
             routers_autoconnect_gossip,
@@ -269,7 +266,7 @@ impl Router {
         if runtime.whatami == whatami::ROUTER {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
-                tables.pid.clone(),
+                tables.pid,
                 runtime,
                 peers_autoconnect,
                 routers_autoconnect_gossip,
@@ -286,7 +283,7 @@ impl Router {
             tables: self.tables.clone(),
             state: {
                 let mut tables = zwrite!(self.tables);
-                let pid = tables.pid.clone();
+                let pid = tables.pid;
                 tables
                     .open_face(pid, whatami::CLIENT, primitives)
                     .upgrade()
@@ -295,21 +292,26 @@ impl Router {
         })
     }
 
-    pub fn new_session(&self, session: Session) -> ZResult<Arc<LinkStateInterceptor>> {
+    pub fn new_transport_unicast(
+        &self,
+        transport: TransportUnicast,
+    ) -> ZResult<Arc<LinkStateInterceptor>> {
         let mut tables = zwrite!(self.tables);
-        let whatami = session.get_whatami()?;
+        let whatami = transport.get_whatami()?;
 
         let link_id = match (self.whatami, whatami) {
             (whatami::ROUTER, whatami::ROUTER) => tables
                 .routers_net
                 .as_mut()
                 .unwrap()
-                .add_link(session.clone()),
+                .add_link(transport.clone()),
             (whatami::ROUTER, whatami::PEER)
             | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => {
-                tables.peers_net.as_mut().unwrap().add_link(session.clone())
-            }
+            | (whatami::PEER, whatami::PEER) => tables
+                .peers_net
+                .as_mut()
+                .unwrap()
+                .add_link(transport.clone()),
             _ => 0,
         };
 
@@ -321,15 +323,15 @@ impl Router {
         }
 
         let handler = Arc::new(LinkStateInterceptor::new(
-            session.clone(),
+            transport.clone(),
             self.tables.clone(),
             Face {
                 tables: self.tables.clone(),
                 state: tables
                     .open_net_face(
-                        session.get_pid().unwrap(),
+                        transport.get_pid().unwrap(),
                         whatami,
-                        Arc::new(Mux::new(session)),
+                        Arc::new(Mux::new(transport)),
                         link_id,
                     )
                     .upgrade()
@@ -353,29 +355,31 @@ impl Router {
 }
 
 pub struct LinkStateInterceptor {
-    pub(crate) session: Session,
+    pub(crate) transport: TransportUnicast,
     pub(crate) tables: Arc<RwLock<Tables>>,
     pub(crate) face: Face,
     pub(crate) demux: DeMux<Face>,
 }
 
 impl LinkStateInterceptor {
-    fn new(session: Session, tables: Arc<RwLock<Tables>>, face: Face) -> Self {
+    fn new(transport: TransportUnicast, tables: Arc<RwLock<Tables>>, face: Face) -> Self {
         LinkStateInterceptor {
-            session,
+            transport,
             tables,
             face: face.clone(),
             demux: DeMux::new(face),
         }
     }
+}
 
-    pub(crate) fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+impl TransportPeerEventHandler for LinkStateInterceptor {
+    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
         log::trace!("Recv {:?}", msg);
         match msg.body {
             ZenohBody::LinkStateList(list) => {
-                let pid = self.session.get_pid().unwrap();
+                let pid = self.transport.get_pid().unwrap();
                 let mut tables = zwrite!(self.tables);
-                let whatami = self.session.get_whatami()?;
+                let whatami = self.transport.get_whatami()?;
                 match (tables.whatami, whatami) {
                     (whatami::ROUTER, whatami::ROUTER) => {
                         for (_, removed_node) in tables
@@ -426,15 +430,15 @@ impl LinkStateInterceptor {
         }
     }
 
-    pub(crate) fn new_link(&self, _link: Link) {}
+    fn new_link(&self, _link: Link) {}
 
-    pub(crate) fn del_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
 
-    pub(crate) fn closing(&self) {
+    fn closing(&self) {
         self.demux.closing();
         let tables_ref = self.tables.clone();
-        let pid = self.session.get_pid().unwrap();
-        let whatami = self.session.get_whatami();
+        let pid = self.transport.get_pid().unwrap();
+        let whatami = self.transport.get_whatami();
         async_std::task::spawn(async move {
             async_std::task::sleep(std::time::Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
             let mut tables = zwrite!(tables_ref);
@@ -481,5 +485,9 @@ impl LinkStateInterceptor {
         });
     }
 
-    pub(crate) fn closed(&self) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }

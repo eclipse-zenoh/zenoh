@@ -14,9 +14,9 @@
 
 //! Publishing primitives.
 
-use super::net::protocol::core::rname;
+use super::net::protocol::core::{rname, Channel, Priority};
 use super::net::protocol::proto::{data_kind, DataInfo, Options};
-use super::net::protocol::session::Primitives;
+use super::net::transport::Primitives;
 use crate::encoding::Encoding;
 use crate::prelude::*;
 use crate::subscriber::Reliability;
@@ -215,7 +215,6 @@ impl Runnable for WriteBuilder<'_> {
         log::trace!("write({:?}, [...])", self.reskey);
         let state = zread!(self.session.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
-        let local_routing = state.local_routing;
         drop(state);
 
         let value = self.value.take().unwrap();
@@ -235,15 +234,16 @@ impl Runnable for WriteBuilder<'_> {
         primitives.send_data(
             &self.reskey,
             value.payload.clone(),
-            Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            Channel {
+                priority: Priority::default(),
+                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            },
             self.congestion_control,
             data_info.clone(),
             None,
         );
-        if local_routing {
-            self.session
-                .handle_data(true, &self.reskey, data_info, value.payload);
-        }
+        self.session
+            .handle_data(true, &self.reskey, data_info, value.payload);
         Ok(())
     }
 }

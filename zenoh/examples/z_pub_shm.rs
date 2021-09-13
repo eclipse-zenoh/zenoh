@@ -75,11 +75,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // the buffer is flowing through the pipeline this will not create any issues.
         //
         // In short, whilst this operation is marked as unsafe, you are safe if you can
-        // guarantee that your in applications only one process at the time will actually write.
+        // guarantee that in your application only one process at the time will actually write.
         let slice = unsafe { sbuf.as_mut_slice() };
         let slice_len = prefix_len + value.as_bytes().len();
-        slice[0..prefix_len].copy_from_slice(&prefix.as_bytes());
-        slice[prefix_len..slice_len].copy_from_slice(&value.as_bytes());
+        slice[0..prefix_len].copy_from_slice(prefix.as_bytes());
+        slice[prefix_len..slice_len].copy_from_slice(value.as_bytes());
 
         // Write the data
         println!(

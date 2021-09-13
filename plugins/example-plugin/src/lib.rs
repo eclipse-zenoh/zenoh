@@ -18,32 +18,70 @@ use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
+use std::sync::{
+    atomic::{AtomicBool, Ordering::Relaxed},
+    Arc,
+};
 use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::resource_name;
+use zenoh_plugin_trait::prelude::*;
+use zenoh_util::zerror2;
 
-#[no_mangle]
-pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    vec![
-        Arg::from_usage("--storage-selector 'The selection of resources to be stored'")
-            .default_value("/demo/example/**"),
-    ]
+pub struct ExamplePlugin {}
+
+zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
+
+pub struct ExamplePluginStopper {
+    flag: Arc<AtomicBool>,
 }
 
-#[no_mangle]
-pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    async_std::task::spawn(run(runtime, args));
+impl PluginStopper for ExamplePluginStopper {
+    fn stop(&self) {
+        self.flag.store(false, Relaxed);
+    }
 }
 
-async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
+impl Plugin for ExamplePlugin {
+    type Requirements = Vec<Arg<'static, 'static>>;
+    type StartArgs = (Runtime, ArgMatches<'static>);
+    fn compatibility() -> zenoh_plugin_trait::PluginId {
+        zenoh_plugin_trait::PluginId {
+            uid: "zenoh-example-plugin",
+        }
+    }
+
+    fn get_requirements() -> Self::Requirements {
+        vec![
+            Arg::from_usage("--storage-selector 'The selection of resources to be stored'")
+                .default_value("/demo/example/**"),
+        ]
+    }
+
+    fn start(
+        (runtime, args): &Self::StartArgs,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
+        if let Some(selector) = args.value_of("storage-selector") {
+            let flag = Arc::new(AtomicBool::new(true));
+            let stopper = ExamplePluginStopper { flag: flag.clone() };
+            async_std::task::spawn(run(runtime.clone(), selector.to_string().into(), flag));
+            Ok(Box::new(stopper))
+        } else {
+            Err(Box::new(zerror2!(ZErrorKind::Other {
+                descr: "storage-selector is a mandatory option for ExamplePlugin".into()
+            })))
+        }
+    }
+}
+
+async fn run(runtime: Runtime, selector: ResKey<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
     let session = zenoh::Session::init(runtime, true, vec![], vec![]).await;
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
-    let selector: ResKey = args.value_of("storage-selector").unwrap().into();
     debug!("Run example-plugin with storage-selector={}", selector);
 
     debug!("Register Subscriber on {}", selector);
@@ -56,7 +94,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
         .await
         .unwrap();
 
-    loop {
+    while flag.load(Relaxed) {
         select!(
             sample = sub.receiver().next().fuse() => {
                 let sample = sample.unwrap();
@@ -68,7 +106,7 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (rname, sample) in stored.iter() {
-                    if resource_name::intersect(&query.selector().key_selector, rname) {
+                    if resource_name::intersect(query.selector().key_selector, rname) {
                         query.reply_async(sample.clone()).await;
                     }
                 }
