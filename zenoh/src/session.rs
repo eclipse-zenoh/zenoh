@@ -876,6 +876,7 @@ impl Session {
             value: Some(value.into()),
             kind: None,
             congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
         }
     }
 
@@ -905,6 +906,7 @@ impl Session {
             value: Some(Value::empty()),
             kind: Some(data_kind::DELETE),
             congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
         }
     }
 

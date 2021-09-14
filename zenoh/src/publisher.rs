@@ -14,7 +14,7 @@
 
 //! Publishing primitives.
 
-use super::net::protocol::core::{rname, Channel, Priority};
+use super::net::protocol::core::{rname, Channel};
 use super::net::protocol::proto::{data_kind, DataInfo, Options};
 use super::net::transport::Primitives;
 use crate::prelude::*;
@@ -179,6 +179,7 @@ derive_zfuture! {
         pub(crate) value: Option<Value>,
         pub(crate) kind: Option<ZInt>,
         pub(crate) congestion_control: CongestionControl,
+        pub(crate) priority: Priority,
     }
 }
 
@@ -210,6 +211,13 @@ impl<'a> Writer<'a> {
         }
         self
     }
+
+    /// Change the priority of the written data.
+    #[inline]
+    pub fn priority(mut self, priority: Priority) -> Writer<'a> {
+        self.priority = priority;
+        self
+    }
 }
 
 impl Runnable for Writer<'_> {
@@ -239,7 +247,7 @@ impl Runnable for Writer<'_> {
             &self.reskey,
             value.payload.clone(),
             Channel {
-                priority: Priority::default(),
+                priority: self.priority.into(),
                 reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             },
             self.congestion_control,

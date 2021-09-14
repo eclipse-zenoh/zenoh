@@ -427,6 +427,37 @@ impl fmt::Display for Sample {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Priority {
+    RealTime = 1,
+    InteractiveHigh = 2,
+    InteractiveLow = 3,
+    DataHigh = 4,
+    Data = 5,
+    DataLow = 6,
+    Background = 7,
+}
+
+impl Default for Priority {
+    fn default() -> Priority {
+        Priority::Data
+    }
+}
+
+impl From<Priority> for super::net::protocol::core::Priority {
+    fn from(prio: Priority) -> Self {
+        match prio {
+            Priority::RealTime => super::net::protocol::core::Priority::RealTime,
+            Priority::InteractiveHigh => super::net::protocol::core::Priority::InteractiveHigh,
+            Priority::InteractiveLow => super::net::protocol::core::Priority::InteractiveLow,
+            Priority::DataHigh => super::net::protocol::core::Priority::DataHigh,
+            Priority::Data => super::net::protocol::core::Priority::Data,
+            Priority::DataLow => super::net::protocol::core::Priority::DataLow,
+            Priority::Background => super::net::protocol::core::Priority::Background,
+        }
+    }
+}
+
 /// The "starttime" property key for time-range selection
 pub const PROP_STARTTIME: &str = "starttime";
 /// The "stoptime" property key for time-range selection
