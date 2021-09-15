@@ -18,37 +18,26 @@ use futures::select;
 use futures::stream::StreamExt;
 use futures::FutureExt;
 use log::{debug, error, trace, warn};
-use zenoh::net::{
-    queryable, QueryConsolidation, QueryTarget, Reliability, SubInfo, SubMode, Target,
-};
-use zenoh::{Path, PathExpr, ZResult, Zenoh};
+use zenoh::prelude::*;
+use zenoh::query::{QueryConsolidation, QueryTarget, Target};
+use zenoh::queryable;
+use zenoh::Session;
 use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
 
 pub(crate) async fn start_storage(
     mut storage: Box<dyn zenoh_backend_traits::Storage>,
-    admin_path: Path,
-    path_expr: PathExpr,
+    admin_path: String,
+    path_expr: String,
     in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
     out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
-    zenoh: Arc<Zenoh>,
+    zenoh: Arc<Session>,
 ) -> ZResult<Sender<bool>> {
     debug!("Start storage {} on {}", admin_path, path_expr);
 
     let (tx, rx) = bounded::<bool>(1);
     task::spawn(async move {
-        let workspace = zenoh.workspace(Some(admin_path.clone())).await.unwrap();
-
         // subscribe on path_expr
-        let sub_info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
-        };
-        let mut storage_sub = match workspace
-            .session()
-            .declare_subscriber(&path_expr.to_string().into(), &sub_info)
-            .await
-        {
+        let mut storage_sub = match zenoh.subscribe(&path_expr).await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_path, e);
@@ -62,14 +51,10 @@ pub(crate) async fn start_storage(
             kind: queryable::STORAGE,
             target: Target::All,
         };
-        let mut replies = match workspace
-            .session()
-            .query(
-                &path_expr.to_string().into(),
-                "?(starttime=0)",
-                query_target,
-                QueryConsolidation::none(),
-            )
+        let mut replies = match zenoh
+            .get(&Selector::from(&path_expr).with_value_selector("?(starttime=0)"))
+            .target(query_target)
+            .consolidation(QueryConsolidation::none())
             .await
         {
             Ok(replies) => replies,
@@ -97,7 +82,7 @@ pub(crate) async fn start_storage(
 
         // admin_path is "/@/.../storage/<stid>"
         // answer to GET on 'admin_path'
-        let mut storage_admin = match workspace.register_eval(&PathExpr::from(&admin_path)).await {
+        let mut storage_admin = match zenoh.register_queryable(&admin_path).await {
             Ok(storages_admin) => storages_admin,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_path, e);
@@ -106,9 +91,9 @@ pub(crate) async fn start_storage(
         };
 
         // answer to queries on path_expr
-        let mut storage_queryable = match workspace
-            .session()
-            .declare_queryable(&path_expr.to_string().into(), queryable::STORAGE)
+        let mut storage_queryable = match zenoh
+            .register_queryable(&path_expr)
+            .kind(queryable::STORAGE)
             .await
         {
             Ok(storage_queryable) => storage_queryable,
@@ -120,10 +105,10 @@ pub(crate) async fn start_storage(
 
         loop {
             select!(
-                // on get request on storage_admin
-                get = storage_admin.next().fuse() => {
-                    let get = get.unwrap();
-                    get.reply_async(admin_path.clone(), storage.get_admin_status().await).await;
+                // on query on storage_admin
+                query = storage_admin.receiver().next().fuse() => {
+                    let query = query.unwrap();
+                    query.reply_async(Sample::new(admin_path.to_string(), storage.get_admin_status().await)).await;
                 },
                 // on sample for path_expr
                 sample = storage_sub.receiver().next().fuse() => {
@@ -141,7 +126,7 @@ pub(crate) async fn start_storage(
                 // on query on path_expr
                 query = storage_queryable.receiver().next().fuse() => {
                     let q = query.unwrap();
-                    // wrap zenoh::net::Query in zenoh_backend_traits::Query
+                    // wrap zenoh::Query in zenoh_backend_traits::Query
                     // with outgoing interceptor
                     let query = Query::new(q, out_interceptor.clone());
                     if let Err(e) = storage.on_query(query).await {

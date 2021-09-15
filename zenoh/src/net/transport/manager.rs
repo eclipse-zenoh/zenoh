@@ -19,7 +19,7 @@ use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
-use crate::net::config::Config;
+use crate::config::Config;
 use crate::net::link::{EndPoint, Locator, LocatorConfig, LocatorProtocol};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};

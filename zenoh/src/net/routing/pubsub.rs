@@ -250,7 +250,7 @@ fn register_client_subscription(
                         local_rid: None,
                         remote_rid: None,
                         subs: Some(sub_info.clone()),
-                        qabl: None,
+                        qabl: HashMap::new(),
                         last_values: HashMap::new(),
                     }),
                 );
@@ -722,7 +722,7 @@ fn insert_faces_for_subs(
                                     let reskey = Resource::get_best_key(prefix, suffix, face.id);
                                     (
                                         face.clone(),
-                                        reskey,
+                                        reskey.to_owned(),
                                         if source != 0 {
                                             Some(RoutingContext::new(source as ZInt))
                                         } else {
@@ -822,7 +822,7 @@ fn compute_data_route(
                     if subinfo.mode == SubMode::Push {
                         route.entry(*sid).or_insert_with(|| {
                             let reskey = Resource::get_best_key(prefix, suffix, *sid);
-                            (context.face.clone(), reskey, None)
+                            (context.face.clone(), reskey.to_owned(), None)
                         });
                     }
                 }

@@ -18,117 +18,196 @@ use futures_lite::StreamExt;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use zenoh::net::*;
-use zenoh_util::core::ZResult;
-use zenoh_util::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
-use zenoh_util::sync::ZFuture;
-use zenoh_util::{zresolved, zwrite};
+use zenoh::prelude::*;
+use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver, Target};
+use zenoh::queryable::STORAGE;
+use zenoh::subscriber::{Reliability, SampleReceiver, SubMode, Subscriber};
+use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
+use zenoh::sync::zready;
+use zenoh::time::Period;
+use zenoh::Session;
+use zenoh_util::zwrite;
+
+use super::publication_cache::PUBLICATION_CACHE_QUERYABLE_KIND;
 
 const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
-pub struct QueryingSubscriberBuilder<'a> {
-    workspace: &'a Workspace,
-    sub_selector: sub_selector,
-    info: SubInfo,
-    query_selector: Selector,
+pub struct QueryingSubscriberBuilder<'a, 'b> {
+    session: &'a Session,
+    sub_reskey: ResKey<'b>,
+    reliability: Reliability,
+    mode: SubMode,
+    period: Option<Period>,
+    query_reskey: ResKey<'b>,
+    query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
 }
 
-impl QueryingSubscriberBuilder<'_> {
-    pub(crate) fn new<'a>(
+impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
+    pub(crate) fn new(
         session: &'a Session,
-        sub_selector: &sub_selector,
-    ) -> QueryingSubscriberBuilder<'a> {
-        let info = SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
-            period: None,
+        sub_reskey: ResKey<'b>,
+    ) -> QueryingSubscriberBuilder<'a, 'b> {
+        // By default query all matching publication caches and storages
+        let query_target = QueryTarget {
+            kind: PUBLICATION_CACHE_QUERYABLE_KIND | STORAGE,
+            target: Target::All,
         };
+
+        // By default no query consolidation, to receive more than 1 sample per-resource
+        // (in history of publications is available)
+        let query_consolidation = QueryConsolidation::none();
+
         QueryingSubscriberBuilder {
             session,
-            sub_selector: sub_selector.clone(),
-            info,
-            query_selector: sub_selector.clone(),
-            query_target: QueryTarget::default(),
-            query_consolidation: QueryConsolidation::default(),
+            sub_reskey: sub_reskey.clone(),
+            reliability: Reliability::default(),
+            mode: SubMode::default(),
+            period: None,
+            query_reskey: sub_reskey,
+            query_value_selector: "".into(),
+            query_target,
+            query_consolidation,
         }
     }
 
+    /// Change the subscription reliability.
+    #[inline]
+    pub fn reliability(mut self, reliability: Reliability) -> Self {
+        self.reliability = reliability;
+        self
+    }
+
     /// Change the subscription reliability to Reliable.
+    #[inline]
     pub fn reliable(mut self) -> Self {
-        self.info.reliability = Reliability::Reliable;
+        self.reliability = Reliability::Reliable;
         self
     }
 
     /// Change the subscription reliability to BestEffort.
+    #[inline]
     pub fn best_effort(mut self) -> Self {
-        self.info.reliability = Reliability::BestEffort;
+        self.reliability = Reliability::BestEffort;
+        self
+    }
+
+    /// Change the subscription mode.
+    #[inline]
+    pub fn mode(mut self, mode: SubMode) -> Self {
+        self.mode = mode;
         self
     }
 
     /// Change the subscription mode to Push.
+    #[inline]
     pub fn push_mode(mut self) -> Self {
-        self.info.mode = SubMode::Push;
-        self.info.period = None;
+        self.mode = SubMode::Push;
+        self.period = None;
         self
     }
 
-    /// Change the subscription mode to Pull with an optional Period.
-    pub fn pull_mode(mut self, period: Option<Period>) -> Self {
-        self.info.mode = SubMode::Pull;
-        self.info.period = period;
+    /// Change the subscription mode to Pull.
+    #[inline]
+    pub fn pull_mode(mut self) -> Self {
+        self.mode = SubMode::Pull;
         self
     }
+
+    /// Change the subscription period.
+    #[inline]
+    pub fn period(mut self, period: Option<Period>) -> Self {
+        self.period = period;
+        self
+    }
+
     /// Change the resource key to be used for queries.
-    pub fn query_selector(mut self, selector: Selector) -> Self {
-        self.query_selector = Selector;
+    #[inline]
+    pub fn query_selector<IntoKeyedSelector>(mut self, query_selector: IntoKeyedSelector) -> Self
+    where
+        IntoKeyedSelector: Into<KeyedSelector<'b>>,
+    {
+        let selector = query_selector.into();
+        self.query_reskey = selector.key_selector.to_owned();
+        self.query_value_selector = selector.value_selector.to_owned();
         self
     }
 
     /// Change the target to be used for queries.
+    #[inline]
     pub fn query_target(mut self, query_target: QueryTarget) -> Self {
         self.query_target = query_target;
         self
     }
 
     /// Change the consolidation mode to be used for queries.
+    #[inline]
     pub fn query_consolidation(mut self, query_consolidation: QueryConsolidation) -> Self {
         self.query_consolidation = query_consolidation;
         self
     }
-}
 
-impl<'a> Future for QueryingSubscriberBuilder<'a> {
-    type Output = ZResult<QueryingSubscriber<'a>>;
-
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(QueryingSubscriber::new(Pin::into_inner(self).clone()))
+    fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
+        QueryingSubscriberBuilder {
+            session: self.session,
+            sub_reskey: self.sub_reskey.to_owned(),
+            reliability: self.reliability,
+            mode: self.mode,
+            period: self.period,
+            query_reskey: self.query_reskey.to_owned(),
+            query_value_selector: "".to_string(),
+            query_target: self.query_target,
+            query_consolidation: self.query_consolidation,
+        }
     }
 }
 
-impl<'a> ZFuture<ZResult<QueryingSubscriber<'a>>> for QueryingSubscriberBuilder<'a> {
+impl<'a, 'b> Future for QueryingSubscriberBuilder<'a, 'b> {
+    type Output = ZResult<QueryingSubscriber<'a>>;
+
+    #[inline]
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(QueryingSubscriber::new(
+            Pin::into_inner(self).clone().with_static_keys(),
+        ))
+    }
+}
+
+impl<'a, 'b> ZFuture for QueryingSubscriberBuilder<'a, 'b> {
+    #[inline]
     fn wait(self) -> ZResult<QueryingSubscriber<'a>> {
-        QueryingSubscriber::new(self)
+        QueryingSubscriber::new(self.with_static_keys())
     }
 }
 
 pub struct QueryingSubscriber<'a> {
-    conf: QueryingSubscriberBuilder<'a>,
+    conf: QueryingSubscriberBuilder<'a, 'a>,
+    subscriber: Subscriber<'a>,
     receiver: QueryingSubscriberReceiver,
 }
 
-impl QueryingSubscriber<'_> {
-    fn new(conf: QueryingSubscriberBuilder<'_>) -> ZResult<QueryingSubscriber<'_>> {
+impl<'a> QueryingSubscriber<'a> {
+    fn new(conf: QueryingSubscriberBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
         // declare subscriber at first
-        let mut sub_recv = conf.workspace.subscribe(&conf.sub_selector).wait()?;
+        let mut subscriber = conf
+            .session
+            .subscribe(&conf.sub_reskey)
+            .reliability(conf.reliability)
+            .mode(conf.mode)
+            .period(conf.period)
+            .wait()?;
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());
 
-        let mut query_subscriber = QueryingSubscriber { conf, receiver };
+        let mut query_subscriber = QueryingSubscriber {
+            conf,
+            subscriber,
+            receiver,
+        };
 
         // start query
         query_subscriber.query().wait()?;
@@ -138,9 +217,8 @@ impl QueryingSubscriber<'_> {
 
     /// Undeclare this QueryingSubscriber
     #[inline]
-    pub fn close(self) -> ZResolvedFuture<ZResult<()>> {
-        let mut state = zwrite!(self.receiver.state);
-        state.subscriber_recv.close()
+    pub fn unregister(self) -> impl ZFuture<Output = ZResult<()>> {
+        self.subscriber.unregister()
     }
 
     /// Return the QueryingSubscriberReceiver associated to this subscriber.
@@ -149,45 +227,51 @@ impl QueryingSubscriber<'_> {
         &mut self.receiver
     }
 
-    /// Issue a new query using the configured resource key and predicate.
-    pub fn query(&mut self) -> ZResolvedFuture<ZResult<()>> {
+    /// Issue a new query using the configured resource key and value_selector.
+    #[inline]
+    pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.query_on(
-            &self.conf.query_selector.clone(),
+            &self.conf.query_reskey.clone(),
+            &self.conf.query_value_selector.clone(),
             self.conf.query_target.clone(),
             self.conf.query_consolidation.clone(),
         )
     }
 
-    /// Issue a new query on the specified resource key and predicate.
+    /// Issue a new query on the specified resource key and value_selector.
     pub fn query_on(
         &mut self,
-        selector: &Selector,
+        reskey: &ResKey,
+        value_selector: &str,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> ZResolvedFuture<ZResult<()>> {
+    ) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.receiver.state);
-        log::debug!("Get on {}?{}", reskey, predicate);
+        log::debug!("Start query on {}?{}", reskey, value_selector);
         match self
             .conf
             .session
-            .query(reskey, predicate, target, consolidation)
+            .get(&KeyedSelector::from(reskey).with_value_selector(value_selector))
+            .target(target)
+            .consolidation(consolidation)
             .wait()
         {
             Ok(recv) => {
                 state.replies_recv_queue.push(recv);
-                zresolved!(Ok(()))
+                zready(Ok(()))
             }
-            Err(err) => zresolved!(Err(err)),
+            Err(err) => zready(Err(err)),
         }
     }
 }
 
+#[derive(Clone)]
 pub struct QueryingSubscriberReceiver {
     state: Arc<RwLock<InnerState>>,
 }
 
 impl QueryingSubscriberReceiver {
-    fn new(subscriber_recv: ChangeReceiver<'_>) -> QueryingSubscriberReceiver {
+    fn new(subscriber_recv: SampleReceiver) -> QueryingSubscriberReceiver {
         QueryingSubscriberReceiver {
             state: Arc::new(RwLock::new(InnerState {
                 subscriber_recv,
@@ -231,9 +315,9 @@ impl Receiver<Sample> for QueryingSubscriberReceiver {
 }
 
 struct InnerState {
-    subscriber_recv: ChangeReceiver<'_>,
-    replies_recv_queue: Vec<ChangeReceiver>,
-    merge_queue: Vec<Change>,
+    subscriber_recv: SampleReceiver,
+    replies_recv_queue: Vec<ReplyReceiver>,
+    merge_queue: Vec<Sample>,
 }
 
 impl Stream for InnerState {
@@ -284,10 +368,10 @@ impl Stream for InnerState {
             // sort and remove duplicates from merge_queue
             mself
                 .merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             mself
                 .merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             mself.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -336,9 +420,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -402,9 +486,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -473,9 +557,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",

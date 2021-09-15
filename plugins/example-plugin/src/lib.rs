@@ -17,15 +17,15 @@ use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
-use runtime::Runtime;
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc,
 };
-use zenoh::net::queryable::STORAGE;
-use zenoh::net::utils::resource_name;
-use zenoh::net::*;
+use zenoh::net::runtime::Runtime;
+use zenoh::prelude::*;
+use zenoh::queryable::STORAGE;
+use zenoh::utils::resource_name;
 use zenoh_plugin_trait::prelude::*;
 use zenoh_util::zerror2;
 
@@ -65,7 +65,7 @@ impl Plugin for ExamplePlugin {
         if let Some(selector) = args.value_of("storage-selector") {
             let flag = Arc::new(AtomicBool::new(true));
             let stopper = ExamplePluginStopper { flag: flag.clone() };
-            async_std::task::spawn(run(runtime.clone(), selector.into(), flag));
+            async_std::task::spawn(run(runtime.clone(), selector.to_string().into(), flag));
             Ok(Box::new(stopper))
         } else {
             Err(Box::new(zerror2!(ZErrorKind::Other {
@@ -75,48 +75,39 @@ impl Plugin for ExamplePlugin {
     }
 }
 
-async fn run(runtime: Runtime, selector: ResKey, flag: Arc<AtomicBool>) {
+async fn run(runtime: Runtime, selector: ResKey<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
-    let session = Session::init(runtime, true, vec![], vec![]).await;
+    let session = zenoh::Session::init(runtime, true, vec![], vec![]).await;
 
-    let mut stored: HashMap<String, (ZBuf, Option<DataInfo>)> = HashMap::new();
-
-    let sub_info = SubInfo {
-        reliability: Reliability::Reliable,
-        mode: SubMode::Push,
-        period: None,
-    };
+    let mut stored: HashMap<String, Sample> = HashMap::new();
 
     debug!("Run example-plugin with storage-selector={}", selector);
 
-    debug!("Declaring Subscriber on {}", selector);
-    let mut sub = session
-        .declare_subscriber(&selector, &sub_info)
+    debug!("Register Subscriber on {}", selector);
+    let mut sub = session.subscribe(&selector).await.unwrap();
+
+    debug!("Register Queryable on {}", selector);
+    let mut queryable = session
+        .register_queryable(&selector)
+        .kind(STORAGE)
         .await
         .unwrap();
-
-    debug!("Declaring Queryable on {}", selector);
-    let mut queryable = session.declare_queryable(&selector, STORAGE).await.unwrap();
 
     while flag.load(Relaxed) {
         select!(
             sample = sub.receiver().next().fuse() => {
                 let sample = sample.unwrap();
-                info!("Received data ('{}': '{}')", sample.res_name, sample.payload);
-                stored.insert(sample.res_name, (sample.payload, sample.data_info));
+                info!("Received data ('{}': '{}')", sample.res_name, sample.value);
+                stored.insert(sample.res_name.clone(), sample);
             },
 
             query = queryable.receiver().next().fuse() => {
                 let query = query.unwrap();
-                info!("Handling query '{}{}'", query.res_name, query.predicate);
-                for (rname, (data, data_info)) in stored.iter() {
-                    if resource_name::intersect(&query.res_name, rname) {
-                        query.reply_async(Sample{
-                            res_name: rname.clone(),
-                            payload: data.clone(),
-                            data_info: data_info.clone(),
-                        }).await;
+                info!("Handling query '{}'", query.selector());
+                for (rname, sample) in stored.iter() {
+                    if resource_name::intersect(query.selector().key_selector, rname) {
+                        query.reply_async(sample.clone()).await;
                     }
                 }
             }

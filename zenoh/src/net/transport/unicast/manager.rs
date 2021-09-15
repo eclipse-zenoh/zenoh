@@ -16,7 +16,7 @@ use super::authenticator::*;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::transport::{TransportUnicastConfig, TransportUnicastInner};
 use super::*;
-use crate::net::config::Config;
+use crate::config::Config;
 use crate::net::link::*;
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};

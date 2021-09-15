@@ -48,8 +48,12 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                                 .decl_subscriber(&s.key, &s.info, msg.routing_context);
                         }
                         Declaration::Queryable(q) => {
-                            self.primitives
-                                .decl_queryable(&q.key, q.kind, msg.routing_context);
+                            self.primitives.decl_queryable(
+                                &q.key,
+                                q.kind,
+                                &q.info,
+                                msg.routing_context,
+                            );
                         }
                         Declaration::ForgetResource(fr) => {
                             self.primitives.forget_resource(fr.rid);
@@ -64,7 +68,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                         }
                         Declaration::ForgetQueryable(q) => {
                             self.primitives
-                                .forget_queryable(&q.key, msg.routing_context);
+                                .forget_queryable(&q.key, q.kind, msg.routing_context);
                         }
                     }
                 }
@@ -116,7 +120,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
 
             ZenohBody::Query(Query {
                 key,
-                predicate,
+                value_selector,
                 qid,
                 target,
                 consolidation,
@@ -124,7 +128,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
             }) => {
                 self.primitives.send_query(
                     &key,
-                    &predicate,
+                    &value_selector,
                     qid,
                     target.unwrap_or_default(),
                     consolidation,

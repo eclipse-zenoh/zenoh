@@ -16,7 +16,7 @@ use async_std::task;
 use clap::{App, Arg};
 use git_version::git_version;
 use validated_struct::ValidatedMap;
-use zenoh::net::config::Config;
+use zenoh::config::Config;
 use zenoh::net::plugins::*;
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh_util::LibLoader;
@@ -151,7 +151,9 @@ fn main() {
             Config::default()
         };
 
-        config.set_mode(Some(zenoh::net::whatami::ROUTER)).unwrap();
+        config
+            .set_mode(Some(zenoh::config::whatami::ROUTER))
+            .unwrap();
 
         config
             .peers

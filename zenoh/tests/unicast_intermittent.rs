@@ -278,7 +278,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let c_router_manager = router_manager.clone();
     let res = task::spawn_blocking(move || {
         // Create the message to send
-        let key = ResKey::RName("/test".to_string());
+        let key = ResKey::RName("/test".into());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),

@@ -84,7 +84,7 @@ impl fmt::Display for LocatorTcp {
 pub struct LocatorConfigTcp;
 
 impl LocatorConfigTcp {
-    pub fn from_config(_config: &crate::net::config::Config) -> ZResult<Option<Properties>> {
+    pub fn from_config(_config: &crate::config::Config) -> ZResult<Option<Properties>> {
         Ok(None)
     }
 }

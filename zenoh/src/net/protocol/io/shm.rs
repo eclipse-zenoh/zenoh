@@ -63,14 +63,18 @@ impl PartialEq for Chunk {
     }
 }
 
-/*************************************/
-/*      SHARED MEMORY BUFFER INFO    */
-/*************************************/
+/// Informations about a [`SharedMemoryBuf`].
+///
+/// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SharedMemoryBufInfo {
+    /// The index of the beginning of the buffer in the shm segment.
     pub offset: usize,
+    /// The length of the buffer.
     pub length: usize,
+    /// The identifier of the shm manager that manages the shm segment this buffer points to.
     pub shm_manager: String,
+    /// The kiond of buffer.
     pub kind: u8,
 }
 
@@ -96,9 +100,7 @@ impl Clone for SharedMemoryBufInfo {
     }
 }
 
-/*************************************/
-/*       SHARED MEMORY BUFFER        */
-/*************************************/
+/// A zenoh buffer in shared memory.
 pub struct SharedMemoryBuf {
     pub(crate) rc_ptr: AtomicPtr<ChunkHeaderType>,
     pub(crate) buf: AtomicPtr<u8>,
@@ -161,8 +163,7 @@ impl SharedMemoryBuf {
         unsafe { std::slice::from_raw_parts(bp, self.len) }
     }
 
-    ///
-    /// Get a mutable slice.
+    /// Gets a mutable slice.
     ///
     /// # Safety
     /// This operation is marked unsafe since we cannot guarantee the single mutable reference
@@ -281,9 +282,9 @@ impl fmt::Debug for SharedMemoryReader {
     }
 }
 
-/*************************************/
-/*       SHARED MEMORY MANAGER       */
-/*************************************/
+/// A shared memory segment manager.
+///
+/// Allows to access a shared memory segment and reserve some parts of this segment for writting.
 pub struct SharedMemoryManager {
     segment_path: String,
     size: usize,

@@ -16,7 +16,8 @@ mod mux;
 
 use super::protocol;
 use super::protocol::core::{
-    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo, ZInt,
+    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, ResKey,
+    SubInfo, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -38,8 +39,19 @@ pub trait Primitives: Send + Sync {
     );
     fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
 
-    fn decl_queryable(&self, reskey: &ResKey, kind: ZInt, routing_context: Option<RoutingContext>);
-    fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>);
+    fn decl_queryable(
+        &self,
+        reskey: &ResKey,
+        kind: ZInt,
+        qabl_info: &QueryableInfo,
+        routing_context: Option<RoutingContext>,
+    );
+    fn forget_queryable(
+        &self,
+        reskey: &ResKey,
+        kind: ZInt,
+        routing_context: Option<RoutingContext>,
+    );
 
     fn send_data(
         &self,
@@ -54,7 +66,7 @@ pub trait Primitives: Send + Sync {
     fn send_query(
         &self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
@@ -107,10 +119,17 @@ impl Primitives for DummyPrimitives {
         &self,
         _reskey: &ResKey,
         _kind: ZInt,
+        _qable_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
+    }
 
     fn send_data(
         &self,
@@ -125,7 +144,7 @@ impl Primitives for DummyPrimitives {
     fn send_query(
         &self,
         _reskey: &ResKey,
-        _predicate: &str,
+        _value_selector: &str,
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: QueryConsolidation,

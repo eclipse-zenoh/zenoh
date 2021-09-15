@@ -183,7 +183,7 @@ impl UserPasswordAuthenticator {
     }
 
     pub async fn from_config(
-        config: &crate::net::config::Config,
+        config: &crate::config::Config,
     ) -> ZResult<Option<UserPasswordAuthenticator>> {
         let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
         if let Some(dict) = config.user_password_dictionary() {

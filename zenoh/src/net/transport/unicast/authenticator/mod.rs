@@ -19,7 +19,7 @@ mod userpassword;
 use super::protocol;
 use super::protocol::core::{PeerId, Property, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
-use crate::net::config::Config;
+use crate::config::Config;
 use crate::net::link::{Link, Locator};
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -45,7 +45,7 @@ pub struct LinkAuthenticator(Arc<dyn LinkUnicastAuthenticatorTrait + Send + Sync
 
 impl LinkAuthenticator {
     pub(crate) async fn from_config(
-        _config: &crate::net::config::Config,
+        _config: &crate::config::Config,
     ) -> ZResult<HashSet<LinkAuthenticator>> {
         Ok(HashSet::new())
     }

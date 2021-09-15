@@ -342,8 +342,9 @@ impl WBuf {
         if let Some(kind) = info.kind {
             zcheck!(self.write_zint(kind));
         }
-        if let Some(enc) = info.encoding {
-            zcheck!(self.write_zint(enc));
+        if let Some(enc) = info.encoding.as_ref() {
+            zcheck!(self.write_zint(enc.prefix));
+            zcheck!(self.write_string(enc.suffix.as_ref()));
         }
         if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
@@ -360,7 +361,13 @@ impl WBuf {
         if let Some(sn) = info.first_router_sn {
             zcheck!(self.write_zint(sn));
         }
+        true
+    }
 
+    #[inline(always)]
+    fn write_queryable_info(&mut self, info: &QueryableInfo) -> bool {
+        zcheck!(self.write_zint(info.complete));
+        zcheck!(self.write_zint(info.distance));
         true
     }
 
@@ -399,13 +406,16 @@ impl WBuf {
                 let header = q.header();
                 zcheck!(self.write(header));
                 zcheck!(self.write_reskey(&q.key));
+                zcheck!(self.write_zint(q.kind));
                 if imsg::has_flag(header, zmsg::flag::Q) {
-                    zcheck!(self.write_zint(q.kind))
+                    zcheck!(self.write_queryable_info(&q.info));
                 }
                 true
             }
             Declaration::ForgetQueryable(fq) => {
-                self.write(fq.header()) && self.write_reskey(&fq.key)
+                zcheck!(self.write(fq.header()) && self.write_reskey(&fq.key));
+                zcheck!(self.write_zint(fq.kind));
+                true
             }
         }
     }
@@ -448,7 +458,7 @@ impl WBuf {
     fn write_query(&mut self, query: &Query) -> bool {
         zcheck!(self.write(query.header()));
         zcheck!(self.write_reskey(&query.key));
-        zcheck!(self.write_string(&query.predicate));
+        zcheck!(self.write_string(&query.value_selector));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {
             zcheck!(self.write_query_target(t));
@@ -495,9 +505,11 @@ impl WBuf {
         #![allow(clippy::unnecessary_cast)]
         match target {
             Target::BestMatching => self.write_zint(0 as ZInt),
-            Target::Complete { n } => self.write_zint(1 as ZInt) && self.write_zint(*n),
-            Target::All => self.write_zint(2 as ZInt),
+            Target::All => self.write_zint(1 as ZInt),
+            Target::AllComplete => self.write_zint(2 as ZInt),
             Target::None => self.write_zint(3 as ZInt),
+            #[cfg(feature = "complete_n")]
+            Target::Complete(n) => self.write_zint(4 as ZInt) && self.write_zint(*n),
         }
     }
 

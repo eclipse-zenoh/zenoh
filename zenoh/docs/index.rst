@@ -20,10 +20,4 @@ The *zenoh-rust* library provides a Rust client API for *zenoh*.
 
 An introduction to *zenoh* and its concepts is available on `zenoh.io <https://zenoh.io>`_.
 
-Note that this library also provides a low-level API *zenoh-net*
-that gives access to the zenoh protocol primitives and allow some
-advanced use cases where a fine tuning of the protocol is required.
-
-
- * `zenoh API <https://docs.rs/zenoh/latest/zenoh/index.html>`_
- * `zenoh-net API <https://docs.rs/zenoh/latest/zenoh/net/index.html>`_
+`zenoh API <https://docs.rs/zenoh/latest/zenoh/index.html>`_

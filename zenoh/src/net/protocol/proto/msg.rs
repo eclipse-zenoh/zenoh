@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::core::Encoding;
 use super::core::*;
 use super::defaults::SEQ_NUM_RES;
 use super::io::{ZBuf, ZSlice};
@@ -188,7 +189,7 @@ pub mod zmsg {
         pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then resource key has name
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
         pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
-        pub const Q: u8 = 1 << 6; // 0x40 QueryableKind if Z==1 then the queryable kind is present
+        pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SubMode       if S==1 then the declaration SubMode is indicated
         pub const T: u8 = 1 << 5; // 0x20 QueryTarget   if T==1 then the query target is present
@@ -530,7 +531,7 @@ pub struct DataInfo {
     #[cfg(feature = "zero-copy")]
     pub sliced: bool,
     pub kind: Option<ZInt>,
-    pub encoding: Option<ZInt>,
+    pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
@@ -639,7 +640,7 @@ impl PartialOrd for DataInfo {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
-    pub key: ResKey,
+    pub key: ResKey<'static>,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
     pub congestion_control: CongestionControl,
@@ -714,7 +715,7 @@ pub enum Declaration {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resource {
     pub rid: ZInt,
-    pub key: ResKey,
+    pub key: ResKey<'static>,
 }
 
 impl Header for Resource {
@@ -758,7 +759,7 @@ impl Header for ForgetResource {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Publisher {
-    pub key: ResKey,
+    pub key: ResKey<'static>,
 }
 
 impl Header for Publisher {
@@ -782,7 +783,7 @@ impl Header for Publisher {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetPublisher {
-    pub key: ResKey,
+    pub key: ResKey<'static>,
 }
 
 impl Header for ForgetPublisher {
@@ -810,7 +811,7 @@ impl Header for ForgetPublisher {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subscriber {
-    pub key: ResKey,
+    pub key: ResKey<'static>,
     pub info: SubInfo,
 }
 
@@ -841,7 +842,7 @@ impl Header for Subscriber {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetSubscriber {
-    pub key: ResKey,
+    pub key: ResKey<'static>,
 }
 
 impl Header for ForgetSubscriber {
@@ -862,20 +863,23 @@ impl Header for ForgetSubscriber {
 /// +---------------+
 /// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
-/// ~     Kind      ~ if Q==1. Otherwise: STORAGE (0x02)
+/// ~     Kind      ~
+/// +---------------+
+/// ~   QablInfo    ~ if Q==1
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Queryable {
-    pub key: ResKey,
+    pub key: ResKey<'static>,
     pub kind: ZInt,
+    pub info: QueryableInfo,
 }
 
 impl Header for Queryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::QUERYABLE;
-        if self.kind != queryable::STORAGE {
+        if self.info != QueryableInfo::default() {
             header |= zmsg::flag::Q;
         }
         if self.key.is_string() {
@@ -892,18 +896,24 @@ impl Header for Queryable {
 /// +---------------+
 /// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
+/// ~     Kind      ~
+/// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetQueryable {
-    pub key: ResKey,
+    pub key: ResKey<'static>,
+    pub kind: ZInt,
 }
 
 impl Header for ForgetQueryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_QUERYABLE;
+        if self.kind != queryable::EVAL {
+            header |= zmsg::flag::Q
+        }
         if self.key.is_string() {
-            header |= zmsg::flag::K;
+            header |= zmsg::flag::K
         }
         header
     }
@@ -947,7 +957,7 @@ impl Header for Declare {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pull {
-    pub key: ResKey,
+    pub key: ResKey<'static>,
     pub pull_id: ZInt,
     pub max_samples: Option<ZInt>,
     pub is_final: bool,
@@ -979,7 +989,7 @@ impl Header for Pull {
 /// +-+-+-+---------+
 /// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
-/// ~   predicate   ~
+/// ~   value_selector   ~
 /// +---------------+
 /// ~      qid      ~
 /// +---------------+
@@ -990,8 +1000,8 @@ impl Header for Pull {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Query {
-    pub key: ResKey,
-    pub predicate: String,
+    pub key: ResKey<'static>,
+    pub value_selector: String,
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
     pub consolidation: QueryConsolidation,
@@ -1142,7 +1152,7 @@ impl ZenohMessage {
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     pub fn make_data(
-        key: ResKey,
+        key: ResKey<'static>,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -1188,7 +1198,7 @@ impl ZenohMessage {
 
     pub fn make_pull(
         is_final: bool,
-        key: ResKey,
+        key: ResKey<'static>,
         pull_id: ZInt,
         max_samples: Option<ZInt>,
         attachment: Option<Attachment>,
@@ -1210,8 +1220,8 @@ impl ZenohMessage {
 
     #[inline(always)]
     pub fn make_query(
-        key: ResKey,
-        predicate: String,
+        key: ResKey<'static>,
+        value_selector: String,
         qid: ZInt,
         target: Option<QueryTarget>,
         consolidation: QueryConsolidation,
@@ -1221,7 +1231,7 @@ impl ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Query(Query {
                 key,
-                predicate,
+                value_selector,
                 qid,
                 target,
                 consolidation,
@@ -1323,38 +1333,39 @@ impl Header for Scout {
     }
 }
 
-/// # Hello message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
-///
-/// The HELLO message is sent in any of the following three cases:
-///     1) in response to a SCOUT message;
-///     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
-///     3) in a already established transport to update the corresponding peer on the new capabilities
-///        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
-/// Locators are expressed as:
-/// <code>
-///  udp/192.168.0.2:1234
-///  tcp/192.168.0.2:1234
-///  udp/239.255.255.123:5555
-/// <code>
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |L|W|I|  HELLO  |
-/// +-+-+-+-+-------+
-/// ~    peer-id    ~ if I==1
-/// +---------------+
-/// ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
-/// +---------------+
-/// ~   [Locators]  ~ if L==1 -- Otherwise src-address is the locator
-/// +---------------+
-/// ```
+/// A zenoh Hello message.
+// # Hello message
+//
+// ```text
+// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+//       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
+//       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+//       the boundary of the serialized messages. The length is encoded as little-endian.
+//       In any case, the length of a message must not exceed 65_535 bytes.
+//
+// The HELLO message is sent in any of the following three cases:
+//     1) in response to a SCOUT message;
+//     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
+//     3) in a already established transport to update the corresponding peer on the new capabilities
+//        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
+// Locators are expressed as:
+// <code>
+//  udp/192.168.0.2:1234
+//  tcp/192.168.0.2:1234
+//  udp/239.255.255.123:5555
+// <code>
+//
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// |L|W|I|  HELLO  |
+// +-+-+-+-+-------+
+// ~    peer-id    ~ if I==1
+// +---------------+
+// ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
+// +---------------+
+// ~   [Locators]  ~ if L==1 -- Otherwise src-address is the locator
+// +---------------+
+// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hello {
     pub pid: Option<PeerId>,

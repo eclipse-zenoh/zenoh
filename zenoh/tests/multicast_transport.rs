@@ -251,7 +251,7 @@ mod tests {
         msg_size: usize,
     ) {
         // Create the message to send
-        let key = ResKey::RName("/test".to_string());
+        let key = ResKey::RName("/test".into());
         let payload = ZBuf::from(vec![0u8; msg_size]);
         let data_info = None;
         let routing_context = None;

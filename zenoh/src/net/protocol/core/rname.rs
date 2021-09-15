@@ -139,6 +139,10 @@ fn next(s: &str) -> &str {
 
 DEFINE_INTERSECT!(res_intersect, end, wild, next, chunk_intersect);
 
+/// Retruns `true` if the given key selectors intersect.
+///
+/// I.e. if it exists a resource name (with no wildcards) that matches
+/// both given key selectors.
 #[inline(always)]
 pub fn intersect(s1: &str, s2: &str) -> bool {
     res_intersect(s1, s2)
@@ -146,6 +150,10 @@ pub fn intersect(s1: &str, s2: &str) -> bool {
 
 DEFINE_INCLUDE!(res_include, end, wild, next, chunk_include);
 
+/// Retruns `true` if the first key selector (`this`) includes the second key selector (`sub`).
+///
+/// I.e. if there exists no resource names (with no wildcards) that matches
+/// `sub` but does not match `this`.
 #[inline(always)]
 pub fn include(this: &str, sub: &str) -> bool {
     res_include(this, sub)

@@ -168,9 +168,9 @@ impl Tables {
                     undeclare_client_subscription(self, &mut face_clone, &mut res);
                     Resource::clean(&mut res);
                 }
-                for mut res in face.remote_qabls.drain() {
+                for (mut res, kind) in face.remote_qabls.drain() {
                     get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-                    undeclare_client_queryable(self, &mut face_clone, &mut res);
+                    undeclare_client_queryable(self, &mut face_clone, &mut res, kind);
                     Resource::clean(&mut res);
                 }
                 self.faces.remove(&face.id);

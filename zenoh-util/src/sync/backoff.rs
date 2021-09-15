@@ -21,7 +21,7 @@ const YIELD_LIMIT: usize = 10;
 /// Performs exponential backoff in spin loops.
 ///
 /// This is the async version of the Backoff implementation provided by
-/// [`Crossebam utils`]: https://docs.rs/crossbeam/0.7.3/crossbeam/utils/struct.Backoff.html
+/// [`crossebam utils`](https://docs.rs/crossbeam/0.7.3/crossbeam/utils/struct.Backoff.html)
 
 pub struct Backoff {
     step: usize,

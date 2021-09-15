@@ -19,7 +19,7 @@ use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
 };
-use crate::net::config::Config;
+use crate::config::Config;
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use std::convert::TryInto;

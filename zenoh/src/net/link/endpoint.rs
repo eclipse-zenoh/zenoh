@@ -21,7 +21,7 @@ use super::tls::{LocatorConfigTls, LocatorTls};
 use super::udp::{LocatorConfigUdp, LocatorUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use super::unixsock_stream::{LocatorConfigUnixSocketStream, LocatorUnixSocketStream};
-use crate::net::config::Config;
+use crate::config::Config;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::fmt;

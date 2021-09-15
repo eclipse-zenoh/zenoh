@@ -73,7 +73,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Create the message to send, this would trigger the transport closure
-    let key = ResKey::RName("/test".to_string());
+    let key = ResKey::RName("/test".into());
     let payload = ZBuf::from(vec![0u8; msg_size]);
     let data_info = None;
     let routing_context = None;

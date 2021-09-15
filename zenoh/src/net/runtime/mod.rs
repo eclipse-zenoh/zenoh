@@ -28,7 +28,7 @@ use super::transport::{
     TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use crate::net::config::{Config, Notifier};
+use crate::config::{Config, Notifier};
 pub use adminspace::AdminSpace;
 use async_std::sync::Arc;
 use std::any::Any;
@@ -89,7 +89,7 @@ impl Runtime {
 
         log::info!("Using PID: {}", pid);
 
-        let whatami = config.mode().unwrap_or(crate::net::whatami::PEER);
+        let whatami = config.mode().unwrap_or(crate::config::whatami::PEER);
         let hlc = if config.add_timestamp().unwrap_or(false) {
             Some(Arc::new(HLC::with_system_time(uhlc::ID::from(&pid))))
         } else {

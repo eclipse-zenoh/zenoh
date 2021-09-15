@@ -89,7 +89,7 @@ impl fmt::Display for LocatorUdp {
 pub struct LocatorConfigUdp;
 
 impl LocatorConfigUdp {
-    pub fn from_config(_config: &crate::net::config::Config) -> ZResult<Option<Properties>> {
+    pub fn from_config(_config: &crate::config::Config) -> ZResult<Option<Properties>> {
         Ok(None)
     }
 }

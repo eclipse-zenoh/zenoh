@@ -123,7 +123,7 @@ impl fmt::Display for LocatorQuic {
 pub struct LocatorConfigQuic;
 
 impl LocatorConfigQuic {
-    pub fn from_config(config: &crate::net::config::Config) -> ZResult<Option<Properties>> {
+    pub fn from_config(config: &crate::config::Config) -> ZResult<Option<Properties>> {
         let mut properties = Properties::default();
 
         if let Some(tls_ca_certificate) = config.tls().root_ca_certificate() {

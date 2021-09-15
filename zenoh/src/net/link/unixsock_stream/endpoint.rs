@@ -90,7 +90,7 @@ impl fmt::Display for LocatorUnixSocketStream {
 pub struct LocatorConfigUnixSocketStream;
 
 impl LocatorConfigUnixSocketStream {
-    pub fn from_config(_config: &crate::net::config::Config) -> ZResult<Option<Properties>> {
+    pub fn from_config(_config: &crate::config::Config) -> ZResult<Option<Properties>> {
         Ok(None)
     }
 }

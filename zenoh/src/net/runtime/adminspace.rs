@@ -12,11 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 use super::protocol::{
     core::{
-        queryable::EVAL, rname, Channel, CongestionControl, PeerId, QueryConsolidation,
-        QueryTarget, ResKey, SubInfo, ZInt,
+        queryable::EVAL, rname, Channel, CongestionControl, Encoding, PeerId, QueryConsolidation,
+        QueryTarget, QueryableInfo, ResKey, SubInfo, ZInt,
     },
     io::ZBuf,
-    proto::{encoding, DataInfo, RoutingContext},
+    proto::{DataInfo, RoutingContext},
 };
 use super::routing::face::Face;
 use super::transport::Primitives;
@@ -41,7 +41,7 @@ pub struct AdminContext {
     version: String,
 }
 
-type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (ZBuf, ZInt)> + Send + Sync>;
+type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (ZBuf, Encoding)> + Send + Sync>;
 
 pub struct AdminSpace {
     pid: PeerId,
@@ -86,7 +86,15 @@ impl AdminSpace {
         let primitives = runtime.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives.decl_queryable(&[&root_path, "/**"].concat().into(), EVAL, None);
+        primitives.decl_queryable(
+            &[&root_path, "/**"].concat().into(),
+            EVAL,
+            &QueryableInfo {
+                complete: 0,
+                distance: 0,
+            },
+            None,
+        );
     }
 
     pub fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
@@ -95,7 +103,7 @@ impl AdminSpace {
             ResKey::RIdWithSuffix(id, suffix) => zlock!(self.mappings)
                 .get(id)
                 .map(|prefix| format!("{}{}", prefix, suffix)),
-            ResKey::RName(name) => Some(name.clone()),
+            ResKey::RName(name) => Some(name.to_string()),
         }
     }
 }
@@ -140,12 +148,18 @@ impl Primitives for AdminSpace {
         &self,
         _reskey: &ResKey,
         _kind: ZInt,
+        _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Queryable {:?}", _reskey);
     }
 
-    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
+    fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Queryable {:?}", _reskey);
     }
 
@@ -171,7 +185,7 @@ impl Primitives for AdminSpace {
     fn send_query(
         &self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         _consolidation: QueryConsolidation,
@@ -180,7 +194,7 @@ impl Primitives for AdminSpace {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             reskey,
-            predicate,
+            value_selector,
             target,
             _consolidation
         );
@@ -207,14 +221,7 @@ impl Primitives for AdminSpace {
                 let mut data_info = DataInfo::new();
                 data_info.encoding = Some(encoding);
 
-                primitives.send_reply_data(
-                    qid,
-                    EVAL,
-                    pid,
-                    ResKey::RName(path),
-                    Some(data_info),
-                    payload,
-                );
+                primitives.send_reply_data(qid, EVAL, pid, path.into(), Some(data_info), payload);
             }
 
             primitives.send_reply_final(qid);
@@ -266,7 +273,7 @@ impl Primitives for AdminSpace {
     }
 }
 
-pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
@@ -309,20 +316,20 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
         "plugins": plugins,
     });
     log::trace!("AdminSpace router_data: {:?}", json);
-    (ZBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
+    (ZBuf::from(json.to_string().as_bytes()), Encoding::APP_JSON)
 }
 
-pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, Encoding) {
     let tables = zread!(context.runtime.router.tables);
 
     let res = (
         ZBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
-        encoding::TEXT_PLAIN,
+        Encoding::TEXT_PLAIN,
     );
     res
 }
 
-pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, Encoding) {
     (
         ZBuf::from(
             context
@@ -337,6 +344,6 @@ pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, ZInt) {
                 .dot()
                 .as_bytes(),
         ),
-        encoding::TEXT_PLAIN,
+        Encoding::TEXT_PLAIN,
     )
 }

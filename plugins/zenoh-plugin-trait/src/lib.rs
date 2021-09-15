@@ -16,7 +16,7 @@
 //!
 //! To build a plugin, up to 2 types may be constructed :
 //! * A [`Plugin`] type.
-//! * [`PluginLaunch::start`] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [`PluginStopper`].
+//! * [`Plugin::start`] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [`PluginStopper`].
 
 use std::any::Any;
 use std::error::Error;
@@ -63,10 +63,10 @@ pub trait Plugin: Sized + 'static {
     type Requirements;
     type StartArgs;
 
-    /// Returns this plugin's [`Compatibility`].
+    /// Returns this plugin's `Compatibility`.
     fn compatibility() -> PluginId;
 
-    /// As Zenoh instanciates plugins, it will append their [`Compatibility`] to an array.
+    /// As Zenoh instanciates plugins, it will append their `Compatibility` to an array.
     /// This array's current state will be shown to the next plugin.
     ///
     /// To signal that your plugin is incompatible with a previously instanciated plugin, return `Err`,
