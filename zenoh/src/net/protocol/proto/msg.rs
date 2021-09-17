@@ -1300,7 +1300,7 @@ pub enum TransportMode {
 /// +-+-+-+-+-+-+-+-+
 /// |X|W|I|  SCOUT  |
 /// +-+-+-+-+-------+
-/// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Brokers
+/// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Routers
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -1350,7 +1350,7 @@ impl Header for Scout {
 /// +-+-+-+-+-------+
 /// ~    peer-id    ~ if I==1
 /// +---------------+
-/// ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
+/// ~    whatami    ~ if W==1 -- Otherwise it is from a Router
 /// +---------------+
 /// ~   [Locators]  ~ if L==1 -- Otherwise src-address is the locator
 /// +---------------+
