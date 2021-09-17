@@ -18,7 +18,7 @@ use super::link;
 use super::link::{Link, Locator};
 use super::plugins;
 use super::protocol;
-use super::protocol::core::{whatami, PeerId, WhatAmI};
+use super::protocol::core::{PeerId, WhatAmI};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
@@ -89,7 +89,7 @@ impl Runtime {
 
         log::info!("Using PID: {}", pid);
 
-        let whatami = config.mode().unwrap_or(crate::config::whatami::PEER);
+        let whatami = config.mode().unwrap_or(crate::config::WhatAmI::Peer);
         let hlc = if config.add_timestamp().unwrap_or(false) {
             Some(Arc::new(HLC::with_system_time(uhlc::ID::from(&pid))))
         } else {
@@ -97,8 +97,13 @@ impl Runtime {
         };
 
         let peers_autoconnect = config.peers_autoconnect().unwrap_or(true);
-        let routers_autoconnect_gossip = config.routers_autoconnect().gossip().unwrap_or(false);
-        let use_link_state = whatami != whatami::CLIENT && config.link_state().unwrap_or(true);
+        let routers_autoconnect_gossip = config
+            .scouting()
+            .gossip()
+            .autoconnect()
+            .map(|f| f.matches(whatami))
+            .unwrap_or(false);
+        let use_link_state = whatami != WhatAmI::Client && config.link_state().unwrap_or(true);
 
         let router = Arc::new(Router::new(pid, whatami, hlc.clone()));
 

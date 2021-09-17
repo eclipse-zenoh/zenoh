@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
-    ResKey, SubInfo, WhatAmI, ZInt,
+    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, ResKey,
+    SubInfo, WhatAmI, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -116,7 +116,7 @@ impl Primitives for Face {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+            (WhatAmI::Router, WhatAmI::Router) => match routing_context {
                 Some(routing_context) => {
                     let router = match tables
                         .routers_net
@@ -149,9 +149,9 @@ impl Primitives for Face {
                     log::error!("Received router subscription with no routing context");
                 }
             },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => match routing_context {
                 Some(routing_context) => {
                     let peer = match tables
                         .peers_net
@@ -198,7 +198,7 @@ impl Primitives for Face {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+            (WhatAmI::Router, WhatAmI::Router) => match routing_context {
                 Some(routing_context) => {
                     let router = match tables
                         .routers_net
@@ -230,9 +230,9 @@ impl Primitives for Face {
                     log::error!("Received router forget subscription with no routing context");
                 }
             },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => match routing_context {
                 Some(routing_context) => {
                     let peer = match tables
                         .peers_net
@@ -282,7 +282,7 @@ impl Primitives for Face {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+            (WhatAmI::Router, WhatAmI::Router) => match routing_context {
                 Some(routing_context) => {
                     let router = match tables
                         .routers_net
@@ -316,9 +316,9 @@ impl Primitives for Face {
                     log::error!("Received router queryable with no routing context");
                 }
             },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => match routing_context {
                 Some(routing_context) => {
                     let peer = match tables
                         .peers_net
@@ -372,7 +372,7 @@ impl Primitives for Face {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
+            (WhatAmI::Router, WhatAmI::Router) => match routing_context {
                 Some(routing_context) => {
                     let router = match tables
                         .routers_net
@@ -405,9 +405,9 @@ impl Primitives for Face {
                     log::error!("Received router forget queryable with no routing context");
                 }
             },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => match routing_context {
                 Some(routing_context) => {
                     let peer = match tables
                         .peers_net

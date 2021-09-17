@@ -35,36 +35,211 @@ pub type AtomicZInt = AtomicU64;
 pub const ZINT_MAX_BYTES: usize = 10;
 
 // WhatAmI values
-pub type WhatAmI = whatami::Type;
+pub type WhatAmI = whatami::WhatAmI;
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami {
-    use super::{ZError, ZErrorKind, ZInt, ZResult};
+    use super::ZInt;
 
-    pub type Type = ZInt;
+    #[repr(u8)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum WhatAmI {
+        Router = 1,
+        Peer = 1 << 1,
+        Client = 1 << 2,
+    }
+    impl std::str::FromStr for WhatAmI {
+        type Err = ();
 
-    pub const ROUTER: Type = 1; // 0x01
-    pub const PEER: Type = 1 << 1; // 0x02
-    pub const CLIENT: Type = 1 << 2; // 0x04
-                                     // b4-b13: Reserved
-
-    pub fn to_string(w: Type) -> String {
-        match w {
-            ROUTER => "Router".to_string(),
-            PEER => "Peer".to_string(),
-            CLIENT => "Client".to_string(),
-            i => i.to_string(),
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            match s {
+                "router" => Ok(WhatAmI::Router),
+                "peer" => Ok(WhatAmI::Peer),
+                "client" => Ok(WhatAmI::Client),
+                _ => Err(()),
+            }
         }
     }
+    impl WhatAmI {
+        pub fn to_str(self) -> &'static str {
+            match self {
+                WhatAmI::Router => "router",
+                WhatAmI::Peer => "peer",
+                WhatAmI::Client => "client",
+            }
+        }
+        pub fn try_from(value: ZInt) -> Option<Self> {
+            const CLIENT: u64 = WhatAmI::Client as u64;
+            const ROUTER: u64 = WhatAmI::Router as u64;
+            const PEER: u64 = WhatAmI::Peer as u64;
+            match value {
+                CLIENT => Some(WhatAmI::Client),
+                ROUTER => Some(WhatAmI::Router),
+                PEER => Some(WhatAmI::Peer),
+                _ => None,
+            }
+        }
+    }
+    impl std::fmt::Display for WhatAmI {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.to_str())
+        }
+    }
+    impl serde::Serialize for WhatAmI {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str(self.to_str())
+        }
+    }
+    pub struct WhatAmIVisitor;
+    impl<'de> serde::de::Visitor<'de> for WhatAmIVisitor {
+        type Value = WhatAmI;
 
-    pub fn parse(m: &str) -> ZResult<Type> {
-        match m {
-            "peer" => Ok(PEER),
-            "client" => Ok(CLIENT),
-            "router" => Ok(ROUTER),
-            unknown => zerror!(ZErrorKind::ValueDecodingFailed {
-                descr: format!("{} is not a valid WhatAmI value", unknown)
-            }),
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("either 'router', 'client' or 'peer'")
+        }
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            v.parse()
+                .map_err(|_| serde::de::Error::unknown_variant(v, &["router", "client", "peer"]))
+        }
+    }
+    impl<'de> serde::Deserialize<'de> for WhatAmI {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_str(WhatAmIVisitor)
+        }
+    }
+    impl From<WhatAmI> for ZInt {
+        fn from(w: WhatAmI) -> Self {
+            w as u64
+        }
+    }
+    use std::{num::NonZeroU8, ops::BitOr};
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct WhatAmIMatcher(pub NonZeroU8);
+    impl WhatAmIMatcher {
+        pub fn try_from<T: std::convert::TryInto<u8>>(i: T) -> Option<Self> {
+            let i = i.try_into().ok()?;
+            if 0 < i && i < 8 {
+                Some(WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(i) }))
+            } else {
+                None
+            }
+        }
+        pub fn matches(self, w: WhatAmI) -> bool {
+            (self.0.get() & w as u8) != 0
+        }
+        pub fn to_str(self) -> &'static str {
+            match self.0.get() {
+                2 => "peer",
+                4 => "client",
+                1 => "router",
+                3 => "router|peer",
+                6 => "client|peer",
+                5 => "client|router",
+                7 => "client|router|peer",
+                _ => "invalid_matcher",
+            }
+        }
+    }
+    impl std::str::FromStr for WhatAmIMatcher {
+        type Err = ();
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let mut inner = 0;
+            for s in s.split('|') {
+                match s.trim() {
+                    "router" => inner |= WhatAmI::Router as u8,
+                    "client" => inner |= WhatAmI::Client as u8,
+                    "peer" => inner |= WhatAmI::Peer as u8,
+                    _ => return Err(()),
+                }
+            }
+            Self::try_from(inner).ok_or(())
+        }
+    }
+    impl serde::Serialize for WhatAmIMatcher {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str(self.to_str())
+        }
+    }
+    struct WhatAmIMatcherVisitor;
+    impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
+        type Value = WhatAmIMatcher;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter
+                .write_str("a | separated list of whatami variants ('peer', 'client' or 'router')")
+        }
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            v.parse().map_err(|_| {
+                serde::de::Error::invalid_value(
+                    serde::de::Unexpected::Str(v),
+                    &"a | separated list of whatami variants ('peer', 'client' or 'router')",
+                )
+            })
+        }
+    }
+    impl<'de> serde::Deserialize<'de> for WhatAmIMatcher {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_str(WhatAmIMatcherVisitor)
+        }
+    }
+    impl std::fmt::Display for WhatAmIMatcher {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.to_str())
+        }
+    }
+    impl From<WhatAmIMatcher> for u64 {
+        fn from(w: WhatAmIMatcher) -> u64 {
+            w.0.get() as u64
+        }
+    }
+    impl<T> BitOr<T> for WhatAmIMatcher
+    where
+        NonZeroU8: BitOr<T, Output = NonZeroU8>,
+    {
+        type Output = Self;
+        fn bitor(self, rhs: T) -> Self::Output {
+            WhatAmIMatcher(self.0 | rhs)
+        }
+    }
+    impl BitOr<WhatAmI> for WhatAmIMatcher {
+        type Output = Self;
+        fn bitor(self, rhs: WhatAmI) -> Self::Output {
+            self | rhs as u8
+        }
+    }
+    impl BitOr for WhatAmIMatcher {
+        type Output = Self;
+        fn bitor(self, rhs: Self) -> Self::Output {
+            self | rhs.0
+        }
+    }
+    impl BitOr for WhatAmI {
+        type Output = WhatAmIMatcher;
+        fn bitor(self, rhs: Self) -> Self::Output {
+            WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(self as u8 | rhs as u8) })
+        }
+    }
+    impl From<WhatAmI> for WhatAmIMatcher {
+        fn from(w: WhatAmI) -> Self {
+            WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(w as u8) })
         }
     }
 }

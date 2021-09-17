@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::link::Locator;
-use super::protocol::core::{whatami, PeerId, ZInt};
+use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{LinkState, ZenohMessage};
 use super::runtime::Runtime;
 use super::transport::TransportUnicast;
@@ -23,7 +23,7 @@ use vec_map::VecMap;
 
 pub(crate) struct Node {
     pub(crate) pid: PeerId,
-    pub(crate) whatami: whatami::Type,
+    pub(crate) whatami: Option<WhatAmI>,
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) sn: ZInt,
     pub(crate) links: Vec<PeerId>,
@@ -106,7 +106,7 @@ impl Network {
         log::debug!("{} Add node (self) {}", name, pid);
         let idx = graph.add_node(Node {
             pid,
-            whatami: runtime.whatami,
+            whatami: Some(runtime.whatami),
             locators: None,
             sn: 1,
             links: vec![],
@@ -201,7 +201,7 @@ impl Network {
             } else {
                 None
             },
-            whatami: Some(self.graph[idx].whatami),
+            whatami: self.graph[idx].whatami,
             locators: if idx == self.idx {
                 Some(self.get_locators())
             } else {
@@ -290,7 +290,7 @@ impl Network {
                     }
                     Some((
                         pid,
-                        link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
+                        link_state.whatami.or(Some(WhatAmI::Router)).unwrap(),
                         link_state.locators,
                         link_state.sn,
                         link_state.links,
@@ -299,7 +299,7 @@ impl Network {
                     match src_link.get_pid(&link_state.psid) {
                         Some(pid) => Some((
                             *pid,
-                            link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
+                            link_state.whatami.or(Some(WhatAmI::Router)).unwrap(),
                             link_state.locators,
                             link_state.sn,
                             link_state.links,
@@ -315,7 +315,7 @@ impl Network {
                     }
                 }
             })
-            .collect::<Vec<(PeerId, whatami::Type, Option<Vec<Locator>>, ZInt, Vec<ZInt>)>>();
+            .collect::<Vec<_>>();
 
         // apply psid<->pid mapping to links
         let src_link = self.get_link_from_pid(&src).unwrap();
@@ -340,13 +340,7 @@ impl Network {
                     .collect();
                 (pid, wai, locs, sn, links)
             })
-            .collect::<Vec<(
-                PeerId,
-                whatami::Type,
-                Option<Vec<Locator>>,
-                ZInt,
-                Vec<PeerId>,
-            )>>();
+            .collect::<Vec<_>>();
 
         // log::trace!(
         //     "{} Received from {} mapped: {:?}",
@@ -389,7 +383,7 @@ impl Network {
                     None => {
                         let node = Node {
                             pid,
-                            whatami,
+                            whatami: Some(whatami),
                             locators,
                             sn,
                             links: links.clone(),
@@ -419,7 +413,7 @@ impl Network {
                 } else {
                     let node = Node {
                         pid: *link,
-                        whatami: 0,
+                        whatami: None,
                         locators: None,
                         sn: 0,
                         links: vec![],
@@ -450,15 +444,17 @@ impl Network {
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
             .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
 
-        if (self.peers_autoconnect && self.runtime.whatami == whatami::PEER)
-            || (self.routers_autoconnect_gossip && self.runtime.whatami == whatami::ROUTER)
+        if (self.peers_autoconnect && self.runtime.whatami == WhatAmI::Peer)
+            || (self.routers_autoconnect_gossip && self.runtime.whatami == WhatAmI::Router)
         {
             // Connect discovered peers
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
-                if (self.runtime.whatami == whatami::PEER
-                    && (node.whatami == whatami::PEER || node.whatami == whatami::ROUTER))
-                    || (self.runtime.whatami == whatami::ROUTER && node.whatami == whatami::ROUTER)
+                if (self.runtime.whatami == WhatAmI::Peer
+                    && (node.whatami == Some(WhatAmI::Peer)
+                        || node.whatami == Some(WhatAmI::Router)))
+                    || (self.runtime.whatami == WhatAmI::Router
+                        && node.whatami == Some(WhatAmI::Router))
                 {
                     if let Some(locators) = &node.locators {
                         let runtime = self.runtime.clone();
@@ -536,7 +532,7 @@ impl Network {
                 (
                     self.add_node(Node {
                         pid,
-                        whatami,
+                        whatami: Some(whatami),
                         locators: None,
                         sn: 0,
                         links: vec![],
@@ -590,7 +586,7 @@ impl Network {
                 psid: self.idx.index().try_into().unwrap(),
                 sn: self.graph[self.idx].sn,
                 pid: None,
-                whatami: Some(self.graph[self.idx].whatami),
+                whatami: self.graph[self.idx].whatami,
                 locators: Some(self.get_locators()),
                 links,
             }],

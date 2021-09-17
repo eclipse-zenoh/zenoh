@@ -1,3 +1,5 @@
+use crate::net::protocol::core::whatami::WhatAmIMatcher;
+
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -149,11 +151,10 @@ impl ZBuf {
     fn read_scout(&mut self, header: u8) -> Option<TransportBody> {
         let pid_request = imsg::has_flag(header, tmsg::flag::I);
         let what = if imsg::has_flag(header, tmsg::flag::W) {
-            Some(self.read_zint()?)
+            WhatAmIMatcher::try_from(self.read_zint()?)
         } else {
             None
         };
-
         Some(TransportBody::Scout(Scout { what, pid_request }))
     }
 
@@ -164,7 +165,7 @@ impl ZBuf {
             None
         };
         let whatami = if imsg::has_flag(header, tmsg::flag::W) {
-            Some(self.read_zint()?)
+            WhatAmI::try_from(self.read_zint()?)
         } else {
             None
         };
@@ -188,7 +189,7 @@ impl ZBuf {
             0
         };
         let version = self.read()?;
-        let whatami = self.read_zint()?;
+        let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let pid = self.read_peerid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             self.read_zint()?
@@ -212,7 +213,7 @@ impl ZBuf {
         } else {
             0
         };
-        let whatami = self.read_zint()?;
+        let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let pid = self.read_peerid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             Some(self.read_zint()?)
@@ -267,7 +268,7 @@ impl ZBuf {
             0
         };
         let version = self.read()?;
-        let whatami = self.read_zint()?;
+        let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let pid = self.read_peerid()?;
         let lease = self.read_zint()?;
         let lease = if imsg::has_flag(header, tmsg::flag::T1) {
@@ -710,7 +711,7 @@ impl ZBuf {
             None
         };
         let whatami = if imsg::has_option(options, zmsg::link_state::WAI) {
-            Some(self.read_zint()?)
+            WhatAmI::try_from(self.read_zint()?)
         } else {
             None
         };

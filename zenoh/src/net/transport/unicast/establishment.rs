@@ -70,7 +70,7 @@ struct Cookie {
 
 impl WBuf {
     fn write_cookie(&mut self, cookie: &Cookie) -> bool {
-        zcheck!(self.write_zint(cookie.whatami));
+        zcheck!(self.write_zint(cookie.whatami.into()));
         zcheck!(self.write_peerid(&cookie.pid));
         zcheck!(self.write_zint(cookie.sn_resolution));
         zcheck!(self.write(if cookie.is_qos { 1 } else { 0 }));
@@ -81,7 +81,7 @@ impl WBuf {
 
 impl ZBuf {
     fn read_cookie(&mut self) -> Option<Cookie> {
-        let whatami = self.read_zint()?;
+        let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let pid = self.read_peerid()?;
         let sn_resolution = self.read_zint()?;
         let is_qos = self.read()? == 1;

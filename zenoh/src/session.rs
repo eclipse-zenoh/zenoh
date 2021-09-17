@@ -15,7 +15,6 @@ use super::info::*;
 use super::publisher::*;
 use super::query::*;
 use super::queryable::*;
-use super::scouting::*;
 use super::subscriber::*;
 use super::*;
 use crate::config::Config;
@@ -324,7 +323,7 @@ impl Session {
             .filter(|s| {
                 s.get_whatami()
                     .ok()
-                    .map(|what| what & whatami::PEER != 0)
+                    .map(|what| what == WhatAmI::Peer)
                     .or(Some(false))
                     .unwrap()
             })
@@ -335,7 +334,7 @@ impl Session {
             })
             .collect::<Vec<String>>();
         let mut router_pids = vec![];
-        if self.runtime.whatami & whatami::ROUTER != 0 {
+        if self.runtime.whatami == WhatAmI::Router {
             router_pids.push(hex::encode_upper(self.runtime.pid.as_slice()));
         }
         router_pids.extend(
@@ -344,7 +343,7 @@ impl Session {
                 .filter(|s| {
                     s.get_whatami()
                         .ok()
-                        .map(|what| what & whatami::ROUTER != 0)
+                        .map(|what| what == WhatAmI::Router)
                         .or(Some(false))
                         .unwrap()
                 })

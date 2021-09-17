@@ -14,7 +14,7 @@
 use rand::*;
 use std::time::Duration;
 use uhlc::Timestamp;
-use zenoh::net::protocol::core::*;
+use zenoh::net::protocol::core::{whatami::WhatAmIMatcher, *};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::defaults::SEQ_NUM_RES;
 use zenoh::net::protocol::proto::*;
@@ -298,7 +298,11 @@ fn codec_scout() {
         for w in wami.iter() {
             for p in pid_req.iter() {
                 for a in attachment.iter() {
-                    let msg = TransportMessage::make_scout(*w, *p, a.clone());
+                    let msg = TransportMessage::make_scout(
+                        w.map(WhatAmIMatcher::try_from).flatten(),
+                        *p,
+                        a.clone(),
+                    );
                     test_write_read_transport_message(msg);
                 }
             }
@@ -324,7 +328,12 @@ fn codec_hello() {
             for w in wami.iter() {
                 for l in locators.iter() {
                     for a in attachment.iter() {
-                        let msg = TransportMessage::make_hello(*p, *w, l.clone(), a.clone());
+                        let msg = TransportMessage::make_hello(
+                            *p,
+                            w.map(WhatAmI::try_from).flatten(),
+                            l.clone(),
+                            a.clone(),
+                        );
                         test_write_read_transport_message(msg);
                     }
                 }
@@ -337,7 +346,7 @@ fn codec_hello() {
 fn codec_init() {
     for _ in 0..NUM_ITER {
         let is_qos = [true, false];
-        let wami = [whatami::ROUTER, whatami::CLIENT];
+        let wami = [WhatAmI::Router, WhatAmI::Client];
         let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
         let attachment = [None, Some(gen_attachment())];
 
@@ -411,7 +420,7 @@ fn codec_open() {
 fn codec_join() {
     for _ in 0..NUM_ITER {
         let lease = [Duration::from_secs(1), Duration::from_millis(1234)];
-        let wami = [whatami::ROUTER, whatami::CLIENT];
+        let wami = [WhatAmI::Router, WhatAmI::Client];
         let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
         let initial_sns = [
             ConduitSnList::Plain(gen_initial_sn()),

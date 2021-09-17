@@ -152,7 +152,7 @@ fn main() {
         };
 
         config
-            .set_mode(Some(zenoh::config::whatami::ROUTER))
+            .set_mode(Some(zenoh::config::WhatAmI::Router))
             .unwrap();
 
         config
@@ -187,8 +187,9 @@ fn main() {
             .set_add_timestamp(Some(!args.is_present("no-timestamp")))
             .unwrap();
         config
+            .scouting
             .multicast
-            .set_scouting(Some(!args.is_present("no-multicast-scouting")))
+            .set_enable(Some(!args.is_present("no-multicast-scouting")))
             .unwrap();
 
         for json in args.values_of("json").unwrap_or_default() {

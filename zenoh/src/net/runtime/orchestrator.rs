@@ -12,11 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::link::{EndPoint, Locator};
-use super::protocol::core::{whatami, PeerId, WhatAmI};
+use super::protocol::core::{PeerId, WhatAmI};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
 use super::transport::TransportUnicast;
 use super::{Runtime, RuntimeSession};
+use crate::net::protocol::core::whatami::WhatAmIMatcher;
 use async_std::net::UdpSocket;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
@@ -45,15 +46,9 @@ pub enum Loop {
 impl Runtime {
     pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami {
-            whatami::CLIENT => self.start_client().await,
-            whatami::PEER => self.start_peer().await,
-            whatami::ROUTER => self.start_router().await,
-            _ => {
-                log::error!("Unknown mode");
-                zerror!(ZErrorKind::Other {
-                    descr: "Unknown mode".to_string()
-                })
-            }
+            WhatAmI::Client => self.start_client().await,
+            WhatAmI::Peer => self.start_peer().await,
+            WhatAmI::Router => self.start_router().await,
         }
     }
 
@@ -62,12 +57,14 @@ impl Runtime {
             let guard = self.config.lock();
             (
                 guard.peers().clone(),
-                guard.multicast().scouting().unwrap_or(true),
+                guard.scouting().multicast().enable().unwrap_or(true),
                 guard
+                    .scouting()
                     .multicast()
                     .address()
                     .unwrap_or_else(|| "224.0.0.224:7447".parse().unwrap()),
                 guard
+                    .scouting()
                     .multicast()
                     .interface()
                     .as_ref()
@@ -97,7 +94,7 @@ impl Runtime {
                                     .to_string()
                             })
                         } else {
-                            self.connect_first(&sockets, whatami::ROUTER, &addr, timeout)
+                            self.connect_first(&sockets, WhatAmI::Router, &addr, timeout)
                                 .await
                         }
                     }
@@ -137,13 +134,20 @@ impl Runtime {
             (
                 listeners,
                 guard.peers().clone(),
-                guard.multicast().scouting().unwrap_or(true),
-                guard.peers_autoconnect().unwrap_or(true),
+                guard.scouting().multicast().enable().unwrap_or(true),
                 guard
+                    .scouting()
+                    .multicast()
+                    .autoconnect()
+                    .map(|m| m.matches(WhatAmI::Peer))
+                    .unwrap_or(true),
+                guard
+                    .scouting()
                     .multicast()
                     .address()
                     .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap()),
                 guard
+                    .scouting()
                     .multicast()
                     .interface()
                     .as_ref()
@@ -177,9 +181,9 @@ impl Runtime {
                             this.connect_all(
                                 &sockets,
                                 if peers_autoconnect {
-                                    whatami::PEER | whatami::ROUTER
+                                    WhatAmI::Peer | WhatAmI::Router
                                 } else {
-                                    whatami::ROUTER
+                                    WhatAmI::Router.into()
                                 },
                                 &addr,
                             ),
@@ -204,13 +208,20 @@ impl Runtime {
             (
                 listeners,
                 guard.peers().clone(),
-                guard.multicast().scouting().unwrap_or(true),
-                guard.routers_autoconnect().multicast().unwrap_or(false),
+                guard.scouting().multicast().enable().unwrap_or(true),
                 guard
+                    .scouting()
+                    .multicast()
+                    .autoconnect()
+                    .map(|m| m.matches(WhatAmI::Router))
+                    .unwrap_or(false),
+                guard
+                    .scouting()
                     .multicast()
                     .address()
                     .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap()),
                 guard
+                    .scouting()
                     .multicast()
                     .interface()
                     .as_ref()
@@ -241,7 +252,7 @@ impl Runtime {
                         async_std::task::spawn(async move {
                             async_std::prelude::FutureExt::race(
                                 this.responder(&mcast_socket, &sockets),
-                                this.connect_all(&sockets, whatami::ROUTER, &addr),
+                                this.connect_all(&sockets, WhatAmI::Router, &addr),
                             )
                             .await;
                         });
@@ -485,7 +496,7 @@ impl Runtime {
 
     pub async fn scout<Fut, F>(
         sockets: &[UdpSocket],
-        what: WhatAmI,
+        matcher: WhatAmIMatcher,
         mcast_addr: &SocketAddr,
         mut f: F,
     ) where
@@ -496,7 +507,7 @@ impl Runtime {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-            let scout = TransportMessage::make_scout(Some(what), true, None);
+            let scout = TransportMessage::make_scout(Some(matcher), true, None);
             wbuf.write_transport_message(&scout);
             loop {
                 for socket in sockets {
@@ -538,8 +549,8 @@ impl Runtime {
                     if let Some(msg) = zbuf.read_transport_message() {
                         log::trace!("Received {:?} from {}", msg.body, peer);
                         if let TransportBody::Hello(hello) = &msg.body {
-                            let whatami = hello.whatami.or(Some(whatami::ROUTER)).unwrap();
-                            if whatami & what != 0 {
+                            let whatami = hello.whatami.or(Some(WhatAmI::Router)).unwrap();
+                            if matcher.matches(whatami) {
                                 if let Loop::Break = f(hello.clone()).await {
                                     break;
                                 }
@@ -588,15 +599,15 @@ impl Runtime {
         }
     }
 
-    async fn connect_first(
+    async fn connect_first<I: Into<WhatAmIMatcher>>(
         &self,
         sockets: &[UdpSocket],
-        what: WhatAmI,
+        what: I,
         addr: &SocketAddr,
         timeout: std::time::Duration,
     ) -> ZResult<()> {
         let scout = async {
-            Runtime::scout(sockets, what, addr, move |hello| async move {
+            Runtime::scout(sockets, what.into(), addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if let Some(locators) = &hello.locators {
                     if self.connect(locators).await.is_ok() {
@@ -619,8 +630,13 @@ impl Runtime {
         async_std::prelude::FutureExt::race(scout, timeout).await
     }
 
-    async fn connect_all(&self, ucast_sockets: &[UdpSocket], what: WhatAmI, addr: &SocketAddr) {
-        Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
+    async fn connect_all<I: Into<WhatAmIMatcher>>(
+        &self,
+        ucast_sockets: &[UdpSocket],
+        what: I,
+        addr: &SocketAddr,
+    ) {
+        Runtime::scout(ucast_sockets, what.into(), addr, move |hello| async move {
             match &hello.pid {
                 Some(pid) => {
                     if let Some(locators) = &hello.locators {
@@ -685,8 +701,8 @@ impl Runtime {
                     what, pid_request, ..
                 }) = &msg.body
                 {
-                    let what = what.or(Some(whatami::ROUTER)).unwrap();
-                    if what & self.whatami != 0 {
+                    let what = what.or(Some(WhatAmI::Router.into())).unwrap();
+                    if what.matches(self.whatami) {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
                         let pid = if *pid_request {
                             Some(self.manager().pid())
@@ -724,7 +740,7 @@ impl Runtime {
 
     pub(super) fn closing_session(session: &RuntimeSession) {
         match session.runtime.whatami {
-            whatami::CLIENT => {
+            WhatAmI::Client => {
                 let runtime = session.runtime.clone();
                 async_std::task::spawn(async move {
                     let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;

@@ -16,7 +16,7 @@ use async_std::sync::Arc;
 use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::EndPoint;
-use zenoh::net::protocol::core::{whatami, PeerId};
+use zenoh::net::protocol::core::{PeerId, WhatAmI};
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
@@ -83,7 +83,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let router_handler = Arc::new(SHRouterOpenClose::default());
     // Create the router transport manager
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .pid(router_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -100,7 +100,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the first client
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client01_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -113,7 +113,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the second client
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client02_id)
         .unicast(
             TransportManagerConfigUnicast::builder()

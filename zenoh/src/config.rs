@@ -91,7 +91,7 @@ validated_struct::validator! {
     Config {
         /// The node's mode (router, peer or client)
         #[intkey(ZN_MODE_KEY, into = whatami_to_cowstr, from = whatami_from_str)]
-        mode: Option<whatami::Type> where (whatami_validator),
+        mode: Option<whatami::WhatAmI>,
         /// Which locators to connect to.
         #[serde(default)]
         #[intkey(ZN_PEER_KEY, into = locvec_to_cowstr, from = locvec_from_str)]
@@ -109,19 +109,6 @@ validated_struct::validator! {
             #[intkey(ZN_PASSWORD_KEY, into = string_to_cowstr, from = string_from_str)]
             password: Option<String>,
         } where (user_conf_validator),
-        /// How multicast should behave
-        #[serde(default)]
-        pub multicast: MulticastConf {
-            /// Whether multicast scouting is enabled or not
-            #[intkey(ZN_MULTICAST_SCOUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
-            scouting: Option<bool>,
-            /// The socket which should be used for multicast scouting
-            #[intkey(ZN_MULTICAST_IPV4_ADDRESS_KEY, into = addr_to_cowstr, from = addr_from_str)]
-            address: Option<SocketAddr>,
-            /// The network interface which should be used for multicast scouting
-            #[intkey(ZN_MULTICAST_INTERFACE_KEY, into = string_to_cowstr, from = string_from_str)]
-            interface: Option<String>,
-        },
         #[serde(default)]
         pub scouting: ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing
@@ -130,6 +117,28 @@ validated_struct::validator! {
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
             #[intkey(ZN_SCOUTING_DELAY_KEY, into = f64_to_cowstr, from = f64_from_str)]
             delay: Option<f64>,
+            /// How multicast should behave
+            #[serde(default)]
+            pub multicast: MulticastConf {
+                /// Whether multicast scouting is enabled or not
+                #[intkey(ZN_MULTICAST_SCOUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
+                enable: Option<bool>,
+                /// The socket which should be used for multicast scouting
+                #[intkey(ZN_MULTICAST_IPV4_ADDRESS_KEY, into = addr_to_cowstr, from = addr_from_str)]
+                address: Option<SocketAddr>,
+                /// The network interface which should be used for multicast scouting
+                #[intkey(ZN_MULTICAST_INTERFACE_KEY, into = string_to_cowstr, from = string_from_str)]
+                interface: Option<String>,
+                #[intkey(ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY, into = whatamimatcher_to_cowstr, from = whatamimatcher_from_str)]
+                autoconnect: Option<whatami::WhatAmIMatcher>,
+            },
+            #[serde(default)]
+            pub gossip: GossipConf {
+                #[intkey(skip)]
+                enable: Option<bool>,
+                #[intkey(ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY, into = whatamimatcher_to_cowstr, from = whatamimatcher_from_str)]
+                autoconnect: Option<whatami::WhatAmIMatcher>,
+            }
         },
         /// Whether data messages should be timestamped
         #[intkey(ZN_ADD_TIMESTAMP_KEY, into = bool_to_cowstr, from = bool_from_str)]
@@ -154,15 +163,6 @@ validated_struct::validator! {
         },
         #[intkey(ZN_SHM_KEY, into = bool_to_cowstr, from = bool_from_str)]
         zero_copy: Option<bool>,
-        #[serde(default)]
-        pub routers_autoconnect: RoutersAutoconnectConf {
-            /// Whether routers should connect to each other when discovered through multicast
-            #[intkey(ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY, into = bool_to_cowstr, from = bool_from_str)]
-            multicast: Option<bool>,
-            /// Whether routers should connect to each other when discovered through gossip
-            #[intkey(ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY, into = bool_to_cowstr, from = bool_from_str)]
-            gossip: Option<bool>,
-        },
         /// Whether local writes/queries should reach local subscribers/queryables
         #[intkey(ZN_LOCAL_ROUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
         local_routing: Option<bool>,
@@ -429,39 +429,43 @@ impl From<Config> for ConfigProperties {
     }
 }
 
-fn whatami_validator(w: &Option<whatami::Type>) -> bool {
-    use whatami::*;
-    if let Some(w) = *w {
-        w == ROUTER || w == PEER || w == CLIENT
-    } else {
-        true
-    }
-}
 fn user_conf_validator(u: &UserConf) -> bool {
     !(u.password().is_some() && u.name().is_none())
 }
 
-fn whatami_to_cowstr(w: &Option<whatami::Type>) -> Option<Cow<str>> {
-    use whatami::*;
+fn whatami_to_cowstr(w: &Option<whatami::WhatAmI>) -> Option<Cow<str>> {
     w.map(|f| {
         match f {
-            ROUTER => "router",
-            PEER => "peer",
-            CLIENT => "client",
-            _ => panic!("{} should be an impossible value for whatami::Type", f),
+            whatami::WhatAmI::Router => "router",
+            whatami::WhatAmI::Peer => "peer",
+            whatami::WhatAmI::Client => "client",
         }
         .into()
     })
 }
 
-fn whatami_from_str(w: &str) -> Option<Option<whatami::Type>> {
-    use whatami::*;
+fn whatami_from_str(w: &str) -> Option<Option<whatami::WhatAmI>> {
     match w {
-        "router" => Some(Some(ROUTER)),
-        "peer" => Some(Some(PEER)),
-        "client" => Some(Some(CLIENT)),
+        "router" => Some(Some(whatami::WhatAmI::Router)),
+        "peer" => Some(Some(whatami::WhatAmI::Peer)),
+        "client" => Some(Some(whatami::WhatAmI::Client)),
         "" => Some(None),
         _ => None,
+    }
+}
+
+fn whatamimatcher_to_cowstr(w: &Option<whatami::WhatAmIMatcher>) -> Option<Cow<str>> {
+    w.map(|f| f.to_str().into())
+}
+
+fn whatamimatcher_from_str(w: &str) -> Option<Option<whatami::WhatAmIMatcher>> {
+    if w.is_empty() {
+        Some(None)
+    } else {
+        match w.parse() {
+            Ok(w) => Some(Some(w)),
+            Err(_) => None,
+        }
     }
 }
 

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::multicast::manager::{TransportManagerConfigMulticast, TransportManagerStateMulticast};
-use super::protocol::core::{whatami, PeerId, WhatAmI, ZInt};
+use super::protocol::core::{PeerId, WhatAmI, ZInt};
 #[cfg(feature = "zero-copy")]
 use super::protocol::io::SharedMemoryReader;
 use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
@@ -76,7 +76,7 @@ use zenoh_util::zparse;
 ///         .build();
 /// let config = TransportManagerConfig::builder()
 ///         .pid(PeerId::rand())
-///         .whatami(whatami::PEER)
+///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .sn_resolution(128)             // Use a sequence number resolution of 128
 ///         .unicast(unicast)               // Configure unicast parameters
@@ -226,7 +226,7 @@ impl Default for TransportManagerConfigBuilder {
         Self {
             version: VERSION,
             pid: PeerId::rand(),
-            whatami: whatami::parse(ZN_MODE_DEFAULT).unwrap(),
+            whatami: ZN_MODE_DEFAULT.parse().unwrap(),
             sn_resolution: SEQ_NUM_RES,
             batch_size: BATCH_SIZE,
             defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
