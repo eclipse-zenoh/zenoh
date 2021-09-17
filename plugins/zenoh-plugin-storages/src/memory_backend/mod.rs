@@ -157,7 +157,7 @@ impl Storage for MemoryStorage {
             (
                 info.kind.map_or(ChangeKind::Put, ChangeKind::from),
                 match &info.timestamp {
-                    Some(ts) => ts.clone(),
+                    Some(ts) => *ts,
                     None => utils::new_reception_timestamp(),
                 },
             )

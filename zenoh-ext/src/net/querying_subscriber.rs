@@ -313,10 +313,10 @@ impl Stream for InnerState {
             // sort and remove duplicates from merge_queue
             mself
                 .merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             mself
                 .merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             mself.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -365,9 +365,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -431,9 +431,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
@@ -502,9 +502,9 @@ impl InnerState {
 
             // sort and remove duplicates from merge_queue
             self.merge_queue
-                .sort_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue
-                .dedup_by_key(|sample| sample.get_timestamp().unwrap().clone());
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",

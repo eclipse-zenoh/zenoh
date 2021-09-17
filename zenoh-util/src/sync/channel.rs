@@ -91,6 +91,13 @@ macro_rules! zreceiver{
             }
         }
 
+        impl$(<$( $lt ),+>)? futures::stream::FusedStream for $struct_name$(<$( $lt ),+>)? {
+            #[inline(always)]
+            fn is_terminated(&self) -> bool {
+                self.stream.is_terminated()
+            }
+        }
+
         impl $struct_name$(<$( $lt ),+>)? {
             #[inline(always)]
             pub fn iter(&self) -> Iter<'_, $recv_type> {
