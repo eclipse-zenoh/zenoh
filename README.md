@@ -85,7 +85,8 @@ See other examples of zenoh usage:
 ## zenoh router command line arguments
 `zenohd` accepts the following arguments:
 
-  * `-c, --config <FILE>`: a configuration file.  ?????????
+  * `-c, --config <FILE>`: a configuration file containing a list of properties with format `<key>=<value>` (1 per-line).
+    The accepted property keys are the same than accepted by the zenoh API and are documented [here](https://docs.rs/zenoh/0.5.0-beta.8/zenoh/net/config/index.html).
   * `-l, --listener <LOCATOR>...`: A locator on which this router will listen for incoming sessions. 
     Repeat this option to open several listeners. By default `tcp/0.0.0.0:7447` is used. The following locators are currently supported:
       - TCP: `tcp/<host_name_or_IPv4>:<port>`
