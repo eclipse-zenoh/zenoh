@@ -189,7 +189,7 @@ fn main() {
         config
             .scouting
             .multicast
-            .set_enable(Some(!args.is_present("no-multicast-scouting")))
+            .set_enabled(Some(!args.is_present("no-multicast-scouting")))
             .unwrap();
 
         for json in args.values_of("json").unwrap_or_default() {

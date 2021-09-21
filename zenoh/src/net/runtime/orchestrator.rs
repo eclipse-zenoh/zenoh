@@ -57,7 +57,7 @@ impl Runtime {
             let guard = self.config.lock();
             (
                 guard.peers().clone(),
-                guard.scouting().multicast().enable().unwrap_or(true),
+                guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
                     .multicast()
@@ -134,7 +134,7 @@ impl Runtime {
             (
                 listeners,
                 guard.peers().clone(),
-                guard.scouting().multicast().enable().unwrap_or(true),
+                guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
                     .multicast()
@@ -208,7 +208,7 @@ impl Runtime {
             (
                 listeners,
                 guard.peers().clone(),
-                guard.scouting().multicast().enable().unwrap_or(true),
+                guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
                     .multicast()

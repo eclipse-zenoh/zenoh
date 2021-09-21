@@ -122,7 +122,7 @@ validated_struct::validator! {
             pub multicast: MulticastConf {
                 /// Whether multicast scouting is enabled or not
                 #[intkey(ZN_MULTICAST_SCOUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
-                enable: Option<bool>,
+                enabled: Option<bool>,
                 /// The socket which should be used for multicast scouting
                 #[intkey(ZN_MULTICAST_IPV4_ADDRESS_KEY, into = addr_to_cowstr, from = addr_from_str)]
                 address: Option<SocketAddr>,
@@ -135,7 +135,7 @@ validated_struct::validator! {
             #[serde(default)]
             pub gossip: GossipConf {
                 #[intkey(skip)]
-                enable: Option<bool>,
+                enabled: Option<bool>,
                 #[intkey(ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY, into = whatamimatcher_to_cowstr, from = whatamimatcher_from_str)]
                 autoconnect: Option<whatami::WhatAmIMatcher>,
             }
