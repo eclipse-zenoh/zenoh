@@ -118,11 +118,13 @@ fn main() {
                 "--no-multicast-scouting \
                 'By default zenohd replies to multicast scouting messages for being discovered by peers and clients. 
                 This option disables this feature.'",
-            )).arg(Arg::from_usage(
-                "--json=[<key>:<value>]\
-                'Allows changing arbitrary parts of the configuration by passing a slash-separated path to the 
-                property as the key, and a JSON deserializable value (don't forget the quotes on strings).'"
-            ));
+            )).arg(Arg::with_name("cfg")
+                .long("cfg")
+                .required(false)
+                .takes_value(true)
+                .value_name("KEY:VALUE")
+                .help("Allows arbitrary configuration changes.\r\nKEY must be a valid config path.\r\nVALUE must be a valid JSON string that can be deserialized to the expected type for the KEY field.")
+            );
 
         // Get plugins search directories from the command line, and create LibLoader
         let plugin_search_dirs = get_plugin_search_dirs_from_args();
@@ -169,19 +171,17 @@ fn main() {
                     }),
             );
 
-        config
-            .listeners
-            .extend(
-                args.values_of("peer")
-                    .unwrap_or_default()
-                    .filter_map(|v| match v.parse() {
-                        Ok(v) => Some(v),
-                        Err(e) => {
-                            log::warn!("Couldn't parse {} into Locator: {}", v, e);
-                            None
-                        }
-                    }),
-            );
+        config.listeners.extend(
+            args.values_of("listener")
+                .unwrap_or_default()
+                .filter_map(|v| match v.parse() {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        log::warn!("Couldn't parse {} into Locator: {}", v, e);
+                        None
+                    }
+                }),
+        );
 
         config
             .set_add_timestamp(Some(!args.is_present("no-timestamp")))
@@ -192,7 +192,7 @@ fn main() {
             .set_enabled(Some(!args.is_present("no-multicast-scouting")))
             .unwrap();
 
-        for json in args.values_of("json").unwrap_or_default() {
+        for json in args.values_of("cfg").unwrap_or_default() {
             if let Some((key, value)) = json.split_once(':') {
                 if let Err(e) = config.insert(key, &mut serde_json::Deserializer::from_str(value)) {
                     log::warn!("Couldn't perform configuration {}: {}", json, e)

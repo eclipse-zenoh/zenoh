@@ -15,8 +15,8 @@
 //! Properties to pass to [`open`](super::open) and [`scout`](super::scout) functions as configuration
 //! and associated constants.
 
-use crate::net::link::Locator;
 pub use crate::net::protocol::core::{whatami, WhatAmI};
+use crate::net::{link::Locator, protocol::core::ZInt};
 use std::{
     any::Any,
     borrow::Cow,
@@ -179,13 +179,13 @@ validated_struct::validator! {
         pub link: LinkConf {
             /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
             #[intkey(ZN_LINK_LEASE_KEY, into = u64_to_cowstr, from = u64_from_str)]
-            lease: Option<u64>,
+            lease: Option<ZInt>,
             /// Link keep-alive duration in milliseconds
             #[intkey(ZN_LINK_KEEP_ALIVE_KEY, into = u64_to_cowstr, from = u64_from_str)]
-            keep_alive: Option<u64>,
+            keep_alive: Option<ZInt>,
             /// Timeout in milliseconds when opening a link
             #[intkey(ZN_OPEN_TIMEOUT_KEY, into = u64_to_cowstr, from = u64_from_str)]
-            open_timeout: Option<u64>,
+            open_timeout: Option<ZInt>,
             /// Receiving buffer size for each link
             #[intkey(ZN_LINK_RX_BUFF_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
             rx_buff_size: Option<usize>,
@@ -193,7 +193,7 @@ validated_struct::validator! {
             max_number: Option<usize>
         },
         #[intkey(ZN_SEQ_NUM_RESOLUTION_KEY, into = u64_to_cowstr, from = u64_from_str)]
-        sequence_number_resolution: Option<u64>,
+        sequence_number_resolution: Option<ZInt>,
         #[intkey(ZN_OPEN_INCOMING_PENDING_KEY, into = usize_to_cowstr, from = usize_from_str)]
         open_pending: Option<usize>,
         #[intkey(ZN_MAX_SESSIONS_KEY, into = usize_to_cowstr, from = usize_from_str)]
@@ -354,10 +354,10 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
     }
 }
 
-impl<'a> TryFrom<&'a HashMap<u64, String>> for Config {
+impl<'a> TryFrom<&'a HashMap<ZInt, String>> for Config {
     type Error = Config;
 
-    fn try_from(value: &'a HashMap<u64, String>) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a HashMap<ZInt, String>) -> Result<Self, Self::Error> {
         let mut s: Self = Default::default();
         let mut merge_error = false;
         for (key, value) in value {
