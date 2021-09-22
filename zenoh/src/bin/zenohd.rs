@@ -81,7 +81,7 @@ fn main() {
             .long_version(LONG_VERSION.as_str())
             .arg(Arg::from_usage(
                 "-c, --config=[FILE] \
-             'The configuration file.'",
+             'The configuration file. Currently, this file must be a valid JSON5 file.'",
             ))
             .arg(Arg::from_usage(
                 "-l, --listener=[LOCATOR]... \
@@ -123,7 +123,7 @@ fn main() {
                 .required(false)
                 .takes_value(true)
                 .value_name("KEY:VALUE")
-                .help("Allows arbitrary configuration changes.\r\nKEY must be a valid config path.\r\nVALUE must be a valid JSON string that can be deserialized to the expected type for the KEY field.")
+                .help("Allows arbitrary configuration changes.\r\nKEY must be a valid config path.\r\nVALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.")
             );
 
         // Get plugins search directories from the command line, and create LibLoader
@@ -194,8 +194,13 @@ fn main() {
 
         for json in args.values_of("cfg").unwrap_or_default() {
             if let Some((key, value)) = json.split_once(':') {
-                if let Err(e) = config.insert(key, &mut serde_json::Deserializer::from_str(value)) {
-                    log::warn!("Couldn't perform configuration {}: {}", json, e)
+                match json5::Deserializer::from_str(value) {
+                    Ok(mut deserializer) => {
+                        if let Err(e) = config.insert(key, &mut deserializer) {
+                            log::warn!("Couldn't perform configuration {}: {}", json, e)
+                        }
+                    }
+                    Err(e) => log::warn!("Couldn't perform configuration {}: {}", json, e),
                 }
             }
         }

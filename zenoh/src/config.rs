@@ -22,6 +22,7 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     convert::TryFrom,
+    io::Read,
     net::SocketAddr,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
@@ -214,15 +215,15 @@ validated_struct::validator! {
 }
 #[derive(Debug)]
 pub enum ConfigOpenErr {
-    CouldNotOpenFile(std::io::Error),
-    JsonParseErr(serde_json::Error),
+    IoError(std::io::Error),
+    JsonParseErr(json5::Error),
     InvalidConfiguration(Box<Config>),
 }
 impl std::fmt::Display for ConfigOpenErr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigOpenErr::CouldNotOpenFile(e) => write!(f, "Couldn't open file : {}", e),
-            ConfigOpenErr::JsonParseErr(e) => write!(f, "JSON parsing error {}", e),
+            ConfigOpenErr::IoError(e) => write!(f, "Couldn't open file : {}", e),
+            ConfigOpenErr::JsonParseErr(e) => write!(f, "JSON5 parsing error {}", e),
             ConfigOpenErr::InvalidConfiguration(c) => write!(
                 f,
                 "Invalid configuration {}",
@@ -235,15 +236,24 @@ impl std::error::Error for ConfigOpenErr {}
 impl Config {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigOpenErr> {
         match std::fs::File::open(path) {
-            Ok(f) => match Config::from_deserializer(&mut serde_json::Deserializer::from_reader(f))
-            {
-                Ok(s) => Ok(s),
-                Err(e) => Err(match e {
-                    Ok(c) => ConfigOpenErr::InvalidConfiguration(Box::new(c)),
-                    Err(e) => ConfigOpenErr::JsonParseErr(e),
-                }),
-            },
-            Err(e) => Err(ConfigOpenErr::CouldNotOpenFile(e)),
+            Ok(mut f) => {
+                let mut content = String::new();
+                if let Err(e) = f.read_to_string(&mut content) {
+                    return Err(ConfigOpenErr::IoError(e));
+                }
+                let mut deser = match json5::Deserializer::from_str(&content) {
+                    Ok(d) => d,
+                    Err(e) => return Err(ConfigOpenErr::JsonParseErr(e)),
+                };
+                match Config::from_deserializer(&mut deser) {
+                    Ok(s) => Ok(s),
+                    Err(e) => Err(match e {
+                        Ok(c) => ConfigOpenErr::InvalidConfiguration(Box::new(c)),
+                        Err(e) => ConfigOpenErr::JsonParseErr(e),
+                    }),
+                }
+            }
+            Err(e) => Err(ConfigOpenErr::IoError(e)),
         }
     }
 }

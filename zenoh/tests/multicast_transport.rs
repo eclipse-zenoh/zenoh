@@ -25,7 +25,7 @@ mod tests {
     use zenoh::net::link::EndPoint;
     use zenoh::net::link::Link;
     use zenoh::net::protocol::core::{
-        whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+        Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, WhatAmI,
     };
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::proto::ZenohMessage;
