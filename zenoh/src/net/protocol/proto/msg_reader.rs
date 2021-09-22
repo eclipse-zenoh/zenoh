@@ -50,6 +50,9 @@ impl ZBuf {
         let mut attachment = None;
         let mut priority = Priority::default();
 
+        #[cfg(feature = "stats")]
+        let start_readable = self.readable();
+
         // Read the message
         let body = loop {
             // Read the header
@@ -101,7 +104,15 @@ impl ZBuf {
             }
         };
 
-        Some(TransportMessage { body, attachment })
+        #[cfg(feature = "stats")]
+        let stop_readable = self.readable();
+
+        Some(TransportMessage {
+            body,
+            attachment,
+            #[cfg(feature = "stats")]
+            size: std::num::NonZeroUsize::new(start_readable - stop_readable),
+        })
     }
 
     #[inline(always)]

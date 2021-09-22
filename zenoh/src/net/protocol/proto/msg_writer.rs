@@ -76,12 +76,16 @@ impl WBuf {
     /*************************************/
     /*            TRANSPORT              */
     /*************************************/
-    pub fn write_transport_message(&mut self, msg: &TransportMessage) -> bool {
+    #[allow(clippy::let_and_return)]
+    pub fn write_transport_message(&mut self, msg: &mut TransportMessage) -> bool {
+        #[cfg(feature = "stats")]
+        let start_written = self.len();
+
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
         }
 
-        match &msg.body {
+        let res = match &mut msg.body {
             TransportBody::Frame(frame) => self.write_frame(frame),
             TransportBody::Scout(scout) => self.write_scout(scout),
             TransportBody::Hello(hello) => self.write_hello(hello),
@@ -96,20 +100,28 @@ impl WBuf {
             TransportBody::KeepAlive(keep_alive) => self.write_keep_alive(keep_alive),
             TransportBody::Ping(ping) => self.write_ping(ping),
             TransportBody::Pong(pong) => self.write_pong(pong),
+        };
+
+        #[cfg(feature = "stats")]
+        {
+            let stop_written = self.len();
+            msg.size = std::num::NonZeroUsize::new(stop_written - start_written);
         }
+
+        res
     }
 
-    fn write_frame(&mut self, frame: &Frame) -> bool {
+    fn write_frame(&mut self, frame: &mut Frame) -> bool {
         if frame.channel.priority != Priority::default() {
             zcheck!(self.write_deco_priority(frame.channel.priority))
         }
 
         zcheck!(self.write(frame.header()));
         zcheck!(self.write_zint(frame.sn));
-        match &frame.payload {
+        match &mut frame.payload {
             FramePayload::Fragment { buffer, .. } => self.write_zslice(buffer.clone()),
             FramePayload::Messages { messages } => {
-                for m in messages.iter() {
+                for m in messages.iter_mut() {
                     zcheck!(self.write_zenoh_message(m));
                 }
                 true
@@ -271,7 +283,11 @@ impl WBuf {
     /*************************************/
     /*              ZENOH                */
     /*************************************/
-    pub fn write_zenoh_message(&mut self, msg: &ZenohMessage) -> bool {
+    #[allow(clippy::let_and_return)]
+    pub fn write_zenoh_message(&mut self, msg: &mut ZenohMessage) -> bool {
+        #[cfg(feature = "stats")]
+        let start_written = self.len();
+
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
         }
@@ -282,7 +298,7 @@ impl WBuf {
             zcheck!(self.write_deco_priority(msg.channel.priority));
         }
 
-        match &msg.body {
+        let res = match &msg.body {
             ZenohBody::Data(data) => self.write_data(data),
             ZenohBody::Declare(declare) => self.write_declare(declare),
             ZenohBody::Unit(unit) => self.write_unit(unit),
@@ -291,7 +307,15 @@ impl WBuf {
             ZenohBody::LinkStateList(link_state_list) => {
                 self.write_link_state_list(link_state_list)
             }
+        };
+
+        #[cfg(feature = "stats")]
+        {
+            let stop_written = self.len();
+            msg.size = std::num::NonZeroUsize::new(stop_written - start_written);
         }
+
+        res
     }
 
     #[inline(always)]

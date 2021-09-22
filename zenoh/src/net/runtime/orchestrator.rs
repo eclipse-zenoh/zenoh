@@ -528,8 +528,8 @@ impl Runtime {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-            let scout = TransportMessage::make_scout(Some(what), true, None);
-            wbuf.write_transport_message(&scout);
+            let mut scout = TransportMessage::make_scout(Some(what), true, None);
+            wbuf.write_transport_message(&mut scout);
             loop {
                 for socket in sockets {
                     log::trace!(
@@ -725,7 +725,7 @@ impl Runtime {
                         } else {
                             None
                         };
-                        let hello = TransportMessage::make_hello(
+                        let mut hello = TransportMessage::make_hello(
                             pid,
                             Some(self.whatami),
                             Some(self.manager().get_locators().clone()),
@@ -740,7 +740,7 @@ impl Runtime {
                                 .local_addr()
                                 .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                         );
-                        wbuf.write_transport_message(&hello);
+                        wbuf.write_transport_message(&mut hello);
                         if let Err(err) =
                             socket.send_to(&ZBuf::from(&wbuf).contiguous(), peer).await
                         {
