@@ -173,7 +173,7 @@ pub mod properties {
 /// ### Sync
 /// ```no_run
 /// use zenoh::prelude::*;
-/// use zenoh::scouting::whatami;
+/// use zenoh::scouting::WhatAmI;
 ///
 /// fn main() {
 ///     let mut receiver = zenoh::scout(WhatAmI::Router, config::default()).wait().unwrap();
@@ -187,7 +187,7 @@ pub mod properties {
 /// ```no_run
 /// use futures::prelude::*;
 /// use zenoh::prelude::*;
-/// use zenoh::scouting::whatami;
+/// use zenoh::scouting::WhatAmI;
 ///
 /// #[async_std::main]
 /// async fn main() {
