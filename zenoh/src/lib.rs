@@ -257,7 +257,7 @@ pub mod scouting {
 /// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
 ///
-/// let mut receiver = zenoh::scout(WhatAmI::PEER | WhatAmI::ROUTER, config::default()).await.unwrap();
+/// let mut receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
 /// while let Some(hello) = receiver.next().await {
 ///     println!("{}", hello);
 /// }
