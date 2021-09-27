@@ -213,6 +213,31 @@ validated_struct::validator! {
         qos: Option<bool>,
     }
 }
+
+impl Config {
+    pub fn insert_json<K: AsRef<str>>(
+        &mut self,
+        key: K,
+        value: &str,
+    ) -> Result<(), validated_struct::InsertionError>
+    where
+        validated_struct::InsertionError: From<serde_json::Error>,
+    {
+        self.insert(key.as_ref(), &mut serde_json::Deserializer::from_str(value))
+    }
+
+    pub fn insert_json5<K: AsRef<str>>(
+        &mut self,
+        key: K,
+        value: &str,
+    ) -> Result<(), validated_struct::InsertionError>
+    where
+        validated_struct::InsertionError: From<json5::Error>,
+    {
+        self.insert(key.as_ref(), &mut json5::Deserializer::from_str(value)?)
+    }
+}
+
 #[derive(Debug)]
 pub enum ConfigOpenErr {
     IoError(std::io::Error),
@@ -330,6 +355,40 @@ impl<T: ValidatedMap> Notifier<T> {
         {
             let mut guard = self.inner.inner.lock().unwrap();
             guard.insert(key, value)?;
+        }
+        self.notify(key);
+        Ok(())
+    }
+
+    pub fn insert_json<K: AsRef<str>>(
+        &self,
+        key: K,
+        value: &str,
+    ) -> Result<(), validated_struct::InsertionError>
+    where
+        validated_struct::InsertionError: From<serde_json::Error>,
+    {
+        let key = key.as_ref();
+        {
+            let mut guard = self.inner.inner.lock().unwrap();
+            guard.insert(key, &mut serde_json::Deserializer::from_str(value))?;
+        }
+        self.notify(key);
+        Ok(())
+    }
+
+    pub fn insert_json5<K: AsRef<str>>(
+        &self,
+        key: K,
+        value: &str,
+    ) -> Result<(), validated_struct::InsertionError>
+    where
+        validated_struct::InsertionError: From<json5::Error>,
+    {
+        let key = key.as_ref();
+        {
+            let mut guard = self.inner.inner.lock().unwrap();
+            guard.insert(key, &mut json5::Deserializer::from_str(value)?)?;
         }
         self.notify(key);
         Ok(())
