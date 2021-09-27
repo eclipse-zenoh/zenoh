@@ -275,7 +275,7 @@ impl From<Option<DataInfo>> for SourceInfo {
 }
 
 /// The kind of a [`Sample`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SampleKind {
     /// if the [`Sample`] was caused by a `put` operation.
     Put = data_kind::PUT as isize,
