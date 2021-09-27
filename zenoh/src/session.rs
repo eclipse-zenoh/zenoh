@@ -17,7 +17,7 @@ use super::query::*;
 use super::queryable::*;
 use super::subscriber::*;
 use super::*;
-use crate::config::Config;
+use crate::config::{Config, Notifier};
 use async_std::sync::Arc;
 use async_std::task;
 use flume::{bounded, Sender};
@@ -302,6 +302,38 @@ impl Session {
     pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.close_alive()
+    }
+
+    /// Get the current configuration of the zenoh [`Session`](Session).
+    ///
+    /// The returned configuration [`Notifier`] can be used to read the current
+    /// zenoh configuration through the [`get`](Notifier::get) function or
+    /// modify the zenoh configuration through the [`insert`](Notifier::insert),
+    /// [`insert_json`](Notifier::insert_json) or [`insert_json5`](Notifier::insert_json5)
+    /// funtion.
+    ///
+    /// # Examples
+    /// ### Read current zenoh configuration
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let peers = session.config().await.get("peers").unwrap();
+    /// # })
+    /// ```
+    ///
+    /// ### Modify current zenoh configuration
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let _ = session.config().await.insert_json5("peers", r#"["tcp/127.0.0.1/7447"]"#);
+    /// # })
+    /// ```
+    pub fn config(&self) -> impl ZFuture<Output = &Notifier<Config>> {
+        zready(&self.runtime.config)
     }
 
     /// Get informations about the zenoh [`Session`](Session).
