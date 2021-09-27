@@ -99,6 +99,49 @@ impl Value {
         self.encoding = encoding;
         self
     }
+
+    pub fn as_json(&self) -> Option<serde_json::Value> {
+        if [Encoding::APP_JSON.prefix, Encoding::TEXT_JSON.prefix].contains(&self.encoding.prefix) {
+            serde::Deserialize::deserialize(&mut serde_json::Deserializer::from_slice(
+                self.payload.contiguous().as_slice(),
+            ))
+            .ok()
+        } else {
+            None
+        }
+    }
+
+    pub fn as_integer(&self) -> Option<i64> {
+        if self.encoding.prefix == Encoding::APP_INTEGER.prefix {
+            std::str::from_utf8(self.payload.contiguous().as_slice())
+                .ok()?
+                .parse()
+                .ok()
+        } else {
+            None
+        }
+    }
+
+    pub fn as_float(&self) -> Option<f64> {
+        if self.encoding.prefix == Encoding::APP_FLOAT.prefix {
+            std::str::from_utf8(self.payload.contiguous().as_slice())
+                .ok()?
+                .parse()
+                .ok()
+        } else {
+            None
+        }
+    }
+
+    pub fn as_properties(&self) -> Option<Properties> {
+        if self.encoding.prefix == Encoding::APP_PROPERTIES.prefix {
+            Some(Properties::from(
+                std::str::from_utf8(self.payload.contiguous().as_slice()).ok()?,
+            ))
+        } else {
+            None
+        }
+    }
 }
 
 impl fmt::Debug for Value {
@@ -175,16 +218,16 @@ impl From<&[u8]> for Value {
 
 impl From<String> for Value {
     fn from(s: String) -> Self {
-        Value {
-            payload: ZBuf::from(s.as_bytes()),
-            encoding: Encoding::STRING,
-        }
+        s.as_str().into()
     }
 }
 
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
-        Value::from(s.to_string())
+        Value {
+            payload: ZBuf::from(s.as_bytes()),
+            encoding: Encoding::STRING,
+        }
     }
 }
 
