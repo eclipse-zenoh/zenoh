@@ -218,7 +218,10 @@ impl From<&[u8]> for Value {
 
 impl From<String> for Value {
     fn from(s: String) -> Self {
-        s.as_str().into()
+        Value {
+            payload: ZBuf::from(s.into_bytes()),
+            encoding: Encoding::STRING,
+        }
     }
 }
 
