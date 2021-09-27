@@ -12,11 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::link::{EndPoint, Locator};
-use super::protocol::core::{whatami, PeerId, WhatAmI};
+use super::protocol::core::{PeerId, WhatAmI};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
 use super::transport::TransportUnicast;
 use super::{Runtime, RuntimeSession};
+use crate::net::protocol::core::whatami::WhatAmIMatcher;
 use async_std::net::UdpSocket;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
@@ -45,51 +46,39 @@ pub enum Loop {
 impl Runtime {
     pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami {
-            whatami::CLIENT => self.start_client().await,
-            whatami::PEER => self.start_peer().await,
-            whatami::ROUTER => self.start_router().await,
-            _ => {
-                log::error!("Unknown mode");
-                zerror!(ZErrorKind::Other {
-                    descr: "Unknown mode".to_string()
-                })
-            }
+            WhatAmI::Client => self.start_client().await,
+            WhatAmI::Peer => self.start_peer().await,
+            WhatAmI::Router => self.start_router().await,
         }
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let config = &self.config;
-        let peers = config
-            .get_or(&ZN_PEER_KEY, "")
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let scouting = config
-            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let addr = config
-            .get_or(
-                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+        let (peers, scouting, addr, ifaces, timeout) = {
+            let guard = self.config.lock();
+            (
+                guard.peers().clone(),
+                guard.scouting().multicast().enabled().unwrap_or(true),
+                guard
+                    .scouting()
+                    .multicast()
+                    .address()
+                    .unwrap_or_else(|| "224.0.0.224:7447".parse().unwrap()),
+                guard
+                    .scouting()
+                    .multicast()
+                    .interface()
+                    .as_ref()
+                    .map(AsRef::as_ref)
+                    .unwrap_or("auto")
+                    .to_owned(),
+                std::time::Duration::from_secs_f64(guard.scouting().timeout().unwrap_or(3.)),
             )
-            .parse()
-            .unwrap();
-        let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
-        let timeout = std::time::Duration::from_secs_f64(
-            config
-                .get_or(&ZN_SCOUTING_TIMEOUT_KEY, ZN_SCOUTING_TIMEOUT_DEFAULT)
-                .parse()
-                .unwrap(),
-        );
+        };
         match peers.len() {
             0 => {
                 if scouting {
                     log::info!("Scouting for router ...");
-                    let ifaces = Runtime::get_interfaces(ifaces);
+                    let ifaces = Runtime::get_interfaces(&ifaces);
                     if ifaces.is_empty() {
                         zerror!(ZErrorKind::IoError {
                             descr: "Unable to find multicast interface!".to_string()
@@ -105,7 +94,7 @@ impl Runtime {
                                     .to_string()
                             })
                         } else {
-                            self.connect_first(&sockets, whatami::ROUTER, &addr, timeout)
+                            self.connect_first(&sockets, WhatAmI::Router, &addr, timeout)
                                 .await
                         }
                     }
@@ -135,45 +124,39 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let config = &self.config;
-        let listeners = config
-            .get_or(&ZN_LISTENER_KEY, PEER_DEFAULT_LISTENER)
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let peers = config
-            .get_or(&ZN_PEER_KEY, "")
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let scouting = config
-            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let peers_autoconnect = config
-            .get_or(&ZN_PEERS_AUTOCONNECT_KEY, ZN_PEERS_AUTOCONNECT_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let addr = config
-            .get_or(
-                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+        let (listeners, peers, scouting, peers_autoconnect, addr, ifaces, delay) = {
+            let guard = &self.config.lock();
+            let listeners = if guard.listeners().is_empty() {
+                vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
+            } else {
+                guard.listeners().clone()
+            };
+            (
+                listeners,
+                guard.peers().clone(),
+                guard.scouting().multicast().enabled().unwrap_or(true),
+                guard
+                    .scouting()
+                    .multicast()
+                    .autoconnect()
+                    .map(|m| m.matches(WhatAmI::Peer))
+                    .unwrap_or(true),
+                guard
+                    .scouting()
+                    .multicast()
+                    .address()
+                    .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap()),
+                guard
+                    .scouting()
+                    .multicast()
+                    .interface()
+                    .as_ref()
+                    .map(AsRef::as_ref)
+                    .unwrap_or_else(|| ZN_MULTICAST_INTERFACE_DEFAULT)
+                    .to_string(),
+                std::time::Duration::from_secs_f64(guard.scouting().delay().unwrap_or(0.2)),
             )
-            .parse()
-            .unwrap();
-        let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
-        let delay = std::time::Duration::from_secs_f64(
-            config
-                .get_or(&ZN_SCOUTING_DELAY_KEY, ZN_SCOUTING_DELAY_DEFAULT)
-                .parse()
-                .unwrap(),
-        );
+        };
 
         self.bind_listeners(&listeners).await?;
 
@@ -183,7 +166,7 @@ impl Runtime {
         }
 
         if scouting {
-            let ifaces = Runtime::get_interfaces(ifaces);
+            let ifaces = Runtime::get_interfaces(&ifaces);
             let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
             if !ifaces.is_empty() {
                 let sockets: Vec<UdpSocket> = ifaces
@@ -198,9 +181,9 @@ impl Runtime {
                             this.connect_all(
                                 &sockets,
                                 if peers_autoconnect {
-                                    whatami::PEER | whatami::ROUTER
+                                    WhatAmI::Peer | WhatAmI::Router
                                 } else {
-                                    whatami::ROUTER
+                                    WhatAmI::Router.into()
                                 },
                                 &addr,
                             ),
@@ -215,42 +198,38 @@ impl Runtime {
     }
 
     async fn start_router(&self) -> ZResult<()> {
-        let config = &self.config;
-        let listeners = config
-            .get_or(&ZN_LISTENER_KEY, ROUTER_DEFAULT_LISTENER)
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let peers = config
-            .get_or(&ZN_PEER_KEY, "")
-            .split(',')
-            .filter_map(|s| match s.trim() {
-                "" => None,
-                s => Some(s.parse().unwrap()),
-            })
-            .collect::<Vec<Locator>>();
-        let scouting = config
-            .get_or(&ZN_MULTICAST_SCOUTING_KEY, ZN_MULTICAST_SCOUTING_DEFAULT)
-            .to_lowercase()
-            == ZN_TRUE;
-        let routers_autoconnect_multicast = config
-            .get_or(
-                &ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY,
-                ZN_ROUTERS_AUTOCONNECT_MULTICAST_DEFAULT,
+        let (listeners, peers, scouting, routers_autoconnect_multicast, addr, ifaces) = {
+            let guard = self.config.lock();
+            let listeners = if guard.listeners().is_empty() {
+                vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
+            } else {
+                guard.listeners().clone()
+            };
+            (
+                listeners,
+                guard.peers().clone(),
+                guard.scouting().multicast().enabled().unwrap_or(true),
+                guard
+                    .scouting()
+                    .multicast()
+                    .autoconnect()
+                    .map(|m| m.matches(WhatAmI::Router))
+                    .unwrap_or(false),
+                guard
+                    .scouting()
+                    .multicast()
+                    .address()
+                    .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap()),
+                guard
+                    .scouting()
+                    .multicast()
+                    .interface()
+                    .as_ref()
+                    .map(AsRef::as_ref)
+                    .unwrap_or(ZN_MULTICAST_INTERFACE_DEFAULT)
+                    .to_string(),
             )
-            .to_lowercase()
-            == ZN_TRUE;
-        let addr = config
-            .get_or(
-                &ZN_MULTICAST_IPV4_ADDRESS_KEY,
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
-            )
-            .parse()
-            .unwrap();
-        let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+        };
 
         self.bind_listeners(&listeners).await?;
 
@@ -260,7 +239,7 @@ impl Runtime {
         }
 
         if scouting {
-            let ifaces = Runtime::get_interfaces(ifaces);
+            let ifaces = Runtime::get_interfaces(&ifaces);
             let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
             if !ifaces.is_empty() {
                 let sockets: Vec<UdpSocket> = ifaces
@@ -273,7 +252,7 @@ impl Runtime {
                         async_std::task::spawn(async move {
                             async_std::prelude::FutureExt::race(
                                 this.responder(&mcast_socket, &sockets),
-                                this.connect_all(&sockets, whatami::ROUTER, &addr),
+                                this.connect_all(&sockets, WhatAmI::Router, &addr),
                             )
                             .await;
                         });
@@ -517,7 +496,7 @@ impl Runtime {
 
     pub async fn scout<Fut, F>(
         sockets: &[UdpSocket],
-        what: WhatAmI,
+        matcher: WhatAmIMatcher,
         mcast_addr: &SocketAddr,
         mut f: F,
     ) where
@@ -528,7 +507,7 @@ impl Runtime {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-            let scout = TransportMessage::make_scout(Some(what), true, None);
+            let scout = TransportMessage::make_scout(Some(matcher), true, None);
             wbuf.write_transport_message(&scout);
             loop {
                 for socket in sockets {
@@ -570,8 +549,8 @@ impl Runtime {
                     if let Some(msg) = zbuf.read_transport_message() {
                         log::trace!("Received {:?} from {}", msg.body, peer);
                         if let TransportBody::Hello(hello) = &msg.body {
-                            let whatami = hello.whatami.or(Some(whatami::ROUTER)).unwrap();
-                            if whatami & what != 0 {
+                            let whatami = hello.whatami.or(Some(WhatAmI::Router)).unwrap();
+                            if matcher.matches(whatami) {
                                 if let Loop::Break = f(hello.clone()).await {
                                     break;
                                 }
@@ -620,15 +599,15 @@ impl Runtime {
         }
     }
 
-    async fn connect_first(
+    async fn connect_first<I: Into<WhatAmIMatcher>>(
         &self,
         sockets: &[UdpSocket],
-        what: WhatAmI,
+        what: I,
         addr: &SocketAddr,
         timeout: std::time::Duration,
     ) -> ZResult<()> {
         let scout = async {
-            Runtime::scout(sockets, what, addr, move |hello| async move {
+            Runtime::scout(sockets, what.into(), addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if let Some(locators) = &hello.locators {
                     if self.connect(locators).await.is_ok() {
@@ -651,8 +630,13 @@ impl Runtime {
         async_std::prelude::FutureExt::race(scout, timeout).await
     }
 
-    async fn connect_all(&self, ucast_sockets: &[UdpSocket], what: WhatAmI, addr: &SocketAddr) {
-        Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
+    async fn connect_all<I: Into<WhatAmIMatcher>>(
+        &self,
+        ucast_sockets: &[UdpSocket],
+        what: I,
+        addr: &SocketAddr,
+    ) {
+        Runtime::scout(ucast_sockets, what.into(), addr, move |hello| async move {
             match &hello.pid {
                 Some(pid) => {
                     if let Some(locators) = &hello.locators {
@@ -717,8 +701,8 @@ impl Runtime {
                     what, pid_request, ..
                 }) = &msg.body
                 {
-                    let what = what.or(Some(whatami::ROUTER)).unwrap();
-                    if what & self.whatami != 0 {
+                    let what = what.or(Some(WhatAmI::Router.into())).unwrap();
+                    if what.matches(self.whatami) {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
                         let pid = if *pid_request {
                             Some(self.manager().pid())
@@ -756,7 +740,7 @@ impl Runtime {
 
     pub(super) fn closing_session(session: &RuntimeSession) {
         match session.runtime.whatami {
-            whatami::CLIENT => {
+            WhatAmI::Client => {
                 let runtime = session.runtime.clone();
                 async_std::task::spawn(async move {
                     let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;

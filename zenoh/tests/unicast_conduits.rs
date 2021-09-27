@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+    Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -175,14 +175,14 @@ async fn open_transport(
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::new(priority));
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .pid(router_id)
         .build(router_handler.clone());
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client_id)
         .build(Arc::new(SHClient::default()));
     let client_manager = TransportManager::new(config);

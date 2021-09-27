@@ -39,6 +39,9 @@ pub use crate::properties::Properties;
 pub use crate::sync::channel::Receiver;
 pub use crate::sync::ZFuture;
 
+/// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
+pub use crate::net::link::Locator;
+
 /// The encoding of a zenoh [`Value`].
 pub use super::net::protocol::core::Encoding;
 

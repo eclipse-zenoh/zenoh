@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
-use zenoh::net::protocol::core::{whatami, PeerId};
+use zenoh::net::protocol::core::{PeerId, WhatAmI};
 use zenoh::net::protocol::proto::ZenohMessage;
 #[cfg(feature = "zero-copy")]
 use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
@@ -127,7 +127,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
     let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .pid(router_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -147,7 +147,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     );
 
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client01_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -164,7 +164,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         Some((user02.clone().into(), password02.clone().into())),
     );
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client02_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -181,7 +181,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         Some((user03.clone().into(), password03.clone().into())),
     );
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client03_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -289,7 +289,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     // Create the router transport manager
     let peer_authenticator_router = SharedMemoryAuthenticator::new();
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .pid(router_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -302,7 +302,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     // Create the transport transport manager for the first client
     let peer_authenticator_client = SharedMemoryAuthenticator::new();
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .pid(client_id)
         .unicast(
             TransportManagerConfigUnicast::builder()

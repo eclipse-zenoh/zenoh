@@ -73,6 +73,7 @@ use net::protocol::core::WhatAmI;
 use net::protocol::proto::data_kind;
 use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
+use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use sync::{zready, ZFuture};
 use zenoh_util::properties::config::*;
@@ -172,10 +173,10 @@ pub mod properties {
 /// ### Sync
 /// ```no_run
 /// use zenoh::prelude::*;
-/// use zenoh::scouting::whatami;
+/// use zenoh::scouting::WhatAmI;
 ///
 /// fn main() {
-///     let mut receiver = zenoh::scout(whatami::ROUTER, config::default()).wait().unwrap();
+///     let mut receiver = zenoh::scout(WhatAmI::Router, config::default()).wait().unwrap();
 ///     while let Ok(hello) = receiver.recv() {
 ///         println!("{}", hello);
 ///     }
@@ -186,11 +187,11 @@ pub mod properties {
 /// ```no_run
 /// use futures::prelude::*;
 /// use zenoh::prelude::*;
-/// use zenoh::scouting::whatami;
+/// use zenoh::scouting::WhatAmI;
 ///
 /// #[async_std::main]
 /// async fn main() {
-///     let mut receiver = zenoh::scout(whatami::ROUTER, config::default()).await.unwrap();
+///     let mut receiver = zenoh::scout(WhatAmI::Router, config::default()).await.unwrap();
 ///     while let Some(hello) = receiver.next().await {
 ///         println!("{}", hello);
 ///     }
@@ -223,7 +224,7 @@ pub mod scouting {
     use std::task::{Context, Poll};
 
     /// Constants and helpers for zenoh `whatami` flags.
-    pub use super::net::protocol::core::whatami;
+    pub use super::net::protocol::core::WhatAmI;
 
     /// A zenoh Hello message.
     pub use super::net::protocol::proto::Hello;
@@ -254,18 +255,19 @@ pub mod scouting {
 /// # async_std::task::block_on(async {
 /// use futures::prelude::*;
 /// use zenoh::prelude::*;
-/// use zenoh::scouting::whatami;
+/// use zenoh::scouting::WhatAmI;
 ///
-/// let mut receiver = zenoh::scout(whatami::PEER | whatami::ROUTER, config::default()).await.unwrap();
+/// let mut receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
 /// while let Some(hello) = receiver.next().await {
 ///     println!("{}", hello);
 /// }
 /// # })
 /// ```
-pub fn scout(
-    what: WhatAmI,
+pub fn scout<I: Into<WhatAmIMatcher>>(
+    what: I,
     config: ConfigProperties,
 ) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>> {
+    let what = what.into();
     trace!("scout({}, {})", what, &config);
     let addr = config
         .get_or(

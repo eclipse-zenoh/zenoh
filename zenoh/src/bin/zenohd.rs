@@ -13,12 +13,12 @@
 //
 use async_std::future;
 use async_std::task;
-use clap::{App, Arg, Values};
+use clap::{App, Arg};
 use git_version::git_version;
+use validated_struct::ValidatedMap;
+use zenoh::config::Config;
 use zenoh::net::plugins::*;
 use zenoh::net::runtime::{AdminSpace, Runtime};
-use zenoh_util::properties::config::*;
-use zenoh_util::properties::Properties;
 use zenoh_util::LibLoader;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -81,7 +81,7 @@ fn main() {
             .long_version(LONG_VERSION.as_str())
             .arg(Arg::from_usage(
                 "-c, --config=[FILE] \
-             'The configuration file.'",
+             'The configuration file. Currently, this file must be a valid JSON5 file.'",
             ))
             .arg(Arg::from_usage(
                 "-l, --listener=[LOCATOR]... \
@@ -116,9 +116,15 @@ fn main() {
              This option disables this feature.'",
             )).arg(Arg::from_usage(
                 "--no-multicast-scouting \
-             'By default zenohd replies to multicast scouting messages for being discovered by peers and clients. 
-              This option disables this feature.'",
-        ));
+                'By default zenohd replies to multicast scouting messages for being discovered by peers and clients. 
+                This option disables this feature.'",
+            )).arg(Arg::with_name("cfg")
+                .long("cfg")
+                .required(false)
+                .takes_value(true)
+                .value_name("KEY:VALUE")
+                .help("Allows arbitrary configuration changes.\r\nKEY must be a valid config path.\r\nVALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.")
+            );
 
         // Get plugins search directories from the command line, and create LibLoader
         let plugin_search_dirs = get_plugin_search_dirs_from_args();
@@ -142,57 +148,62 @@ fn main() {
         let args = app.args(&expected_args).get_matches();
 
         let mut config = if let Some(conf_file) = args.value_of("config") {
-            Properties::from(std::fs::read_to_string(conf_file).unwrap()).into()
+            Config::from_file(conf_file).unwrap()
         } else {
-            ConfigProperties::default()
+            Config::default()
         };
 
-        config.insert(ZN_MODE_KEY, "router".to_string());
+        config
+            .set_mode(Some(zenoh::config::WhatAmI::Router))
+            .unwrap();
 
-        let mut peer = args
-            .values_of("peer")
-            .or_else(|| Some(Values::default()))
-            .unwrap()
-            .collect::<Vec<&str>>()
-            .join(",");
-        if let Some(val) = config.get(&ZN_PEER_KEY) {
-            peer.push(',');
-            peer.push_str(val);
-        }
-        config.insert(ZN_PEER_KEY, peer);
+        config
+            .peers
+            .extend(
+                args.values_of("peer")
+                    .unwrap_or_default()
+                    .filter_map(|v| match v.parse() {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            log::warn!("Couldn't parse {} into Locator: {}", v, e);
+                            None
+                        }
+                    }),
+            );
 
-        let mut listener = args
-            .values_of("listener")
-            .or_else(|| Some(Values::default()))
-            .unwrap()
-            .collect::<Vec<&str>>()
-            .join(",");
-        if let Some(val) = config.get(&ZN_LISTENER_KEY) {
-            if listener == DEFAULT_LISTENER {
-                listener.clear();
+        config.listeners.extend(
+            args.values_of("listener")
+                .unwrap_or_default()
+                .filter_map(|v| match v.parse() {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        log::warn!("Couldn't parse {} into Locator: {}", v, e);
+                        None
+                    }
+                }),
+        );
+
+        config
+            .set_add_timestamp(Some(!args.is_present("no-timestamp")))
+            .unwrap();
+        config
+            .scouting
+            .multicast
+            .set_enabled(Some(!args.is_present("no-multicast-scouting")))
+            .unwrap();
+
+        for json in args.values_of("cfg").unwrap_or_default() {
+            if let Some((key, value)) = json.split_once(':') {
+                match json5::Deserializer::from_str(value) {
+                    Ok(mut deserializer) => {
+                        if let Err(e) = config.insert(key, &mut deserializer) {
+                            log::warn!("Couldn't perform configuration {}: {}", json, e)
+                        }
+                    }
+                    Err(e) => log::warn!("Couldn't perform configuration {}: {}", json, e),
+                }
             }
-            listener.push(',');
-            listener.push_str(val);
         }
-        config.insert(ZN_LISTENER_KEY, listener);
-
-        config.insert(
-            ZN_ADD_TIMESTAMP_KEY,
-            if args.is_present("no-timestamp") {
-                ZN_FALSE.to_string()
-            } else {
-                ZN_TRUE.to_string()
-            },
-        );
-
-        config.insert(
-            ZN_MULTICAST_SCOUTING_KEY,
-            if args.is_present("no-multicast-scouting") {
-                ZN_FALSE.to_string()
-            } else {
-                ZN_TRUE.to_string()
-            },
-        );
 
         log::debug!("Config: {:?}", &config);
 

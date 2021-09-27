@@ -19,6 +19,7 @@ mod userpassword;
 use super::protocol;
 use super::protocol::core::{PeerId, Property, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
+use crate::config::Config;
 use crate::net::link::{Link, Locator};
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -30,7 +31,6 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 pub use userpassword::*;
 use zenoh_util::core::ZResult;
-use zenoh_util::properties::config::*;
 
 /*************************************/
 /*              LINK                 */
@@ -45,7 +45,7 @@ pub struct LinkAuthenticator(Arc<dyn LinkUnicastAuthenticatorTrait + Send + Sync
 
 impl LinkAuthenticator {
     pub(crate) async fn from_config(
-        _config: &ConfigProperties,
+        _config: &crate::config::Config,
     ) -> ZResult<HashSet<LinkAuthenticator>> {
         Ok(HashSet::new())
     }
@@ -127,9 +127,7 @@ pub enum PeerAuthenticatorId {
 pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait>);
 
 impl PeerAuthenticator {
-    pub(crate) async fn from_config(
-        config: &ConfigProperties,
-    ) -> ZResult<HashSet<PeerAuthenticator>> {
+    pub(crate) async fn from_config(config: &Config) -> ZResult<HashSet<PeerAuthenticator>> {
         let mut pas = HashSet::new();
 
         let mut res = UserPasswordAuthenticator::from_config(config).await?;

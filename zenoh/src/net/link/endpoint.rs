@@ -21,6 +21,7 @@ use super::tls::{LocatorConfigTls, LocatorTls};
 use super::udp::{LocatorConfigUdp, LocatorUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use super::unixsock_stream::{LocatorConfigUnixSocketStream, LocatorUnixSocketStream};
+use crate::config::Config;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::fmt;
@@ -28,7 +29,6 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::Arc;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::Properties;
 use zenoh_util::zerror2;
 
@@ -201,7 +201,7 @@ impl fmt::Display for LocatorProtocol {
 pub struct LocatorConfig;
 
 impl LocatorConfig {
-    pub fn from_config(config: &ConfigProperties) -> ZResult<HashMap<LocatorProtocol, Properties>> {
+    pub fn from_config(config: &Config) -> ZResult<HashMap<LocatorProtocol, Properties>> {
         let mut ps: HashMap<LocatorProtocol, Properties> = HashMap::new();
         #[cfg(feature = "transport_tcp")]
         {
@@ -296,6 +296,40 @@ impl FromStr for Locator {
 
         let locator = Locator { address, metadata };
         Ok(locator)
+    }
+}
+
+struct LocatorVisitor;
+impl<'de> serde::de::Visitor<'de> for LocatorVisitor {
+    type Value = Locator;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a locator (ex: tcp/0.0.0.0:7447)")
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        v.parse().map_err(E::custom)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Locator {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(LocatorVisitor)
+    }
+}
+
+impl serde::Serialize for Locator {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{}", self))
     }
 }
 

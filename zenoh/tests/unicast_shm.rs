@@ -22,7 +22,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
-    use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
+    use zenoh::net::protocol::core::{Channel, PeerId, Priority, Reliability, ResKey, WhatAmI};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
@@ -136,7 +136,7 @@ mod tests {
         // Create a peer manager with zero-copy authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_shm01)
             .unicast(
                 TransportManagerConfigUnicast::builder()
@@ -151,7 +151,7 @@ mod tests {
         // Create a peer manager with zero-copy authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_shm02)
             .unicast(
                 TransportManagerConfigUnicast::builder()
@@ -166,7 +166,7 @@ mod tests {
         // Create a peer manager with zero-copy authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_net01)
             .build(peer_net01_handler.clone());
         let peer_net01_manager = TransportManager::new(config);

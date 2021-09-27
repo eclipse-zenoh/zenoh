@@ -16,8 +16,8 @@ use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh::net::protocol::core::rname::intersect;
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
-    Reliability, ResKey, SubInfo, SubMode, ZInt,
+    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Reliability, ResKey, SubInfo, SubMode, WhatAmI, ZInt,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
@@ -29,11 +29,11 @@ use zenoh_util::zlock;
 fn base_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
+    let face = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
     register_resource(
         &mut tables,
         &mut face.upgrade().unwrap(),
@@ -124,11 +124,11 @@ fn match_test() {
 
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
+    let face = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
     for (i, rname) in rnames.iter().enumerate() {
         register_resource(
             &mut tables,
@@ -159,12 +159,12 @@ fn match_test() {
 fn clean_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
+    let face0 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
     assert!(face0.upgrade().is_some());
 
     // --------------
@@ -471,7 +471,7 @@ impl Primitives for ClientPrimitives {
 fn client_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
     );
     let sub_info = SubInfo {
@@ -483,7 +483,7 @@ fn client_test() {
     let primitives0 = Arc::new(ClientPrimitives::new());
     let face0 = tables.open_face(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         primitives0.clone(),
     );
     register_resource(
@@ -513,7 +513,7 @@ fn client_test() {
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = tables.open_face(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         primitives1.clone(),
     );
     register_resource(
@@ -543,7 +543,7 @@ fn client_test() {
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = tables.open_face(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         primitives2.clone(),
     );
     register_resource(

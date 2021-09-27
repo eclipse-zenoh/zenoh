@@ -120,7 +120,7 @@ impl WBuf {
     fn write_scout(&mut self, scout: &Scout) -> bool {
         zcheck!(self.write(scout.header()));
         match scout.what {
-            Some(w) => self.write_zint(w),
+            Some(w) => self.write_zint(w.into()),
             None => true,
         }
     }
@@ -131,8 +131,8 @@ impl WBuf {
             zcheck!(self.write_peerid(pid));
         }
         if let Some(w) = hello.whatami {
-            if w != whatami::ROUTER {
-                zcheck!(self.write_zint(w));
+            if w != WhatAmI::Router {
+                zcheck!(self.write_zint(w.into()));
             }
         }
         if let Some(locs) = hello.locators.as_ref() {
@@ -148,7 +148,7 @@ impl WBuf {
             zcheck!(self.write_zint(init_syn.options()));
         }
         zcheck!(self.write(init_syn.version));
-        zcheck!(self.write_zint(init_syn.whatami));
+        zcheck!(self.write_zint(init_syn.whatami.into()));
         zcheck!(self.write_peerid(&init_syn.pid));
         if imsg::has_flag(header, tmsg::flag::S) {
             zcheck!(self.write_zint(init_syn.sn_resolution));
@@ -161,7 +161,7 @@ impl WBuf {
         if init_ack.has_options() {
             zcheck!(self.write_zint(init_ack.options()));
         }
-        zcheck!(self.write_zint(init_ack.whatami));
+        zcheck!(self.write_zint(init_ack.whatami.into()));
         zcheck!(self.write_peerid(&init_ack.pid));
         if let Some(snr) = init_ack.sn_resolution {
             zcheck!(self.write_zint(snr));
@@ -199,7 +199,7 @@ impl WBuf {
             zcheck!(self.write_zint(join.options()));
         }
         zcheck!(self.write(join.version));
-        zcheck!(self.write_zint(join.whatami));
+        zcheck!(self.write_zint(join.whatami.into()));
         zcheck!(self.write_peerid(&join.pid));
         if imsg::has_flag(header, tmsg::flag::T1) {
             zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
@@ -482,8 +482,8 @@ impl WBuf {
         if let Some(pid) = link_state.pid.as_ref() {
             zcheck!(self.write_peerid(pid));
         }
-        if let Some(whatami) = link_state.whatami.as_ref() {
-            zcheck!(self.write_zint(*whatami));
+        if let Some(&whatami) = link_state.whatami.as_ref() {
+            zcheck!(self.write_zint(whatami.into()));
         }
         if let Some(locators) = link_state.locators.as_ref() {
             zcheck!(self.write_locators(locators));
