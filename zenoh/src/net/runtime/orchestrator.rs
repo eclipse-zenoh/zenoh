@@ -268,6 +268,56 @@ impl Runtime {
         Ok(())
     }
 
+    pub(crate) async fn update_peers(&self) -> ZResult<()> {
+        let peers = self.config.lock().peers().clone();
+        let tranports = self.manager().get_transports();
+
+        if self.whatami == WhatAmI::Client {
+            for transport in tranports {
+                let should_close = if let Some(orch_transport) = transport
+                    .get_callback()
+                    .unwrap()
+                    .unwrap()
+                    .as_any()
+                    .downcast_ref::<super::RuntimeSession>()
+                {
+                    if let Some(locator) = &*zread!(orch_transport.locator) {
+                        !peers.contains(locator)
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                };
+                if should_close {
+                    transport.close().await?;
+                }
+            }
+        } else {
+            for peer in peers {
+                if !tranports.iter().any(|transport| {
+                    if let Some(orch_transport) = transport
+                        .get_callback()
+                        .unwrap()
+                        .unwrap()
+                        .as_any()
+                        .downcast_ref::<super::RuntimeSession>()
+                    {
+                        if let Some(locator) = &*zread!(orch_transport.locator) {
+                            return *locator == peer;
+                        }
+                    }
+                    false
+                }) {
+                    let this = self.clone();
+                    async_std::task::spawn(async move { this.peer_connector(peer).await });
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
         for listener in listeners {
             let endpoint = EndPoint {
@@ -755,9 +805,14 @@ impl Runtime {
             }
             _ => {
                 if let Some(locator) = &*zread!(session.locator) {
-                    let locator = locator.clone();
-                    let runtime = session.runtime.clone();
-                    async_std::task::spawn(async move { runtime.peer_connector(locator).await });
+                    let peers = session.runtime.config.lock().peers().clone();
+                    if peers.contains(locator) {
+                        let locator = locator.clone();
+                        let runtime = session.runtime.clone();
+                        async_std::task::spawn(
+                            async move { runtime.peer_connector(locator).await },
+                        );
+                    }
                 }
             }
         }

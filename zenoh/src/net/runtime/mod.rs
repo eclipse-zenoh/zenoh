@@ -30,6 +30,7 @@ use super::transport::{
 };
 use crate::config::{Config, Notifier};
 pub use adminspace::AdminSpace;
+use async_std::stream::StreamExt;
 use async_std::sync::Arc;
 use std::any::Any;
 use uhlc::HLC;
@@ -139,6 +140,22 @@ impl Runtime {
                 routers_autoconnect_gossip,
             );
         }
+
+        let receiver = config.subscribe();
+        async_std::task::spawn({
+            let runtime = runtime.clone();
+            async move {
+                let mut stream = receiver.into_stream();
+                while let Some(event) = stream.next().await {
+                    if &*event == "peers" {
+                        if let Err(e) = runtime.update_peers().await {
+                            log::error!("Error updating peers : {}", e);
+                        }
+                    }
+                }
+            }
+        });
+
         match runtime.start().await {
             Ok(()) => Ok(runtime),
             Err(err) => Err(err),
