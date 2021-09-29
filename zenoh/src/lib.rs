@@ -263,20 +263,29 @@ pub mod scouting {
 /// }
 /// # })
 /// ```
-pub fn scout<I: Into<WhatAmIMatcher>>(
+pub fn scout<I: Into<WhatAmIMatcher>, IntoConfig>(
     what: I,
-    config: ConfigProperties,
-) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>> {
+    config: IntoConfig,
+) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>>
+where
+    IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
     let what = what.into();
+    let config: crate::config::Config = config.try_into().unwrap();
     trace!("scout({}, {})", what, &config);
     let addr = config
-        .get_or(
-            &ZN_MULTICAST_IPV4_ADDRESS_KEY,
-            ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
-        )
-        .parse()
-        .unwrap();
-    let ifaces = config.get_or(&ZN_MULTICAST_INTERFACE_KEY, ZN_MULTICAST_INTERFACE_DEFAULT);
+        .scouting
+        .multicast
+        .address()
+        .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap());
+    let ifaces = config
+        .scouting
+        .multicast
+        .interface()
+        .as_ref()
+        .map(|s| s.as_ref())
+        .unwrap_or(ZN_MULTICAST_INTERFACE_DEFAULT);
 
     let (hello_sender, hello_receiver) = bounded::<scouting::Hello>(1);
     let (stop_sender, stop_receiver) = bounded::<()>(1);
@@ -359,13 +368,12 @@ pub fn scout<I: Into<WhatAmIMatcher>>(
 /// let session = zenoh::open(config).await.unwrap();
 /// # })
 /// ```
-pub fn open<IntoConfigProperties>(
-    config: IntoConfigProperties,
-) -> impl ZFuture<Output = ZResult<Session>>
+pub fn open<IntoConfig>(config: IntoConfig) -> impl ZFuture<Output = ZResult<Session>>
 where
-    IntoConfigProperties: Into<ConfigProperties>,
+    IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    let config = config.into();
+    let config = config.try_into().unwrap();
     debug!("Zenoh Rust API {}", GIT_VERSION);
     debug!("Config: {:?}", &config);
     Session::new(config)

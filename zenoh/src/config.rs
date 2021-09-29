@@ -29,7 +29,7 @@ use std::{
 };
 use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_util::properties::config::*;
-use zenoh_util::properties::IntKeyProperties;
+use zenoh_util::properties::{IntKeyProperties, Properties};
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
 /// to configure the zenoh [`Session`](crate::Session).
@@ -85,7 +85,6 @@ fn config_keys() {
     dbg!(c.ikeys());
     dbg!(c.keys());
 }
-
 validated_struct::validator! {
     #[recursive_attrs]
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, IntKeyMapLike)]
@@ -283,6 +282,12 @@ impl Config {
     }
 }
 
+impl std::fmt::Display for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
 #[test]
 fn config_from_json() {
     use validated_struct::ValidatedMap;
@@ -425,7 +430,6 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
 
 impl<'a> TryFrom<&'a HashMap<ZInt, String>> for Config {
     type Error = Config;
-
     fn try_from(value: &'a HashMap<ZInt, String>) -> Result<Self, Self::Error> {
         let mut s: Self = Default::default();
         let mut merge_error = false;
@@ -440,9 +444,32 @@ impl<'a> TryFrom<&'a HashMap<ZInt, String>> for Config {
     }
 }
 
+impl TryFrom<HashMap<ZInt, String>> for Config {
+    type Error = Config;
+    fn try_from(value: HashMap<ZInt, String>) -> Result<Self, Self::Error> {
+        let mut s: Self = Default::default();
+        let mut merge_error = false;
+        for (key, value) in value {
+            s.iset(key, value).is_err().then(|| merge_error = true);
+        }
+        if merge_error || s.validate_rec() {
+            Ok(s)
+        } else {
+            Err(s)
+        }
+    }
+}
+
+impl TryFrom<Properties> for Config {
+    type Error = Config;
+    fn try_from(value: Properties) -> Result<Self, Self::Error> {
+        let props: IntKeyProperties<ConfigTranscoder> = value.into();
+        Config::try_from(props)
+    }
+}
+
 impl<'a> TryFrom<&'a IntKeyProperties<ConfigTranscoder>> for Config {
     type Error = Config;
-
     fn try_from(value: &'a IntKeyProperties<ConfigTranscoder>) -> Result<Self, Self::Error> {
         let mut s: Self = Default::default();
         let mut merge_error = false;
@@ -459,7 +486,6 @@ impl<'a> TryFrom<&'a IntKeyProperties<ConfigTranscoder>> for Config {
 
 impl TryFrom<IntKeyProperties<ConfigTranscoder>> for Config {
     type Error = Config;
-
     fn try_from(value: IntKeyProperties<ConfigTranscoder>) -> Result<Self, Self::Error> {
         let mut s: Self = Default::default();
         let mut merge_error = false;
