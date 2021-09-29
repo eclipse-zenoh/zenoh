@@ -23,7 +23,6 @@ use super::transport::Primitives;
 use super::Runtime;
 use async_std::sync::Arc;
 use async_std::task;
-use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
 use serde_json::json;
@@ -297,16 +296,16 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
         .collect();
 
     // transports info
-    let transports = future::join_all(transport_mgr.get_transports().iter().map(move |transport| async move {
+    let transports: Vec<serde_json::Value> = transport_mgr.get_transports().iter().map(|transport|
         json!({
-            "peer": transport.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
+            "peer": transport.get_pid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
+            "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "links": transport.get_links().map_or_else(
                 |_| Vec::new(),
                 |links| links.iter().map(|link| link.dst.to_string()).collect()
             )
         })
-    }))
-    .await;
+    ).collect();
 
     let json = json!({
         "pid": context.pid_str,
