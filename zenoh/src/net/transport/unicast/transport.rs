@@ -19,11 +19,11 @@ use super::common::{
 use super::link::TransportLinkUnicast;
 use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
+#[cfg(feature = "stats")]
+use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
-#[cfg(feature = "stats")]
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
@@ -45,65 +45,6 @@ macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
         $guard.iter().position(|l| l.get_link() == $link)
     };
-}
-
-/*************************************/
-/*              STATS                */
-/*************************************/
-#[cfg(feature = "stats")]
-#[derive(Clone)]
-pub(crate) struct TransportUnicastStatsInner {
-    tx_msgs: Arc<AtomicUsize>,
-    tx_bytes: Arc<AtomicUsize>,
-    rx_msgs: Arc<AtomicUsize>,
-    rx_bytes: Arc<AtomicUsize>,
-}
-
-#[cfg(feature = "stats")]
-impl TransportUnicastStatsInner {
-    pub(crate) fn inc_tx_msgs(&self, messages: usize) {
-        self.tx_msgs.fetch_add(messages, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_tx_msgs(&self) -> usize {
-        self.tx_msgs.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_tx_bytes(&self, bytes: usize) {
-        self.tx_bytes.fetch_add(bytes, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_tx_bytes(&self) -> usize {
-        self.tx_bytes.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_rx_msgs(&self, messages: usize) {
-        self.rx_msgs.fetch_add(messages, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_rx_msgs(&self) -> usize {
-        self.rx_msgs.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_rx_bytes(&self, bytes: usize) {
-        self.rx_bytes.fetch_add(bytes, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_rx_bytes(&self) -> usize {
-        self.rx_bytes.load(Ordering::Relaxed)
-    }
-}
-
-#[cfg(feature = "stats")]
-impl Default for TransportUnicastStatsInner {
-    fn default() -> TransportUnicastStatsInner {
-        TransportUnicastStatsInner {
-            tx_msgs: Arc::new(AtomicUsize::new(0)),
-            tx_bytes: Arc::new(AtomicUsize::new(0)),
-            rx_msgs: Arc::new(AtomicUsize::new(0)),
-            rx_bytes: Arc::new(AtomicUsize::new(0)),
-        }
-    }
 }
 
 /*************************************/
@@ -133,7 +74,7 @@ pub(crate) struct TransportUnicastInner {
     pub(super) is_shm: bool,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: TransportUnicastStatsInner,
+    pub(super) stats: Arc<TransportUnicastStatsAtomic>,
 }
 
 pub(crate) struct TransportUnicastConfig {
@@ -206,7 +147,7 @@ impl TransportUnicastInner {
             alive: AsyncArc::new(AsyncMutex::new(true)),
             is_shm: config.is_shm,
             #[cfg(feature = "stats")]
-            stats: TransportUnicastStatsInner::default(),
+            stats: Arc::new(TransportUnicastStatsAtomic::default()),
         }
     }
 

@@ -16,7 +16,7 @@ use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::TransportMessage;
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
-use super::transport::TransportMulticastStatsInner;
+use super::TransportMulticastStatsAtomic;
 use crate::net::link::{LinkMulticast, Locator};
 use crate::net::protocol::core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use crate::net::transport::common::batch::SerializationBatch;
@@ -203,7 +203,7 @@ async fn tx_task(
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
     mut next_sns: Vec<ConduitSn>,
-    #[cfg(feature = "stats")] stats: TransportMulticastStatsInner,
+    #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
 ) -> ZResult<()> {
     enum Action {
         Pull((SerializationBatch, usize)),
@@ -251,7 +251,7 @@ async fn tx_task(
                 }
                 #[cfg(feature = "stats")]
                 {
-                    stats.inc_tx_msgs(batch.stats.t_msgs);
+                    stats.inc_tx_t_msgs(batch.stats.t_msgs);
                     stats.inc_tx_bytes(bytes.len());
                 }
                 // Reinsert the batch into the queue
@@ -280,7 +280,7 @@ async fn tx_task(
                 let n = link.write_transport_message(&mut message).await?;
                 #[cfg(feature = "stats")]
                 {
-                    stats.inc_tx_msgs(1);
+                    stats.inc_tx_t_msgs(1);
                     stats.inc_tx_bytes(n);
                 }
 
@@ -311,7 +311,7 @@ async fn tx_task(
 
                     #[cfg(feature = "stats")]
                     {
-                        stats.inc_tx_msgs(b.stats.t_msgs);
+                        stats.inc_tx_t_msgs(b.stats.t_msgs);
                         stats.inc_tx_bytes(b.len());
                     }
                 }
@@ -378,7 +378,7 @@ async fn rx_task(
                     match zbuf.read_transport_message() {
                         Some(msg) => {
                             #[cfg(feature = "stats")]
-                            transport.stats.inc_rx_msgs(1);
+                            transport.stats.inc_rx_t_msgs(1);
 
                             transport.receive_message(msg, &loc)?
                         }

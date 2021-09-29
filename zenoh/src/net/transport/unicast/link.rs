@@ -17,7 +17,7 @@ use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::TransportMessage;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
-use super::transport::TransportUnicastStatsInner;
+use super::TransportUnicastStatsAtomic;
 use crate::net::link::LinkUnicast;
 use async_std::prelude::*;
 use async_std::task;
@@ -179,7 +179,7 @@ async fn tx_task(
     pipeline: Arc<TransmissionPipeline>,
     link: LinkUnicast,
     keep_alive: Duration,
-    #[cfg(feature = "stats")] stats: TransportUnicastStatsInner,
+    #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
 ) -> ZResult<()> {
     loop {
         match pipeline.pull().timeout(keep_alive).await {
@@ -191,7 +191,7 @@ async fn tx_task(
 
                     #[cfg(feature = "stats")]
                     {
-                        stats.inc_tx_msgs(batch.stats.t_msgs);
+                        stats.inc_tx_t_msgs(batch.stats.t_msgs);
                         stats.inc_tx_bytes(bytes.len());
                     }
 
@@ -223,7 +223,7 @@ async fn tx_task(
 
         #[cfg(feature = "stats")]
         {
-            stats.inc_tx_msgs(b.stats.t_msgs);
+            stats.inc_tx_t_msgs(b.stats.t_msgs);
             stats.inc_tx_bytes(b.len());
         }
     }
@@ -291,7 +291,7 @@ async fn rx_task_stream(
                     match zbuf.read_transport_message() {
                         Some(msg) => {
                             #[cfg(feature = "stats")]
-                            transport.stats.inc_rx_msgs(1);
+                            transport.stats.inc_rx_t_msgs(1);
 
                             transport.receive_message(msg, &link)?
                         }
@@ -371,7 +371,7 @@ async fn rx_task_dgram(
                     match zbuf.read_transport_message() {
                         Some(msg) => {
                             #[cfg(feature = "stats")]
-                            transport.stats.inc_rx_msgs(1);
+                            transport.stats.inc_rx_t_msgs(1);
 
                             transport.receive_message(msg, &link)?
                         }

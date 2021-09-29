@@ -15,6 +15,8 @@ use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
+#[cfg(feature = "stats")]
+use super::TransportMulticastStatsAtomic;
 use crate::net::link::{Link, LinkMulticast, Locator};
 use crate::net::transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -23,72 +25,11 @@ use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
-#[cfg(feature = "stats")]
-use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-
-/*************************************/
-/*              STATS                */
-/*************************************/
-#[cfg(feature = "stats")]
-#[derive(Clone)]
-pub(crate) struct TransportMulticastStatsInner {
-    tx_msgs: Arc<AtomicUsize>,
-    tx_bytes: Arc<AtomicUsize>,
-    rx_msgs: Arc<AtomicUsize>,
-    rx_bytes: Arc<AtomicUsize>,
-}
-
-#[cfg(feature = "stats")]
-impl TransportMulticastStatsInner {
-    pub(crate) fn inc_tx_msgs(&self, messages: usize) {
-        self.tx_msgs.fetch_add(messages, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_tx_msgs(&self) -> usize {
-        self.tx_msgs.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_tx_bytes(&self, bytes: usize) {
-        self.tx_bytes.fetch_add(bytes, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_tx_bytes(&self) -> usize {
-        self.tx_bytes.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_rx_msgs(&self, messages: usize) {
-        self.rx_msgs.fetch_add(messages, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_rx_msgs(&self) -> usize {
-        self.rx_msgs.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_rx_bytes(&self, bytes: usize) {
-        self.rx_bytes.fetch_add(bytes, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_rx_bytes(&self) -> usize {
-        self.rx_bytes.load(Ordering::Relaxed)
-    }
-}
-
-#[cfg(feature = "stats")]
-impl Default for TransportMulticastStatsInner {
-    fn default() -> TransportMulticastStatsInner {
-        TransportMulticastStatsInner {
-            tx_msgs: Arc::new(AtomicUsize::new(0)),
-            tx_bytes: Arc::new(AtomicUsize::new(0)),
-            rx_msgs: Arc::new(AtomicUsize::new(0)),
-            rx_bytes: Arc::new(AtomicUsize::new(0)),
-        }
-    }
-}
 
 /*************************************/
 /*             TRANSPORT             */
@@ -153,7 +94,7 @@ pub(crate) struct TransportMulticastInner {
     pub(super) timer: Arc<Timer>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: TransportMulticastStatsInner,
+    pub(super) stats: Arc<TransportMulticastStatsAtomic>,
 }
 
 pub(crate) struct TransportMulticastConfig {
@@ -192,7 +133,7 @@ impl TransportMulticastInner {
             callback: Arc::new(RwLock::new(None)),
             timer: Arc::new(Timer::new()),
             #[cfg(feature = "stats")]
-            stats: TransportMulticastStatsInner::default(),
+            stats: Arc::new(TransportMulticastStatsAtomic::default()),
         };
 
         let mut w_guard = zwrite!(ti.link);
