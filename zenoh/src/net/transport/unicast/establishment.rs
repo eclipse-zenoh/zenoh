@@ -108,9 +108,9 @@ async fn close_link(
         let peer_id = Some(manager.config.pid);
         let link_only = true;
         let attachment = None;
-        let message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
+        let mut message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
         // Send the close message on the link
-        let _ = link.write_transport_message(message).await;
+        let _ = link.write_transport_message(&mut message).await;
     }
     // Close the link
     let _ = link.close().await;
@@ -142,7 +142,7 @@ async fn open_send_init_syn(
     }
 
     // Build and send the InitSyn message
-    let message = TransportMessage::make_init_syn(
+    let mut message = TransportMessage::make_init_syn(
         manager.config.version,
         manager.config.whatami,
         manager.config.pid,
@@ -151,7 +151,7 @@ async fn open_send_init_syn(
         attachment_from_config(&auth.properties).ok(),
     );
     let _ = link
-        .write_transport_message(message)
+        .write_transport_message(&mut message)
         .await
         .map_err(|e| (e, None))?;
 
@@ -316,14 +316,14 @@ async fn open_send_open_syn(
 ) -> IResult<OpenOpenSynOutput> {
     // Build and send an OpenSyn message
     let lease = manager.config.unicast.lease;
-    let message = TransportMessage::make_open_syn(
+    let mut message = TransportMessage::make_open_syn(
         lease,
         input.initial_sn_tx,
         input.cookie,
         input.open_syn_attachment,
     );
     let _ = link
-        .write_transport_message(message)
+        .write_transport_message(&mut message)
         .await
         .map_err(|e| (e, None))?;
 
@@ -673,7 +673,7 @@ async fn accept_send_init_ack(
 
     // Send the cookie
     let cookie: ZSlice = encrypted.into();
-    let message = TransportMessage::make_init_ack(
+    let mut message = TransportMessage::make_init_ack(
         whatami,
         apid,
         sn_resolution,
@@ -684,7 +684,7 @@ async fn accept_send_init_ack(
 
     // Send the message on the link
     let _ = link
-        .write_transport_message(message)
+        .write_transport_message(&mut message)
         .await
         .map_err(|e| (e, None))?;
 
@@ -929,14 +929,14 @@ async fn accept_send_open_ack(
     input: AcceptInitTransportOutput,
 ) -> ZResult<AcceptOpenAckOutput> {
     // Build OpenAck message
-    let message = TransportMessage::make_open_ack(
+    let mut message = TransportMessage::make_open_ack(
         manager.config.unicast.lease,
         input.initial_sn,
         input.open_ack_attachment,
     );
 
     // Send the message on the link
-    let _ = link.write_transport_message(message).await?;
+    let _ = link.write_transport_message(&mut message).await?;
 
     let output = AcceptOpenAckOutput {
         transport: input.transport,

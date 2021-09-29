@@ -34,6 +34,15 @@ use zenoh_util::zerror2;
 /*************************************/
 /*       TRANSPORT MULTICAST         */
 /*************************************/
+#[cfg(feature = "stats")]
+#[derive(Clone, Copy, Debug)]
+pub struct TransportStatsMulticast {
+    tx_msgs: usize,
+    tx_bytes: usize,
+    rx_msgs: usize,
+    rx_bytes: usize,
+}
+
 #[derive(Clone)]
 pub struct TransportMulticast(Weak<TransportMulticastInner>);
 
@@ -102,6 +111,18 @@ impl TransportMulticast {
     #[inline(always)]
     pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
         self.schedule(message)
+    }
+
+    #[cfg(feature = "stats")]
+    pub fn get_stats(&self) -> ZResult<TransportStatsMulticast> {
+        let transport = self.get_transport()?;
+        let stats = TransportStatsMulticast {
+            tx_msgs: transport.stats.get_tx_msgs(),
+            tx_bytes: transport.stats.get_tx_bytes(),
+            rx_msgs: transport.stats.get_rx_msgs(),
+            rx_bytes: transport.stats.get_rx_bytes(),
+        };
+        Ok(stats)
     }
 }
 

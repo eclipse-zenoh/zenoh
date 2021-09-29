@@ -1311,7 +1311,7 @@ pub enum TransportMode {
 /// +-+-+-+-+-+-+-+-+
 /// |X|W|I|  SCOUT  |
 /// +-+-+-+-+-------+
-/// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Brokers
+/// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Routers
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -1361,7 +1361,7 @@ impl Header for Scout {
 /// +-+-+-+-+-------+
 /// ~    peer-id    ~ if I==1
 /// +---------------+
-/// ~    whatami    ~ if W==1 -- Otherwise it is from a Broker
+/// ~    whatami    ~ if W==1 -- Otherwise it is from a Router
 /// +---------------+
 /// ~   [Locators]  ~ if L==1 -- Otherwise src-address is the locator
 /// +---------------+
@@ -2008,6 +2008,8 @@ pub enum TransportBody {
 pub struct TransportMessage {
     pub body: TransportBody,
     pub attachment: Option<Attachment>,
+    #[cfg(feature = "stats")]
+    pub size: Option<std::num::NonZeroUsize>,
 }
 
 impl TransportMessage {
@@ -2019,6 +2021,8 @@ impl TransportMessage {
         TransportMessage {
             body: TransportBody::Scout(Scout { what, pid_request }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2035,6 +2039,8 @@ impl TransportMessage {
                 locators,
             }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2055,6 +2061,8 @@ impl TransportMessage {
                 is_qos,
             }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2075,6 +2083,8 @@ impl TransportMessage {
                 cookie,
             }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2091,6 +2101,8 @@ impl TransportMessage {
                 cookie,
             }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2102,6 +2114,8 @@ impl TransportMessage {
         TransportMessage {
             body: TransportBody::OpenAck(OpenAck { lease, initial_sn }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2124,6 +2138,8 @@ impl TransportMessage {
                 next_sns,
             }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2140,6 +2156,8 @@ impl TransportMessage {
                 link_only,
             }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2156,6 +2174,8 @@ impl TransportMessage {
                 count,
             }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2167,6 +2187,8 @@ impl TransportMessage {
         TransportMessage {
             body: TransportBody::AckNack(AckNack { sn, mask }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2177,6 +2199,8 @@ impl TransportMessage {
         TransportMessage {
             body: TransportBody::KeepAlive(KeepAlive { pid }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2184,6 +2208,8 @@ impl TransportMessage {
         TransportMessage {
             body: TransportBody::Ping(Ping { hash }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2191,6 +2217,8 @@ impl TransportMessage {
         TransportMessage {
             body: TransportBody::Pong(Pong { hash }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 
@@ -2207,6 +2235,8 @@ impl TransportMessage {
                 payload,
             }),
             attachment,
+            #[cfg(feature = "stats")]
+            size: None,
         }
     }
 }

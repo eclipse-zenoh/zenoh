@@ -254,7 +254,7 @@ impl Default for TransportManagerState {
 
 #[derive(Clone)]
 pub struct TransportManager {
-    pub(crate) config: Arc<TransportManagerConfig>,
+    pub config: Arc<TransportManagerConfig>,
     pub(crate) state: Arc<TransportManagerState>,
     pub(crate) prng: AsyncArc<AsyncMutex<PseudoRng>>,
     pub(crate) cipher: Arc<BlockCipher>,

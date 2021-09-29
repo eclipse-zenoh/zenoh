@@ -74,7 +74,7 @@ fn bench_make_data(payload: ZBuf) {
     );
 }
 
-fn bench_write_data(buf: &mut WBuf, data: &ZenohMessage) {
+fn bench_write_data(buf: &mut WBuf, data: &mut ZenohMessage) {
     buf.write_zenoh_message(data);
 }
 
@@ -97,7 +97,7 @@ fn bench_make_frame_data(payload: FramePayload) {
     let _ = TransportMessage::make_frame(Channel::default(), 42, payload, None);
 }
 
-fn bench_write_frame_data(buf: &mut WBuf, data: &TransportMessage) {
+fn bench_write_frame_data(buf: &mut WBuf, data: &mut TransportMessage) {
     buf.write_transport_message(data);
 }
 
@@ -105,7 +105,7 @@ fn bench_make_frame_frag(payload: FramePayload) {
     let _ = TransportMessage::make_frame(Channel::default(), 42, payload, None);
 }
 
-fn bench_write_frame_frag(buf: &mut WBuf, data: &TransportMessage) {
+fn bench_write_frame_frag(buf: &mut WBuf, data: &mut TransportMessage) {
     buf.write_transport_message(data);
 }
 
@@ -138,7 +138,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let bytes = vec![0u8; 32];
     let payload: ZBuf = bytes.clone().into();
     let fragment: ZSlice = bytes.into();
-    let data = ZenohMessage::make_data(
+    let mut data = ZenohMessage::make_data(
         ResKey::RId(10),
         payload.clone(),
         Channel::default(),
@@ -187,7 +187,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("bench_write_data", |b| {
         b.iter(|| {
-            let _ = bench_write_data(&mut buf, &data);
+            let _ = bench_write_data(&mut buf, &mut data);
             buf.clear();
         })
     });
@@ -222,10 +222,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     let frame_data_payload = FramePayload::Messages {
         messages: vec![data; 1],
     };
-    let frame_data = TransportMessage::make_frame(Channel::default(), 42, frame_data_payload, None);
+    let mut frame_data =
+        TransportMessage::make_frame(Channel::default(), 42, frame_data_payload, None);
     c.bench_function("bench_write_frame_data", |b| {
         b.iter(|| {
-            let _ = bench_write_frame_data(&mut buf, &frame_data);
+            let _ = bench_write_frame_data(&mut buf, &mut frame_data);
             buf.clear();
         })
     });
@@ -244,10 +245,11 @@ fn criterion_benchmark(c: &mut Criterion) {
         buffer: fragment,
         is_final: false,
     };
-    let frame_frag = TransportMessage::make_frame(Channel::default(), 42, frame_frag_payload, None);
+    let mut frame_frag =
+        TransportMessage::make_frame(Channel::default(), 42, frame_frag_payload, None);
     c.bench_function("bench_write_frame_frag", |b| {
         b.iter(|| {
-            let _ = bench_write_frame_frag(&mut buf, &frame_frag);
+            let _ = bench_write_frame_frag(&mut buf, &mut frame_frag);
             buf.clear();
         })
     });

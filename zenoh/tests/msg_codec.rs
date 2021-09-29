@@ -254,10 +254,10 @@ fn gen_initial_sn() -> ConduitSn {
     }
 }
 
-fn test_write_read_transport_message(msg: TransportMessage) {
+fn test_write_read_transport_message(mut msg: TransportMessage) {
     let mut buf = WBuf::new(164, false);
     println!("\nWrite message: {:?}", msg);
-    buf.write_transport_message(&msg);
+    buf.write_transport_message(&mut msg);
     println!("Read message from: {:?}", buf);
     let mut result = ZBuf::from(&buf).read_transport_message().unwrap();
     println!("Message read: {:?}", result);
@@ -268,10 +268,10 @@ fn test_write_read_transport_message(msg: TransportMessage) {
     assert_eq!(msg, result);
 }
 
-fn test_write_read_zenoh_message(msg: ZenohMessage) {
+fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
     let mut buf = WBuf::new(164, false);
     println!("\nWrite message: {:?}", msg);
-    buf.write_zenoh_message(&msg);
+    buf.write_zenoh_message(&mut msg);
     println!("Read message from: {:?}", buf);
     let mut result = ZBuf::from(&buf)
         .read_zenoh_message(msg.channel.reliability)
@@ -637,10 +637,10 @@ fn codec_frame_batching() {
         let payload = FramePayload::Messages { messages: vec![] };
         let sn = gen!(ZInt);
         let sattachment = None;
-        let frame = TransportMessage::make_frame(channel, sn, payload, sattachment.clone());
+        let mut frame = TransportMessage::make_frame(channel, sn, payload, sattachment.clone());
 
         // Write the first frame header
-        assert!(wbuf.write_transport_message(&frame));
+        assert!(wbuf.write_transport_message(&mut frame));
 
         // Create data message
         let key = ResKey::RName("test".into());
@@ -649,7 +649,7 @@ fn codec_frame_batching() {
         let routing_context = None;
         let reply_context = None;
         let zattachment = None;
-        let data = ZenohMessage::make_data(
+        let mut data = ZenohMessage::make_data(
             key,
             payload,
             channel,
@@ -661,7 +661,7 @@ fn codec_frame_batching() {
         );
 
         // Write the first data message
-        assert!(wbuf.write_zenoh_message(&data));
+        assert!(wbuf.write_zenoh_message(&mut data));
 
         // Store the first transport message written
         let payload = FramePayload::Messages {
@@ -675,13 +675,13 @@ fn codec_frame_batching() {
         ));
 
         // Write the second frame header
-        assert!(wbuf.write_transport_message(&frame));
+        assert!(wbuf.write_transport_message(&mut frame));
 
         // Write until we fill the batch
         let mut messages: Vec<ZenohMessage> = vec![];
         loop {
             wbuf.mark();
-            if wbuf.write_zenoh_message(&data) {
+            if wbuf.write_zenoh_message(&mut data) {
                 messages.push(data.clone());
             } else {
                 wbuf.revert();

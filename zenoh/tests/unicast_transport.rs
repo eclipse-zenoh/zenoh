@@ -146,7 +146,12 @@ impl TransportPeerEventHandler for SCClient {
 
 async fn open_transport(
     endpoints: &[EndPoint],
-) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
+) -> (
+    TransportManager,
+    Arc<SHRouter>,
+    TransportManager,
+    TransportUnicast,
+) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -200,7 +205,12 @@ async fn open_transport(
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Return the handlers
-    (router_manager, router_handler, client_transport)
+    (
+        router_manager,
+        router_handler,
+        client_manager,
+        client_transport,
+    )
 }
 
 async fn close_transport(
@@ -297,9 +307,23 @@ async fn single_run(
 async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
-            let (router_manager, router_handler, client_transport) =
+            #[allow(unused_variables)] // Used when stats feature is enabled
+            let (router_manager, router_handler, client_manager, client_transport) =
                 open_transport(endpoints).await;
             single_run(router_handler.clone(), client_transport.clone(), *ch, *ms).await;
+
+            #[cfg(feature = "stats")]
+            {
+                let c_stats = client_transport.get_stats().unwrap();
+                println!("\tClient: {:?}", c_stats,);
+                let r_stats = router_manager
+                    .get_transport_unicast(&client_manager.config.pid)
+                    .unwrap()
+                    .get_stats()
+                    .unwrap();
+                println!("\tRouter: {:?}", r_stats);
+            }
+
             close_transport(router_manager, client_transport, endpoints).await;
         }
     }

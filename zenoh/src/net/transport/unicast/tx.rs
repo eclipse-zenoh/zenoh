@@ -25,6 +25,7 @@ impl TransportUnicastInner {
                 // block for fairly long time
                 drop($guard);
                 $pipeline.push_zenoh_message($msg);
+
                 return;
             };
         }

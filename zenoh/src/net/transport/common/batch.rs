@@ -45,6 +45,26 @@ impl SerializationBatchSeqNum {
     }
 }
 
+#[cfg(feature = "stats")]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SerializationBatchStats {
+    pub(crate) t_msgs: usize,
+}
+
+#[cfg(feature = "stats")]
+impl SerializationBatchStats {
+    fn clear(&mut self) {
+        self.t_msgs = 0;
+    }
+}
+
+#[cfg(feature = "stats")]
+impl Default for SerializationBatchStats {
+    fn default() -> SerializationBatchStats {
+        SerializationBatchStats { t_msgs: 0 }
+    }
+}
+
 /// Serialization Batch
 ///
 /// A [`SerializationBatch`][SerializationBatch] is a non-expandable and contiguous region of memory
@@ -74,6 +94,9 @@ pub(crate) struct SerializationBatch {
     current_frame: CurrentFrame,
     // The last SeqNum serialized on this batch
     pub(crate) sn: SerializationBatchSeqNum,
+    // Statistics related to this batch
+    #[cfg(feature = "stats")]
+    pub(crate) stats: SerializationBatchStats,
 }
 
 impl SerializationBatch {
@@ -106,6 +129,8 @@ impl SerializationBatch {
                 reliable: None,
                 best_effort: None,
             },
+            #[cfg(feature = "stats")]
+            stats: SerializationBatchStats::default(),
         };
 
         // Bring the batch in a clear state
@@ -147,6 +172,8 @@ impl SerializationBatch {
             self.buffer.write_bytes(&LENGTH_BYTES);
         }
         self.sn.clear();
+        #[cfg(feature = "stats")]
+        self.stats.clear();
     }
 
     /// In case the [`SerializationBatch`][SerializationBatch] is for a stream-based protocol, use the first 2 bytes
@@ -171,7 +198,7 @@ impl SerializationBatch {
     /// # Arguments
     /// * `message` - The [`TransportMessage`][TransportMessage] to serialize.
     ///
-    pub(crate) fn serialize_transport_message(&mut self, message: &TransportMessage) -> bool {
+    pub(crate) fn serialize_transport_message(&mut self, message: &mut TransportMessage) -> bool {
         // Mark the write operation
         self.buffer.mark();
         let res = self.buffer.write_transport_message(message);
@@ -182,6 +209,12 @@ impl SerializationBatch {
             // Revert the write operation
             self.buffer.revert();
         }
+
+        #[cfg(feature = "stats")]
+        if res {
+            self.stats.t_msgs += 1;
+        }
+
         res
     }
 
@@ -192,7 +225,7 @@ impl SerializationBatch {
     ///
     pub(crate) fn serialize_zenoh_message(
         &mut self,
-        message: &ZenohMessage,
+        message: &mut ZenohMessage,
         priority: Priority,
         sn_gen: &mut SeqNumGenerator,
     ) -> bool {
@@ -241,6 +274,7 @@ impl SerializationBatch {
                 None,
                 None,
             ) && self.buffer.write_zenoh_message(message);
+
             if res {
                 self.current_frame = frame;
                 let sn_state = SerializationBatchSeqNumState {
@@ -255,6 +289,12 @@ impl SerializationBatch {
                 // Restore the sequence number
                 sn_gen.set(sn);
             }
+
+            #[cfg(feature = "stats")]
+            if res {
+                self.stats.t_msgs += 1;
+            }
+
             res
         } else {
             self.buffer.write_zenoh_message(message)
@@ -299,6 +339,7 @@ impl SerializationBatch {
             let res =
                 self.buffer
                     .write_frame_header(priority, reliability, sn, fragment, attachment);
+
             if res {
                 // Compute the amount left
                 let space_left = self.buffer.capacity() - self.buffer.len();
@@ -322,6 +363,11 @@ impl SerializationBatch {
                 match reliability {
                     Reliability::Reliable => self.sn.reliable = Some(sn_state),
                     Reliability::BestEffort => self.sn.best_effort = Some(sn_state),
+                }
+
+                #[cfg(feature = "stats")]
+                if res {
+                    self.stats.t_msgs += 1;
                 }
 
                 return written;
@@ -380,10 +426,10 @@ mod tests {
                     // Create a TransportMessage
                     let pid = None;
                     let attachment = None;
-                    let msg = TransportMessage::make_keep_alive(pid, attachment);
+                    let mut msg = TransportMessage::make_keep_alive(pid, attachment);
 
                     // Serialize the TransportMessage
-                    let res = batch.serialize_transport_message(&msg);
+                    let res = batch.serialize_transport_message(&mut msg);
                     if !res {
                         assert!(!zmsgs_in.is_empty());
                         break;
@@ -416,7 +462,7 @@ mod tests {
                 let reply_context = None;
                 let attachment = None;
 
-                let msg = ZenohMessage::make_data(
+                let mut msg = ZenohMessage::make_data(
                     key,
                     payload,
                     channel,
@@ -427,7 +473,7 @@ mod tests {
                     attachment,
                 );
                 // Serialize the ZenohMessage
-                let res = batch.serialize_zenoh_message(&msg, channel.priority, &mut sn_gen);
+                let res = batch.serialize_zenoh_message(&mut msg, channel.priority, &mut sn_gen);
                 if !res {
                     batch.write_len();
                     assert!(!zmsgs_in.is_empty());
@@ -483,7 +529,7 @@ mod tests {
                 let routing_context = None;
                 let reply_context = None;
                 let attachment = None;
-                let msg_in = ZenohMessage::make_data(
+                let mut msg_in = ZenohMessage::make_data(
                     key,
                     payload,
                     channel,
@@ -496,7 +542,7 @@ mod tests {
 
                 // Serialize the message
                 let mut wbuf = WBuf::new(batch_size as usize, false);
-                wbuf.write_zenoh_message(&msg_in);
+                wbuf.write_zenoh_message(&mut msg_in);
 
                 print!(
                     "Streamed: {}\t\tBatch: {}\t\tPload: {}",

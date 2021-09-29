@@ -35,6 +35,15 @@ use zenoh_util::zerror2;
 /*************************************/
 /*        TRANSPORT UNICAST          */
 /*************************************/
+#[cfg(feature = "stats")]
+#[derive(Clone, Copy, Debug)]
+pub struct TransportStatsUnicast {
+    tx_msgs: usize,
+    tx_bytes: usize,
+    rx_msgs: usize,
+    rx_bytes: usize,
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct TransportConfigUnicast {
     pub(crate) peer: PeerId,
@@ -160,6 +169,18 @@ impl TransportUnicast {
     #[inline(always)]
     pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
         self.schedule(message)
+    }
+
+    #[cfg(feature = "stats")]
+    pub fn get_stats(&self) -> ZResult<TransportStatsUnicast> {
+        let transport = self.get_transport()?;
+        let stats = TransportStatsUnicast {
+            tx_msgs: transport.stats.get_tx_msgs(),
+            tx_bytes: transport.stats.get_tx_bytes(),
+            rx_msgs: transport.stats.get_rx_msgs(),
+            rx_bytes: transport.stats.get_rx_bytes(),
+        };
+        Ok(stats)
     }
 }
 
