@@ -296,16 +296,29 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
         .collect();
 
     // transports info
-    let transports: Vec<serde_json::Value> = transport_mgr.get_transports().iter().map(|transport|
+    #[cfg(feature = "stats")]
+    let transports: Vec<serde_json::Value> = transport_mgr.get_transports().iter().map(|transport| {
         json!({
             "peer": transport.get_pid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "links": transport.get_links().map_or_else(
                 |_| Vec::new(),
                 |links| links.iter().map(|link| link.dst.to_string()).collect()
-            )
+            ),
+            "stats": transport.get_stats().map_or_else(|_| json!({}), |p| json!(p)),
         })
-    ).collect();
+    }).collect();
+    #[cfg(not(feature = "stats"))]
+    let transports: Vec<serde_json::Value> = transport_mgr.get_transports().iter().map(|transport| {
+        json!({
+            "peer": transport.get_pid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
+            "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
+            "links": transport.get_links().map_or_else(
+                |_| Vec::new(),
+                |links| links.iter().map(|link| link.dst.to_string()).collect()
+            ),
+        })
+    }).collect();
 
     let json = json!({
         "pid": context.pid_str,
