@@ -45,13 +45,25 @@ pub struct Query {
 }
 
 impl Query {
-    /// The [`Selector`] of this Query.
+    /// The full [`Selector`] of this Query.
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
             key_selector: &self.key_selector,
             value_selector: &self.value_selector,
         }
+    }
+
+    /// The key selector part of this Query.
+    #[inline(always)]
+    pub fn key_selector(&self) -> &str {
+        &self.key_selector
+    }
+
+    /// The value selector part of this Query.
+    #[inline(always)]
+    pub fn value_selector(&self) -> &str {
+        &self.value_selector
     }
 
     /// Sends a reply to this Query.

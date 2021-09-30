@@ -214,10 +214,22 @@ impl Query {
         Query { q, interceptor }
     }
 
-    /// Returns the value_selector of this Query
+    /// The full [`Selector`] of this Query.
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         self.q.selector()
+    }
+
+    /// The key selector part of this Query.
+    #[inline(always)]
+    pub fn key_selector(&self) -> &str {
+        self.q.key_selector()
+    }
+
+    /// The value selector part of this Query.
+    #[inline(always)]
+    pub fn value_selector(&self) -> &str {
+        self.q.value_selector()
     }
 
     /// Sends a Sample as a reply to this Query
