@@ -120,11 +120,11 @@
 //!
 //!     // When receiving a Query (i.e. on GET operations)
 //!     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-//!         let _path_expr = query.res_name();
+//!         let _key_elector = query.key_selector();
 //!         // @TODO:
-//!         //  - test if path expression contains *
-//!         //  - if not: just get the sample with key==path_expr and call: query.reply(sample.clone()).await;
-//!         //  - if yes: get all the samples with key matching path_expr and call for each: query.reply(sample.clone()).await;
+//!         //  - test if key selector contains *
+//!         //  - if not: just get the sample with key==key_selector and call: query.reply(sample.clone()).await;
+//!         //  - if yes: get all the samples with key matching key_selector and call for each: query.reply(sample.clone()).await;
 //!         //
 //!         // NOTE: in case query.value_selector() is not empty something smarter should be done with returned samples...
 //!         Ok(())
