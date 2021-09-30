@@ -817,23 +817,4 @@ impl ZBuf {
             reception: ZBuf::read_consolidation_mode(modes & 0x03)?,
         })
     }
-
-    fn read_timestamp(&mut self) -> Option<Timestamp> {
-        let time = self.read_zint_as_u64()?;
-        let size = self.read_zint_as_usize()?;
-        if size > (uhlc::ID::MAX_SIZE) {
-            log::trace!(
-                "Reading a Timestamp's ID size that exceed {} bytes: {}",
-                uhlc::ID::MAX_SIZE,
-                size
-            );
-            return None;
-        }
-        let mut id = [0u8; PeerId::MAX_SIZE];
-        if self.read_bytes(&mut id[..size]) {
-            Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
-        } else {
-            None
-        }
-    }
 }

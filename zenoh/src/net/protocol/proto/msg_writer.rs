@@ -552,9 +552,4 @@ impl WBuf {
                 | (WBuf::write_consolidation_mode(consolidation.reception)),
         )
     }
-
-    fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {
-        self.write_u64_as_zint(tstamp.get_time().as_u64())
-            && self.write_bytes_array(tstamp.get_id().as_slice())
-    }
 }
