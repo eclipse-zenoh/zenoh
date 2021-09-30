@@ -214,16 +214,10 @@ impl Query {
         Query { q, interceptor }
     }
 
-    /// Returns the resource name of this Query
-    #[inline(always)]
-    pub fn res_name(&self) -> &str {
-        self.q.selector().key_selector
-    }
-
     /// Returns the value_selector of this Query
     #[inline(always)]
-    pub fn value_selector(&self) -> &str {
-        self.q.selector().value_selector
+    pub fn selector(&self) -> Selector<'_> {
+        self.q.selector()
     }
 
     /// Sends a Sample as a reply to this Query
