@@ -143,8 +143,8 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_link(&self, id: usize) -> &Link {
-        &self.links[id]
+    pub(crate) fn get_link(&self, id: usize) -> Option<&Link> {
+        self.links.get(id)
     }
 
     #[inline]
@@ -155,9 +155,23 @@ impl Network {
     #[inline]
     pub(crate) fn get_local_context(&self, context: Option<ZInt>, link_id: usize) -> usize {
         let context = context.unwrap_or(0);
-        (*self.get_link(link_id).get_local_psid(&context).unwrap())
-            .try_into()
-            .unwrap()
+        match self.get_link(link_id) {
+            Some(link) => match link.get_local_psid(&context) {
+                Some(psid) => (*psid).try_into().unwrap_or(0),
+                None => {
+                    log::error!(
+                        "Cannot find local psid for context {} on link {}",
+                        context,
+                        link_id
+                    );
+                    0
+                }
+            },
+            None => {
+                log::error!("Cannot find link {}", link_id);
+                0
+            }
+        }
     }
 
     #[inline]
