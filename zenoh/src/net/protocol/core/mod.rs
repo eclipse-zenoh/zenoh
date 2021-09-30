@@ -626,8 +626,8 @@ impl<'a> From<&Mime> for Encoding {
     }
 }
 
-impl From<u64> for Encoding {
-    fn from(i: u64) -> Self {
+impl From<ZInt> for Encoding {
+    fn from(i: ZInt) -> Self {
         Encoding {
             prefix: i,
             suffix: "".into(),
