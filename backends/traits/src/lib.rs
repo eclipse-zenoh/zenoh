@@ -149,7 +149,7 @@ pub const PROP_STORAGE_PATH_EXPR: &str = "path_expr";
 ///
 /// Note that it shall be a prefix of the `"path_expr"`.
 /// If you use it, you should also adapt in [`Storage::on_query()`] implementation the incoming
-/// queries' path expression to the stored keys calling [`crate::utils::get_sub_path_exprs()`].
+/// queries' path expression to the stored keys calling [`crate::utils::get_sub_key_selectors()`].
 pub const PROP_STORAGE_PATH_PREFIX: &str = "path_prefix";
 
 /// Trait to be implemented by a Backend.
