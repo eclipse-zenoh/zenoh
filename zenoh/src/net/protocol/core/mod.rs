@@ -184,7 +184,7 @@ impl<'a> From<&'a ResKey> for (ResourceId, &'a str) {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Property {
     pub key: ZInt,
     pub value: Vec<u8>,

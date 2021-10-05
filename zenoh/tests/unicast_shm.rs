@@ -25,7 +25,7 @@ mod tests {
     use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
-    use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
+    use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
     use zenoh::net::transport::{
         TransportEventHandler, TransportManager, TransportManagerConfig,
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,

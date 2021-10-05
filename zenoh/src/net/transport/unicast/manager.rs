@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::TransportManager;
-use super::authenticator::*;
+use super::establishment::authenticator::*;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::transport::{TransportUnicastConfig, TransportUnicastInner};
 use super::*;
@@ -224,10 +224,10 @@ impl Default for TransportManagerStateUnicast {
     }
 }
 
-pub(super) struct Opened {
-    pub(super) whatami: WhatAmI,
-    pub(super) sn_resolution: ZInt,
-    pub(super) initial_sn: ZInt,
+pub(crate) struct Opened {
+    pub(crate) whatami: WhatAmI,
+    pub(crate) sn_resolution: ZInt,
+    pub(crate) initial_sn: ZInt,
 }
 
 impl TransportManager {
@@ -438,7 +438,7 @@ impl TransportManager {
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(endpoint).await?;
         // Open the link
-        super::establishment::open_link(self, &link).await
+        super::establishment::open::open_link(self, &link).await
     }
 
     pub fn get_transport_unicast(&self, peer: &PeerId) -> Option<TransportUnicast> {
@@ -524,7 +524,7 @@ impl TransportManager {
                 peer_id,
             };
 
-            let res = super::establishment::accept_link(&c_manager, &link, &auth_link)
+            let res = super::establishment::accept::accept_link(&c_manager, &link, &auth_link)
                 .timeout(c_manager.config.unicast.open_timeout)
                 .await;
             match res {

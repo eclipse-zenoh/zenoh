@@ -21,8 +21,9 @@ use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
 #[cfg(feature = "zero-copy")]
-use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
-use zenoh::net::transport::unicast::authenticator::UserPasswordAuthenticator;
+use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
+#[cfg(feature = "auth_usrpwd")]
+use zenoh::net::transport::unicast::establishment::authenticator::UserPasswordAuthenticator;
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
@@ -103,6 +104,7 @@ impl TransportEventHandler for SHClientAuthenticator {
     }
 }
 
+#[cfg(feature = "auth_usrpwd")]
 async fn authenticator_user_password(endpoint: &EndPoint) {
     /* [CLIENT] */
     let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -360,6 +362,7 @@ fn authenticator_tcp() {
 
     let endpoint: EndPoint = "tcp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
+        #[cfg(feature = "auth_usrpwd")]
         authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
         authenticator_shared_memory(&endpoint).await;
@@ -375,6 +378,7 @@ fn authenticator_udp() {
 
     let endpoint: EndPoint = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
+        #[cfg(feature = "auth_usrpwd")]
         authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
         authenticator_shared_memory(&endpoint).await;
@@ -393,6 +397,7 @@ fn authenticator_unix() {
         .parse()
         .unwrap();
     task::block_on(async {
+        #[cfg(feature = "auth_usrpwd")]
         authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
         authenticator_shared_memory(&endpoint).await;
@@ -493,6 +498,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     endpoint.config = Some(Arc::new(config));
 
     task::block_on(async {
+        #[cfg(feature = "auth_usrpwd")]
         authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
         authenticator_shared_memory(&endpoint).await;
@@ -591,6 +597,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     endpoint.config = Some(Arc::new(config));
 
     task::block_on(async {
+        #[cfg(feature = "auth_usrpwd")]
         authenticator_user_password(&endpoint).await;
         #[cfg(feature = "zero-copy")]
         authenticator_shared_memory(&endpoint).await;
