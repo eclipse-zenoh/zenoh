@@ -25,7 +25,7 @@ use async_std::sync::Arc;
 use async_trait::async_trait;
 // #[cfg(feature = "multilink")]
 // pub use multilink::*;
-use crate::net::transport::unicast::establishment::EstablishmentProperties;
+use crate::net::transport::unicast::establishment::{Cookie, EstablishmentProperties};
 #[cfg(feature = "zero-copy")]
 pub use shm::*;
 use std::collections::HashSet;
@@ -221,8 +221,6 @@ impl Default for AuthenticatedPeerTransport {
     }
 }
 
-pub type PeerAuthenticatorCookie = Option<Property>;
-
 pub struct PeerAuthenticatorOutput {
     pub(crate) properties: EstablishmentProperties,
     pub(crate) transport: AuthenticatedPeerTransport,
@@ -273,22 +271,16 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     /// # Arguments
     /// * `link`            - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the InitSyn message was received on
     ///
-    /// * `peer_id`         - The [`PeerId`][PeerId] of the sender of the InitSyn message
-    ///
-    /// * `sn_resolution`   - The sn_resolution negotiated by the sender of the InitSyn message
+    /// * `cookie`          - The Cookie containing the internal state
     ///
     /// * `properties`      - The optional [`Property`][Property] included in the InitSyn message
-    ///
-    /// * `nonce`           - The nonce to be used as a challenge
     ///
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &PeerId,
-        sn_resolution: ZInt,
+        cookie: &mut Cookie,
         properties: &[Property],
-        nonce: ZInt,
-    ) -> ZResult<(PeerAuthenticatorOutput, PeerAuthenticatorCookie)>;
+    ) -> ZResult<PeerAuthenticatorOutput>;
 
     /// Return the attachment to be included in the OpenSyn message to be sent
     /// in response of the authenticated InitAck.
@@ -324,7 +316,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         &self,
         link: &AuthenticatedPeerLink,
         properties: &[Property],
-        cookie: &[Property],
+        cookie: &Cookie,
     ) -> ZResult<PeerAuthenticatorOutput>;
 
     /// Auhtenticate the OpenAck. No message is sent back in response to an OpenAck
@@ -385,15 +377,10 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
     async fn handle_init_syn(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
-        _sn_resolution: ZInt,
+        _cookie: &mut Cookie,
         _properties: &[Property],
-        _nonce: ZInt,
-    ) -> ZResult<(PeerAuthenticatorOutput, PeerAuthenticatorCookie)> {
-        Ok((
-            PeerAuthenticatorOutput::new(),
-            PeerAuthenticatorCookie::default(),
-        ))
+    ) -> ZResult<PeerAuthenticatorOutput> {
+        Ok(PeerAuthenticatorOutput::new())
     }
 
     async fn handle_init_ack(
@@ -410,7 +397,7 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _properties: &[Property],
-        _cookie: &[Property],
+        _cookie: &Cookie,
     ) -> ZResult<PeerAuthenticatorOutput> {
         Ok(PeerAuthenticatorOutput::new())
     }

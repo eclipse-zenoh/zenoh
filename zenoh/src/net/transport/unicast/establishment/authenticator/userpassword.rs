@@ -12,23 +12,23 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{
-    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorCookie, PeerAuthenticatorId,
-    PeerAuthenticatorOutput, PeerAuthenticatorTrait,
+    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorOutput,
+    PeerAuthenticatorTrait,
 };
 use super::{Locator, PeerId, Property, WBuf, ZBuf, ZInt};
+use crate::net::transport::unicast::establishment::Cookie;
 use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
-use rand::{Rng, SeedableRng};
 use std::collections::{HashMap, HashSet};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::crypto::{hmac, PseudoRng};
+use zenoh_util::crypto::hmac;
 use zenoh_util::properties::config::*;
 use zenoh_util::properties::Properties;
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite};
 
 const WBUF_SIZE: usize = 64;
-const USRPWD_VERSION: ZInt = 0;
+const USRPWD_VERSION: ZInt = 1;
 
 /// # Attachment decorator
 ///
@@ -148,9 +148,7 @@ struct Authenticated {
 pub struct UserPasswordAuthenticator {
     lookup: RwLock<HashMap<Vec<u8>, Vec<u8>>>,
     credentials: Option<Credentials>,
-    nonces: Mutex<HashMap<(Locator, Locator), (PeerId, ZInt)>>,
     authenticated: Mutex<HashMap<PeerId, Authenticated>>,
-    prng: Mutex<PseudoRng>,
 }
 
 impl UserPasswordAuthenticator {
@@ -165,9 +163,7 @@ impl UserPasswordAuthenticator {
         UserPasswordAuthenticator {
             lookup: RwLock::new(lookup),
             credentials,
-            nonces: Mutex::new(HashMap::new()),
             authenticated: Mutex::new(HashMap::new()),
-            prng: Mutex::new(PseudoRng::from_entropy()),
         }
     }
 
@@ -253,11 +249,9 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &PeerId,
-        sn_resolution: ZInt,
+        cookie: &mut Cookie,
         properties: &[Property],
-        _nonce: ZInt,
-    ) -> ZResult<(PeerAuthenticatorOutput, PeerAuthenticatorCookie)> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
         let res = properties
             .iter()
             .find(|p| p.key == PeerAuthenticatorId::UserPassword as ZInt);
@@ -285,8 +279,9 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         }
 
         // Create the InitAck attachment
-        let nonce = zasynclock!(self.prng).gen_range(0..sn_resolution);
-        let init_ack_property = InitAckProperty { nonce };
+        let init_ack_property = InitAckProperty {
+            nonce: cookie.nonce,
+        };
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_ack_property_usrpwd(&init_ack_property);
@@ -296,12 +291,9 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             value: zbuf.to_vec(),
         };
 
-        // Insert the nonce in the set of sent nonces
-        zasynclock!(self.nonces).insert((link.src.clone(), link.dst.clone()), (*peer_id, nonce));
-
         let mut res = PeerAuthenticatorOutput::new();
         res.properties.push(prop);
-        Ok((res, None))
+        Ok(res)
     }
 
     async fn handle_init_ack(
@@ -362,21 +354,8 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         &self,
         link: &AuthenticatedPeerLink,
         properties: &[Property],
-        _cookie: &[Property],
+        cookie: &Cookie,
     ) -> ZResult<PeerAuthenticatorOutput> {
-        let (peer_id, nonce) =
-            match zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone())) {
-                Some(tuple) => tuple,
-                None => {
-                    return zerror!(ZErrorKind::InvalidMessage {
-                        descr: format!(
-                            "Received OpenSyn but no nonce has been associated to link: {}",
-                            link
-                        ),
-                    });
-                }
-            };
-
         let res = properties
             .iter()
             .find(|p| p.key == PeerAuthenticatorId::UserPassword as ZInt);
@@ -407,7 +386,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         };
 
         // Create the HMAC of the password using the nonce received as challenge
-        let key = nonce.to_le_bytes();
+        let key = cookie.nonce.to_le_bytes();
         let hmac = hmac::sign(&key, &password)?;
         if hmac != open_syn_property.hmac {
             return zerror!(ZErrorKind::InvalidMessage {
@@ -417,7 +396,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         // Check PID validity
         let mut guard = zasynclock!(self.authenticated);
-        match guard.get_mut(&peer_id) {
+        match guard.get_mut(&cookie.pid) {
             Some(auth) => {
                 if open_syn_property.user != auth.credentials.user
                     || password != auth.credentials.password
@@ -436,7 +415,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 let mut links = HashSet::new();
                 links.insert((link.src.clone(), link.dst.clone()));
                 let auth = Authenticated { credentials, links };
-                guard.insert(peer_id, auth);
+                guard.insert(cookie.pid, auth);
             }
         }
 
@@ -452,8 +431,6 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     }
 
     async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {
-        zasynclock!(self.nonces).remove(&(link.src.clone(), link.dst.clone()));
-
         // Need to check if it authenticated and remove it if this is the last link
         let mut guard = zasynclock!(self.authenticated);
         let mut to_del: Option<PeerId> = None;

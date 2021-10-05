@@ -94,7 +94,7 @@ pub(super) fn properties_from_attachment(mut att: Attachment) -> ZResult<Establi
 /*************************************/
 /*             COOKIE                */
 /*************************************/
-struct Cookie {
+pub struct Cookie {
     whatami: WhatAmI,
     pid: PeerId,
     sn_resolution: ZInt,

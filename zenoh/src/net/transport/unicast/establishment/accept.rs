@@ -147,26 +147,24 @@ async fn accept_send_init_ack(
         Some(agreed_sn_resolution)
     };
 
-    let nonce = zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution);
+    // Create the cookie
+    let mut cookie = Cookie {
+        whatami: input.whatami,
+        pid: input.pid,
+        sn_resolution: agreed_sn_resolution,
+        is_qos: input.is_qos,
+        nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
+        properties: EstablishmentProperties::new(),
+    };
 
     // Build the attachment
     let mut auth_peer = PeerAuthenticatorOutput::new();
-    let mut properties = EstablishmentProperties::new();
     for pa in manager.config.unicast.peer_authenticator.iter() {
-        let (att, mut cke) = pa
-            .handle_init_syn(
-                auth_link,
-                &input.pid,
-                agreed_sn_resolution,
-                &input.init_syn_properties,
-                nonce,
-            )
+        let att = pa
+            .handle_init_syn(auth_link, &mut cookie, &input.init_syn_properties)
             .await
             .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
         auth_peer = auth_peer.merge(att).map_err(|e| (e, None))?;
-        if let Some(p) = cke.take() {
-            properties.insert(p).map_err(|e| (e, None))?;
-        }
     }
     let attachment = if auth_peer.properties.is_empty() {
         None
@@ -176,15 +174,6 @@ async fn accept_send_init_ack(
         Some(att)
     };
 
-    // Create and encode the cookie
-    let cookie = Cookie {
-        whatami: input.whatami,
-        pid: input.pid,
-        sn_resolution: agreed_sn_resolution,
-        is_qos: input.is_qos,
-        nonce,
-        properties,
-    };
     let encrypted = cookie
         .encrypt(&manager.cipher, &mut *zasynclock!(manager.prng))
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
@@ -316,7 +305,7 @@ async fn accept_recv_open_syn(
     };
     for pa in manager.config.unicast.peer_authenticator.iter() {
         let ps = pa
-            .handle_open_syn(auth_link, &open_syn_properties, &cookie.properties)
+            .handle_open_syn(auth_link, &open_syn_properties, &cookie)
             .await
             .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
         auth = auth

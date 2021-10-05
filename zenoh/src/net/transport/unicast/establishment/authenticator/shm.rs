@@ -12,13 +12,14 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{
-    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorCookie, PeerAuthenticatorId,
-    PeerAuthenticatorOutput, PeerAuthenticatorTrait,
+    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorOutput,
+    PeerAuthenticatorTrait,
 };
 use crate::net::protocol::core::{PeerId, Property, ZInt};
 use crate::net::protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice,
 };
+use crate::net::transport::unicast::establishment::Cookie;
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use std::convert::TryInto;
@@ -29,8 +30,8 @@ use zenoh_util::properties::config::*;
 use zenoh_util::zcheck;
 
 const WBUF_SIZE: usize = 64;
-const SHM_VERSION: ZInt = 0;
-const SHM_NAME: &str = "shmauth";
+const SHM_VERSION: ZInt = 1;
+const SHM_NAME: &str = "auth_shm";
 // Let's use a ZInt as a challenge
 const SHM_SIZE: usize = std::mem::size_of::<ZInt>();
 
@@ -126,7 +127,6 @@ impl ZBuf {
 /*          Authenticator            */
 /*************************************/
 pub struct SharedMemoryAuthenticator {
-    challenge: ZInt,
     // Rust guarantees that fields are dropped in the order of declaration.
     // Buffer needs to be dropped before the manager.
     buffer: SharedMemoryBuf,
@@ -147,7 +147,6 @@ impl SharedMemoryAuthenticator {
         slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
         SharedMemoryAuthenticator {
-            challenge,
             buffer,
             _manager,
             reader: Arc::new(RwLock::new(SharedMemoryReader::new())),
@@ -176,7 +175,6 @@ impl SharedMemoryAuthenticator {
             slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
             let sma = SharedMemoryAuthenticator {
-                challenge,
                 buffer,
                 _manager,
                 reader: Arc::new(RwLock::new(SharedMemoryReader::new())),
@@ -228,11 +226,9 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &PeerId,
-        _sn_resolution: ZInt,
+        cookie: &mut Cookie,
         properties: &[Property],
-        _nonce: ZInt,
-    ) -> ZResult<(PeerAuthenticatorOutput, PeerAuthenticatorCookie)> {
+    ) -> ZResult<PeerAuthenticatorOutput> {
         log::debug!("Authenticator::handle_init_syn(...)");
         let res = properties
             .iter()
@@ -240,8 +236,11 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let mut zbuf: ZBuf = match res {
             Some(p) => p.value.clone().into(),
             None => {
-                log::debug!("Peer {} did not express interest in shared memory", peer_id);
-                return Ok((PeerAuthenticatorOutput::new(), None));
+                log::debug!(
+                    "Peer {} did not express interest in shared memory",
+                    cookie.pid
+                );
+                return Ok(PeerAuthenticatorOutput::new());
             }
         };
         let mut init_syn_property = match zbuf.read_init_syn_property_shm() {
@@ -265,14 +264,18 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
                 if !res {
                     log::debug!(
                         "Peer {} can not operate over shared memory: not a SHM buffer",
-                        peer_id
+                        cookie.pid
                     );
-                    return Ok((PeerAuthenticatorOutput::new(), None));
+                    return Ok(PeerAuthenticatorOutput::new());
                 }
             }
             Err(e) => {
-                log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);
-                return Ok((PeerAuthenticatorOutput::new(), None));
+                log::debug!(
+                    "Peer {} can not operate over shared memory: {}",
+                    cookie.pid,
+                    e
+                );
+                return Ok(PeerAuthenticatorOutput::new());
             }
         }
 
@@ -282,8 +285,12 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let bytes: [u8; SHM_SIZE] = match xs.as_slice().try_into() {
             Ok(bytes) => bytes,
             Err(e) => {
-                log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);
-                return Ok((PeerAuthenticatorOutput::new(), None));
+                log::debug!(
+                    "Peer {} can not operate over shared memory: {}",
+                    cookie.pid,
+                    e
+                );
+                return Ok(PeerAuthenticatorOutput::new());
             }
         };
         let challenge = ZInt::from_le_bytes(bytes);
@@ -304,7 +311,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         };
         let mut res = PeerAuthenticatorOutput::new();
         res.properties.insert(prop)?;
-        Ok((res, None))
+        Ok(res)
     }
 
     async fn handle_init_ack(
@@ -350,17 +357,18 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         }
 
-        let bytes: [u8; SHM_SIZE] = match init_ack_property.shm.as_slice().try_into() {
-            Ok(bytes) => bytes,
+        let challenge: [u8; SHM_SIZE] = match init_ack_property.shm.as_slice().try_into() {
+            Ok(challenge) => challenge,
             Err(e) => {
                 log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);
                 return Ok(PeerAuthenticatorOutput::new());
             }
         };
-        let challenge = ZInt::from_le_bytes(bytes);
 
         // Create the OpenSyn attachment
-        let open_syn_property = OpenSynProperty { challenge };
+        let open_syn_property = OpenSynProperty {
+            challenge: ZInt::from_le_bytes(challenge),
+        };
         // Encode the OpenSyn property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_open_syn_property_shm(&open_syn_property);
@@ -373,7 +381,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
         let mut res = PeerAuthenticatorOutput::new();
         res.properties.insert(prop)?;
-        if init_ack_property.challenge == self.challenge {
+        if challenge == self.buffer.as_slice() {
             res.transport.is_shm = true;
         }
         Ok(res)
@@ -383,7 +391,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         &self,
         link: &AuthenticatedPeerLink,
         properties: &[Property],
-        _cookie: &[Property],
+        _cookie: &Cookie,
     ) -> ZResult<PeerAuthenticatorOutput> {
         let res = properties
             .iter()
@@ -395,17 +403,15 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
                 return Ok(PeerAuthenticatorOutput::new());
             }
         };
-        let open_syn_property = match zbuf.read_open_syn_property_shm() {
-            Some(isa) => isa,
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received OpenSyn with invalid attachment on link: {}", link),
-                });
-            }
-        };
+        let open_syn_property = zbuf.read_open_syn_property_shm().ok_or_else(|| {
+            zerror2!(ZErrorKind::InvalidMessage {
+                descr: format!("Received OpenSyn with invalid attachment on link: {}", link),
+            })
+        })?;
 
         let mut res = PeerAuthenticatorOutput::new();
-        if open_syn_property.challenge == self.challenge {
+        let challenge: [u8; SHM_SIZE] = open_syn_property.challenge.to_le_bytes();
+        if challenge == self.buffer.as_slice() {
             res.transport.is_shm = true;
         }
         Ok(res)
