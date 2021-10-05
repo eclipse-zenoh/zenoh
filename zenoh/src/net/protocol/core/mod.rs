@@ -20,7 +20,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
-pub use uhlc::Timestamp;
+pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;

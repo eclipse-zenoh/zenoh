@@ -118,7 +118,7 @@ pub mod buf {
 
 /// Time related types and functions.
 pub mod time {
-    pub use super::net::protocol::core::{Timestamp, TimestampId};
+    pub use super::net::protocol::core::{Timestamp, TimestampId, NTP64};
 
     /// A time period.
     pub use super::net::protocol::core::Period;
