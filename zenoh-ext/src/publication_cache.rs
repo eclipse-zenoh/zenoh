@@ -29,8 +29,6 @@ use zenoh::utils::resource_name;
 use zenoh::Session;
 use zenoh_util::zerror;
 
-pub const PUBLICATION_CACHE_QUERYABLE_KIND: ZInt = 0x08;
-
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
 pub struct PublicationCacheBuilder<'a, 'b> {
@@ -96,6 +94,8 @@ pub struct PublicationCache<'a> {
 }
 
 impl<'a> PublicationCache<'a> {
+    pub const QUERYABLE_KIND: ZInt = 0x08;
+
     fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
         log::debug!(
             "Declare PublicationCache on {} with history={} resource_limit={:?}",
@@ -133,7 +133,7 @@ impl<'a> PublicationCache<'a> {
         let mut queryable = conf
             .session
             .register_queryable(&queryable_reskey)
-            .kind(PUBLICATION_CACHE_QUERYABLE_KIND)
+            .kind(PublicationCache::QUERYABLE_KIND)
             .wait()?;
 
         // take local ownership of stuff to be moved into task

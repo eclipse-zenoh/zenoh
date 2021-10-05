@@ -28,7 +28,7 @@ use zenoh::time::Period;
 use zenoh::Session;
 use zenoh_util::zwrite;
 
-use super::publication_cache::PUBLICATION_CACHE_QUERYABLE_KIND;
+use super::PublicationCache;
 
 const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
@@ -54,7 +54,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
         let query_target = QueryTarget {
-            kind: PUBLICATION_CACHE_QUERYABLE_KIND | STORAGE,
+            kind: PublicationCache::QUERYABLE_KIND | STORAGE,
             target: Target::All,
         };
 
